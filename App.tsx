@@ -165,13 +165,54 @@ const evictLargeLocalStorage = () => {
 
 type CompressedPhoto = { dataUrl: string; thumbUrl: string; base64: string };
 
-const compressFoodPhoto = async (file: File, opts?: { maxSide?: number; quality?: number; thumbSize?: number }): Promise<CompressedPhoto> => {
+const loadImageElement = (file: File): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
+};
+
+const compressFoodPhoto = async (
+  file: File,
+  opts?: { maxSide?: number; quality?: number; thumbSize?: number }
+): Promise<CompressedPhoto> => {
   const maxSide = opts?.maxSide ?? 768;
   const quality = opts?.quality ?? 0.72;
   const thumbSize = opts?.thumbSize ?? 140;
 
-  const bitmap = await createImageBitmap(file);
-  const { width: w0, height: h0 } = bitmap;
+  // Prefer createImageBitmap (fast), but fallback for environments where it fails (some Android tablets / WebViews)
+  let w0 = 0;
+  let h0 = 0;
+  const canvasSrc = document.createElement('canvas');
+  const ctxSrc = canvasSrc.getContext('2d');
+  if (!ctxSrc) throw new Error('No canvas context');
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    w0 = bitmap.width;
+    h0 = bitmap.height;
+    canvasSrc.width = w0;
+    canvasSrc.height = h0;
+    ctxSrc.drawImage(bitmap, 0, 0);
+    // @ts-ignore - close exists in modern browsers
+    bitmap.close?.();
+  } catch {
+    const img = await loadImageElement(file);
+    w0 = img.naturalWidth || img.width;
+    h0 = img.naturalHeight || img.height;
+    canvasSrc.width = w0;
+    canvasSrc.height = h0;
+    ctxSrc.drawImage(img, 0, 0);
+  }
 
   // Resize keeping aspect
   const scale = Math.min(1, maxSide / Math.max(w0, h0));
@@ -183,7 +224,7 @@ const compressFoodPhoto = async (file: File, opts?: { maxSide?: number; quality?
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No canvas context');
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  ctx.drawImage(canvasSrc, 0, 0, w0, h0, 0, 0, w, h);
 
   const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
@@ -202,6 +243,7 @@ const compressFoodPhoto = async (file: File, opts?: { maxSide?: number; quality?
   const base64 = dataUrl.split(',')[1] || '';
   return { dataUrl, thumbUrl, base64 };
 };
+
 
 const pickLessonForToday = (user: UserProfile): CourseLesson => {
   const completedIds = user.courseProgress?.completedLessonIds || [];
