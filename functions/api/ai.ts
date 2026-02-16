@@ -1,6 +1,8 @@
 /**
  * FITFOCUS v17_SAFE — Free plan with AI limits (no D1 required)
- * + Hotfix: normalize Gemini payload (contents/config) to avoid 400 Bad Request
+ * Adds daily quota gating on top of v16 hardening:
+ * - Free: 3 AI calls / day per (ipHash + feature)
+ * - Pro/Family: later via /api/me + Stripe + D1 (not required now)
  *
  * Cloudflare Pages → Bindings:
  * - KV: FITFOCUS_KV (optional)
@@ -16,7 +18,74 @@ export interface Env {
   FREE_AI_DAILY_LIMIT?: string;
 }
 
-type JsonObj = Record<string, any>;
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
+type GeminiContent = {
+  role?: "user" | "model";
+  parts: GeminiPart[];
+};
+
+function normalizeContents(input: any): GeminiContent[] {
+  // Accept:
+  // - contents: "text"
+  // - contents: { parts:[...] }  (single Content)
+  // - contents: [{ role, parts:[...] }, ...]
+  // - contents: [{ text:"..." }, ...] (we'll wrap into parts)
+  // - contents: [{ inlineData: ... }, ...] (wrap into parts)
+  // - contents: { parts:[{text...},{inlineData...}] } (ok)
+
+  const toTextContent = (t: string): GeminiContent => ({
+    role: "user",
+    parts: [{ text: t }],
+  });
+
+  const isPart = (p: any): p is GeminiPart =>
+    !!p &&
+    (typeof p?.text === "string" ||
+      (p?.inlineData &&
+        typeof p.inlineData?.mimeType === "string" &&
+        typeof p.inlineData?.data === "string"));
+
+  const toContent = (c: any): GeminiContent | null => {
+    if (!c) return null;
+
+    // already looks like Content
+    if (Array.isArray(c?.parts) && c.parts.every(isPart)) {
+      const role = c.role === "model" ? "model" : "user";
+      return { role, parts: c.parts };
+    }
+
+    // if someone passed a Part directly
+    if (isPart(c)) {
+      return { role: "user", parts: [c] };
+    }
+
+    // if someone passed {text:"..."} or string
+    if (typeof c === "string") return toTextContent(c);
+    if (typeof c?.text === "string") return toTextContent(c.text);
+
+    return null;
+  };
+
+  if (typeof input === "string") return [toTextContent(input)];
+
+  if (Array.isArray(input)) {
+    const out: GeminiContent[] = [];
+    for (const item of input) {
+      const cc = toContent(item);
+      if (cc) out.push(cc);
+    }
+    return out;
+  }
+
+  // object
+  const single = toContent(input);
+  if (single) return [single];
+
+  return [];
+}
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const startedAt = Date.now();
@@ -63,7 +132,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const kv = env.FITFOCUS_KV;
 
   if (kv) {
-    // ---- RATE LIMIT (cooldown) ----
+    // ---- RATE LIMIT (v16) ----
     const cooldownKey = `rl:cd:4s:${ipHash}:${feature}`;
     const seen = await kv.get(cooldownKey);
     if (seen) {
@@ -72,7 +141,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     }
     await kv.put(cooldownKey, "1", { expirationTtl: 4 });
 
-    // ---- RATE LIMIT (burst) ----
     const burstKey = `rl:burst:10m:${ipHash}:${feature}`;
     const current = Number(await kv.get(burstKey) || "0");
     if (current >= 20) {
@@ -81,10 +149,11 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     }
     await kv.put(burstKey, String(current + 1), { expirationTtl: 60 * 10 });
 
-    // ---- DAILY QUOTA ----
+    // ---- DAILY QUOTA (NEW) ----
     const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
     const quotaKey = `quota:${day}:${ipHash}:${feature}`;
     const usedToday = Number(await kv.get(quotaKey) || "0");
+
     const freeLimit = Number(env.FREE_AI_DAILY_LIMIT || "3");
 
     if (usedToday >= freeLimit) {
@@ -94,13 +163,14 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
           error: {
             code: "PAYWALL",
             message: `Free limit reached: ${freeLimit}/day. Upgrade to Pro for unlimited AI.`,
-            meta: { feature, limitPerDay: freeLimit },
-          },
+            meta: { feature, limitPerDay: freeLimit }
+          }
         },
         402,
         { "X-FF-Quota": "EXCEEDED" }
       );
     }
+    // increment quota counter
     await kv.put(quotaKey, String(usedToday + 1), { expirationTtl: 60 * 60 * 24 * 2 });
   }
 
@@ -109,16 +179,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const dedupKey = `dedup:60s:${feature}:${bodyHash}`;
 
   if (kv) {
-    const cached = (await kv.get(dedupKey, { type: "json" })) as any | null;
+    const cached = await kv.get(dedupKey, { type: "json" }) as any | null;
     if (cached && typeof cached === "object" && cached.data) {
-      await logUsage(env, {
-        ipHash,
-        feature,
-        status: cached.status || 200,
-        latency: Date.now() - startedAt,
-        bytesIn: bodyText.length,
-        cacheHit: true,
-      });
+      await logUsage(env, { ipHash, feature, status: cached.status || 200, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
       return new Response(JSON.stringify(cached.data), {
         status: cached.status || 200,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
@@ -135,9 +198,26 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const model = body?.model || "gemini-3-flash-preview";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
 
-  // Drop "feature" and normalize payload to Gemini format
-  const { feature: _drop, ...rawPayload } = (body ?? {}) as JsonObj;
-  const payloadToSend = normalizeGeminiPayload(rawPayload);
+  const { feature: _drop, ...payload } = body ?? {};
+  const payloadToSend = (payload && typeof payload === "object") ? payload : {};
+
+  // ✅ FIX: normalize contents for ALL features (coach/weekly/plan/etc)
+  if ("contents" in payloadToSend) {
+    const normalized = normalizeContents(payloadToSend.contents);
+    if (!normalized.length) {
+      await logUsage(env, { ipHash, feature, status: 400, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+      return json(
+        {
+          error: {
+            message:
+              "Invalid contents: expected string or Content/Content[] with parts[]. Use {contents:[{role:'user',parts:[{text:'...'}]}]}",
+          },
+        },
+        400
+      );
+    }
+    payloadToSend.contents = normalized;
+  }
 
   const geminiResp = await fetch(url, {
     method: "POST",
@@ -145,20 +225,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     body: JSON.stringify(payloadToSend),
   });
 
+  const data = await geminiResp.json();
   const latency = Date.now() - startedAt;
 
-  // IMPORTANT: return readable error details (not [object Object])
-  const respText = await geminiResp.text();
-  let data: any = null;
-  try {
-    data = respText ? JSON.parse(respText) : {};
-  } catch {
-    data = { raw: respText };
-  }
-
-  // Save dedup cache + usage
+  // Save dedup cache
   if (kv) {
-    await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data }), { expirationTtl: 60 });
+    await kv.put(
+      dedupKey,
+      JSON.stringify({ status: geminiResp.status, data }),
+      { expirationTtl: 60 }
+    );
     await logUsage(env, { ipHash, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
@@ -168,57 +244,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
       "X-FF-Cache": "MISS",
-      "X-FF-KV": kv ? "found" : "missing",
+      "X-FF-KV": kv ? "found" : "missing"
     },
   });
-}
-
-/**
- * Normalizes payload from frontend into Gemini REST format:
- * - config -> generationConfig
- * - contents (object) -> contents (array)
- * - ensure each content has role + parts
- */
-function normalizeGeminiPayload(input: JsonObj): JsonObj {
-  const p: JsonObj = { ...(input || {}) };
-
-  // Some clients send "config" but Gemini expects "generationConfig"
-  if (p.config && !p.generationConfig) {
-    p.generationConfig = p.config;
-    delete p.config;
-  }
-
-  // Normalize contents:
-  // allowed:
-  //  - contents: [{ role, parts: [...] }, ...]
-  //  - contents: { parts: [...] }   (legacy) -> wrap into array + role:user
-  const c = p.contents;
-
-  if (c && !Array.isArray(c) && typeof c === "object") {
-    // If it's like {parts:[...]} or {role?, parts?...}
-    const role = typeof c.role === "string" ? c.role : "user";
-    const parts = Array.isArray(c.parts) ? c.parts : [];
-    p.contents = [{ role, parts }];
-  } else if (Array.isArray(c)) {
-    p.contents = c.map((item: any) => {
-      if (!item || typeof item !== "object") return { role: "user", parts: [] };
-      const role = typeof item.role === "string" ? item.role : "user";
-      const parts = Array.isArray(item.parts) ? item.parts : [];
-      return { ...item, role, parts };
-    });
-  }
-
-  // If still no contents, but there is "prompt" or "text" fields (failsafe)
-  if (!p.contents) {
-    const text = typeof p.text === "string" ? p.text : (typeof p.prompt === "string" ? p.prompt : "");
-    if (text) {
-      p.contents = [{ role: "user", parts: [{ text }] }];
-      delete p.prompt;
-      delete p.text;
-    }
-  }
-
-  return p;
 }
 
 async function logUsage(
@@ -231,9 +259,7 @@ async function logUsage(
     const key = `usage:${day}:${ev.ipHash}:${ev.feature}`;
 
     const prevRaw = await env.FITFOCUS_KV.get(key);
-    const prev = prevRaw
-      ? JSON.parse(prevRaw)
-      : { count: 0, errorCount: 0, totalLatency: 0, totalBytesIn: 0, cacheHits: 0, lastStatus: 0, lastTs: 0 };
+    const prev = prevRaw ? JSON.parse(prevRaw) : { count: 0, errorCount: 0, totalLatency: 0, totalBytesIn: 0, cacheHits: 0, lastStatus: 0, lastTs: 0 };
 
     prev.count += 1;
     if (ev.status >= 400) prev.errorCount += 1;
