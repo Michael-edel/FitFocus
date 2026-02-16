@@ -201,6 +201,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const { feature: _drop, ...payload } = body ?? {};
   const payloadToSend = (payload && typeof payload === "object") ? payload : {};
 
+
+  // ✅ FIX: Gemini API doesn't support `config` field.
+  // Our client may send `config`; map it to `generationConfig`.
+  if ("config" in payloadToSend) {
+    if (!("generationConfig" in payloadToSend)) {
+      (payloadToSend as any).generationConfig = (payloadToSend as any).config;
+    }
+    delete (payloadToSend as any).config;
+  }
+
   // ✅ FIX: normalize contents for ALL features (coach/weekly/plan/etc)
   if ("contents" in payloadToSend) {
     const normalized = normalizeContents(payloadToSend.contents);
