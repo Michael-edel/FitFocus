@@ -1,21 +1,19 @@
+
 /**
- * FITFOCUS v17_SAFE — Free plan with AI limits (no D1 required)
- * Adds daily quota gating on top of v16 hardening:
- * - Free: 3 AI calls / day per (ipHash + feature)
- * - Pro/Family: later via /api/me + Stripe + D1 (not required now)
- *
- * Cloudflare Pages → Bindings:
- * - KV: FITFOCUS_KV (optional)
- * Env Secrets:
- * - GEMINI_API_KEY (required)
- * - IP_HASH_SALT (optional but recommended)
+ * FITFOCUS v18_USER_LIMITS
+ * AI limits now scoped to:
+ *   - userId (if authenticated via ff_session)
+ *   - fallback to ipHash (guest mode)
  */
+
+import { jwtVerify } from "jose";
 
 export interface Env {
   GEMINI_API_KEY: string;
   FITFOCUS_KV?: any;
   IP_HASH_SALT?: string;
   FREE_AI_DAILY_LIMIT?: string;
+  AUTH_JWT_SECRET?: string;
 }
 
 type GeminiPart =
@@ -27,260 +25,93 @@ type GeminiContent = {
   parts: GeminiPart[];
 };
 
-function normalizeContents(input: any): GeminiContent[] {
-  // Accept:
-  // - contents: "text"
-  // - contents: { parts:[...] }  (single Content)
-  // - contents: [{ role, parts:[...] }, ...]
-  // - contents: [{ text:"..." }, ...] (we'll wrap into parts)
-  // - contents: [{ inlineData: ... }, ...] (wrap into parts)
-  // - contents: { parts:[{text...},{inlineData...}] } (ok)
+function getCookie(req: Request, name: string) {
+  const c = req.headers.get("Cookie") || "";
+  const m = c.match(new RegExp("(^|;\s*)" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[2]) : null;
+}
 
-  const toTextContent = (t: string): GeminiContent => ({
-    role: "user",
-    parts: [{ text: t }],
-  });
+async function resolveIdentity(request: Request, env: Env): Promise<string> {
+  const token = getCookie(request, "ff_session");
 
-  const isPart = (p: any): p is GeminiPart =>
-    !!p &&
-    (typeof p?.text === "string" ||
-      (p?.inlineData &&
-        typeof p.inlineData?.mimeType === "string" &&
-        typeof p.inlineData?.data === "string"));
-
-  const toContent = (c: any): GeminiContent | null => {
-    if (!c) return null;
-
-    // already looks like Content
-    if (Array.isArray(c?.parts) && c.parts.every(isPart)) {
-      const role = c.role === "model" ? "model" : "user";
-      return { role, parts: c.parts };
+  if (token && env.AUTH_JWT_SECRET) {
+    try {
+      const secret = new TextEncoder().encode(env.AUTH_JWT_SECRET);
+      const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
+      const uid = (payload as any)?.uid;
+      if (uid) return `user:${uid}`;
+    } catch {
+      // ignore invalid token → fallback to IP
     }
-
-    // if someone passed a Part directly
-    if (isPart(c)) {
-      return { role: "user", parts: [c] };
-    }
-
-    // if someone passed {text:"..."} or string
-    if (typeof c === "string") return toTextContent(c);
-    if (typeof c?.text === "string") return toTextContent(c.text);
-
-    return null;
-  };
-
-  if (typeof input === "string") return [toTextContent(input)];
-
-  if (Array.isArray(input)) {
-    const out: GeminiContent[] = [];
-    for (const item of input) {
-      const cc = toContent(item);
-      if (cc) out.push(cc);
-    }
-    return out;
   }
 
-  // object
-  const single = toContent(input);
-  if (single) return [single];
+  const ipRaw = request.headers.get("CF-Connecting-IP") || "unknown";
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode((env.IP_HASH_SALT || "ff")+":"+ipRaw));
+  const ipHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  return `ip:${ipHash}`;
+}
 
+function normalizeContents(input: any): GeminiContent[] {
+  if (typeof input === "string") {
+    return [{ role: "user", parts: [{ text: input }] }];
+  }
+  if (Array.isArray(input)) return input;
+  if (input?.parts) return [input];
   return [];
 }
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
-  const startedAt = Date.now();
+  const apiKey = env.GEMINI_API_KEY;
+  if (!apiKey) return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), { status: 500 });
 
-  const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
+  const body = await request.json().catch(() => ({}));
+  const feature = body?.feature || "ai";
 
-  const json = (obj: any, status = 200, extraHeaders: Record<string, string> = {}) =>
-    new Response(JSON.stringify(obj), {
-      status,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        ...extraHeaders,
-      },
-    });
-
-  const sha256Hex = async (input: string) => {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-  };
-
-  const ipRaw = request.headers.get("CF-Connecting-IP") || "unknown";
-  const ipHash = await sha256Hex(`${env.IP_HASH_SALT || "ff"}:${ipRaw}`);
-
-  // ---- Payload size limit (4MB) ----
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
-    return json({ error: { message: "Payload too large" } }, 413);
-  }
-
-  let bodyText = "";
-  let body: any = null;
-
-  try {
-    bodyText = await request.text();
-    body = bodyText ? JSON.parse(bodyText) : {};
-  } catch {
-    return json({ error: { message: "Invalid JSON body" } }, 400);
-  }
-
-  const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
-
-  // ---- KV Optional Handlers ----
+  const identity = await resolveIdentity(request, env);
   const kv = env.FITFOCUS_KV;
 
   if (kv) {
-    // ---- RATE LIMIT (v16) ----
-    const cooldownKey = `rl:cd:4s:${ipHash}:${feature}`;
-    const seen = await kv.get(cooldownKey);
-    if (seen) {
-      await logUsage(env, { ipHash, feature, status: 429, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return json({ error: { message: "Rate limit exceeded (cooldown)" } }, 429);
+    const day = new Date().toISOString().slice(0,10);
+    const quotaKey = `quota:${day}:${identity}:${feature}`;
+    const used = Number(await kv.get(quotaKey) || "0");
+    const limit = Number(env.FREE_AI_DAILY_LIMIT || "3");
+
+    if (used >= limit) {
+      return new Response(JSON.stringify({
+        error: {
+          code: "PAYWALL",
+          message: `Free limit reached (${limit}/day)`
+        }
+      }), { status: 402 });
     }
-    await kv.put(cooldownKey, "1", { expirationTtl: 4 });
 
-    const burstKey = `rl:burst:10m:${ipHash}:${feature}`;
-    const current = Number(await kv.get(burstKey) || "0");
-    if (current >= 20) {
-      await logUsage(env, { ipHash, feature, status: 429, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return json({ error: { message: "Rate limit exceeded (burst)" } }, 429);
-    }
-    await kv.put(burstKey, String(current + 1), { expirationTtl: 60 * 10 });
-
-    // ---- DAILY QUOTA (NEW) ----
-    const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-    const quotaKey = `quota:${day}:${ipHash}:${feature}`;
-    const usedToday = Number(await kv.get(quotaKey) || "0");
-
-    const freeLimit = Number(env.FREE_AI_DAILY_LIMIT || "3");
-
-    if (usedToday >= freeLimit) {
-      await logUsage(env, { ipHash, feature, status: 402, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return json(
-        {
-          error: {
-            code: "PAYWALL",
-            message: `Free limit reached: ${freeLimit}/day. Upgrade to Pro for unlimited AI.`,
-            meta: { feature, limitPerDay: freeLimit }
-          }
-        },
-        402,
-        { "X-FF-Quota": "EXCEEDED" }
-      );
-    }
-    // increment quota counter
-    await kv.put(quotaKey, String(usedToday + 1), { expirationTtl: 60 * 60 * 24 * 2 });
+    await kv.put(quotaKey, String(used+1), { expirationTtl: 60*60*24*2 });
   }
 
-  // ---- DEDUP CACHE (60s) ----
-  const bodyHash = await sha256Hex(bodyText || "{}");
-  const dedupKey = `dedup:60s:${feature}:${bodyHash}`;
+  const { feature: _drop, config, ...payload } = body;
+  const payloadToSend: any = payload;
 
-  if (kv) {
-    const cached = await kv.get(dedupKey, { type: "json" }) as any | null;
-    if (cached && typeof cached === "object" && cached.data) {
-      await logUsage(env, { ipHash, feature, status: cached.status || 200, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
-      return new Response(JSON.stringify(cached.data), {
-        status: cached.status || 200,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
-      });
-    }
+  if (config && !payloadToSend.generationConfig) {
+    payloadToSend.generationConfig = config;
   }
 
-  // ---- GEMINI ----
-  if (!apiKey) {
-    await logUsage(env, { ipHash, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-    return json({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
+  if ("contents" in payloadToSend) {
+    payloadToSend.contents = normalizeContents(payloadToSend.contents);
   }
 
   const model = body?.model || "gemini-3-flash-preview";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
-
-  const { feature: _drop, ...payload } = body ?? {};
-  const payloadToSend = (payload && typeof payload === "object") ? payload : {};
-
-
-  // ✅ FIX: Gemini API doesn't support `config` field.
-  // Our client may send `config`; map it to `generationConfig`.
-  if ("config" in payloadToSend) {
-    if (!("generationConfig" in payloadToSend)) {
-      (payloadToSend as any).generationConfig = (payloadToSend as any).config;
-    }
-    delete (payloadToSend as any).config;
-  }
-
-  // ✅ FIX: normalize contents for ALL features (coach/weekly/plan/etc)
-  if ("contents" in payloadToSend) {
-    const normalized = normalizeContents(payloadToSend.contents);
-    if (!normalized.length) {
-      await logUsage(env, { ipHash, feature, status: 400, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return json(
-        {
-          error: {
-            message:
-              "Invalid contents: expected string or Content/Content[] with parts[]. Use {contents:[{role:'user',parts:[{text:'...'}]}]}",
-          },
-        },
-        400
-      );
-    }
-    payloadToSend.contents = normalized;
-  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const geminiResp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payloadToSend),
+    body: JSON.stringify(payloadToSend)
   });
 
-  const data = await geminiResp.json();
-  const latency = Date.now() - startedAt;
+  const data = await geminiResp.text();
 
-  // Save dedup cache
-  if (kv) {
-    await kv.put(
-      dedupKey,
-      JSON.stringify({ status: geminiResp.status, data }),
-      { expirationTtl: 60 }
-    );
-    await logUsage(env, { ipHash, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
-  }
-
-  return new Response(JSON.stringify(data), {
+  return new Response(data, {
     status: geminiResp.status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "X-FF-Cache": "MISS",
-      "X-FF-KV": kv ? "found" : "missing"
-    },
+    headers: { "Content-Type": "application/json" }
   });
-}
-
-async function logUsage(
-  env: Env,
-  ev: { ipHash: string; feature: string; status: number; latency: number; bytesIn: number; cacheHit?: boolean }
-) {
-  if (!env.FITFOCUS_KV) return;
-  try {
-    const day = new Date().toISOString().slice(0, 10);
-    const key = `usage:${day}:${ev.ipHash}:${ev.feature}`;
-
-    const prevRaw = await env.FITFOCUS_KV.get(key);
-    const prev = prevRaw ? JSON.parse(prevRaw) : { count: 0, errorCount: 0, totalLatency: 0, totalBytesIn: 0, cacheHits: 0, lastStatus: 0, lastTs: 0 };
-
-    prev.count += 1;
-    if (ev.status >= 400) prev.errorCount += 1;
-    prev.totalLatency += Number(ev.latency) || 0;
-    prev.totalBytesIn += Number(ev.bytesIn) || 0;
-    if (ev.cacheHit) prev.cacheHits += 1;
-    prev.lastStatus = ev.status;
-    prev.lastTs = Date.now();
-
-    await env.FITFOCUS_KV.put(key, JSON.stringify(prev), { expirationTtl: 60 * 60 * 24 * 7 });
-  } catch {
-    // never break request
-  }
 }
