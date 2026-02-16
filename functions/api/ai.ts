@@ -132,30 +132,24 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const { feature: _drop, ...payload } = body ?? {};
   const payloadToSend = (payload && typeof payload === "object") ? payload : {};
 
-  // ---- Payload normalization (frontend tolerance) ----
-  // Gemini expects: contents: [ { parts: [...] } ]
-  // Some clients may accidentally send: contents: { parts: [...] }
-  // We'll normalize to the array form to avoid 400 Bad Request.
+  // HOTFIX: Gemini expects contents to be an array: contents: [{ parts: [...] }]
+  // Some clients send contents as an object: { parts: [...] }. Normalize here to avoid 400.
+  if ((payloadToSend as any)?.contents && !Array.isArray((payloadToSend as any).contents)) {
+    (payloadToSend as any).contents = [(payloadToSend as any).contents];
+  }
+  // If inlineData.data is a data URL, strip the prefix and keep only base64.
   try {
-    const c: any = (payloadToSend as any).contents;
-    if (c && !Array.isArray(c)) {
-      (payloadToSend as any).contents = [c];
-    }
-
-    // If inlineData.data is a data URL, strip prefix to keep only base64
-    const parts: any[] | undefined = (payloadToSend as any)?.contents?.[0]?.parts;
+    const parts = (payloadToSend as any)?.contents?.[0]?.parts;
     if (Array.isArray(parts)) {
       for (const p of parts) {
         const d = p?.inlineData?.data;
         if (typeof d === "string" && d.startsWith("data:")) {
-          const split = d.split(",");
-          p.inlineData.data = split.length > 1 ? split[1] : d;
+          p.inlineData.data = d.split(",")[1] || d;
         }
       }
     }
-  } catch {
-    // never break request
-  }
+  } catch {}
+
 
   const geminiResp = await fetch(url, {
     method: "POST",
