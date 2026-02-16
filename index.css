@@ -1,0 +1,1220 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Local Inter variable font (offline-first) */
+@font-face {
+  font-family: 'Inter';
+  src: url('/Inter-VariableFont.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+body { font-family: 'Inter', sans-serif; }
+
+/* Chart palette (can be used in Recharts) */
+:root {
+  --ff-chart-protein: #60a5fa; /* blue-400 */
+  --ff-chart-fat: #fbbf24;     /* amber-400 */
+  --ff-chart-carbs: #34d399;   /* emerald-400 */
+}
+:root[data-ff-theme="light"] {
+  --ff-chart-protein: #2563eb; /* blue-600 */
+  --ff-chart-fat: #d97706;     /* amber-600 */
+  --ff-chart-carbs: #059669;   /* emerald-600 */
+}
+:root[data-ff-theme="premium"] {
+  --ff-chart-protein: #38bdf8; /* sky-400 */
+  --ff-chart-fat: #fbbf24;     /* amber-400 */
+  --ff-chart-carbs: #a3e635;   /* lime-400 */
+}
+
+/* =========================
+   Theme overrides for the existing Tailwind-heavy UI
+   Goal: make themes visible WITHOUT rewriting all components.
+   ========================= */
+
+/* Main surfaces */
+.bg-slate-950, .bg-slate-950\/90, .bg-slate-950\/80, .bg-slate-950\/70, .bg-slate-950\/60, .bg-slate-950\/55, .bg-slate-950\/50, .bg-slate-950\/40 {
+  background-color: var(--ff-surface) !important;
+}
+.bg-slate-900, .bg-slate-900\/90, .bg-slate-900\/80, .bg-slate-900\/70, .bg-slate-900\/60, .bg-slate-900\/55, .bg-slate-900\/50, .bg-slate-900\/40, .bg-slate-900\/30, .bg-slate-900\/20 {
+  background-color: var(--ff-card) !important;
+}
+.bg-slate-800, .bg-slate-800\/80, .bg-slate-800\/70, .bg-slate-800\/60, .bg-slate-800\/50, .bg-slate-800\/40, .bg-slate-800\/30, .bg-slate-800\/20 {
+  background-color: var(--ff-card-2) !important;
+}
+
+/* Borders */
+.border-slate-900, .border-slate-800, .border-slate-700, .border-white\/20, .border-white\/10 {
+  border-color: var(--ff-border) !important;
+}
+
+/* Text */
+.text-slate-50, .text-slate-100, .text-slate-200, .text-slate-300 {
+  color: var(--ff-text) !important;
+}
+.text-slate-400, .text-slate-500, .text-slate-600 {
+  color: var(--ff-muted) !important;
+}
+
+/* Inputs & placeholders */
+input, textarea, select {
+  color: var(--ff-text);
+}
+input::placeholder, textarea::placeholder {
+  color: color-mix(in srgb, var(--ff-muted) 85%, transparent);
+}
+
+/* Card shadows should not look "dirty" in light theme */
+.shadow-2xl, .shadow-xl, .shadow-lg {
+  box-shadow: 0 20px 50px var(--ff-shadow) !important;
+}
+
+/* =========================
+   FitFocus Multi-Theme (CSS variables)
+   Applied via: document.documentElement.dataset.ffTheme = '<theme>'
+   ========================= */
+:root {
+  --ff-bg: #020617;
+  --ff-surface: rgba(2, 6, 23, 0.72);
+  --ff-card: rgba(15, 23, 42, 0.78);
+  --ff-card-2: rgba(15, 23, 42, 0.52);
+  --ff-border: rgba(148, 163, 184, 0.14);
+  --ff-text: #f8fafc;
+  --ff-muted: #94a3b8;
+  --ff-accent: #6366f1;   /* indigo-500 */
+  --ff-accent2: #a855f7;  /* violet-500 */
+  --ff-shadow: rgba(0, 0, 0, 0.55);
+}
+
+/* Light theme */
+:root[data-ff-theme="light"] {
+  --ff-bg: #f8fafc;
+  --ff-surface: rgba(248, 250, 252, 0.85);
+  --ff-card: rgba(255, 255, 255, 0.92);
+  --ff-card-2: rgba(255, 255, 255, 0.72);
+  --ff-border: rgba(15, 23, 42, 0.10);
+  --ff-text: #0f172a;
+  --ff-muted: rgba(15, 23, 42, 0.65);
+  --ff-accent: #4f46e5;   /* indigo-600 */
+  --ff-accent2: #7c3aed;  /* violet-600 */
+  --ff-shadow: rgba(15, 23, 42, 0.10);
+}
+
+/* Violet AI theme */
+:root[data-ff-theme="violet"] {
+  --ff-bg: #07051a;
+  --ff-card: rgba(17, 12, 46, 0.75);
+  --ff-card-2: rgba(17, 12, 46, 0.52);
+  --ff-border: rgba(167, 139, 250, 0.18);
+  --ff-accent: #8b5cf6;   /* violet-500 */
+  --ff-accent2: #22d3ee;  /* cyan-400 */
+}
+
+/* Calm wellness theme */
+:root[data-ff-theme="calm"] {
+  --ff-bg: #041014;
+  --ff-card: rgba(3, 27, 33, 0.78);
+  --ff-card-2: rgba(3, 27, 33, 0.52);
+  --ff-border: rgba(94, 234, 212, 0.16);
+  --ff-accent: #14b8a6;   /* teal-500 */
+  --ff-accent2: #22c55e;  /* green-500 */
+}
+
+/* Premium theme (navy + gold) */
+:root[data-ff-theme="premium"] {
+  --ff-bg: #020617;
+  --ff-card: rgba(2, 6, 23, 0.86);
+  --ff-card-2: rgba(2, 6, 23, 0.62);
+  --ff-border: rgba(245, 158, 11, 0.18);
+  --ff-accent: #f59e0b;   /* amber-500 */
+  --ff-accent2: #fbbf24;  /* amber-400 */
+}
+
+/* Apply theme vars globally + smooth transitions */
+html, body {
+  background: var(--ff-bg) !important;
+  color: var(--ff-text) !important;
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+/* Global selection color matching active theme */
+::selection {
+  background: color-mix(in srgb, var(--ff-accent) 28%, transparent);
+  color: var(--ff-text);
+}
+
+/* Glass utility */
+.glass {
+  background: var(--ff-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--ff-border);
+}
+
+/* Helper classes */
+.ff-card {
+  background: var(--ff-card);
+  border: 1px solid var(--ff-border);
+  box-shadow: 0 25px 50px -12px var(--ff-shadow);
+}
+.ff-card-soft {
+  background: var(--ff-card-2);
+  border: 1px solid var(--ff-border);
+}
+.ff-accent {
+  color: var(--ff-accent);
+}
+.ff-accent-bg {
+  background: color-mix(in srgb, var(--ff-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ff-accent) 34%, transparent);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--ff-bg); }
+::-webkit-scrollbar-thumb { background: var(--ff-border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ff-muted); }
+
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Better numeric alignment across UI */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Food Infographic Card Styles */
+.ff-infocard {
+  position: relative;
+  width: min(980px, 96vw);
+  margin: 0 auto;
+  padding: 14px;
+  border-radius: 2.5rem;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 25px 50px -12px var(--ff-shadow);
+  overflow-y: auto;
+  max-height: 90vh;
+}
+
+.ff-infocard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 10px;
+  gap: 10px;
+}
+
+.ff-infocard__title {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ff-muted);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ff-infocard__close {
+  background: var(--ff-border);
+  border: 1px solid var(--ff-border);
+  color: var(--ff-text);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.ff-infocard__close:hover {
+  background: var(--ff-border);
+  color: #ef4444;
+}
+
+.ff-infocard__stage {
+  position: relative;
+  border-radius: 2rem;
+  overflow: hidden;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-bg);
+  aspect-ratio: 1 / 1;
+}
+
+/* Фокусный dim: затемняем всё кроме активной зоны (маска) */
+.ff-infocard__stage--focus::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--ff-focus-x) var(--ff-focus-y),
+    rgba(0,0,0,0.00) 0%,
+    rgba(0,0,0,0.00) 18%,
+    rgba(0,0,0,0.16) 34%,
+    rgba(0,0,0,0.28) 55%,
+    rgba(0,0,0,0.36) 75%
+  );
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  z-index: 7;
+}
+
+.ff-infocard__photo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.ff-infocard__photo--sharp {
+  filter: saturate(1.06) contrast(1.06) brightness(1.02);
+}
+
+.ff-infocard__overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at top center,
+    rgba(0,0,0,0.45) 0%,
+    rgba(0,0,0,0.28) 35%,
+    rgba(0,0,0,0.12) 60%,
+    rgba(0,0,0,0.0) 75%
+  );
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Контейнер для UI-элементов */
+.ff-infocard__uiLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Общий класс для UI с локальным blur */
+.ff-ui {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* HALO по зоне ингредиента (x,y,r в %) */
+.ff-infocard__haloArea {
+  position: absolute;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(255,122,47,0.34) 0%,
+    rgba(255,122,47,0.18) 35%,
+    rgba(255,122,47,0.08) 55%,
+    rgba(255,122,47,0.0) 72%
+  );
+  box-shadow:
+    0 0 0 2px rgba(255,122,47,0.40),
+    0 0 34px rgba(255,122,47,0.45),
+    0 0 80px rgba(255,122,47,0.22);
+  mix-blend-mode: screen;
+  filter: saturate(1.12) contrast(1.06);
+  animation: ffHaloPulseArea 1.8s ease-in-out infinite;
+  z-index: 8;
+}
+
+/* Овальная форма halo + лёгкий поворот */
+.ff-infocard__haloArea--oval {
+  width: calc(var(--ff-halo-rx) * 2);
+  height: calc(var(--ff-halo-ry) * 2);
+  transform: translate(-50%, -50%) rotate(var(--ff-halo-rot));
+}
+
+/* Авто-контраст темы Halo */
+.ff-infocard__haloArea--light {
+  outline: 1px solid rgba(0,0,0,0.14);
+  outline-offset: -1px;
+}
+
+.ff-infocard__haloArea--dark {
+  outline: 1px solid rgba(0,0,0,0.28);
+  outline-offset: -1px;
+  box-shadow:
+    0 0 0 2px rgba(255,122,47,0.52),
+    0 0 36px rgba(255,122,47,0.42),
+    0 0 86px rgba(255,122,47,0.20);
+}
+
+/* Мягкий "вектор" в сторону callout */
+.ff-infocard__vector {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(var(--ff-vector-ang));
+  transform-origin: left center;
+  width: var(--ff-vector-len);
+  height: 2px;
+  pointer-events: none;
+  opacity: 0.95;
+  z-index: 9;
+}
+.ff-infocard__vector::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255,122,47,0.00) 0%,
+    rgba(255,122,47,0.18) 20%,
+    rgba(255,122,47,0.55) 70%,
+    rgba(255,122,47,0.85) 100%
+  );
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(255,122,47,0.35);
+}
+.ff-infocard__vector::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,122,47,0.92);
+  box-shadow: 0 0 22px rgba(255,122,47,0.55);
+}
+
+@keyframes ffHaloPulseArea {
+  0%   { transform: translate(-50%, -50%) scale(0.94); opacity: 0.82; }
+  50%  { transform: translate(-50%, -50%) scale(1.06); opacity: 1.0; }
+  100% { transform: translate(-50%, -50%) scale(0.94); opacity: 0.82; }
+}
+
+.ff-infocard__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ff-infocard__svg line {
+  stroke: rgba(255, 255, 255, 0.3);
+  stroke-width: 0.4;
+  stroke-dasharray: 2;
+  animation: dash 20s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: 100;
+  }
+}
+
+.ff-infocard__bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 140px;
+  height: 140px;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.95);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 12px 40px rgba(0,0,0,0.45),
+    inset 0 0 0 2px rgba(255,255,255,0.25);
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  z-index: 20;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ff-infocard__bubbleBtn {
+  cursor: pointer;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+}
+.ff-infocard__bubbleBtn:hover {
+  background: rgba(251, 146, 60, 1);
+  scale: 1.05;
+}
+.ff-infocard__bubbleBtn:focus {
+  outline: none;
+}
+.ff-infocard__bubbleBtn--active {
+  box-shadow:
+    0 12px 44px rgba(0,0,0,0.50),
+    inset 0 0 0 2px rgba(255,255,255,0.4),
+    0 0 0 6px rgba(255,122,47,0.30);
+  scale: 1.1;
+}
+
+.ff-infocard__bubbleLabel {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  opacity: 0.8;
+}
+
+.ff-infocard__bubbleValue {
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ff-infocard__bubbleUnit {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ff-infocard__bubbleHint {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.85;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ff-infocard__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ff-text);
+}
+
+.ff-infocard__breakdown {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+.ff-infocard__breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+}
+.ff-infocard__breakdownName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--ff-text);
+  font-size: 13px;
+}
+.ff-infocard__breakdownMeta {
+  flex: 0 0 auto;
+  opacity: 0.9;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ff-accent);
+}
+.ff-infocard__disclaimer {
+  margin-top: 12px;
+  opacity: 0.7;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.ff-infocard__recipeBlock {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ff-border);
+}
+
+.ff-infocard__recipeBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 1.2rem;
+  background: var(--ff-accent-bg);
+  border: 1px solid var(--ff-border);
+  color: var(--ff-accent);
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ff-infocard__recipeBtn:hover:not(:disabled) {
+  background: var(--ff-accent-bg);
+  border-color: var(--ff-accent);
+}
+
+.ff-infocard__recipeBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ff-infocard__usageRow{
+  margin-top: 8px;
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+.ff-infocard__recipeActions{
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ff-infocard__recipeActionBtn{
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 0.2s;
+}
+.ff-infocard__recipeActionBtn:hover{
+  background: var(--ff-card);
+  border-color: var(--ff-muted);
+}
+
+.ff-infocard__upgradeBox{
+  margin-top: 10px;
+  padding: 16px;
+  border-radius: 1.5rem;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  text-align: left;
+}
+.ff-infocard__upgradeTitle{
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: var(--ff-text);
+  font-size: 14px;
+}
+.ff-infocard__upgradeText{
+  opacity: 0.82;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ff-muted);
+}
+.ff-infocard__upgradeBtn{
+  margin-top: 12px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 1.2rem;
+  border: 1px solid var(--ff-accent);
+  background: var(--ff-accent-bg);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+.ff-infocard__upgradeBtn:hover{
+  background: var(--ff-accent);
+  border-color: var(--ff-accent);
+}
+
+.ff-infocard__recipePhotoWrap{
+  margin-top: 10px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+}
+.ff-infocard__recipePhoto{
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+}
+
+.ff-infocard__scrollArea{
+  /* отдельная прокрутка внутри рецепта, чтобы кнопки были доступны */
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 6px; /* чтобы скроллбар не перекрывал текст */
+}
+
+.ff-infocard__stickyBar{
+  position: sticky;
+  bottom: 0;
+  padding-top: 10px;
+  background: linear-gradient(180deg, transparent 0%, var(--ff-surface) 100%);
+  backdrop-filter: blur(6px);
+  z-index: 50;
+}
+
+.ff-plans__head{
+  display:flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ff-plans__price{
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.ff-plans__per{
+  font-weight: 600;
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+.ff-infocard__callout {
+  position: absolute;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  color: var(--ff-text);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  box-shadow: 0 8px 24px var(--ff-shadow);
+  max-width: min(240px, 44vw);
+  overflow: hidden;
+  /* чтобы измерения были стабильнее и текст не "прыгал" */
+  line-height: 1.1;
+}
+
+.ff-infocard__callout:hover, .ff-infocard__callout--active {
+  background: var(--ff-card-2);
+  border-color: var(--ff-accent);
+  box-shadow: 0 10px 28px var(--ff-shadow), 0 0 0 2px var(--ff-accent-bg);
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.ff-infocard__callout--dim {
+  opacity: 0.45;
+  filter: saturate(0.85);
+}
+
+.ff-infocard__callout--left { transform: translate(-100%, -50%); }
+.ff-infocard__callout--right { transform: translate(0%, -50%); }
+
+.ff-infocard__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f97316;
+  box-shadow: 0 0 10px #f97316;
+  flex-shrink: 0;
+}
+
+.ff-infocard__calloutText {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.ff-infocard__calloutName {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ff-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ff-infocard__calloutPct {
+  font-size: 12px;
+  opacity: 0.75;
+  font-weight: 800;
+  color: #f97316;
+  flex-shrink: 0;
+}
+
+.ff-infocard__macros {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  z-index: 20;
+}
+
+.ff-infocard__macro {
+  background: var(--ff-surface);
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--ff-border);
+  text-align: center;
+  box-shadow: 0 6px 18px var(--ff-shadow);
+}
+
+.ff-infocard__macroK {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--ff-muted);
+  margin-bottom: 2px;
+}
+
+.ff-infocard__macroV {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ff-text);
+}
+
+.ff-infocard__notes {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--ff-card-2);
+  border-radius: 1.5rem;
+  border: 1px solid var(--ff-border);
+}
+
+.ff-infocard__note {
+  font-size: 13px;
+  color: var(--ff-muted);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.ff-infocard__ingredientsList {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.ff-infocard__ingredient {
+  padding: 12px;
+  border-radius: 1rem;
+  background: var(--ff-card-2);
+  border: 1px solid var(--ff-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ff-text);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.ff-infocard__ingredient:hover, .ff-infocard__ingredient--active {
+  background: var(--ff-accent-bg);
+  border-color: var(--ff-accent);
+  opacity: 1 !important;
+}
+
+.ff-infocard__ingredient--dim {
+  opacity: 0.55;
+}
+
+.ff-infocard__ingredientPct {
+  color: #f97316;
+  font-weight: 800;
+}
+
+.ff-infocard__focusToggle {
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ff-infocard__focusToggle:hover {
+  background: var(--ff-card);
+}
+
+.ff-infocard__tooltip {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 24px));
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 16px 50px var(--ff-shadow);
+  z-index: 100;
+  animation: slideUp 0.3s ease-out;
+  /* чтобы длинный контент не вылезал за экран */
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+@keyframes slideUp {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.ff-infocard__tooltipTitle {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ff-text);
+  margin-bottom: 12px;
+}
+
+.ff-infocard__tooltipRow {
+  font-size: 14px;
+  color: var(--ff-muted);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.ff-infocard__tooltipClose {
+  width: 100%;
+  padding: 14px;
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  border-radius: 1.2rem;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 12px;
+}
+.ff-infocard__tooltipClose:hover {
+  background: var(--ff-card);
+}
+
+@media (max-width: 640px) {
+  .ff-infocard__bubble {
+    width: 100px;
+    height: 100px;
+  }
+  .ff-infocard__bubbleValue {
+    font-size: 32px;
+  }
+  .ff-infocard__callout {
+    padding: 4px 8px;
+  }
+  .ff-infocard__calloutName {
+    font-size: 10px;
+  }
+  .ff-infocard__haloArea {
+    box-shadow:
+      0 0 0 2px rgba(255,122,47,0.40),
+      0 0 28px rgba(255,122,47,0.40),
+      0 0 62px rgba(255,122,47,0.20);
+  }
+  .ff-infocard__tooltip{
+    bottom: 10px;
+    max-height: calc(100vh - 20px);
+  }
+  .ff-infocard__recipePhoto{
+    height: 120px;
+  }
+  .ff-infocard__scrollArea{
+    max-height: 52vh;
+  }
+}
+
+@media (max-width: 420px) {
+  .ff-infocard__callout {
+    max-width: 56vw;
+  }
+  .ff-infocard__calloutName {
+    font-size: 11px;
+  }
+  .ff-infocard__calloutPct {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 360px) {
+  .ff-infocard__callout {
+    max-width: 62vw;
+  }
+}
+
+/* Plans layout */
+.ff-plans{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1000;
+}
+.ff-plans__topbar{
+  width: min(720px, 100%);
+  display:flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  color: var(--ff-text);
+}
+.ff-plans__title{ font-weight: 800; letter-spacing: 0.01em; }
+.ff-plans__x{
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  cursor: pointer;
+}
+.ff-plans__x:hover{ background: var(--ff-card); }
+
+.ff-plans__card{
+  width: min(720px, 100%);
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  color: var(--ff-text);
+}
+.ff-plans__card button{
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ff-accent);
+  background: var(--ff-accent-bg);
+  color: var(--ff-text);
+  cursor: pointer;
+  font-weight: 750;
+}
+.ff-plans__card button:disabled{
+  opacity: 0.65;
+  cursor: default;
+}
+.ff-plans__card--pro{
+  border-color: var(--ff-accent);
+  box-shadow: 0 14px 40px var(--ff-shadow);
+}
+
+/* Checkout sheet */
+.ff-plans__sheet{
+  position: fixed;
+  z-index: 460;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-surface);
+  color: var(--ff-text);
+  box-shadow: 0 18px 60px var(--ff-shadow);
+}
+.ff-plans__sheetHead{
+  display:flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ff-plans__sheetTitle{ font-weight: 850; }
+.ff-plans__sheetX{
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  cursor: pointer;
+}
+.ff-plans__sheetSubtitle{
+  margin-top: 6px;
+  font-weight: 750;
+}
+.ff-plans__sheetHint{
+  margin-top: 8px;
+  opacity: 0.78;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ff-plans__methods{
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+.ff-plans__method{
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  cursor: pointer;
+}
+.ff-plans__method:hover{ background: var(--ff-card); }
+.ff-plans__methodName{ font-weight: 800; }
+.ff-plans__methodDesc{ margin-top: 3px; opacity: 0.75; font-size: 12px; }
+
+.ff-plans__method--primary{
+  border-color: var(--ff-accent);
+  background: var(--ff-accent-bg);
+}
+.ff-plans__badge{
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--ff-accent);
+  color: #fff;
+}
+
+.ff-plans__receipt{
+  margin-top: 14px;
+}
+.ff-plans__receiptLabel{
+  font-size: 12px;
+  font-weight: 700;
+}
+.ff-plans__receiptInput{
+  margin-top: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+}
+.ff-plans__receiptInput::placeholder{
+  opacity: 0.6;
+}
+.ff-plans__receiptHint{
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.ff-plans__sheetActions{
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+.ff-plans__activate{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ff-accent);
+  background: var(--ff-accent-bg);
+  color: var(--ff-text);
+  cursor: pointer;
+  font-weight: 800;
+}
+.ff-plans__activate:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ff-plans__back{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  color: var(--ff-text);
+  cursor: pointer;
+}
+.ff-plans__back:hover{ background: var(--ff-card); }
+
+/* ===== AI "analyzing" micro-animation (onboarding) ===== */
+.ff-ai-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ff-border);
+  background: var(--ff-card-2);
+  box-shadow: 0 10px 30px var(--ff-shadow);
+}
+.ff-ai-pill__text{
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ff-text);
+  line-height: 1;
+}
+.ff-ai-dots{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ff-ai-dot{
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ff-accent);
+  box-shadow: 0 0 18px var(--ff-accent);
+  opacity: 0.35;
+  animation: ffAiDot 1.15s ease-in-out infinite;
+}
+.ff-ai-dot--2{ animation-delay: 0.14s; }
+.ff-ai-dot--3{ animation-delay: 0.28s; }
+
+@keyframes ffAiDot{
+  0%   { transform: translateY(0); opacity: 0.35; }
+  35%  { transform: translateY(-2px); opacity: 0.95; }
+  70%  { transform: translateY(0); opacity: 0.45; }
+  100% { transform: translateY(0); opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .ff-ai-dot{ animation: none; opacity: 0.7; }
+}
+/* Hide scrollbar (for chat-like panels) */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* AI Council Animations */
+@keyframes thinking {
+  0% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(-3px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.5; }
+}
+
+.animate-thinking {
+  animation: thinking 1.5s infinite ease-in-out;
+}
+
+.consensus-gradient {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+}

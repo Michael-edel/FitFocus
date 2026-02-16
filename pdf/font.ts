@@ -1,0 +1,104 @@
+import { jsPDF } from "jspdf";
+
+const INTER_FONT_NAME = "Inter";
+const INTER_FONT_STYLE = "normal";
+const INTER_FONT_FILE = "Inter-VariableFont.ttf";
+
+let interFontLoaded = false;
+
+const getPublicBaseUrl = () => {
+  try {
+    // Vite base URL (usually "/")
+    // In some environments (like previews), it can be something else.
+    // Ensure it always ends with "/".
+    const base = (import.meta as any)?.env?.BASE_URL || "/";
+    return base.endsWith("/") ? base : `${base}/`;
+  } catch {
+    return "/";
+  }
+};
+
+const looksLikeHtml = (u8: Uint8Array) => {
+  // quick detect: "<!DO", "<htm", "<HTM"
+  const a = u8[0], b = u8[1], c = u8[2], d = u8[3];
+  if (a === 0x3c && b === 0x21 && c === 0x44 && d === 0x4f) return true; // <!DO
+  if (a === 0x3c && (b === 0x68 || b === 0x48) && (c === 0x74 || c === 0x54) && (d === 0x6d || d === 0x4d)) return true; // <htm / <HTM
+  return false;
+};
+
+const looksLikeFont = (u8: Uint8Array) => {
+  // TTF: 00 01 00 00, OTF: 4F 54 54 4F ("OTTO"), TTC: 74 74 63 66 ("ttcf")
+  if (u8.length < 4) return false;
+  const a = u8[0], b = u8[1], c = u8[2], d = u8[3];
+  const isTTF = a === 0x00 && b === 0x01 && c === 0x00 && d === 0x00;
+  const isOTF = a === 0x4f && b === 0x54 && c === 0x54 && d === 0x4f;
+  const isTTC = a === 0x74 && b === 0x74 && c === 0x63 && d === 0x66;
+  return isTTF || isOTF || isTTC;
+};
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+const loadInterFontBytes = async (): Promise<ArrayBuffer> => {
+  const base = getPublicBaseUrl();
+  // build absolute URL to avoid weird relative resolution in previews
+  const url = new URL(`${base}${INTER_FONT_FILE}`, globalThis.location?.origin || "http://localhost").toString();
+
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Не удалось загрузить шрифт Inter (${res.status}). URL: ${url}`);
+  }
+
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  const buf = await res.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+
+  // SPA fallback / proxy errors often return HTML with 200 OK.
+  if (looksLikeHtml(u8)) {
+    const head = new TextDecoder().decode(u8.slice(0, 200));
+    throw new Error(
+      `Inter.ttf вернулся как HTML (SPA fallback/redirect). content-type=${ct || "(empty)"} url=${url}. head=${head}`
+    );
+  }
+
+  // Accept common font mime OR octet-stream, but also verify by magic bytes.
+  const ctLooksOk =
+    ct.startsWith("font/") ||
+    ct.includes("application/octet-stream") ||
+    ct.includes("application/x-font-ttf") ||
+    ct.includes("application/font-sfnt");
+
+  if (!ctLooksOk && !looksLikeFont(u8)) {
+    throw new Error(
+      `Inter.ttf не похож на шрифт. content-type=${ct || "(empty)"} url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
+    );
+  }
+
+  if (!looksLikeFont(u8)) {
+    // even if ct is "font/ttf", verify content – some CDNs send html with wrong ct
+    throw new Error(
+      `Inter.ttf загружен, но сигнатура файла не TTF/OTF/TTC. url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
+    );
+  }
+
+  return buf;
+};
+
+export const ensurePdfInterFont = async (doc: jsPDF) => {
+  if (interFontLoaded) return;
+
+  const fontBytes = await loadInterFontBytes();
+  const base64 = arrayBufferToBase64(fontBytes);
+
+  doc.addFileToVFS(INTER_FONT_FILE, base64);
+  doc.addFont(INTER_FONT_FILE, INTER_FONT_NAME, INTER_FONT_STYLE);
+
+  interFontLoaded = true;
+};

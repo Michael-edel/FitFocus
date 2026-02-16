@@ -1,0 +1,1995 @@
+
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import clsx from 'clsx';
+import { 
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { 
+  Activity, 
+  Utensils, 
+  Camera, 
+  Plus,
+  Search,
+  Settings,
+  ChefHat,
+  Dumbbell,
+  Heart,
+  Sparkles,
+  ChevronRight,
+  Scale,
+  TrendingUp,
+  CheckCircle2,
+  X,
+  Award,
+  BookOpen,
+  Droplets,
+  Footprints,
+  Leaf,
+  Moon,
+  Flame,
+  LogIn,
+  Loader2,
+  CheckCircle,
+  ChevronLeft,
+  Crown,
+  Download,
+  CheckSquare,
+  Users,
+  BrainCircuit,
+  Brain,
+  ShieldCheck,
+  AlertTriangle,
+  Info,
+  RefreshCcw,
+  Trash2,
+  MessageSquareText,
+  Send,
+  MessageCircle,
+  ChevronDown,
+  History
+} from 'lucide-react';
+// FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
+import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu } from './geminiService';
+import { COURSE_LIBRARY } from './lessons';
+import { Gender, Goal, UserProfile, FoodItem, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse } from './types';
+import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
+import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
+import { toggleHabit, calculateStreak, getTodayKey } from './habits';
+import { addWeight, weightDelta } from './weight';
+import { createTask } from './coach';
+import { detectPlateau } from './plateau';
+import { generateWeeklyIntelligence } from './weeklyIntelligence';
+import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
+import { WeightTrendChart, HabitStreaksCard } from './charts';
+import FoodInsightCard from './FoodInsightCard';
+import PlansScreen from './PlansScreen';
+import { usePaywall } from './usePaywall';
+import { setDevPlanOverride } from './money';
+import { downloadShortHealthReportPdf, downloadDetailedHealthReportPdf } from './pdf';
+import { ensurePdfInterFont } from './pdf/font';
+import SettingsScreen from './SettingsScreen';
+import RecipesScreen from './RecipesScreen';
+import WorkoutsScreen from './WorkoutsScreen';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+// NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
+
+type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
+
+const MAX_DIARY_ITEMS = 500;
+const MAX_HISTORY_ITEMS = 500;
+
+/**
+ * Безопасное сохранение в localStorage с обработкой переполнения
+ */
+const safeSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      console.warn('LocalStorage quota exceeded. Consider clearing old data.');
+    }
+  }
+};
+
+const pickLessonForToday = (user: UserProfile): CourseLesson => {
+  const completedIds = user.courseProgress?.completedLessonIds || [];
+  const nextLesson = COURSE_LIBRARY.find(l => !completedIds.includes(l.id));
+  return nextLesson || COURSE_LIBRARY[0];
+};
+
+const PREMIUM_GATES = {
+  aiFoodPhotoPerDay: { free: 3, pro: Infinity, family: Infinity },
+  aiCoachAdvicePerDay: { free: 1, pro: Infinity, family: Infinity },
+  familyMenuGenerationsPerWeek: { free: 1, pro: 10, family: 100 },
+  weeklyReview: { free: false, pro: true, family: true },
+  metabolicAdaptation: { free: false, pro: true, family: true }
+};
+
+const INITIAL_HABITS: UserHabit[] = [
+  { id: 'h_water', title: 'Пить воду', goal: 8, current: 0, unit: 'ст.', streak: 0, lastCompletedDate: null },
+  { id: 'h_steps', title: '10,000 шагов', goal: 10000, current: 0, unit: 'шаг', streak: 0, lastCompletedDate: null },
+  { id: 'h_veg', title: 'Здоровый завтрак', goal: 1, current: 0, unit: 'порц.', streak: 0, lastCompletedDate: null },
+  { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
+];
+
+function getDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getWeekKey(d: Date): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`;
+}
+
+function formatTime(tsIso: string): string {
+  const d = new Date(tsIso);
+  if (Number.isNaN(d.getTime())) return tsIso;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function last7DayKeys(anchor: Date = new Date()): string[] {
+  const keys: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(anchor);
+    d.setDate(anchor.getDate() - i);
+    keys.push(getDayKey(d));
+  }
+  return keys;
+}
+
+const MacroBar: React.FC<{ label: string; current: number; target: number; color: string; unit?: string }> = React.memo(({ label, current, target, color, unit = 'г' }) => {
+  const progress = Math.min(100, (current / (target || 1)) * 100);
+
+  const handleGenerateWeeklyMenu = useCallback(async () => {
+    if (!currentUser?.aiPlan) return;
+    setWeeklyMenuError(null);
+    setWeeklyMenuLoading(true);
+    try {
+      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
+      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
+      setCurrentUser(updatedUser);
+      setAllUsers(prev => {
+        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        return next;
+      });
+    } catch (e: any) {
+      setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
+    } finally {
+      setWeeklyMenuLoading(false);
+    }
+  }, [currentUser]);
+
+  return (
+    <div className="space-y-2 text-left">
+      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+        <span className="text-slate-500">{label}</span>
+        <span className="text-slate-200 tabular-nums">{Math.round(current)} / {target} {unit}</span>
+      </div>
+      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+        <div className="h-full transition-all duration-1000 ease-out rounded-full shadow-[0_0_8px_rgba(0,0,0,0.1)]" style={{ width: `${progress}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+});
+
+const App: React.FC = () => {
+  const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  // ---- Weekly menus (personal + family) ----
+  const handleGenerateWeeklyMenu = useCallback(async () => {
+    if (!currentUser?.aiPlan) return;
+    setWeeklyMenuError(null);
+    setWeeklyMenuLoading(true);
+    try {
+      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
+      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
+      setCurrentUser(updatedUser);
+      setAllUsers(prev => {
+        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        return next;
+      });
+    } catch (e: any) {
+      setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
+    } finally {
+      setWeeklyMenuLoading(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    // 1) load prefs from saved menu
+    const saved = currentUser.aiPlan?.familyWeeklyMenu?.prefs;
+    // 2) or from localStorage
+    let ls: any = null;
+    try { ls = JSON.parse(localStorage.getItem(`fitfocus_family_menu_prefs_${currentUser.id}`) || 'null'); } catch {}
+    const fromStore = ls && typeof ls === 'object' ? ls : null;
+    const baseInclude = (saved?.includeIds?.length ? saved.includeIds : (fromStore?.includeIds?.length ? fromStore.includeIds : []));
+    const includeIds = baseInclude.length ? baseInclude : allUsers.map(u => u.id);
+    setFamilyMenuPrefs(prev => ({
+      ...prev,
+      includeIds,
+      cookingMode: (saved?.cookingMode || fromStore?.cookingMode || prev.cookingMode) as any,
+      budgetPerWeek: String(saved?.budgetPerWeek ?? fromStore?.budgetPerWeek ?? prev.budgetPerWeek ?? ''),
+      currency: String(saved?.currency ?? fromStore?.currency ?? prev.currency ?? 'KZT'),
+    }));
+  }, [currentUser?.id, allUsers]);
+
+  const persistFamilyMenuPrefs = useCallback((prefs: { includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }) => {
+    if (!currentUser) return;
+    try {
+      localStorage.setItem(`fitfocus_family_menu_prefs_${currentUser.id}`, JSON.stringify({
+        includeIds: prefs.includeIds,
+        cookingMode: prefs.cookingMode,
+        budgetPerWeek: prefs.budgetPerWeek ? Number(prefs.budgetPerWeek) : undefined,
+        currency: prefs.currency
+      }));
+    } catch {}
+  }, [currentUser]);
+
+  const handleGenerateFamilyWeeklyMenu = useCallback(async () => {
+    if (!currentUser?.aiPlan) return;
+    setFamilyMenuError(null);
+    // обязательные вопросы перед генерацией
+    const includeIds = (familyMenuPrefs.includeIds?.length ? familyMenuPrefs.includeIds : allUsers.map(u => u.id));
+    if (!includeIds.length) {
+      setFamilyMenuPrefsOpen(true);
+      return;
+    }
+    if (!familyMenuPrefs.cookingMode) {
+      setFamilyMenuPrefsOpen(true);
+      return;
+    }
+
+    setFamilyMenuLoading(true);
+    try {
+      const prefs = {
+        includeIds,
+        cookingMode: familyMenuPrefs.cookingMode,
+        budgetPerWeek: familyMenuPrefs.budgetPerWeek ? Number(familyMenuPrefs.budgetPerWeek) : undefined,
+        currency: familyMenuPrefs.currency || 'KZT'
+      } as any;
+
+      persistFamilyMenuPrefs(familyMenuPrefs);
+
+      const familyWeeklyMenu = await generateFamilyWeeklyMenu(currentUser, allUsers, prefs);
+      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, familyWeeklyMenu } };
+      setCurrentUser(updatedUser);
+      setAllUsers(prev => {
+        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        return next;
+      });
+    } catch (e: any) {
+      setFamilyMenuError(e?.message || 'Не удалось сгенерировать семейное меню на неделю.');
+    } finally {
+      setFamilyMenuLoading(false);
+    }
+  }, [currentUser, allUsers, familyMenuPrefs, persistFamilyMenuPrefs]);
+
+  const deleteUserProfile = useCallback((userId: string) => {
+    // 1) Удаляем все данные пользователя из localStorage
+    const prefix = `fitfocus_data_${userId}_`;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+    }
+
+    // 2) Удаляем из списка профилей
+    setAllUsers(prev => {
+      const next = prev.filter(u => u.id !== userId);
+      localStorage.setItem('fitfocus_all_users', JSON.stringify(next));
+      return next;
+    });
+
+    // 3) Если удалили "последнего" или текущего — сбрасываем
+    const lastId = localStorage.getItem('fitfocus_last_user_id');
+    if (lastId === userId) localStorage.removeItem('fitfocus_last_user_id');
+
+    if (currentUser?.id === userId) {
+      setCurrentUser(null);
+      setAuthState('auth_choice');
+    }
+  }, [currentUser]);
+  
+  const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
+  const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro'>('dashboard');
+  // AI Council (Orchestrator v2)
+  const [councilInput, setCouncilInput] = useState('');
+  const [councilLoading, setCouncilLoading] = useState(false);
+  const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
+  const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
+  const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
+  type CouncilChatMsg = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; response?: CouncilResponse };
+  const [councilMessages, setCouncilMessages] = useState<CouncilChatMsg[]>([]);
+  const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
+  const councilScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [newWeight, setNewWeight] = useState<string>('');
+  
+  const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
+  const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
+  const [isQuizActive, setIsQuizActive] = useState(false);
+  const [selectedQuizOption, setSelectedQuizOption] = useState<LessonQuizOption | null>(null);
+
+  // Metabolic Adaptation States
+  const [adaptLoading, setAdaptLoading] = useState(false);
+  const [adaptNote, setAdaptNote] = useState<string>('');
+  const [refeedDate, setRefeedDate] = useState<string | null>(null);
+
+  // Weekly Reports History
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
+
+  // Settings
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const raw = localStorage.getItem('ff_settings');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false };
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('ff_settings', JSON.stringify(settings)); } catch {}
+  }, [settings]);
+
+  // AI Council: load/save chat history per user (localStorage)
+  useEffect(() => {
+    if (!currentUser) return;
+    const key = `fitfocus_council_history_${currentUser.id}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setCouncilMessages(parsed);
+      } else {
+        setCouncilMessages([]);
+      }
+    } catch {
+      setCouncilMessages([]);
+    }
+    setExpandedCouncilThoughtIds({});
+    setCouncilResponse(null);
+    setCouncilStage('idle');
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    // keep view pinned to the bottom during conversation
+    if (!councilScrollRef.current) return;
+    councilScrollRef.current.scrollTop = councilScrollRef.current.scrollHeight;
+  }, [councilMessages.length, councilLoading, activeTab]);
+
+  const persistCouncilHistory = useCallback((msgs: CouncilChatMsg[]) => {
+    if (!currentUser) return;
+    const key = `fitfocus_council_history_${currentUser.id}`;
+    try { localStorage.setItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
+  }, [currentUser?.id]);
+
+  // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
+  const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {
+    try { return readAiStatus(); } catch { return null; }
+  });
+
+  const [lastAiAction, setLastAiActionState] = useState(() => {
+    try { return getLastAiAction(); } catch { return null; }
+  });
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      try { setAiStatus(readAiStatus()); } catch {}
+      try { setLastAiActionState(getLastAiAction()); } catch {}
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Apply theme to document root (works for Vite/PWA and AI Studio preview)
+  useEffect(() => {
+    const root = document.documentElement;
+    // store theme in a data-attribute for CSS variables
+    root.dataset.ffTheme = settings.theme;
+    // Tailwind dark-mode class: enabled for all themes except 'light'
+    const isDark = settings.theme !== 'light';
+    root.classList.toggle('dark', isDark);
+  }, [settings.theme]);
+
+  // Favorite recipes
+  const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>(() => {
+    try {
+      const raw = localStorage.getItem('ff_fav_recipes');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
+  const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
+    setFavoriteRecipes(next);
+    try { localStorage.setItem('ff_fav_recipes', JSON.stringify(next)); } catch {}
+  }, []);
+
+  const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
+    persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
+  }, [favoriteRecipes, persistFavorites]);
+
+  const removeFavoriteRecipe = useCallback((id: string) => {
+    persistFavorites(favoriteRecipes.filter(r => r.id !== id));
+  }, [favoriteRecipes, persistFavorites]);
+
+  const clearFavoriteRecipes = useCallback(() => {
+    persistFavorites([]);
+  }, [persistFavorites]);
+
+  const paywall = usePaywall(currentUser?.plan || 'free');
+  const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
+
+  const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+
+  const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
+  const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
+  const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  const [regData, setRegData] = useState({
+    name: '',
+    gender: Gender.MALE,
+    weight: 70,
+    height: 170,
+    age: 25,
+    activityLevel: ActivityLevel.MODERATELY_ACTIVE,
+    goal: Goal.LOSS,
+    targetWeight: 65,
+    plan: 'free' as TariffPlan,
+    lossDeficit: DEFAULT_DEFICIT,
+    gainSurplus: DEFAULT_SURPLUS,
+    riskAckLoss: false,
+    riskAckGain: false
+  });
+
+  const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [isActivatingPlan, setIsActivatingPlan] = useState(false);
+  const [activationStep, setActivationStep] = useState(0);
+  const activationTimerRef = useRef<number | null>(null);
+  const activationIntervalRef = useRef<number | null>(null);
+
+  const [planIntroOpen, setPlanIntroOpen] = useState(false);
+  const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
+  const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
+  const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
+  const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
+  const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
+  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<{ includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }>({
+    includeIds: [],
+    cookingMode: 'all_meals',
+    budgetPerWeek: '',
+    currency: 'KZT'
+  });
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  // Cinematic AI activation steps
+  const ACTIVATION_TOTAL_MS = 3200;
+  const ACTIVATION_STEPS = useMemo(() => ([
+    { title: 'AI анализирует профиль…', subtitle: 'Считываем параметры и контекст цели', icon: Brain },
+    { title: 'Считаем метаболизм и KPI…', subtitle: 'BMR, TDEE и дневные макросы', icon: Activity },
+    { title: 'Готовим персональную стратегию…', subtitle: 'Подбираем режим и прогноз на 4 недели', icon: Sparkles },
+    { title: 'Защищаем ваши данные…', subtitle: 'Offline-first: всё остаётся на устройстве', icon: ShieldCheck },
+  ]), []);
+
+  const ACTIVATION_STEP_MS = Math.round(ACTIVATION_TOTAL_MS / ACTIVATION_STEPS.length);
+
+  const regBMI = useMemo(() => {
+    const h = Number(regData.height) || 0;
+    const w = Number(regData.weight) || 0;
+    if (!h || !w) return 0;
+    const m = h / 100;
+    return w / (m * m);
+  }, [regData.height, regData.weight]);
+
+  const regBMR = useMemo(() => {
+    return Math.round(calculateBMR({ gender: regData.gender, weight: regData.weight, height: regData.height, age: regData.age }));
+  }, [regData.gender, regData.weight, regData.height, regData.age]);
+
+  const regTDEE = useMemo(() => {
+    return Math.round(calculateTDEE({ 
+      gender: regData.gender, 
+      weight: regData.weight, 
+      height: regData.height, 
+      age: regData.age, 
+      activityLevel: regData.activityLevel, 
+      adaptationMultiplier: 1, 
+      goal: regData.goal,
+      lossDeficit: regData.lossDeficit,
+      gainSurplus: regData.gainSurplus
+    }));
+  }, [regData]);
+
+  const regTargets = useMemo(() => {
+    return calculateDailyTargets({ 
+      gender: regData.gender, 
+      weight: regData.weight, 
+      height: regData.height, 
+      age: regData.age, 
+      activityLevel: regData.activityLevel, 
+      adaptationMultiplier: 1, 
+      goal: regData.goal,
+      lossDeficit: regData.lossDeficit,
+      gainSurplus: regData.gainSurplus
+    });
+  }, [regData]);
+
+  const aiRecommendedGoal: Goal = useMemo(() => {
+    if (!regBMI) return regData.goal;
+    if (regBMI >= 27) return Goal.LOSS;
+    if (regBMI <= 20) return Goal.GAIN;
+    return Goal.MAINTAIN;
+  }, [regBMI, regData.goal]);
+
+  const forecast = useMemo(() => {
+    if (!regData.weight || !regTargets.calories) return null;
+    const deficit = regData.goal === Goal.LOSS ? -Number(regData.lossDeficit || DEFAULT_DEFICIT) : regData.goal === Goal.GAIN ? Number(regData.gainSurplus || DEFAULT_SURPLUS) : 0;
+    const weeklyDeltaKg = (deficit * 7) / 7700;
+    return {
+      week4Weight: (regData.weight + weeklyDeltaKg * 4).toFixed(1),
+      weeklyDelta: (weeklyDeltaKg > 0 ? '+' : '') + weeklyDeltaKg.toFixed(2),
+    };
+  }, [regData.weight, regData.goal, regTargets.calories, regData.lossDeficit, regData.gainSurplus]);
+
+  const canAddProfile = useCallback((users: UserProfile[]) => users.length < 5, []);
+  
+  const regNameTrim = (regData.name ?? '').trim();
+  const regNameValid = regNameTrim.length > 0;
+  const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
+
+  const persistUser = useCallback((updated: UserProfile) => {
+    setCurrentUser(updated);
+    setAllUsers(prev => {
+      const next = prev.map(u => u.id === updated.id ? updated : u);
+      safeSetItem('fitfocus_all_users', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const weekKey = getWeekKey(new Date());
+    const usage = user.usage || {};
+    let updated = false;
+    const nextUsage = { ...usage };
+    if (usage.dayKey !== today) {
+      nextUsage.dayKey = today;
+      nextUsage.aiFoodPhotoCount = 0;
+      nextUsage.aiCoachCount = 0;
+      updated = true;
+    }
+    if (usage.weekKey !== weekKey) {
+      nextUsage.weekKey = weekKey;
+      nextUsage.familyMenuCount = 0;
+      updated = true;
+    }
+    if (updated) return { ...user, usage: nextUsage };
+    return user;
+  }, []);
+
+  const targets = useMemo(() => {
+    if (!currentUser) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
+    return calculateDailyTargets(currentUser);
+  }, [currentUser]);
+
+  const weekly = useMemo(() => {
+    if (!currentUser) return null;
+    return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
+  }, [currentUser, foodDiary, habits, targets.calories]);
+
+  const forecastNextWeek = useMemo(() => {
+    if (!weekly || !currentUser) return 0;
+    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 7) / 7700;
+    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 7) / 7700;
+    return 0;
+  }, [weekly, currentUser]);
+
+  const exportWeeklyPDF = async (report: any) => {
+    const doc = new jsPDF();
+    await ensurePdfInterFont(doc);
+    doc.setFont("Inter", "normal");
+    doc.setFontSize(18);
+    doc.text("FitFocus — AI Weekly Intelligence Report", 14, 20);
+    doc.setFontSize(12);
+    doc.text(`Неделя: ${report.weekKey}`, 14, 30);
+    doc.text(`WIS Score: ${report.data.wis}/100`, 14, 36);
+    autoTable(doc, {
+      startY: 45,
+      styles: { font: 'Inter' },
+      head: [["Показатель", "Значение"]],
+      body: [
+        ["Дельта 7 дней", `${report.data.weightDelta7.toFixed(1)} кг`],
+        ["Дельта 30 дней", `${report.data.weightDelta30.toFixed(1)} кг`],
+        ["Комплаенс", `${report.data.compliance}%`],
+        ["Адаптация", `${report.data.adaptationIndex}/100`],
+      ],
+    });
+    if (report.aiText) {
+      doc.setFontSize(12);
+      doc.text("AI Интерпретация:", 14, (doc as any).lastAutoTable.finalY + 10);
+      doc.setFontSize(10);
+      doc.text(doc.splitTextToSize(report.aiText, 180), 14, (doc as any).lastAutoTable.finalY + 18);
+    }
+    doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
+  };
+
+  // Оптимизированный запуск AI генерации еженедельных отчетов
+  const aiReportGenerationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentUser || !weekly) return;
+    
+    const weekKey = getWeekKey(new Date());
+    // Если отчет для этой недели с этим WIS уже генерируется или готов - пропускаем
+    if (aiReportGenerationRef.current === `${currentUser.id}_${weekKey}_${weekly.wis}`) return;
+
+    const generateAI = async () => {
+      aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
+      setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
+      // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
+      return await getWeeklyIntelligenceInterpretation({
+        name: currentUser.name,
+        goal: currentUser.goal,
+        wis: weekly.wis,
+        status: weekly.status,
+        weightDelta7: weekly.weightDelta7,
+        weightDelta30: weekly.weightDelta30,
+        compliancePct: weekly.compliance,
+        adaptationIndex: weekly.adaptationIndex,
+        calorieTarget: targets.calories,
+        macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs }
+      });
+    };
+
+    ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI).then(() => {
+      setWeeklyReports(loadWeeklyReports(currentUser.id));
+    }).catch(err => {
+      const msg = String((err as any)?.message || err || "").toLowerCase();
+      // В dev StrictMode/перезапусках это нормальные "мягкие" ситуации — не засоряем консоль
+      const soft = msg.includes("already in progress") || msg.includes("cooldown") || msg.includes("api key") || msg.includes("missing");
+      if (!soft) console.error("Weekly AI reporting failed", err);
+      aiReportGenerationRef.current = null; // Позволяем переповтор при следующем изменении
+    });
+  }, [currentUser?.id, weekly?.wis]); // Срабатывает только при смене юзера или изменении итогового балла
+
+  const dailyStats = useMemo(() => {
+    return foodDiary.reduce((acc, item) => ({
+      calories: acc.calories + item.calories,
+      protein: acc.protein + item.protein,
+      fat: acc.fat + item.fat,
+      carbs: acc.carbs + item.carbs,
+    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
+  }, [foodDiary]);
+
+  const macroPieData = useMemo(() => {
+    return [
+      { name: 'Белки', value: dailyStats.protein * 4, color: '#818CF8' },
+      { name: 'Жиры', value: dailyStats.fat * 9, color: '#FCD34D' },
+      { name: 'Углеводы', value: dailyStats.carbs * 4, color: '#A7F3D0' }
+    ];
+  }, [dailyStats]);
+
+  const weightTrend = useMemo(() => {
+    if (!currentUser || (currentUser.weightHistory || []).length < 2) return undefined;
+    const sorted = [...currentUser.weightHistory].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const last = sorted[sorted.length - 1];
+    const prev = sorted[sorted.length - 2];
+    const diff = last.weight - prev.weight;
+    const delta7 = weightDelta(currentUser.weightHistory, 7);
+    const delta30 = weightDelta(currentUser.weightHistory, 30);
+    return { current: last.weight, diff, diffPct: (diff / prev.weight) * 100, delta7, delta30 };
+  }, [currentUser]);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    const combined = [...foodHistory, ...foodFavorites];
+    const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
+    return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
+  }, [searchQuery, foodHistory, foodFavorites]);
+
+  const logout = useCallback(() => {
+    setCurrentUser(null);
+    setAuthState('auth_choice');
+    localStorage.removeItem('fitfocus_last_user_id');
+  }, []);
+
+  const loginAsUser = useCallback(async (user: UserProfile) => {
+    const userWithResetUsage = resetUsageIfNewTime(user);
+    const prefix = `fitfocus_data_${user.id}_`;
+    const storedDiary: FoodItem[] = JSON.parse(localStorage.getItem(prefix + 'diary') || '[]');
+    const storedHabits: UserHabit[] = JSON.parse(localStorage.getItem(prefix + 'habits') || JSON.stringify(INITIAL_HABITS));
+    const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+    const userWithOffsets: UserProfile = { 
+      ...userWithTask, 
+      lossDeficit: userWithTask.lossDeficit ?? DEFAULT_DEFICIT, 
+      gainSurplus: userWithTask.gainSurplus ?? DEFAULT_SURPLUS 
+    };
+    setCurrentUser(userWithOffsets);
+    localStorage.setItem('fitfocus_last_user_id', user.id);
+    setFoodDiary(storedDiary);
+    setHabits(storedHabits);
+    setFoodHistory(JSON.parse(localStorage.getItem(prefix + 'history') || '[]'));
+    setFoodFavorites(JSON.parse(localStorage.getItem(prefix + 'favorites') || '[]'));
+    setCoachCard(JSON.parse(localStorage.getItem(prefix + 'last_coach_card') || 'null'));
+    setCurrentLesson(pickLessonForToday(userWithTask));
+    setAuthState('app');
+  }, [resetUsageIfNewTime]);
+
+  const weightDelta14 = useMemo(() => {
+    if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 0;
+    const log = currentUser.weightHistory ?? [];
+    const now = log[log.length - 1];
+    const past = log.slice().reverse().find(e => new Date(now.date).getTime() - new Date(e.date).getTime() >= 14 * 86400000);
+    return past ? (now.weight - past.weight) : 0;
+  }, [currentUser]);
+
+  const expected14 = useMemo(() => {
+    if (!currentUser) return 0;
+    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 14) / 7700;
+    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 14) / 7700;
+    return 0;
+  }, [currentUser]);
+
+  const compliancePct = useMemo(() => {
+    if (!currentUser) return 0;
+    const now = Date.now();
+    const last7 = foodDiary.filter(f => (now - new Date(f.timestamp).getTime()) <= 7 * 86400000);
+    if (!last7.length) return 0;
+    const dayKey = (iso?: string) => (iso ?? "").slice(0, 10);
+    const sums: Record<string, number> = {};
+    for (const f of last7) sums[dayKey(f.timestamp)] = (sums[dayKey(f.timestamp)] ?? 0) + (f.calories ?? 0);
+    const days = Object.keys(sums);
+    const okDays = days.filter(d => sums[d] <= (targets.calories || 1) * 1.1).length;
+    const dietScore = okDays / Math.max(1, days.length);
+    const habitScore = (habits.filter(h => h.current >= h.goal).length) / Math.max(1, habits.length);
+    return Math.round((dietScore * 0.6 + habitScore * 0.4) * 100);
+  }, [currentUser, foodDiary, habits, targets.calories]);
+
+  const adaptationIndex = useMemo(() => {
+    if (!currentUser) return 0;
+    if (currentUser.goal === Goal.MAINTAIN) return 0;
+    const exp = expected14;
+    if (exp === 0) return 0;
+    const actual = weightDelta14;
+    const progress = currentUser.goal === Goal.LOSS
+      ? Math.min(1, Math.max(0, (Math.abs(actual) / Math.abs(exp))))
+      : Math.min(1, Math.max(0, (actual / exp)));
+    const idx = Math.round((1 - progress) * 100);
+    return Math.max(0, Math.min(100, idx));
+  }, [currentUser, expected14, weightDelta14]);
+
+  const adaptationStatus = useMemo(() => {
+    if (!currentUser) return { label: '—', color: 'text-slate-400', level: 'none' as const };
+    if (currentUser.goal === Goal.MAINTAIN) return { label: 'Поддержание', color: 'text-slate-300', level: 'none' as const };
+    if (adaptationIndex < 35) return { label: 'Низкая', color: 'text-emerald-300', level: 'low' as const };
+    if (adaptationIndex < 70) return { label: 'Средняя', color: 'text-amber-300', level: 'mid' as const };
+    return { label: 'Высокая', color: 'text-rose-300', level: 'high' as const };
+  }, [currentUser, adaptationIndex]);
+
+  const refeedSuggestion = useMemo(() => {
+    if (!currentUser) return { type: 'stay' as const };
+    if (currentUser.goal !== Goal.LOSS) return { type: 'stay' as const };
+    if (compliancePct < 70) return { type: 'stay' as const };
+    if (adaptationIndex >= 70) return { type: 'refeed' as const, caloriesTomorrow: targets.calories + 300 };
+    if (adaptationIndex >= 45) return { type: 'adjust' as const, stepsExtra: 2000 };
+    return { type: 'stay' as const };
+  }, [currentUser, compliancePct, adaptationIndex, targets.calories]);
+
+  const scheduleRefeedTomorrow = useCallback(() => {
+    if (!currentUser) return;
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const key = `ff_refeed_${currentUser.id}`;
+    const value = d.toISOString().slice(0, 10);
+    localStorage.setItem(key, value);
+    setRefeedDate(value);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const key = `ff_refeed_${currentUser.id}`;
+    setRefeedDate(localStorage.getItem(key));
+  }, [currentUser?.id]);
+
+  const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
+    if (!currentUser) return false;
+    const usage = currentUser.usage || {};
+    if (type === 'aiFoodPhotoPerDay') return (usage.aiFoodPhotoCount || 0) < (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3);
+    if (type === 'aiCoachAdvicePerDay') return (usage.aiCoachCount || 0) < (PREMIUM_GATES.aiCoachAdvicePerDay[paywall.plan as 'free'] || 1);
+    return !!(PREMIUM_GATES[type] as any)[paywall.plan];
+  }, [currentUser, paywall.plan]);
+
+  const incrementUsage = useCallback((key: keyof UsageStats) => {
+    if (!currentUser) return;
+    const nextUsage = { ...currentUser.usage, [key]: (Number(currentUser.usage?.[key as keyof UsageStats]) || 0) + 1 };
+    persistUser({ ...currentUser, usage: nextUsage });
+  }, [currentUser, persistUser]);
+
+  const addFoodToDiary = useCallback((item: FastLogItem) => {
+    if (!currentUser) return;
+    const newEntry = { ...item, id: Date.now().toString(), timestamp: new Date().toISOString() };
+    const newDiary = [newEntry, ...foodDiary].slice(0, MAX_DIARY_ITEMS);
+    setFoodDiary(newDiary);
+    safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(newDiary));
+    const historyItem = { ...item };
+    delete historyItem.photo;
+    if (historyItem.insight) delete historyItem.insight.recipe;
+    const newHistory = [historyItem, ...foodHistory.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY_ITEMS);
+    setFoodHistory(newHistory);
+    safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(newHistory));
+    return newEntry;
+  }, [foodDiary, foodHistory, currentUser]);
+
+  const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
+    if (!currentUser) return;
+    const updatedUser = toggleHabit(currentUser, habitKey);
+    persistUser(updatedUser);
+    const legacyMap: Record<string, string> = { water: 'h_water', steps: 'h_steps', breakfast: 'h_veg', sleep: 'h_sleep' };
+    const lid = legacyMap[habitKey];
+    if (lid) {
+      const isDone = updatedUser.dailyHabits?.[getTodayKey()]?.[habitKey];
+      const nextHabits = habits.map(h => h.id === lid ? { ...h, current: isDone ? h.goal : 0 } : h);
+      setHabits(nextHabits);
+    }
+  }, [currentUser, habits, persistUser]);
+
+  const handleToggleTask = useCallback((taskDate: string) => {
+    if (!currentUser || !currentUser.tasks) return;
+    const nextTasks = currentUser.tasks.map(t => t.date === taskDate ? { ...t, completed: !t.completed } : t);
+    persistUser({ ...currentUser, tasks: nextTasks });
+  }, [currentUser, persistUser]);
+
+  const exportShortPdf = useCallback(async () => {
+    if (!currentUser) return;
+    await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
+  }, [currentUser, targets, foodDiary, habits]);
+
+  const exportDetailedPdf = useCallback(async () => {
+    if (!currentUser) return;
+    await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
+  }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('fitfocus_all_users');
+    const lastId = localStorage.getItem('fitfocus_last_user_id');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const migrated = Array.isArray(parsed)
+        ? parsed.map((u: any) => ({
+            ...u,
+            lossDeficit: u.lossDeficit ?? DEFAULT_DEFICIT,
+            gainSurplus: u.gainSurplus ?? DEFAULT_SURPLUS,
+          }))
+        : [];
+      // persist migration if any record was missing new fields
+      const changed = migrated.some((u: any, i: number) => (parsed[i]?.lossDeficit == null && u.lossDeficit != null) || (parsed[i]?.gainSurplus == null && u.gainSurplus != null));
+      if (changed) safeSetItem('fitfocus_all_users', JSON.stringify(migrated));
+      setAllUsers(migrated);
+      const lastUser = migrated.find((u: any) => u.id === lastId);
+      if (lastUser) void loginAsUser(lastUser); else setAuthState('auth_choice');
+    } else setAuthState('register');
+  }, [loginAsUser]);
+
+  const handlePhotoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file || !currentUser) return;
+    if (!checkLimit('aiFoodPhotoPerDay')) return paywall.openPaywall();
+    setIsScanning(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const photo = reader.result as string; 
+      const base64 = photo.split(',')[1];
+      const result = await analyzeFoodPhoto(base64);
+      if (result) {
+        const insight: FoodInsight = {
+          calories: result.calories,
+          macros: { protein: result.protein, fat: result.fat, carbs: result.carbs },
+          ingredients: Array.isArray(result.ingredients) ? result.ingredients : [],
+          notes: Array.isArray(result.notes) ? result.notes : []
+        };
+        const newEntry = addFoodToDiary({ ...result, photo, insight });
+        if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight });
+        incrementUsage('aiFoodPhotoCount');
+      }
+      setIsScanning(false);
+    };
+    reader.readAsDataURL(file);
+  }, [currentUser, addFoodToDiary, checkLimit, incrementUsage, paywall]);
+
+  const logWeight = useCallback(() => {
+    if (!currentUser || !newWeight) return;
+    const nextWeight = parseFloat(newWeight);
+    const updatedUser = addWeight(currentUser, nextWeight);
+    persistUser(updatedUser);
+    setNewWeight('');
+  }, [currentUser, newWeight, persistUser]);
+
+  const handleGetCoachAdvice = async () => {
+    if (!currentUser) return;
+    if (!checkLimit('aiCoachAdvicePerDay')) return paywall.openPaywall();
+    // Remember last action for "Retry" button
+    setLastAiAction({ feature: 'coach_advice', type: 'coach', userId: currentUser.id });
+    setCoachLoading(true);
+    try {
+      const todayKey = getTodayKey();
+      const todayHabits = currentUser.dailyHabits?.[todayKey] || {};
+      const habitsDone = Object.values(todayHabits).filter(Boolean).length;
+      const advice = await getCoachAdvice({
+        user: { name: currentUser.name, goal: currentUser.goal, caloriesTarget: targets.calories, proteinTarget: targets.protein, fatTarget: targets.fat, carbsTarget: targets.carbs, adaptationMultiplier: currentUser.adaptationMultiplier },
+        today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
+      });
+      setCoachCard(advice); incrementUsage('aiCoachCount');
+      safeSetItem(`fitfocus_data_${currentUser.id}_last_coach_card`, JSON.stringify(advice));
+    } catch (e) { console.error(e); } finally { setCoachLoading(false); }
+  };
+
+  const handleAiRetry = useCallback(async (opts?: { force?: boolean }) => {
+    const last = (() => { try { return getLastAiAction(); } catch { return null; } })();
+    
+    // Clear cooldown/throttle and potentially proceed
+    const canRun = allowAiRetryNow(last?.feature, opts);
+    if (!canRun) return;
+
+    if (!last || !currentUser) return;
+
+    if (last.type === 'coach') {
+      await handleGetCoachAdvice();
+      return;
+    }
+
+    if (last.type === 'plan') {
+      try {
+        const aiPlan = await generatePersonalPlan(currentUser);
+        persistUser({ ...currentUser, aiPlan });
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
+
+    if (last.type === 'plateau') {
+      setAdaptLoading(true);
+      try {
+        const txt = await generatePlateauExplanation({
+          name: currentUser.name,
+          goal: currentUser.goal,
+          compliancePct,
+          weightDelta14,
+          expected14,
+          adaptationIndex,
+          suggestion: refeedSuggestion,
+        });
+        setAdaptNote(txt);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setAdaptLoading(false);
+      }
+      return;
+    }
+
+    if (last.type === 'wis') {
+      if (!weekly) return;
+      try {
+        aiReportGenerationRef.current = null;
+        const weekKey = getWeekKey(new Date());
+        const generateAI = async () => {
+          aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
+          setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
+          // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
+          return await getWeeklyIntelligenceInterpretation({
+            name: currentUser.name,
+            goal: currentUser.goal,
+            wis: weekly.wis,
+            status: weekly.status,
+            weightDelta7: weekly.weightDelta7,
+            weightDelta30: weekly.weightDelta30,
+            compliancePct: weekly.compliance,
+            adaptationIndex: weekly.adaptationIndex,
+            calorieTarget: targets.calories,
+            macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs },
+          });
+        };
+        await ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI);
+        setWeeklyReports(loadWeeklyReports(currentUser.id));
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
+  }, [currentUser, weekly, targets, compliancePct, weightDelta14, expected14, adaptationIndex, refeedSuggestion, persistUser, handleGetCoachAdvice]);
+
+  const handleRegister = useCallback(async () => {
+    if (allUsers.length >= 5) {
+      setPlanError('Лимит Family: максимум 5 профилей на одном устройстве.');
+      return;
+    }
+    // Risk acknowledgement for aggressive intensity (relative to TDEE)
+    try {
+      // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
+      const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
+      if (isFinite(tdee)) {
+        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
+        const val = regData.goal === Goal.LOSS ? Number((regData as any).lossDeficit ?? DEFAULT_DEFICIT) : Number((regData as any).gainSurplus ?? DEFAULT_SURPLUS);
+        const isAggressive = (regData.goal === Goal.LOSS && val > limit) || (regData.goal === Goal.GAIN && val > limit);
+        const ack = regData.goal === Goal.LOSS ? (regData as any).riskAckLoss : (regData as any).riskAckGain;
+        if (isAggressive && !ack) {
+          setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
+          return;
+        }
+      }
+    } catch {}
+    if (!regNameValid) return;
+    setPlanError(null);
+    const safeName = regData.name.trim();
+    let newUser: UserProfile = {
+      id: `user-${Date.now()}`, 
+      name: safeName.length ? safeName : 'Пользователь', 
+      gender: regData.gender, 
+      weight: Math.max(0, regData.weight || 0), 
+      height: Math.max(0, regData.height || 0), 
+      age: Math.max(0, Math.floor(regData.age || 0)), 
+      activityLevel: regData.activityLevel, 
+      goal: regData.goal, 
+      targetWeight: regData.targetWeight, 
+      adaptationMultiplier: 1.0, 
+      familyMembers: [], 
+      exclusions: '', 
+      lossDeficit: Number(regData.lossDeficit ?? DEFAULT_DEFICIT), 
+      gainSurplus: Number(regData.gainSurplus ?? DEFAULT_SURPLUS), 
+      riskAcknowledgedLoss: !!(regData as any).riskAckLoss,
+      riskAcknowledgedGain: !!(regData as any).riskAckGain,
+      weightHistory: [{ date: new Date().toISOString(), weight: regData.weight }], 
+      tasks: [], 
+      plan: regData.plan
+    };
+    setDevPlanOverride(regData.plan);
+    try {
+      setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id });
+      const aiPlan = await generatePersonalPlan(newUser);
+      newUser = { ...newUser, aiPlan };
+    } catch (e) { setPlanError("Не удалось создать AI-план. Используем базовый план."); }
+    setAllUsers(prev => { 
+      const next = [...prev, newUser]; 
+      safeSetItem('fitfocus_all_users', JSON.stringify(next)); 
+      return next; 
+    });
+    await loginAsUser(newUser);
+    setActiveTab('plan');
+    setPlanIntroOpen(true);
+  }, [regData, loginAsUser, regNameValid, allUsers.length]);
+
+  const handleActivateWithTransition = useCallback(() => {
+    if (!regNameValid || isActivatingPlan) return;
+    setActivationStep(0); setIsActivatingPlan(true);
+    if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
+    activationIntervalRef.current = window.setInterval(() => {
+      setActivationStep((s) => Math.min(s + 1, ACTIVATION_STEPS.length - 1));
+    }, ACTIVATION_STEP_MS);
+    if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
+    activationTimerRef.current = window.setTimeout(async () => {
+      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
+      activationIntervalRef.current = null; activationTimerRef.current = null;
+      await handleRegister(); setIsActivatingPlan(false);
+    }, ACTIVATION_TOTAL_MS);
+  }, [handleRegister, regNameValid, isActivatingPlan, ACTIVATION_STEPS.length, ACTIVATION_STEP_MS, ACTIVATION_TOTAL_MS]);
+
+  useEffect(() => {
+    return () => {
+      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
+      if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
+    };
+  }, []);
+
+  const handleMarkLessonRead = useCallback(() => {
+    if (!currentUser || !currentLesson) return;
+    const progress = currentUser.courseProgress || { completedLessonIds: [], streak: 0 };
+    if (progress.completedLessonIds.includes(currentLesson.id)) return setIsLessonViewOpen(false);
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const nextProgress = {
+      completedLessonIds: [...progress.completedLessonIds, currentLesson.id],
+      lastLessonDate: todayStr,
+      lastLessonId: currentLesson.id,
+      streak: (progress.streak || 0) + 1
+    };
+    persistUser({ ...currentUser, courseProgress: nextProgress });
+    if (currentLesson.quiz) setIsQuizActive(true);
+    else setIsLessonViewOpen(false);
+  }, [currentUser, currentLesson, persistUser]);
+
+  const handleQuizSubmit = useCallback(() => {
+    if (!currentUser || !currentLesson || !selectedQuizOption) return;
+    const newAnswer = { lessonId: currentLesson.id, optionId: selectedQuizOption.id, date: new Date().toLocaleDateString('en-CA') };
+    persistUser({ ...currentUser, lessonQuizAnswers: [...(currentUser.lessonQuizAnswers || []), newAnswer] });
+    setIsQuizActive(false); setIsLessonViewOpen(false); setSelectedQuizOption(null);
+  }, [currentUser, currentLesson, selectedQuizOption, persistUser]);
+
+  const todayTask = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return currentUser?.tasks?.find(t => t.date === today);
+  }, [currentUser]);
+
+  const plateau = useMemo(() => currentUser ? detectPlateau(currentUser) : false, [currentUser]);
+
+  const aiBadge = useMemo(() => {
+    const s = aiStatus;
+    const now = Date.now();
+    const cooling = (s?.cooldownUntil ?? 0) > now;
+
+    if (!s) {
+      return { label: 'AI: готов', cls: 'bg-slate-800/60 text-slate-300 border-slate-700', title: 'AI готов к работе' };
+    }
+
+    if (cooling) {
+      return {
+        label: 'AI: пауза',
+        cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20',
+        title: `AI временно ограничен (квота/лимит). Используется кэш/фолбэк до ${new Date(s.cooldownUntil || now).toLocaleTimeString()}`
+      };
+    }
+
+    if (s.source.includes('cooldown')) {
+      return { label: 'AI: кэш', cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20', title: s.reason || 'Используется кэш из-за лимитов' };
+    }
+    if (s.source === 'cache') {
+      return { label: 'AI: кэш', cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20', title: 'Показывается ранее сгенерированный результат' };
+    }
+    if (s.source === 'fallback') {
+      return { label: 'AI: офлайн', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'AI недоступен, используется локальный совет' };
+    }
+    if (s.source === 'error') {
+      return { label: 'AI: ошибка', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'Ошибка AI' };
+    }
+    return { label: 'AI: online', cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20', title: 'AI отвечает в реальном времени' };
+  }, [aiStatus]);
+
+  const retryMeta = useMemo(() => {
+    const cooling = (aiStatus?.cooldownUntil ?? 0) > Date.now();
+    const typeLabel = !lastAiAction ? '' : (lastAiAction.type === 'coach' ? 'Coach' : lastAiAction.type === 'plan' ? 'Plan' : lastAiAction.type === 'plateau' ? 'Plateau' : 'WIS');
+    const label = lastAiAction ? `Retry: ${typeLabel}` : 'Retry';
+    const title = !lastAiAction
+      ? 'Нет действия для повтора'
+      : (cooling ? 'AI сейчас на паузе из-за квоты. Используйте Force, если понимаете риск.' : 'Повторить последнее действие AI');
+    return { cooling, label, title };
+  }, [aiStatus, lastAiAction]);
+
+  if (authState === 'loading') return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+
+  if (authState === 'auth_choice') return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
+      <div className="max-w-md w-full space-y-8 text-center">
+        <div className="flex justify-center"><div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-indigo-950/50">FF</div></div>
+        <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
+        <div className="grid gap-4">
+          {allUsers.map(user => (
+            <div key={user.id} onClick={() => void loginAsUser(user)} className="flex items-center gap-4 p-5 bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl hover:bg-slate-800 transition-all text-left group cursor-pointer">
+              <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-400 font-bold text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{user.name[0].toUpperCase()}</div>
+              <div className="flex-1">
+                <p className="font-bold text-slate-100 text-lg">{user.name}</p>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-widest tabular-nums">{user.weight} кг · {user.plan || 'Free'}</p>
+              </div>
+              <button
+                type="button"
+                className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
+                title="Удалить профиль"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const ok = confirm(`Удалить профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
+                  if (ok) deleteUserProfile(user.id);
+                }}
+              >
+                <Trash2 size={20} />
+              </button>
+              <LogIn size={20} className="text-slate-600 group-hover:text-indigo-400 shrink-0" />
+            </div>
+          ))}
+          <button 
+            onClick={() => setAuthState('register')} 
+            disabled={allUsers.length >= 5}
+            className="flex items-center justify-center gap-2 p-5 border-2 border-dashed border-slate-800 rounded-[2rem] text-slate-500 hover:text-indigo-400 hover:border-indigo-900 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5)' : 'Создать профиль'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (authState === 'register') return (
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden text-left">
+      {/* Premium backdrop */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-32 -left-24 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-3xl" />
+        <div className="absolute -bottom-40 -right-28 w-[560px] h-[560px] rounded-full bg-violet-600/20 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_55%)]" />
+      </div>
+
+      {/* Modal overlay */}
+      <div className="fixed inset-0 bg-black/55 backdrop-blur-md" />
+
+      {/* Cinematic AI activation overlay */}
+      {isActivatingPlan && (
+        <div className="fixed inset-0 z-[2000] bg-slate-950/70 backdrop-blur-2xl flex items-center justify-center p-4">
+          <div className="w-full max-w-[560px] rounded-[2.5rem] border border-indigo-500/20 bg-gradient-to-b from-slate-950/80 to-slate-950/55 shadow-2xl shadow-indigo-950/40 overflow-hidden">
+            <div className="h-[6px] bg-gradient-r from-indigo-500/0 via-indigo-400/50 to-violet-400/0" />
+            <div className="p-7 sm:p-8">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-600/15 border border-indigo-500/25 grid place-items-center">
+                    {React.createElement(ACTIVATION_STEPS[activationStep]?.icon ?? Sparkles, { size: 18, className: "text-indigo-300" })}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">AI Инициализация</p>
+                    <p className="text-base sm:text-lg font-black text-white truncate">{ACTIVATION_STEPS[activationStep]?.title ?? 'AI анализирует…'}</p>
+                    <p className="text-sm font-semibold text-slate-400 mt-0.5">{ACTIVATION_STEPS[activationStep]?.subtitle ?? 'Подготавливаем персональную стратегию'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200/90 bg-indigo-600/10 border border-indigo-500/20 px-2 py-1 rounded-full">
+                    {Math.min(100, Math.round(((activationStep + 1) / ACTIVATION_STEPS.length) * 100))}%
+                  </span>
+                </div>
+              </div>
+              <div className="mt-5">
+                <div className="h-2 rounded-full bg-slate-900/60 border border-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.35)] transition-all duration-700"
+                    style={{ width: `${Math.min(100, Math.round(((activationStep + 1) / ACTIVATION_STEPS.length) * 100))}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                  <span>Шаг {Math.min(ACTIVATION_STEPS.length, activationStep + 1)} из {ACTIVATION_STEPS.length}</span>
+                  <span className="tabular-nums">{(ACTIVATION_TOTAL_MS / 1000).toFixed(1)}s</span>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">BMR</p><p className="mt-1 text-sm font-black text-white tabular-nums">{regBMR || '—'}</p></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">TDEE</p><p className="mt-1 text-sm font-black text-white tabular-nums">{regTDEE || '—'}</p></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">KPI</p><p className="mt-1 text-sm font-black text-white tabular-nums">{regTargets?.calories ?? '—'}</p></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Готово</p><p className="mt-1 text-sm font-black text-indigo-200 flex items-center gap-2"><CheckCircle2 size={16} className="text-indigo-300" /><span className="tabular-nums">{Math.min(100, Math.round(((activationStep + 1) / ACTIVATION_STEPS.length) * 100))}%</span></p></div>
+              </div>
+              <div className="mt-6 text-xs text-slate-500 font-semibold">Нажимая «Создать AI‑план», вы запускаете персональную модель — можно изменить цель и тариф позже.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative z-10 fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center p-4">
+        <div className="relative w-full md:max-w-4xl bg-slate-900/90 rounded-t-[2.75rem] md:rounded-[3rem] p-6 md:p-10 shadow-2xl space-y-6 border border-slate-800/70 backdrop-blur-xl max-h-[95vh] overflow-y-auto overflow-x-hidden scrollbar-hide">
+          <div className="flex justify-center -mt-2 md:hidden mb-4"><div className="w-12 h-1.5 rounded-full bg-slate-700/70" /></div>
+        <div className="text-center space-y-3">
+          <div className="relative inline-flex w-14 h-14 mx-auto items-center justify-center">
+            <div className="absolute inset-0 rounded-[1.25rem] overflow-hidden pointer-events-none"><div className="absolute inset-[-200%] bg-[conic-gradient(from_0deg,transparent_85%,#818cf8_98%,transparent_100%)] animate-spin" style={{ animationDuration: '3s' }} /></div>
+            <div className="absolute inset-[2px] bg-slate-900 rounded-[1.1rem] z-0" />
+            <div className="relative w-[48px] h-[48px] bg-indigo-600 rounded-[1rem] flex items-center justify-center text-white font-black text-xl shadow-2xl animate-pulse">FF</div>
+          </div>
+          <h1 className="text-xl md:text-2xl font-black text-slate-100 tracking-tight">Настроим ваш персональный AI‑план</h1>
+          <p className="text-[10px] md:text-xs text-slate-400 font-semibold max-w-xs mx-auto">Мы рассчитаем метаболизм, цель и дневные KPI на основе ваших данных.</p>
+        </div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2 text-[10px] font-black text-slate-50 uppercase tracking-widest">
+            <span className={clsx("w-2 h-2 rounded-full", onboardingStep === 1 ? "bg-indigo-400" : "bg-slate-700")} />
+            <span className={clsx("w-2 h-2 rounded-full", onboardingStep === 2 ? "bg-indigo-400" : "bg-slate-700")} />
+            <span>Шаг {onboardingStep} из 2</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {onboardingStep === 1 ? (
+            <div className="space-y-4 md:col-span-2 max-w-md mx-auto w-full">
+              <div className="grid grid-cols-1 gap-2">
+                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Вес (кг)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.weight} onChange={e => setRegData({...regData, weight: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.age} onChange={e => setRegData({...regData, age: Math.max(0, Math.floor(Number(e.target.value) || 0))})} /></div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Пол</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ id: Gender.MALE, label: 'Мужской' }, { id: Gender.FEMALE, label: 'Женский' }].map(g => (
+                    <button key={g.id} onClick={() => setRegData({...regData, gender: g.id})} className={clsx("w-full p-4 text-center rounded-[1.25rem] border text-xs font-black transition-all", regData.gender === g.id ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-800 text-slate-500')}>{g.label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Имя профиля</label><input type="text" className={clsx("w-full p-3.5 bg-slate-950 rounded-[1.25rem] border outline-none transition-all font-bold text-white placeholder:text-slate-500 text-sm", !regNameValid ? "border-amber-500/40" : "border-slate-800")} value={regData.name} onChange={e => setRegData(prev => ({...prev, name: e.target.value}))} placeholder="Наталья" /></div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ваша цель</label>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {[{ id: Goal.LOSS, label: 'Похудение' }, { id: Goal.MAINTAIN, label: 'Поддержание' }, { id: Goal.GAIN, label: 'Набор' }].map(g => (
+                      <button key={g.id} onClick={() => setRegData({...regData, goal: g.id})} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.goal === g.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                        <div className="flex items-center justify-between"><span>{g.label}</span>{aiRecommendedGoal === g.id && <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-black uppercase tracking-widest">AI Рекомендует</span>}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Интенсивность цели (Smart Deficit Engine) */}
+                  {(regData.goal === Goal.LOSS || regData.goal === Goal.GAIN) && (
+                    <div className="space-y-2 mt-4 p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 animate-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Интенсивность цели</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
+                            const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
+                            if (!isFinite(tdee)) return;
+                            if (regData.goal === Goal.LOSS) {
+                              const rec = Math.max(MIN_DEFICIT, Math.min(Math.min(500, Math.round((tdee*0.2)/50)*50), MAX_DEFICIT));
+                              setRegData({ ...regData, lossDeficit: rec, riskAckLoss: false });
+                            }
+                            if (regData.goal === Goal.GAIN) {
+                              const rec = Math.max(MIN_SURPLUS, Math.min(Math.min(300, Math.round((tdee*0.1)/50)*50), MAX_SURPLUS));
+                              setRegData({ ...regData, gainSurplus: rec, riskAckGain: false });
+                            }
+                          }}
+                          className="text-[10px] font-black px-2 py-1 rounded-full border border-slate-800 bg-slate-950 text-slate-300 hover:border-indigo-500/30"
+                        >
+                          Рекомендовать
+                        </button>
+                      </div>
+                      {regData.goal === Goal.LOSS ? (
+                        <div className="grid grid-cols-3 gap-2">
+                          {[250, 500, 750].map(v => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setRegData(prev => ({ ...prev, lossDeficit: v }))}
+                              className={clsx(
+                                "w-full p-3 text-center rounded-[1rem] border text-[10px] font-black transition-all",
+                                Number(regData.lossDeficit || DEFAULT_DEFICIT) === v
+                                  ? "bg-rose-600/10 border-rose-500 text-rose-200"
+                                  : "bg-slate-900 border-slate-800 text-slate-500 hover:border-rose-500/30"
+                              )}
+                            >
+                              -{v} ккал
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2">
+                          {[150, 300, 500].map(v => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => setRegData(prev => ({ ...prev, gainSurplus: v }))}
+                              className={clsx(
+                                "w-full p-3 text-center rounded-[1rem] border text-[10px] font-black transition-all",
+                                Number(regData.gainSurplus || DEFAULT_SURPLUS) === v
+                                  ? "bg-emerald-600/10 border-emerald-500 text-emerald-200"
+                                  : "bg-slate-900 border-slate-800 text-slate-500 hover:border-rose-500/30"
+                              )}
+                            >
+                              +{v} ккал
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {(() => {
+                        const ready = regData.weight && regData.height && regData.age && regData.activityLevel;
+                        if (!ready) return null;
+                        const tdee = calculateTDEE({
+                          gender: regData.gender,
+                          weight: Number(regData.weight),
+                          height: Number(regData.height),
+                          age: Number(regData.age),
+                          activityLevel: regData.activityLevel,
+                          goal: regData.goal,
+                          adaptationMultiplier: 1.0,
+                          lossDeficit: Number(regData.lossDeficit ?? DEFAULT_DEFICIT),
+                          gainSurplus: Number(regData.gainSurplus ?? DEFAULT_SURPLUS),
+                          riskAcknowledgedLoss: !!(regData as any).riskAckLoss,
+                          riskAcknowledgedGain: !!(regData as any).riskAckGain,
+                        } as any);
+                        const off = regData.goal === Goal.LOSS
+                          ? Number(regData.lossDeficit ?? DEFAULT_DEFICIT)
+                          : regData.goal === Goal.GAIN
+                            ? Number(regData.gainSurplus ?? DEFAULT_SURPLUS)
+                            : 0;
+                        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
+                        const tooAggressive = (regData.goal === Goal.LOSS && off > limit) || (regData.goal === Goal.GAIN && off > limit);
+                        if (!tooAggressive) return null;
+                        return (
+                          <div className="mt-2 p-3 rounded-[1rem] bg-amber-500/5 border border-amber-500/20 flex items-start gap-2">
+                            <AlertTriangle size={16} className="text-amber-400 mt-0.5" />
+                            <div className="text-left text-[11px] text-amber-200 font-semibold leading-snug">
+                              Слишком агрессивная интенсивность для вашего TDEE (~{Math.round(tdee)} ккал/день). Рекомендуем не превышать {limit} ккал/день.
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        const ready = regData.weight && regData.height && regData.age && regData.activityLevel;
+                        if (!ready) return null;
+                        // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
+                        const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
+                        if (!isFinite(tdee)) return null;
+                        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
+                        const val = regData.goal === Goal.LOSS ? Number(regData.lossDeficit ?? DEFAULT_DEFICIT) : Number(regData.gainSurplus ?? DEFAULT_SURPLUS);
+                        const isAggressive = (regData.goal === Goal.LOSS && val > limit) || (regData.goal === Goal.GAIN && val > limit);
+                        if (!isAggressive) return null;
+                        const ackKey = regData.goal === Goal.LOSS ? "riskAckLoss" : "riskAckGain";
+                        const ack = (regData as any)[ackKey];
+                        return (
+                          <label className="mt-2 flex items-start gap-2 p-3 rounded-[1rem] bg-slate-950 border border-slate-800 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!ack}
+                              onChange={(e) => setRegData({ ...regData, [ackKey]: e.target.checked } as any)}
+                              className="mt-0.5"
+                            />
+                            <div className="text-[11px] text-slate-300 font-semibold leading-snug">
+                              Я понимаю риски агрессивной интенсивности и хочу продолжить.
+                            </div>
+                          </label>
+                        );
+                      })()}
+                      <div className="text-[10px] text-slate-600 font-semibold mt-1 px-1">
+                        Выбор влияет на прогноз, WIS и «ожидаемое» изменение веса.
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Тариф</label>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {[ { id: 'free' as TariffPlan, label: 'Free', hint: 'AI лимиты' }, { id: 'pro' as TariffPlan, label: 'Pro', hint: 'Без лимит + PDF' }, { id: 'family' as TariffPlan, label: 'Family', hint: '5 профилей' } ].map(p => (
+                      <button key={p.id} onClick={() => setRegData({ ...regData, plan: p.id })} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.plan === p.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                        <div className="flex items-center justify-between"><div className="flex items-center gap-2">{p.id === 'pro' && <Crown size={12} className="text-indigo-300" />}{p.id === 'family' && <Users size={12} className="text-indigo-300" />}<span>{p.label}</span></div><span className="text-[7px] px-1.5 py-0.5 rounded-full bg-slate-900/40 border border-slate-800 text-slate-400 uppercase tracking-widest">{p.hint}</span></div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 shadow-xl">
+                  <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">AI Расчёт</p><span className="ff-ai-pill !py-0.5 !px-2"><BrainCircuit size={10} className="text-indigo-300" /><span className="ff-ai-pill__text !text-[7px]">анализ</span></span></div><p className="text-[9px] font-black text-slate-600 uppercase tabular-nums">BMI {regBMI ? regBMI.toFixed(1) : "—"}</p></div>
+                  <div className="grid grid-cols-2 gap-2 mb-3"><div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">BMR</p><p className="text-lg font-black text-white">{regBMR}</p></div><div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">TDEE</p><p className="text-lg font-black text-white">{regTDEE}</p></div></div>
+                  <div className="p-3 rounded-[1rem] bg-indigo-500/5 border border-indigo-500/20"><p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Цель на день</p><div className="text-sm font-bold text-slate-300 mt-2">{regTargets.calories} ккал<div className="mt-1 text-slate-400 text-xs font-semibold tabular-nums">{regTargets.protein} г белка • {regTargets.fat} г жиров • {regTargets.carbs} г углеводов</div></div><div className="mt-4 text-[11px] text-slate-500 leading-relaxed font-medium">Расчёт выполнен по формуле <span className="text-slate-400 font-semibold">Миффлина–Сан Жеора</span>.<br/>TDEE = BMR × коэффициент активности.<br/>Стратегия: {regData.goal === Goal.LOSS ? `дефицит ${regData.lossDeficit} ккал` : regData.goal === Goal.GAIN ? `профицит ${regData.gainSurplus} ккал` : 'баланс энергии'}.</div></div>
+                </div>
+                {forecast && (<div className="p-4 rounded-[1.5rem] bg-gradient-to-br from-indigo-950/40 to-slate-950 border border-indigo-800/40 shadow-xl"><div className="flex items-center gap-2 mb-2 text-indigo-300"><TrendingUp size={14} /><span className="text-[9px] font-black uppercase tracking-widest">AI Прогноз · 4 недели</span></div><div className="space-y-1"><p className="text-xs font-bold text-slate-200">Вес через месяц: <span className="text-indigo-300 font-black tabular-nums">{forecast.week4Weight} кг</span></p><p className="text-[10px] text-slate-500 italic">Изменение: {forecast.weeklyDelta} кг/нед</p></div></div>)}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="pt-4 space-y-3">
+          {onboardingStep === 1 ? (
+            <button type="button" onClick={() => setOnboardingStep(2)} disabled={!regStep1Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep1Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Рассчитать мой план</button>
+          ) : (
+            <>
+              <button onClick={handleActivateWithTransition} disabled={!regNameValid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regNameValid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
+              <button type="button" onClick={() => onboardingStep === 2 && setOnboardingStep(1)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад к параметрам</button>
+            </>
+          )}
+          <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Без регистрации • Данные на устройстве</p>
+        </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen pb-24 md:pb-0 md:pl-64 bg-slate-950 text-slate-100 text-left">
+      {isScanning && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
+          <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
+          <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
+        </div>
+      )}
+      {paywall.isPaywallOpen && (
+        <PlansScreen currentPlan={currentUser?.plan || 'free'} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
+      )}
+      {insightModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl animate-in zoom-in duration-300">
+            <FoodInsightCard photo={insightModal.photo} name={insightModal.name} insight={insightModal.insight} isPro={paywall.canUsePro} onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(newDiary)); setInsightModal({ ...insightModal, insight: next }); }} onSaveRecipe={addFavoriteRecipe} onClose={() => setInsightModal(null)} />
+          </div>
+        </div>
+      )}
+      <nav className="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center md:top-0 md:left-0 md:w-64 md:h-full md:flex-col md:justify-start md:border-r md:border-t-0 z-50">
+        <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
+          <div className="flex items-center gap-3">
+            <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
+              <div className="absolute inset-0 rounded-[1.1rem] overflow-hidden pointer-events-none"><div className="absolute inset-[-200%] bg-[conic-gradient(from_0deg,transparent_85%,#818cf8_98%,transparent_100%)] animate-spin" style={{ animationDuration: '3s' }} /></div>
+              <div className="absolute inset-[1.5px] bg-slate-900 rounded-[1rem] z-0" />
+              <div className="relative w-[40px] h-[40px] bg-indigo-600 rounded-[0.8rem] flex items-center justify-center text-white font-black text-lg shadow-xl animate-pulse z-10 border border-indigo-400/20">FF</div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xl font-black text-slate-100 tracking-tight leading-none">FitFocus</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Premium</span>
+              <div className="mt-2 flex items-center gap-2">
+                <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
+                  {aiBadge.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleAiRetry()}
+                  disabled={!lastAiAction || retryMeta.cooling}
+                  className={clsx(
+                    "px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95",
+                    (!lastAiAction || retryMeta.cooling) ? "border-slate-900 bg-slate-950 text-slate-600 opacity-50 cursor-not-allowed" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300"
+                  )}
+                  title={retryMeta.title}
+                >
+                  {retryMeta.label}
+                </button>
+                {lastAiAction && retryMeta.cooling && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ok = window.confirm("AI сейчас на паузе из-за квоты/лимита. Force Retry может снова вызвать ошибку quota exceeded и потратить лимиты. Продолжить?");
+                      if (ok) void handleAiRetry({ force: true });
+                    }}
+                    className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200"
+                    title="Принудительно повторить последнее AI-действие, игнорируя паузу"
+                  >
+                    Force
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
+        ))}
+        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
+      </nav>
+      <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
+        {activeTab === 'dashboard' && (
+          <div className="space-y-10 animate-in fade-in duration-700">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="text-left"><h1 className="text-4xl font-black text-slate-200 mb-2">Привет, <span className="text-slate-50">{currentUser?.name}</span>! 👋</h1><p className="text-slate-400 font-medium">Ваш путь к цели под контролем ({paywall.plan})</p></div>
+              <div className="flex items-center gap-3 bg-slate-900 p-2 rounded-[2rem] shadow-sm border border-slate-800"><div className="flex flex-col gap-2 items-center px-2 py-1"><div className="flex gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20"><Scale size={20} className="text-indigo-400 mr-2" /><input type="number" placeholder="Вес" className="bg-transparent w-16 text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="bg-indigo-600 text-white p-4 rounded-[1.5rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all"><Plus size={20} /></button></div>
+            </header>
+            {plateau && currentUser?.goal === Goal.LOSS && (<div className="p-6 rounded-[2.5rem] border border-amber-500/30 bg-amber-500/5 backdrop-blur-md flex items-start gap-4 animate-in slide-in-from-top-4 duration-500"><div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0 border border-amber-500/20"><AlertTriangle size={24} /></div><div className="text-left"><p className="text-[11px] font-black uppercase tracking-widest text-amber-500 mb-1">Обнаружено плато (28 дней анализа)</p><h3 className="text-lg font-black text-slate-100">Ваш вес стабилизировался</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-200"><ShieldCheck size={14} className="text-amber-300" />Интенсивность учтена</div><p className="text-sm font-medium text-slate-400 mt-2">Это естественная адаптация организма. AI-коуч подготовил для вас обновленные рекомендации в разделе «План» и ежедневных задачах.</p></div></div>)}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '24px', border: '1px solid #1e293b', fontWeight: 'bold' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? dailyStats.protein : i === 1 ? dailyStats.fat : dailyStats.carbs} г</p></div>))}</div></div>
+              <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
+              <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8 flex flex-col"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Мой вес</h3><div className="flex flex-col items-end"><span className="text-lg font-black text-slate-50 tabular-nums">{weightTrend?.current || currentUser?.weight} кг</span><div className="flex gap-2 mt-1">{weightTrend && weightTrend.delta7 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta7 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>7д: {weightTrend.delta7 > 0 ? '+' : ''}{weightTrend.delta7.toFixed(1)}</span>}{weightTrend && weightTrend.delta30 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta30 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>30д: {weightTrend.delta30 > 0 ? '+' : ''}{weightTrend.delta30.toFixed(1)}</span>}</div></div></div><div className="flex-1 min-h-[200px]"><WeightTrendChart weightHistory={currentUser?.weightHistory || []} /></div><div className="flex justify-between items-center text-[10px] font-black text-slate-600 uppercase tracking-widest pt-4 border-t border-slate-800"><span>Неделя 1</span><span>Неделя {Math.ceil((currentUser?.weightHistory.length || 1) / 7)}</span></div></div>
+            </div>
+            {currentUser && paywall.canUsePro && (<div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500"><div className="flex items-start justify-between gap-4"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Метаболическая адаптация</span><h3 className="text-3xl font-black text-slate-100 flex items-center gap-2"><span className="tabular-nums">{adaptationIndex}</span><span className="text-sm font-black text-slate-600">/ 100</span><span className={clsx("text-sm font-black ml-4 px-3 py-1 rounded-full bg-slate-950 border border-slate-800", adaptationStatus.color)}>{adaptationStatus.label}</span></h3><p className="text-sm font-semibold text-slate-400 mt-2 text-left">Комплаенс: <span className="tabular-nums font-black text-slate-200">{compliancePct}%</span> · Дельта 14 дней: <span className="tabular-nums font-black text-slate-200">{weightDelta14.toFixed(1)} кг</span></p></div><div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400"><Activity size={28} /></div></div><div className="space-y-2"><div className="h-3 rounded-full bg-slate-950 overflow-hidden border border-slate-800"><div className={clsx("h-full rounded-full transition-all duration-1000 ease-out", adaptationIndex < 35 ? "bg-emerald-500" : adaptationIndex < 70 ? "bg-amber-500" : "bg-rose-500")} style={{ width: `${Math.max(4, adaptationIndex)}%` }} /></div><div className="flex items-center justify-between text-[10px] font-black text-slate-600 uppercase tracking-widest px-1"><span>Низкая</span><span>Средняя</span><span>Высокая</span></div></div><div className="p-6 rounded-[2rem] bg-slate-950/50 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-2"><RefreshCcw size={16} className={clsx(refeedSuggestion.type === 'refeed' ? "text-indigo-400" : "text-slate-500")} /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Рекомендация AI</span></div>{refeedDate && (<span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-600/10 border border-indigo-500/20 px-3 py-1 rounded-full">Рефид: {refeedDate}</span>)}</div>{refeedSuggestion.type === 'refeed' ? (<div className="space-y-4"><p className="text-sm font-bold text-slate-200 leading-relaxed">Предлагаю провести «рефид-день» завтра: <span className="font-black tabular-nums text-indigo-400">{refeedSuggestion.caloriesTomorrow}</span> ккал. Это поможет снизить адаптацию и перезагрузить метаболизм.</p><button type="button" onClick={scheduleRefeedTomorrow} className="w-full py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest bg-indigo-600/10 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all shadow-lg">Запланировать рефид на завтра</button></div>) : refeedSuggestion.type === 'adjust' ? (<p className="text-sm font-bold text-slate-300 leading-relaxed">Мягкая адаптация: попробуйте снизить норму на <span className="font-black text-amber-400">200 ккал</span> или добавить <span className="font-black text-amber-400">+{refeedSuggestion.stepsExtra} шагов</span> в день.</p>) : (<p className="text-sm font-bold text-slate-400 leading-relaxed italic">Динамика в норме — продолжаем текущую стратегию без изменений.</p>)}</div><div className="space-y-4"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Info size={16} className="text-indigo-400" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Интерпретация</span></div><button type="button" disabled={adaptLoading} onClick={async () => { if (!currentUser) return; setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id }); setAdaptLoading(true); // FIX: call generatePlateauExplanation instead of missing getAdaptationExplanation.
+const txt = await generatePlateauExplanation({ name: currentUser.name, goal: currentUser.goal, compliancePct, weightDelta14, expected14, adaptationIndex, suggestion: refeedSuggestion, }); setAdaptNote(txt); setAdaptLoading(false); }} className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95", adaptLoading ? "opacity-60 border-slate-800 bg-slate-900" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300")}>{adaptLoading ? "AI думает..." : "Объяснить"}</button></div><div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10"><p className={clsx("text-sm font-medium leading-relaxed text-left", adaptNote ? "text-slate-200" : "text-slate-500 italic")}>{adaptNote || "Нажмите «Объяснить», чтобы AI интерпретировал вашу динамику веса и комплаенс режима."}</p></div></div></div>)}
+            {weekly && paywall.canUsePro && (<div className="bg-gradient-to-br from-indigo-600/20 via-purple-600/20 to-rose-500/20 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/20 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-600"><div className="flex items-start justify-between"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 opacity-80 block mb-1">AI-Аналитика недели (PRO)</span><div className="mt-4"><div className="flex items-center justify-between gap-6"><h3 className="text-4xl font-black text-white flex items-center gap-3"><span className="tabular-nums">{weekly.wis}</span><span className="text-lg font-black text-indigo-300 opacity-50">/ 100</span></h3><span className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest", weekly.wis >= 80 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : weekly.wis >= 60 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : weekly.wis >= 40 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30")}>{weekly.status}</span></div><div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div></div></div><div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Адаптация</p><p className="text-sm font-black tabular-nums text-white">{weekly.adaptationIndex}/100</p></div></div><div className="mt-2 space-y-2 text-sm font-semibold opacity-90"><p className="font-black text-indigo-100 flex items-center gap-2"><TrendingUp size={16} />Прогноз следующей недели: {forecastNextWeek > 0 ? '+' : ''}{forecastNextWeek.toFixed(2)} кг</p><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/80"><ShieldCheck size={14} className="text-white/80" />Интенсивность учтена</div></div>{weeklyReports.length > 0 && (<div className="mt-8 border-t border-white/10 pt-6"><span className="text-[10px] font-black uppercase tracking-widest text-white/60 block mb-4">История AI-отчётов</span><div className="space-y-4">{weeklyReports.slice().reverse().map((r, idx) => (<div key={idx} className="p-5 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 group hover:border-white/20 transition-all"><div className="flex justify-between items-center"><div className="text-left"><span className="text-sm font-black text-indigo-300">{r.weekKey}</span><p className="text-[10px] font-black uppercase tracking-widest text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p></div><div className="text-right"><span className="text-xs font-black text-white tabular-nums">{r.data.wis}/100</span><p className="text-[8px] font-black uppercase tracking-widest text-white/40">WIS Score</p></div></div>{r.aiText && (<p className="text-sm font-medium text-white/80 leading-relaxed text-left border-l-2 border-indigo-400/30 pl-4">{r.aiText}</p>)}<button onClick={() => exportWeeklyPDF(r)} className="w-full py-3 rounded-xl bg-white/10 border border-white/10 text-white font-bold hover:bg-white/20 transition flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Download size={14} /> Экспорт в PDF</button></div>))}</div></div>)}</div>)}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-10 rounded-[3rem] text-white shadow-2xl shadow-indigo-950/20 relative overflow-hidden group"><div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:scale-110 transition-transform" /><div className="relative z-10 flex flex-col h-full space-y-6"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner border border-white/10"><Sparkles size={28} /></div><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">AI Коучинг</span><h3 className="text-2xl font-black">{coachCard ? coachCard.title : "Ваш коуч рядом"}</h3></div></div><div className="flex-1 flex flex-col justify-center">{coachLoading ? (<div className="flex items-center gap-3 font-bold animate-pulse"><Loader2 className="animate-spin" /> Формирую рекомендации...</div>) : (<div className="space-y-4"><p className="text-lg font-medium leading-relaxed italic opacity-90 text-left">{coachCard ? `"${coachCard.advice}"` : "Нажмите, чтобы получить персональный анализ вашего дня и привычек."}</p>{todayTask && (<div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-xl"><span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2 block text-white text-left">Задача дня:</span><div className="flex items-start gap-4 cursor-pointer" onClick={() => handleToggleTask(todayTask.date)}><div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center transition-all ${todayTask.completed ? 'bg-white text-indigo-600 shadow-lg shadow-white/20' : 'bg-white/10 border-2 border-white/30 text-transparent'}`}><CheckCircle2 size={14} fill="currentColor" /></div><span className={`text-lg font-bold leading-snug text-left ${todayTask.completed ? 'line-through opacity-50' : ''}`}>{todayTask.text}</span></div></div>)}</div>)}</div>{!coachCard && !coachLoading && (<button onClick={handleGetCoachAdvice} className="w-fit px-10 py-4 bg-white text-indigo-600 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl hover:scale-105 transition-all active:scale-95">Получить совет</button>)}</div></div>
+                <div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 flex flex-col justify-between group"><div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-500"><BookOpen size={20} /></div><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Курс обучения</span></div><div className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 border border-emerald-500/20"><Flame size={12} fill="currentColor" /> {currentUser?.courseProgress?.streak || 0} Дней</div></div><div className="bg-slate-950 p-6 rounded-[2rem] flex items-center gap-6 border border-slate-800 group-hover:border-indigo-500/20 transition-all shadow-inner"><div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-sm border border-slate-800"><CheckSquare size={32} className="text-indigo-400" /></div><div className="text-left"><h4 className="text-2xl font-black text-slate-100 leading-tight mb-1">Урок {currentLesson?.week || 1}: {currentLesson?.title}</h4><p className="text-sm text-slate-500 font-bold tabular-nums">{Math.ceil((currentLesson?.readTimeSec || 0) / 60)} минут чтения</p></div></div></div><button onClick={() => setIsLessonViewOpen(true)} className="w-full mt-8 py-5 bg-slate-800 text-slate-300 rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3 border border-slate-700 hover:border-indigo-500 shadow-lg">Открыть урок <ChevronRight size={20} /></button></div>
+             </div>
+           </div>
+         )}
+        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> {d.breakfast}</div><div><span className="text-slate-500 font-black">Обед:</span> {d.lunch}</div><div><span className="text-slate-500 font-black">Ужин:</span> {d.dinner}</div><div><span className="text-slate-500 font-black">Перекус:</span> {d.snack}</div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length ? (<div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">Список покупок</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">{currentUser.aiPlan.weeklyMenu.shoppingList.slice(0, 30).map((s, i) => (<div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>))}</div></div>) : null)}</div>
+
+              {paywall.plan === 'family' && allUsers.length > 1 && (
+                <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Семейное меню на неделю</p>
+                      <p className="mt-1 text-xs text-slate-500 font-semibold">Одна готовка для всех + порции под разные калории. Исключения учитываются.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setFamilyMenuPrefsOpen(true)} disabled={!currentUser?.aiPlan || familyMenuLoading} className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-black text-[11px] uppercase tracking-widest hover:border-indigo-500/30 disabled:opacity-50">Параметры</button>
+                      <button onClick={handleGenerateFamilyWeeklyMenu} disabled={familyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{familyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.familyWeeklyMenu ? 'Обновить' : 'Сгенерировать')}</button>
+                    </div>
+                  </div>
+                  {familyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{familyMenuError}</p>)}
+                  {currentUser?.aiPlan?.familyWeeklyMenu ? (
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {currentUser.aiPlan.familyWeeklyMenu.days.map((d, i) => (
+                        <div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
+                          <div className="text-slate-200 font-black mb-2">{d.day}</div>
+                          {([['Завтрак', d.breakfast], ['Обед', d.lunch], ['Ужин', d.dinner], ['Перекус', d.snack]] as const).map(([label, meal], j) => (
+                            <div key={j} className="mt-2 text-xs text-slate-300 font-semibold">
+                              <div><span className="text-slate-500 font-black">{label}:</span> {meal.base}</div>
+                              <div className="mt-1 pl-3 space-y-0.5">
+                                {Object.entries(meal.portions || {}).map(([pid, ptxt]) => {
+                                  const person = allUsers.find(u => u.id === pid);
+                                  const nm = person?.name || (pid === currentUser.id ? 'Вы' : pid);
+                                  if (!ptxt) return null;
+                                  return <div key={pid} className="text-[11px] text-slate-400"><span className="text-slate-500 font-black">{nm}:</span> {ptxt}</div>;
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
+                  )}
+                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length ? (
+                    <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
+                      <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
+                        {currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
+                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="mt-6"/><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">{(currentUser?.aiPlan?.rules ?? []).slice(0, 6).map((r, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold">• {r}</div>))}</div></div></div>)}
+         {activeTab === 'nutrition' && (<div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-6"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Анализ еды</h1><p className="text-slate-400 font-medium">Фотографируйте — AI посчитает все сам</p></div><div className="flex items-center gap-4"><div className="text-right hidden sm:block"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Осталось сегодня</p><p className="text-xl font-black text-indigo-400 tabular-nums">{checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0} AI Сканов</p></div><label className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-5 rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95"><Camera size={24} /><span>Сканировать фото</span><input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} /></label></div></header><div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold">Вы еще ничего не ели сегодня</p></div>) : ([...foodDiary].map((item) => (<div key={item.id} onClick={() => { if (item.photo && item.insight) setInsightModal({ id: item.id, photo: item.photo, name: item.name, insight: item.insight }); }} role="button" className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center justify-between group hover:border-slate-700 transition-all cursor-pointer"><div className="flex items-center gap-6 flex-1 min-w-0"><div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-slate-800/50 overflow-hidden shrink-0">{item.photo ? (<img src={item.photo} alt={item.name} className="w-full h-full object-cover" />) : (<Utensils size={28} />)}</div><div className="text-left flex-1 min-w-0"><h4 className="text-xl font-black text-slate-100 mb-1 truncate">{item.name}</h4><p className="text-[10px] font-black text-slate-600 uppercase tracking-widest tabular-nums">{formatTime(item.timestamp)} · Б:{Math.round(item.protein)} Ж:{Math.round(item.fat)} У:{Math.round(item.carbs)}</p></div></div><div className="flex flex-col items-end w-28 shrink-0">{item.photo && item.insight && (<button type="button" onClick={(e) => { e.stopPropagation(); setInsightModal({ id: item.id, photo: item.photo!, name: item.name, insight: item.insight! }); }} className="mb-2 text-[10px] px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-black tracking-widest uppercase hover:bg-indigo-500/15 transition">ИНФО</button>)}<div className="text-right tabular-nums"><div className="text-2xl font-black text-slate-50 leading-none">{Math.round(item.calories)}</div><div className="text-xs font-bold text-slate-600 mt-1">Ккал</div></div></div></div>)))}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
+        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
+        {activeTab === 'workouts' && <WorkoutsScreen />}
+        {activeTab === 'family' && (
+          <div className="max-w-4xl mx-auto space-y-10 py-10 animate-in fade-in duration-700">
+            <header className="flex items-center justify-between"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Семья</h1><p className="text-slate-400 font-medium">До 5 профилей в одном аккаунте (Family)</p></div><button onClick={() => setAuthState('auth_choice')} className="px-6 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all">Сменить профиль</button></header>
+            {paywall.plan !== 'family' ? (
+              <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
+                <button 
+                  onClick={() => setAuthState('register')} 
+                  disabled={allUsers.length >= 5}
+                  className="w-full py-6 bg-slate-900 border-2 border-dashed border-slate-800 rounded-[2.5rem] font-black text-slate-500 hover:text-indigo-300 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5) достигнут' : 'Добавить профиль'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === 'council' && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-10 duration-700">
+            <header className="text-left">
+              <div className="flex items-center gap-3 text-indigo-400 mb-2">
+                <BrainCircuit size={28} />
+                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
+              <p className="text-slate-400">Параллельный анализ от 2 экспертов + Peer Review + синтез.</p>
+            </header>
+
+            <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
+              <div className="px-6 md:px-10 py-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <History size={14} /> История совета
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!currentUser) return;
+                    const ok = confirm('Очистить историю AI Совета?');
+                    if (!ok) return;
+                    const key = `fitfocus_council_history_${currentUser.id}`;
+                    try { localStorage.removeItem(key); } catch {}
+                    setCouncilMessages([]);
+                    setCouncilResponse(null);
+                    setExpandedCouncilThoughtIds({});
+                  }}
+                  className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all"
+                >
+                  <Trash2 size={14} /> Очистить
+                </button>
+              </div>
+              <div ref={councilScrollRef} className="flex-1 p-6 md:p-10 overflow-y-auto space-y-8 scrollbar-hide">
+                {/* Chat history */}
+                <div className="space-y-6">
+                  {councilMessages.length === 0 && !councilLoading && (
+                    <div className="h-full flex flex-col items-center justify-center opacity-50 py-24">
+                      <MessageCircle size={72} className="mb-6 text-slate-800" />
+                      <p className="text-center font-bold text-slate-500 text-lg">Задайте вопрос о прогрессе,
+                        <br />метаболизме, рационе или привычках.</p>
+                    </div>
+                  )}
+
+                  {councilMessages.map((m) => {
+                    const isUser = m.role === 'user';
+                    const resp = m.response;
+                    const score = resp?.agreementScore ?? null;
+                    const expanded = !!expandedCouncilThoughtIds[m.id];
+                    return (
+                      <div key={m.id} className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={clsx(
+                            'max-w-[85%] p-5 md:p-6 rounded-[2.5rem] border shadow-xl',
+                            isUser
+                              ? 'bg-indigo-600/10 border-indigo-500/20 text-slate-100'
+                              : 'bg-slate-950 border-slate-800 text-slate-200'
+                          )}
+                        >
+                          {!isUser && score !== null && (
+                            <div className="mb-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Chairman Synthesis</div>
+                                <div className={clsx(
+                                  'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
+                                  score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                                  : score >= 55 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                                  : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                                )}>
+                                  Agreement {score}%
+                                </div>
+                              </div>
+                              <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                                <div
+                                  className={clsx('h-full rounded-full transition-all',
+                                    score >= 80 ? 'bg-emerald-500' : score >= 55 ? 'bg-amber-500' : 'bg-rose-500'
+                                  )}
+                                  style={{ width: `${score}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
+
+                          {!isUser && resp?.thoughts?.length ? (
+                            <div className="mt-4">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                className="flex items-center gap-2 text-slate-500 hover:text-indigo-400 font-black text-[10px] uppercase tracking-widest transition-all"
+                              >
+                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета'}
+                                <ChevronDown className={clsx('transition-transform', expanded && 'rotate-180')} size={14} />
+                              </button>
+
+                              {expanded && (
+                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in zoom-in-95">
+                                  {resp.thoughts.map((t, i) => (
+                                    <div
+                                      key={i}
+                                      className={clsx(
+                                        'p-5 rounded-3xl border',
+                                        t.isReview ? 'bg-slate-900/50 border-slate-800 italic' : 'bg-indigo-500/5 border-indigo-500/20'
+                                      )}
+                                    >
+                                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2">{t.agentName}</p>
+                                      <p className="text-sm text-slate-300">"{t.text}"</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {councilLoading && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[85%] p-5 md:p-6 rounded-[2.5rem] bg-slate-900 border border-slate-800 shadow-xl">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                            <BrainCircuit size={14} /> Совет обсуждает…
+                          </div>
+                          <span className="text-[10px] font-black text-slate-500 uppercase">
+                            {councilStage === 'router' ? 'Router'
+                              : councilStage === 'experts' ? 'Experts'
+                              : councilStage === 'review' ? 'Peer Review'
+                              : councilStage === 'chairman' ? 'Chairman'
+                              : '…'}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+                          {[
+                            { id: 'router', label: 'Router' },
+                            { id: 'experts', label: 'Эксперты' },
+                            { id: 'review', label: 'Review' },
+                            { id: 'chairman', label: 'Synthesis' },
+                          ].map((s) => {
+                            const order = ['router','experts','review','chairman'] as const;
+                            const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
+                            const myIdx = order.indexOf(s.id as any);
+                            const done = myIdx < curIdx;
+                            const active = myIdx === curIdx;
+                            return (
+                              <div
+                                key={s.id}
+                                className={clsx(
+                                  'py-2 rounded-2xl border text-[10px] font-black uppercase tracking-widest',
+                                  done ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                                  : active ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300 animate-pulse'
+                                  : 'bg-slate-950 border-slate-800 text-slate-600'
+                                )}
+                              >
+                                {s.label}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
+                          <span className="ff-ai-dot" />
+                          <span className="ff-ai-dot ff-ai-dot--2" />
+                          <span className="ff-ai-dot ff-ai-dot--3" />
+                          <span className="ml-2">идёт обсуждение…</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!currentUser) return;
+                  const q = councilInput.trim();
+                  if (!q) return;
+
+                  const nowIso = new Date().toISOString();
+                  const userMsg = { id: `u_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`, role: 'user' as const, text: q, createdAt: nowIso };
+                  setCouncilInput('');
+                  setShowCouncilThoughts(false);
+
+                  setCouncilMessages(prev => {
+                    const next = [...prev, userMsg];
+                    persistCouncilHistory(next);
+                    return next;
+                  });
+
+                  setCouncilLoading(true);
+                  setCouncilResponse(null);
+                  setCouncilStage('router');
+
+                  const timers: any[] = [];
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
+
+                  try {
+                    const r = await callAiCouncil(q, currentUser, foodDiary, habits);
+
+                    const assistantMsg = {
+                      id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
+                      role: 'assistant' as const,
+                      text: r.finalAnswer,
+                      createdAt: new Date().toISOString(),
+                      response: r
+                    };
+
+                    setCouncilMessages(prev => {
+                      const next = [...prev, assistantMsg];
+                      persistCouncilHistory(next);
+                      return next;
+                    });
+
+                    setCouncilResponse(r);
+                  } catch (err: any) {
+                    const msg = err?.message || 'Ошибка совета.';
+                    const assistantMsg = {
+                      id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
+                      role: 'assistant' as const,
+                      text: `⚠️ ${msg}`,
+                      createdAt: new Date().toISOString()
+                    };
+                    setCouncilMessages(prev => {
+                      const next = [...prev, assistantMsg];
+                      persistCouncilHistory(next);
+                      return next;
+                    });
+                  } finally {
+                    timers.forEach(t => clearTimeout(t));
+                    setCouncilLoading(false);
+                    setCouncilStage('idle');
+                  }
+                }}
+                className="p-5 md:p-8 bg-slate-950 border-t border-slate-800 flex gap-4"
+              >
+                <textarea
+                  rows={1}
+                  className="flex-1 bg-slate-900 border border-slate-800 p-4 md:p-6 rounded-3xl outline-none text-white focus:border-indigo-500 transition-all resize-none"
+                  value={councilInput}
+                  onChange={(e) => setCouncilInput(e.target.value)}
+                  placeholder="Ваш вопрос экспертам..."
+                />
+                <button
+                  disabled={councilLoading || !councilInput.trim()}
+                  className="bg-indigo-600 p-4 md:p-6 rounded-3xl text-white hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center min-w-[64px]"
+                >
+                  {councilLoading ? <Loader2 className="animate-spin" /> : <Send size={26} />}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+{activeTab === 'pro' && (<div className="max-w-4xl mx-auto space-y-12 py-10 animate-in zoom-in duration-700"><div className="text-center space-y-6"><div className="w-28 h-28 bg-gradient-to-br from-amber-400 to-orange-600 rounded-[3rem] flex items-center justify-center text-white mx-auto shadow-[0_20px_50px_rgba(245,158,11,0.2)]"><Crown size={56} /></div><h1 className="text-5xl font-black text-slate-50">FitFocus Pro</h1><p className="text-slate-400 text-xl font-medium">Все, что нужно для быстрого и здорового результата</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6">{[{ title: "Безлимитный AI Анализ", desc: "Узнайте КБЖУ любого блюда за секунду по фото" }, { title: "Персональный Коучинг", desc: "Ежедневные советы на основе ваших данных" }, { title: "Пошаговые рецепты", desc: "AI составит рецепт любого блюда прямо по вашему фото" }, { title: "Экспорт отчетов", desc: "PDF-выгрузка для врача или фитнес-тренера" }].map((f, i) => (<div key={i} className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 flex items-center gap-8 shadow-sm group hover:border-indigo-500/20 transition-all text-left"><div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner shrink-0"><CheckCircle size={32} /></div><div><h4 className="text-xl font-black text-slate-100 mb-1">{f.title}</h4><p className="text-slate-500 font-medium">{f.desc}</p></div></div>))}</div><button onClick={paywall.openPaywall} className="w-full py-8 bg-indigo-600 text-white rounded-[3rem] font-black text-2xl shadow-[0_20px_50px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all hover:-translate-y-1 active:scale-95">Выбрать тарифный план</button></div>)}
+        {activeTab === 'course' && (<div className="space-y-10 animate-in fade-in duration-700"><header className="flex items-center justify-between text-left"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Обучение</h1><p className="text-slate-400 font-medium">Ваш навигатор в мире нутрициологии</p></div><div className="flex items-center gap-6"><div className="text-right"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Пройдено</p><p className="text-2xl font-black text-slate-100 tabular-nums">{currentUser?.courseProgress?.completedLessonIds.length || 0} <span className="text-sm text-slate-600">/ {COURSE_LIBRARY.length}</span></p></div></div></header><div className="space-y-12">{[1, 2, 3, 4].map(weekNum => (<div key={weekNum} className="space-y-6"><div className="flex items-center gap-6"><h2 className="text-2xl font-black text-slate-200">Неделя {weekNum}</h2><div className="h-1 bg-slate-800 flex-1 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${(COURSE_LIBRARY.filter(l => l.week === weekNum && currentUser?.courseProgress?.completedLessonIds.includes(l.id)).length / COURSE_LIBRARY.filter(l => l.week === weekNum).length) * 100}%` }} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">{COURSE_LIBRARY.filter(l => l.week === weekNum).map(lesson => { const done = currentUser?.courseProgress?.completedLessonIds.includes(lesson.id); return (<button key={lesson.id} onClick={() => { setCurrentLesson(lesson); setIsLessonViewOpen(true); }} className={`p-8 rounded-[2.5rem] text-left border transition-all relative group ${done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800 shadow-xl hover:border-indigo-500/30'}`}>{done && <CheckCircle size={24} className="absolute top-8 right-8 text-emerald-500" />}<span className={`text-[10px] font-black uppercase tracking-widest block mb-4 ${done ? 'text-emerald-500' : 'text-slate-600'}`}>Урок {lesson.id.split('_')[0].replace('l','')}</span><h4 className={`text-xl font-black leading-tight mb-2 ${done ? 'text-emerald-100' : 'text-slate-100'}`}>{lesson.title}</h4><p className={`text-xs font-bold tabular-nums ${done ? 'text-emerald-500/60' : 'text-slate-500'}`}>{Math.ceil(lesson.readTimeSec/60)} минут чтения</p></button>); })}</div></div>))}</div></div>)}
+        {activeTab === 'settings' && (<SettingsScreen settings={settings} onChange={setSettings} user={currentUser} onChangeUser={(u) => u && persistUser(u)} />)}
+      </main>
+      {/* Family menu pre-questions */}
+      {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
+        <div className="fixed inset-0 z-[2100] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4">
+          <div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Семейное меню</p>
+                <h3 className="mt-1 text-2xl font-black text-white">Вопросы перед генерацией</h3>
+                <p className="mt-2 text-sm text-slate-400 font-semibold">Данные о росте/весе/цели берём из профилей регистрации. Здесь — только параметры готовки.</p>
+              </div>
+              <button onClick={() => setFamilyMenuPrefsOpen(false)} className="w-10 h-10 rounded-[1.2rem] border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all grid place-items-center text-slate-200"><X size={18} /></button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Сколько членов семьи учитывать?</p>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {allUsers.map(u => (
+                    <label key={u.id} className="flex items-center gap-2 p-3 rounded-[1.4rem] bg-slate-950/40 border border-slate-800 text-slate-200 font-bold">
+                      <input
+                        type="checkbox"
+                        checked={familyMenuPrefs.includeIds.includes(u.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFamilyMenuPrefs(prev => {
+                            const set = new Set(prev.includeIds);
+                            if (checked) set.add(u.id); else set.delete(u.id);
+                            return { ...prev, includeIds: Array.from(set) };
+                          });
+                        }}
+                      />
+                      <span>{u.name} <span className="text-slate-500 font-black">({u.age} лет)</span></span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-500 font-semibold">Дети: {allUsers.filter(u => familyMenuPrefs.includeIds.includes(u.id) && u.age < 18).map(u => `${u.name} (${u.age})`).join(', ') || 'нет'}</p>
+              </div>
+
+              <div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Готовите 1 раз в день или каждый приём?</p>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <button onClick={() => setFamilyMenuPrefs(prev => ({ ...prev, cookingMode: 'all_meals' }))} className={`p-3 rounded-[1.4rem] border font-black text-sm ${familyMenuPrefs.cookingMode === 'all_meals' ? 'border-indigo-500/40 bg-indigo-600/15 text-indigo-200' : 'border-slate-800 bg-slate-950/40 text-slate-200 hover:border-indigo-500/30'}`}>Каждый приём пищи</button>
+                  <button onClick={() => setFamilyMenuPrefs(prev => ({ ...prev, cookingMode: 'once_per_day' }))} className={`p-3 rounded-[1.4rem] border font-black text-sm ${familyMenuPrefs.cookingMode === 'once_per_day' ? 'border-indigo-500/40 bg-indigo-600/15 text-indigo-200' : 'border-slate-800 bg-slate-950/40 text-slate-200 hover:border-indigo-500/30'}`}>1 раз в день (ужин + остатки)</button>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Нужно ли учитывать бюджет?</p>
+                <div className="mt-3 flex flex-col md:flex-row gap-2">
+                  <input value={familyMenuPrefs.budgetPerWeek} onChange={(e) => setFamilyMenuPrefs(prev => ({ ...prev, budgetPerWeek: e.target.value.replace(/[^0-9]/g, '') }))} placeholder="Напр. 40000" className="flex-1 px-4 py-3 rounded-[1.4rem] bg-slate-950 border border-slate-800 text-slate-100 font-bold outline-none focus:border-indigo-500/40" />
+                  <select value={familyMenuPrefs.currency} onChange={(e) => setFamilyMenuPrefs(prev => ({ ...prev, currency: e.target.value }))} className="px-4 py-3 rounded-[1.4rem] bg-slate-950 border border-slate-800 text-slate-100 font-bold outline-none focus:border-indigo-500/40">
+                    <option value="KZT">KZT</option>
+                    <option value="RUB">RUB</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <p className="mt-2 text-xs text-slate-500 font-semibold">Оставьте пустым, если бюджет не важен.</p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-2">
+              <button
+                onClick={() => { setFamilyMenuPrefsOpen(false); handleGenerateFamilyWeeklyMenu(); }}
+                disabled={!familyMenuPrefs.includeIds.length}
+                className="w-full py-4 rounded-[2rem] font-black text-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-xl shadow-indigo-900/40 hover:from-indigo-500 hover:to-violet-500 transition-all active:scale-[0.98] disabled:opacity-50"
+              >Сгенерировать меню</button>
+              <button onClick={() => setFamilyMenuPrefsOpen(false)} className="w-full py-4 rounded-[2rem] font-black text-sm text-slate-200 border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all">Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {planIntroOpen && currentUser?.aiPlan && (<div className="fixed inset-0 z-[2000] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4"><div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left"><div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Ваш AI‑план готов</p><h3 className="mt-1 text-2xl font-black text-white">{currentUser.aiPlan.title}</h3><p className="mt-2 text-sm text-slate-400 font-semibold">{currentUser.aiPlan.strategySummary}</p></div><button onClick={() => setPlanIntroOpen(false)} className="w-10 h-10 rounded-[1.2rem] border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all grid place-items-center text-slate-200"><X size={18} /></button></div><div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3"><div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-1 text-xl font-black text-white tabular-nums">{currentUser.aiPlan.dailyKpi.calories} ккал</p><p className="text-sm font-black text-slate-200 tabular-nums">{currentUser.aiPlan.dailyKpi.protein}Б · {currentUser.aiPlan.dailyKpi.fat}Ж · {currentUser.aiPlan.dailyKpi.carbs}У</p><p className="mt-3 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser.aiPlan.weeklyFocus}</p></div><div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Первые шаги</p><div className="mt-2 space-y-2">{currentUser.aiPlan.firstTasks.slice(0,3).map((t, i) => (<div key={i} className="text-sm font-bold text-slate-200">• {t}</div>))}</div></div></div>{planError && <p className="mt-4 text-xs text-amber-300 font-bold">{planError}</p>}<div className="mt-6 grid gap-2"><button onClick={() => { setPlanIntroOpen(false); setActiveTab('plan'); }} className="w-full py-4 rounded-[2rem] font-black text-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-xl shadow-indigo-900/40 hover:from-indigo-500 hover:to-violet-500 transition-all active:scale-[0.98]">Открыть полный план</button><button onClick={() => { setPlanIntroOpen(false); setActiveTab('nutrition'); }} className="w-full py-4 rounded-[2rem] font-black text-sm text-slate-200 border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all">Начать дневник сегодня</button></div></div></div>)}
+      {isLessonViewOpen && currentLesson && (<div className="fixed inset-0 bg-slate-950 z-[200] overflow-y-auto animate-in slide-in-from-right duration-500"><div className="max-w-3xl mx-auto px-6 py-12 pb-32 space-y-12">{!isQuizActive ? (<><button onClick={() => setIsLessonViewOpen(false)} className="flex items-center gap-3 text-slate-500 font-black text-xs uppercase tracking-widest hover:text-indigo-400 transition-colors bg-slate-900 px-6 py-3 rounded-full border border-slate-800"><ChevronLeft size={20} /> Назад</button><header className="space-y-4 text-left"><div className="flex gap-2">{currentLesson.tags.map(t => <span key={t} className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-500/20">{t}</span>)}</div><h1 className="text-5xl font-black text-slate-50 leading-tight">{currentLesson.title}</h1></header><div className="space-y-8 text-xl text-slate-400 leading-relaxed font-medium text-left">{currentLesson.content.map((p, i) => <p key={i}>{p}</p>)}</div><div className="bg-slate-900 p-10 rounded-[3rem] space-y-4 border border-slate-800 shadow-2xl text-left"><h3 className="text-2xl font-black text-slate-200">Главный вывод:</h3><p className="text-xl font-bold text-indigo-400 italic">"{currentLesson.takeaway}"</p></div><button onClick={handleMarkLessonRead} className="w-full py-6 bg-slate-100 text-slate-950 rounded-[2.5rem] font-black text-lg shadow-2xl shadow-black/50 hover:bg-white transition-all">Прочитано</button></>) : (<div className="py-20 text-center space-y-12 animate-in zoom-in"><div className="w-24 h-24 bg-indigo-500/10 rounded-[2rem] flex items-center justify-center text-indigo-400 mx-auto shadow-inner border border-indigo-500/20"><Award size={48} /></div><h2 className="text-4xl font-black text-slate-100">{currentLesson.quiz?.question}</h2><div className="grid gap-4">{currentLesson.quiz?.options.map(o => (<button key={o.id} onClick={() => setSelectedQuizOption(o)} className={`w-full p-6 rounded-[2rem] border-4 transition-all text-xl font-black ${selectedQuizOption?.id === o.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-500'}`}>{o.text}</button>))}</div><button onClick={handleQuizSubmit} disabled={!selectedQuizOption} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg disabled:opacity-20 transition-all shadow-xl shadow-indigo-900/40">Завершить урок</button></div>)}</div></div>)}
+    </div>
+  );
+};
+
+export default App;
