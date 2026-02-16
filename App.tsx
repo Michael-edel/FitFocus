@@ -1325,18 +1325,24 @@ const openEditFood = (item: FoodEntry) => {
   const addFoodToDiary = useCallback((item: FastLogItem) => {
     if (!currentUser) return;
     const ts = (item as any).timestamp ?? new Date().toISOString();
-    const newEntry: any = { ...item, id: Date.now().toString(), timestamp: ts, mealType: (item as any).mealType ?? inferMealType(ts) };
-
-    // Avoid storing full-size photos in localStorage (quota). Keep only thumbnail.
-    if (typeof newEntry.photo === 'string') delete newEntry.photo;
-    if (typeof newEntry.photoThumb === 'string' && newEntry.photoThumb.length > 120_000) delete newEntry.photoThumb;
+    // Keep photo in UI state (so user sees it immediately), but strip it from persisted localStorage payload to avoid quota issues.
+    const entryForState: any = { ...item, id: Date.now().toString(), timestamp: ts, mealType: (item as any).mealType ?? inferMealType(ts) };
+    const stripForStorage = (e: any) => {
+      const out: any = { ...e };
+      if (typeof out.photo === 'string') delete out.photo;
+      if (typeof out.photoThumb === 'string' && out.photoThumb.length > 120_000) delete out.photoThumb;
+      return out;
+    };
+    const entryForStorage = stripForStorage(entryForState);
 
     // Use functional update so rapid consecutive adds (e.g. multiple scans)
     // don't overwrite previous entries because of stale closures.
     setFoodDiary((prev) => {
-      const next = [newEntry, ...(prev || [])].slice(0, MAX_DIARY_ITEMS);
-      safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(next));
-      return next;
+      const prevArr = prev || [];
+      const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
+      const nextStorage = [entryForStorage, ...prevArr.map(stripForStorage)].slice(0, MAX_DIARY_ITEMS);
+      safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
+      return nextState;
     });
     const historyItem = { ...item };
     delete historyItem.photo;
@@ -1344,9 +1350,8 @@ const openEditFood = (item: FoodEntry) => {
     const newHistory = [historyItem, ...foodHistory.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY_ITEMS);
     setFoodHistory(newHistory);
     safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(newHistory));
-    return newEntry;
+    return entryForState;
   }, [foodHistory, currentUser]);
-
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!currentUser) return;
     const next = foodDiary.map(it => (it.id === id ? { ...it, ...patch } : it));
