@@ -1,0 +1,1 @@
+Replace your repo file functions/api/ai.ts with this one, commit, push. Then in DevTools Network -> /api/ai -> Response you'll see the real Gemini error.
