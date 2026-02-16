@@ -1402,7 +1402,7 @@ const openEditFood = (item: FoodEntry) => {
     } catch (err) {
       console.error(err);
     }
-    } finally {
+    finally {
       setIsScanning(false);
     }
   }, [currentUser, addFoodToDiary, checkLimit, incrementUsage, paywall]);
