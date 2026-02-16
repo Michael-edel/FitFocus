@@ -1,36 +1,29 @@
-// services/camera.ts
-// Camera utilities for PWA/Browser capture (Android Chrome + installed PWA)
-// Works over HTTPS. Includes safe defaults & stop helpers.
-
 export type CameraFacing = "user" | "environment";
 
-export function preferredConstraints(facing: CameraFacing): MediaStreamConstraints {
-  return {
+export async function startCamera(facing: CameraFacing): Promise<MediaStream> {
+  // Prefer higher resolution for better analysis results.
+  const constraints: MediaStreamConstraints = {
     video: {
       facingMode: { ideal: facing },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
     },
     audio: false,
   };
+
+  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  return stream;
 }
 
-export async function startCamera(facing: CameraFacing): Promise<MediaStream> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Camera API not supported");
-  }
-  return navigator.mediaDevices.getUserMedia(preferredConstraints(facing));
-}
-
-export function stopCamera(stream?: MediaStream | null) {
+export function stopCamera(stream: MediaStream | null) {
   if (!stream) return;
-  for (const t of stream.getTracks()) t.stop();
+  stream.getTracks().forEach((t) => t.stop());
 }
 
 export async function captureToBlob(
   videoEl: HTMLVideoElement,
   mimeType: string = "image/jpeg",
-  quality: number = 0.92
+  quality: number = 0.95
 ): Promise<Blob> {
   const w = videoEl.videoWidth || 1280;
   const h = videoEl.videoHeight || 720;
@@ -40,14 +33,66 @@ export async function captureToBlob(
   canvas.height = h;
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas not supported");
-
+  if (!ctx) throw new Error("Canvas unsupported");
   ctx.drawImage(videoEl, 0, 0, w, h);
 
-  const blob: Blob | null = await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b), mimeType, quality)
-  );
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
+      mimeType,
+      quality
+    );
+  });
 
-  if (!blob) throw new Error("Failed to capture photo");
   return blob;
+}
+
+/**
+ * Some browsers support ImageCapture.takePhoto(), which can yield better quality.
+ * Falls back to canvas capture.
+ */
+export async function capturePhoto(
+  stream: MediaStream | null,
+  videoEl: HTMLVideoElement,
+  mimeType: string = "image/jpeg",
+  quality: number = 0.95
+): Promise<Blob> {
+  try {
+    const w: any = window as any;
+    if (w.ImageCapture && stream) {
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const ic = new w.ImageCapture(track);
+        const blob: Blob = await ic.takePhoto();
+        // Some browsers return image/jpeg by default.
+        if (blob && blob.size > 0) return blob;
+      }
+    }
+  } catch {
+    // ignore and fallback
+  }
+  return captureToBlob(videoEl, mimeType, quality);
+}
+
+export function isTorchSupported(stream: MediaStream | null): boolean {
+  try {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track || !track.getCapabilities) return false;
+    const caps: any = track.getCapabilities();
+    return !!caps?.torch;
+  } catch {
+    return false;
+  }
+}
+
+export async function setTorch(stream: MediaStream | null, on: boolean): Promise<boolean> {
+  try {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track || !track.applyConstraints) return false;
+    const anyTrack: any = track as any;
+    await anyTrack.applyConstraints({ advanced: [{ torch: on }] });
+    return true;
+  } catch {
+    return false;
+  }
 }

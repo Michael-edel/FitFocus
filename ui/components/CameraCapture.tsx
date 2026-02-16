@@ -1,142 +1,179 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  capturePhoto,
+  isTorchSupported,
+  setTorch,
   startCamera,
   stopCamera,
-  captureToBlob,
   type CameraFacing,
 } from "../../services/camera";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onCaptured: (file: File) => void;
+  /** Returns a File that matches what the existing upload pipeline expects. */
+  onCaptured: (file: File) => void | Promise<void>;
+  /** If true, shows PRO-only controls like torch/flash (when supported by device). */
+  pro?: boolean;
 };
 
-/**
- * CameraCapture
- * - Live preview via getUserMedia
- * - Toggle front/back
- * - Capture to JPEG File (then reuse your existing photo pipeline)
- * - Includes fallback file input with capture="environment"
- */
-export default function CameraCapture({ open, onClose, onCaptured }: Props) {
+export default function CameraCapture({ open, onClose, onCaptured, pro }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [facing, setFacing] = useState<CameraFacing>("environment");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
-  async function init() {
-    setError(null);
+  const canShowTorch = useMemo(() => pro && torchAvailable, [pro, torchAvailable]);
+
+  async function boot(nextFacing: CameraFacing) {
+    setStarting(true);
+    setErr(null);
     try {
-      const stream = await startCamera(facing);
-      streamRef.current = stream;
+      stopCamera(stream);
+      const s = await startCamera(nextFacing);
+      setStream(s);
 
-      const v = videoRef.current;
-      if (v) {
-        v.srcObject = stream;
-        await v.play();
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+        await videoRef.current.play();
+      }
+
+      const hasTorch = isTorchSupported(s);
+      setTorchAvailable(hasTorch);
+      if (hasTorch && torchOn) {
+        await setTorch(s, true);
       }
     } catch (e: any) {
-      setError(e?.message ?? "Camera error");
+      setErr(e?.message || "Не удалось открыть камеру");
+      setTorchAvailable(false);
+      setTorchOn(false);
+    } finally {
+      setStarting(false);
     }
-  }
-
-  function cleanup() {
-    stopCamera(streamRef.current);
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
   }
 
   useEffect(() => {
     if (!open) {
-      cleanup();
+      stopCamera(stream);
+      setStream(null);
+      setErr(null);
+      setTorchAvailable(false);
+      setTorchOn(false);
       return;
     }
-    init();
-    return () => cleanup();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, facing]);
 
-  async function onShot() {
+    boot(facing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    boot(facing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facing]);
+
+  async function handleCapture() {
     if (!videoRef.current) return;
-    setBusy(true);
     try {
-      const blob = await captureToBlob(videoRef.current, "image/jpeg", 0.92);
-      const file = new File([blob], `fitfocus_${Date.now()}.jpg`, { type: blob.type });
-      onCaptured(file);
+      const blob = await capturePhoto(stream, videoRef.current, "image/jpeg", 0.95);
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+      await onCaptured(file);
       onClose();
     } catch (e: any) {
-      setError(e?.message ?? "Capture failed");
-    } finally {
-      setBusy(false);
+      setErr(e?.message || "Не удалось сделать фото");
     }
+  }
+
+  async function toggleTorch() {
+    const next = !torchOn;
+    setTorchOn(next);
+    const ok = await setTorch(stream, next);
+    if (!ok) setTorchOn(!next);
   }
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
-      <div className="w-[min(96vw,520px)] rounded-2xl overflow-hidden bg-zinc-950 border border-white/10">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <div className="text-white font-semibold">Камера</div>
-          <button className="text-white/70 hover:text-white" onClick={onClose}>
-            ✕
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-[680px] rounded-2xl bg-[#0b1220] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div className="text-sm font-semibold text-white">Камера</div>
+          <button
+            className="rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+            onClick={onClose}
+          >
+            Закрыть
           </button>
         </div>
 
-        <div className="relative">
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className="w-full aspect-[3/4] object-cover bg-black"
-          />
-          {error && (
-            <div className="absolute inset-0 p-4 text-sm text-red-200 bg-black/70">
-              <div className="font-semibold">Не удалось открыть камеру</div>
-              <div className="mt-2">{error}</div>
-              <div className="mt-3 text-white/70">
-                Используйте “Загрузить фото” ниже или откройте сайт в Chrome.
+        <div className="p-4">
+          <div className="relative overflow-hidden rounded-2xl bg-black">
+            <video
+              ref={videoRef}
+              className="h-[420px] w-full object-cover"
+              playsInline
+              muted
+              autoPlay
+            />
+            {starting && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white/80">
+                Открываю камеру…
               </div>
+            )}
+          </div>
+
+          {err && (
+            <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              {err}
             </div>
           )}
-        </div>
 
-        <div className="p-4 flex gap-3 justify-between">
-          <button
-            className="px-4 py-2 rounded-xl bg-white/10 text-white"
-            onClick={() => setFacing((v) => (v === "environment" ? "user" : "environment"))}
-            disabled={busy}
-          >
-            Переключить
-          </button>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="rounded-xl bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
+                onClick={() => setFacing((v) => (v === "environment" ? "user" : "environment"))}
+                disabled={starting}
+              >
+                Переключить камеру
+              </button>
 
-          <button
-            className="px-5 py-2 rounded-xl bg-orange-500 text-black font-semibold disabled:opacity-60"
-            onClick={onShot}
-            disabled={busy || !!error}
-          >
-            {busy ? "..." : "Снять"}
-          </button>
-        </div>
+              {canShowTorch && (
+                <button
+                  className={
+                    "rounded-xl px-4 py-2 text-sm text-white hover:bg-white/15 " +
+                    (torchOn ? "bg-yellow-500/20" : "bg-white/10")
+                  }
+                  onClick={toggleTorch}
+                  disabled={starting}
+                  title="Подсветка (если поддерживается устройством)"
+                >
+                  {torchOn ? "Подсветка: ВКЛ" : "Подсветка: ВЫКЛ"}
+                </button>
+              )}
 
-        <div className="px-4 pb-4">
-          <label className="block text-xs text-white/50 mb-2">Если камера не открывается:</label>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="block w-full text-white/70"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) {
-                onCaptured(f);
-                onClose();
-              }
-            }}
-          />
+              {!pro && torchAvailable && (
+                <div className="rounded-xl bg-white/5 px-3 py-2 text-xs text-white/60">
+                  Подсветка доступна в PRO
+                </div>
+              )}
+            </div>
+
+            <button
+              className="rounded-xl bg-[#5b5cf6] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+              onClick={handleCapture}
+              disabled={starting}
+            >
+              Снять
+            </button>
+          </div>
+
+          <div className="mt-3 text-xs text-white/50">
+            Совет: лучшее качество — при хорошем свете и без движения.
+          </div>
         </div>
       </div>
     </div>
