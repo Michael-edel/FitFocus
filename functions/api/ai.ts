@@ -309,12 +309,17 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const data = await geminiResp.json().catch(() => ({}));
   const latency = Date.now() - startedAt;
 
+  // --- Compatibility layer -------------------------------------------------
+  // UI (geminiService.ts) historically ожидает поле `text`.
+  // Gemini API обычно возвращает: candidates[].content.parts[].text
+  const extractedText = extractTextFromGemini(data);
+
   if (kv) {
     await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data }), { expirationTtl: 60 });
     await logUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
-  return new Response(JSON.stringify(data), {
+  return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
       "Content-Type": "application/json",
@@ -323,4 +328,24 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       "X-FF-KV": kv ? "found" : "missing"
     },
   });
+}
+
+function extractTextFromGemini(data: any): string {
+  if (data && typeof data.text === 'string') return data.text;
+
+  const parts: string[] = [];
+  const candidates = data?.candidates;
+  if (Array.isArray(candidates)) {
+    for (const c of candidates) {
+      const p = c?.content?.parts;
+      if (Array.isArray(p)) {
+        for (const part of p) {
+          if (part && typeof part.text === 'string') parts.push(part.text);
+        }
+      }
+    }
+  }
+
+  if (!parts.length && typeof data?.output_text === 'string') return data.output_text;
+  return parts.join('\n').trim();
 }

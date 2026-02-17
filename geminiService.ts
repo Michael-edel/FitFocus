@@ -62,7 +62,30 @@ async function callAiProxy(model: string, contents: any, feature: string, config
     throw new Error(msg);
   }
 
-  return data;
+  // Нормализуем ответ: UI ожидает поле `text`,
+  // а Gemini API часто возвращает структуру candidates[].content.parts[].text
+  const text = extractTextFromGemini(data);
+  return { ...data, text };
+}
+
+function extractTextFromGemini(data: any): string {
+  if (data && typeof data.text === "string") return data.text;
+
+  const out: string[] = [];
+  const candidates = data?.candidates;
+  if (Array.isArray(candidates)) {
+    for (const c of candidates) {
+      const parts = c?.content?.parts;
+      if (Array.isArray(parts)) {
+        for (const p of parts) {
+          if (p && typeof p.text === "string") out.push(p.text);
+        }
+      }
+    }
+  }
+
+  if (!out.length && typeof data?.output_text === "string") return data.output_text;
+  return out.join("\n").trim();
 }
 
 
