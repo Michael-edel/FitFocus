@@ -1,44 +1,52 @@
+// Cloudflare Pages Function: /api/me
+// Returns current session user from ff_session cookie (HS256 JWT).
 
-/**
- * FitFocus: current user (session)
- * GET /api/me
- * Reads ff_session cookie (HS256 JWT signed with AUTH_JWT_SECRET)
- * No external deps.
- */
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
+  if (!token) return json({ user: null }, 200);
 
-export interface Env {
-  AUTH_JWT_SECRET: string;
-  FITFOCUS_KV?: any;
+  if (!env.AUTH_JWT_SECRET) return json({ user: null }, 200);
+
+  const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
+  if (!payload) return json({ user: null }, 200);
+
+  const user = {
+    sub: payload.sub,
+    email: payload.email,
+    name: payload.name,
+    picture: payload.picture,
+  };
+
+  return json({ user }, 200);
+};
+
+type Env = { AUTH_JWT_SECRET: string };
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
 }
 
-function b64urlEncode(bytes: Uint8Array) {
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  const b64 = btoa(s).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-  return b64;
+function readCookie(cookieHeader: string, name: string): string | null {
+  const parts = cookieHeader.split(";").map((p) => p.trim());
+  for (const p of parts) {
+    if (p.startsWith(name + "=")) return p.slice(name.length + 1);
+  }
+  return null;
 }
 
-function b64urlDecodeToBytes(b64url: string) {
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
-  const bin = atob(b64);
+function b64urlToBytes(s: string): Uint8Array {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
 
-async function hmacSign(secret: string, data: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  return b64urlEncode(new Uint8Array(sig));
-}
-
-async function hmacVerify(secret: string, data: string, signatureB64Url: string) {
+async function hmacVerify(data: string, signatureB64Url: string, secret: string): Promise<boolean> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -46,78 +54,30 @@ async function hmacVerify(secret: string, data: string, signatureB64Url: string)
     false,
     ["verify"]
   );
-  const sigBytes = b64urlDecodeToBytes(signatureB64Url);
-  return crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(data));
+  return crypto.subtle.verify("HMAC", key, b64urlToBytes(signatureB64Url), new TextEncoder().encode(data));
 }
 
-function jsonResponse(obj: any, status = 200, extraHeaders: Record<string,string> = {}) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      ...extraHeaders,
-    },
-  });
-}
-
-function getCookie(req: Request, name: string) {
-  const c = req.headers.get("Cookie") || "";
-  const m = c.match(new RegExp("(^|;\\s*)" + name.replace(/[-[\]{}()*+?.,\\^$|#\\s]/g, "\\$&") + "=([^;]*)"));
-  return m ? decodeURIComponent(m[2]) : null;
-}
-
-async function verifySessionJwt(token: string, secret: string): Promise<any|null> {
+function parseJwtPayload(token: string): any | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
-  const [h, p, s] = parts;
-  const ok = await hmacVerify(secret, `${h}.${p}`, s);
-  if (!ok) return null;
   try {
-    const payloadJson = new TextDecoder().decode(b64urlDecodeToBytes(p));
-    const payload = JSON.parse(payloadJson);
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload?.exp === "number" && payload.exp < now) return null;
-    return payload;
+    const jsonStr = new TextDecoder().decode(b64urlToBytes(parts[1]));
+    return JSON.parse(jsonStr);
   } catch {
     return null;
   }
 }
 
-async function signSessionJwt(payload: any, secret: string, expiresInSeconds: number) {
-  const header = { alg: "HS256", typ: "JWT" };
+async function verifySessionJwt(token: string, secret: string): Promise<any | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [h, p, sig] = parts;
+  const data = `${h}.${p}`;
+  const ok = await hmacVerify(data, sig, secret);
+  if (!ok) return null;
+  const payload = parseJwtPayload(token);
+  if (!payload) return null;
   const now = Math.floor(Date.now() / 1000);
-  const body = { ...payload, iat: now, exp: now + expiresInSeconds };
-
-  const h = b64urlEncode(new TextEncoder().encode(JSON.stringify(header)));
-  const p = b64urlEncode(new TextEncoder().encode(JSON.stringify(body)));
-  const sig = await hmacSign(secret, `${h}.${p}`);
-  return `${h}.${p}.${sig}`;
-}
-
-export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
-  if (!env.AUTH_JWT_SECRET) return jsonResponse({ user: null, error: { message: "Missing AUTH_JWT_SECRET" } }, 500);
-
-  const token = getCookie(request, "ff_session");
-  if (!token) return jsonResponse({ user: null }, 200);
-
-  const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
-  if (!payload) return jsonResponse({ user: null }, 200);
-
-  const uid = payload?.uid as string | undefined;
-
-  if (uid && env.FITFOCUS_KV) {
-    const full = await env.FITFOCUS_KV.get(`user:${uid}`, { type: "json" }) as any | null;
-    if (full) return jsonResponse({ user: full }, 200);
-  }
-
-  return jsonResponse({
-    user: {
-      id: uid ?? null,
-      provider: payload?.prov ?? null,
-      email: payload?.email ?? null,
-      name: payload?.name ?? null,
-      picture: payload?.pic ?? null,
-    }
-  }, 200);
+  if (payload.exp && now > payload.exp) return null;
+  return payload;
 }

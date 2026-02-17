@@ -1,43 +1,119 @@
+// Cloudflare Pages Function: /api/auth/google
+// Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
+// then issues our own signed session JWT in HttpOnly cookie.
 
-/**
- * FitFocus: Google Sign-In (GIS) → tokeninfo verification → app session cookie (HS256)
- *
- * POST /api/auth/google
- * Body: { credential: string }  // Google ID token from GIS
- *
- * Env vars required (Cloudflare Pages):
- *  - GOOGLE_CLIENT_ID : OAuth 2.0 Client ID (Web)
- *  - AUTH_JWT_SECRET  : random long secret used to sign app session (HS256)
- *
- * Optional:
- *  - FITFOCUS_KV      : KV binding for persisting users (recommended)
- *
- * Note: This version avoids external deps (no "jose") to keep Pages Functions bundler happy.
- *       It verifies ID tokens via Google's tokeninfo endpoint.
- */
+export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  try {
+    const { request, env } = ctx;
 
-export interface Env {
-  GOOGLE_CLIENT_ID: string;
+    const body = await request.json().catch(() => ({} as any));
+    const credential = body?.credential;
+    if (!credential || typeof credential !== "string") {
+      return json({ error: "Missing credential" }, 400);
+    }
+
+    const googleClientId = env.GOOGLE_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID;
+    if (!googleClientId) return json({ error: "Server missing GOOGLE_CLIENT_ID" }, 500);
+    if (!env.AUTH_JWT_SECRET) return json({ error: "Server missing AUTH_JWT_SECRET" }, 500);
+
+    // Validate token with Google (simple + reliable, no crypto libs needed).
+    const tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential);
+    const r = await fetch(tokenInfoUrl, { method: "GET" });
+    if (!r.ok) {
+      const t = await r.text();
+      return json({ error: "Invalid Google token", details: t.slice(0, 200) }, 401);
+    }
+    const info: any = await r.json();
+
+    // Basic checks
+    if (info.aud !== googleClientId) return json({ error: "Token aud mismatch" }, 401);
+    if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com") {
+      return json({ error: "Token iss mismatch" }, 401);
+    }
+
+    const user = {
+      sub: String(info.sub || ""),
+      email: String(info.email || ""),
+      name: String(info.name || info.given_name || ""),
+      picture: String(info.picture || ""),
+      email_verified: String(info.email_verified || "") === "true",
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const session = await signSessionJwt(
+      {
+        v: 1,
+        sub: user.sub,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        iat: now,
+      },
+      env.AUTH_JWT_SECRET,
+      60 * 60 * 24 * 30 // 30 days
+    );
+
+    const headers = new Headers();
+    headers.append(
+      "Set-Cookie",
+      cookieSerialize("ff_session", session, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      })
+    );
+
+    return json({ ok: true, user }, 200, headers);
+  } catch (e: any) {
+    return json({ error: "Server error", details: String(e?.message || e) }, 500);
+  }
+};
+
+type Env = {
   AUTH_JWT_SECRET: string;
-  FITFOCUS_KV?: any;
+  GOOGLE_CLIENT_ID?: string;
+  VITE_GOOGLE_CLIENT_ID?: string;
+};
+
+function json(data: any, status = 200, headers?: Headers) {
+  const h = headers ? new Headers(headers) : new Headers();
+  h.set("Content-Type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(data), { status, headers: h });
 }
 
-function b64urlEncode(bytes: Uint8Array) {
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  const b64 = btoa(s).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-  return b64;
+function cookieSerialize(
+  name: string,
+  value: string,
+  opts: {
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: "Lax" | "Strict" | "None";
+    path?: string;
+    maxAge?: number;
+  }
+) {
+  const parts = [`${name}=${value}`];
+  if (opts.maxAge != null) parts.push(`Max-Age=${opts.maxAge}`);
+  if (opts.path) parts.push(`Path=${opts.path}`);
+  if (opts.httpOnly) parts.push("HttpOnly");
+  if (opts.secure) parts.push("Secure");
+  if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`);
+  return parts.join("; ");
 }
 
-function b64urlDecodeToBytes(b64url: string) {
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+// --- JWT (HS256) ---
+function b64url(input: ArrayBuffer | Uint8Array | string): string {
+  let bytes: Uint8Array;
+  if (typeof input === "string") bytes = new TextEncoder().encode(input);
+  else bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function hmacSign(secret: string, data: string) {
+async function hmacSha256(data: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -46,152 +122,16 @@ async function hmacSign(secret: string, data: string) {
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  return b64urlEncode(new Uint8Array(sig));
+  return b64url(sig);
 }
 
-async function hmacVerify(secret: string, data: string, signatureB64Url: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-  const sigBytes = b64urlDecodeToBytes(signatureB64Url);
-  return crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(data));
-}
-
-function jsonResponse(obj: any, status = 200, extraHeaders: Record<string,string> = {}) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      ...extraHeaders,
-    },
-  });
-}
-
-function getCookie(req: Request, name: string) {
-  const c = req.headers.get("Cookie") || "";
-  const m = c.match(new RegExp("(^|;\\s*)" + name.replace(/[-[\]{}()*+?.,\\^$|#\\s]/g, "\\$&") + "=([^;]*)"));
-  return m ? decodeURIComponent(m[2]) : null;
-}
-
-async function verifySessionJwt(token: string, secret: string): Promise<any|null> {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [h, p, s] = parts;
-  const ok = await hmacVerify(secret, `${h}.${p}`, s);
-  if (!ok) return null;
-  try {
-    const payloadJson = new TextDecoder().decode(b64urlDecodeToBytes(p));
-    const payload = JSON.parse(payloadJson);
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload?.exp === "number" && payload.exp < now) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
-async function signSessionJwt(payload: any, secret: string, expiresInSeconds: number) {
+async function signSessionJwt(payload: any, secret: string, ttlSeconds: number): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
-  const body = { ...payload, iat: now, exp: now + expiresInSeconds };
-
-  const h = b64urlEncode(new TextEncoder().encode(JSON.stringify(header)));
-  const p = b64urlEncode(new TextEncoder().encode(JSON.stringify(body)));
-  const sig = await hmacSign(secret, `${h}.${p}`);
-  return `${h}.${p}.${sig}`;
-}
-
-function cookie(name: string, value: string, opts: { maxAge?: number; httpOnly?: boolean; secure?: boolean; sameSite?: "Lax"|"Strict"|"None"; path?: string } = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`];
-  parts.push(`Path=${opts.path ?? "/"}`);
-  if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
-  if (opts.httpOnly !== false) parts.push("HttpOnly");
-  if (opts.secure !== false) parts.push("Secure");
-  parts.push(`SameSite=${opts.sameSite ?? "Lax"}`);
-  return parts.join("; ");
-}
-
-export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
-  if (!env.GOOGLE_CLIENT_ID) return jsonResponse({ error: { message: "Missing GOOGLE_CLIENT_ID in env" } }, 500);
-  if (!env.AUTH_JWT_SECRET) return jsonResponse({ error: { message: "Missing AUTH_JWT_SECRET in env" } }, 500);
-
-  let body: any = null;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
-  }
-
-  const idToken = body?.credential;
-  if (typeof idToken !== "string" || idToken.length < 50) {
-    return jsonResponse({ error: { message: "Missing credential (Google ID token)" } }, 400);
-  }
-
-  const tokeninfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
-  const tiResp = await fetch(tokeninfoUrl, { method: "GET" });
-  const ti = await tiResp.json().catch(() => ({}));
-
-  if (!tiResp.ok) {
-    return jsonResponse({ error: { message: "Invalid Google token", details: ti } }, 401);
-  }
-
-  if (ti.aud !== env.GOOGLE_CLIENT_ID) {
-    return jsonResponse({ error: { message: "Google token aud mismatch" } }, 401);
-  }
-
-  const exp = Number(ti.exp || 0);
-  const now = Math.floor(Date.now() / 1000);
-  if (!exp || exp < now) {
-    return jsonResponse({ error: { message: "Google token expired" } }, 401);
-  }
-
-  const sub = String(ti.sub || "");
-  if (!sub) return jsonResponse({ error: { message: "Invalid Google token: no sub" } }, 401);
-
-  const user: any = {
-    id: `google:${sub}`,
-    provider: "google",
-    sub,
-    email: ti.email || null,
-    emailVerified: ti.email_verified === "true" || ti.email_verified === true,
-    name: ti.name || null,
-    picture: ti.picture || null,
-    givenName: ti.given_name || null,
-    familyName: ti.family_name || null,
-    createdAt: Date.now(),
-    lastLoginAt: Date.now(),
-  };
-
-  if (env.FITFOCUS_KV) {
-    const key = `user:${user.id}`;
-    const prev = await env.FITFOCUS_KV.get(key, { type: "json" }) as any | null;
-    if (prev && typeof prev === "object") {
-      user.createdAt = prev.createdAt ?? user.createdAt;
-    }
-    await env.FITFOCUS_KV.put(key, JSON.stringify(user), { expirationTtl: 60 * 60 * 24 * 365 });
-  }
-
-  const sessionJwt = await signSessionJwt({
-    uid: user.id,
-    email: user.email,
-    name: user.name,
-    pic: user.picture,
-    prov: "google",
-  }, env.AUTH_JWT_SECRET, 60 * 60 * 24 * 30);
-
-  const isHttps = (new URL(request.url)).protocol === "https:";
-  return jsonResponse({ ok: true, user }, 200, {
-    "Set-Cookie": cookie("ff_session", sessionJwt, {
-      maxAge: 60 * 60 * 24 * 30,
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: "Lax",
-      path: "/",
-    }),
-  });
+  const full = { ...payload, iat: payload?.iat ?? now, exp: now + ttlSeconds };
+  const h = b64url(JSON.stringify(header));
+  const p = b64url(JSON.stringify(full));
+  const data = `${h}.${p}`;
+  const sig = await hmacSha256(data, secret);
+  return `${data}.${sig}`;
 }
