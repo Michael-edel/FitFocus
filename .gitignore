@@ -25,4 +25,5 @@ dist-ssr
 Remove-Item .\README_PATCH.txt
 
 .env
+.env.local
 

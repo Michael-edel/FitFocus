@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig, loadEnv } from 'vite';
+import crypto from 'node:crypto';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -88,6 +89,156 @@ export default defineConfig(({ mode }) => {
               res.end(JSON.stringify({ error: e?.message || 'AI proxy error' }));
             }
           });
+        },
+      },
+      // --- /api/auth/google middleware (DEV only) ---
+      {
+        name: 'fitfocus-google-auth',
+        apply: 'serve',
+        configureServer(server) {
+          server.middlewares.use('/api/auth/google', async (req, res, next) => {
+            try {
+              if (req.method !== 'POST') return next();
+
+              const chunks: Buffer[] = [];
+              req.on('data', (c) => chunks.push(Buffer.from(c)));
+              req.on('end', async () => {
+                try {
+                  const raw = Buffer.concat(chunks).toString('utf8') || '{}';
+                  let payload: any = {};
+                  try { payload = JSON.parse(raw); } catch { payload = {}; }
+
+                  const credential = payload?.credential;
+                  if (!credential || typeof credential !== 'string') {
+                    res.statusCode = 400;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Missing credential' }));
+                    return;
+                  }
+
+                  const authSecret = process.env.AUTH_JWT_SECRET || env.AUTH_JWT_SECRET;
+                  if (!authSecret) {
+                    res.statusCode = 500;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Server missing AUTH_JWT_SECRET (set in .env / docker compose env)' }));
+                    return;
+                  }
+
+                  // Accept BOTH local + prod client IDs (универсально для одного кода).
+                  const allowedAud = new Set<string>([
+                    process.env.VITE_GOOGLE_CLIENT_ID_LOCAL,
+                    process.env.VITE_GOOGLE_CLIENT_ID_PROD,
+                    process.env.VITE_GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_ID,
+                    env.VITE_GOOGLE_CLIENT_ID_LOCAL,
+                    env.VITE_GOOGLE_CLIENT_ID_PROD,
+                    env.VITE_GOOGLE_CLIENT_ID,
+                    env.GOOGLE_CLIENT_ID,
+                  ].filter(Boolean) as string[]);
+
+                  if (allowedAud.size === 0) {
+                    res.statusCode = 500;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Server missing Google Client ID env (set VITE_GOOGLE_CLIENT_ID_LOCAL/PROD or VITE_GOOGLE_CLIENT_ID)' }));
+                    return;
+                  }
+
+                  // Validate token with Google
+                  const tokenInfoUrl = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential);
+                  const r = await fetch(tokenInfoUrl);
+                  if (!r.ok) {
+                    const t = await r.text();
+                    res.statusCode = 401;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Invalid Google token', details: t.slice(0, 200) }));
+                    return;
+                  }
+                  const info: any = await r.json();
+
+                  if (!allowedAud.has(String(info.aud || ''))) {
+                    res.statusCode = 401;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Token aud mismatch', aud: info.aud }));
+                    return;
+                  }
+                  if (info.iss !== 'https://accounts.google.com' && info.iss !== 'accounts.google.com') {
+                    res.statusCode = 401;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ error: 'Token iss mismatch', iss: info.iss }));
+                    return;
+                  }
+
+                  const user = {
+                    sub: String(info.sub || ''),
+                    email: String(info.email || ''),
+                    name: String(info.name || info.given_name || ''),
+                    picture: String(info.picture || ''),
+                    email_verified: String(info.email_verified || '') === 'true',
+                  };
+
+                  const now = Math.floor(Date.now() / 1000);
+                  const session = signJwtHS256(
+                    {
+                      v: 1,
+                      sub: user.sub,
+                      email: user.email,
+                      name: user.name,
+                      picture: user.picture,
+                      iat: now,
+                      exp: now + 60 * 60 * 24 * 30,
+                    },
+                    authSecret
+                  );
+
+                  const isHttps =
+                    (req.headers['x-forwarded-proto'] === 'https') ||
+                    (String(req.headers.origin || '').startsWith('https://'));
+
+                  const cookie = serializeCookie('ff_session', session, {
+                    httpOnly: true,
+                    secure: isHttps, // IMPORTANT: localhost over http must be non-secure cookie
+                    sameSite: 'Lax',
+                    path: '/',
+                    maxAge: 60 * 60 * 24 * 30,
+                  });
+
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.setHeader('Set-Cookie', cookie);
+                  res.end(JSON.stringify({ ok: true, user }));
+                } catch (e: any) {
+                  res.statusCode = 500;
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ error: 'Server error', details: e?.message || String(e) }));
+                }
+              });
+            } catch (e: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Auth middleware error', details: e?.message || String(e) }));
+            }
+          });
+
+          function base64url(input: Buffer) {
+            return input.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+          }
+          function signJwtHS256(payload: any, secret: string) {
+            const header = { alg: 'HS256', typ: 'JWT' };
+            const h = base64url(Buffer.from(JSON.stringify(header), 'utf8'));
+            const p = base64url(Buffer.from(JSON.stringify(payload), 'utf8'));
+            const data = `${h}.${p}`;
+            const sig = crypto.createHmac('sha256', secret).update(data).digest();
+            return `${data}.${base64url(sig)}`;
+          }
+          function serializeCookie(name: string, value: string, opts: any) {
+            const parts = [`${name}=${value}`];
+            if (opts.maxAge != null) parts.push(`Max-Age=${opts.maxAge}`);
+            if (opts.path) parts.push(`Path=${opts.path}`);
+            if (opts.httpOnly) parts.push('HttpOnly');
+            if (opts.secure) parts.push('Secure');
+            if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`);
+            return parts.join('; ');
+          }
         },
       },
       react(),

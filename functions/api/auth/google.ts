@@ -12,8 +12,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       return json({ error: "Missing credential" }, 400);
     }
 
-    const googleClientId = env.GOOGLE_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID;
-    if (!googleClientId) return json({ error: "Server missing GOOGLE_CLIENT_ID" }, 500);
+    const allowedAud = [
+      env.GOOGLE_CLIENT_ID,
+      env.VITE_GOOGLE_CLIENT_ID,
+      (env as any).VITE_GOOGLE_CLIENT_ID_LOCAL,
+      (env as any).VITE_GOOGLE_CLIENT_ID_PROD,
+    ].filter(Boolean) as string[];
+    if (allowedAud.length === 0) return json({ error: "Server missing GOOGLE_CLIENT_ID" }, 500);
     if (!env.AUTH_JWT_SECRET) return json({ error: "Server missing AUTH_JWT_SECRET" }, 500);
 
     // Validate token with Google (simple + reliable, no crypto libs needed).
@@ -26,7 +31,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     const info: any = await r.json();
 
     // Basic checks
-    if (info.aud !== googleClientId) return json({ error: "Token aud mismatch" }, 401);
+    if (!allowedAud.includes(String(info.aud || ""))) return json({ error: "Token aud mismatch", aud: info.aud }, 401);
     if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com") {
       return json({ error: "Token iss mismatch" }, 401);
     }
@@ -54,11 +59,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     );
 
     const headers = new Headers();
+    const isHttps = new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
+
     headers.append(
       "Set-Cookie",
       cookieSerialize("ff_session", session, {
         httpOnly: true,
-        secure: true,
+        secure: isHttps,
         sameSite: "Lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
@@ -75,6 +82,8 @@ type Env = {
   AUTH_JWT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;
   VITE_GOOGLE_CLIENT_ID?: string;
+  VITE_GOOGLE_CLIENT_ID_LOCAL?: string;
+  VITE_GOOGLE_CLIENT_ID_PROD?: string;
 };
 
 function json(data: any, status = 200, headers?: Headers) {
