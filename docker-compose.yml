@@ -3,8 +3,16 @@ services:
     build: .
     ports:
       - "5173:5173"
+    env_file:
+      - .env
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+      - VITE_GOOGLE_CLIENT_ID_LOCAL=${VITE_GOOGLE_CLIENT_ID_LOCAL}
+      - VITE_GOOGLE_CLIENT_ID_PROD=${VITE_GOOGLE_CLIENT_ID_PROD}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     volumes:
       - .:/app
       - /app/node_modules

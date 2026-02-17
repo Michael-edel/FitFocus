@@ -1,4 +1,4 @@
-
+console.log("CHECK CLIENT ID:", import.meta.env.VITE_GOOGLE_CLIENT_ID);
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import CameraCapture from './ui/components/CameraCapture';
 import clsx from 'clsx';
@@ -94,10 +94,24 @@ declare global {
   }
 }
 
-const GOOGLE_CLIENT_ID =
-  (import.meta as any)?.env?.VITE_GOOGLE_CLIENT_ID ||
-  (import.meta as any)?.env?.VITE_GOOGLE_CLIENTID ||
-  "";
+// NOTE:
+// Не держим client_id как top-level const.
+// При HMR/fast-refresh или при старте dev-сервера до появления env
+// могло "залипнуть" состояние с ошибкой. Читаем env внутри эффекта.
+const getGoogleClientId = () => {
+  const envAny = (import.meta as any)?.env || {};
+  const local = envAny.VITE_GOOGLE_CLIENT_ID_LOCAL || "";
+  const prod = envAny.VITE_GOOGLE_CLIENT_ID_PROD || "";
+  const fallback = envAny.VITE_GOOGLE_CLIENT_ID || envAny.VITE_GOOGLE_CLIENTID || "";
+
+  // Выбираем ID автоматически по origin, чтобы один код работал в dev и production.
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const isLocal =
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("http://127.0.0.1");
+
+  return (isLocal ? local : prod) || fallback || "";
+};
 
 function loadGoogleIdentityScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -130,8 +144,13 @@ function GoogleSignInButton({ onAuthed }: { onAuthed: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        if (!GOOGLE_CLIENT_ID) {
-          setErr("VITE_GOOGLE_CLIENT_ID не задан в переменных окружения.");
+        const clientId = getGoogleClientId();
+        // Важно: сбрасываем старую ошибку при повторном запуске эффекта
+        // (например, после HMR), чтобы сообщение не "залипало".
+        setErr(null);
+
+        if (!clientId) {
+          setErr("Google Client ID не задан (VITE_GOOGLE_CLIENT_ID_LOCAL / VITE_GOOGLE_CLIENT_ID_PROD).");
           return;
         }
         await loadGoogleIdentityScript();
@@ -144,7 +163,7 @@ function GoogleSignInButton({ onAuthed }: { onAuthed: () => void }) {
         }
 
         g.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: clientId,
           callback: async (resp: any) => {
             try {
               const r = await fetch("/api/auth/google", {
