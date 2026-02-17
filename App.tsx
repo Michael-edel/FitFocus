@@ -253,7 +253,7 @@ const pickLessonForToday = (user: UserProfile): CourseLesson => {
 
 const PREMIUM_GATES = {
   aiFoodPhotoPerDay: { free: 3, pro: Infinity, family: Infinity },
-  aiCoachAdvicePerDay: { free: 1, pro: Infinity, family: Infinity },
+  aiCoachAdvicePerDay: { free: 3, pro: Infinity, family: Infinity },
   familyMenuGenerationsPerWeek: { free: 1, pro: 10, family: 100 },
   weeklyReview: { free: false, pro: true, family: true },
   metabolicAdaptation: { free: false, pro: true, family: true }

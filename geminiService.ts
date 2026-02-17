@@ -29,55 +29,42 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 /**
  * Прокси-вызов для AI (используется для соблюдения лимитов на сервере)
  */
-function toGeminiTextContents(prompt: string) {
-  return [
-    {
-      role: "user",
-      parts: [{ text: prompt }],
-    },
-  ];
-}
-
-function normalizeClientContents(contents: any) {
-  // ✅ FIX: строка -> правильный Content[]
-  if (typeof contents === "string") {
-    return toGeminiTextContents(contents);
-  }
-
-  // ✅ FIX: один Content {parts:[...]} -> оборачиваем в массив
-  if (contents && typeof contents === "object" && !Array.isArray(contents) && Array.isArray((contents as any).parts)) {
-    return [contents];
-  }
-
-  // ✅ FIX: если уже массив — оставляем как есть
-  return contents;
-}
-
-/**
- * Прокси-вызов для AI (используется для соблюдения лимитов на сервере)
- */
 async function callAiProxy(model: string, contents: any, feature: string, config?: any) {
-  const normalizedContents = normalizeClientContents(contents);
-
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
+
+  // ✅ Нормализуем contents (на всякий случай) — текст всегда Content[]
+  if (typeof contents === "string") {
+    contents = [{ role: "user", parts: [{ text: contents }] }];
+  } else if (contents && !Array.isArray(contents) && Array.isArray(contents.parts)) {
+    contents = [contents];
+  }
+
+  // ✅ Gemini не принимает поле `config` — прокидываем как `generationConfig`
+  const payload: any = { model, contents, feature };
+  if (config && typeof config === "object") payload.generationConfig = config;
+
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, contents: normalizedContents, feature, config })
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const msg = data?.error?.message || data?.error || data?.message || `AI proxy error: ${res.status}`;
+    // Если исчерпан бесплатный лимит гостя — попросим авторизацию
+    if (res.status === 402 && data?.error?.code === "PAYWALL") {
+      try {
+        window.dispatchEvent(new CustomEvent("ff:auth-required", { detail: data.error }));
+      } catch {}
+    }
+    const msg = data?.error?.message || data?.message || `AI proxy error: ${res.status}`;
     throw new Error(msg);
   }
 
-  // Возвращаем структуру, совместимую с SDK (Response.text)
-  return {
-    text: data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
-  };
+  return data;
 }
+
 
 
 export async function callAiCouncil(

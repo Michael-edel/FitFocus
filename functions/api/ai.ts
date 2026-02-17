@@ -249,7 +249,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       return jsonResponse({
         error: {
           code: "PAYWALL",
-          message: `Free limit reached: ${freeLimit}/day. Upgrade to Pro for unlimited AI.`,
+          message: `Guest free limit reached: ${freeLimit}/day. Upgrade to Pro for unlimited AI.`,
           meta: { feature, limitPerDay: freeLimit }
         }
       }, 402, { "X-FF-Quota": "EXCEEDED" });
