@@ -1,18 +1,9 @@
-
-/**
- * FitFocus: logout
- * POST /api/logout
- * Clears ff_session cookie.
- */
-
-export async function onRequestPost({ request }: { request: Request }) {
-  const isHttps = (new URL(request.url)).protocol === "https:";
+// Cloudflare Pages Function: /api/logout
+export const onRequestPost: PagesFunction = async () => {
+  const headers = new Headers();
+  headers.append("Set-Cookie", "ff_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax");
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "Set-Cookie": `ff_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; ${isHttps ? "Secure;" : ""}`,
-    },
+    headers: { ...Object.fromEntries(headers), "Content-Type": "application/json; charset=utf-8" } as any,
   });
-}
+};
