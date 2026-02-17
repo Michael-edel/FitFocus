@@ -90,6 +90,13 @@ import autoTable from "jspdf-autotable";
 
 type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
 
+// --- Google Identity Services (GIS) typings ---
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 const MAX_DIARY_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 500;
 
@@ -488,6 +495,117 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
 
 const App: React.FC = () => {
+
+// --- Google Auth (GIS) ---
+const GOOGLE_CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID as string | undefined;
+const [googleConnected, setGoogleConnected] = useState(false);
+const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+const [googleBusy, setGoogleBusy] = useState(false);
+
+const loadGoogleScript = useCallback(async () => {
+  if (!GOOGLE_CLIENT_ID) return false;
+  if (typeof window === "undefined") return false;
+  if (window.google?.accounts?.id) return true;
+
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector('script[data-gis="1"]') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("GIS load error")));
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.dataset.gis = "1";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("GIS load error"));
+    document.head.appendChild(s);
+  });
+
+  return !!window.google?.accounts?.id;
+}, [GOOGLE_CLIENT_ID]);
+
+const refreshGoogleSession = useCallback(async () => {
+  try {
+    const r = await fetch("/api/me", { credentials: "include" });
+    if (!r.ok) {
+      setGoogleConnected(false);
+      setGoogleEmail(null);
+      return;
+    }
+    const me = await r.json();
+    const email = me?.email || me?.user?.email || null;
+    setGoogleConnected(true);
+    setGoogleEmail(email);
+  } catch {
+    setGoogleConnected(false);
+    setGoogleEmail(null);
+  }
+}, []);
+
+const startGoogleLogin = useCallback(async () => {
+  if (!GOOGLE_CLIENT_ID) {
+    alert("Google Client ID не задан (VITE_GOOGLE_CLIENT_ID).");
+    return;
+  }
+  setGoogleBusy(true);
+  try {
+    const ok = await loadGoogleScript();
+    if (!ok) throw new Error("GIS не загрузился");
+
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: async (resp: any) => {
+        try {
+          const credential = resp?.credential;
+          if (!credential) throw new Error("Нет credential");
+
+          const r = await fetch("/api/auth/google", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ credential }),
+          });
+
+          if (!r.ok) {
+            const t = await r.text().catch(() => "");
+            throw new Error(t || "Auth failed");
+          }
+
+          await refreshGoogleSession();
+        } catch (e: any) {
+          console.error(e);
+          alert("Google авторизация не удалась. Открой DevTools → Console для деталей.");
+        } finally {
+          setGoogleBusy(false);
+        }
+      },
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+
+    window.google.accounts.id.prompt();
+  } catch (e) {
+    console.error(e);
+    alert("Не удалось запустить Google авторизацию.");
+    setGoogleBusy(false);
+  }
+}, [GOOGLE_CLIENT_ID, loadGoogleScript, refreshGoogleSession]);
+
+const logoutGoogle = useCallback(async () => {
+  try {
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
+  } catch {}
+  setGoogleConnected(false);
+  setGoogleEmail(null);
+}, []);
+
+useEffect(() => {
+  refreshGoogleSession();
+}, [refreshGoogleSession]);
+
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
     if (t === 'lunch') return 'Обед';
@@ -2164,6 +2282,22 @@ const logWeight = useCallback(() => {
                   </button>
                 )}
               </div>
+
+{/* Google Sign-In */}
+{GOOGLE_CLIENT_ID && (
+  <div className="mt-5 flex items-center justify-center">
+    <button
+      onClick={googleConnected ? logoutGoogle : startGoogleLogin}
+      disabled={googleBusy}
+      className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold"
+    >
+      {googleConnected
+        ? `Google подключен${googleEmail ? `: ${googleEmail}` : ""} — Выйти`
+        : (googleBusy ? "Открываем Google..." : "Войти через Google")}
+    </button>
+  </div>
+)}
+
             </div>
           </div>
         </div>
