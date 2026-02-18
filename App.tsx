@@ -871,6 +871,7 @@ const App: React.FC = () => {
   const councilScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [newWeight, setNewWeight] = useState<string>('');
   
@@ -1663,6 +1664,7 @@ const openEditFood = (item: FoodEntry) => {
     // Paywall check once per batch
     if (!checkLimit('aiFoodPhotoPerDay')) return paywall.openPaywall();
 
+    setScanError(null);
     setIsScanning(true);
     try {
       for (const file of files) {
@@ -1681,8 +1683,9 @@ const openEditFood = (item: FoodEntry) => {
         if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight });
         incrementUsage('aiFoodPhotoCount');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setScanError(err?.message || 'Не удалось распознать фото. Попробуйте другое изображение или введите вручную.');
     }
     finally {
       setIsScanning(false);
@@ -2311,6 +2314,20 @@ if (authState === 'register') return (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
           <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
+        </div>
+      )}
+      {scanError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[210] w-[min(92vw,520px)]">
+          <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-amber-300">AI анализ</p>
+                <p className="mt-1 text-sm font-bold text-amber-100">{scanError}</p>
+                <p className="mt-2 text-xs font-semibold text-amber-200/80">Совет: сфотографируйте блюдо крупнее, при хорошем свете, без лишних предметов в кадре.</p>
+              </div>
+              <button onClick={() => setScanError(null)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-black text-amber-200 border border-amber-500/30 hover:bg-amber-500/10">OK</button>
+            </div>
+          </div>
         </div>
       )}
       {paywall.isPaywallOpen && (
