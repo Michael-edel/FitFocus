@@ -14,11 +14,13 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
     const allowedAud = [
       env.GOOGLE_CLIENT_ID,
+      env.GOOGLE_CLIENT_ID_LOCAL,
+      env.GOOGLE_CLIENT_ID_PROD,
       env.VITE_GOOGLE_CLIENT_ID,
-      (env as any).VITE_GOOGLE_CLIENT_ID_LOCAL,
-      (env as any).VITE_GOOGLE_CLIENT_ID_PROD,
+      env.VITE_GOOGLE_CLIENT_ID_LOCAL,
+      env.VITE_GOOGLE_CLIENT_ID_PROD,
     ].filter(Boolean) as string[];
-    if (allowedAud.length === 0) return json({ error: "Server missing GOOGLE_CLIENT_ID" }, 500);
+    if (allowedAud.length === 0) return json({ error: "Server missing GOOGLE_CLIENT_ID (or *_LOCAL/PROD)" }, 500);
     if (!env.AUTH_JWT_SECRET) return json({ error: "Server missing AUTH_JWT_SECRET" }, 500);
 
     // Validate token with Google (simple + reliable, no crypto libs needed).
@@ -81,6 +83,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 type Env = {
   AUTH_JWT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_ID_LOCAL?: string;
+  GOOGLE_CLIENT_ID_PROD?: string;
   VITE_GOOGLE_CLIENT_ID?: string;
   VITE_GOOGLE_CLIENT_ID_LOCAL?: string;
   VITE_GOOGLE_CLIENT_ID_PROD?: string;

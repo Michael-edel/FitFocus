@@ -1,4 +1,3 @@
-console.log("CHECK CLIENT ID:", import.meta.env.VITE_GOOGLE_CLIENT_ID);
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import CameraCapture from './ui/components/CameraCapture';
 import clsx from 'clsx';
@@ -86,6 +85,11 @@ import WorkoutsScreen from './WorkoutsScreen';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+// Compile-time fallbacks injected by Vite (see vite.config.ts)
+declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
+declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
+
+
 
 // --- Google Sign-In (GIS) helper (client-side only) ---
 declare global {
@@ -99,20 +103,30 @@ declare global {
 // При HMR/fast-refresh или при старте dev-сервера до появления env
 // могло "залипнуть" состояние с ошибкой. Читаем env внутри эффекта.
 const getGoogleClientId = () => {
+  // Vite normally provides import.meta.env, but in some setups (custom index.html/importmaps/CSP)
+  // it may be empty. So we support a compile-time fallback via __VITE_* constants injected
+  // in vite.config.ts.
   const envAny = (import.meta as any)?.env || {};
-  const local = envAny.VITE_GOOGLE_CLIENT_ID_LOCAL || "";
-  const prod = envAny.VITE_GOOGLE_CLIENT_ID_PROD || "";
-  const fallback = envAny.VITE_GOOGLE_CLIENT_ID || envAny.VITE_GOOGLE_CLIENTID || "";
+  const local =
+    envAny.VITE_GOOGLE_CLIENT_ID_LOCAL ||
+    __VITE_GOOGLE_CLIENT_ID_LOCAL__ ||
+    "";
+  const prod =
+    envAny.VITE_GOOGLE_CLIENT_ID_PROD ||
+    __VITE_GOOGLE_CLIENT_ID_PROD__ ||
+    "";
 
-  // Выбираем ID автоматически по origin, чтобы один код работал в dev и production.
+  // Auto-pick based on origin so the same bundle works in dev and prod.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const isLocal =
     origin.startsWith("http://localhost") ||
-    origin.startsWith("http://127.0.0.1");
+    origin.startsWith("http://127.0.0.1") ||
+    origin.startsWith("http://0.0.0.0");
 
-  return (isLocal ? local : prod) || fallback || "";
+  const picked = (isLocal ? local : prod).trim();
+  if (!picked || picked.includes('CHANGE_ME')) return '';
+  return picked;
 };
-
 function loadGoogleIdentityScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined") return reject(new Error("No window"));
@@ -646,6 +660,8 @@ const App: React.FC = () => {
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  const [googleMe, setGoogleMe] = useState<null | { sub?: string; email?: string; name?: string; picture?: string }>(null);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -1528,9 +1544,21 @@ const openEditFood = (item: FoodEntry) => {
     await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
   }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
-  useEffect(() => {
+  const bootstrapAuth = useCallback(async () => {
+    // 1) Пробуем серверную сессию (ff_session cookie)
+    let me: any = null;
+    try {
+      const r = await fetch('/api/me', { credentials: 'include' });
+      if (r.ok) me = await r.json();
+    } catch {}
+
+    const serverUser = me?.user || null;
+    setGoogleMe(serverUser);
+
+    // 2) Грузим локальные профили
     const saved = localStorage.getItem('fitfocus_all_users');
     const lastId = localStorage.getItem('fitfocus_last_user_id');
+
     if (saved) {
       const parsed = JSON.parse(saved);
       const migrated = Array.isArray(parsed)
@@ -1540,14 +1568,53 @@ const openEditFood = (item: FoodEntry) => {
             gainSurplus: u.gainSurplus ?? DEFAULT_SURPLUS,
           }))
         : [];
-      // persist migration if any record was missing new fields
-      const changed = migrated.some((u: any, i: number) => (parsed[i]?.lossDeficit == null && u.lossDeficit != null) || (parsed[i]?.gainSurplus == null && u.gainSurplus != null));
+      const changed = migrated.some(
+        (u: any, i: number) =>
+          (parsed[i]?.lossDeficit == null && u.lossDeficit != null) ||
+          (parsed[i]?.gainSurplus == null && u.gainSurplus != null)
+      );
       if (changed) safeSetItem('fitfocus_all_users', JSON.stringify(migrated));
       setAllUsers(migrated);
+
+      // ✅ Если есть Google-сессия — пытаемся сматчить профиль по email/sub
+      if (serverUser?.email || serverUser?.sub) {
+        const matched = migrated.find(
+          (u: any) =>
+            (serverUser?.sub && u.googleSub === serverUser.sub) ||
+            (serverUser?.email && u.email === serverUser.email)
+        );
+        if (matched) {
+          void loginAsUser(matched);
+          return;
+        }
+
+        // профиля нет → идём в регистрацию и подставляем имя
+        setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
+        setAuthState('register');
+        return;
+      }
+
+      // фоллбек: старое поведение
       const lastUser = migrated.find((u: any) => u.id === lastId);
-      if (lastUser) void loginAsUser(lastUser); else setAuthState('auth_choice');
-    } else setAuthState('register');
+      if (lastUser) void loginAsUser(lastUser);
+      else setAuthState('auth_choice');
+      return;
+    }
+
+    // Нет сохранённых профилей
+    if (serverUser?.email || serverUser?.sub) {
+      setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
+      setAuthState('register');
+      return;
+    }
+
+    setAuthState('register');
   }, [loginAsUser]);
+
+  useEffect(() => {
+    void bootstrapAuth();
+  }, [bootstrapAuth]);
+
 
   const processPhotoFiles = useCallback(async (files: File[]) => {
     if (!files.length || !currentUser) return;
@@ -1717,6 +1784,9 @@ const logWeight = useCallback(() => {
     let newUser: UserProfile = {
       id: `user-${Date.now()}`, 
       name: safeName.length ? safeName : 'Пользователь', 
+      email: googleMe?.email,
+      googleSub: googleMe?.sub,
+      picture: googleMe?.picture,
       gender: regData.gender, 
       weight: Math.max(0, regData.weight || 0), 
       height: Math.max(0, regData.height || 0), 
@@ -1855,7 +1925,7 @@ const logWeight = useCallback(() => {
         <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
         
             <div className="mt-4 mb-6">
-              <GoogleSignInButton onAuthed={() => window.location.reload()} />
+              <GoogleSignInButton onAuthed={() => void bootstrapAuth()} />
             </div>
 <div className="grid gap-4">
           {allUsers.map(user => (
