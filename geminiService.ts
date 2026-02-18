@@ -104,72 +104,6 @@ function extractTextFromGemini(data: any): string {
   return out.join("\n").trim();
 }
 
-// ---------------------------
-// B2C-hardening helpers
-// ---------------------------
-
-/**
- * Gemini иногда возвращает JSON внутри markdown/текста.
- * Для B2C нельзя падать на JSON.parse(text) — сначала извлекаем JSON-объект/массив.
- */
-function extractJsonString(raw: string): string {
-  const text = String(raw || "").trim();
-  if (!text) throw new Error("AI вернул пустой ответ");
-
-  // Remove common markdown fences
-  const unfenced = text
-    .replace(/^\s*```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
-
-  // Prefer JSON object/array boundaries
-  const firstObj = unfenced.indexOf("{");
-  const firstArr = unfenced.indexOf("[");
-  let start = -1;
-  let end = -1;
-
-  if (firstObj === -1 && firstArr === -1) {
-    throw new Error("AI не вернул JSON. Попробуйте ещё раз.");
-  }
-
-  if (firstArr !== -1 && (firstObj === -1 || firstArr < firstObj)) {
-    start = firstArr;
-    end = unfenced.lastIndexOf("]");
-  } else {
-    start = firstObj;
-    end = unfenced.lastIndexOf("}");
-  }
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("AI вернул повреждённый JSON. Попробуйте ещё раз.");
-  }
-  return unfenced.slice(start, end + 1).trim();
-}
-
-function safeParseAiJson<T = any>(raw: string): T {
-  const jsonStr = extractJsonString(raw);
-  try {
-    return JSON.parse(jsonStr) as T;
-  } catch {
-    throw new Error("AI вернул невалидный JSON. Попробуйте ещё раз.");
-  }
-}
-
-function isNonEmptyString(x: any): x is string {
-  return typeof x === "string" && x.trim().length > 0;
-}
-
-function normalizePaywallMessage(msg: string) {
-  const m = String(msg || "");
-  if (m.toUpperCase().includes("PAYWALL") || m.toLowerCase().includes("free limit") || m.includes("402")) {
-    return "Лимит AI на сегодня исчерпан. Попробуйте завтра или включите PRO.";
-  }
-  if (m.includes("429") || m.toLowerCase().includes("cooldown") || m.toLowerCase().includes("rate")) {
-    return "Слишком много запросов. Подождите пару секунд и попробуйте снова.";
-  }
-  return m;
-}
-
 
 
 export async function callAiCouncil(
@@ -365,34 +299,16 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - Порции в описании коротко (пример: "курица 150г + гречка 80г + салат").
 - shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.`;
 
-  const call = async (p: string) => {
-    const r = await callAiProxy("gemini-2.5-flash", p, "weekly_menu", {
-      responseMimeType: "application/json",
-      responseSchema: schema
-    });
-    return r;
-  };
+  const res = await callAiProxy("gemini-2.5-flash", prompt, "weekly_menu", {
+    responseMimeType: "application/json",
+    responseSchema: schema
+  });
 
-  let obj: any;
-  try {
-    const res = await call(prompt);
-    obj = safeParseAiJson(res.text || "{}");
-  } catch (e: any) {
-    // One repair retry (B2C): ask to return ONLY JSON.
-    const repair = `${prompt}\n\nВАЖНО: Верни ТОЛЬКО валидный JSON (без пояснений, без markdown, без \`\`\`json). Если есть сомнения — всё равно заполни поля, не оставляй пустыми.`;
-    try {
-      const res2 = await call(repair);
-      obj = safeParseAiJson(res2.text || "{}");
-    } catch (e2: any) {
-      throw new Error(normalizePaywallMessage(e2?.message || e?.message || "Не удалось сгенерировать меню на неделю."));
-    }
-  }
+  let obj: any = {};
+  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
 
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const days = Array.isArray(obj.days) ? obj.days : [];
-  if (!Array.isArray(days) || days.length < 7) {
-    throw new Error("AI не смог составить меню на 7 дней. Попробуйте ещё раз.");
-  }
   const normDays = dayNames.map((dn, i) => {
     const d: any = days[i] || {};
     return {
@@ -404,22 +320,10 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     };
   });
 
-  // Ensure meals are not empty (B2C: better to fail than show blank cards)
-  const hasAnyMeal = normDays.some(d => [d.breakfast, d.lunch, d.dinner, d.snack].some(isNonEmptyString));
-  if (!hasAnyMeal) {
-    throw new Error("AI вернул пустое меню. Попробуйте ещё раз.");
-  }
-
   const shoppingList = (Array.isArray(obj.shoppingList) ? obj.shoppingList : [])
     .map((s: any) => String(s).trim())
     .filter(Boolean)
     .slice(0, 40);
-
-  if (!shoppingList.length) {
-    // Not critical, but nice: keep UX consistent
-    // Provide at least a placeholder item rather than rendering nothing.
-    shoppingList.push("Овощи/фрукты по сезону");
-  }
 
   return { days: normDays, shoppingList };
 }
@@ -525,18 +429,8 @@ export async function generateFamilyWeeklyMenu(
     responseSchema: schema
   });
 
-  let obj: any;
-  try {
-    obj = safeParseAiJson(res.text || "{}");
-  } catch (e: any) {
-    // One repair retry (B2C)
-    const repair = `${prompt}\n\nВАЖНО: Верни ТОЛЬКО валидный JSON (без пояснений/markdown). Не оставляй пустыми meals/portions.`;
-    const res2 = await callAiProxy("gemini-2.5-flash", repair, "family_menu", {
-      responseMimeType: "application/json",
-      responseSchema: schema
-    });
-    obj = safeParseAiJson(res2.text || "{}");
-  }
+  let obj: any = {};
+  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
 
   const daysRaw = Array.isArray(obj.days) ? obj.days : [];
   const normMeal = (m: any): any => {
@@ -666,12 +560,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
       required: ["name", "calories", "protein", "fat", "carbs", "ingredients"]
     }
   });
-  const obj: any = safeParseAiJson(response.text || "{}");
-  // Minimal sanity checks for B2C (avoid crashing downstream UI)
-  if (!isNonEmptyString(obj?.name) || typeof obj?.calories !== "number") {
-    throw new Error("Не удалось распознать блюдо. Попробуйте другое фото или введите вручную.");
-  }
-  return obj;
+  return JSON.parse(response.text || "{}");
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
@@ -729,11 +618,7 @@ export async function getCoachAdvice(data: any): Promise<any> {
       }
     }
   );
-  const obj: any = safeParseAiJson(response.text || "{}");
-  if (!isNonEmptyString(obj?.title) || !isNonEmptyString(obj?.advice) || !Array.isArray(obj?.bullets)) {
-    throw new Error("AI‑коуч вернул неожиданный формат ответа. Попробуйте ещё раз.");
-  }
-  return obj;
+  return JSON.parse(response.text || "{}");
 }
 
 /**
@@ -849,7 +734,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   });
 
   let parsed: any;
-  try { parsed = safeParseAiJson(r1.text || "{}"); } catch { parsed = {}; }
+  try { parsed = JSON.parse(r1.text || "{}"); } catch { parsed = {}; }
   let plan = normalizePlan(parsed);
 
   // FIX B: если модель вернула нули/пустые KPI, берём из профиля, чтобы не было "0 ккал".
@@ -867,7 +752,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
       responseSchema: schema
     });
     let parsed2: any;
-    try { parsed2 = safeParseAiJson(r2.text || "{}"); } catch { parsed2 = plan; }
+    try { parsed2 = JSON.parse(r2.text || "{}"); } catch { parsed2 = plan; }
     plan = normalizePlan(parsed2);
   }
 
