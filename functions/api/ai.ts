@@ -166,7 +166,7 @@ async function resolveIdentityKey(request: Request, env: Env) {
   const token = getCookie(request, "ff_session");
   if (token && env.AUTH_JWT_SECRET) {
     const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
-    const uid = payload?.uid ?? payload?.sub;
+    const uid = payload?.uid;
     if (uid) return `user:${uid}`;
   }
   const ipRaw = request.headers.get("CF-Connecting-IP") || "unknown";
