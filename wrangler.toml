@@ -1,0 +1,4 @@
+name = "fitfocus"
+compatibility_date = "2026-02-17"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"

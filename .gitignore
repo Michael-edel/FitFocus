@@ -26,4 +26,7 @@ Remove-Item .\README_PATCH.txt
 
 .env
 .env.local
-
+.dev.vars
+.wrangler
+fitfocus.zip
+ui.zip

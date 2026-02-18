@@ -225,6 +225,12 @@ export interface UserProfile {
   /** тариф: free/pro/family */
   plan?: TariffPlan;
   aiPlan?: AIPlan;
+  /** email из Google/аккаунта (для B2C OAuth-сессии) */
+  email?: string;
+  /** уникальный id пользователя в Google (sub) */
+  googleSub?: string;
+  /** аватар из Google */
+  picture?: string;
 }
 
 export interface NutritionIntake {

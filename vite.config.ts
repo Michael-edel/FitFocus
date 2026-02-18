@@ -11,12 +11,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
+// Ensure Vite reads env files from project root (where docker-compose places .env/.env.local)
+envDir: '.',
+// Expose only VITE_ vars to the client
+envPrefix: 'VITE_',
+define: {
+  // Compile-time fallbacks (used if import.meta.env is empty in browser due to custom setup)
+  __VITE_GOOGLE_CLIENT_ID_LOCAL__: JSON.stringify(
+    env.VITE_GOOGLE_CLIENT_ID_LOCAL || process.env.VITE_GOOGLE_CLIENT_ID_LOCAL || ''
+  ),
+  __VITE_GOOGLE_CLIENT_ID_PROD__: JSON.stringify(
+    env.VITE_GOOGLE_CLIENT_ID_PROD || process.env.VITE_GOOGLE_CLIENT_ID_PROD || ''
+  ),
+  // Also try to patch import.meta.env.* directly (works in most Vite setups)
+  'import.meta.env.VITE_GOOGLE_CLIENT_ID_LOCAL': JSON.stringify(
+    env.VITE_GOOGLE_CLIENT_ID_LOCAL || process.env.VITE_GOOGLE_CLIENT_ID_LOCAL || ''
+  ),
+  'import.meta.env.VITE_GOOGLE_CLIENT_ID_PROD': JSON.stringify(
+    env.VITE_GOOGLE_CLIENT_ID_PROD || process.env.VITE_GOOGLE_CLIENT_ID_PROD || ''
+  ),
+},
     server: {
-      port: 3000,
+      port: 5173,
       host: '0.0.0.0',
-      // Dev-only: безопасный прокси /api/ai (ключ только на сервере).
-      // В production на Cloudflare работает /functions/api/ai.ts.
-      middlewareMode: false,
+      headers: {
+        'Cross-Origin-Opener-Policy': 'unsafe-none',
+        'Cross-Origin-Embedder-Policy': 'unsafe-none',
+      },
+      // Proxy /api to local Cloudflare Pages Functions (wrangler service in docker-compose)
+      proxy: {
+        '/api': {
+          target: 'http://wrangler:8788',
+          changeOrigin: true,
+        },
+      },
     },
     plugins: [
       // --- /api/ai middleware (DEV only) ---
@@ -125,21 +153,18 @@ export default defineConfig(({ mode }) => {
                   }
 
                   // Accept BOTH local + prod client IDs (универсально для одного кода).
+                  // Accept BOTH local + prod client IDs (универсально для одного кода).
                   const allowedAud = new Set<string>([
-                    process.env.VITE_GOOGLE_CLIENT_ID_LOCAL,
-                    process.env.VITE_GOOGLE_CLIENT_ID_PROD,
-                    process.env.VITE_GOOGLE_CLIENT_ID,
-                    process.env.GOOGLE_CLIENT_ID,
-                    env.VITE_GOOGLE_CLIENT_ID_LOCAL,
-                    env.VITE_GOOGLE_CLIENT_ID_PROD,
-                    env.VITE_GOOGLE_CLIENT_ID,
-                    env.GOOGLE_CLIENT_ID,
+                    process.env.VITE_GOOGLE_CLIENT_ID_LOCAL || env.VITE_GOOGLE_CLIENT_ID_LOCAL,
+                    process.env.VITE_GOOGLE_CLIENT_ID_PROD || env.VITE_GOOGLE_CLIENT_ID_PROD,
+                    process.env.GOOGLE_CLIENT_ID_LOCAL || env.GOOGLE_CLIENT_ID_LOCAL,
+                    process.env.GOOGLE_CLIENT_ID_PROD || env.GOOGLE_CLIENT_ID_PROD,
                   ].filter(Boolean) as string[]);
 
                   if (allowedAud.size === 0) {
                     res.statusCode = 500;
                     res.setHeader('Content-Type', 'application/json');
-                    res.end(JSON.stringify({ error: 'Server missing Google Client ID env (set VITE_GOOGLE_CLIENT_ID_LOCAL/PROD or VITE_GOOGLE_CLIENT_ID)' }));
+                    res.end(JSON.stringify({ error: 'Server missing Google Client ID env (set VITE_GOOGLE_CLIENT_ID_LOCAL/PROD or GOOGLE_CLIENT_ID_LOCAL/PROD)' }));
                     return;
                   }
 

@@ -276,8 +276,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
   }
 
-  const model = body?.model || "gemini-3-flash-preview";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
+  const model = body?.model || "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const { feature: _drop, ...payload } = body ?? {};
   const payloadToSend: any = (payload && typeof payload === "object") ? payload : {};
@@ -302,7 +302,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   const geminiResp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(payloadToSend),
   });
 

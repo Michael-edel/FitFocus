@@ -35,30 +35,42 @@ async function callAiProxy(model: string, contents: any, feature: string, config
   // ✅ Нормализуем contents (на всякий случай) — текст всегда Content[]
   if (typeof contents === "string") {
     contents = [{ role: "user", parts: [{ text: contents }] }];
-  } else if (contents && !Array.isArray(contents) && Array.isArray(contents.parts)) {
+  } else if (contents && !Array.isArray(contents) && Array.isArray((contents as any).parts)) {
     contents = [contents];
   }
 
   // ✅ Gemini не принимает поле `config` — прокидываем как `generationConfig`
-  const payload: any = { model, contents, feature };
-  if (config && typeof config === "object") payload.generationConfig = config;
+  const basePayload: any = { contents, feature };
+  if (config && typeof config === "object") basePayload.generationConfig = config;
 
-  const res = await fetch("/api/ai", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  const doReq = async (m: string) => {
+    const payload = { ...basePayload, model: m };
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
 
-  const data = await res.json().catch(() => ({}));
+  // 1) пробуем основную модель
+  let { res, data } = await doReq(model);
+
+  // 2) если нет доступа/модель не найдена — фолбэк на стабильные модели
+  if (!res.ok && (res.status === 403 || res.status === 404)) {
+    const fallback = model.toLowerCase().includes("pro") ? "gemini-2.5-pro" : "gemini-2.5-flash";
+    ({ res, data } = await doReq(fallback));
+  }
 
   if (!res.ok) {
     // Если исчерпан бесплатный лимит гостя — попросим авторизацию
-    if (res.status === 402 && data?.error?.code === "PAYWALL") {
+    if (res.status === 402 && (data as any)?.error?.code === "PAYWALL") {
       try {
-        window.dispatchEvent(new CustomEvent("ff:auth-required", { detail: data.error }));
+        window.dispatchEvent(new CustomEvent("ff:auth-required", { detail: (data as any).error }));
       } catch {}
     }
-    const msg = data?.error?.message || data?.message || `AI proxy error: ${res.status}`;
+    const msg = (data as any)?.error?.message || (data as any)?.message || `AI proxy error: ${res.status}`;
     throw new Error(msg);
   }
 
@@ -97,7 +109,7 @@ export async function callAiCouncil(
   habits: UserHabit[]
 ): Promise<CouncilResponse> {
   const callModel = async (prompt: string, role: AIAgentRole) => {
-    const res = await callAiProxy('gemini-3-flash-preview', prompt, `council_${role}`);
+    const res = await callAiProxy('gemini-2.5-flash', prompt, `council_${role}`);
     return (res as any).text || '';
   };
 
@@ -283,7 +295,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - Порции в описании коротко (пример: "курица 150г + гречка 80г + салат").
 - shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.`;
 
-  const res = await callAiProxy("gemini-3-flash-preview", prompt, "weekly_menu", {
+  const res = await callAiProxy("gemini-2.5-flash", prompt, "weekly_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -408,7 +420,7 @@ export async function generateFamilyWeeklyMenu(
 
   const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
 
-  const res = await callAiProxy("gemini-3-flash-preview", prompt, "family_menu", {
+  const res = await callAiProxy("gemini-2.5-flash", prompt, "family_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -471,7 +483,7 @@ export async function generateFamilyWeeklyMenu(
 ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
 `;
 
-    const rep = await callAiProxy("gemini-3-flash-preview", repairPrompt, "family_menu_repair", {
+    const rep = await callAiProxy("gemini-2.5-flash", repairPrompt, "family_menu_repair", {
       responseMimeType: "application/json",
       responseSchema: schema
     });
@@ -507,7 +519,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
  * Анализ фото еды с использованием Gemini Flash
  */
 export async function analyzeFoodPhoto(base64: string): Promise<any> {
-  const response = await callAiProxy('gemini-3-flash-preview', {
+  const response = await callAiProxy('gemini-2.5-flash', {
     parts: [
       {
         inlineData: {
@@ -586,7 +598,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  * Получение персонального совета от AI коуча
  */
 export async function getCoachAdvice(data: any): Promise<any> {
-  const response = await callAiProxy('gemini-3-flash-preview', 
+  const response = await callAiProxy('gemini-2.5-flash', 
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
@@ -712,7 +724,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   const repairPrompt = (badJson: any) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
 
   // Attempt 1 (schema-enforced)
-  const r1 = await callAiProxy('gemini-3-pro-preview', basePrompt, 'personal_plan', {
+  const r1 = await callAiProxy('gemini-2.5-pro', basePrompt, 'personal_plan', {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -723,7 +735,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 
   // Attempt 2: repair if model returned huge strings
   if (looksTooLong(plan)) {
-    const r2 = await callAiProxy('gemini-3-pro-preview', repairPrompt(plan), 'personal_plan', {
+    const r2 = await callAiProxy('gemini-2.5-pro', repairPrompt(plan), 'personal_plan', {
       responseMimeType: "application/json",
       responseSchema: schema
     });
@@ -739,7 +751,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
  * Объяснение причин плато и рекомендации
  */
 export async function generatePlateauExplanation(data: any): Promise<string> {
-  const response = await callAiProxy('gemini-3-flash-preview', 
+  const response = await callAiProxy('gemini-2.5-flash', 
     `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
     'plateau'
   );
@@ -750,7 +762,7 @@ export async function generatePlateauExplanation(data: any): Promise<string> {
  * Интерпретация еженедельных показателей прогресса
  */
 export async function getWeeklyIntelligenceInterpretation(data: any): Promise<string> {
-  const response = await callAiProxy('gemini-3-flash-preview', 
+  const response = await callAiProxy('gemini-2.5-flash', 
     `Интерпретируй еженедельные результаты пользователя: ${JSON.stringify(data)}. Напиши краткий мотивирующий анализ на 3-4 предложения.`,
     'wis_text'
   );
@@ -761,7 +773,7 @@ export async function getWeeklyIntelligenceInterpretation(data: any): Promise<st
  * Генерация рецепта по изображению
  */
 export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
-  const response = await callAiProxy('gemini-3-flash-preview', {
+  const response = await callAiProxy('gemini-2.5-flash', {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
       { text: 'Напиши пошаговый рецепт этого блюда. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк).' }
