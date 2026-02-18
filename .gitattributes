@@ -4,6 +4,5 @@
 *.js text eol=lf
 *.md text eol=lf
 *.json text eol=lf
-@'
+
 .githooks/* text eol=lf
-'@ | Set-Content -Encoding utf8 -NoNewline .gitattributes
