@@ -30,3 +30,5 @@ Remove-Item .\README_PATCH.txt
 .wrangler
 fitfocus.zip
 ui.zip
+.env*
+.env.docker
