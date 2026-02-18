@@ -166,8 +166,7 @@ async function resolveIdentityKey(request: Request, env: Env) {
   const token = getCookie(request, "ff_session");
   if (token && env.AUTH_JWT_SECRET) {
     const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
-    // Google OAuth sessions use `sub` (subject). Older sessions may use `uid`.
-    const uid = (payload as any)?.uid ?? (payload as any)?.sub;
+    const uid = payload?.uid ?? payload?.sub;
     if (uid) return `user:${uid}`;
   }
   const ipRaw = request.headers.get("CF-Connecting-IP") || "unknown";
