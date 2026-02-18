@@ -77,6 +77,10 @@ async function callAiProxy(model: string, contents: any, feature: string, config
   // Нормализуем ответ: UI ожидает поле `text`,
   // а Gemini API часто возвращает структуру candidates[].content.parts[].text
   const text = extractTextFromGemini(data);
+  if (!text || !String(text).trim()) {
+    const status = (data && (data.status || data.error?.code)) ? ` (status: ${data.status || data.error?.code})` : "";
+    throw new Error(`AI вернул пустой ответ${status}. Возможен safety-block или недоступная модель.`);
+  }
   return { ...data, text };
 }
 
@@ -732,6 +736,14 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   let parsed: any;
   try { parsed = JSON.parse(r1.text || "{}"); } catch { parsed = {}; }
   let plan = normalizePlan(parsed);
+
+  // FIX B: если модель вернула нули/пустые KPI, берём из профиля, чтобы не было "0 ккал".
+  const targets = calculateDailyTargets(user as any);
+  plan.dailyKpi = plan.dailyKpi || ({} as any);
+  if (!(plan.dailyKpi.calories > 0)) plan.dailyKpi.calories = targets.calories;
+  if (!(plan.dailyKpi.protein > 0)) plan.dailyKpi.protein = targets.protein;
+  if (!(plan.dailyKpi.fat > 0)) plan.dailyKpi.fat = targets.fat;
+  if (!(plan.dailyKpi.carbs > 0)) plan.dailyKpi.carbs = targets.carbs;
 
   // Attempt 2: repair if model returned huge strings
   if (looksTooLong(plan)) {

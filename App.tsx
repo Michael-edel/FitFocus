@@ -150,27 +150,35 @@ function loadGoogleIdentityScript(): Promise<void> {
   });
 }
 
-function GoogleSignInButton({ onAuthed }: { onAuthed: () => void }) {
-  const ref = React.useRef<HTMLDivElement | null>(null);
+function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
+  const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
+  const onAuthedRef = React.useRef(onAuthed);
+  const renderedRef = React.useRef(false);
+
   const [err, setErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => { onAuthedRef.current = onAuthed; }, [onAuthed]);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const clientId = getGoogleClientId();
-        // Важно: сбрасываем старую ошибку при повторном запуске эффекта
-        // (например, после HMR), чтобы сообщение не "залипало".
+
+        // Load + init once (avoid "jumping" / re-rendering GIS UI)
+        if (renderedRef.current && (window as any).google?.accounts?.id) return;
+
         setErr(null);
 
         if (!clientId) {
           setErr("Google Client ID не задан (VITE_GOOGLE_CLIENT_ID_LOCAL / VITE_GOOGLE_CLIENT_ID_PROD).");
           return;
         }
+
         await loadGoogleIdentityScript();
         if (cancelled) return;
 
-        const g = window.google;
+        const g = (window as any).google;
         if (!g?.accounts?.id) {
           setErr("Google Identity Services не инициализирован.");
           return;
@@ -187,7 +195,7 @@ function GoogleSignInButton({ onAuthed }: { onAuthed: () => void }) {
                 body: JSON.stringify({ credential: resp?.credential }),
               });
               if (!r.ok) throw new Error(await r.text());
-              onAuthed();
+              onAuthedRef.current();
             } catch (e: any) {
               console.error("Google auth failed", e);
               setErr("Не удалось войти через Google. Проверь /api/auth/google и переменные.");
@@ -195,31 +203,64 @@ function GoogleSignInButton({ onAuthed }: { onAuthed: () => void }) {
           },
         });
 
-        if (ref.current) {
-          ref.current.innerHTML = "";
-          g.accounts.id.renderButton(ref.current, {
+        // Render the official GIS button OFFSCREEN once, then click it from our custom button.
+        if (hiddenBtnHostRef.current) {
+          hiddenBtnHostRef.current.innerHTML = "";
+          g.accounts.id.renderButton(hiddenBtnHostRef.current, {
             type: "standard",
             theme: "outline",
-            size: "large",
+            size,
             shape: "pill",
-            text: "continue_with",
-            width: 320,
+            text,
+            width,
           });
+          renderedRef.current = true;
         }
       } catch (e: any) {
         console.error(e);
-        setErr("Не удалось загрузить Google кнопку (GIS).");
+        setErr("Не удалось загрузить Google (GIS).");
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [onAuthed]);
+    return () => { cancelled = true; };
+  }, []); // IMPORTANT: run once
+
+  const handleClick = React.useCallback(() => {
+    setErr(null);
+    const host = hiddenBtnHostRef.current;
+    const g = (window as any).google;
+    // Try clicking the hidden official button (opens the same popup flow)
+    const btn = host?.querySelector("div[role=button], button") as HTMLElement | null;
+    if (btn) {
+      btn.click();
+      return;
+    }
+    // Fallback: try One Tap prompt
+    if (g?.accounts?.id?.prompt) {
+      g.accounts.id.prompt();
+      return;
+    }
+    setErr("Google Identity Services ещё не загрузился. Подожди секунду и попробуй снова.");
+  }, []);
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div ref={ref} />
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
+      >
+        <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
+        <span>Google профиль</span>
+      </button>
+
+      {/* hidden host for the official GIS button (kept offscreen to prevent UI jumping) */}
+      <div
+        ref={hiddenBtnHostRef}
+        aria-hidden="true"
+        style={{ position: "absolute", left: -99999, top: -99999, width: 0, height: 0, overflow: "hidden" }}
+      />
+
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
   );
@@ -1919,50 +1960,78 @@ const logWeight = useCallback(() => {
   if (authState === 'loading') return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   if (authState === 'auth_choice') return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
-      <div className="max-w-md w-full space-y-8 text-center">
-        <div className="flex justify-center"><div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-indigo-950/50">FF</div></div>
-        <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
-        
-            <div className="mt-4 mb-6">
-              <GoogleSignInButton onAuthed={() => void bootstrapAuth()} />
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
+    <div className="max-w-md w-full space-y-8 text-center">
+      <div className="flex justify-center">
+        <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-indigo-950/50">
+          FF
+        </div>
+      </div>
+      <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
+
+      <div className="grid gap-4">
+        {allUsers.map(user => (
+          <div
+            key={user.id}
+            onClick={() => void loginAsUser(user)}
+            className="flex items-center gap-4 p-5 bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl hover:bg-slate-800 transition-all text-left group cursor-pointer"
+          >
+            <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-indigo-500/10 group-hover:bg-indigo-600 transition-all">
+              {user.picture ? (
+                <img src={user.picture} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-indigo-400 font-bold text-2xl group-hover:text-white transition-all">{user.name[0].toUpperCase()}</span>
+              )}
             </div>
-<div className="grid gap-4">
-          {allUsers.map(user => (
-            <div key={user.id} onClick={() => void loginAsUser(user)} className="flex items-center gap-4 p-5 bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl hover:bg-slate-800 transition-all text-left group cursor-pointer">
-              <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-400 font-bold text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{user.name[0].toUpperCase()}</div>
-              <div className="flex-1">
+
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
                 <p className="font-bold text-slate-100 text-lg">{user.name}</p>
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-widest tabular-nums">{user.weight} кг · {user.plan || 'Free'}</p>
+                {user.googleSub ? (
+                  <img src="/google-g.svg" alt="Google" title="Профиль Google" className="w-4 h-4 opacity-90" />
+                ) : null}
               </div>
-              <button
-                type="button"
-                className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
-                title="Удалить профиль"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const ok = confirm(`Удалить профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
-                  if (ok) deleteUserProfile(user.id);
-                }}
-              >
-                <Trash2 size={20} />
-              </button>
-              <LogIn size={20} className="text-slate-600 group-hover:text-indigo-400 shrink-0" />
+              <p className="text-xs text-slate-500 font-medium uppercase tracking-widest tabular-nums">
+                {user.weight} кг · {user.plan || 'Free'}
+              </p>
             </div>
-          ))}
-          <button 
-            onClick={() => setAuthState('register')} 
+
+            <button
+              type="button"
+              className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
+              title="Удалить профиль"
+              onClick={(e) => {
+                e.stopPropagation();
+                const ok = confirm(`Удалить профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
+                if (ok) deleteUserProfile(user.id);
+              }}
+            >
+              <Trash2 size={20} />
+            </button>
+
+            <LogIn size={20} className="text-slate-600 group-hover:text-indigo-400 shrink-0" />
+          </div>
+        ))}
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setAuthState('register')}
             disabled={allUsers.length >= 5}
             className="flex items-center justify-center gap-2 p-5 border-2 border-dashed border-slate-800 rounded-[2rem] text-slate-500 hover:text-indigo-400 hover:border-indigo-900 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5)' : 'Создать профиль'}
           </button>
+
+          <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
+            <GoogleSignInButton onAuthed={() => void bootstrapAuth()} width={180} size="medium" text="continue_with" />
+          </div>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 
-  if (authState === 'register') return (
+if (authState === 'register') return (
     <div className="min-h-screen bg-slate-950 relative overflow-hidden text-left">
       {/* Premium backdrop */}
       <div className="absolute inset-0 pointer-events-none">
