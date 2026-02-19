@@ -2,3 +2,7 @@ name = "fitfocus"
 compatibility_date = "2026-02-17"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
+[[d1_databases]]
+binding = "DB"
+database_name = "fitfocus"
+database_id = "061ae786-9341-4bd7-8efe-025dd1bac6d5"
