@@ -732,7 +732,11 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
+  const [inviteCode, setInviteCode] = useState<'string'> = localStorage.getItem ('fitfocus_invite_code') | '';
+  const [requireInvite, setRequireInvite] = useState<boolean>(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteChecking, setInviteChecking] = useState<boolean>(false);
+
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
@@ -1717,6 +1721,51 @@ setAuthState('auth_choice');
     void bootstrapAuth();
   }, [bootstrapAuth]);
 
+  // Load public env flags (no auth)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/env', { credentials: 'include' });
+        if (!r.ok) return;
+        const j = await r.json().catch(() => null);
+        if (j && typeof j.requireInvite === 'boolean') setRequireInvite(!!j.requireInvite);
+      } catch {}
+    })();
+  }, []);
+
+  const ensureInviteOk = useCallback(async (): Promise<boolean> => {
+    if (!requireInvite) return true;
+    const code = String(inviteCode || '').trim();
+    if (!code) {
+      setInviteError('Введите код приглашения для доступа к бете.');
+      return false;
+    }
+    setInviteChecking(true);
+    setInviteError(null);
+    try {
+      const r = await fetch(`/api/invite/validate?code=${encodeURIComponent(code)}`, { credentials: 'include' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.valid) {
+        setInviteError('Код приглашения недействителен или уже использован.');
+        return false;
+      }
+      return true;
+    } catch {
+      setInviteError('Не удалось проверить код приглашения. Проверьте сервер.');
+      return false;
+    } finally {
+      setInviteChecking(false);
+    }
+  }, [requireInvite, inviteCode]);
+
+  const startLocalRegistration = useCallback(async () => {
+    const ok = await ensureInviteOk();
+    if (!ok) return;
+    setAuthState('register');
+  }, [ensureInviteOk]);
+
+
+
 
   const processPhotoFiles = useCallback(async (files: File[]) => {
     if (!files.length || !currentUser) return;
@@ -1928,11 +1977,38 @@ const logWeight = useCallback(() => {
       }
     } catch {}
 
+
+    // Closed beta: redeem invite for local profiles as well (bind to local user id)
+    if (requireInvite) {
+      const code = String(inviteCode || '').trim();
+      if (!code) {
+        setPlanError('Требуется код приглашения.');
+        return;
+      }
+      try {
+        const rr = await fetch('/api/invite/redeem', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, userId: newUser.id }),
+        });
+        const rj = await rr.json().catch(() => null);
+        if (!rr.ok || rj?.ok !== true) {
+          setPlanError(rj?.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
+          return;
+        }
+      } catch {
+        setPlanError('Не удалось связаться с сервером для проверки приглашения.');
+        return;
+      }
+    }
+
+
     setAllUsers([newUser]);
     await loginAsUser(newUser);
     setActiveTab('plan');
     setPlanIntroOpen(true);
-  }, [regData, loginAsUser, regNameValid, allUsers.length]);
+  }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode]);
 
   const handleActivateWithTransition = useCallback(() => {
     if (!regNameValid || isActivatingPlan) return;
@@ -2084,10 +2160,30 @@ const logWeight = useCallback(() => {
           </div>
         ))}
 
-        <div className="grid grid-cols-2 gap-3">
+        
+        <div className="space-y-2 text-left">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
+          <input
+            value={inviteCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInviteCode(v);
+              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
+              setInviteError(null);
+            }}
+            placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
+            className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
+          />
+          {requireInvite ? (
+            <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
+          ) : null}
+          {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
+        </div>
+
+<div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setAuthState('register')}
-            disabled={allUsers.length >= 5}
+            onClick={() => void startLocalRegistration()}
+            disabled={allUsers.length >= 5 || inviteChecking}
             className="flex items-center justify-center gap-2 p-5 border-2 border-dashed border-slate-800 rounded-[2rem] text-slate-500 hover:text-indigo-400 hover:border-indigo-900 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5)' : 'Создать профиль'}
@@ -2409,7 +2505,27 @@ if (authState === 'register') return (
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              
+        <div className="space-y-2 text-left">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
+          <input
+            value={inviteCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInviteCode(v);
+              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
+              setInviteError(null);
+            }}
+            placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
+            className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
+          />
+          {requireInvite ? (
+            <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
+          ) : null}
+          {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
+        </div>
+
+<div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-sm text-slate-300 mb-1">Приём пищи</div>
                   <select
@@ -2643,8 +2759,8 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
                 <button 
-                  onClick={() => setAuthState('register')} 
-                  disabled={allUsers.length >= 5}
+                  onClick={() => void startLocalRegistration()} 
+                  disabled={allUsers.length >= 5 || inviteChecking}
                   className="w-full py-6 bg-slate-900 border-2 border-dashed border-slate-800 rounded-[2.5rem] font-black text-slate-500 hover:text-indigo-300 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5) достигнут' : 'Добавить профиль'}
