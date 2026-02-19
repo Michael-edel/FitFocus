@@ -151,7 +151,7 @@ function loadGoogleIdentityScript(): Promise<void> {
   });
 }
 
-function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
+function GoogleSignInButton({ onAuthed, inviteCode, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; inviteCode?: string; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
   const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
   const onAuthedRef = React.useRef(onAuthed);
   const renderedRef = React.useRef(false);
@@ -187,14 +187,14 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
 
         g.accounts.id.initialize({
           client_id: clientId,
-          use_fedcm_for_prompt: false, // dev-friendly: avoids FedCM issues in incognito
+          use_fedcm_for_prompt: false,
           callback: async (resp: any) => {
             try {
               const r = await fetch("/api/auth/google", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ credential: resp?.credential }),
+                body: JSON.stringify({ credential: resp?.credential, inviteCode: inviteCode || undefined }),
               });
               if (!r.ok) throw new Error(await r.text());
               onAuthedRef.current();
@@ -732,6 +732,7 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
+  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
@@ -1694,29 +1695,22 @@ const openEditFood = (item: FoodEntry) => {
       return;
     }
 
-    // No server session (or /api/me returned {user:null}) -> restore local profiles or show chooser
-    let storedUsers: any[] = [];
-    try {
-      const raw = localStorage.getItem('fitfocus_all_users');
-      const parsed = raw ? JSON.parse(raw) : [];
-      storedUsers = Array.isArray(parsed) ? parsed : [];
-    } catch {}
-
-    if (storedUsers.length) setAllUsers(storedUsers as any);
-
-    const lastId = (() => {
-      try { return localStorage.getItem('fitfocus_last_user_id'); } catch { return null; }
-    })();
-
-    const lastUser = lastId ? storedUsers.find((u: any) => u && u.id === lastId) : null;
-    if (lastUser) {
-      // login to last local profile (works even if server session absent; state hydration will just no-op)
-      void loginAsUser(lastUser);
+// No server session -> restore local profiles or show profile chooser
+try {
+  const raw = localStorage.getItem('fitfocus_all_users');
+  const all = raw ? (JSON.parse(raw) as any[]) : [];
+  const lastId = localStorage.getItem('fitfocus_last_user_id');
+  if (Array.isArray(all) && all.length > 0) {
+    setAllUsers(all);
+    const last = lastId ? all.find((u) => String(u?.id) === String(lastId)) : null;
+    if (last) {
+      void loginAsUser(last);
       return;
     }
+  }
+} catch {}
 
-    // Show "Создать профиль / Google профиль"
-    setAuthState('auth_choice');
+setAuthState('auth_choice');
   }, [loginAsUser]);
 
   useEffect(() => {
@@ -2100,7 +2094,7 @@ const logWeight = useCallback(() => {
           </button>
 
           <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
-            <GoogleSignInButton onAuthed={() => void bootstrapAuth()} width={180} size="medium" text="continue_with" />
+            <GoogleSignInButton onAuthed={() => void bootstrapAuth()} inviteCode={inviteCode} width={180} size="medium" text="continue_with" />
           </div>
         </div>
       </div>
