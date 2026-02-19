@@ -669,6 +669,24 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 };
 
 
+function summarizeExpertText(text: string, maxBullets = 2): string[] {
+  const t = String(text || '').trim().replace(/^"+|"+$/g, '');
+  const cleanedLines = t
+    .split(/\n+/)
+    .map((l) => l.replace(/^[-*\d\.)\s]+/, '').trim())
+    .filter(Boolean);
+
+  const bullets = cleanedLines.length
+    ? cleanedLines.slice(0, maxBullets)
+    : t
+        .split(/(?<=[.!?])\s+/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .slice(0, maxBullets);
+
+  return bullets.length ? bullets : [t.slice(0, 140)];
+}
+
 const App: React.FC = () => {
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
@@ -2744,7 +2762,40 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             </div>
                           )}
 
-                          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
+                          <div className="space-y-4">
+  {!!resp?.thoughts?.length && (
+    <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-4 md:p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Что сказал каждый эксперт</div>
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласие экспертов {score}%</div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {(resp.thoughts || [])
+          .filter((t: any) => !t.isReview)
+          .map((t: any, i: number) => {
+            const bullets = summarizeExpertText(t.text, 2);
+            return (
+              <div key={i} className="p-4 rounded-3xl border border-indigo-500/15 bg-indigo-500/5">
+                <div className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2">{t.agentName}</div>
+                <ul className="text-sm text-slate-200 space-y-1 list-disc pl-5">
+                  {bullets.map((b, bi) => (
+                    <li key={bi} className="text-slate-300">{b}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+      </div>
+
+      <div className="mt-3 text-xs text-slate-500">
+        Это короткая выжимка. Ниже — итоговый, согласованный план.
+      </div>
+    </div>
+  )}
+
+  <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
+</div>
 
                           {!isUser && resp?.thoughts?.length ? (
                             <div className="mt-4">
