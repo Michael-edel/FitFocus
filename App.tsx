@@ -2587,10 +2587,10 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             <header className="text-left">
               <div className="flex items-center gap-3 text-indigo-400 mb-2">
                 <BrainCircuit size={28} />
-                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
+                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Команда экспертов</span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
-              <p className="text-slate-400">Параллельный анализ от 2 экспертов + Peer Review + синтез.</p>
+              <p className="text-slate-400">Диетолог и тренер анализируют запрос, затем мы согласуем рекомендации и даём общий план.</p>
             </header>
 
             <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
@@ -2644,7 +2644,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           {!isUser && score !== null && (
                             <div className="mb-4">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Chairman Synthesis</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Итоговый вывод</div>
                                 <div className={clsx(
                                   'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
                                   score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
@@ -2709,20 +2709,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             <BrainCircuit size={14} /> Совет обсуждает…
                           </div>
                           <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Router'
-                              : councilStage === 'experts' ? 'Experts'
-                              : councilStage === 'review' ? 'Peer Review'
-                              : councilStage === 'chairman' ? 'Chairman'
+                            {councilStage === 'router' ? 'Анализ'
+                              : councilStage === 'experts' ? 'Эксперты'
+                              : councilStage === 'review' ? 'Согласование'
+                              : councilStage === 'chairman' ? 'Итог'
                               : '…'}
                           </span>
                         </div>
 
                         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                           {[
-                            { id: 'router', label: 'Router' },
+                            { id: 'router', label: 'Анализ' },
                             { id: 'experts', label: 'Эксперты' },
-                            { id: 'review', label: 'Review' },
-                            { id: 'chairman', label: 'Synthesis' },
+                            { id: 'review', label: 'Согласование' },
+                            { id: 'chairman', label: 'Итог' },
                           ].map((s) => {
                             const order = ['router','experts','review','chairman'] as const;
                             const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
