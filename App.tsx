@@ -882,7 +882,7 @@ const App: React.FC = () => {
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
   const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
-  const \[showCouncilThoughts, setShowCouncilThoughts\] = useState\(false\);
+  const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
   const [showExpertDetails, setShowExpertDetails] = useState(false);
   const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
   const [councilExpertIdx, setCouncilExpertIdx] = useState<number>(-1); // 0..3 = активный эксперт
