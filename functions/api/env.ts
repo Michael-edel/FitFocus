@@ -9,7 +9,10 @@ export const onRequestGet: PagesFunction = async (context) => {
     env.GOOGLE_CLIENT_ID_PROD ||
     '';
 
-  return new Response(JSON.stringify({ googleClientIdLocal, googleClientIdProd }), {
+  const requireInvite =
+    String(env.REQUIRE_INVITE ?? env.VITE_REQUIRE_INVITE ?? '').trim() === '1';
+
+  return new Response(JSON.stringify({ googleClientIdLocal, googleClientIdProd, requireInvite }), {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
