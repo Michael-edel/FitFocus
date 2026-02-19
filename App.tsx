@@ -1113,12 +1113,6 @@ const openEditFood = (item: FoodEntry) => {
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
-  // Ensure deterministic onboarding start (always step 1 on a fresh page load).
-  // Prevents rare cases where dev tooling or cached state could render step 2 by accident.
-  useEffect(() => {
-    setOnboardingStep(1);
-  }, []);
-
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   const [activationStep, setActivationStep] = useState(0);
   const activationTimerRef = useRef<number | null>(null);
@@ -1252,13 +1246,6 @@ const openEditFood = (item: FoodEntry) => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
   const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
-
-  // Safety: don't allow onboarding to start on step 2 unless step 1 is valid.
-  // Helps when dev refresh/HMR or some edge state accidentally preserves step 2.
-  useEffect(() => {
-    if (onboardingStep === 2 && !regStep1Valid) setOnboardingStep(1);
-  }, [onboardingStep, regStep1Valid]);
-
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -1706,8 +1693,29 @@ const openEditFood = (item: FoodEntry) => {
       return;
     }
 
-    // No server session -> go onboarding (user can sign in)
-    setAuthState('register');
+    // No server session -> fallback to local offline profiles (device-only)
+    // This is the expected "Step 1": choose/create a profile.
+    try {
+      const raw = localStorage.getItem('fitfocus_all_users');
+      const parsed = raw ? JSON.parse(raw) : [];
+      const users: UserProfile[] = Array.isArray(parsed) ? parsed : [];
+      setAllUsers(users);
+
+      const lastId = localStorage.getItem('fitfocus_last_user_id');
+      const last = lastId ? users.find(u => u.id === lastId) : null;
+      if (last) {
+        void loginAsUser(last);
+        return;
+      }
+
+      // Even if there are 0 users, show the profile screen with "Create profile" / "Google profile".
+      setAuthState('auth_choice');
+      return;
+    } catch {
+      // If localStorage is unavailable/corrupted, still allow continuing.
+      setAuthState('auth_choice');
+      return;
+    }
   }, [loginAsUser]);
 
   useEffect(() => {
