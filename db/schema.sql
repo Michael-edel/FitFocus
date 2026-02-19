@@ -39,3 +39,17 @@ CREATE TABLE IF NOT EXISTS user_kv (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, k)
 );
+
+
+-- Сессии (enterprise layer: отзыв, выход со всех устройств)
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  revoked INTEGER DEFAULT 0,
+  user_agent TEXT,
+  ip TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
