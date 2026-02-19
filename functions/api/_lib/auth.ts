@@ -1,4 +1,6 @@
 // Shared auth utilities for Pages Functions (HS256 JWT in ff_session cookie)
+export const API_SCHEMA_VERSION = 3;
+
 export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
 
 export function readCookie(cookieHeader: string, name: string): string | null {
@@ -98,10 +100,17 @@ export async function requireUser(
   };
 }
 
-export function json(data: any, status = 200, headers?: Headers) {
+export function json(data: any, status = 200, headers?: Headers, schemaVersion: number = API_SCHEMA_VERSION) {
   const h = headers ? new Headers(headers) : new Headers();
   h.set("Content-Type", "application/json; charset=utf-8");
   h.set("Cache-Control", "no-store");
+  h.set("X-API-Schema-Version", String(schemaVersion));
+
+  // Backward-compatible: keep original shape, but add schema_version if absent
+  if (data && typeof data === "object" && !Array.isArray(data) && (data as any).schema_version === undefined) {
+    (data as any).schema_version = schemaVersion;
+  }
+
   return new Response(JSON.stringify(data), { status, headers: h });
 }
 

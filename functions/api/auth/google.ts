@@ -1,3 +1,4 @@
+import { json } from "../_lib/auth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -60,6 +61,12 @@ await env.DB.prepare(
   .bind(user.sub, user.email, Date.now())
   .run();
 
+
+// Optional: auto-promote admins/supports by email (enterprise convenience)
+const adminEmails = String((env as any).ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+if (adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
+  await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
+}
 // Create server-tracked session (enterprise layer)
 const ua = request.headers.get("user-agent") || "";
 const ip =
@@ -119,11 +126,6 @@ type Env = {
   VITE_GOOGLE_CLIENT_ID_PROD?: string;
 };
 
-function json(data: any, status = 200, headers?: Headers) {
-  const h = headers ? new Headers(headers) : new Headers();
-  h.set("Content-Type", "application/json; charset=utf-8");
-  return new Response(JSON.stringify(data), { status, headers: h });
-}
 
 function cookieSerialize(
   name: string,
