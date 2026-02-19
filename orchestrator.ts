@@ -47,9 +47,12 @@ export async function runCouncil(
     Запрос: "${query}"
   `;
 
-  // 1. ВЫБОР ЭКСПЕРТОВ
-  // Премиальный режим: всегда подключаем всех 4 экспертов.
-  const activeAgents = AGENTS;
+  // 1. ROUTING
+  const routerPrompt = `Проанализируй запрос пользователя: "${query}". Выбери ровно 2 агентов из списка [architect, nutritionist, physiologist, psychologist], чья помощь наиболее важна. Верни только ID через запятую.`;
+  const selectedRolesRaw = await callModel(routerPrompt, 'chairman');
+  const selectedRoles = selectedRolesRaw.split(',').map(s => s.trim() as AIAgentRole).filter(r => AGENTS.find(a => a.id === r));
+  
+  const activeAgents = AGENTS.filter(a => selectedRoles.includes(a.id));
 
   // 2. EXPERT THOUGHTS
   const thoughts = await Promise.all(activeAgents.map(async agent => {
@@ -79,16 +82,16 @@ export async function runCouncil(
     ${peerReviews.map(r => `[${r.agentName} о коллеге]: ${r.text}`).join('\n')}
     
     Сформируй итоговый ответ на русском языке. Ответ должен быть структурированным, дружелюбным и содержать конкретные шаги.
-    В конце добавь строку "Согласие: X/100", где X — уровень согласия экспертов (0–100).
+    В конце добавь "Agreement Score: X/100", где X - уровень согласия экспертов.
   `;
 
   const finalAnswer = await callModel(synthesisPrompt, 'chairman');
   
-  const agreementMatch = finalAnswer.match(/(?:Agreement Score|Согласие(?: экспертов)?):\s*(\d+)/i);
+  const agreementMatch = finalAnswer.match(/Agreement Score: (\d+)/);
   const agreementScore = agreementMatch ? parseInt(agreementMatch[1]) : 85;
 
   return {
-    finalAnswer: finalAnswer.replace(/(?:Agreement Score|Согласие(?: экспертов)?):\s*\d+\/100/i, '').trim(),
+    finalAnswer: finalAnswer.replace(/Agreement Score: \d+\/100/, '').trim(),
     decisionReason: `Запрос обработан агентами: ${activeAgents.map(a => a.name).join(', ')}.`,
     thoughts: [...thoughts, ...peerReviews],
     agreementScore

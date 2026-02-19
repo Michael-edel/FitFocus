@@ -25,20 +25,30 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   PRIMARY KEY (user_id, day, feature)
 );
 
--- Профиль пользователя (премиум персонализация для AI)
+-- Профиль пользователя (source of truth). Храним целиком JSON, чтобы фронт мог развиваться без миграций.
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id TEXT PRIMARY KEY,
-  name TEXT,
-  gender TEXT,
-  age INTEGER,
-  height INTEGER,
-  weight REAL,
-  target_weight REAL,
-  activity_level REAL,
-  goal TEXT,
-  exclusions TEXT,
-  loss_deficit INTEGER,
-  gain_surplus INTEGER,
+  profile_json TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- История приёмов пищи (опционально, но нужно для экспорта)
+CREATE TABLE IF NOT EXISTS meals (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  raw_json TEXT NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- Логи AI (для "магии" + поддержки + экспорта)
+CREATE TABLE IF NOT EXISTS ai_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  feature TEXT NOT NULL,
+  request_json TEXT,
+  response_json TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id)
 );

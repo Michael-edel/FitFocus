@@ -1,5 +1,3 @@
-import { requireUser } from "./_lib/auth";
-import { ensureUserRow, requireDB } from "./_lib/db";
 
 /**
  * FITFOCUS v18_USER_LIMITS_NO_JOSE
@@ -26,24 +24,6 @@ type GeminiContent = {
   role?: "user" | "model";
   parts: GeminiPart[];
 };
-
-function buildProfileContext(p: any): string {
-  if (!p) return "";
-  const parts: string[] = [];
-  if (p.name) parts.push(`Имя: ${p.name}`);
-  if (p.gender) parts.push(`Пол: ${p.gender}`);
-  if (p.age) parts.push(`Возраст: ${p.age}`);
-  if (p.height) parts.push(`Рост: ${p.height} см`);
-  if (p.weight) parts.push(`Вес: ${p.weight} кг`);
-  if (p.target_weight) parts.push(`Целевой вес: ${p.target_weight} кг`);
-  if (p.activity_level) parts.push(`Уровень активности: ${p.activity_level}`);
-  if (p.goal) parts.push(`Цель: ${p.goal}`);
-  if (p.loss_deficit != null) parts.push(`Дефицит: ${p.loss_deficit} ккал/день`);
-  if (p.gain_surplus != null) parts.push(`Профицит: ${p.gain_surplus} ккал/день`);
-  if (p.exclusions) parts.push(`Исключения/аллергены: ${p.exclusions}`);
-  if (!parts.length) return "";
-  return `ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ (используй для персонализации):\n${parts.join("\n")}\n---\n`;
-}
 
 function b64urlEncode(bytes: Uint8Array) {
   let s = "";
@@ -241,26 +221,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
   const kv = env.FITFOCUS_KV;
   const identity = await resolveIdentityKey(request, env);
-  // Premium: load user profile from D1 (server-side source of truth for AI personalization)
-  let profileContext = "";
-  try {
-    if ((env as any).DB && (env as any).AUTH_JWT_SECRET) {
-      const sessionUser = await requireUser(request, env as any);
-      const db = requireDB(env as any);
-      await ensureUserRow(db, sessionUser);
-      const profileRow = await db
-        .prepare(
-          `SELECT name, gender, age, height, weight, target_weight, activity_level, goal, exclusions, loss_deficit, gain_surplus
-           FROM user_profiles WHERE user_id = ?`
-        )
-        .bind(sessionUser.sub)
-        .first();
-      profileContext = buildProfileContext(profileRow);
-    }
-  } catch {
-    // ignore: AI can still work without profile
-  }
-
 
   if (kv) {
     const cooldownKey = `rl:cd:4s:${identity}:${feature}`;
@@ -337,21 +297,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         error: { message: "Invalid contents: expected string or Content/Content[] with parts[]. Use {contents:[{role:'user',parts:[{text:'...'}]}]}" }
       }, 400);
     }
-    
-    // Inject profile context into the first user message for key premium features.
-    if (profileContext && ["weekly_menu", "personal_plan", "coach_advice", "ai_council", "meal_analyze", "family_weekly_menu"].includes(feature)) {
-      if (normalized.length && (normalized[0] as any).role === "user") {
-        const first = normalized[0] as any;
-        if (first.parts?.length && first.parts[0]?.text) {
-          first.parts[0].text = profileContext + String(first.parts[0].text);
-        } else {
-          first.parts = [{ text: profileContext }, ...(first.parts || [])];
-        }
-      } else {
-        normalized.unshift({ role: "user", parts: [{ text: profileContext }] } as any);
-      }
-    }
-payloadToSend.contents = normalized;
+    payloadToSend.contents = normalized;
   }
 
   const geminiResp = await fetch(url, {
