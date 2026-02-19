@@ -46,7 +46,8 @@ import {
   Send,
   MessageCircle,
   ChevronDown,
-  History
+  History,
+  Dot
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu } from './geminiService';
@@ -883,6 +884,8 @@ const App: React.FC = () => {
   const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
   const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
   const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
+  const [councilExpertIdx, setCouncilExpertIdx] = useState<number>(-1); // 0..3 = активный эксперт
+  const [councilReviewPct, setCouncilReviewPct] = useState<number>(0); // прогресс согласования 0..100
   type CouncilChatMsg = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; response?: CouncilResponse };
   const [councilMessages, setCouncilMessages] = useState<CouncilChatMsg[]>([]);
   const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
@@ -2875,7 +2878,73 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           })}
                         </div>
 
-                        <div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
+                        
+                        <div className="mt-5 space-y-3">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Эксперты</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {[
+                              { name: 'Архитектор стратегии', hint: 'фокус недели, система привычек' },
+                              { name: 'Диетолог', hint: 'рацион, дефицит/профицит' },
+                              { name: 'Тренер‑физиолог', hint: 'нагрузка, восстановление' },
+                              { name: 'Психолог привычек', hint: 'мотивация, срывы, режим' },
+                            ].map((ex, idx) => {
+                              const stageOrder = ['router','experts','review','chairman'] as const;
+                              const curStageIdx = stageOrder.indexOf((councilStage === 'idle' ? 'router' : councilStage) as any);
+                              const isExpertsStage = (councilStage === 'experts');
+                              const isReviewStage = (councilStage === 'review');
+                              const isDone = curStageIdx > stageOrder.indexOf('experts') || (isExpertsStage && councilExpertIdx !== -1 && idx < councilExpertIdx) || (isExpertsStage && councilExpertIdx === -1);
+                              const isActive = isExpertsStage && councilExpertIdx === idx;
+                              const label = isActive ? 'формирует рекомендации…' : isDone ? 'готово' : isExpertsStage ? 'в очереди' : 'ожидает';
+                              return (
+                                <div
+                                  key={ex.name}
+                                  className={clsx(
+                                    'p-4 rounded-3xl border flex items-start gap-3 transition-all',
+                                    isDone ? 'bg-emerald-500/5 border-emerald-500/15'
+                                    : isActive ? 'bg-indigo-500/10 border-indigo-500/25 shadow-[0_0_0_1px_rgba(99,102,241,0.15)]'
+                                    : 'bg-slate-950 border-slate-800'
+                                  )}
+                                >
+                                  <div className={clsx(
+                                    'mt-0.5 w-8 h-8 rounded-2xl grid place-items-center border',
+                                    isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                                    : isActive ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300'
+                                    : 'bg-slate-900 border-slate-800 text-slate-600'
+                                  )}>
+                                    {isDone ? <CheckCircle size={16} /> : isActive ? <Loader2 className="animate-spin" size={16} /> : <Dot size={18} />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="text-sm font-black text-slate-100 truncate">{ex.name}</div>
+                                      <div className={clsx(
+                                        'text-[10px] font-black uppercase tracking-widest',
+                                        isDone ? 'text-emerald-300'
+                                        : isActive ? 'text-indigo-300'
+                                        : 'text-slate-600'
+                                      )}>{label}</div>
+                                    </div>
+                                    <div className="mt-1 text-xs text-slate-500 font-semibold">{ex.hint}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {councilStage === 'review' && (
+                            <div className="mt-1 p-4 rounded-3xl border border-slate-800 bg-slate-950/50">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласование рекомендаций</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 tabular-nums">{councilReviewPct}%</div>
+                              </div>
+                              <div className="mt-3 h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
+                                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${councilReviewPct}%` }} />
+                              </div>
+                              <div className="mt-2 text-xs text-slate-500 font-semibold">Эксперты проверяют друг друга и собирают один общий план.</div>
+                            </div>
+                          )}
+                        </div>
+
+<div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
                           <span className="ff-ai-dot" />
                           <span className="ff-ai-dot ff-ai-dot--2" />
                           <span className="ff-ai-dot ff-ai-dot--3" />
@@ -2909,11 +2978,48 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   setCouncilLoading(true);
                   setCouncilResponse(null);
                   setCouncilStage('router');
+                  setCouncilExpertIdx(-1);
+                  setCouncilReviewPct(0);
 
                   const timers: any[] = [];
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
+
+                  // 1) Понимание запроса (коротко)
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 450));
+
+                  // 2) Эксперты по очереди (премиальная "магия")
+                  const expertStart = 520;
+                  const perExpert = 650;
+                  [0,1,2,3].forEach((idx) => {
+                    timers.push(setTimeout(() => {
+                      setCouncilStage(s => (s === 'router' ? 'experts' : s));
+                      setCouncilExpertIdx(idx);
+                    }, expertStart + idx * perExpert));
+                  });
+                  // когда эксперты закончили
+                  timers.push(setTimeout(() => {
+                    setCouncilExpertIdx(-1);
+                    setCouncilStage('review');
+                  }, expertStart + 4 * perExpert + 120));
+
+                  // 3) Согласование (плавный прогресс)
+                  const reviewStart = expertStart + 4 * perExpert + 150;
+                  timers.push(setTimeout(() => {
+                    setCouncilStage('review');
+                    setCouncilReviewPct(0);
+                    const iv = setInterval(() => {
+                      setCouncilReviewPct(p => {
+                        const next = Math.min(100, p + 8);
+                        return next;
+                      });
+                    }, 120);
+                    timers.push(iv);
+                  }, reviewStart));
+
+                  // 4) Итог
+                  timers.push(setTimeout(() => {
+                    setCouncilReviewPct(100);
+                    setCouncilStage('chairman');
+                  }, reviewStart + 1700));
 
                   try {
                     const r = await callAiCouncil(q, currentUser, foodDiary, habits);
@@ -2947,7 +3053,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       return next;
                     });
                   } finally {
-                    timers.forEach(t => clearTimeout(t));
+                    timers.forEach(t => { try { clearTimeout(t); } catch {} try { clearInterval(t as any); } catch {} });
                     setCouncilLoading(false);
                     setCouncilStage('idle');
                   }
