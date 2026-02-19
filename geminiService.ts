@@ -167,37 +167,6 @@ export const readAiStatus = (): AiLastStatus | null => {
 
 const nowMs = () => Date.now();
 
-
-function extractJson(text: string): string {
-  let t = String(text || "").trim();
-
-  // Remove fenced code blocks like ```json ... ```
-  t = t.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
-
-  // Remove leading/trailing backticks
-  t = t.replace(/^`+/, "").replace(/`+$/, "").trim();
-
-  // If still not pure JSON, try to cut first {...} or [...]
-  const firstObj = t.indexOf("{");
-  const lastObj = t.lastIndexOf("}");
-  if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
-    return t.slice(firstObj, lastObj + 1);
-  }
-
-  const firstArr = t.indexOf("[");
-  const lastArr = t.lastIndexOf("]");
-  if (firstArr !== -1 && lastArr !== -1 && lastArr > firstArr) {
-    return t.slice(firstArr, lastArr + 1);
-  }
-
-  return t;
-}
-
-function safeJsonParse(text: string): any {
-  return JSON.parse(extractJson(text));
-}
-
-
 const getCooldownUntil = (): number => {
   try {
     const v = localStorage.getItem(LS_COOLDOWN_KEY);
@@ -563,7 +532,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         },
       },
       {
-        text: 'Анализируй это блюдо. Верни ТОЛЬКО валидный JSON (без markdown/```/пояснений). Начни ответ с { и закончи }. Поля: name (строка), calories (число), protein (число, г), fat (число, г), carbs (число, г), ingredients (массив объектов {name, percent}), notes (массив строк).',
+        text: 'Анализируй это блюдо. Верни JSON с полями: name (название), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name и percent), notes (массив строк). Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
@@ -591,7 +560,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
       required: ["name", "calories", "protein", "fat", "carbs", "ingredients"]
     }
   });
-  return safeJsonParse(response.text || "{}");
+  return JSON.parse(response.text || "{}");
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
@@ -649,7 +618,7 @@ export async function getCoachAdvice(data: any): Promise<any> {
       }
     }
   );
-  return safeJsonParse(response.text || "{}");
+  return JSON.parse(response.text || "{}");
 }
 
 /**
@@ -855,5 +824,5 @@ export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
       required: ["title", "ingredients", "steps"]
     }
   });
-  return safeJsonParse(response.text || "{}");
+  return JSON.parse(response.text || "{}");
 }

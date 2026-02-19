@@ -319,6 +319,27 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     await logUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
+  
+  // If a feature expects pure JSON (e.g. weekly_menu), unwrap Gemini response and return parsed object.
+  const wantsPureJson = feature === "weekly_menu" || feature === "menu_week" || feature === "weeklyPlan";
+
+  if (wantsPureJson) {
+    const parsed = tryParseJson(extractedText);
+    if (!parsed) {
+      if (kv) {
+        await logUsage(env, { identity, feature, status: 502, latency, bytesIn: bodyText.length });
+      }
+      return jsonResponse({ error: { message: "AI returned invalid JSON" }, rawText: extractedText, data }, 502);
+    }
+
+    if (kv) {
+      await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data: parsed }), { expirationTtl: 60 });
+      await logUsage(env, { identity, feature, status: 200, latency, bytesIn: bodyText.length });
+    }
+
+    return jsonResponse(parsed, 200);
+  }
+
   return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
@@ -328,6 +349,37 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       "X-FF-KV": kv ? "found" : "missing"
     },
   });
+}
+
+
+
+function extractJsonFromText(text: string): string {
+  let t = String(text || "").trim();
+
+  // remove fenced code blocks ```json ... ```
+  t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+
+  // remove leading/trailing backticks
+  t = t.replace(/^`+/, "").replace(/`+$/, "").trim();
+
+  // cut first {...} or [...]
+  const objStart = t.indexOf("{");
+  const objEnd = t.lastIndexOf("}");
+  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) return t.slice(objStart, objEnd + 1);
+
+  const arrStart = t.indexOf("[");
+  const arrEnd = t.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) return t.slice(arrStart, arrEnd + 1);
+
+  return t;
+}
+
+function tryParseJson(text: string): any | null {
+  try {
+    return JSON.parse(extractJsonFromText(text));
+  } catch {
+    return null;
+  }
 }
 
 function extractTextFromGemini(data: any): string {
