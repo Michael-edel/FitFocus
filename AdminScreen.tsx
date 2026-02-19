@@ -309,7 +309,7 @@ export default function AdminScreen() {
                   <button
                     disabled={!hasChanges || loading}
                     onClick={() => saveFlag(flag.key)}
-                    className={\`px-4 py-2 rounded-2xl font-black \${hasChanges ? "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200" : "bg-slate-800 text-slate-500"}\`}
+                    className={`px-4 py-2 rounded-2xl font-black \${hasChanges ? "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200" : "bg-slate-800 text-slate-500"}`}
                   >
                     Сохранить
                   </button>
@@ -467,7 +467,7 @@ export default function AdminScreen() {
               <button
                 key={u.id}
                 onClick={() => { setSelectedUserId(u.id); void loadUserDetails(u.id); }}
-                className={\`w-full text-left p-3 rounded-2xl border \${selectedUserId === u.id ? "border-indigo-500/40 bg-indigo-500/10" : "border-slate-800 bg-slate-950/40 hover:bg-slate-900/40"}\`}
+                className={`w-full text-left p-3 rounded-2xl border ${selectedUserId === u.id ? "border-indigo-500/40 bg-indigo-500/10" : "border-slate-800 bg-slate-950/40 hover:bg-slate-900/40"}`}
               >
                 <div className="text-slate-100 font-black text-sm">{u.email || u.id}</div>
                 <div className="text-slate-500 font-semibold text-xs">{u.id}</div>
@@ -531,7 +531,7 @@ export default function AdminScreen() {
                   <button
                     disabled={loading || !!s.revoked}
                     onClick={() => revokeSession(s.id)}
-                    className={\`px-3 py-2 rounded-2xl font-black \${s.revoked ? "bg-slate-800 text-slate-500" : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-200"}\`}
+                    className={`px-3 py-2 rounded-2xl font-black \${s.revoked ? "bg-slate-800 text-slate-500" : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-200"}`}
                   >
                     {s.revoked ? "Отозвана" : "Отозвать"}
                   </button>
