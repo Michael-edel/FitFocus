@@ -1113,19 +1113,11 @@ const openEditFood = (item: FoodEntry) => {
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
-
-  // Always start onboarding from step 1 on a fresh visit.
-  // This also neutralizes React Fast Refresh state preservation in dev.
+  // Ensure deterministic onboarding start (always step 1 on a fresh page load).
+  // Prevents rare cases where dev tooling or cached state could render step 2 by accident.
   useEffect(() => {
     setOnboardingStep(1);
   }, []);
-
-  // When auth flow sends user to onboarding (register), reset to step 1.
-  useEffect(() => {
-    if (authState === 'register') {
-      setOnboardingStep(1);
-    }
-  }, [authState]);
 
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   const [activationStep, setActivationStep] = useState(0);
@@ -1260,6 +1252,13 @@ const openEditFood = (item: FoodEntry) => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
   const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
+
+  // Safety: don't allow onboarding to start on step 2 unless step 1 is valid.
+  // Helps when dev refresh/HMR or some edge state accidentally preserves step 2.
+  useEffect(() => {
+    if (onboardingStep === 2 && !regStep1Valid) setOnboardingStep(1);
+  }, [onboardingStep, regStep1Valid]);
+
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
