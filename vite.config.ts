@@ -19,9 +19,9 @@ export default defineConfig(({ mode }) => {
     process.env.HOSTNAME === 'wrangler' ||
     process.env.WSL_DISTRO_NAME !== undefined
 
-  const backendTarget = env.VITE_BACKEND_TARGET || (isDocker
+  const backendTarget = isDocker
     ? 'http://wrangler:8788'
-    : 'http://localhost:8788')
+    : 'http://127.0.0.1:8788'
 
   console.log('🔧 Vite mode:', mode)
   console.log('🐳 Docker detected:', isDocker)

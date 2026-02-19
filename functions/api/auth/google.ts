@@ -61,6 +61,40 @@ await env.DB.prepare(
   .bind(user.sub, user.email, Date.now())
   .run();
 
+// Closed beta (invite codes)
+const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
+if (requireInvite) {
+  const inviteCode = String(body?.inviteCode || "").trim();
+  if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  // atomic consume: only if not revoked/expired and has remaining uses
+  const upd = await env.DB.prepare(
+    `UPDATE invite_codes
+     SET uses = uses + 1
+     WHERE code = ?
+       AND revoked = 0
+       AND (expires_at IS NULL OR expires_at > ?)
+       AND uses < COALESCE(max_uses, 1)`
+  )
+    .bind(inviteCode, nowSec)
+    .run();
+
+  if (!upd?.changes) {
+    return json({ error: "INVITE_INVALID" }, 403);
+  }
+
+  // record redemption (best-effort)
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS invite_redemptions (code TEXT, user_id TEXT, redeemed_at INTEGER NOT NULL, PRIMARY KEY(code, user_id))"
+  ).run();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
+  )
+    .bind(inviteCode, user.sub, nowSec)
+    .run();
+}
+
 
 // Optional: auto-promote admins/supports by email (enterprise convenience)
 const adminEmails = String((env as any).ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);

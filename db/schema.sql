@@ -112,3 +112,13 @@ CREATE INDEX IF NOT EXISTS idx_invite_codes_created_at ON invite_codes(created_a
 CREATE INDEX IF NOT EXISTS idx_ai_events_user_ts ON ai_events(user_id, ts);
 CREATE INDEX IF NOT EXISTS idx_ai_events_feature_ts ON ai_events(feature, ts);
 
+
+
+-- Invite redemptions (audit)
+CREATE TABLE IF NOT EXISTS invite_redemptions (
+  code TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  redeemed_at INTEGER NOT NULL,
+  PRIMARY KEY (code, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_invite_redemptions_user ON invite_redemptions(user_id);
