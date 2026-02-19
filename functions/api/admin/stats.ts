@@ -54,6 +54,25 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(day)
       .first<{ c: number }>();
     mealsLogged = Number(meals?.c || 0);
+
+  // AI events metrics (if table exists)
+  let aiCallsEvents = 0;
+  let aiErrorsEvents = 0;
+  let aiAvgLatency = 0;
+  try {
+    const start = new Date();
+    start.setUTCHours(0,0,0,0);
+    const startMs = start.getTime();
+    const endMs = startMs + 24 * 60 * 60 * 1000;
+
+    const agg = await db.prepare(
+      "SELECT COUNT(*) as calls, SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors, AVG(latency_ms) as avg_latency FROM ai_events WHERE ts >= ? AND ts < ?"
+    ).bind(startMs, endMs).first<{ calls: number; errors: number; avg_latency: number }>();
+
+    aiCallsEvents = Number(agg?.calls || 0);
+    aiErrorsEvents = Number(agg?.errors || 0);
+    aiAvgLatency = Math.round(Number(agg?.avg_latency || 0));
+  } catch {}
   } catch {}
 
   return json({

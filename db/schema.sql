@@ -75,5 +75,26 @@ CREATE TABLE IF NOT EXISTS feature_flags (
 INSERT OR IGNORE INTO feature_flags (key, enabled, rollout_percentage) VALUES
   ('ai_council', 1, 100),
   ('weekly_menu_v2', 1, 100),
-  ('family_mode', 1, 100);
+  ('family_mode', 1, 100),
+  ('ai_safe_mode', 0, 100);
+
+
+
+
+-- AI события (логирование для мониторинга и поддержки)
+CREATE TABLE IF NOT EXISTS ai_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  ts INTEGER NOT NULL,              -- epoch ms
+  feature TEXT NOT NULL,
+  status INTEGER NOT NULL,
+  latency_ms INTEGER NOT NULL,
+  safe_mode INTEGER DEFAULT 0,
+  request_json TEXT,
+  response_json TEXT,
+  error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_events_user_ts ON ai_events(user_id, ts);
+CREATE INDEX IF NOT EXISTS idx_ai_events_feature_ts ON ai_events(feature, ts);
 

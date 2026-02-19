@@ -1,3 +1,6 @@
+import { requireUser, json as jsonV } from "./_lib/auth";
+import { loadFeatures, isEnabled } from "./_lib/features";
+
 
 /**
  * FITFOCUS v18_USER_LIMITS_NO_JOSE
@@ -9,6 +12,7 @@
  */
 
 export interface Env {
+  DB?: any;
   GEMINI_API_KEY: string;
   FITFOCUS_KV?: any;
   IP_HASH_SALT?: string;
@@ -174,6 +178,58 @@ async function resolveIdentityKey(request: Request, env: Env) {
   return `ip:${ipHash}`;
 }
 
+
+async function enforceDailyLimit(db: any, userId: string, feature: string, limit: number): Promise<void> {
+  if (!db) return;
+  const d = new Date();
+  const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+  const row = await db.prepare("SELECT count FROM usage_daily WHERE user_id = ? AND day = ? AND feature = ?")
+    .bind(userId, day, feature).first<{ count: number }>();
+  const current = Number(row?.count || 0);
+  if (current >= limit) {
+    const err: any = new Error("DAILY_LIMIT");
+    err.code = "DAILY_LIMIT";
+    throw err;
+  }
+  await db.prepare(
+    "INSERT INTO usage_daily (user_id, day, feature, count) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, day, feature) DO UPDATE SET count = count + 1"
+  ).bind(userId, day, feature).run();
+}
+
+async function logAiEvent(env: any, args: {
+  userId: string;
+  feature: string;
+  status: number;
+  latencyMs: number;
+  safeMode: boolean;
+  requestJson?: any;
+  responseJson?: any;
+  error?: string;
+}) {
+  try {
+    if (!env?.DB) return;
+    const id = crypto.randomUUID();
+    const ts = Date.now();
+    const reqStr = args.requestJson ? JSON.stringify(args.requestJson).slice(0, 40000) : null;
+    const resStr = args.responseJson ? JSON.stringify(args.responseJson).slice(0, 40000) : null;
+    await env.DB.prepare(
+      "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      id,
+      args.userId,
+      ts,
+      args.feature,
+      args.status,
+      Math.max(0, Math.round(args.latencyMs)),
+      args.safeMode ? 1 : 0,
+      reqStr,
+      resStr,
+      args.error || null
+    ).run();
+  } catch {
+    // never break request
+  }
+}
 async function logUsage(
   env: Env,
   ev: { identity: string; feature: string; status: number; latency: number; bytesIn: number; cacheHit?: boolean }
@@ -202,6 +258,13 @@ async function logUsage(
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const startedAt = Date.now();
+
+  // Enterprise Layer: require authenticated user (server-driven)
+  let user: any;
+  try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
+  const features = await loadFeatures(env as any);
+  const safeMode = isEnabled(features, "ai_safe_mode", false);
+
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
 
   const contentLength = request.headers.get("content-length");
@@ -219,8 +282,19 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
+
+  // Safe mode: apply conservative limits and settings (toggled via feature_flags.ai_safe_mode)
+  if (safeMode) {
+    const isPro = Array.isArray(user?.roles) && user.roles.includes('pro');
+    const dailyLimit = isPro ? 200 : 50;
+    try { await enforceDailyLimit((env as any).DB, String(user.sub), `ai_${feature}`, dailyLimit); }
+    catch (e: any) {
+      await logAiEvent(env as any, { userId: String(user.sub), feature, status: 429, latencyMs: Date.now()-startedAt, safeMode: true, requestJson: body, error: 'DAILY_LIMIT' });
+      return jsonV({ error: 'DAILY_LIMIT', limit: dailyLimit }, 429);
+    }
+  }
   const kv = env.FITFOCUS_KV;
-  const identity = await resolveIdentityKey(request, env);
+  const identity = String(user?.sub || "");
 
   if (kv) {
     const cooldownKey = `rl:cd:4s:${identity}:${feature}`;
@@ -285,6 +359,15 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   if ("config" in payloadToSend) {
     if (!("generationConfig" in payloadToSend)) {
       payloadToSend.generationConfig = payloadToSend.config;
+
+  if (safeMode) {
+    payloadToSend.generationConfig = payloadToSend.generationConfig || {};
+    // Conservative defaults to reduce latency/cost and force structured output
+    if (payloadToSend.generationConfig.maxOutputTokens == null) payloadToSend.generationConfig.maxOutputTokens = 900;
+    if (payloadToSend.generationConfig.temperature == null) payloadToSend.generationConfig.temperature = 0.4;
+    // Encourage JSON-only outputs
+    if (payloadToSend.generationConfig.responseMimeType == null) payloadToSend.generationConfig.responseMimeType = 'application/json';
+  }
     }
     delete payloadToSend.config;
   }
@@ -319,7 +402,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     await logUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
-  return new Response(JSON.stringify({ ...data, text: extractedText }), {
+  
+  await logAiEvent(env as any, { userId: String(user.sub), feature, status: geminiResp.status, latencyMs: latency, safeMode, requestJson: body, responseJson: { text: extractedText } , error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null });
+return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
       "Content-Type": "application/json",

@@ -12,11 +12,16 @@ type Stats = {
   today: {
     day: string;
     ai_calls: number;
+    ai_calls_events?: number;
+    ai_errors_events?: number;
+    ai_avg_latency_ms?: number;
     meals_logged: number;
   };
 };
 
 type UserRow = { id: string; email?: string; created_at?: number };
+
+type AiLog = { id: string; user_id: string; ts: number; feature: string; status: number; latency_ms: number; safe_mode: number; error?: string | null };
 
 type SessionRow = { id: string; created_at: number; expires_at: number; revoked: number; user_agent?: string; ip?: string };
 
@@ -39,10 +44,27 @@ export default function AdminScreen() {
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
 
+  const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
+  const [aiLogLimit, setAiLogLimit] = useState(50);
+  const [aiLogFeature, setAiLogFeature] = useState<string>("");
+
   const selectedUserLabel = useMemo(() => {
     const u = users.find(x => x.id === selectedUserId);
     return u ? (u.email || u.id) : selectedUserId;
   }, [users, selectedUserId]);
+
+  const loadAiLogs = async () => {
+    try {
+      const qs = new URLSearchParams();
+      qs.set('limit', String(aiLogLimit));
+      if (aiLogFeature) qs.set('feature', aiLogFeature);
+      const r = await fetch(`/api/admin/ai_logs?${qs.toString()}`, { credentials: 'include' });
+      if (r.ok) {
+        const j = await r.json();
+        setAiLogs(Array.isArray(j.logs) ? j.logs : []);
+      }
+    } catch {}
+  };
 
   const loadAll = async () => {
     setLoading(true); setErr(null);
@@ -299,7 +321,115 @@ export default function AdminScreen() {
         </div>
       </div>
 
-      {/* Users + roles + sessions */}
+      
+      {/* AI Monitoring */}
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100">AI мониторинг</h2>
+            <div className="text-slate-300 font-semibold mt-1">
+              Согласованные метрики и логи вызовов AI (для поддержки и контроля качества).
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-slate-300 font-semibold">Безопасный режим</div>
+            <button
+              className="px-3 py-2 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 font-bold"
+              onClick={() => {
+                const key = "ai_safe_mode";
+                const current = asBool(flagsDirty[key]?.enabled ?? (flags.find(x => x.key === key)?.enabled));
+                setFlagsDirty(prev => ({ ...prev, [key]: { enabled: !current, rollout: prev[key]?.rollout ?? Number(flags.find(x => x.key === key)?.rollout_percentage ?? 100) } }));
+              }}
+              title="Ограничивает дневные лимиты и принуждает структурированный (JSON) вывод"
+            >
+              {asBool(flagsDirty["ai_safe_mode"]?.enabled ?? (flags.find(x => x.key === "ai_safe_mode")?.enabled)) ? "ВКЛ" : "ВЫКЛ"}
+            </button>
+
+            <button
+              className="px-3 py-2 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-200 font-black"
+              onClick={async () => { await saveFlags(); await loadAll(); }}
+            >
+              Сохранить
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
+            <div className="text-slate-400 font-bold">AI вызовы (usage_daily)</div>
+            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_calls ?? 0}</div>
+          </div>
+          <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
+            <div className="text-slate-400 font-bold">AI вызовы (ai_events)</div>
+            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_calls_events ?? 0}</div>
+            <div className="text-slate-400 font-semibold mt-1">Ошибки: {stats?.today?.ai_errors_events ?? 0}</div>
+          </div>
+          <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
+            <div className="text-slate-400 font-bold">Средняя задержка</div>
+            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_avg_latency_ms ?? 0} ms</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mt-5 flex-wrap">
+          <div className="text-slate-300 font-semibold">Фильтр feature:</div>
+          <input
+            value={aiLogFeature}
+            onChange={(e) => setAiLogFeature(e.target.value)}
+            placeholder="например: weekly_menu"
+            className="px-3 py-2 rounded-2xl bg-slate-950/40 border border-slate-800 text-slate-100 font-semibold"
+          />
+          <div className="text-slate-300 font-semibold">Лимит:</div>
+          <input
+            type="number"
+            value={aiLogLimit}
+            min={10}
+            max={200}
+            onChange={(e) => setAiLogLimit(Number(e.target.value || 50))}
+            className="w-24 px-3 py-2 rounded-2xl bg-slate-950/40 border border-slate-800 text-slate-100 font-semibold"
+          />
+          <button
+            className="px-3 py-2 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 font-bold"
+            onClick={loadAiLogs}
+          >
+            Обновить логи
+          </button>
+        </div>
+
+        <div className="mt-4 overflow-auto rounded-2xl border border-slate-800">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-950/50 text-slate-300">
+              <tr>
+                <th className="text-left px-3 py-2 font-black">Время</th>
+                <th className="text-left px-3 py-2 font-black">Feature</th>
+                <th className="text-left px-3 py-2 font-black">Статус</th>
+                <th className="text-left px-3 py-2 font-black">Latency</th>
+                <th className="text-left px-3 py-2 font-black">Safe</th>
+                <th className="text-left px-3 py-2 font-black">User</th>
+                <th className="text-left px-3 py-2 font-black">Ошибка</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 text-slate-100">
+              {aiLogs.length === 0 && (
+                <tr><td className="px-3 py-3 text-slate-400 font-semibold" colSpan={7}>Логов пока нет.</td></tr>
+              )}
+              {aiLogs.map((l) => (
+                <tr key={l.id} className="hover:bg-slate-950/40">
+                  <td className="px-3 py-2 text-slate-300 font-semibold">{new Date(l.ts).toLocaleString()}</td>
+                  <td className="px-3 py-2 font-bold">{l.feature}</td>
+                  <td className="px-3 py-2 font-black">{l.status}</td>
+                  <td className="px-3 py-2 font-bold">{l.latency_ms}ms</td>
+                  <td className="px-3 py-2 font-bold">{Number(l.safe_mode) === 1 ? "Да" : "Нет"}</td>
+                  <td className="px-3 py-2 text-slate-300 font-semibold">{l.user_id.slice(0, 8)}…</td>
+                  <td className="px-3 py-2 text-slate-300 font-semibold">{l.error || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+{/* Users + roles + sessions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6">
           <h2 className="text-xl font-black text-slate-100 mb-2">Пользователи</h2>
