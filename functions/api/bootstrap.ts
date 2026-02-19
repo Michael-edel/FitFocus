@@ -3,6 +3,7 @@
 // Returns: { user, profile, kv }
 
 import { requireUser } from "./_lib/auth";
+import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
@@ -39,7 +40,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .all<{ k: string; v: string }>();
   const items = (results || []).map((r) => ({ key: r.k, value: r.v }));
 
-  return json({ user, profile, items }, 200);
+  const features = await loadFeatures(env);
+
+  return json({ schema_version: 3, user, profile, roles: user.roles, features, items }, 200);
 };
 
 function safeParse(s: string) {
