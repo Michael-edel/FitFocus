@@ -347,6 +347,18 @@ export default function AdminScreen() {
             </button>
 
             <button
+              className="px-3 py-2 rounded-2xl bg-slate-800 border border-slate-700 text-slate-100 font-bold"
+              onClick={() => {
+                const key = "ai_fallback_mode";
+                const current = asBool(flagsDirty[key]?.enabled ?? (flags.find(x => x.key === key)?.enabled));
+                setFlagsDirty(prev => ({ ...prev, [key]: { enabled: !current, rollout: prev[key]?.rollout ?? Number(flags.find(x => x.key === key)?.rollout_percentage ?? 100) } }));
+              }}
+              title="Если AI недоступен/квота/5xx — возвращаем упрощённый план/меню вместо ошибки"
+            >
+              Fallback: {asBool(flagsDirty["ai_fallback_mode"]?.enabled ?? (flags.find(x => x.key === "ai_fallback_mode")?.enabled)) ? "ВКЛ" : "ВЫКЛ"}
+            </button>
+
+            <button
               className="px-3 py-2 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-200 font-black"
               onClick={async () => { await saveFlags(); await loadAll(); }}
             >

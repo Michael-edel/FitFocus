@@ -73,10 +73,11 @@ CREATE TABLE IF NOT EXISTS feature_flags (
 
 -- Дефолтные фичи (глобально)
 INSERT OR IGNORE INTO feature_flags (key, enabled, rollout_percentage) VALUES
-  ('ai_council', 1, 100),
+('ai_council', 1, 100),
   ('weekly_menu_v2', 1, 100),
   ('family_mode', 1, 100),
-  ('ai_safe_mode', 0, 100);
+  ('ai_safe_mode', 0, 100),
+  ('ai_fallback_mode', 1, 100);
 
 
 
