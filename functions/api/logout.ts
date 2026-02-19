@@ -1,11 +1,30 @@
 // Cloudflare Pages Function: /api/logout
-// Clears ff_session cookie. Must NOT force Secure on http://localhost.
+// Revokes current session (if present) and clears ff_session cookie.
 
-export const onRequestPost: PagesFunction = async ({ request }) => {
+import { readCookie, verifySessionJwt } from "./_lib/auth";
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const isHttps =
     new URL(request.url).protocol === "https:" ||
     request.headers.get("x-forwarded-proto") === "https" ||
     (request.headers.get("origin") || "").startsWith("https://");
+
+  // Best-effort revoke
+  try {
+    const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
+    if (token && env.AUTH_JWT_SECRET && env.DB) {
+      const payload: any = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
+      const sid = String(payload?.sid || "");
+      const sub = String(payload?.sub || "");
+      if (sid && sub) {
+        await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?")
+          .bind(sid, sub)
+          .run();
+      }
+    }
+  } catch {
+    // ignore
+  }
 
   const cookie = cookieSerialize("ff_session", "", {
     httpOnly: true,
@@ -21,6 +40,8 @@ export const onRequestPost: PagesFunction = async ({ request }) => {
 
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 };
+
+type Env = { AUTH_JWT_SECRET?: string; DB?: any };
 
 function cookieSerialize(
   name: string,

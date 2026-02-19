@@ -47,17 +47,45 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     };
 
     const now = Math.floor(Date.now() / 1000);
+if (!env.DB) return json({ error: "Server missing DB binding" }, 500);
+
+const sid = crypto.randomUUID();
+const ttl = 60 * 60 * 24 * 30; // 30 days
+const expiresAt = now + ttl;
+
+// Upsert user (minimal) so we have a record for exports/admin later.
+await env.DB.prepare(
+  "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET email=excluded.email"
+)
+  .bind(user.sub, user.email, Date.now())
+  .run();
+
+// Create server-tracked session (enterprise layer)
+const ua = request.headers.get("user-agent") || "";
+const ip =
+  request.headers.get("cf-connecting-ip") ||
+  request.headers.get("x-forwarded-for") ||
+  request.headers.get("x-real-ip") ||
+  "";
+
+await env.DB.prepare(
+  "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
+)
+  .bind(sid, user.sub, now, expiresAt, ua.slice(0, 500), String(ip).slice(0, 100))
+  .run();
+
+
     const session = await signSessionJwt(
       {
-        v: 1,
+        v: 2,
         sub: user.sub,
+        sid,
         email: user.email,
         name: user.name,
         picture: user.picture,
         iat: now,
       },
-      env.AUTH_JWT_SECRET,
-      60 * 60 * 24 * 30 // 30 days
+      env.AUTH_JWT_SECRET,      ttl
     );
 
     const headers = new Headers();
@@ -70,7 +98,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
         secure: isHttps,
         sameSite: "Lax",
         path: "/",
-        maxAge: 60 * 60 * 24 * 30,
+                maxAge: ttl,
       })
     );
 
@@ -82,6 +110,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
 type Env = {
   AUTH_JWT_SECRET: string;
+  DB: any;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_ID_LOCAL?: string;
   GOOGLE_CLIENT_ID_PROD?: string;

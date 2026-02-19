@@ -1,5 +1,5 @@
 // Shared auth utilities for Pages Functions (HS256 JWT in ff_session cookie)
-export type SessionUser = { sub: string; email?: string; name?: string; picture?: string };
+export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string };
 
 export function readCookie(cookieHeader: string, name: string): string | null {
   const parts = (cookieHeader || "").split(";").map((p) => p.trim());
@@ -52,20 +52,46 @@ export async function verifySessionJwt(token: string, secret: string): Promise<a
   return payload;
 }
 
-export async function requireUser(request: Request, env: { AUTH_JWT_SECRET?: string }): Promise<SessionUser> {
+export async function requireUser(
+  request: Request,
+  env: { AUTH_JWT_SECRET?: string; DB?: any }
+): Promise<SessionUser> {
   const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
   if (!token) throw new Error("UNAUTH");
   if (!env.AUTH_JWT_SECRET) throw new Error("AUTH_CONFIG");
   const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
   if (!payload?.sub) throw new Error("UNAUTH");
-  return { sub: payload.sub, email: payload.email, name: payload.name, picture: payload.picture };
+
+  // Enterprise layer: enforce server-tracked sessions (logout-all, revoke, device control)
+  const sid = String(payload.sid || "");
+  if (!sid) throw new Error("UNAUTH"); // force re-login if cookie is legacy without sid
+  if (!env.DB) throw new Error("DB_CONFIG");
+
+  const now = Math.floor(Date.now() / 1000);
+  const s = await env.DB.prepare(
+    "SELECT id, revoked, expires_at FROM sessions WHERE id = ? AND user_id = ? LIMIT 1"
+  )
+    .bind(sid, payload.sub)
+    .first();
+
+  if (!s) throw new Error("UNAUTH");
+  if (Number(s.revoked || 0) === 1) throw new Error("UNAUTH");
+  if (Number(s.expires_at || 0) <= now) throw new Error("UNAUTH");
+
+  return {
+    sub: payload.sub,
+    sid,
+    email: payload.email,
+    name: payload.name,
+    picture: payload.picture,
+  };
 }
 
-export function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-  });
+export function json(data: any, status = 200, headers?: Headers) {
+  const h = headers ? new Headers(headers) : new Headers();
+  h.set("Content-Type", "application/json; charset=utf-8");
+  h.set("Cache-Control", "no-store");
+  return new Response(JSON.stringify(data), { status, headers: h });
 }
 
 export function errRu(code: string): { code: string; message: string } {
