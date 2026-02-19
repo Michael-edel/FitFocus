@@ -1,5 +1,5 @@
 // Shared auth utilities for Pages Functions (HS256 JWT in ff_session cookie)
-export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string };
+export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
 
 export function readCookie(cookieHeader: string, name: string): string | null {
   const parts = (cookieHeader || "").split(";").map((p) => p.trim());
@@ -78,12 +78,23 @@ export async function requireUser(
   if (Number(s.revoked || 0) === 1) throw new Error("UNAUTH");
   if (Number(s.expires_at || 0) <= now) throw new Error("UNAUTH");
 
+
+  // RBAC layer: load roles from DB (auto-assign 'user' for everyone)
+  let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all<{ role: string }>();
+  let roles = (rolesRows.results || []).map((r) => String(r.role)).filter(Boolean);
+  if (roles.length === 0) {
+    // Assign baseline role for existing users (one-time)
+    await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'user')").bind(payload.sub).run();
+    roles = ['user'];
+  }
+
   return {
     sub: payload.sub,
     sid,
     email: payload.email,
     name: payload.name,
     picture: payload.picture,
+    roles,
   };
 }
 

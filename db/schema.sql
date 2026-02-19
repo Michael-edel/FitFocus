@@ -53,3 +53,27 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+
+
+-- Роли пользователей (RBAC)
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  PRIMARY KEY (user_id, role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+
+-- Флаги функций (feature flags)
+CREATE TABLE IF NOT EXISTS feature_flags (
+  key TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL,
+  rollout_percentage INTEGER DEFAULT 100
+);
+
+-- Дефолтные фичи (глобально)
+INSERT OR IGNORE INTO feature_flags (key, enabled, rollout_percentage) VALUES
+  ('ai_council', 1, 100),
+  ('weekly_menu_v2', 1, 100),
+  ('family_mode', 1, 100);
+
