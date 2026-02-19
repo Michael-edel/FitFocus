@@ -112,6 +112,8 @@ export async function callAiCouncil(
   diary: FoodItem[],
   habits: UserHabit[]
 ): Promise<CouncilResponse> {
+  await syncProfileToServer(user);
+
   const callModel = async (prompt: string, role: AIAgentRole) => {
     const res = await callAiProxy('gemini-2.5-flash', prompt, `council_${role}`);
     return (res as any).text || '';
@@ -143,6 +145,32 @@ let queue: Promise<any> = Promise.resolve();
 
 type AiStatusSource = 'live' | 'cache' | 'stale-cache' | 'fallback' | 'cooldown-cache' | 'cooldown-stale-cache' | 'cooldown-fallback' | 'error';
 
+
+async function syncProfileToServer(user: UserProfile) {
+  // Best-effort. We don't block user flows if server is temporarily unavailable.
+  try {
+    await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: user.name,
+        gender: user.gender,
+        age: user.age,
+        height: user.height,
+        weight: user.weight,
+        targetWeight: user.targetWeight,
+        activityLevel: user.activityLevel,
+        goal: user.goal,
+        exclusions: user.exclusions || "",
+        lossDeficit: user.lossDeficit,
+        gainSurplus: user.gainSurplus,
+      }),
+      credentials: "include",
+    });
+  } catch {
+    // ignore
+  }
+}
 export type AiLastStatus = {
   ts: number;
   feature: string;
@@ -265,6 +293,8 @@ export const getLastAiAction = (): { feature: string; type: string; userId: stri
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
 export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promise<WeeklyMenu> {
+  await syncProfileToServer(user);
+
   const schema = {
     type: "OBJECT",
     properties: {
@@ -337,6 +367,8 @@ export async function generateFamilyWeeklyMenu(
   familyProfiles: UserProfile[],
   prefs: FamilyMenuPrefs
 ): Promise<FamilyWeeklyMenu> {
+  await syncProfileToServer(user);
+
   // Источник семьи: зарегистрированные профили (Family тариф)
   const uniqueById = new Map<string, UserProfile>();
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
@@ -602,6 +634,8 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  * Получение персонального совета от AI коуча
  */
 export async function getCoachAdvice(data: any): Promise<any> {
+  await syncProfileToServer(user);
+
   const response = await callAiProxy('gemini-2.5-flash', 
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
@@ -625,6 +659,8 @@ export async function getCoachAdvice(data: any): Promise<any> {
  * Генерация персонального плана (используется Gemini Pro)
  */
 export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
+  await syncProfileToServer(user);
+
   const schema = {
     type: "OBJECT",
     properties: {
