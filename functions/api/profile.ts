@@ -1,126 +1,67 @@
 // Cloudflare Pages Function: /api/profile
-// Source-of-truth user profile stored in D1 (JSON blob).
+// Server-driven source-of-truth for UserProfile (stored as JSON in D1)
 
-import { requireUser, json, errRu } from "./_lib/auth";
+import { requireUser } from "./_lib/auth";
+import { requireDB, nowMs } from "./_lib/db";
 
-type Env = {
-  DB?: any; // D1Database
-  AUTH_JWT_SECRET?: string;
+type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  let user;
+  try {
+    user = await requireUser(request, env);
+  } catch {
+    return json({ error: "UNAUTH" }, 401);
+  }
+
+  const db = requireDB(env);
+  const row = await db
+    .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
+    .bind(user.sub)
+    .first<{ profile_json: string }>();
+
+  if (!row?.profile_json) {
+    // No profile yet: return null so UI can show onboarding
+    return json({ profile: null }, 200);
+  }
+
+  try {
+    return json({ profile: JSON.parse(row.profile_json) }, 200);
+  } catch {
+    return json({ error: "PROFILE_CORRUPT" }, 500);
+  }
 };
 
-function nowMs() {
-  return Date.now();
-}
+export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+  let user;
+  try {
+    user = await requireUser(request, env);
+  } catch {
+    return json({ error: "UNAUTH" }, 401);
+  }
 
-function defaultProfile(user: { sub: string; name?: string }) {
-  // Minimal defaults for the existing front-end UserProfile shape.
-  // IMPORTANT: keep fields aligned with `types.ts` UserProfile.
-  const id = user.sub;
-  const name = user.name || "";
-  return {
-    id,
-    name,
-    gender: "MALE",
-    weight: 80,
-    height: 175,
-    age: 30,
-    activityLevel: 1.375,
-    goal: "LOSS",
-    weightHistory: [],
-    targetWeight: 70,
-    adaptationMultiplier: 1,
-    familyMembers: [],
-    exclusions: "",
-    lossDeficit: 400,
-    gainSurplus: 250,
-    usage: {},
-  };
-}
+  const db = requireDB(env);
+  const body = await request.json<any>().catch(() => null);
+  if (!body) return json({ error: "BAD_JSON" }, 400);
 
-async function ensureUserRow(db: any, user: { sub: string; email?: string }) {
+  // Enforce user ownership
+  const profile = { ...body, id: user.sub, googleSub: user.sub, email: user.email, name: body.name ?? user.name, picture: body.picture ?? user.picture };
+
+  const t = nowMs();
   await db
-    .prepare("INSERT OR IGNORE INTO users (id, email, created_at) VALUES (?, ?, ?)")
-    .bind(user.sub, user.email || "", Math.floor(Date.now() / 1000))
+    .prepare(
+      "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
+    )
+    .bind(user.sub, JSON.stringify(profile), t)
     .run();
-}
 
-export const onRequestGet: PagesFunction<Env> = async (ctx) => {
-  try {
-    const { request, env } = ctx;
-    if (!env.DB) return json({ error: errRu("DB_CONFIG") }, 500);
-
-    const user = await requireUser(request, env);
-    await ensureUserRow(env.DB, user);
-
-    const row = await env.DB
-      .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
-      .bind(user.sub)
-      .first();
-
-    if (!row?.profile_json) {
-      const profile = defaultProfile(user);
-      await env.DB
-        .prepare("INSERT OR REPLACE INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?)")
-        .bind(user.sub, JSON.stringify(profile), nowMs())
-        .run();
-      return json({ profile }, 200);
-    }
-
-    let profile: any = null;
-    try {
-      profile = JSON.parse(row.profile_json);
-    } catch {
-      profile = defaultProfile(user);
-    }
-
-    // гарантируем id
-    profile.id = user.sub;
-    if (!profile.name) profile.name = user.name || "";
-
-    return json({ profile }, 200);
-  } catch (e: any) {
-    const code = String(e?.message || "");
-    if (code === "UNAUTH") return json({ error: errRu("UNAUTH") }, 401);
-    if (code === "AUTH_CONFIG") return json({ error: errRu("AUTH_CONFIG") }, 500);
-    return json({ error: { code: "SERVER", message: String(e?.message || e) } }, 500);
-  }
-};
-
-export const onRequestPut: PagesFunction<Env> = async (ctx) => {
-  try {
-    const { request, env } = ctx;
-    if (!env.DB) return json({ error: errRu("DB_CONFIG") }, 500);
-
-    const user = await requireUser(request, env);
-    await ensureUserRow(env.DB, user);
-
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body !== "object") return json({ error: errRu("BAD_REQUEST") }, 400);
-
-    // Accept either {profile:{...}} or directly profile object.
-    const incoming = (body as any).profile ?? body;
-    if (!incoming || typeof incoming !== "object") return json({ error: errRu("BAD_REQUEST") }, 400);
-
-    // merge with existing
-    const existingRow = await env.DB
-      .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
-      .bind(user.sub)
-      .first();
-
-    let base: any = existingRow?.profile_json ? JSON.parse(existingRow.profile_json) : defaultProfile(user);
-    const profile = { ...base, ...incoming, id: user.sub };
-    if (!profile.name) profile.name = user.name || "";
-
-    await env.DB
-      .prepare("INSERT OR REPLACE INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?)")
-      .bind(user.sub, JSON.stringify(profile), nowMs())
-      .run();
-
-    return json({ ok: true, profile }, 200);
-  } catch (e: any) {
-    const code = String(e?.message || "");
-    if (code === "UNAUTH") return json({ error: errRu("UNAUTH") }, 401);
-    if (code === "AUTH_CONFIG") return json({ error: errRu("AUTH_CONFIG") }, 500);
-    return json({ error: { code: "SERVER", message: String(e?.message || e) } }, 500);
-  }
+  return json({ profile }, 200);
 };

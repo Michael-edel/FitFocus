@@ -151,7 +151,7 @@ function loadGoogleIdentityScript(): Promise<void> {
 }
 
 function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
-  const gisBtnHostRef = React.useRef<HTMLDivElement | null>(null);
+  const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
   const onAuthedRef = React.useRef(onAuthed);
   const renderedRef = React.useRef(false);
 
@@ -203,11 +203,10 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
           },
         });
 
-        // Render the official GIS button as an invisible overlay above our custom UI.
-        // This avoids popup blockers / FedCM quirks from programmatic clicks.
-        if (gisBtnHostRef.current) {
-          gisBtnHostRef.current.innerHTML = "";
-          g.accounts.id.renderButton(gisBtnHostRef.current, {
+        // Render the official GIS button OFFSCREEN once, then click it from our custom button.
+        if (hiddenBtnHostRef.current) {
+          hiddenBtnHostRef.current.innerHTML = "";
+          g.accounts.id.renderButton(hiddenBtnHostRef.current, {
             type: "standard",
             theme: "outline",
             size,
@@ -226,26 +225,41 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
     return () => { cancelled = true; };
   }, []); // IMPORTANT: run once
 
+  const handleClick = React.useCallback(() => {
+    setErr(null);
+    const host = hiddenBtnHostRef.current;
+    const g = (window as any).google;
+    // Try clicking the hidden official button (opens the same popup flow)
+    const btn = host?.querySelector("div[role=button], button") as HTMLElement | null;
+    if (btn) {
+      btn.click();
+      return;
+    }
+    // Fallback: try One Tap prompt
+    if (g?.accounts?.id?.prompt) {
+      g.accounts.id.prompt();
+      return;
+    }
+    setErr("Google Identity Services ещё не загрузился. Подожди секунду и попробуй снова.");
+  }, []);
+
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative">
-        {/* Visual button */}
-        <div
-          className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90 select-none"
-          style={{ width }}
-        >
-          <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
-          <span>Google профиль</span>
-        </div>
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
+      >
+        <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
+        <span>Google профиль</span>
+      </button>
 
-        {/* Invisible official GIS button overlay (handles click in a user gesture) */}
-        <div
-          ref={gisBtnHostRef}
-          aria-label="Google Sign-In"
-          className="absolute inset-0 opacity-0"
-          style={{ width, height: 40 }}
-        />
-      </div>
+      {/* hidden host for the official GIS button (kept offscreen to prevent UI jumping) */}
+      <div
+        ref={hiddenBtnHostRef}
+        aria-hidden="true"
+        style={{ position: "absolute", left: -99999, top: -99999, width: 0, height: 0, overflow: "hidden" }}
+      />
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
@@ -267,6 +281,7 @@ const MAX_HISTORY_ITEMS = 500;
 const safeSetItem = (key: string, value: string) => {
   try {
     localStorage.setItem(key, value);
+    enqueueRemoteKVWrite(key, value);
   } catch (e) {
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
       console.warn('LocalStorage quota exceeded. Consider clearing old data.');
@@ -275,6 +290,36 @@ const safeSetItem = (key: string, value: string) => {
     }
   }
 };
+
+// --- Server-driven persistence (D1 remote) ---
+// We keep localStorage as a fast cache, but D1 is the source-of-truth.
+// Any key under fitfocus_data_* is mirrored to /api/state.
+type KVItem = { key: string; value: string };
+const __kvQueue: KVItem[] = [];
+let __kvTimer: number | null = null;
+
+function enqueueRemoteKVWrite(key: string, value: string) {
+  if (!key.startsWith('fitfocus_data_') && !key.startsWith('fitfocus_council_history_')) return;
+  __kvQueue.push({ key, value });
+
+  if (__kvTimer != null) return;
+  __kvTimer = window.setTimeout(async () => {
+    __kvTimer = null;
+    const batch = __kvQueue.splice(0, __kvQueue.length);
+    if (!batch.length) return;
+    try {
+      await fetch('/api/state', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: batch }),
+      });
+    } catch {
+      // ignore network errors; will retry on next write
+    }
+  }, 400);
+}
+
 
 // Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
 const evictLargeLocalStorage = () => {
@@ -689,21 +734,6 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const [googleMe, setGoogleMe] = useState<null | { sub?: string; email?: string; name?: string; picture?: string }>(null);
-
-  // ✅ B2C: keep profile in sync with server (D1) so it works across computers.
-  // Debounced to avoid spamming on every small UI change.
-  useEffect(() => {
-    if (!googleMe?.sub || !currentUser) return;
-    const t = window.setTimeout(() => {
-      void fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ profile: currentUser }),
-      }).catch(() => {});
-    }, 600);
-    return () => window.clearTimeout(t);
-  }, [googleMe?.sub, currentUser]);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -1363,22 +1393,37 @@ const openEditFood = (item: FoodEntry) => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(async () => {
-    try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    } catch {}
-    setGoogleMe(null);
+  const logout = useCallback(() => {
     setCurrentUser(null);
-    setAllUsers([]);
     setAuthState('auth_choice');
     localStorage.removeItem('fitfocus_last_user_id');
   }, []);
 
   const loginAsUser = useCallback(async (user: UserProfile) => {
     const userWithResetUsage = resetUsageIfNewTime(user);
+
+    // Server-driven hydration for cross-device: load KV blobs from D1
     const prefix = `fitfocus_data_${user.id}_`;
-    const storedDiaryRaw: FoodItem[] = JSON.parse(localStorage.getItem(prefix + 'diary') || '[]');
-    // Migration: keep only thumbnails in localStorage to avoid quota issues
+    let kv: Record<string, string> = {};
+    try {
+      const r = await fetch(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
+      if (r.ok) {
+        const data = await r.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        for (const it of items) {
+          if (it?.key && typeof it.value === 'string') kv[it.key] = it.value;
+        }
+      }
+    } catch {}
+
+    const readKV = <T,>(suffix: string, fallback: T): T => {
+      const raw = kv[prefix + suffix];
+      if (!raw) return fallback;
+      try { return JSON.parse(raw) as T; } catch { return fallback; }
+    };
+
+    const storedDiaryRaw: FoodItem[] = readKV('diary', []);
+    // Keep only thumbnails in memory to avoid huge payloads
     const storedDiary: FoodItem[] = (storedDiaryRaw || []).map((it: any) => {
       if (!it || typeof it !== 'object') return it;
       const copy: any = { ...it };
@@ -1386,28 +1431,43 @@ const openEditFood = (item: FoodEntry) => {
       if (typeof copy.photoThumb === 'string' && copy.photoThumb.length > 120_000) delete copy.photoThumb;
       return copy;
     });
-    if (JSON.stringify(storedDiaryRaw) !== JSON.stringify(storedDiary)) {
-      try {
-        safeSetItem(prefix + 'diary', JSON.stringify(storedDiary));
-      } catch {}
-    }
-    const storedHabits: UserHabit[] = JSON.parse(localStorage.getItem(prefix + 'habits') || JSON.stringify(INITIAL_HABITS));
+
+    const storedHabits: UserHabit[] = readKV('habits', INITIAL_HABITS);
     const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+
     const userWithOffsets: UserProfile = { 
       ...userWithTask, 
       lossDeficit: userWithTask.lossDeficit ?? DEFAULT_DEFICIT, 
       gainSurplus: userWithTask.gainSurplus ?? DEFAULT_SURPLUS 
     };
+
     setCurrentUser(userWithOffsets);
-    localStorage.setItem('fitfocus_last_user_id', user.id);
     setFoodDiary(storedDiary);
     setHabits(storedHabits);
-    setFoodHistory(JSON.parse(localStorage.getItem(prefix + 'history') || '[]'));
-    setFoodFavorites(JSON.parse(localStorage.getItem(prefix + 'favorites') || '[]'));
-    setCoachCard(JSON.parse(localStorage.getItem(prefix + 'last_coach_card') || 'null'));
+    setFoodHistory(readKV('history', []));
+    setFoodFavorites(readKV('favorites', []));
+    setCoachCard(readKV('last_coach_card', null));
     setCurrentLesson(pickLessonForToday(userWithTask));
     setAuthState('app');
   }, [resetUsageIfNewTime]);
+
+
+  // Server-driven: persist profile changes to D1 (debounced)
+  const profileSaveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!currentUser) return;
+    if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
+    profileSaveTimer.current = window.setTimeout(async () => {
+      try {
+        await fetch('/api/profile', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentUser),
+        });
+      } catch {}
+    }, 500);
+  }, [currentUser]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
@@ -1602,82 +1662,34 @@ const openEditFood = (item: FoodEntry) => {
     const serverUser = me?.user || null;
     setGoogleMe(serverUser);
 
-    // ✅ B2C source-of-truth: if we have a server session, load profile from server (D1)
-    // This makes data independent from the computer (no localStorage dependency).
+    // 2) Server-driven: load profile from D1 (independent of device)
     if (serverUser?.sub) {
       try {
         const pr = await fetch('/api/profile', { credentials: 'include' });
         if (pr.ok) {
           const pj = await pr.json();
           const profile = pj?.profile || null;
+
           if (profile) {
             setAllUsers([profile]);
-            setCurrentUser(profile);
-            setAuthState('app');
+            void loginAsUser(profile);
             return;
           }
+
+          // profile missing -> go onboarding
+          setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
+          setAuthState('register');
+          return;
         }
       } catch {}
 
-      // If profile fetch fails, keep UX simple: go to register, with name prefilled.
+      // if profile fetch failed, still show register with name
       setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
       setAuthState('register');
       return;
     }
 
-    // 2) Грузим локальные профили
-    const saved = localStorage.getItem('fitfocus_all_users');
-    const lastId = localStorage.getItem('fitfocus_last_user_id');
-
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const migrated = Array.isArray(parsed)
-        ? parsed.map((u: any) => ({
-            ...u,
-            lossDeficit: u.lossDeficit ?? DEFAULT_DEFICIT,
-            gainSurplus: u.gainSurplus ?? DEFAULT_SURPLUS,
-          }))
-        : [];
-      const changed = migrated.some(
-        (u: any, i: number) =>
-          (parsed[i]?.lossDeficit == null && u.lossDeficit != null) ||
-          (parsed[i]?.gainSurplus == null && u.gainSurplus != null)
-      );
-      if (changed) safeSetItem('fitfocus_all_users', JSON.stringify(migrated));
-      setAllUsers(migrated);
-
-      // ✅ Если есть Google-сессия — пытаемся сматчить профиль по email/sub
-      if (serverUser?.email || serverUser?.sub) {
-        const matched = migrated.find(
-          (u: any) =>
-            (serverUser?.sub && u.googleSub === serverUser.sub) ||
-            (serverUser?.email && u.email === serverUser.email)
-        );
-        if (matched) {
-          void loginAsUser(matched);
-          return;
-        }
-
-        // профиля нет → идём в регистрацию и подставляем имя
-        setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-        setAuthState('register');
-        return;
-      }
-
-      // фоллбек: старое поведение
-      const lastUser = migrated.find((u: any) => u.id === lastId);
-      if (lastUser) void loginAsUser(lastUser);
-      else setAuthState('auth_choice');
-      return;
-    }
-
-    // Нет сохранённых профилей
-    if (serverUser?.email || serverUser?.sub) {
-      setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-      setAuthState('register');
-      return;
-    }
-
+    // No server session -> go onboarding (user can sign in)
     setAuthState('register');
   }, [loginAsUser]);
 
@@ -1882,11 +1894,21 @@ const logWeight = useCallback(() => {
       const aiPlan = await generatePersonalPlan(newUser);
       newUser = { ...newUser, aiPlan };
     } catch (e) { setPlanError("Не удалось создать AI-план. Используем базовый план."); }
-    setAllUsers(prev => { 
-      const next = [...prev, newUser]; 
-      safeSetItem('fitfocus_all_users', JSON.stringify(next)); 
-      return next; 
-    });
+    // Server-driven: persist profile to D1
+    try {
+      const r = await fetch('/api/profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      if (r.ok) {
+        const pj = await r.json();
+        if (pj?.profile) newUser = pj.profile;
+      }
+    } catch {}
+
+    setAllUsers([newUser]);
     await loginAsUser(newUser);
     setActiveTab('plan');
     setPlanIntroOpen(true);

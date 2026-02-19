@@ -24,31 +24,18 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   count INTEGER NOT NULL,
   PRIMARY KEY (user_id, day, feature)
 );
-
--- Профиль пользователя (source of truth). Храним целиком JSON, чтобы фронт мог развиваться без миграций.
+-- Профиль пользователя (сервер = источник правды)
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id TEXT PRIMARY KEY,
   profile_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- KV-хранилище пользовательского состояния (дневник, история, карточки и т.п.)
+CREATE TABLE IF NOT EXISTS user_kv (
+  user_id TEXT NOT NULL,
+  k TEXT NOT NULL,
+  v TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES users(id)
-);
-
--- История приёмов пищи (опционально, но нужно для экспорта)
-CREATE TABLE IF NOT EXISTS meals (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  ts INTEGER NOT NULL,
-  raw_json TEXT NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES users(id)
-);
-
--- Логи AI (для "магии" + поддержки + экспорта)
-CREATE TABLE IF NOT EXISTS ai_events (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  ts INTEGER NOT NULL,
-  feature TEXT NOT NULL,
-  request_json TEXT,
-  response_json TEXT,
-  FOREIGN KEY(user_id) REFERENCES users(id)
+  PRIMARY KEY (user_id, k)
 );

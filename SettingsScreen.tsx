@@ -401,17 +401,6 @@ export default function SettingsScreen({
               )}
             </div>
 
-            <button
-              onClick={() => {
-                // Server export (D1). Uses HttpOnly cookie session.
-                window.open('/api/export', '_blank');
-              }}
-              className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-amber-400/30 transition-all text-left"
-            >
-              <div className="text-slate-100 font-black">Экспорт данных (сервер)</div>
-              <div className="text-slate-400 text-sm mt-1">Профиль + история питания + AI-логи (если включены).</div>
-            </button>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 onClick={onExportBackup}
