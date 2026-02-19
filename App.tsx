@@ -187,6 +187,7 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
 
         g.accounts.id.initialize({
           client_id: clientId,
+          use_fedcm_for_prompt: false, // dev-friendly: avoids FedCM issues in incognito
           callback: async (resp: any) => {
             try {
               const r = await fetch("/api/auth/google", {
@@ -1693,8 +1694,29 @@ const openEditFood = (item: FoodEntry) => {
       return;
     }
 
-    // No server session -> go onboarding (user can sign in)
-    setAuthState('register');
+    // No server session (or /api/me returned {user:null}) -> restore local profiles or show chooser
+    let storedUsers: any[] = [];
+    try {
+      const raw = localStorage.getItem('fitfocus_all_users');
+      const parsed = raw ? JSON.parse(raw) : [];
+      storedUsers = Array.isArray(parsed) ? parsed : [];
+    } catch {}
+
+    if (storedUsers.length) setAllUsers(storedUsers as any);
+
+    const lastId = (() => {
+      try { return localStorage.getItem('fitfocus_last_user_id'); } catch { return null; }
+    })();
+
+    const lastUser = lastId ? storedUsers.find((u: any) => u && u.id === lastId) : null;
+    if (lastUser) {
+      // login to last local profile (works even if server session absent; state hydration will just no-op)
+      void loginAsUser(lastUser);
+      return;
+    }
+
+    // Show "Создать профиль / Google профиль"
+    setAuthState('auth_choice');
   }, [loginAsUser]);
 
   useEffect(() => {
