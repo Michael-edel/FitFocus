@@ -96,6 +96,19 @@ CREATE TABLE IF NOT EXISTS ai_events (
   error TEXT
 );
 
+-- Invite codes (закрытая beta)
+CREATE TABLE IF NOT EXISTS invite_codes (
+  code TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  created_by TEXT,
+  note TEXT,
+  max_uses INTEGER DEFAULT 1,
+  uses INTEGER DEFAULT 0,
+  expires_at INTEGER,
+  revoked INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_codes_created_at ON invite_codes(created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_events_user_ts ON ai_events(user_id, ts);
 CREATE INDEX IF NOT EXISTS idx_ai_events_feature_ts ON ai_events(feature, ts);
 
