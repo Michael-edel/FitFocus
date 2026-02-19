@@ -264,6 +264,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   const features = await loadFeatures(env as any);
   const safeMode = isEnabled(features, "ai_safe_mode", false);
+  const fallbackMode = isEnabled(features, "ai_fallback_mode", true);
 
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
 
@@ -383,19 +384,82 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     payloadToSend.contents = normalized;
   }
 
-  const geminiResp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify(payloadToSend),
-  });
+  let geminiResp: Response | null = null;
+  let data: any = {};
+  let latency = 0;
 
-  const data = await geminiResp.json().catch(() => ({}));
-  const latency = Date.now() - startedAt;
+  try {
+    geminiResp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(payloadToSend),
+    });
+
+    data = await geminiResp.json().catch(() => ({}));
+    latency = Date.now() - startedAt;
+  } catch (err: any) {
+    latency = Date.now() - startedAt;
+
+    if (fallbackMode) {
+      const profile = await loadUserProfile(env as any, String(user.sub));
+      const fallback = buildFallback(feature, profile);
+      await logAiEvent(env as any, {
+        userId: String(user.sub),
+        feature,
+        status: 200,
+        latencyMs: latency,
+        safeMode,
+        requestJson: body,
+        responseJson: fallback,
+        error: (err && (err.message || String(err))) || "fetch_failed",
+      });
+      return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "X-FF-AI-Fallback": "1",
+          "X-FF-Cache": "MISS",
+          "X-FF-KV": kv ? "found" : "missing",
+        },
+      });
+    }
+
+    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
+    return jsonResponse({ error: { message: "AI request failed" } }, 500);
+  }
+
 
   // --- Compatibility layer -------------------------------------------------
   // UI (geminiService.ts) historically ожидает поле `text`.
   // Gemini API обычно возвращает: candidates[].content.parts[].text
   const extractedText = extractTextFromGemini(data);
+  // Fallback on quota/5xx: return a deterministic plan instead of breaking the product.
+  if (fallbackMode && shouldFallback(geminiResp!.status)) {
+    const profile = await loadUserProfile(env as any, String(user.sub));
+    const fallback = buildFallback(feature, profile);
+    await logAiEvent(env as any, {
+      userId: String(user.sub),
+      feature,
+      status: 200,
+      latencyMs: latency,
+      safeMode,
+      requestJson: body,
+      responseJson: fallback,
+      error: data?.error?.message || data?.error || `status_${geminiResp!.status}`,
+    });
+    return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "X-FF-AI-Fallback": "1",
+        "X-FF-Cache": "MISS",
+        "X-FF-KV": kv ? "found" : "missing",
+      },
+    });
+  }
+
 
   if (kv) {
     await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data }), { expirationTtl: 60 });
@@ -433,4 +497,110 @@ function extractTextFromGemini(data: any): string {
 
   if (!parts.length && typeof data?.output_text === 'string') return data.output_text;
   return parts.join('\n').trim();
+}
+
+
+// --- Fallback layer ---------------------------------------------------------
+// Когда Gemini недоступен/квота/ошибка, продукт не должен "умирать".
+// В fallback режиме возвращаем упрощённый, но полезный результат на основе профиля.
+async function loadUserProfile(env: any, userId: string): Promise<any> {
+  try {
+    const row = await env?.DB?.prepare(
+      "SELECT profile_json FROM user_profiles WHERE user_id = ?"
+    ).bind(userId).first();
+    if (!row?.profile_json) return {};
+    return JSON.parse(row.profile_json);
+  } catch {
+    return {};
+  }
+}
+
+function calcTargetCalories(profile: any): number {
+  // Очень грубая оценка: если есть цель и активность — подстраиваем.
+  // Это fallback, не медицинская рекомендация.
+  const weight = Number(profile?.weight_kg || profile?.weightKg || 70);
+  const base = Math.round(weight * 30); // ~ поддержание
+  const goal = String(profile?.goal || profile?.goalType || "loss");
+  const activity = String(profile?.activity_level || profile?.activityLevel || "medium");
+  let adj = 0;
+  if (goal === "loss") adj -= 350;
+  else if (goal === "gain") adj += 250;
+  if (activity === "low") adj -= 150;
+  else if (activity === "high") adj += 150;
+  const cals = Math.max(1200, base + adj);
+  return cals;
+}
+
+function buildFallbackWeeklyMenu(profile: any) {
+  const target = calcTargetCalories(profile);
+  const perMeal = Math.round(target / 3);
+  const days = [
+    "Понедельник",
+    "Вторник",
+    "Среда",
+    "Четверг",
+    "Пятница",
+    "Суббота",
+    "Воскресенье",
+  ].map((day) => ({
+    day,
+    targetCalories: target,
+    meals: [
+      { name: "Завтрак", calories: perMeal, idea: "Овсянка + йогурт/творог + ягоды" },
+      { name: "Обед", calories: perMeal, idea: "Курица/рыба + крупа + овощной салат" },
+      { name: "Ужин", calories: perMeal, idea: "Омлет/творог/рыба + овощи" },
+    ],
+  }));
+
+  return {
+    fallback: true,
+    reason: "AI temporarily unavailable",
+    targetCalories: target,
+    days,
+    notes: [
+      "Это временный план (fallback), чтобы приложение работало без перебоев.",
+      "При восстановлении AI вы сможете сгенерировать более точное меню.",
+    ],
+  };
+}
+
+function buildFallbackAdvice(profile: any) {
+  const target = calcTargetCalories(profile);
+  const w = profile?.weight_kg || profile?.weightKg;
+  const tw = profile?.target_weight_kg || profile?.targetWeightKg;
+  const act = profile?.activity_level || profile?.activityLevel;
+  return {
+    fallback: true,
+    reason: "AI temporarily unavailable",
+    agreement: 0.88,
+    experts: [
+      { name: "Диетолог", summary: [`Цель: ~${target} ккал/день`, "Белок в каждом приёме пищи", "Овощи 400–600 г/день"] },
+      { name: "Тренер", summary: ["3–4 тренировки/нед (или 8–10k шагов/день)", "Прогрессия нагрузки", "Разминка/заминка"] },
+      { name: "Психолог", summary: ["Планируй 1–2 " + "любимые" + " еды в неделю без чувства вины", "Сон 7–8 часов", "Фиксируй триггеры переедания"] },
+      { name: "Стратег", summary: ["Держи дефицит умеренным", "Следи за средним весом по неделе", "Одна привычка за раз"] },
+    ],
+    plan: {
+      profileSnapshot: { weight: w ?? null, targetWeight: tw ?? null, activity: act ?? null },
+      steps: [
+        "Собери тарелку: 1/2 овощи, 1/4 белок, 1/4 сложные углеводы.",
+        "Пей воду и добавь лёгкую активность каждый день.",
+        "Отслеживай питание 3 дня для калибровки.",
+      ],
+    },
+  };
+}
+
+function buildFallback(feature: string, profile: any) {
+  if (feature === "weekly_menu" || feature === "menu_week" || feature === "weekly_plan") {
+    return buildFallbackWeeklyMenu(profile);
+  }
+  return buildFallbackAdvice(profile);
+}
+
+function shouldFallback(status: number): boolean {
+  // 429 (quota), 5xx (server), 0/NaN
+  if (!status || Number.isNaN(status)) return true;
+  if (status === 429) return true;
+  if (status >= 500) return true;
+  return false;
 }
