@@ -2,17 +2,11 @@
 // Stores small/medium JSON blobs (diary/history/cards/etc.) in D1 user_kv.
 // This enables cross-device sync while keeping the client code largely unchanged.
 
-import { requireUser } from "./_lib/auth";
+import { requireUser, json } from "./_lib/auth";
 import { requireDB, nowMs } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
-function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
-}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;

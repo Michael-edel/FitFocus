@@ -2,18 +2,12 @@
 // Single request to hydrate app state after login (server-driven).
 // Returns: { user, profile, kv }
 
-import { requireUser } from "./_lib/auth";
+import { requireUser, json } from "./_lib/auth";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
-function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
-}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
