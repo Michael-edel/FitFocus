@@ -1,3 +1,5 @@
+import { requireUser } from "./_lib/auth";
+import { ensureUserRow, requireDB } from "./_lib/db";
 
 /**
  * FITFOCUS v18_USER_LIMITS_NO_JOSE
@@ -24,6 +26,24 @@ type GeminiContent = {
   role?: "user" | "model";
   parts: GeminiPart[];
 };
+
+function buildProfileContext(p: any): string {
+  if (!p) return "";
+  const parts: string[] = [];
+  if (p.name) parts.push(`Имя: ${p.name}`);
+  if (p.gender) parts.push(`Пол: ${p.gender}`);
+  if (p.age) parts.push(`Возраст: ${p.age}`);
+  if (p.height) parts.push(`Рост: ${p.height} см`);
+  if (p.weight) parts.push(`Вес: ${p.weight} кг`);
+  if (p.target_weight) parts.push(`Целевой вес: ${p.target_weight} кг`);
+  if (p.activity_level) parts.push(`Уровень активности: ${p.activity_level}`);
+  if (p.goal) parts.push(`Цель: ${p.goal}`);
+  if (p.loss_deficit != null) parts.push(`Дефицит: ${p.loss_deficit} ккал/день`);
+  if (p.gain_surplus != null) parts.push(`Профицит: ${p.gain_surplus} ккал/день`);
+  if (p.exclusions) parts.push(`Исключения/аллергены: ${p.exclusions}`);
+  if (!parts.length) return "";
+  return `ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ (используй для персонализации):\n${parts.join("\n")}\n---\n`;
+}
 
 function b64urlEncode(bytes: Uint8Array) {
   let s = "";
@@ -221,6 +241,26 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
   const kv = env.FITFOCUS_KV;
   const identity = await resolveIdentityKey(request, env);
+  // Premium: load user profile from D1 (server-side source of truth for AI personalization)
+  let profileContext = "";
+  try {
+    if ((env as any).DB && (env as any).AUTH_JWT_SECRET) {
+      const sessionUser = await requireUser(request, env as any);
+      const db = requireDB(env as any);
+      await ensureUserRow(db, sessionUser);
+      const profileRow = await db
+        .prepare(
+          `SELECT name, gender, age, height, weight, target_weight, activity_level, goal, exclusions, loss_deficit, gain_surplus
+           FROM user_profiles WHERE user_id = ?`
+        )
+        .bind(sessionUser.sub)
+        .first();
+      profileContext = buildProfileContext(profileRow);
+    }
+  } catch {
+    // ignore: AI can still work without profile
+  }
+
 
   if (kv) {
     const cooldownKey = `rl:cd:4s:${identity}:${feature}`;
@@ -297,7 +337,21 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         error: { message: "Invalid contents: expected string or Content/Content[] with parts[]. Use {contents:[{role:'user',parts:[{text:'...'}]}]}" }
       }, 400);
     }
-    payloadToSend.contents = normalized;
+    
+    // Inject profile context into the first user message for key premium features.
+    if (profileContext && ["weekly_menu", "personal_plan", "coach_advice", "ai_council", "meal_analyze", "family_weekly_menu"].includes(feature)) {
+      if (normalized.length && (normalized[0] as any).role === "user") {
+        const first = normalized[0] as any;
+        if (first.parts?.length && first.parts[0]?.text) {
+          first.parts[0].text = profileContext + String(first.parts[0].text);
+        } else {
+          first.parts = [{ text: profileContext }, ...(first.parts || [])];
+        }
+      } else {
+        normalized.unshift({ role: "user", parts: [{ text: profileContext }] } as any);
+      }
+    }
+payloadToSend.contents = normalized;
   }
 
   const geminiResp = await fetch(url, {
@@ -319,27 +373,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     await logUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
-  
-  // If a feature expects pure JSON (e.g. weekly_menu), unwrap Gemini response and return parsed object.
-  const wantsPureJson = feature === "weekly_menu" || feature === "menu_week" || feature === "weeklyPlan";
-
-  if (wantsPureJson) {
-    const parsed = tryParseJson(extractedText);
-    if (!parsed) {
-      if (kv) {
-        await logUsage(env, { identity, feature, status: 502, latency, bytesIn: bodyText.length });
-      }
-      return jsonResponse({ error: { message: "AI returned invalid JSON" }, rawText: extractedText, data }, 502);
-    }
-
-    if (kv) {
-      await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data: parsed }), { expirationTtl: 60 });
-      await logUsage(env, { identity, feature, status: 200, latency, bytesIn: bodyText.length });
-    }
-
-    return jsonResponse(parsed, 200);
-  }
-
   return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
@@ -349,37 +382,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       "X-FF-KV": kv ? "found" : "missing"
     },
   });
-}
-
-
-
-function extractJsonFromText(text: string): string {
-  let t = String(text || "").trim();
-
-  // remove fenced code blocks ```json ... ```
-  t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-
-  // remove leading/trailing backticks
-  t = t.replace(/^`+/, "").replace(/`+$/, "").trim();
-
-  // cut first {...} or [...]
-  const objStart = t.indexOf("{");
-  const objEnd = t.lastIndexOf("}");
-  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) return t.slice(objStart, objEnd + 1);
-
-  const arrStart = t.indexOf("[");
-  const arrEnd = t.lastIndexOf("]");
-  if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) return t.slice(arrStart, arrEnd + 1);
-
-  return t;
-}
-
-function tryParseJson(text: string): any | null {
-  try {
-    return JSON.parse(extractJsonFromText(text));
-  } catch {
-    return null;
-  }
 }
 
 function extractTextFromGemini(data: any): string {

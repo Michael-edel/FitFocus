@@ -24,3 +24,21 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   count INTEGER NOT NULL,
   PRIMARY KEY (user_id, day, feature)
 );
+
+-- Профиль пользователя (премиум персонализация для AI)
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id TEXT PRIMARY KEY,
+  name TEXT,
+  gender TEXT,
+  age INTEGER,
+  height INTEGER,
+  weight REAL,
+  target_weight REAL,
+  activity_level REAL,
+  goal TEXT,
+  exclusions TEXT,
+  loss_deficit INTEGER,
+  gain_surplus INTEGER,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
