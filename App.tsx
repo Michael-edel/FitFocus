@@ -882,7 +882,8 @@ const App: React.FC = () => {
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
   const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
-  const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
+  const \[showCouncilThoughts, setShowCouncilThoughts\] = useState\(false\);
+  const [showExpertDetails, setShowExpertDetails] = useState(false);
   const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
   const [councilExpertIdx, setCouncilExpertIdx] = useState<number>(-1); // 0..3 = активный эксперт
   const [councilReviewPct, setCouncilReviewPct] = useState<number>(0); // прогресс согласования 0..100
@@ -2767,35 +2768,55 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
 
                           <div className="space-y-4">
   {!!resp?.thoughts?.length && (
-    <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-4 md:p-5">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Что сказал каждый эксперт</div>
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласие экспертов {score}%</div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-slate-500">
+          Доступны подробности от <span className="text-slate-300 font-semibold">4 экспертов</span>.
+        </div>
+        <button
+          onClick={() => setShowExpertDetails(v => !v)}
+          className="text-xs px-3 py-1.5 rounded-full border border-slate-700 bg-slate-900/40 text-slate-200 hover:bg-slate-900 transition"
+        >
+          {showExpertDetails ? 'Скрыть подробности' : 'Показать подробности экспертов'}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {(resp.thoughts || [])
-          .filter((t: any) => !t.isReview)
-          .map((t: any, i: number) => {
-            const bullets = summarizeExpertText(t.text, 2);
-            return (
-              <div key={i} className="p-4 rounded-3xl border border-indigo-500/15 bg-indigo-500/5">
-                <div className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2">{t.agentName}</div>
-                <ul className="text-sm text-slate-200 space-y-1 list-disc pl-5">
-                  {bullets.map((b, bi) => (
-                    <li key={bi} className="text-slate-300">{b}</li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-      </div>
+      <div className={clsx(
+        'overflow-hidden transition-all duration-500',
+        showExpertDetails ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+      )}>
+        <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-4 md:p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Что сказал каждый эксперт</div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласие экспертов {score}%</div>
+          </div>
 
-      <div className="mt-3 text-xs text-slate-500">
-        Это короткая выжимка. Ниже — итоговый, согласованный план.
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(resp.thoughts || [])
+              .filter((t: any) => !t.isReview)
+              .map((t: any, i: number) => {
+                const bullets = summarizeExpertText(t.text, 2);
+                return (
+                  <div key={i} className="p-4 rounded-3xl border border-indigo-500/15 bg-indigo-500/5">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2">{t.agentName}</div>
+                    <ul className="text-sm text-slate-200 space-y-1 list-disc pl-5">
+                      {bullets.map((b, bi) => (
+                        <li key={bi} className="text-slate-300">{b}</li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+          </div>
+
+          <div className="mt-3 text-xs text-slate-500">
+            Это короткая выжимка. Ниже — итоговый, согласованный план.
+          </div>
+        </div>
       </div>
     </div>
   )}
+
 
   <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
 </div>
