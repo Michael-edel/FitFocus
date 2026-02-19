@@ -1693,29 +1693,8 @@ const openEditFood = (item: FoodEntry) => {
       return;
     }
 
-    // No server session -> fallback to local offline profiles (device-only)
-    // This is the expected "Step 1": choose/create a profile.
-    try {
-      const raw = localStorage.getItem('fitfocus_all_users');
-      const parsed = raw ? JSON.parse(raw) : [];
-      const users: UserProfile[] = Array.isArray(parsed) ? parsed : [];
-      setAllUsers(users);
-
-      const lastId = localStorage.getItem('fitfocus_last_user_id');
-      const last = lastId ? users.find(u => u.id === lastId) : null;
-      if (last) {
-        void loginAsUser(last);
-        return;
-      }
-
-      // Even if there are 0 users, show the profile screen with "Create profile" / "Google profile".
-      setAuthState('auth_choice');
-      return;
-    } catch {
-      // If localStorage is unavailable/corrupted, still allow continuing.
-      setAuthState('auth_choice');
-      return;
-    }
+    // No server session -> go onboarding (user can sign in)
+    setAuthState('register');
   }, [loginAsUser]);
 
   useEffect(() => {
