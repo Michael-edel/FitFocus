@@ -1113,6 +1113,20 @@ const openEditFood = (item: FoodEntry) => {
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+
+  // Always start onboarding from step 1 on a fresh visit.
+  // This also neutralizes React Fast Refresh state preservation in dev.
+  useEffect(() => {
+    setOnboardingStep(1);
+  }, []);
+
+  // When auth flow sends user to onboarding (register), reset to step 1.
+  useEffect(() => {
+    if (authState === 'register') {
+      setOnboardingStep(1);
+    }
+  }, [authState]);
+
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   const [activationStep, setActivationStep] = useState(0);
   const activationTimerRef = useRef<number | null>(null);
