@@ -46,8 +46,7 @@ import {
   Send,
   MessageCircle,
   ChevronDown,
-  History,
-  Dot
+  History
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu } from './geminiService';
@@ -152,7 +151,7 @@ function loadGoogleIdentityScript(): Promise<void> {
 }
 
 function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
-  const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
+  const gisBtnHostRef = React.useRef<HTMLDivElement | null>(null);
   const onAuthedRef = React.useRef(onAuthed);
   const renderedRef = React.useRef(false);
 
@@ -204,10 +203,11 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
           },
         });
 
-        // Render the official GIS button OFFSCREEN once, then click it from our custom button.
-        if (hiddenBtnHostRef.current) {
-          hiddenBtnHostRef.current.innerHTML = "";
-          g.accounts.id.renderButton(hiddenBtnHostRef.current, {
+        // Render the official GIS button as an invisible overlay above our custom UI.
+        // This avoids popup blockers / FedCM quirks from programmatic clicks.
+        if (gisBtnHostRef.current) {
+          gisBtnHostRef.current.innerHTML = "";
+          g.accounts.id.renderButton(gisBtnHostRef.current, {
             type: "standard",
             theme: "outline",
             size,
@@ -226,41 +226,26 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
     return () => { cancelled = true; };
   }, []); // IMPORTANT: run once
 
-  const handleClick = React.useCallback(() => {
-    setErr(null);
-    const host = hiddenBtnHostRef.current;
-    const g = (window as any).google;
-    // Try clicking the hidden official button (opens the same popup flow)
-    const btn = host?.querySelector("div[role=button], button") as HTMLElement | null;
-    if (btn) {
-      btn.click();
-      return;
-    }
-    // Fallback: try One Tap prompt
-    if (g?.accounts?.id?.prompt) {
-      g.accounts.id.prompt();
-      return;
-    }
-    setErr("Google Identity Services ещё не загрузился. Подожди секунду и попробуй снова.");
-  }, []);
-
   return (
     <div className="flex flex-col items-center gap-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
-      >
-        <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
-        <span>Google профиль</span>
-      </button>
+      <div className="relative">
+        {/* Visual button */}
+        <div
+          className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90 select-none"
+          style={{ width }}
+        >
+          <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
+          <span>Google профиль</span>
+        </div>
 
-      {/* hidden host for the official GIS button (kept offscreen to prevent UI jumping) */}
-      <div
-        ref={hiddenBtnHostRef}
-        aria-hidden="true"
-        style={{ position: "absolute", left: -99999, top: -99999, width: 0, height: 0, overflow: "hidden" }}
-      />
+        {/* Invisible official GIS button overlay (handles click in a user gesture) */}
+        <div
+          ref={gisBtnHostRef}
+          aria-label="Google Sign-In"
+          className="absolute inset-0 opacity-0"
+          style={{ width, height: 40 }}
+        />
+      </div>
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
@@ -670,24 +655,6 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 };
 
 
-function summarizeExpertText(text: string, maxBullets = 2): string[] {
-  const t = String(text || '').trim().replace(/^"+|"+$/g, '');
-  const cleanedLines = t
-    .split(/\n+/)
-    .map((l) => l.replace(/^[-*\d\.)\s]+/, '').trim())
-    .filter(Boolean);
-
-  const bullets = cleanedLines.length
-    ? cleanedLines.slice(0, maxBullets)
-    : t
-        .split(/(?<=[.!?])\s+/)
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .slice(0, maxBullets);
-
-  return bullets.length ? bullets : [t.slice(0, 140)];
-}
-
 const App: React.FC = () => {
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
@@ -722,6 +689,21 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const [googleMe, setGoogleMe] = useState<null | { sub?: string; email?: string; name?: string; picture?: string }>(null);
+
+  // ✅ B2C: keep profile in sync with server (D1) so it works across computers.
+  // Debounced to avoid spamming on every small UI change.
+  useEffect(() => {
+    if (!googleMe?.sub || !currentUser) return;
+    const t = window.setTimeout(() => {
+      void fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ profile: currentUser }),
+      }).catch(() => {});
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [googleMe?.sub, currentUser]);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -883,10 +865,7 @@ const App: React.FC = () => {
   const [councilLoading, setCouncilLoading] = useState(false);
   const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
   const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
-  const [showExpertDetails, setShowExpertDetails] = useState(false);
   const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
-  const [councilExpertIdx, setCouncilExpertIdx] = useState<number>(-1); // 0..3 = активный эксперт
-  const [councilReviewPct, setCouncilReviewPct] = useState<number>(0); // прогресс согласования 0..100
   type CouncilChatMsg = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; response?: CouncilResponse };
   const [councilMessages, setCouncilMessages] = useState<CouncilChatMsg[]>([]);
   const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
@@ -1097,69 +1076,6 @@ const openEditFood = (item: FoodEntry) => {
     riskAckLoss: false,
     riskAckGain: false
   });
-
-
-
-  // Premium: after login, always pull profile from server (D1) so all devices stay in sync.
-  useEffect(() => {
-    if (authState !== 'app') return;
-
-    (async () => {
-      try {
-        const r = await fetch('/api/profile', { credentials: 'include' });
-        if (!r.ok) return;
-        const data = await r.json();
-        const p = data?.profile;
-        if (!p) return;
-
-        // Update onboarding/reg defaults so UI reflects server truth
-        setRegData(prev => ({
-          ...prev,
-          ...(p.name != null ? { name: p.name } : {}),
-          ...(p.gender != null ? { gender: p.gender } : {}),
-          ...(p.age != null ? { age: p.age } : {}),
-          ...(p.height != null ? { height: p.height } : {}),
-          ...(p.weight != null ? { weight: p.weight } : {}),
-          ...(p.targetWeight != null ? { targetWeight: p.targetWeight } : {}),
-          ...(p.activityLevel != null ? { activityLevel: p.activityLevel } : {}),
-          ...(p.goal != null ? { goal: p.goal } : {}),
-          ...(p.lossDeficit != null ? { lossDeficit: p.lossDeficit } : {}),
-          ...(p.gainSurplus != null ? { gainSurplus: p.gainSurplus } : {}),
-        }));
-
-        // Merge into the active in-app profile (currentUser) if we already have one selected
-        setCurrentUser(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            ...(p.name != null ? { name: p.name } : {}),
-            ...(p.gender != null ? { gender: p.gender } : {}),
-            ...(p.age != null ? { age: p.age } : {}),
-            ...(p.height != null ? { height: p.height } : {}),
-            ...(p.weight != null ? { weight: p.weight } : {}),
-            ...(p.targetWeight != null ? { targetWeight: p.targetWeight } : {}),
-            ...(p.activityLevel != null ? { activityLevel: p.activityLevel } : {}),
-            ...(p.goal != null ? { goal: p.goal } : {}),
-            ...(p.lossDeficit != null ? { lossDeficit: p.lossDeficit } : {}),
-            ...(p.gainSurplus != null ? { gainSurplus: p.gainSurplus } : {}),
-          };
-        });
-
-        // Also update list of profiles if one matches by id/sub
-        setAllUsers(prev => {
-          const uid = p.userId;
-          if (!uid) return prev;
-          const idx = prev.findIndex(u => (u as any).id === uid || (u as any).sub === uid);
-          if (idx === -1) return prev;
-          const next = [...prev];
-          next[idx] = { ...next[idx], ...p } as any;
-          return next;
-        });
-      } catch {
-        // ignore — server profile is best-effort
-      }
-    })();
-  }, [authState]);
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
@@ -1447,8 +1363,13 @@ const openEditFood = (item: FoodEntry) => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    } catch {}
+    setGoogleMe(null);
     setCurrentUser(null);
+    setAllUsers([]);
     setAuthState('auth_choice');
     localStorage.removeItem('fitfocus_last_user_id');
   }, []);
@@ -1680,6 +1601,29 @@ const openEditFood = (item: FoodEntry) => {
 
     const serverUser = me?.user || null;
     setGoogleMe(serverUser);
+
+    // ✅ B2C source-of-truth: if we have a server session, load profile from server (D1)
+    // This makes data independent from the computer (no localStorage dependency).
+    if (serverUser?.sub) {
+      try {
+        const pr = await fetch('/api/profile', { credentials: 'include' });
+        if (pr.ok) {
+          const pj = await pr.json();
+          const profile = pj?.profile || null;
+          if (profile) {
+            setAllUsers([profile]);
+            setCurrentUser(profile);
+            setAuthState('app');
+            return;
+          }
+        }
+      } catch {}
+
+      // If profile fetch fails, keep UX simple: go to register, with name prefilled.
+      setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
+      setAuthState('register');
+      return;
+    }
 
     // 2) Грузим локальные профили
     const saved = localStorage.getItem('fitfocus_all_users');
@@ -2672,23 +2616,10 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             <header className="text-left">
               <div className="flex items-center gap-3 text-indigo-400 mb-2">
                 <BrainCircuit size={28} />
-                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Команда экспертов</span>
+                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
-              <p className="text-slate-400">Консилиум из 4 экспертов (диетолог, тренер‑физиолог, психолог, архитектор стратегии). Они анализируют запрос, проверяют друг друга и формируют единый план.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {[
-                  { label: 'Архитектор стратегии', hint: 'Собирает план в систему' },
-                  { label: 'Диетолог', hint: 'Питание и КБЖУ' },
-                  { label: 'Тренер‑физиолог', hint: 'Нагрузка и восстановление' },
-                  { label: 'Психолог', hint: 'Привычки и мотивация' },
-                ].map((e) => (
-                  <span key={e.label} className="text-xs px-3 py-1 rounded-full border border-slate-700 bg-slate-900/50 text-slate-200">
-                    <span className="font-semibold">{e.label}</span><span className="text-slate-500"> — {e.hint}</span>
-                  </span>
-                ))}
-              </div>
-
+              <p className="text-slate-400">Параллельный анализ от 2 экспертов + Peer Review + синтез.</p>
             </header>
 
             <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
@@ -2742,14 +2673,14 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           {!isUser && score !== null && (
                             <div className="mb-4">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Итоговый вывод</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Chairman Synthesis</div>
                                 <div className={clsx(
                                   'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
                                   score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                                   : score >= 55 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
                                   : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
                                 )}>
-                                  Согласие экспертов {score}%
+                                  Agreement {score}%
                                 </div>
                               </div>
                               <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
@@ -2760,66 +2691,10 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                                   style={{ width: `${score}%` }}
                                 />
                               </div>
-                              <div className="mt-2 text-xs text-slate-500 leading-snug">
-                                Это оценка того, насколько 4 эксперта сошлись во мнении при взаимной проверке рекомендаций.
-                              </div>
                             </div>
                           )}
 
-                          <div className="space-y-4">
-  {!!resp?.thoughts?.length && (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-xs text-slate-500">
-          Доступны подробности от <span className="text-slate-300 font-semibold">4 экспертов</span>.
-        </div>
-        <button
-          onClick={() => setShowExpertDetails(v => !v)}
-          className="text-xs px-3 py-1.5 rounded-full border border-slate-700 bg-slate-900/40 text-slate-200 hover:bg-slate-900 transition"
-        >
-          {showExpertDetails ? 'Скрыть подробности' : 'Показать подробности экспертов'}
-        </button>
-      </div>
-
-      <div className={clsx(
-        'overflow-hidden transition-all duration-500',
-        showExpertDetails ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-      )}>
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-4 md:p-5">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Что сказал каждый эксперт</div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласие экспертов {score}%</div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {(resp.thoughts || [])
-              .filter((t: any) => !t.isReview)
-              .map((t: any, i: number) => {
-                const bullets = summarizeExpertText(t.text, 2);
-                return (
-                  <div key={i} className="p-4 rounded-3xl border border-indigo-500/15 bg-indigo-500/5">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2">{t.agentName}</div>
-                    <ul className="text-sm text-slate-200 space-y-1 list-disc pl-5">
-                      {bullets.map((b, bi) => (
-                        <li key={bi} className="text-slate-300">{b}</li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-          </div>
-
-          <div className="mt-3 text-xs text-slate-500">
-            Это короткая выжимка. Ниже — итоговый, согласованный план.
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
-
-
-  <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
-</div>
+                          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
 
                           {!isUser && resp?.thoughts?.length ? (
                             <div className="mt-4">
@@ -2863,20 +2738,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             <BrainCircuit size={14} /> Совет обсуждает…
                           </div>
                           <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Понимание запроса'
-                              : councilStage === 'experts' ? 'Мнение экспертов'
-                              : councilStage === 'review' ? 'Согласование'
-                              : councilStage === 'chairman' ? 'Итог'
+                            {councilStage === 'router' ? 'Router'
+                              : councilStage === 'experts' ? 'Experts'
+                              : councilStage === 'review' ? 'Peer Review'
+                              : councilStage === 'chairman' ? 'Chairman'
                               : '…'}
                           </span>
                         </div>
 
                         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                           {[
-                            { id: 'router', label: 'Понимание' },
+                            { id: 'router', label: 'Router' },
                             { id: 'experts', label: 'Эксперты' },
-                            { id: 'review', label: 'Согласование' },
-                            { id: 'chairman', label: 'Итог' },
+                            { id: 'review', label: 'Review' },
+                            { id: 'chairman', label: 'Synthesis' },
                           ].map((s) => {
                             const order = ['router','experts','review','chairman'] as const;
                             const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
@@ -2899,73 +2774,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           })}
                         </div>
 
-                        
-                        <div className="mt-5 space-y-3">
-                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Эксперты</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {[
-                              { name: 'Архитектор стратегии', hint: 'фокус недели, система привычек' },
-                              { name: 'Диетолог', hint: 'рацион, дефицит/профицит' },
-                              { name: 'Тренер‑физиолог', hint: 'нагрузка, восстановление' },
-                              { name: 'Психолог привычек', hint: 'мотивация, срывы, режим' },
-                            ].map((ex, idx) => {
-                              const stageOrder = ['router','experts','review','chairman'] as const;
-                              const curStageIdx = stageOrder.indexOf((councilStage === 'idle' ? 'router' : councilStage) as any);
-                              const isExpertsStage = (councilStage === 'experts');
-                              const isReviewStage = (councilStage === 'review');
-                              const isDone = curStageIdx > stageOrder.indexOf('experts') || (isExpertsStage && councilExpertIdx !== -1 && idx < councilExpertIdx) || (isExpertsStage && councilExpertIdx === -1);
-                              const isActive = isExpertsStage && councilExpertIdx === idx;
-                              const label = isActive ? 'формирует рекомендации…' : isDone ? 'готово' : isExpertsStage ? 'в очереди' : 'ожидает';
-                              return (
-                                <div
-                                  key={ex.name}
-                                  className={clsx(
-                                    'p-4 rounded-3xl border flex items-start gap-3 transition-all',
-                                    isDone ? 'bg-emerald-500/5 border-emerald-500/15'
-                                    : isActive ? 'bg-indigo-500/10 border-indigo-500/25 shadow-[0_0_0_1px_rgba(99,102,241,0.15)]'
-                                    : 'bg-slate-950 border-slate-800'
-                                  )}
-                                >
-                                  <div className={clsx(
-                                    'mt-0.5 w-8 h-8 rounded-2xl grid place-items-center border',
-                                    isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                                    : isActive ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300'
-                                    : 'bg-slate-900 border-slate-800 text-slate-600'
-                                  )}>
-                                    {isDone ? <CheckCircle size={16} /> : isActive ? <Loader2 className="animate-spin" size={16} /> : <Dot size={18} />}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-sm font-black text-slate-100 truncate">{ex.name}</div>
-                                      <div className={clsx(
-                                        'text-[10px] font-black uppercase tracking-widest',
-                                        isDone ? 'text-emerald-300'
-                                        : isActive ? 'text-indigo-300'
-                                        : 'text-slate-600'
-                                      )}>{label}</div>
-                                    </div>
-                                    <div className="mt-1 text-xs text-slate-500 font-semibold">{ex.hint}</div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {councilStage === 'review' && (
-                            <div className="mt-1 p-4 rounded-3xl border border-slate-800 bg-slate-950/50">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Согласование рекомендаций</div>
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 tabular-nums">{councilReviewPct}%</div>
-                              </div>
-                              <div className="mt-3 h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
-                                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${councilReviewPct}%` }} />
-                              </div>
-                              <div className="mt-2 text-xs text-slate-500 font-semibold">Эксперты проверяют друг друга и собирают один общий план.</div>
-                            </div>
-                          )}
-                        </div>
-
-<div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
+                        <div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
                           <span className="ff-ai-dot" />
                           <span className="ff-ai-dot ff-ai-dot--2" />
                           <span className="ff-ai-dot ff-ai-dot--3" />
@@ -2999,48 +2808,11 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   setCouncilLoading(true);
                   setCouncilResponse(null);
                   setCouncilStage('router');
-                  setCouncilExpertIdx(-1);
-                  setCouncilReviewPct(0);
 
                   const timers: any[] = [];
-
-                  // 1) Понимание запроса (коротко)
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 450));
-
-                  // 2) Эксперты по очереди (премиальная "магия")
-                  const expertStart = 520;
-                  const perExpert = 650;
-                  [0,1,2,3].forEach((idx) => {
-                    timers.push(setTimeout(() => {
-                      setCouncilStage(s => (s === 'router' ? 'experts' : s));
-                      setCouncilExpertIdx(idx);
-                    }, expertStart + idx * perExpert));
-                  });
-                  // когда эксперты закончили
-                  timers.push(setTimeout(() => {
-                    setCouncilExpertIdx(-1);
-                    setCouncilStage('review');
-                  }, expertStart + 4 * perExpert + 120));
-
-                  // 3) Согласование (плавный прогресс)
-                  const reviewStart = expertStart + 4 * perExpert + 150;
-                  timers.push(setTimeout(() => {
-                    setCouncilStage('review');
-                    setCouncilReviewPct(0);
-                    const iv = setInterval(() => {
-                      setCouncilReviewPct(p => {
-                        const next = Math.min(100, p + 8);
-                        return next;
-                      });
-                    }, 120);
-                    timers.push(iv);
-                  }, reviewStart));
-
-                  // 4) Итог
-                  timers.push(setTimeout(() => {
-                    setCouncilReviewPct(100);
-                    setCouncilStage('chairman');
-                  }, reviewStart + 1700));
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
+                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
 
                   try {
                     const r = await callAiCouncil(q, currentUser, foodDiary, habits);
@@ -3074,7 +2846,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       return next;
                     });
                   } finally {
-                    timers.forEach(t => { try { clearTimeout(t); } catch {} try { clearInterval(t as any); } catch {} });
+                    timers.forEach(t => clearTimeout(t));
                     setCouncilLoading(false);
                     setCouncilStage('idle');
                   }

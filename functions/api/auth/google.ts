@@ -46,6 +46,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       email_verified: String(info.email_verified || "") === "true",
     };
 
+    // B2C: persist user record in D1 (source of truth for cross-device)
+    if (env.DB) {
+      await env.DB
+        .prepare("INSERT OR IGNORE INTO users (id, email, created_at) VALUES (?, ?, ?)")
+        .bind(user.sub, user.email, Math.floor(Date.now() / 1000))
+        .run();
+    }
+
     const now = Math.floor(Date.now() / 1000);
     const session = await signSessionJwt(
       {
@@ -82,6 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
 type Env = {
   AUTH_JWT_SECRET: string;
+  DB?: any; // D1Database
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_ID_LOCAL?: string;
   GOOGLE_CLIENT_ID_PROD?: string;
