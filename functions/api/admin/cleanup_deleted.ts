@@ -5,6 +5,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { hardDeleteAccount } from "../_lib/account_delete";
+import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -35,6 +36,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       deleted++;
     } catch {}
   }
+
+  await logAdminEvent(db, { adminUserId: user.id, action: 'cleanup_deleted', meta: { found: ids.length, deleted, limit } });
 
   return json({ ok: true, found: ids.length, deleted }, 200);
 };

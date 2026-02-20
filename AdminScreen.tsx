@@ -37,6 +37,8 @@ export default function AdminScreen() {
 
   const [userQuery, setUserQuery] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [admins, setAdmins] = useState<UserRow[]>([]);
+  const [adminEvents, setAdminEvents] = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const [roles, setRoles] = useState<string[]>([]);
@@ -69,16 +71,24 @@ export default function AdminScreen() {
   const loadAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const [s, f] = await Promise.all([
+      const [s, f, a, e] = await Promise.all([
         fetch("/api/admin/stats", { credentials: "include" }),
         fetch("/api/admin/feature_flags", { credentials: "include" }),
+        fetch("/api/admin/admins", { credentials: "include" }),
+        fetch("/api/admin/admin_events?limit=50", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
+      if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
+      if (!e.ok) throw new Error("Нет доступа к /api/admin/admin_events (нужна роль admin)");
       if (!f.ok) throw new Error("Нет доступа к /api/admin/feature_flags (нужна роль admin)");
       const sj = await s.json();
       const fj = await f.json();
+      const aj = await a.json();
+      const ej = await e.json();
       setStats(sj?.stats || null);
       setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
+      setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
+      setAdminEvents(Array.isArray(ej?.events) ? ej.events : []);
       setFlagsDirty({});
     } catch (e: any) {
       setErr(e?.message || "Ошибка загрузки");
@@ -546,6 +556,61 @@ export default function AdminScreen() {
       {loading && (
         <div className="text-slate-500 font-semibold">Загрузка…</div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+          <div className="mb-3 flex items-center gap-2 text-white/90">
+            <ShieldCheck className="h-5 w-5 text-indigo-300" />
+            <div className="font-semibold">Администраторы</div>
+          </div>
+          <div className="space-y-2 text-sm text-white/80">
+            {admins.length === 0 ? (
+              <div className="text-white/60">Админы не найдены</div>
+            ) : (
+              admins.map((u) => (
+                <div key={u.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="truncate">
+                    <div className="truncate font-medium text-white/90">{u.email || u.id}</div>
+                    <div className="truncate text-xs text-white/50">{u.id}</div>
+                  </div>
+                  <button
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs hover:bg-white/10"
+                    onClick={() => { setSelectedUserId(u.id); void loadUserRoles(u.id); }}
+                    title="Открыть роли"
+                  >
+                    Роли
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+          <div className="mb-3 flex items-center gap-2 text-white/90">
+            <Activity className="h-5 w-5 text-indigo-300" />
+            <div className="font-semibold">Журнал действий админа</div>
+          </div>
+          <div className="max-h-[360px] overflow-auto space-y-2 text-sm text-white/80">
+            {adminEvents.length === 0 ? (
+              <div className="text-white/60">Пока пусто</div>
+            ) : (
+              adminEvents.map((ev) => (
+                <div key={ev.id} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium text-white/90">{ev.action}</div>
+                    <div className="text-xs text-white/50">{new Date(ev.ts).toLocaleString()}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-white/60">
+                    admin: {ev.admin_email || ev.admin_user_id}{ev.target_email ? ` → target: ${ev.target_email}` : ev.target_user_id ? ` → target: ${ev.target_user_id}` : ""}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
