@@ -1,0 +1,6 @@
+# Wrangler local vars for Cloudflare Pages Functions (copy to .dev.vars)
+# Used by /functions/api/auth/google.ts to validate Google ID token (aud claim)
+GOOGLE_CLIENT_ID=CHANGE_ME
+
+# Our session cookie ff_session is a HS256 JWT signed with this secret
+AUTH_JWT_SECRET=CHANGE_ME_LONG_RANDOM_STRING

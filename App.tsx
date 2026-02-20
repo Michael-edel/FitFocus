@@ -591,7 +591,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                       className="text-[10px] px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition flex items-center gap-2"
                     >
                       <Trash2 size={14} />
-                      Запись
+                      Удалить
                     </button>
                   </div>
 
