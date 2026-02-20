@@ -81,6 +81,17 @@ export async function requireUser(
   if (Number(s.expires_at || 0) <= now) throw new Error("UNAUTH");
 
 
+  // Account lifecycle: block deleted/disabled users (B2C safe delete)
+  const urow = await env.DB.prepare("SELECT is_active, deleted_at FROM users WHERE id = ? LIMIT 1")
+    .bind(payload.sub)
+    .first<any>();
+  if (urow && (Number(urow.is_active ?? 1) === 0 || urow.deleted_at)) {
+    // Revoke current session as well (best-effort)
+    try { await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ?").bind(sid).run(); } catch {}
+    throw new Error("UNAUTH");
+  }
+
+
   // RBAC layer: load roles from DB (auto-assign 'user' for everyone)
   let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all<{ role: string }>();
   let roles = (rolesRows.results || []).map((r) => String(r.role)).filter(Boolean);

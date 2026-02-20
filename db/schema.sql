@@ -2,7 +2,14 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT,
-  created_at INTEGER NOT NULL
+  name TEXT,
+  picture TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER,
+  -- B2C lifecycle
+  deleted_at TEXT,
+  deletion_scheduled_at TEXT,
+  is_active INTEGER DEFAULT 1
 );
 
 -- Подписки/планы
