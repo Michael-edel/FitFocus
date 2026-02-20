@@ -77,6 +77,8 @@ export type WeeklyMenu = {
 };
 
 export type FavoriteRecipe = {
+  allergens?: string[];
+  intolerances?: string[];
   id: string;
   title: string;
   createdAt: string; // ISO
@@ -387,3 +389,12 @@ export interface CouncilResponse {
 
 // PRO photo analysis meta
 export type AnalysisMeta = { confidence: number; compressed: boolean; enhancedRun: boolean; reasons?: string[] };
+export type DietaryRestrictions = {
+  allergens: string[];        // аллергены (строгий запрет)
+  intolerances: string[];     // непереносимость / избегать
+  excludedFoods: string[];    // не ем / исключить
+  severity: "strict" | "avoid";
+  notes?: string;
+};
+
+

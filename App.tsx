@@ -1025,6 +1025,7 @@ const openEditFood = (item: FoodEntry) => {
     activityLevel: ActivityLevel.MODERATELY_ACTIVE,
     goal: Goal.LOSS,
     targetWeight: 65,
+    dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
     plan: 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
@@ -2349,6 +2350,106 @@ if (authState === 'register') return (
                     </div>
                   )}
                 </div>
+
+<div className="space-y-2 mt-6">
+  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Аллергены и непереносимость</label>
+  <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+    <div className="text-xs text-slate-400 font-semibold">
+      Эти ограничения будут учитываться при генерации недельного меню (в том числе общего меню на семью).
+    </div>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      {[
+        "орехи",
+        "молоко/лактоза",
+        "яйца",
+        "рыба/морепродукты",
+        "глютен",
+        "соя",
+        "арахис",
+        "кунжут"
+      ].map(tag => {
+        const selected = (regData.dietary?.allergens || []).includes(tag);
+        return (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => {
+              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+              const next = selected
+                ? prev.allergens.filter(x => x !== tag)
+                : [...prev.allergens, tag];
+              setRegData(r => ({ ...r, dietary: { ...prev, allergens: next } }));
+            }}
+            className={clsx(
+              "px-3 py-2 rounded-[1rem] border text-xs font-black transition-all text-left",
+              selected ? "bg-rose-500/10 border-rose-400/40 text-rose-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
+            )}
+          >
+            {tag}
+          </button>
+        );
+      })}
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Что избегать (непереносимость / предпочтение)</label>
+        <input
+          type="text"
+          value={(regData.dietary?.intolerances || []).join(", ")}
+          onChange={(e) => {
+            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
+            setRegData(r => ({ ...r, dietary: { ...prev, intolerances: next } }));
+          }}
+          placeholder="например: лук, чеснок, острое"
+          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Не ем совсем</label>
+        <input
+          type="text"
+          value={(regData.dietary?.excludedFoods || []).join(", ")}
+          onChange={(e) => {
+            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
+            setRegData(r => ({ ...r, dietary: { ...prev, excludedFoods: next } }));
+          }}
+          placeholder="например: свинина, грибы"
+          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+        />
+      </div>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Строгость</label>
+      {[
+        { id: "strict", label: "Строго" },
+        { id: "avoid", label: "По возможности" }
+      ].map(opt => {
+        const selected = (regData.dietary?.severity || "strict") === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => {
+              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+              setRegData(r => ({ ...r, dietary: { ...prev, severity: opt.id as any } }));
+            }}
+            className={clsx(
+              "px-3 py-1.5 rounded-full border text-[10px] font-black transition-all",
+              selected ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+</div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Тариф</label>
                   <div className="grid grid-cols-1 gap-1.5">
@@ -2663,7 +2764,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
     </div></div></header>
       <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold">Вы еще ничего не ели сегодня</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
-        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
+        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
         {activeTab === 'family' && (
           <div className="max-w-4xl mx-auto space-y-10 py-10 animate-in fade-in duration-700">
