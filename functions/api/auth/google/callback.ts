@@ -62,6 +62,7 @@ export const onRequestGet: PagesFunction<{
   GOOGLE_CLIENT_SECRET: string;
   AUTH_JWT_SECRET: string;
   ADMIN_EMAILS?: string;
+  BOOTSTRAP_ADMIN_EMAILS?: string;
 }> = async ({ request, env }) => {
   try {
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -147,6 +148,21 @@ export const onRequestGet: PagesFunction<{
     if (adminEmails.length && user.email && adminEmails.includes(user.email.toLowerCase())) {
       await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
     }
+    // Bootstrap admin (B2C-safe):
+    // - only when there are NO admins yet
+    // - only for emails listed in BOOTSTRAP_ADMIN_EMAILS
+    const bootstrapEmails = String((env as any).BOOTSTRAP_ADMIN_EMAILS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (bootstrapEmails.length && user.email) {
+      const anyAdmin = await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first();
+      if (!anyAdmin && bootstrapEmails.includes(user.email.toLowerCase())) {
+        await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
+      }
+    }
+
 
     // Session
     const sid = crypto.randomUUID();

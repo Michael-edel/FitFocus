@@ -4,6 +4,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
+import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -46,6 +47,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } else {
     await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)").bind(userId, role).run();
   }
+  await logAdminEvent(db, { adminUserId: user.id, action: action === 'remove' ? 'role_remove' : 'role_add', targetUserId: userId, meta: { role } });
+
 
   const { results } = await db.prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role").bind(userId).all<{ role: string }>();
   return json({ ok: true, user_id: userId, roles: (results || []).map(r => r.role) });
