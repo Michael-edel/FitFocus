@@ -151,99 +151,21 @@ function loadGoogleIdentityScript(): Promise<void> {
   });
 }
 
-function GoogleSignInButton({ onAuthed, inviteCode, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; inviteCode?: string; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
-  const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
-  const onAuthedRef = React.useRef(onAuthed);
-  const renderedRef = React.useRef(false);
-
+function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?: string; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
+  // Why this approach:
+  // Google Identity Services now relies on FedCM in Chromium and is not supported/reliable in all browsers.
+  // Some users will have FedCM disabled by corporate policies, flags, privacy extensions, etc.
+  // That produces "identity-credentials-get" errors and lost sign-ins.
+  // To work for *all* clients with no browser tweaking, we use a backend-driven OAuth2 redirect flow.
   const [err, setErr] = React.useState<string | null>(null);
-
-  React.useEffect(() => { onAuthedRef.current = onAuthed; }, [onAuthed]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const clientId = getGoogleClientId();
-
-        // Load + init once (avoid "jumping" / re-rendering GIS UI)
-        if (renderedRef.current && (window as any).google?.accounts?.id) return;
-
-        setErr(null);
-
-        if (!clientId) {
-          setErr("Google Client ID не задан (VITE_GOOGLE_CLIENT_ID_LOCAL / VITE_GOOGLE_CLIENT_ID_PROD).");
-          return;
-        }
-
-        await loadGoogleIdentityScript();
-        if (cancelled) return;
-
-        const g = (window as any).google;
-        if (!g?.accounts?.id) {
-          setErr("Google Identity Services не инициализирован.");
-          return;
-        }
-
-        g.accounts.id.initialize({
-          client_id: clientId,
-          use_fedcm_for_prompt: false,
-          callback: async (resp: any) => {
-            try {
-              const r = await fetch("/api/auth/google", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ credential: resp?.credential, inviteCode: inviteCode || undefined }),
-              });
-              if (!r.ok) throw new Error(await r.text());
-              onAuthedRef.current();
-            } catch (e: any) {
-              console.error("Google auth failed", e);
-              setErr("Не удалось войти через Google. Проверь /api/auth/google и переменные.");
-            }
-          },
-        });
-
-        // Render the official GIS button OFFSCREEN once, then click it from our custom button.
-        if (hiddenBtnHostRef.current) {
-          hiddenBtnHostRef.current.innerHTML = "";
-          g.accounts.id.renderButton(hiddenBtnHostRef.current, {
-            type: "standard",
-            theme: "outline",
-            size,
-            shape: "pill",
-            text,
-            width,
-          });
-          renderedRef.current = true;
-        }
-      } catch (e: any) {
-        console.error(e);
-        setErr("Не удалось загрузить Google (GIS).");
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, []); // IMPORTANT: run once
 
   const handleClick = React.useCallback(() => {
     setErr(null);
-    const host = hiddenBtnHostRef.current;
-    const g = (window as any).google;
-    // Try clicking the hidden official button (opens the same popup flow)
-    const btn = host?.querySelector("div[role=button], button") as HTMLElement | null;
-    if (btn) {
-      btn.click();
-      return;
-    }
-    // Fallback: try One Tap prompt
-    if (g?.accounts?.id?.prompt) {
-      g.accounts.id.prompt();
-      return;
-    }
-    setErr("Google Identity Services ещё не загрузился. Подожди секунду и попробуй снова.");
-  }, []);
+    const params = new URLSearchParams();
+    if (inviteCode) params.set("invite", inviteCode);
+    params.set("redirect", window.location.origin);
+    window.location.href = `/api/auth/google/start?${params.toString()}`;
+  }, [inviteCode]);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -255,13 +177,6 @@ function GoogleSignInButton({ onAuthed, inviteCode, width = 320, size = "large",
         <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
         <span>Google профиль</span>
       </button>
-
-      {/* hidden host for the official GIS button (kept offscreen to prevent UI jumping) */}
-      <div
-        ref={hiddenBtnHostRef}
-        aria-hidden="true"
-        style={{ position: "absolute", left: -99999, top: -99999, width: 0, height: 0, overflow: "hidden" }}
-      />
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
