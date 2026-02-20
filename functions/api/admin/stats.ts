@@ -22,6 +22,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
+
   const now = Math.floor(Date.now() / 1000);
   const day = todayKey();
 
@@ -56,67 +57,25 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(day)
       .first<{ c: number }>();
     mealsLogged = Number(meals?.c || 0);
-  } catch {}
 
   // AI events metrics (if table exists)
   let aiCallsEvents = 0;
   let aiErrorsEvents = 0;
   let aiAvgLatency = 0;
-  let aiTokens = 0;
-  let aiCostUsd = 0;
-  let aiFallbackPct = 0;
-
   try {
     const start = new Date();
-    start.setUTCHours(0, 0, 0, 0);
+    start.setUTCHours(0,0,0,0);
     const startMs = start.getTime();
     const endMs = startMs + 24 * 60 * 60 * 1000;
 
     const agg = await db.prepare(
-      `SELECT
-        COUNT(*) as calls,
-        SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors,
-        AVG(latency_ms) as avg_latency,
-        SUM(COALESCE(total_tokens,0)) as tokens,
-        SUM(COALESCE(estimated_cost_usd,0)) as cost_usd,
-        SUM(CASE WHEN is_fallback = 1 THEN 1 ELSE 0 END) as fallback_calls
-      FROM ai_events
-      WHERE ts >= ? AND ts < ?`
-    ).bind(startMs, endMs).first<any>();
+      "SELECT COUNT(*) as calls, SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors, AVG(latency_ms) as avg_latency FROM ai_events WHERE ts >= ? AND ts < ?"
+    ).bind(startMs, endMs).first<{ calls: number; errors: number; avg_latency: number }>();
 
     aiCallsEvents = Number(agg?.calls || 0);
     aiErrorsEvents = Number(agg?.errors || 0);
     aiAvgLatency = Math.round(Number(agg?.avg_latency || 0));
-    aiTokens = Number(agg?.tokens || 0);
-    aiCostUsd = Number(agg?.cost_usd || 0);
-    const fb = Number(agg?.fallback_calls || 0);
-    aiFallbackPct = aiCallsEvents ? Math.round((fb / aiCallsEvents) * 100) : 0;
   } catch {}
-
-  // Top users by AI cost (last 7 days)
-  let topUsersCost7d: Array<{ user_id: string; cost_usd: number; calls: number; tokens: number }> = [];
-  try {
-    const endMs = Date.now();
-    const startMs = endMs - 7 * 24 * 60 * 60 * 1000;
-    const rows = await db.prepare(
-      `SELECT
-        user_id,
-        SUM(COALESCE(estimated_cost_usd,0)) as cost_usd,
-        COUNT(*) as calls,
-        SUM(COALESCE(total_tokens,0)) as tokens
-      FROM ai_events
-      WHERE ts >= ? AND ts < ?
-      GROUP BY user_id
-      ORDER BY cost_usd DESC
-      LIMIT 10`
-    ).bind(startMs, endMs).all<any>();
-
-    topUsersCost7d = (rows?.results || []).map((r: any) => ({
-      user_id: String(r.user_id),
-      cost_usd: Number(r.cost_usd || 0),
-      calls: Number(r.calls || 0),
-      tokens: Number(r.tokens || 0),
-    }));
   } catch {}
 
   return json({
@@ -127,20 +86,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         pro_active: Number(proActive?.c || 0),
         family_active: Number(familyActive?.c || 0),
       },
-      today: {
-        day,
-        ai_calls: aiCalls,
-        meals_logged: mealsLogged,
-      },
-      ai_today: {
-        calls: aiCallsEvents,
-        errors: aiErrorsEvents,
-        avg_latency_ms: aiAvgLatency,
-        total_tokens: aiTokens,
-        estimated_cost_usd: aiCostUsd,
-        fallback_pct: aiFallbackPct,
-      },
-      ai_top_users_7d: topUsersCost7d,
+      today: { day, ai_calls: aiCalls, meals_logged: mealsLogged },
     },
   });
 };

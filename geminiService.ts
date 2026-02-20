@@ -32,11 +32,30 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 async function callAiProxy(model: string, contents: any, feature: string, config?: any) {
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
+  // ✅ Глобальная языковая политика продукта
+  // Gemini часто "уходит" в английский на названиях блюд/ингредиентов (особенно vision).
+  // Поэтому добавляем жёсткую инструкцию в начало каждого запроса.
+  const RU_POLICY =
+    "ВАЖНО: отвечай строго на русском языке. " +
+    "Все названия блюд, продуктов и ингредиентов — только на русском (без латиницы). " +
+    "Единицы: граммы (г), миллилитры (мл), килокалории (ккал). " +
+    "Если возвращаешь JSON — все строковые значения тоже на русском.";
+
   // ✅ Нормализуем contents (на всякий случай) — текст всегда Content[]
   if (typeof contents === "string") {
-    contents = [{ role: "user", parts: [{ text: contents }] }];
+    contents = [{ role: "user", parts: [{ text: `${RU_POLICY}\n\n${contents}` }] }];
   } else if (contents && !Array.isArray(contents) && Array.isArray((contents as any).parts)) {
-    contents = [contents];
+    // Один Content (часто для vision). Подмешиваем RU_POLICY первой текстовой частью.
+    const c: any = contents;
+    const parts = Array.isArray(c.parts) ? [...c.parts] : [];
+    parts.unshift({ text: RU_POLICY });
+    contents = [{ ...c, role: c.role || "user", parts }];
+  } else if (Array.isArray(contents)) {
+    // Content[]
+    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }, ...contents];
+  } else {
+    // Непредвиденный формат — всё равно обеспечиваем инструкцию
+    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }];
   }
 
   // ✅ Gemini не принимает поле `config` — прокидываем как `generationConfig`
@@ -562,7 +581,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         },
       },
       {
-        text: 'Анализируй это блюдо. Верни JSON с полями: name (название), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name и percent), notes (массив строк). Ответ строго в формате JSON.',
+        text: 'Анализируй это блюдо. Верни JSON с полями: name (название блюда НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
