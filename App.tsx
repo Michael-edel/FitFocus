@@ -1221,10 +1221,10 @@ const openEditFood = (item: FoodEntry) => {
     await ensurePdfInterFont(doc);
     doc.setFont("Inter", "normal");
     doc.setFontSize(18);
-    doc.text("FitFocus — AI Weekly Intelligence Report", 14, 20);
+    doc.text("FitFocus — Еженедельный AI-отчёт (WIS)", 14, 20);
     doc.setFontSize(12);
     doc.text(`Неделя: ${report.weekKey}`, 14, 30);
-    doc.text(`WIS Score: ${report.data.wis}/100`, 14, 36);
+    doc.text(`WIS (индекс недели): ${report.data.wis}/100`, 14, 36);
     autoTable(doc, {
       startY: 45,
       styles: { font: 'Inter' },
@@ -2793,7 +2793,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                 <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
-              <p className="text-slate-400">Параллельный анализ от 2 экспертов + Peer Review + синтез.</p>
+              <p className="text-slate-400">Параллельный анализ от 4 экспертов + независимая проверка + синтез.</p>
             </header>
 
             <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
@@ -2847,7 +2847,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           {!isUser && score !== null && (
                             <div className="mb-4">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Chairman Synthesis</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Синтез (итог)</div>
                                 <div className={clsx(
                                   'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
                                   score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
@@ -2912,20 +2912,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             <BrainCircuit size={14} /> Совет обсуждает…
                           </div>
                           <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Router'
-                              : councilStage === 'experts' ? 'Experts'
-                              : councilStage === 'review' ? 'Peer Review'
-                              : councilStage === 'chairman' ? 'Chairman'
+                            {councilStage === 'router' ? 'Маршрутизация'
+                              : councilStage === 'experts' ? 'Эксперты'
+                              : councilStage === 'review' ? 'Проверка'
+                              : councilStage === 'chairman' ? 'Синтез'
                               : '…'}
                           </span>
                         </div>
 
                         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                           {[
-                            { id: 'router', label: 'Router' },
+                            { id: 'router', label: 'Маршрут' },
                             { id: 'experts', label: 'Эксперты' },
-                            { id: 'review', label: 'Review' },
-                            { id: 'chairman', label: 'Synthesis' },
+                            { id: 'review', label: 'Проверка' },
+                            { id: 'chairman', label: 'Синтез' },
                           ].map((s) => {
                             const order = ['router','experts','review','chairman'] as const;
                             const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
