@@ -18,6 +18,7 @@ export interface Env {
   IP_HASH_SALT?: string;
   FREE_AI_DAILY_LIMIT?: string;
   AUTH_JWT_SECRET?: string;
+  AI_PRICING_JSON?: string;
 }
 
 type GeminiPart =
@@ -29,6 +30,91 @@ type GeminiContent = {
   parts: GeminiPart[];
 };
 
+
+
+function extractUsage(data: any) {
+  const u = data?.usageMetadata || data?.usage_metadata || null;
+  const input = Number(u?.promptTokenCount ?? u?.prompt_token_count ?? 0) || 0;
+  const output = Number(u?.candidatesTokenCount ?? u?.candidates_token_count ?? 0) || 0;
+  const total = Number(u?.totalTokenCount ?? u?.total_token_count ?? (input + output)) || (input + output);
+  return { inputTokens: input, outputTokens: output, totalTokens: total };
+}
+
+function estimateCostUSD(env: any, model: string, inputTokens: number, outputTokens: number) {
+  try {
+    const raw = env?.AI_PRICING_JSON;
+    if (!raw) return 0;
+    const pricing = JSON.parse(String(raw));
+    const p = pricing?.[model];
+    if (!p) return 0;
+    const inRate = Number(p.input_per_1k || 0);
+    const outRate = Number(p.output_per_1k || 0);
+    const cost = (inputTokens / 1000) * inRate + (outputTokens / 1000) * outRate;
+    return Number.isFinite(cost) ? cost : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function utcDayKeyFromMs(ms: number) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function upsertUserCostDaily(env: any, args: {
+  userId: string;
+  tsMs: number;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  isFallback: boolean;
+}) {
+  try {
+    if (!env?.DB) return;
+    const day = utcDayKeyFromMs(args.tsMs);
+    const now = Date.now();
+    const lat = Math.max(0, Math.round(args.latencyMs || 0));
+    const inTok = Math.max(0, Math.round(args.inputTokens || 0));
+    const outTok = Math.max(0, Math.round(args.outputTokens || 0));
+    const totTok = Math.max(0, Math.round(args.totalTokens || 0));
+    const cost = Number(args.estimatedCostUsd || 0) || 0;
+
+    await env.DB.prepare(`
+      INSERT INTO user_cost_daily (
+        user_id, day, ai_calls, input_tokens, output_tokens, total_tokens,
+        estimated_cost_usd, fallback_calls, avg_latency_ms, p95_latency_ms, updated_at
+      )
+      VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 0, ?)
+      ON CONFLICT(user_id, day) DO UPDATE SET
+        ai_calls = ai_calls + 1,
+        input_tokens = input_tokens + excluded.input_tokens,
+        output_tokens = output_tokens + excluded.output_tokens,
+        total_tokens = total_tokens + excluded.total_tokens,
+        estimated_cost_usd = estimated_cost_usd + excluded.estimated_cost_usd,
+        fallback_calls = fallback_calls + excluded.fallback_calls,
+        avg_latency_ms = CAST(ROUND((avg_latency_ms * ai_calls + ?) * 1.0 / (ai_calls + 1)) AS INT),
+        updated_at = excluded.updated_at
+    `).bind(
+      args.userId,
+      day,
+      inTok,
+      outTok,
+      totTok,
+      cost,
+      args.isFallback ? 1 : 0,
+      lat,
+      now,
+      lat
+    ).run();
+  } catch {
+    // never break request
+  }
+}
 function b64urlEncode(bytes: Uint8Array) {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
@@ -205,6 +291,12 @@ async function logAiEvent(env: any, args: {
   requestJson?: any;
   responseJson?: any;
   error?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimatedCostUsd?: number;
+  isFallback?: boolean;
 }) {
   try {
     if (!env?.DB) return;
@@ -212,8 +304,14 @@ async function logAiEvent(env: any, args: {
     const ts = Date.now();
     const reqStr = args.requestJson ? JSON.stringify(args.requestJson).slice(0, 40000) : null;
     const resStr = args.responseJson ? JSON.stringify(args.responseJson).slice(0, 40000) : null;
-    await env.DB.prepare(
-      "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    const inTok = args.inputTokens ?? null;
+    const outTok = args.outputTokens ?? null;
+    const totTok = args.totalTokens ?? null;
+    const cost = args.estimatedCostUsd ?? null;
+    const isFb = args.isFallback ? 1 : 0;
+
+    env.DB.prepare(
+      "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error, model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, is_fallback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       id,
       args.userId,
@@ -224,12 +322,31 @@ async function logAiEvent(env: any, args: {
       args.safeMode ? 1 : 0,
       reqStr,
       resStr,
-      args.error || null
-    ).run();
+      args.error || null,
+      args.model || null,
+      inTok,
+      outTok,
+      totTok,
+      cost,
+      isFb
+    ).run().catch(() => {});
+
+    // Inline daily rollup (beta-friendly)
+    upsertUserCostDaily(env, {
+      userId: args.userId,
+      tsMs: ts,
+      latencyMs: args.latencyMs,
+      inputTokens: Number(args.inputTokens || 0),
+      outputTokens: Number(args.outputTokens || 0),
+      totalTokens: Number(args.totalTokens || 0),
+      estimatedCostUsd: Number(args.estimatedCostUsd || 0),
+      isFallback: !!args.isFallback,
+    }).catch(() => {});
   } catch {
     // never break request
   }
 }
+
 async function logUsage(
   env: Env,
   ev: { identity: string; feature: string; status: number; latency: number; bytesIn: number; cacheHit?: boolean }
@@ -397,6 +514,11 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
     data = await geminiResp.json().catch(() => ({}));
     latency = Date.now() - startedAt;
+
+    // Token/cost observability (best-effort)
+    var __ff_usage = extractUsage(data);
+    var __ff_estimatedCostUsd = estimateCostUSD(env as any, model, __ff_usage.inputTokens, __ff_usage.outputTokens);
+
   } catch (err: any) {
     latency = Date.now() - startedAt;
 
@@ -412,6 +534,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         requestJson: body,
         responseJson: fallback,
         error: (err && (err.message || String(err))) || "fetch_failed",
+        model,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+        isFallback: true,
       });
       return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
         status: 200,
@@ -425,7 +553,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       });
     }
 
-    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
+    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed", model, isFallback: false });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
   }
 
@@ -447,6 +575,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       requestJson: body,
       responseJson: fallback,
       error: data?.error?.message || data?.error || `status_${geminiResp!.status}`,
+      model,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      estimatedCostUsd: 0,
+      isFallback: true,
     });
     return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
       status: 200,
@@ -467,7 +601,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   
-  await logAiEvent(env as any, { userId: String(user.sub), feature, status: geminiResp.status, latencyMs: latency, safeMode, requestJson: body, responseJson: { text: extractedText } , error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null });
+  await logAiEvent(env as any, { userId: String(user.sub), feature, status: geminiResp.status, latencyMs: latency, safeMode, requestJson: body, responseJson: { text: extractedText } , error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null, model, inputTokens: __ff_usage?.inputTokens || 0, outputTokens: __ff_usage?.outputTokens || 0, totalTokens: __ff_usage?.totalTokens || 0, estimatedCostUsd: __ff_estimatedCostUsd || 0, isFallback: false });
 return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
