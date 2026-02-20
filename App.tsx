@@ -815,6 +815,43 @@ const App: React.FC = () => {
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
+  // URL sync (minimal): allow opening /admin directly and keep URL in sync when switching tabs
+  const navigateTab = useCallback((tab: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => {
+    setActiveTab(tab);
+    if (typeof window === 'undefined') return;
+    const targetPath = tab === 'admin' ? '/admin' : '/';
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncFromPath = () => {
+      const p = window.location.pathname || '/';
+      if (p.startsWith('/admin')) {
+        setActiveTab('admin');
+      } else if (window.location.pathname === '/admin') {
+        setActiveTab('admin');
+      } else {
+        // keep existing tab on other paths (app is mostly single-path in beta)
+      }
+    };
+    syncFromPath();
+    window.addEventListener('popstate', syncFromPath);
+    return () => window.removeEventListener('popstate', syncFromPath);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'admin' && !isAdmin) {
+      // Prevent non-admins from staying on /admin
+      setActiveTab('dashboard');
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  }, [activeTab, isAdmin]);
+
   // AI Council (Orchestrator v2)
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
@@ -2677,7 +2714,7 @@ if (authState === 'register') return (
           </div>
         </div>
         {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
+          <button key={tab.id} onClick={() => navigateTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
         ))}
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
