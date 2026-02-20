@@ -290,7 +290,11 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
   const prompt = `Составь простое меню на 7 дней для пользователя.
 Пользователь: ${user.name}, пол: ${user.gender}, возраст: ${user.age}, рост: ${user.height} см, вес: ${user.weight} кг, цель: ${user.goal}.
 Дневные KPI: ${plan.dailyKpi.calories} ккал, Б ${plan.dailyKpi.protein} г, Ж ${plan.dailyKpi.fat} г, У ${plan.dailyKpi.carbs} г.
-Ограничения/исключения (если есть): ${user.exclusions || "нет"}.
+Ограничения (если есть):
+- Аллергены (строго): ${(user.dietary?.allergens || []).join(', ') || 'нет'}
+- Непереносимость/избегать: ${(user.dietary?.intolerances || []).join(', ') || 'нет'}
+- Не ем совсем: ${(user.dietary?.excludedFoods || []).join(', ') || (user.exclusions || 'нет')}
+- Строгость: ${user.dietary?.severity || 'strict'}.
 
 Требования:
 - Верни СТРОГО валидный JSON по schema (без текста, без markdown).
@@ -353,6 +357,7 @@ export async function generateFamilyWeeklyMenu(
       activityLevel: p.activityLevel,
       goal: p.goal,
       exclusions: p.exclusions || "",
+      dietary: p.dietary || null,
       targets
     };
   });
@@ -364,7 +369,32 @@ export async function generateFamilyWeeklyMenu(
   const individualExcl = people
     .map(p => p.exclusions ? `${p.name}: ${p.exclusions}` : "")
     .filter(Boolean)
-    .join("; ");
+    .join("; ")
+const dietaryBlock = (() => {
+  const strictAllergens = Array.from(new Set(people.flatMap(p => (p.dietary?.allergens || [])))).filter(Boolean);
+  const intolerances = Array.from(new Set(people.flatMap(p => (p.dietary?.intolerances || [])))).filter(Boolean);
+  const excludedFoods = Array.from(new Set(people.flatMap(p => (p.dietary?.excludedFoods || [])))).filter(Boolean);
+  const perPerson = people.map(p => {
+    const a = (p.dietary?.allergens || []).join(", ");
+    const i = (p.dietary?.intolerances || []).join(", ");
+    const e = (p.dietary?.excludedFoods || []).join(", ");
+    const parts = [
+      a ? `аллергены: ${a}` : "",
+      i ? `избегать: ${i}` : "",
+      e ? `не ем: ${e}` : ""
+    ].filter(Boolean);
+    return parts.length ? `${p.name}: ${parts.join(" / ")}` : "";
+  }).filter(Boolean).join("; ");
+
+  return {
+    strictAllergens,
+    intolerances,
+    excludedFoods,
+    perPerson,
+  };
+})();
+
+;
 
   const schema = {
     type: "OBJECT",
