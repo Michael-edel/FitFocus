@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
 
   const backendTarget = isDocker
     ? 'http://wrangler:8788'
-    : 'http://127.0.0.1:8788'
+    : 'http://localhost:8788'
 
   console.log('🔧 Vite mode:', mode)
   console.log('🐳 Docker detected:', isDocker)
