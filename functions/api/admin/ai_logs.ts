@@ -1,9 +1,13 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireRole } from "../_lib/rbac";
+import { requireAdminRequest } from "../_lib/admin_guard";
 
 export async function onRequestGet({ request, env }: { request: Request; env: any }) {
   const user = await requireUser(request, env);
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
+  const db = requireDB(env);
+  await requireAdminRequest(user, request, db);
+
 
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit") || 50), 200);

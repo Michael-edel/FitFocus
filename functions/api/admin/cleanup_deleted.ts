@@ -4,6 +4,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
+import { requireAdminRequest } from "../_lib/admin_guard";
 import { hardDeleteAccount } from "../_lib/account_delete";
 import { logAdminEvent } from "../_lib/admin_audit";
 

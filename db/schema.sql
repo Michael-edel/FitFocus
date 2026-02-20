@@ -198,3 +198,18 @@ CREATE TABLE IF NOT EXISTS admin_events (
 CREATE INDEX IF NOT EXISTS idx_admin_events_ts ON admin_events(ts);
 CREATE INDEX IF NOT EXISTS idx_admin_events_admin ON admin_events(admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_admin_events_action ON admin_events(action);
+
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id TEXT PRIMARY KEY,
+  admin_user_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  ip TEXT,
+  user_agent TEXT,
+  created_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_admin_sessions_session ON admin_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON admin_sessions(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_last_seen ON admin_sessions(last_seen_at);
