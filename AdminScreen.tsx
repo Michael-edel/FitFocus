@@ -39,6 +39,10 @@ export default function AdminScreen() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [admins, setAdmins] = useState<UserRow[]>([]);
   const [adminEvents, setAdminEvents] = useState<any[]>([]);
+  const [adminEventQ, setAdminEventQ] = useState("");
+  const [adminEventAction, setAdminEventAction] = useState("");
+  const [adminEventFrom, setAdminEventFrom] = useState<string>("");
+  const [adminEventTo, setAdminEventTo] = useState<string>("");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const [roles, setRoles] = useState<string[]>([]);
@@ -68,27 +72,52 @@ export default function AdminScreen() {
     } catch {}
   };
 
+  const loadAdminEvents = async () => {
+    try {
+      const qs = new URLSearchParams();
+      qs.set('limit', '100');
+      if (adminEventQ.trim()) qs.set('q', adminEventQ.trim());
+      if (adminEventAction.trim()) qs.set('action', adminEventAction.trim());
+      if (adminEventFrom) qs.set('from', adminEventFrom);
+      if (adminEventTo) qs.set('to', adminEventTo);
+      const r = await fetch(`/api/admin/admin_events?${qs.toString()}`, { credentials: 'include' });
+      if (r.ok) {
+        const j = await r.json();
+        setAdminEvents(Array.isArray(j.events) ? j.events : []);
+      }
+    } catch {}
+  };
+
+  const exportAdminEventsCsv = () => {
+    const qs = new URLSearchParams();
+    qs.set('limit', '500');
+    qs.set('format', 'csv');
+    if (adminEventQ.trim()) qs.set('q', adminEventQ.trim());
+    if (adminEventAction.trim()) qs.set('action', adminEventAction.trim());
+    if (adminEventFrom) qs.set('from', adminEventFrom);
+    if (adminEventTo) qs.set('to', adminEventTo);
+    window.open(`/api/admin/admin_events?${qs.toString()}`, '_blank');
+  };
+
+
   const loadAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const [s, f, a, e] = await Promise.all([
+      const [s, f, a] = await Promise.all([
         fetch("/api/admin/stats", { credentials: "include" }),
         fetch("/api/admin/feature_flags", { credentials: "include" }),
         fetch("/api/admin/admins", { credentials: "include" }),
-        fetch("/api/admin/admin_events?limit=50", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
       if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
-      if (!e.ok) throw new Error("Нет доступа к /api/admin/admin_events (нужна роль admin)");
       if (!f.ok) throw new Error("Нет доступа к /api/admin/feature_flags (нужна роль admin)");
       const sj = await s.json();
       const fj = await f.json();
       const aj = await a.json();
-      const ej = await e.json();
       setStats(sj?.stats || null);
       setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
       setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
-      setAdminEvents(Array.isArray(ej?.events) ? ej.events : []);
+      await loadAdminEvents();
       setFlagsDirty({});
     } catch (e: any) {
       setErr(e?.message || "Ошибка загрузки");
@@ -590,6 +619,26 @@ export default function AdminScreen() {
           <div className="mb-3 flex items-center gap-2 text-white/90">
             <Activity className="h-5 w-5 text-indigo-300" />
             <div className="font-semibold">Журнал действий админа</div>
+          </div>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-white/60">Поиск</div>
+              <input value={adminEventQ} onChange={(e)=>setAdminEventQ(e.target.value)} placeholder="email / action" className="h-9 w-56 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/40" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-white/60">Action</div>
+              <input value={adminEventAction} onChange={(e)=>setAdminEventAction(e.target.value)} placeholder="role_add" className="h-9 w-44 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/40" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-white/60">From</div>
+              <input type="date" value={adminEventFrom} onChange={(e)=>setAdminEventFrom(e.target.value)} className="h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-white/60">To</div>
+              <input type="date" value={adminEventTo} onChange={(e)=>setAdminEventTo(e.target.value)} className="h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white" />
+            </div>
+            <button onClick={loadAdminEvents} className="h-9 rounded-xl bg-white/10 px-3 text-sm text-white hover:bg-white/20">Применить</button>
+            <button onClick={exportAdminEventsCsv} className="h-9 rounded-xl bg-white/10 px-3 text-sm text-white hover:bg-white/20">Export CSV</button>
           </div>
           <div className="max-h-[360px] overflow-auto space-y-2 text-sm text-white/80">
             {adminEvents.length === 0 ? (

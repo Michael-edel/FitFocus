@@ -3,6 +3,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
+import { requireAdminRequest } from "../_lib/admin_guard";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -18,8 +19,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
   const db = requireDB(env);
+  await requireAdminRequest(user, request, db);
+
+
   const now = Math.floor(Date.now() / 1000);
   const day = todayKey();
 
