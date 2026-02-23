@@ -1,5 +1,5 @@
 import { requireUser, json as jsonV } from "./_lib/auth";
-import { loadFeatures, isEnabled } from "./_lib/features";
+import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
 
 
 /**
@@ -263,6 +263,66 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let user: any;
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   const features = await loadFeatures(env as any);
+  const settings = await loadSettings(env as any);
+  const budgetGuardEnabled = isEnabled(features, "ai_budget_guard_enabled", false);
+  const emergencyFallback = isEnabled(features, "ai_emergency_fallback", false);
+  const onLimitAction = (getSetting(settings, "ai_on_limit_action", "fallback") || "fallback").toLowerCase();
+  const maxCallsPerUserDay = Math.max(0, Math.floor(getSettingNumber(settings, "ai_max_calls_per_user_day", 0)));
+  const maxCostPerUserDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_per_user_day_usd", 0));
+  const maxCostTotalDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_total_day_usd", 0));
+
+  // UTC day start (ms)
+  const now = Date.now();
+  const d0 = new Date(now);
+  const dayStart = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate())).getTime();
+
+  // Emergency: force fallback for everyone (kill switch)
+  if (emergencyFallback) {
+    const profile = await loadUserProfile(env as any, String(user.sub));
+    const fallback = buildFallback(feature, profile);
+    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
+    return json({ ok: true, data: fallback, fallback: true }, 200);
+  }
+
+  // Budget Guard (admin-managed)
+  if (budgetGuardEnabled && (maxCallsPerUserDay > 0 || maxCostPerUserDay > 0 || maxCostTotalDay > 0)) {
+    try {
+      const db = requireDB(env as any);
+
+      // per-user calls today
+      const callsRow = await db.prepare("SELECT COUNT(*) as cnt FROM ai_events WHERE user_id = ? AND ts >= ?")
+        .bind(String(user.sub), dayStart).first<any>();
+      const callsToday = Number(callsRow?.cnt || 0);
+
+      // per-user cost today
+      const costUserRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE user_id = ? AND ts >= ?")
+        .bind(String(user.sub), dayStart).first<any>();
+      const costUserToday = Number(costUserRow?.cost || 0);
+
+      // total cost today
+      const costTotalRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE ts >= ?")
+        .bind(dayStart).first<any>();
+      const costTotalToday = Number(costTotalRow?.cost || 0);
+
+      const exceedCalls = maxCallsPerUserDay > 0 && callsToday >= maxCallsPerUserDay;
+      const exceedUserCost = maxCostPerUserDay > 0 && costUserToday >= maxCostPerUserDay;
+      const exceedTotalCost = maxCostTotalDay > 0 && costTotalToday >= maxCostTotalDay;
+
+      if (exceedCalls || exceedUserCost || exceedTotalCost) {
+        if (onLimitAction === "block") {
+          return json({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
+        }
+        // default: fallback
+        const profile = await loadUserProfile(env as any, String(user.sub));
+        const fallback = buildFallback(feature, profile);
+        await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
+        return json({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
+      }
+    } catch {
+      // never break product if guard check fails
+    }
+  }
+
   const safeMode = isEnabled(features, "ai_safe_mode", false);
   const fallbackMode = isEnabled(features, "ai_fallback_mode", true);
 
