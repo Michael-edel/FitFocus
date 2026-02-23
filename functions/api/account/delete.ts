@@ -4,7 +4,7 @@
 
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
-import { softDeleteAccount } from "../_lib/account_delete";
+import { softDeleteAccount, ensureNotLastAdmin } from "../_lib/account_delete";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -21,6 +21,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return json({ ok: false, error: "CONFIRM_REQUIRED" }, 400);
     }
 
+    await ensureNotLastAdmin(db, user.sub);
     await softDeleteAccount(db, user.sub);
 
     // Log event (non-AI, but reuse ai_events for audit)
@@ -37,6 +38,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     h.append("Set-Cookie", "ff_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
     return json({ ok: true, scheduled_days: 30 }, 200, h);
   } catch (e: any) {
-    return json({ ok: false, error: String(e?.message || "ERROR") }, 401);
+    const msg = String(e?.message || "ERROR");
+    const code = msg.includes("последнего администратора") ? 409 : 401;
+    return json({ ok: false, error: msg }, code);
   }
 };

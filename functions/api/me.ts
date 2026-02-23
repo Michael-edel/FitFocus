@@ -6,7 +6,7 @@ import { requireUser, json } from "./_lib/auth";
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
-    return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture } }, 200);
+    return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles } }, 200);
   } catch {
     return json({ user: null }, 200);
   }

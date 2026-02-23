@@ -60,3 +60,22 @@ export async function hardDeleteAccount(db: D1Database, userId: string): Promise
   // D1 batch executes sequentially; if one fails, others may still have executed.
   await db.batch(stmts);
 }
+
+
+export async function ensureNotLastAdmin(db: D1Database, userId: string): Promise<void> {
+  // Prevent deleting the last active admin (B2C safety)
+  const isAdminRow = await db.prepare("SELECT 1 as x FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1").bind(userId).first<any>();
+  if (!isAdminRow) return;
+
+  const row = await db.prepare(`
+    SELECT COUNT(*) as c
+    FROM user_roles ur
+    JOIN users u ON u.id = ur.user_id
+    WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL
+  `).first<any>();
+
+  const adminsCount = Number(row?.c || 0);
+  if (adminsCount <= 1) {
+    throw new Error("Нельзя удалить аккаунт последнего администратора.");
+  }
+}

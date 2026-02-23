@@ -46,10 +46,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!userId || !role) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
 
   if (action === "remove" && role === "admin") {
-    const row = await db.prepare("SELECT COUNT(*) as c FROM user_roles WHERE role = 'admin'").first<any>();
+    const row = await db.prepare("SELECT COUNT(*) as c FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL").first<any>();
     const adminsCount = Number(row?.c || 0);
     if (adminsCount <= 1) {
-      return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 400);
+      return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 409);
     }
   }
 
