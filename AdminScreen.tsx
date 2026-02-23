@@ -2,6 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2 } from "lucide-react";
 
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
+type SettingRow = { key: string; value: string };
+
+function getSettingValue(settings: SettingRow[], key: string, fallback = "") {
+  const row = settings.find((s) => s.key === key);
+  const v: any = (row as any)?.value;
+  return typeof v === "string" ? v : (v ?? fallback);
+}
+
 type Stats = {
   totals: {
     users: number;
@@ -58,6 +66,9 @@ export default function AdminScreen() {
   const [aiCost, setAiCost] = useState<AiCost | null>(null);
   const [flags, setFlags] = useState<Flag[]>([]);
   const [flagsDirty, setFlagsDirty] = useState<Record<string, { enabled: boolean; rollout: number }>>({});
+
+  const [settings, setSettings] = useState<SettingRow[]>([]);
+  const [settingsDirty, setSettingsDirty] = useState<Record<string, string>>({});
 
   const [userQuery, setUserQuery] = useState("");
   const [users, setUsers] = useState<UserRow[]>([]);
