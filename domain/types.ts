@@ -71,9 +71,13 @@ export type WeeklyMenuDay = {
   snack: string;
 };
 
+export type ShoppingListItem = { name: string; grams: number };
+
 export type WeeklyMenu = {
   days: WeeklyMenuDay[];
   shoppingList: string[];
+  shoppingListItems?: ShoppingListItem[];
+  weekStart?: string;
 };
 
 export type FavoriteRecipe = {

@@ -19,6 +19,29 @@ type Stats = {
   };
 };
 
+
+type AiCost = {
+  today: {
+    day_start_ms: number;
+    calls: number;
+    errors: number;
+    tokens: number;
+    cost_usd: number;
+    fallback_calls: number;
+    fallback_pct: number;
+    avg_latency_ms: number;
+  };
+  last_7d: {
+    from_ms: number;
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+    fallback_calls: number;
+    fallback_pct: number;
+  };
+  top_users_7d: { user_id: string; cost_usd: number; tokens: number; calls: number }[];
+};
+
 type UserRow = { id: string; email?: string; created_at?: number };
 
 type AiLog = { id: string; user_id: string; ts: number; feature: string; status: number; latency_ms: number; safe_mode: number; error?: string | null };
@@ -32,6 +55,7 @@ export default function AdminScreen() {
   const [err, setErr] = useState<string | null>(null);
 
   const [stats, setStats] = useState<Stats | null>(null);
+  const [aiCost, setAiCost] = useState<AiCost | null>(null);
   const [flags, setFlags] = useState<Flag[]>([]);
   const [flagsDirty, setFlagsDirty] = useState<Record<string, { enabled: boolean; rollout: number }>>({});
 
@@ -103,18 +127,22 @@ export default function AdminScreen() {
   const loadAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const [s, f, a] = await Promise.all([
+      const [s, f, a, c] = await Promise.all([
         fetch("/api/admin/stats", { credentials: "include" }),
         fetch("/api/admin/feature_flags", { credentials: "include" }),
         fetch("/api/admin/admins", { credentials: "include" }),
+        fetch("/api/admin/ai-cost", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
       if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
       if (!f.ok) throw new Error("Нет доступа к /api/admin/feature_flags (нужна роль admin)");
+      if (!c.ok) throw new Error("Нет доступа к /api/admin/ai-cost (нужна роль admin)");
       const sj = await s.json();
       const fj = await f.json();
       const aj = await a.json();
+      const cj = await c.json();
       setStats(sj?.stats || null);
+      setAiCost(cj || null);
       setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
       setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
       await loadAdminEvents();
@@ -308,7 +336,101 @@ export default function AdminScreen() {
         </div>
       </div>
 
-      {/* Feature flags */}
+      
+      {/* AI Cost Intelligence */}
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100">AI Cost Intelligence</h2>
+            <div className="text-slate-300 font-semibold mt-1">
+              Стоимость и нагрузка AI (токены, расходы, fallback).
+            </div>
+          </div>
+          <button
+            onClick={loadAll}
+            className="px-4 py-2 rounded-2xl bg-slate-800/70 border border-slate-700 text-slate-100 font-black hover:bg-slate-700/70 inline-flex items-center gap-2"
+            title="Обновить"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            Обновить
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="text-slate-400 font-bold">Сегодня — расходы</div>
+            <div className="text-3xl font-black text-slate-100 mt-2">
+              {aiCost ? `$${(aiCost.today.cost_usd || 0).toFixed(4)}` : "—"}
+            </div>
+            <div className="text-slate-400 font-semibold mt-2">
+              {aiCost ? `${aiCost.today.calls} вызовов · ${aiCost.today.tokens} токенов` : ""}
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="text-slate-400 font-bold">7 дней — расходы</div>
+            <div className="text-3xl font-black text-slate-100 mt-2">
+              {aiCost ? `$${(aiCost.last_7d.cost_usd || 0).toFixed(4)}` : "—"}
+            </div>
+            <div className="text-slate-400 font-semibold mt-2">
+              {aiCost ? `${aiCost.last_7d.calls} вызовов · ${aiCost.last_7d.tokens} токенов` : ""}
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="text-slate-400 font-bold">Fallback</div>
+            <div className="text-3xl font-black text-slate-100 mt-2">
+              {aiCost ? `${aiCost.today.fallback_pct}%` : "—"}
+            </div>
+            <div className="text-slate-400 font-semibold mt-2">
+              {aiCost ? `${aiCost.today.fallback_calls} fallback сегодня` : ""}
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="text-slate-400 font-bold">Latency avg</div>
+            <div className="text-3xl font-black text-slate-100 mt-2">
+              {aiCost ? `${aiCost.today.avg_latency_ms} мс` : "—"}
+            </div>
+            <div className="text-slate-400 font-semibold mt-2">
+              {aiCost ? `${aiCost.today.errors} ошибок сегодня` : ""}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="text-slate-200 font-black mb-2">Top 10 пользователей по стоимости (7 дней)</div>
+          <div className="overflow-auto rounded-2xl border border-slate-800">
+            <table className="min-w-[720px] w-full text-sm">
+              <thead className="bg-slate-900/70">
+                <tr className="text-slate-300">
+                  <th className="text-left p-3 font-black">user_id</th>
+                  <th className="text-left p-3 font-black">cost</th>
+                  <th className="text-left p-3 font-black">tokens</th>
+                  <th className="text-left p-3 font-black">calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(aiCost?.top_users_7d || []).map((r) => (
+                  <tr key={r.user_id} className="border-t border-slate-800 text-slate-200">
+                    <td className="p-3 font-mono text-xs">{r.user_id}</td>
+                    <td className="p-3 font-black">{`$${(r.cost_usd || 0).toFixed(4)}`}</td>
+                    <td className="p-3 font-bold">{r.tokens}</td>
+                    <td className="p-3 font-bold">{r.calls}</td>
+                  </tr>
+                ))}
+                {(!aiCost?.top_users_7d || aiCost.top_users_7d.length === 0) && (
+                  <tr className="border-t border-slate-800">
+                    <td className="p-3 text-slate-400 font-semibold" colSpan={4}>Пока нет данных.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+{/* Feature flags */}
       <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>

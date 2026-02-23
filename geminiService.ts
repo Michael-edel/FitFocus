@@ -301,9 +301,20 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
           required: ["day", "breakfast", "lunch", "dinner", "snack"]
         }
       },
-      shoppingList: { type: "ARRAY", items: { type: "STRING" } }
+      shoppingList: { type: "ARRAY", items: { type: "STRING" } },
+      shoppingListItems: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            grams: { type: "NUMBER" }
+          },
+          required: ["name", "grams"]
+        }
+      }
     },
-    required: ["days", "shoppingList"]
+    required: ["days", "shoppingList", "shoppingListItems"]
   } as const;
 
   const prompt = `Составь простое меню на 7 дней для пользователя.
@@ -320,7 +331,8 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - 7 дней в массиве days, порядок: Понедельник..Воскресенье.
 - Блюда должны быть простые, из доступных продуктов, повторы допустимы.
 - Порции в описании коротко (пример: "курица 150г + гречка 80г + салат").
-- shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.`;
+- shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.
+- shoppingListItems: агрегированный список покупок с весом в граммах на неделю. Формат: [{name, grams}]. Названия строго на русском.`;
 
   const res = await callAiProxy("gemini-2.5-flash", prompt, "weekly_menu", {
     responseMimeType: "application/json",
@@ -348,7 +360,39 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     .filter(Boolean)
     .slice(0, 40);
 
-  return { days: normDays, shoppingList };
+  const shoppingListItems = (Array.isArray(obj.shoppingListItems) ? obj.shoppingListItems : [])
+    .map((it: any) => ({
+      name: String(it?.name || "").trim(),
+      grams: Math.max(0, Math.round(Number(it?.grams || 0)))
+    }))
+    .filter((it: any) => it.name && it.grams > 0)
+    .slice(0, 120);
+
+  // weekStart (UTC Monday) for storage/export
+  const weekStart = (() => {
+    const d0 = new Date();
+    const date = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()));
+    const day = date.getUTCDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    date.setUTCDate(date.getUTCDate() + diff);
+    return date.toISOString().slice(0, 10);
+  })();
+
+  // Best-effort: store normalized items server-side for aggregated shopping list + CSV export
+  try {
+    await fetch("/api/weekly_menu/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems })
+    });
+  } catch {}
+
+  // Legacy list fallback from items if shoppingList empty
+  const legacyFromItems = shoppingListItems.map((it: any) => `${it.name} — ${it.grams} г`);
+  const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
+
+  return { days: normDays, shoppingList: finalShoppingList, shoppingListItems, weekStart };
 }
 
 /**
@@ -460,9 +504,20 @@ const dietaryBlock = (() => {
           required: ["day", "breakfast", "lunch", "dinner", "snack"]
         }
       },
-      shoppingList: { type: "ARRAY", items: { type: "STRING" } }
+      shoppingList: { type: "ARRAY", items: { type: "STRING" } },
+      shoppingListItems: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            grams: { type: "NUMBER" }
+          },
+          required: ["name", "grams"]
+        }
+      }
     },
-    required: ["days", "shoppingList"]
+    required: ["days", "shoppingList", "shoppingListItems"]
   } as const;
 
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
