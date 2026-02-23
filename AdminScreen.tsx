@@ -127,24 +127,29 @@ export default function AdminScreen() {
   const loadAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const [s, f, a, c] = await Promise.all([
+      const [s, f, a, c, st] = await Promise.all([
         fetch("/api/admin/stats", { credentials: "include" }),
         fetch("/api/admin/feature_flags", { credentials: "include" }),
         fetch("/api/admin/admins", { credentials: "include" }),
         fetch("/api/admin/ai-cost", { credentials: "include" }),
+        fetch("/api/admin/settings", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
       if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
       if (!f.ok) throw new Error("Нет доступа к /api/admin/feature_flags (нужна роль admin)");
       if (!c.ok) throw new Error("Нет доступа к /api/admin/ai-cost (нужна роль admin)");
+      if (!st.ok) throw new Error("Нет доступа к /api/admin/settings (нужна роль admin)");
       const sj = await s.json();
       const fj = await f.json();
       const aj = await a.json();
       const cj = await c.json();
+      const stj = await st.json();
       setStats(sj?.stats || null);
       setAiCost(cj || null);
       setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
       setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
+      setSettings(Array.isArray(stj?.settings) ? stj.settings : []);
+      setSettingsDirty({});
       await loadAdminEvents();
       setFlagsDirty({});
     } catch (e: any) {
@@ -210,6 +215,27 @@ export default function AdminScreen() {
       setLoading(false);
     }
   };
+
+  const saveSetting = async (key: string) => {
+    const value = settingsDirty[key];
+    if (typeof value !== "string") return;
+    setLoading(true); setErr(null);
+    try {
+      const r = await fetch("/api/admin/settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      });
+      if (!r.ok) throw new Error("Не удалось сохранить настройку");
+      await loadAll();
+    } catch (e: any) {
+      setErr(e?.message || "Ошибка сохранения");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const toggleFlag = (flag: Flag) => {
     const key = flag.key;
@@ -427,6 +453,116 @@ export default function AdminScreen() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+
+      {/* AI Budget Guard */}
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100">AI Budget Guard</h2>
+            <div className="text-slate-300 font-semibold mt-1">
+              Лимиты и аварийные переключатели (без деплоя). По умолчанию — fallback.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-slate-200 font-black">Budget Guard</div>
+                <div className="text-slate-400 font-semibold text-sm">Включить/выключить проверку лимитов</div>
+              </div>
+              {(() => {
+                const f = flags.find(x => x.key === "ai_budget_guard_enabled");
+                const enabled = (flagsDirty["ai_budget_guard_enabled"]?.enabled ?? (Number((f as any)?.enabled || 0) === 1));
+                return (
+                  <button
+                    onClick={() => {
+                      const currRollout = flagsDirty["ai_budget_guard_enabled"]?.rollout ?? Number((f as any)?.rollout_percentage ?? 100);
+                      setFlagsDirty(d => ({ ...d, ai_budget_guard_enabled: { enabled: !enabled, rollout: currRollout } }));
+                    }}
+                    className={`px-4 py-2 rounded-2xl font-black ${enabled ? "bg-emerald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-slate-800/70 text-slate-200 border border-slate-700"}`}
+                    title="Переключить"
+                  >
+                    {enabled ? "ON" : "OFF"}
+                  </button>
+                );
+              })()}
+            </div>
+            <div className="mt-3">
+              <button
+                onClick={() => saveFlag("ai_budget_guard_enabled")}
+                className="px-4 py-2 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-100 font-black hover:bg-indigo-500/20"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-slate-200 font-black">Emergency fallback</div>
+                <div className="text-slate-400 font-semibold text-sm">Принудительно переводит AI в fallback</div>
+              </div>
+              {(() => {
+                const f = flags.find(x => x.key === "ai_emergency_fallback");
+                const enabled = (flagsDirty["ai_emergency_fallback"]?.enabled ?? (Number((f as any)?.enabled || 0) === 1));
+                return (
+                  <button
+                    onClick={() => {
+                      const currRollout = flagsDirty["ai_emergency_fallback"]?.rollout ?? Number((f as any)?.rollout_percentage ?? 100);
+                      setFlagsDirty(d => ({ ...d, ai_emergency_fallback: { enabled: !enabled, rollout: currRollout } }));
+                    }}
+                    className={`px-4 py-2 rounded-2xl font-black ${enabled ? "bg-rose-500/15 text-rose-200 border border-rose-500/30" : "bg-slate-800/70 text-slate-200 border border-slate-700"}`}
+                    title="Переключить"
+                  >
+                    {enabled ? "ON" : "OFF"}
+                  </button>
+                );
+              })()}
+            </div>
+            <div className="mt-3">
+              <button
+                onClick={() => saveFlag("ai_emergency_fallback")}
+                className="px-4 py-2 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-100 font-black hover:bg-indigo-500/20"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+          {[
+            { key: "ai_max_calls_per_user_day", label: "Calls / user / day", hint: "0 = без лимита" },
+            { key: "ai_max_cost_per_user_day_usd", label: "Cost / user / day ($)", hint: "0 = без лимита" },
+            { key: "ai_max_cost_total_day_usd", label: "Total cost / day ($)", hint: "0 = без лимита" },
+            { key: "ai_on_limit_action", label: "On limit action", hint: "fallback или block" },
+          ].map((s) => {
+            const current = settingsDirty[s.key] ?? getSettingValue(settings, s.key, "");
+            return (
+              <div key={s.key} className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
+                <div className="text-slate-200 font-black">{s.label}</div>
+                <div className="text-slate-400 font-semibold text-sm mt-1">{s.hint}</div>
+                <input
+                  className="mt-3 w-full px-4 py-2 rounded-2xl bg-slate-900/60 border border-slate-700 text-slate-100 font-bold"
+                  value={current}
+                  onChange={(e) => setSettingsDirty((d) => ({ ...d, [s.key]: e.target.value }))}
+                  placeholder="0"
+                />
+                <button
+                  onClick={() => saveSetting(s.key)}
+                  className="mt-3 px-4 py-2 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-100 font-black hover:bg-indigo-500/20"
+                >
+                  Сохранить
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
