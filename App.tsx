@@ -814,44 +814,34 @@ const App: React.FC = () => {
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
-  // URL sync (minimal): allow opening /admin directly and keep URL in sync when switching tabs
-  const navigateTab = useCallback((tab: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => {
-    setActiveTab(tab);
-    if (typeof window === 'undefined') return;
-    const targetPath = tab === 'admin' ? '/admin' : '/';
-    if (window.location.pathname !== targetPath) {
-      window.history.pushState({}, '', targetPath);
-    }
+  const tabFromPath = (p: string) => (p.startsWith('/admin') ? 'admin' : 'dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>(() => (typeof window !== 'undefined' && window.location.pathname ? (window.location.pathname.startsWith('/admin') ? 'admin' : 'dashboard') : 'dashboard'));
+  const navigateTab = useCallback((tabId: any) => {
+    setActiveTab(tabId);
+    const url = tabId === 'admin' ? '/admin' : '/';
+    try {
+      if (typeof window !== 'undefined' && window.location.pathname !== url) window.history.pushState({}, '', url);
+    } catch {}
   }, []);
 
+  // Sync URL -> tab (direct open /admin, browser back/forward)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const syncFromPath = () => {
-      const p = window.location.pathname || '/';
-      if (p.startsWith('/admin')) {
-        setActiveTab('admin');
-      } else if (window.location.pathname === '/admin') {
-        setActiveTab('admin');
-      } else {
-        // keep existing tab on other paths (app is mostly single-path in beta)
-      }
+    const apply = () => {
+      const t = tabFromPath(window.location.pathname || '/');
+      setActiveTab((prev: any) => (prev === t ? prev : (t as any)));
     };
-    syncFromPath();
-    window.addEventListener('popstate', syncFromPath);
-    return () => window.removeEventListener('popstate', syncFromPath);
+    try { apply(); } catch {}
+    window.addEventListener('popstate', apply);
+    return () => window.removeEventListener('popstate', apply);
   }, []);
 
+  // Guard: non-admin cannot stay on /admin
   useEffect(() => {
     if (activeTab === 'admin' && !isAdmin) {
-      // Prevent non-admins from staying on /admin
       setActiveTab('dashboard');
-      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-        window.history.replaceState({}, '', '/');
-      }
+      try { window.history.replaceState({}, '', '/'); } catch {}
     }
   }, [activeTab, isAdmin]);
-
   // AI Council (Orchestrator v2)
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
