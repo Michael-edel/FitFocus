@@ -17,7 +17,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         `SELECT f.id, f.name, f.owner_user_id, f.created_at
          FROM families f
          JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND (m.status = 'active' OR m.is_active = 1)
+         WHERE m.user_id = ? AND m.status = 'active'
          LIMIT 1`
       )
       .bind(user.sub)
@@ -29,7 +29,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .prepare(
         `SELECT user_id, role, status, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at
          FROM family_members
-         WHERE family_id = ? AND (status = 'active' OR is_active = 1)
+         WHERE family_id = ? AND status = 'active'
          ORDER BY role DESC, created_at ASC`
       )
       .bind(fam.id)
@@ -57,7 +57,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         `SELECT f.id, f.name, f.owner_user_id, f.created_at
          FROM families f
          JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND (m.status = 'active' OR m.is_active = 1)
+         WHERE m.user_id = ? AND m.status = 'active'
          LIMIT 1`
       )
       .bind(user.sub)
@@ -76,8 +76,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       ),
       db.prepare(
         `INSERT INTO family_members
-         (id, family_id, user_id, role, status, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
-         VALUES (?, ?, ?, 'owner', 'active', NULL, NULL, NULL, NULL, NULL, 'MAINTAIN', ?, ?)`
+         (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
+         VALUES (?, ?, ?, 'owner', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)`
       ).bind(uuid(), familyId, user.sub, ts, ts),
     ]);
 

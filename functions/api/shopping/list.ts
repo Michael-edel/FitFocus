@@ -1,5 +1,7 @@
 // /api/shopping/list
-// GET: aggregated shopping list for a week (per user, optional family scope)
+// GET: aggregated shopping list for a week
+// - personal scope: per user (family_id is NULL)
+// - family scope: aggregated for the whole family (family_id provided) if user is an active member
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 
@@ -21,28 +23,63 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     if (!isIsoDay(week)) return json({ error: "BAD_WEEK" }, { status: 400 });
 
-    const q = family_id
-      ? `SELECT ingredient_name as name, SUM(grams) as grams
-         FROM weekly_menu_items
-         WHERE user_id = ? AND week_start = ? AND family_id = ?
-         GROUP BY ingredient_name
-         ORDER BY ingredient_name`
-      : `SELECT ingredient_name as name, SUM(grams) as grams
+    if (family_id) {
+      const famId = String(family_id);
+
+      // Ensure current user is in this family (active)
+      const mem = await db
+        .prepare(
+          `SELECT 1 AS ok
+           FROM family_members
+           WHERE family_id = ? AND user_id = ? AND status = 'active'
+           LIMIT 1`
+        )
+        .bind(famId, user.sub)
+        .first<any>();
+      if (!mem) return json({ error: "FORBIDDEN" }, { status: 403 });
+
+      const rows = await db
+        .prepare(
+          `SELECT ingredient_name as name, SUM(grams) as grams
+           FROM weekly_menu_items
+           WHERE week_start = ? AND family_id = ?
+           GROUP BY ingredient_name
+           ORDER BY ingredient_name`
+        )
+        .bind(week, famId)
+        .all<any>();
+
+      const items = (rows?.results || [])
+        .map((r: any) => ({
+          name: String(r.name || "").trim(),
+          grams: Math.max(0, Math.round(Number(r.grams || 0))),
+        }))
+        .filter((it: any) => it.name && it.grams > 0);
+
+      const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
+      return json({ week_start: week, family_id: famId, items, total_grams: totalGrams });
+    }
+
+    // Personal scope
+    const rows = await db
+      .prepare(
+        `SELECT ingredient_name as name, SUM(grams) as grams
          FROM weekly_menu_items
          WHERE user_id = ? AND week_start = ? AND family_id IS NULL
          GROUP BY ingredient_name
-         ORDER BY ingredient_name`;
+         ORDER BY ingredient_name`
+      )
+      .bind(user.sub, week)
+      .all<any>();
 
-    const stmt = family_id ? db.prepare(q).bind(user.sub, week, String(family_id)) : db.prepare(q).bind(user.sub, week);
-    const rows = await stmt.all<any>();
-
-    const items = (rows?.results || []).map((r: any) => ({
-      name: String(r.name || "").trim(),
-      grams: Math.max(0, Math.round(Number(r.grams || 0))),
-    })).filter((it: any) => it.name && it.grams > 0);
+    const items = (rows?.results || [])
+      .map((r: any) => ({
+        name: String(r.name || "").trim(),
+        grams: Math.max(0, Math.round(Number(r.grams || 0))),
+      }))
+      .filter((it: any) => it.name && it.grams > 0);
 
     const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
-
     return json({ week_start: week, items, total_grams: totalGrams });
   } catch (e: any) {
     return toApiError(e);

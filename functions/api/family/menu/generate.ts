@@ -1,59 +1,12 @@
 // /api/family/menu/generate
-// POST: generate shared weekly menu + personalized portions for all active members
-// MVP v0: deterministic shared menu skeleton (no AI). Portions are computed later by client MealEngine.
-// This endpoint stores a simple shared structure so multiple devices can sync.
-// Next step: move solver server-side.
+// POST: generate shared weekly menu + personalized portions for all active members (server-side)
+// This enables true B2C Family mode: one shared menu, different portion sizes per member, one aggregated family shopping list.
 import { json, requireUser } from "../../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../../_lib/db";
+import { calculateDailyTargets } from "../../../../domain/profileMath";
+import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
-
-type MemberGoal = 'LOSS' | 'MAINTAIN';
-
-function goalMultiplier(goal?: string): number {
-  const g = (goal || 'MAINTAIN').toUpperCase();
-  if (g === 'LOSS') return 0.85;
-  return 1.0;
-}
-
-const BASE_GRAMS: Record<string, number> = {
-  oatmeal: 60,
-  greek_yogurt: 150,
-  banana: 120,
-  egg: 100, // ~2 яйца
-  chicken_breast: 180,
-  rice: 70, // сухой
-  buckwheat: 70, // сухая
-  salad_mix: 200,
-  olive_oil: 10,
-  cottage_cheese: 200,
-  berries: 100,
-  nuts: 20,
-};
-
-function computeWeeklyTotalsFromShared(shared: any, multiplier: number) {
-  const totals = new Map<string, number>();
-  const days = Array.isArray(shared?.days) ? shared.days : [];
-  for (const day of days) {
-    for (const mealKey of ['breakfast','lunch','dinner','snack']) {
-      const meal = (day as any)?.[mealKey];
-      const items: string[] = Array.isArray(meal?.items) ? meal.items : [];
-      for (const it of items) {
-        const base = BASE_GRAMS[it] || 0;
-        if (base <= 0) continue;
-        totals.set(it, (totals.get(it) || 0) + base * multiplier);
-      }
-    }
-  }
-  // round to nearest 5g
-  const out = Array.from(totals.entries()).map(([name, grams]) => ({
-    name,
-    grams: Math.max(0, Math.round(grams / 5) * 5),
-  })).filter(x => x.grams > 0);
-  out.sort((a,b)=>a.name.localeCompare(b.name));
-  return out;
-}
-
 
 function weekStartISO(d: Date) {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -63,17 +16,109 @@ function weekStartISO(d: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+type ItemKey =
+  | "oatmeal"
+  | "greek_yogurt"
+  | "banana"
+  | "egg"
+  | "chicken_breast"
+  | "rice"
+  | "salad_mix"
+  | "olive_oil"
+  | "buckwheat"
+  | "cottage_cheese"
+  | "berries"
+  | "nuts";
+
+const BASE_DAY_KCAL = 2000;
+
+// Base grams are calibrated for ~2000 kcal/day template.
+// Portions for a member are scaled by (member_target_kcal / 2000).
+const ITEM_META: Record<ItemKey, { name: string; grams: number }> = {
+  oatmeal: { name: "Овсянка", grams: 60 },
+  greek_yogurt: { name: "Йогурт греческий", grams: 200 },
+  banana: { name: "Банан", grams: 120 },
+  egg: { name: "Яйца", grams: 100 }, // ~2 eggs, handled as grams for now
+  chicken_breast: { name: "Куриная грудка", grams: 180 },
+  rice: { name: "Рис", grams: 70 },
+  salad_mix: { name: "Салат (микс)", grams: 200 },
+  olive_oil: { name: "Оливковое масло", grams: 15 },
+  buckwheat: { name: "Гречка", grams: 70 },
+  cottage_cheese: { name: "Творог", grams: 200 },
+  berries: { name: "Ягоды", grams: 120 },
+  nuts: { name: "Орехи", grams: 30 },
+};
+
 function buildDeterministicSharedMenu() {
-  // Minimal stable structure in Russian; grams handled per-user later
-  // days: 7, meals: breakfast/lunch/dinner/snack, each meal has template items
   const days = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const sharedDay = () => ({
-    breakfast: { title: "Овсянка + йогурт + фрукт", items: ["oatmeal","greek_yogurt","banana","egg"] },
-    lunch: { title: "Курица + рис + салат", items: ["chicken_breast","rice","salad_mix","olive_oil"] },
-    dinner: { title: "Курица + гречка + салат", items: ["chicken_breast","buckwheat","salad_mix","olive_oil"] },
-    snack: { title: "Творог + ягоды + орехи", items: ["cottage_cheese","berries","nuts"] },
+    breakfast: { title: "Овсянка + йогурт + фрукт", items: ["oatmeal","greek_yogurt","banana","egg"] as ItemKey[] },
+    lunch: { title: "Курица + рис + салат", items: ["chicken_breast","rice","salad_mix","olive_oil"] as ItemKey[] },
+    dinner: { title: "Курица + гречка + салат", items: ["chicken_breast","buckwheat","salad_mix","olive_oil"] as ItemKey[] },
+    snack: { title: "Творог + ягоды + орехи", items: ["cottage_cheese","berries","nuts"] as ItemKey[] },
   });
   return { version: 1, days: days.map((name)=>({ name, ...sharedDay() })) };
+}
+
+function memberTargetKcal(member: any): number {
+  const goalRaw = String(member?.goal || "").toUpperCase();
+  const goal = goalRaw === "LOSS" ? Goal.LOSS : Goal.MAINTAIN;
+
+  // If profile exists, compute targets
+  const sexRaw = String(member?.sex || "").toUpperCase();
+  const age = Number(member?.age || 0);
+  const height = Number(member?.height_cm || 0);
+  const weight = Number(member?.weight_kg || 0);
+  const activityNum = Number(member?.activity || 0);
+
+  if ((sexRaw === "MALE" || sexRaw === "FEMALE") && age > 0 && height > 0 && weight > 0) {
+    const gender = sexRaw === "MALE" ? Gender.MALE : Gender.FEMALE;
+    const activityLevel = Object.values(ActivityLevel).includes(activityNum as any)
+      ? (activityNum as any)
+      : ActivityLevel.SEDENTARY;
+
+    const targets = calculateDailyTargets({
+      gender,
+      age,
+      height,
+      weight,
+      activityLevel,
+      goal,
+      adaptationMultiplier: 1.0,
+      lossDeficit: undefined,
+      gainSurplus: undefined,
+    } as any);
+    return Math.max(1200, Math.round(targets.calories || 2000));
+  }
+
+  // Fallback simple defaults for B2C
+  return goal === Goal.LOSS ? 1700 : 2000;
+}
+
+function buildPortionsForMember(shared: any, kcalPerDay: number) {
+  const k = Math.max(0.6, Math.min(1.8, kcalPerDay / BASE_DAY_KCAL));
+  const totals: Record<string, number> = {};
+  const portions = shared.days.map((d: any) => {
+    const outDay: any = { name: d.name, meals: {} };
+    for (const mealKey of ["breakfast","lunch","dinner","snack"]) {
+      const m = d[mealKey];
+      const ing = (m.items as ItemKey[]).map((key) => {
+        const meta = ITEM_META[key];
+        const grams = Math.max(1, Math.round(meta.grams * k));
+        totals[meta.name] = (totals[meta.name] || 0) + grams;
+        return { key, name: meta.name, grams };
+      });
+      outDay.meals[mealKey] = { title: m.title, ingredients: ing };
+    }
+    return outDay;
+  });
+
+  // Totals for the whole week
+  const totalsArr = Object.entries(totals)
+    .map(([name, grams]) => ({ name, grams }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+  return { portions, totals: totalsArr, kcalPerDay };
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -91,7 +136,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         `SELECT f.id, f.owner_user_id
          FROM families f
          JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND (m.status = 'active' OR m.is_active = 1)
+         WHERE m.user_id = ? AND m.status='active'
          LIMIT 1`
       )
       .bind(user.sub)
@@ -114,7 +159,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
         .bind(JSON.stringify(shared), user.sub, now, menuId)
         .run();
-      // portions recalculation is next step; for now we clear existing portions so clients recompute
       await db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id=?").bind(menuId).run();
     } else {
       await db
@@ -123,63 +167,50 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .run();
     }
 
-    
-    // B2C: compute per-member weekly totals server-side so all devices sync immediately.
+    // Compute and store portions for all active members (B2C sync)
     const members = await db
       .prepare(
-        `SELECT user_id, COALESCE(goal,'MAINTAIN') as goal
+        `SELECT user_id, goal, sex, age, height_cm, weight_kg, activity
          FROM family_members
-         WHERE family_id = ? AND (status='active' OR is_active=1)`
+         WHERE family_id = ? AND status = 'active'`
       )
       .bind(fam.id)
       .all<any>();
 
-    const memberRows = members.results || [];
-    // For each member: compute totals and upsert weekly_menu_portions + weekly_menu_items
-    for (const m of memberRows) {
-      const mult = goalMultiplier(m.goal);
-      const totals = computeWeeklyTotalsFromShared(shared, mult);
+    const membersList = members.results || [];
 
-      // store portions as multiplier (clients may render per-person text later)
-      const portionsPayload = { multiplier: mult };
-      const totalsPayload = { items: totals };
+    for (const m of membersList) {
+      const kcal = memberTargetKcal(m);
+      const computed = buildPortionsForMember(shared, kcal);
 
-      // upsert weekly_menu_portions
-      const existingPort = await db
-        .prepare("SELECT id FROM weekly_menu_portions WHERE weekly_menu_id=? AND user_id=? LIMIT 1")
-        .bind(menuId, m.user_id)
-        .first<any>();
-
-      if (existingPort?.id) {
-        await db
-          .prepare("UPDATE weekly_menu_portions SET portions_json=?, totals_json=?, updated_at=? WHERE id=?")
-          .bind(JSON.stringify(portionsPayload), JSON.stringify(totalsPayload), now, existingPort.id)
-          .run();
-      } else {
-        await db
-          .prepare("INSERT INTO weekly_menu_portions (id, weekly_menu_id, user_id, portions_json, totals_json, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-          .bind(uuid(), menuId, m.user_id, JSON.stringify(portionsPayload), JSON.stringify(totalsPayload), now)
-          .run();
-      }
-
-      // replace weekly_menu_items for this member + family + week
+      // Upsert portions
       await db
-        .prepare("DELETE FROM weekly_menu_items WHERE user_id=? AND family_id=? AND week_start=?")
-        .bind(m.user_id, fam.id, weekStart)
+        .prepare(
+          `INSERT INTO weekly_menu_portions (weekly_menu_id, user_id, portions_json, totals_json, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(weekly_menu_id, user_id)
+           DO UPDATE SET portions_json=excluded.portions_json, totals_json=excluded.totals_json, updated_at=excluded.updated_at`
+        )
+        .bind(menuId, String(m.user_id), JSON.stringify(computed.portions), JSON.stringify(computed.totals), now)
         .run();
 
-      const created_at_ms = nowMs();
-      for (const it of totals) {
+      // Replace user's family-scoped weekly_menu_items so shopping list works immediately on all devices
+      await db
+        .prepare("DELETE FROM weekly_menu_items WHERE user_id=? AND family_id=? AND week_start=?")
+        .bind(String(m.user_id), fam.id, weekStart)
+        .run();
+
+      for (const it of computed.totals) {
         await db
           .prepare(
             "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
           )
-          .bind(uuid(), m.user_id, fam.id, weekStart, it.name, Math.round(it.grams), created_at_ms)
+          .bind(uuid(), String(m.user_id), fam.id, weekStart, String(it.name), Math.round(Number(it.grams)), now)
           .run();
       }
     }
 
-    return json({ ok: true, weekStart, menuId, shared }, 200);
+    return json({ ok: true, weekStart, menuId, shared, members: membersList.length }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
