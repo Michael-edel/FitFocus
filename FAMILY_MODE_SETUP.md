@@ -16,3 +16,11 @@
 
 ## Примечание
 Порции (граммовки) пока считаются на клиенте Meal Engine и сохраняются в `weekly_menu_portions` на следующем шаге.
+
+
+## B2C улучшения (v1)
+- Server-side portions/totals: `/api/family/menu/generate` теперь вычисляет недельные totals для всех активных членов семьи (по цели LOSS/MAINTAIN) и сохраняет:
+  - `weekly_menu_portions` (JSON)
+  - `weekly_menu_items` (на каждого члена семьи, с `family_id`), чтобы Shopping List работал сразу на всех устройствах.
+- Добавлен endpoint `PATCH /api/family/member` для сохранения цели и параметров участника.
+
