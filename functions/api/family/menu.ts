@@ -29,7 +29,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         `SELECT f.id
          FROM families f
          JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
+         WHERE m.user_id = ? AND (m.status = 'active' OR m.is_active = 1)
          LIMIT 1`
       )
       .bind(user.sub)
