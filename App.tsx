@@ -191,6 +191,9 @@ type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
 
 const MAX_DIARY_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 500;
+// Максимум локальных профилей (Family): ограничение для хранения в localStorage.
+// В UI сейчас заявлено «до 5 профилей», поэтому держим 5.
+const MAX_LOCAL_PROFILES = 5;
 
 /**
  * Безопасное сохранение в localStorage с обработкой переполнения
