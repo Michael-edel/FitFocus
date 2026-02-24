@@ -283,6 +283,29 @@ export const getLastAiAction = (): { feature: string; type: string; userId: stri
 /**
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
+
+function guessIngredientCategory(name: string):
+  | "vegetables"
+  | "fruits"
+  | "protein"
+  | "dairy"
+  | "carbs"
+  | "fat"
+  | "other" {
+  const n = (name || "").toLowerCase();
+
+  const has = (words: string[]) => words.some(w => n.includes(w));
+
+  if (has(["куриц", "индейк", "говя", "свин", "рыб", "лосос", "тунец", "треск", "яйц", "яйцо", "сырокопч", "ветчин", "фарш"])) return "protein";
+  if (has(["молок", "йогур", "кефир", "творог", "сыр", "сметан", "ряжен", "сливк"])) return "dairy";
+  if (has(["рис", "греч", "овся", "овёс", "макарон", "паста", "хлеб", "батон", "картоф", "булгур", "кус-кус", "киноа", "мука"])) return "carbs";
+  if (has(["масл", "олив", "авокад", "орех", "арахис", "семеч", "кунжут", "майонез"])) return "fat";
+  if (has(["яблок", "банан", "апельс", "груш", "ягод", "клубник", "черник", "манго", "виноград", "персик", "слив"])) return "fruits";
+  if (has(["помидор", "томат", "огурц", "брокк", "капуст", "морков", "лук", "чеснок", "перец", "салат", "шпинат", "гриб", "кабач", "баклаж", "свекл"])) return "vegetables";
+
+  return "other";
+}
+
 export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promise<WeeklyMenu> {
   const schema = {
     type: "OBJECT",
@@ -384,7 +407,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems })
+      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems.map((it: any) => ({ ...it, category: guessIngredientCategory(String(it?.name || "")) })) })
     });
   } catch {}
 
