@@ -134,10 +134,33 @@ export const onRequestGet: PagesFunction<{
       .run();
 
     // Invite handling (optional)
+    // DB schema uses invite_codes + invite_redemptions (NOT a single "invites" table).
     if (inviteCode) {
-      await env.DB.prepare("UPDATE invites SET used_by_user_id = ?, used_at = ? WHERE code = ? AND used_at IS NULL")
-        .bind(user.sub, now, inviteCode)
-        .run();
+      const codeRow: any = await env.DB.prepare(
+        "SELECT code, max_uses, used_count, is_active FROM invite_codes WHERE code = ? LIMIT 1"
+      )
+        .bind(inviteCode)
+        .first();
+
+      const active = codeRow && (codeRow.is_active === 1 || codeRow.is_active === true || codeRow.is_active === "1");
+      const maxUses = codeRow?.max_uses ?? null;
+      const usedCount = codeRow?.used_count ?? 0;
+
+      if (active && (maxUses === null || usedCount < maxUses)) {
+        // record redemption (idempotent-ish: ignore duplicates by (code,user) if unique exists)
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
+        )
+          .bind(inviteCode, user.sub, now)
+          .run();
+
+        // bump used_count (safe even if redemption already existed; keep simple)
+        await env.DB.prepare(
+          "UPDATE invite_codes SET used_count = COALESCE(used_count,0) + 1 WHERE code = ?"
+        )
+          .bind(inviteCode)
+          .run();
+      }
     }
 
     // Admin role by email list
