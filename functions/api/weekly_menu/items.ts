@@ -1,6 +1,6 @@
 // /api/weekly_menu/items
 // POST: store normalized weekly shopping list items for the current user (and optional family scope)
-// Body: { week_start: 'YYYY-MM-DD', family_id?: string, items: [{name, grams}] }
+// Body: { week_start: 'YYYY-MM-DD', family_id?: string, items: [{name, grams, category?}] }
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 
@@ -23,30 +23,52 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, { status: 400 });
 
+    const allowedCategories = new Set([
+      "vegetables",
+      "fruits",
+      "protein",
+      "dairy",
+      "carbs",
+      "fat",
+      "other",
+    ] as const);
+
     const norm = items
-      .map((it: any) => ({
-        name: String(it?.name || "").trim(),
-        grams: Math.max(0, Math.round(Number(it?.grams || 0))),
-      }))
+      .map((it: any) => {
+        const name = String(it?.name || "").trim();
+        const grams = Math.max(0, Math.round(Number(it?.grams || 0)));
+        const rawCat = String(it?.category || "other").trim().toLowerCase();
+        const category = allowedCategories.has(rawCat as any) ? rawCat : "other";
+        return { name, grams, category };
+      })
       .filter((it: any) => it.name && it.grams > 0)
       .slice(0, 500);
 
     // Replace existing items for this scope (user + week [+ family_id])
     if (family_id) {
-      await db.prepare(
-        "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id = ?"
-      ).bind(user.sub, week_start, family_id).run();
+      await db
+        .prepare(
+          "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id = ?"
+        )
+        .bind(user.sub, week_start, family_id)
+        .run();
     } else {
-      await db.prepare(
-        "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id IS NULL"
-      ).bind(user.sub, week_start).run();
+      await db
+        .prepare(
+          "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id IS NULL"
+        )
+        .bind(user.sub, week_start)
+        .run();
     }
 
     const created_at = nowMs();
     for (const it of norm) {
-      await db.prepare(
-        "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).bind(uuid(), user.sub, family_id, week_start, it.name, it.grams, created_at).run();
+      await db
+        .prepare(
+          "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, category, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid(), user.sub, family_id, week_start, it.name, it.grams, it.category, created_at)
+        .run();
     }
 
     return json({ ok: true, stored: norm.length, week_start });
