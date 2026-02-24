@@ -7,6 +7,10 @@ import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT,
 import { clearAiCache } from './geminiService';
 
 type Props = {
+  serverSession?: boolean;
+  onServerLogout?: () => Promise<void> | void;
+  onDeleteAccount?: () => Promise<void> | void;
+
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
@@ -102,6 +106,9 @@ export default function SettingsScreen({
   onImportBackup,
   onConnectAutosave,
   autosaveEnabled,
+  serverSession,
+  onServerLogout,
+  onDeleteAccount,
 }: Props) {
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;

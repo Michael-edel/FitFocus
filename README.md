@@ -25,6 +25,34 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 2.  Настройте `GEMINI_API_KEY` в файле `.env.local`.
 3.  Запустите сервер разработки: `npm run dev`
 
+## Локальная разработка (backend + Google OAuth)
+
+Проект использует Cloudflare Pages Functions (Wrangler) и локальную D1 базу.
+
+1) Первый запуск на новом компьютере — примените миграции в локальную D1:
+
+```bash
+npx wrangler d1 migrations apply fitfocus --local
+```
+
+2) Запуск backend (Pages Functions) и фронта:
+
+```bash
+# backend
+npx wrangler pages dev dist --port 8788 --ip localhost
+
+# frontend (в отдельном терминале)
+npm run dev
+```
+
+3) Google OAuth (для local):
+
+В Google Cloud Console добавьте Authorized redirect URI:
+`http://localhost:8788/api/auth/google/callback`
+
+В проде добавьте URI вида:
+`https://<ваш-домен>/api/auth/google/callback`
+
 ## Безопасность и Приватность
 
 Приложение использует архитектуру "Privacy-by-Design":
