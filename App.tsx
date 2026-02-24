@@ -2088,7 +2088,7 @@ const logWeight = useCallback(() => {
                 <p className="font-bold text-slate-100 text-lg">{user.name}</p>
                 {user.googleSub ? (
                   <img src="/google-g.svg" alt="Google" title="Профиль Google" className="w-4 h-4 opacity-90" />
-                )}
+                ) : null}
               </div>
               <p className="text-xs text-slate-500 font-medium uppercase tracking-widest tabular-nums">
                 {user.weight} кг · {user.plan || 'Free'}
@@ -2128,7 +2128,7 @@ const logWeight = useCallback(() => {
           />
           {requireInvite ? (
             <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
-          )}
+          ) : null}
           {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
         </div>
 
@@ -2573,7 +2573,7 @@ if (authState === 'register') return (
           />
           {requireInvite ? (
             <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
-          )}
+          ) : null}
           {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
         </div>
 
@@ -2775,7 +2775,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   ) : (
                     <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
                   )}
-                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length ? (
+                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length && (
                     <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
@@ -2934,7 +2934,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                                 </div>
                               )}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     );
@@ -2948,11 +2948,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             <BrainCircuit size={14} /> Совет обсуждает…
                           </div>
                           <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Маршрутизация'
-                              : councilStage === 'experts' ? 'Эксперты'
-                              : councilStage === 'review' ? 'Проверка'
-                              : councilStage === 'chairman' ? 'Синтез'
-                              : '…'}
+                            {councilStage === 'router' ? 'Маршрутизация' : councilStage === 'experts' ? 'Эксперты' : councilStage === 'review' ? 'Проверка' : councilStage === 'chairman' ? 'Синтез' : '…'}
                           </span>
                         </div>
 
