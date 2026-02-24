@@ -2,7 +2,6 @@ import { Goal } from "./types";
 
 /**
  * Macro ratios by goal (sum = 1.0)
- * You can tune later.
  */
 export const MACRO_RATIOS: Record<Goal, { protein: number; fat: number; carbs: number }> = {
   [Goal.LOSS]: { protein: 0.30, fat: 0.30, carbs: 0.40 },
