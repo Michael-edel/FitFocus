@@ -3191,8 +3191,6 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             )}
           </div>
         )}
-          </div>
-        )}
         {activeTab === 'council' && (
           <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-10 duration-700">
             <header className="text-left">
