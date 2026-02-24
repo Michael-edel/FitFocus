@@ -412,6 +412,47 @@ function getWeekKey(d: Date): string {
   return `${date.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`;
 }
 
+function computeShoppingListFromWeeklyMenu(weeklyMenu: any): Array<{ name: string; amount?: number; unit?: string }> {
+  const days = weeklyMenu?.days;
+  if (!Array.isArray(days)) return [];
+
+  const acc = new Map<string, { name: string; amount: number; unit: string }>();
+
+  const addMatch = (rawName: string, amount: number, unit: string) => {
+    const name = rawName.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const key = `${name}|${unit}`;
+    const prev = acc.get(key);
+    if (prev) prev.amount += amount;
+    else acc.set(key, { name, amount, unit });
+  };
+
+  const scanText = (text: unknown) => {
+    if (typeof text !== 'string') return;
+    // Ищем все фрагменты вида "Куриное филе (180г)" или "Оливковое масло (15мл)"
+    const re = /([A-Za-zА-Яа-яЁё0-9\-\s\.]+?)\s*\((\d+(?:[\.,]\d+)?)\s*(г|мл)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const name = m[1];
+      const amount = Number(String(m[2]).replace(',', '.'));
+      const unit = m[3];
+      if (!Number.isFinite(amount)) continue;
+      addMatch(name, amount, unit);
+    }
+  };
+
+  for (const d of days) {
+    scanText(d?.breakfast);
+    scanText(d?.lunch);
+    scanText(d?.dinner);
+    scanText(d?.snack);
+  }
+
+  return Array.from(acc.values())
+    .sort((a, b) => b.amount - a.amount)
+    .map(i => ({ name: i.name, amount: Math.round(i.amount), unit: i.unit }));
+}
+
 function formatTime(tsIso: string): string {
   const d = new Date(tsIso);
   if (Number.isNaN(d.getTime())) return tsIso;
@@ -618,116 +659,6 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
 
 const App: React.FC = () => {
-
-  // --- Cloud Family (B2C) state ---
-  const [cloudFamily, setCloudFamily] = useState<any | null>(null);
-  const [cloudFamilyMembers, setCloudFamilyMembers] = useState<any[]>([]);
-  const [cloudFamilyLoading, setCloudFamilyLoading] = useState(false);
-  const [cloudFamilyError, setCloudFamilyError] = useState<string | null>(null);
-
-  const [familyInviteCode, setFamilyInviteCode] = useState<string>('');
-  const [familyJoinCode, setFamilyJoinCode] = useState<string>('');
-  const [familyNameDraft, setFamilyNameDraft] = useState<string>('Моя семья');
-
-  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
-  const [familyShopping, setFamilyShopping] = useState<{ week_start: string; items: {name:string; grams:number}[] } | null>(null);
-  const [familyShoppingLoading, setFamilyShoppingLoading] = useState(false);
-
-  const weekStartISO = useCallback((d = new Date()) => {
-    const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    const day = date.getUTCDay();
-    const diff = (day === 0 ? -6 : 1 - day); // Monday start
-    date.setUTCDate(date.getUTCDate() + diff);
-    return date.toISOString().slice(0, 10);
-  }, []);
-
-  const formatGramsPretty = useCallback((grams: number) => {
-    const g = Math.max(0, Math.round(Number(grams || 0)));
-    if (g >= 1000) return `${(g / 1000).toFixed(1)} кг`;
-    return `${g} г`;
-  }, []);
-
-  const loadCloudFamily = useCallback(async () => {
-    try {
-      setCloudFamilyLoading(true);
-      setCloudFamilyError(null);
-      const res = await fetch('/api/family', { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось загрузить семью');
-      setCloudFamily(data.family || null);
-      setCloudFamilyMembers(Array.isArray(data.members) ? data.members : []);
-      // Auto switch scope if user is in a family
-      if (data.family && planScope !== 'family') {
-        // keep user's choice, but first time default to family for visibility
-        setPlanScope('family');
-      }
-    } catch (e: any) {
-      setCloudFamilyError(e?.message || 'Ошибка');
-      setCloudFamily(null);
-      setCloudFamilyMembers([]);
-    } finally {
-      setCloudFamilyLoading(false);
-    }
-  }, [planScope]);
-
-  const loadFamilyShopping = useCallback(async () => {
-    if (!cloudFamily?.id) return;
-    try {
-      setFamilyShoppingLoading(true);
-      const week = weekStartISO();
-      const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(week)}&family_id=${encodeURIComponent(cloudFamily.id)}`, { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Не удалось загрузить список покупок семьи');
-      setFamilyShopping({ week_start: data.week_start, items: data.items || [] });
-    } catch (e) {
-      setFamilyShopping(null);
-    } finally {
-      setFamilyShoppingLoading(false);
-    }
-  }, [cloudFamily?.id, weekStartISO]);
-
-  const createFamilyCloud = useCallback(async () => {
-    const name = (familyNameDraft || 'Моя семья').trim().slice(0, 60);
-    const res = await fetch('/api/family', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать семью');
-    await loadCloudFamily();
-  }, [familyNameDraft, loadCloudFamily]);
-
-  const makeInviteCode = useCallback(async () => {
-    const res = await fetch('/api/family/invite', { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать приглашение');
-    setFamilyInviteCode(String(data.code || ''));
-    return String(data.code || '');
-  }, []);
-
-  const joinFamilyCloud = useCallback(async () => {
-    const code = (familyJoinCode || '').trim();
-    if (!code) return;
-    const res = await fetch('/api/family/join', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось присоединиться');
-    setFamilyJoinCode('');
-    await loadCloudFamily();
-  }, [familyJoinCode, loadCloudFamily]);
-
-  const updateMyFamilyGoal = useCallback(async (goal: 'LOSS' | 'MAINTAIN') => {
-    const res = await fetch('/api/family/member', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить цель');
-    await loadCloudFamily();
-  }, [loadCloudFamily]);
-
-  const generateFamilyMenuNow = useCallback(async () => {
-    if (!cloudFamily?.id) return;
-    const week = weekStartISO();
-    const res = await fetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось сгенерировать семейное меню');
-    await loadFamilyShopping();
-  }, [cloudFamily?.id, weekStartISO, loadFamilyShopping]);
-
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
     if (t === 'lunch') return 'Обед';
@@ -925,21 +856,6 @@ const App: React.FC = () => {
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
-
-  // Load Cloud Family context when opening Family / Plan (so users can see family mode immediately)
-  useEffect(() => {
-    if (activeTab === 'family' || activeTab === 'plan') {
-      void loadCloudFamily();
-    }
-  }, [activeTab, loadCloudFamily]);
-
-  // If plan is in family scope, keep family shopping list fresh
-  useEffect(() => {
-    if (planScope === 'family' && cloudFamily?.id) {
-      void loadFamilyShopping();
-    }
-  }, [planScope, cloudFamily?.id, loadFamilyShopping]);
-
   // AI Council (Orchestrator v2)
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
@@ -1334,7 +1250,20 @@ const openEditFood = (item: FoodEntry) => {
     return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
   }, [currentUser, foodDiary, habits, targets.calories]);
 
-  const forecastNextWeek = useMemo(() => {
+  
+const computedShoppingList = useMemo(() => {
+  return computeShoppingListFromWeeklyMenu(currentUser?.aiPlan?.weeklyMenu);
+}, [currentUser?.aiPlan?.weeklyMenu]);
+
+
+const shoppingToShow = useMemo(() => {
+  if (computedShoppingList.length) return computedShoppingList;
+  const raw = currentUser?.aiPlan?.weeklyMenu?.shoppingList;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((name: string) => ({ name }));
+}, [computedShoppingList, currentUser?.aiPlan?.weeklyMenu?.shoppingList]);
+
+const forecastNextWeek = useMemo(() => {
     if (!weekly || !currentUser) return 0;
     if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 7) / 7700;
     if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 7) / 7700;
@@ -2079,10 +2008,12 @@ const logWeight = useCallback(() => {
         return;
       }
     }
-
-
-    setAllUsers([newUser]);
-    await loginAsUser(newUser);
+      setAllUsers(prev => {
+        const next = [newUser, ...prev.filter(u => u.id !== newUser.id)].slice(0, MAX_LOCAL_PROFILES);
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        return next;
+      });
+await loginAsUser(newUser);
     setActiveTab('plan');
     setPlanIntroOpen(true);
   }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode]);
@@ -2861,75 +2792,11 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
              </div>
            </div>
          )}
-        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> {d.breakfast}</div><div><span className="text-slate-500 font-black">Обед:</span> {d.lunch}</div><div><span className="text-slate-500 font-black">Ужин:</span> {d.dinner}</div><div><span className="text-slate-500 font-black">Перекус:</span> {d.snack}</div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length ? (<div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">Список покупок</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">{currentUser.aiPlan.weeklyMenu.shoppingList.slice(0, 30).map((s, i) => (<div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>))}</div></div>) : null}</div>
-
-
-              {/* Cloud Family (B2C) — visible переключатель "Я / Семья" */}
-              {cloudFamily?.id && (
-                <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Режим плана</p>
-                      <p className="mt-1 text-xs text-slate-500 font-semibold">
-                        Семья: <span className="text-slate-200 font-black">{cloudFamily.name || 'Семья'}</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-full p-1">
-                      <button
-                        onClick={() => setPlanScope('personal')}
-                        className={clsx(
-                          'px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all',
-                          planScope === 'personal' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                        )}
-                      >
-                        Я
-                      </button>
-                      <button
-                        onClick={() => setPlanScope('family')}
-                        className={clsx(
-                          'px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all',
-                          planScope === 'family' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                        )}
-                      >
-                        Семья
-                      </button>
-                    </div>
-                  </div>
-
-                  {planScope === 'family' && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-slate-200 font-black">Семейный список покупок (на неделю)</p>
-                        <button
-                          onClick={() => void loadFamilyShopping()}
-                          className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-200 hover:border-indigo-500/30 transition-all"
-                        >
-                          Обновить
-                        </button>
-                      </div>
-
-                      {familyShoppingLoading ? (
-                        <div className="mt-3 text-slate-400 font-bold flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Загружаю…</div>
-                      ) : familyShopping?.items?.length ? (
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                          {familyShopping.items.slice(0, 30).map((it, i) => (
-                            <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                              <span className="truncate">• {it.name}</span>
-                              <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-sm text-slate-500 font-semibold">
-                          Пусто. Сначала сгенерируйте семейное меню во вкладке «Семья».
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-
+        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> {d.breakfast}</div><div><span className="text-slate-500 font-black">Обед:</span> {d.lunch}</div><div><span className="text-slate-500 font-black">Ужин:</span> {d.dinner}</div><div><span className="text-slate-500 font-black">Перекус:</span> {d.snack}</div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{shoppingToShow.length ? (<div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">Список покупок</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">{shoppingToShow.slice(0, 30).map((it, i) => (
+                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">
+                            • {it?.amount ? `${it.name} — ${it.amount} ${it.unit}` : it.name}
+                          </div>
+                        ))}</div></div>) : null}</div>
 
               {paywall.plan === 'family' && allUsers.length > 1 && (
                 <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
@@ -2973,7 +2840,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
                         {currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
-                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
+                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s?.amount ? `${s.name} — ${s.amount} ${s.unit}` : s.name}</div>
                         ))}
                       </div>
                     </div>
@@ -2996,197 +2863,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
         {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
         {activeTab === 'family' && (
-          <div className="max-w-4xl mx-auto space-y-8 py-10 animate-in fade-in duration-700">
-            <header className="flex items-start justify-between gap-4">
-              <div className="text-left">
-                <h1 className="text-4xl font-black text-slate-100 mb-2">Семья</h1>
-                <p className="text-slate-400 font-medium">Одна готовка для всех • разные цели (похудение/удержание) • общий список покупок</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => void loadCloudFamily()}
-                  className="px-4 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
+          <div className="max-w-4xl mx-auto space-y-10 py-10 animate-in fade-in duration-700">
+            <header className="flex items-center justify-between"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Семья</h1><p className="text-slate-400 font-medium">До 5 профилей в одном аккаунте (Family)</p></div><button onClick={() => setAuthState('auth_choice')} className="px-6 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all">Сменить профиль</button></header>
+            {paywall.plan !== 'family' ? (
+              <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить локальный профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
+                <button 
+                  onClick={() => void startLocalRegistration()} 
+                  disabled={allUsers.length >= 5 || inviteChecking}
+                  className="w-full py-6 bg-slate-900 border-2 border-dashed border-slate-800 rounded-[2.5rem] font-black text-slate-500 hover:text-indigo-300 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Обновить
+                  <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5) достигнут' : 'Добавить профиль'}
                 </button>
-              </div>
-            </header>
-
-            {cloudFamilyLoading && (
-              <div className="p-6 rounded-[2rem] bg-slate-900 border border-slate-800 text-slate-300 font-bold flex items-center gap-3">
-                <Loader2 className="w-5 h-5 animate-spin" /> Загружаю семью…
-              </div>
-            )}
-
-            {cloudFamilyError && (
-              <div className="p-6 rounded-[2rem] bg-rose-500/10 border border-rose-500/20 text-rose-200 font-bold">
-                {cloudFamilyError}
-              </div>
-            )}
-
-            {!cloudFamilyLoading && !cloudFamily && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-8 rounded-[2.5rem] bg-slate-950 border border-slate-800 text-left space-y-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-500">Создать семью</p>
-                  <input
-                    value={familyNameDraft}
-                    onChange={(e) => setFamilyNameDraft(e.target.value)}
-                    placeholder="Название семьи"
-                    className="w-full px-5 py-4 rounded-[1.5rem] bg-slate-900 border border-slate-800 text-slate-100 font-bold outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  />
-                  <button
-                    onClick={() => void createFamilyCloud().catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                    className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all"
-                  >
-                    Создать
-                  </button>
-                  <p className="text-xs text-slate-500 font-semibold">
-                    После создания сделайте “Приглашение” и отправьте код на другой телефон.
-                  </p>
-                </div>
-
-                <div className="p-8 rounded-[2.5rem] bg-slate-950 border border-slate-800 text-left space-y-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-500">Присоединиться</p>
-                  <input
-                    value={familyJoinCode}
-                    onChange={(e) => setFamilyJoinCode(e.target.value)}
-                    placeholder="Код приглашения"
-                    className="w-full px-5 py-4 rounded-[1.5rem] bg-slate-900 border border-slate-800 text-slate-100 font-bold outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  />
-                  <button
-                    onClick={() => void joinFamilyCloud().catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                    className="w-full py-5 bg-slate-900 border border-slate-800 rounded-[2rem] font-black text-lg text-slate-100 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
-                  >
-                    Войти в семью
-                  </button>
-                  <p className="text-xs text-slate-500 font-semibold">
-                    Введите код от владельца семьи. После входа у вас появится общий план и shopping list.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {!cloudFamilyLoading && cloudFamily && (
-              <div className="space-y-6">
-                <div className="p-8 rounded-[2.5rem] bg-slate-950 border border-slate-800 text-left">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Ваша семья</p>
-                      <h3 className="text-2xl font-black text-slate-100 mt-1">{cloudFamily?.name || 'Семья'}</h3>
-                      <p className="text-xs text-slate-500 font-semibold mt-1">
-                        Участников: {cloudFamilyMembers.length || 1}
-                      </p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        onClick={() => void makeInviteCode().catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                        className="px-6 py-4 bg-slate-900 border border-slate-800 rounded-[2rem] font-black text-sm text-slate-100 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
-                      >
-                        Создать приглашение
-                      </button>
-                      <button
-                        onClick={() => void generateFamilyMenuNow().catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                        className="px-6 py-4 bg-indigo-600 text-white rounded-[2rem] font-black text-sm shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all"
-                      >
-                        Сгенерировать семейное меню
-                      </button>
-                    </div>
-                  </div>
-
-                  {familyInviteCode && (
-                    <div className="mt-5 p-5 rounded-[2rem] bg-indigo-500/10 border border-indigo-500/20 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-indigo-200/80">Код приглашения</p>
-                        <p className="text-2xl font-black text-indigo-100 mt-1 tracking-widest">{familyInviteCode}</p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(familyInviteCode);
-                          } catch {}
-                        }}
-                        className="px-6 py-4 bg-slate-950 border border-slate-800 rounded-[2rem] font-black text-sm text-slate-100 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
-                      >
-                        Скопировать
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-8 rounded-[2.5rem] bg-slate-950 border border-slate-800 text-left space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">Участники</p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => void updateMyFamilyGoal('LOSS').catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                        className="px-4 py-2 rounded-full border border-slate-800 bg-slate-900 text-xs font-black text-slate-200 hover:border-emerald-500/30 hover:text-emerald-200 transition-all"
-                        title="Похудение"
-                      >
-                        Я: похудение
-                      </button>
-                      <button
-                        onClick={() => void updateMyFamilyGoal('MAINTAIN').catch((e) => setCloudFamilyError(e?.message || 'Ошибка'))}
-                        className="px-4 py-2 rounded-full border border-slate-800 bg-slate-900 text-xs font-black text-slate-200 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
-                        title="Удержание"
-                      >
-                        Я: удержание
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {cloudFamilyMembers.map((m: any, i: number) => (
-                      <div key={`${m.user_id}-${i}`} className="p-5 rounded-[2rem] bg-slate-900/40 border border-slate-800">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-black text-slate-100 break-all">{m.user_id}</p>
-                            <p className="text-xs text-slate-500 font-semibold mt-1">
-                              Роль: {m.role || 'member'} • Цель: {m.goal || '—'}
-                            </p>
-                          </div>
-                          <span className="text-[10px] px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-400 font-black tracking-widest uppercase">
-                            active
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 font-semibold">
-                    Советы: поставьте цели участникам (похудение/удержание), затем нажмите “Сгенерировать семейное меню”.
-                  </p>
-                </div>
-
-                <div className="p-8 rounded-[2.5rem] bg-slate-950 border border-slate-800 text-left">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Семейный список покупок</p>
-                      <p className="text-xs text-slate-500 font-semibold mt-1">Сумма по всем участникам на текущую неделю.</p>
-                    </div>
-                    <button
-                      onClick={() => void loadFamilyShopping()}
-                      className="px-5 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
-                    >
-                      Обновить список
-                    </button>
-                  </div>
-
-                  {familyShoppingLoading ? (
-                    <div className="mt-4 text-slate-400 font-bold flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Загружаю…</div>
-                  ) : familyShopping?.items?.length ? (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                      {familyShopping.items.slice(0, 60).map((it, idx) => (
-                        <div key={idx} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                          <span className="truncate">• {it.name}</span>
-                          <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm text-slate-500 font-semibold">
-                      Пока пусто. Нажмите “Сгенерировать семейное меню”.
-                    </p>
-                  )}
-                </div>
               </div>
             )}
           </div>
