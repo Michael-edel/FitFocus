@@ -412,6 +412,47 @@ function getWeekKey(d: Date): string {
   return `${date.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`;
 }
 
+function computeShoppingListFromWeeklyMenu(weeklyMenu: any): Array<{ name: string; amount?: number; unit?: string }> {
+  const days = weeklyMenu?.days;
+  if (!Array.isArray(days)) return [];
+
+  const acc = new Map<string, { name: string; amount: number; unit: string }>();
+
+  const addMatch = (rawName: string, amount: number, unit: string) => {
+    const name = rawName.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const key = `${name}|${unit}`;
+    const prev = acc.get(key);
+    if (prev) prev.amount += amount;
+    else acc.set(key, { name, amount, unit });
+  };
+
+  const scanText = (text: unknown) => {
+    if (typeof text !== 'string') return;
+    // Ищем все фрагменты вида "Куриное филе (180г)" или "Оливковое масло (15мл)"
+    const re = /([A-Za-zА-Яа-яЁё0-9\-\s\.]+?)\s*\((\d+(?:[\.,]\d+)?)\s*(г|мл)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const name = m[1];
+      const amount = Number(String(m[2]).replace(',', '.'));
+      const unit = m[3];
+      if (!Number.isFinite(amount)) continue;
+      addMatch(name, amount, unit);
+    }
+  };
+
+  for (const d of days) {
+    scanText(d?.breakfast);
+    scanText(d?.lunch);
+    scanText(d?.dinner);
+    scanText(d?.snack);
+  }
+
+  return Array.from(acc.values())
+    .sort((a, b) => b.amount - a.amount)
+    .map(i => ({ name: i.name, amount: Math.round(i.amount), unit: i.unit }));
+}
+
 function formatTime(tsIso: string): string {
   const d = new Date(tsIso);
   if (Number.isNaN(d.getTime())) return tsIso;
@@ -1209,7 +1250,20 @@ const openEditFood = (item: FoodEntry) => {
     return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
   }, [currentUser, foodDiary, habits, targets.calories]);
 
-  const forecastNextWeek = useMemo(() => {
+  
+const computedShoppingList = useMemo(() => {
+  return computeShoppingListFromWeeklyMenu(currentUser?.aiPlan?.weeklyMenu);
+}, [currentUser?.aiPlan?.weeklyMenu]);
+
+
+const shoppingToShow = useMemo(() => {
+  if (computedShoppingList.length) return computedShoppingList;
+  const raw = currentUser?.aiPlan?.weeklyMenu?.shoppingList;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((name: string) => ({ name }));
+}, [computedShoppingList, currentUser?.aiPlan?.weeklyMenu?.shoppingList]);
+
+const forecastNextWeek = useMemo(() => {
     if (!weekly || !currentUser) return 0;
     if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 7) / 7700;
     if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 7) / 7700;
@@ -1954,10 +2008,12 @@ const logWeight = useCallback(() => {
         return;
       }
     }
-
-
-    setAllUsers([newUser]);
-    await loginAsUser(newUser);
+      setAllUsers(prev => {
+        const next = [newUser, ...prev.filter(u => u.id !== newUser.id)].slice(0, MAX_LOCAL_PROFILES);
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        return next;
+      });
+await loginAsUser(newUser);
     setActiveTab('plan');
     setPlanIntroOpen(true);
   }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode]);
@@ -2736,7 +2792,11 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
              </div>
            </div>
          )}
-        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> {d.breakfast}</div><div><span className="text-slate-500 font-black">Обед:</span> {d.lunch}</div><div><span className="text-slate-500 font-black">Ужин:</span> {d.dinner}</div><div><span className="text-slate-500 font-black">Перекус:</span> {d.snack}</div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length ? (<div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">Список покупок</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">{currentUser.aiPlan.weeklyMenu.shoppingList.slice(0, 30).map((s, i) => (<div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>))}</div></div>) : null}</div>
+        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> {d.breakfast}</div><div><span className="text-slate-500 font-black">Обед:</span> {d.lunch}</div><div><span className="text-slate-500 font-black">Ужин:</span> {d.dinner}</div><div><span className="text-slate-500 font-black">Перекус:</span> {d.snack}</div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{shoppingToShow.length ? (<div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">Список покупок</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">{shoppingToShow.slice(0, 30).map((it, i) => (
+                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">
+                            • {it?.amount ? `${it.name} — ${it.amount} ${it.unit}` : it.name}
+                          </div>
+                        ))}</div></div>) : null}</div>
 
               {paywall.plan === 'family' && allUsers.length > 1 && (
                 <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
@@ -2780,7 +2840,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
                         {currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
-                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
+                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s?.amount ? `${s.name} — ${s.amount} ${s.unit}` : s.name}</div>
                         ))}
                       </div>
                     </div>
