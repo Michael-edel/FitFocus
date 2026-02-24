@@ -71,6 +71,7 @@ import { setDevPlanOverride } from './money';
 import { downloadShortHealthReportPdf, downloadDetailedHealthReportPdf } from './pdf';
 import { ensurePdfInterFont } from './pdf/font';
 import SettingsScreen from './SettingsScreen';
+import AdminScreen from './AdminScreen';
 import {
   applyBackupPayload,
   createBackupPayload,
@@ -150,98 +151,21 @@ function loadGoogleIdentityScript(): Promise<void> {
   });
 }
 
-function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "continue_with" }: { onAuthed: () => void; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
-  const hiddenBtnHostRef = React.useRef<HTMLDivElement | null>(null);
-  const onAuthedRef = React.useRef(onAuthed);
-  const renderedRef = React.useRef(false);
-
+function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?: string; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
+  // Why this approach:
+  // Google Identity Services now relies on FedCM in Chromium and is not supported/reliable in all browsers.
+  // Some users will have FedCM disabled by corporate policies, flags, privacy extensions, etc.
+  // That produces "identity-credentials-get" errors and lost sign-ins.
+  // To work for *all* clients with no browser tweaking, we use a backend-driven OAuth2 redirect flow.
   const [err, setErr] = React.useState<string | null>(null);
-
-  React.useEffect(() => { onAuthedRef.current = onAuthed; }, [onAuthed]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const clientId = getGoogleClientId();
-
-        // Load + init once (avoid "jumping" / re-rendering GIS UI)
-        if (renderedRef.current && (window as any).google?.accounts?.id) return;
-
-        setErr(null);
-
-        if (!clientId) {
-          setErr("Google Client ID не задан (VITE_GOOGLE_CLIENT_ID_LOCAL / VITE_GOOGLE_CLIENT_ID_PROD).");
-          return;
-        }
-
-        await loadGoogleIdentityScript();
-        if (cancelled) return;
-
-        const g = (window as any).google;
-        if (!g?.accounts?.id) {
-          setErr("Google Identity Services не инициализирован.");
-          return;
-        }
-
-        g.accounts.id.initialize({
-          client_id: clientId,
-          callback: async (resp: any) => {
-            try {
-              const r = await fetch("/api/auth/google", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ credential: resp?.credential }),
-              });
-              if (!r.ok) throw new Error(await r.text());
-              onAuthedRef.current();
-            } catch (e: any) {
-              console.error("Google auth failed", e);
-              setErr("Не удалось войти через Google. Проверь /api/auth/google и переменные.");
-            }
-          },
-        });
-
-        // Render the official GIS button OFFSCREEN once, then click it from our custom button.
-        if (hiddenBtnHostRef.current) {
-          hiddenBtnHostRef.current.innerHTML = "";
-          g.accounts.id.renderButton(hiddenBtnHostRef.current, {
-            type: "standard",
-            theme: "outline",
-            size,
-            shape: "pill",
-            text,
-            width,
-          });
-          renderedRef.current = true;
-        }
-      } catch (e: any) {
-        console.error(e);
-        setErr("Не удалось загрузить Google (GIS).");
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, []); // IMPORTANT: run once
 
   const handleClick = React.useCallback(() => {
     setErr(null);
-    const host = hiddenBtnHostRef.current;
-    const g = (window as any).google;
-    // Try clicking the hidden official button (opens the same popup flow)
-    const btn = host?.querySelector("div[role=button], button") as HTMLElement | null;
-    if (btn) {
-      btn.click();
-      return;
-    }
-    // Fallback: try One Tap prompt
-    if (g?.accounts?.id?.prompt) {
-      g.accounts.id.prompt();
-      return;
-    }
-    setErr("Google Identity Services ещё не загрузился. Подожди секунду и попробуй снова.");
-  }, []);
+    const params = new URLSearchParams();
+    if (inviteCode) params.set("invite", inviteCode);
+    params.set("redirect", window.location.origin);
+    window.location.href = `/api/auth/google/start?${params.toString()}`;
+  }, [inviteCode]);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -253,13 +177,6 @@ function GoogleSignInButton({ onAuthed, width = 320, size = "large", text = "con
         <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
         <span>Google профиль</span>
       </button>
-
-      {/* hidden host for the official GIS button (kept offscreen to prevent UI jumping) */}
-      <div
-        ref={hiddenBtnHostRef}
-        aria-hidden="true"
-        style={{ position: "absolute", left: -99999, top: -99999, width: 0, height: 0, overflow: "hidden" }}
-      />
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
@@ -281,6 +198,7 @@ const MAX_HISTORY_ITEMS = 500;
 const safeSetItem = (key: string, value: string) => {
   try {
     localStorage.setItem(key, value);
+    enqueueRemoteKVWrite(key, value);
   } catch (e) {
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
       console.warn('LocalStorage quota exceeded. Consider clearing old data.');
@@ -289,6 +207,36 @@ const safeSetItem = (key: string, value: string) => {
     }
   }
 };
+
+// --- Server-driven persistence (D1 remote) ---
+// We keep localStorage as a fast cache, but D1 is the source-of-truth.
+// Any key under fitfocus_data_* is mirrored to /api/state.
+type KVItem = { key: string; value: string };
+const __kvQueue: KVItem[] = [];
+let __kvTimer: number | null = null;
+
+function enqueueRemoteKVWrite(key: string, value: string) {
+  if (!key.startsWith('fitfocus_data_') && !key.startsWith('fitfocus_council_history_')) return;
+  __kvQueue.push({ key, value });
+
+  if (__kvTimer != null) return;
+  __kvTimer = window.setTimeout(async () => {
+    __kvTimer = null;
+    const batch = __kvQueue.splice(0, __kvQueue.length);
+    if (!batch.length) return;
+    try {
+      await fetch('/api/state', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: batch }),
+      });
+    } catch {
+      // ignore network errors; will retry on next write
+    }
+  }, 400);
+}
+
 
 // Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
 const evictLargeLocalStorage = () => {
@@ -643,7 +591,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                       className="text-[10px] px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition flex items-center gap-2"
                     >
                       <Trash2 size={14} />
-                      Запись
+                      Удалить
                     </button>
                   </div>
 
@@ -699,10 +647,18 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
+  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
+  const [requireInvite, setRequireInvite] = useState<boolean>(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteChecking, setInviteChecking] = useState<boolean>(false);
+
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
-  const [googleMe, setGoogleMe] = useState<null | { sub?: string; email?: string; name?: string; picture?: string }>(null);
+  const [googleMe, setGoogleMe] = useState<
+  null | { sub?: string; email?: string }
+>(null);
+  const isAdmin = !!googleMe?.roles?.includes('admin');
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -858,7 +814,7 @@ const App: React.FC = () => {
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
   // AI Council (Orchestrator v2)
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
@@ -871,7 +827,6 @@ const App: React.FC = () => {
   const councilScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [isScanning, setIsScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [newWeight, setNewWeight] = useState<string>('');
   
@@ -1070,6 +1025,7 @@ const openEditFood = (item: FoodEntry) => {
     activityLevel: ActivityLevel.MODERATELY_ACTIVE,
     goal: Goal.LOSS,
     targetWeight: 65,
+    dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
     plan: 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
@@ -1265,10 +1221,10 @@ const openEditFood = (item: FoodEntry) => {
     await ensurePdfInterFont(doc);
     doc.setFont("Inter", "normal");
     doc.setFontSize(18);
-    doc.text("FitFocus — AI Weekly Intelligence Report", 14, 20);
+    doc.text("FitFocus — Еженедельный AI-отчёт (WIS)", 14, 20);
     doc.setFontSize(12);
     doc.text(`Неделя: ${report.weekKey}`, 14, 30);
-    doc.text(`WIS Score: ${report.data.wis}/100`, 14, 36);
+    doc.text(`WIS (индекс недели): ${report.data.wis}/100`, 14, 36);
     autoTable(doc, {
       startY: 45,
       styles: { font: 'Inter' },
@@ -1364,16 +1320,72 @@ const openEditFood = (item: FoodEntry) => {
   }, [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useCallback(() => {
-    setCurrentUser(null);
-    setAuthState('auth_choice');
-    localStorage.removeItem('fitfocus_last_user_id');
-  }, []);
+  // Local logout + (if present) server session logout
+  void (async () => {
+    if (googleMe?.sub) {
+      try { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); } catch {}
+    }
+  })();
+
+  setGoogleMe(null);
+  setCurrentUser(null);
+  setAuthState('auth_choice');
+  localStorage.removeItem('fitfocus_last_user_id');
+}, [googleMe?.sub]);
+
+
+const deleteAccount = useCallback(async () => {
+  if (!googleMe?.sub) return;
+  const typed = (prompt('Чтобы удалить аккаунт, введите слово DELETE (латиницей).') || '').trim().toUpperCase();
+  if (typed !== 'DELETE') return;
+
+  try {
+    const r = await fetch('/api/account/delete', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'DELETE' }),
+    });
+
+    if (!r.ok) {
+      const j = await r.json().catch(() => null);
+      alert(j?.error ? `Ошибка удаления: ${j.error}` : 'Не удалось удалить аккаунт.');
+      return;
+    }
+  } catch {
+    alert('Не удалось удалить аккаунт (network).');
+    return;
+  }
+
+  // After delete the cookie is cleared server-side; also clear UI state
+  logout();
+}, [googleMe?.sub, logout]);
 
   const loginAsUser = useCallback(async (user: UserProfile) => {
     const userWithResetUsage = resetUsageIfNewTime(user);
+
+    // Server-driven hydration for cross-device: load KV blobs from D1
     const prefix = `fitfocus_data_${user.id}_`;
-    const storedDiaryRaw: FoodItem[] = JSON.parse(localStorage.getItem(prefix + 'diary') || '[]');
-    // Migration: keep only thumbnails in localStorage to avoid quota issues
+    let kv: Record<string, string> = {};
+    try {
+      const r = await fetch(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
+      if (r.ok) {
+        const data = await r.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        for (const it of items) {
+          if (it?.key && typeof it.value === 'string') kv[it.key] = it.value;
+        }
+      }
+    } catch {}
+
+    const readKV = <T,>(suffix: string, fallback: T): T => {
+      const raw = kv[prefix + suffix];
+      if (!raw) return fallback;
+      try { return JSON.parse(raw) as T; } catch { return fallback; }
+    };
+
+    const storedDiaryRaw: FoodItem[] = readKV('diary', []);
+    // Keep only thumbnails in memory to avoid huge payloads
     const storedDiary: FoodItem[] = (storedDiaryRaw || []).map((it: any) => {
       if (!it || typeof it !== 'object') return it;
       const copy: any = { ...it };
@@ -1381,28 +1393,43 @@ const openEditFood = (item: FoodEntry) => {
       if (typeof copy.photoThumb === 'string' && copy.photoThumb.length > 120_000) delete copy.photoThumb;
       return copy;
     });
-    if (JSON.stringify(storedDiaryRaw) !== JSON.stringify(storedDiary)) {
-      try {
-        safeSetItem(prefix + 'diary', JSON.stringify(storedDiary));
-      } catch {}
-    }
-    const storedHabits: UserHabit[] = JSON.parse(localStorage.getItem(prefix + 'habits') || JSON.stringify(INITIAL_HABITS));
+
+    const storedHabits: UserHabit[] = readKV('habits', INITIAL_HABITS);
     const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+
     const userWithOffsets: UserProfile = { 
       ...userWithTask, 
       lossDeficit: userWithTask.lossDeficit ?? DEFAULT_DEFICIT, 
       gainSurplus: userWithTask.gainSurplus ?? DEFAULT_SURPLUS 
     };
+
     setCurrentUser(userWithOffsets);
-    localStorage.setItem('fitfocus_last_user_id', user.id);
     setFoodDiary(storedDiary);
     setHabits(storedHabits);
-    setFoodHistory(JSON.parse(localStorage.getItem(prefix + 'history') || '[]'));
-    setFoodFavorites(JSON.parse(localStorage.getItem(prefix + 'favorites') || '[]'));
-    setCoachCard(JSON.parse(localStorage.getItem(prefix + 'last_coach_card') || 'null'));
+    setFoodHistory(readKV('history', []));
+    setFoodFavorites(readKV('favorites', []));
+    setCoachCard(readKV('last_coach_card', null));
     setCurrentLesson(pickLessonForToday(userWithTask));
     setAuthState('app');
   }, [resetUsageIfNewTime]);
+
+
+  // Server-driven: persist profile changes to D1 (debounced)
+  const profileSaveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!currentUser) return;
+    if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
+    profileSaveTimer.current = window.setTimeout(async () => {
+      try {
+        await fetch('/api/profile', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentUser),
+        });
+      } catch {}
+    }, 500);
+  }, [currentUser]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
@@ -1597,65 +1624,99 @@ const openEditFood = (item: FoodEntry) => {
     const serverUser = me?.user || null;
     setGoogleMe(serverUser);
 
-    // 2) Грузим локальные профили
-    const saved = localStorage.getItem('fitfocus_all_users');
-    const lastId = localStorage.getItem('fitfocus_last_user_id');
+    // 2) Server-driven: load profile from D1 (independent of device)
+    if (serverUser?.sub) {
+      try {
+        const pr = await fetch('/api/profile', { credentials: 'include' });
+        if (pr.ok) {
+          const pj = await pr.json();
+          const profile = pj?.profile || null;
 
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const migrated = Array.isArray(parsed)
-        ? parsed.map((u: any) => ({
-            ...u,
-            lossDeficit: u.lossDeficit ?? DEFAULT_DEFICIT,
-            gainSurplus: u.gainSurplus ?? DEFAULT_SURPLUS,
-          }))
-        : [];
-      const changed = migrated.some(
-        (u: any, i: number) =>
-          (parsed[i]?.lossDeficit == null && u.lossDeficit != null) ||
-          (parsed[i]?.gainSurplus == null && u.gainSurplus != null)
-      );
-      if (changed) safeSetItem('fitfocus_all_users', JSON.stringify(migrated));
-      setAllUsers(migrated);
+          if (profile) {
+            setAllUsers([profile]);
+            void loginAsUser(profile);
+            return;
+          }
 
-      // ✅ Если есть Google-сессия — пытаемся сматчить профиль по email/sub
-      if (serverUser?.email || serverUser?.sub) {
-        const matched = migrated.find(
-          (u: any) =>
-            (serverUser?.sub && u.googleSub === serverUser.sub) ||
-            (serverUser?.email && u.email === serverUser.email)
-        );
-        if (matched) {
-          void loginAsUser(matched);
+          // profile missing -> go onboarding
+          setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
+          setAuthState('register');
           return;
         }
+      } catch {}
 
-        // профиля нет → идём в регистрацию и подставляем имя
-        setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-        setAuthState('register');
-        return;
-      }
-
-      // фоллбек: старое поведение
-      const lastUser = migrated.find((u: any) => u.id === lastId);
-      if (lastUser) void loginAsUser(lastUser);
-      else setAuthState('auth_choice');
-      return;
-    }
-
-    // Нет сохранённых профилей
-    if (serverUser?.email || serverUser?.sub) {
+      // if profile fetch failed, still show register with name
       setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
       setAuthState('register');
       return;
     }
 
-    setAuthState('register');
+// No server session -> restore local profiles or show profile chooser
+try {
+  const raw = localStorage.getItem('fitfocus_all_users');
+  const all = raw ? (JSON.parse(raw) as any[]) : [];
+  const lastId = localStorage.getItem('fitfocus_last_user_id');
+  if (Array.isArray(all) && all.length > 0) {
+    setAllUsers(all);
+    const last = lastId ? all.find((u) => String(u?.id) === String(lastId)) : null;
+    if (last) {
+      void loginAsUser(last);
+      return;
+    }
+  }
+} catch {}
+
+setAuthState('auth_choice');
   }, [loginAsUser]);
 
   useEffect(() => {
     void bootstrapAuth();
   }, [bootstrapAuth]);
+
+  // Load public env flags (no auth)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/env', { credentials: 'include' });
+        if (!r.ok) return;
+        const j = await r.json().catch(() => null);
+        if (j && typeof j.requireInvite === 'boolean') setRequireInvite(!!j.requireInvite);
+      } catch {}
+    })();
+  }, []);
+
+  const ensureInviteOk = useCallback(async (): Promise<boolean> => {
+    if (!requireInvite) return true;
+    const code = String(inviteCode || '').trim();
+    if (!code) {
+      setInviteError('Введите код приглашения для доступа к бете.');
+      return false;
+    }
+    setInviteChecking(true);
+    setInviteError(null);
+    try {
+      const r = await fetch(`/api/invite/validate?code=${encodeURIComponent(code)}`, { credentials: 'include' });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.valid) {
+        setInviteError('Код приглашения недействителен или уже использован.');
+        return false;
+      }
+      return true;
+    } catch {
+      setInviteError('Не удалось проверить код приглашения. Проверьте сервер.');
+      return false;
+    } finally {
+      setInviteChecking(false);
+    }
+  }, [requireInvite, inviteCode]);
+
+  const startLocalRegistration = useCallback(async () => {
+    const ok = await ensureInviteOk();
+    if (!ok) return;
+    setAuthState('register');
+  }, [ensureInviteOk]);
+
+
 
 
   const processPhotoFiles = useCallback(async (files: File[]) => {
@@ -1664,7 +1725,6 @@ const openEditFood = (item: FoodEntry) => {
     // Paywall check once per batch
     if (!checkLimit('aiFoodPhotoPerDay')) return paywall.openPaywall();
 
-    setScanError(null);
     setIsScanning(true);
     try {
       for (const file of files) {
@@ -1683,9 +1743,8 @@ const openEditFood = (item: FoodEntry) => {
         if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight });
         incrementUsage('aiFoodPhotoCount');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setScanError(err?.message || 'Не удалось распознать фото. Попробуйте другое изображение или введите вручную.');
     }
     finally {
       setIsScanning(false);
@@ -1856,15 +1915,52 @@ const logWeight = useCallback(() => {
       const aiPlan = await generatePersonalPlan(newUser);
       newUser = { ...newUser, aiPlan };
     } catch (e) { setPlanError("Не удалось создать AI-план. Используем базовый план."); }
-    setAllUsers(prev => { 
-      const next = [...prev, newUser]; 
-      safeSetItem('fitfocus_all_users', JSON.stringify(next)); 
-      return next; 
-    });
+    // Server-driven: persist profile to D1
+    try {
+      const r = await fetch('/api/profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      if (r.ok) {
+        const pj = await r.json();
+        if (pj?.profile) newUser = pj.profile;
+      }
+    } catch {}
+
+
+    // Closed beta: redeem invite for local profiles as well (bind to local user id)
+    if (requireInvite) {
+      const code = String(inviteCode || '').trim();
+      if (!code) {
+        setPlanError('Требуется код приглашения.');
+        return;
+      }
+      try {
+        const rr = await fetch('/api/invite/redeem', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, userId: newUser.id }),
+        });
+        const rj = await rr.json().catch(() => null);
+        if (!rr.ok || rj?.ok !== true) {
+          setPlanError(rj?.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
+          return;
+        }
+      } catch {
+        setPlanError('Не удалось связаться с сервером для проверки приглашения.');
+        return;
+      }
+    }
+
+
+    setAllUsers([newUser]);
     await loginAsUser(newUser);
     setActiveTab('plan');
     setPlanIntroOpen(true);
-  }, [regData, loginAsUser, regNameValid, allUsers.length]);
+  }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode]);
 
   const handleActivateWithTransition = useCallback(() => {
     if (!regNameValid || isActivatingPlan) return;
@@ -2002,10 +2098,10 @@ const logWeight = useCallback(() => {
             <button
               type="button"
               className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
-              title="Удалить профиль"
+              title="Удалить локальный профиль"
               onClick={(e) => {
                 e.stopPropagation();
-                const ok = confirm(`Удалить профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
+                const ok = confirm(`Удалить локальный профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
                 if (ok) deleteUserProfile(user.id);
               }}
             >
@@ -2016,17 +2112,37 @@ const logWeight = useCallback(() => {
           </div>
         ))}
 
-        <div className="grid grid-cols-2 gap-3">
+        
+        <div className="space-y-2 text-left">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
+          <input
+            value={inviteCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInviteCode(v);
+              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
+              setInviteError(null);
+            }}
+            placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
+            className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
+          />
+          {requireInvite ? (
+            <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
+          ) : null}
+          {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
+        </div>
+
+<div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setAuthState('register')}
-            disabled={allUsers.length >= 5}
+            onClick={() => void startLocalRegistration()}
+            disabled={allUsers.length >= 5 || inviteChecking}
             className="flex items-center justify-center gap-2 p-5 border-2 border-dashed border-slate-800 rounded-[2rem] text-slate-500 hover:text-indigo-400 hover:border-indigo-900 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5)' : 'Создать профиль'}
           </button>
 
           <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
-            <GoogleSignInButton onAuthed={() => void bootstrapAuth()} width={180} size="medium" text="continue_with" />
+            <GoogleSignInButton onAuthed={() => void bootstrapAuth()} inviteCode={inviteCode} width={180} size="medium" text="continue_with" />
           </div>
         </div>
       </div>
@@ -2270,6 +2386,106 @@ if (authState === 'register') return (
                     </div>
                   )}
                 </div>
+
+<div className="space-y-2 mt-6">
+  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Аллергены и непереносимость</label>
+  <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+    <div className="text-xs text-slate-400 font-semibold">
+      Эти ограничения будут учитываться при генерации недельного меню (в том числе общего меню на семью).
+    </div>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      {[
+        "орехи",
+        "молоко/лактоза",
+        "яйца",
+        "рыба/морепродукты",
+        "глютен",
+        "соя",
+        "арахис",
+        "кунжут"
+      ].map(tag => {
+        const selected = (regData.dietary?.allergens || []).includes(tag);
+        return (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => {
+              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+              const next = selected
+                ? prev.allergens.filter(x => x !== tag)
+                : [...prev.allergens, tag];
+              setRegData(r => ({ ...r, dietary: { ...prev, allergens: next } }));
+            }}
+            className={clsx(
+              "px-3 py-2 rounded-[1rem] border text-xs font-black transition-all text-left",
+              selected ? "bg-rose-500/10 border-rose-400/40 text-rose-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
+            )}
+          >
+            {tag}
+          </button>
+        );
+      })}
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Что избегать (непереносимость / предпочтение)</label>
+        <input
+          type="text"
+          value={(regData.dietary?.intolerances || []).join(", ")}
+          onChange={(e) => {
+            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
+            setRegData(r => ({ ...r, dietary: { ...prev, intolerances: next } }));
+          }}
+          placeholder="например: лук, чеснок, острое"
+          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Не ем совсем</label>
+        <input
+          type="text"
+          value={(regData.dietary?.excludedFoods || []).join(", ")}
+          onChange={(e) => {
+            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
+            setRegData(r => ({ ...r, dietary: { ...prev, excludedFoods: next } }));
+          }}
+          placeholder="например: свинина, грибы"
+          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+        />
+      </div>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Строгость</label>
+      {[
+        { id: "strict", label: "Строго" },
+        { id: "avoid", label: "По возможности" }
+      ].map(opt => {
+        const selected = (regData.dietary?.severity || "strict") === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => {
+              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
+              setRegData(r => ({ ...r, dietary: { ...prev, severity: opt.id as any } }));
+            }}
+            className={clsx(
+              "px-3 py-1.5 rounded-full border text-[10px] font-black transition-all",
+              selected ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+</div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Тариф</label>
                   <div className="grid grid-cols-1 gap-1.5">
@@ -2316,20 +2532,6 @@ if (authState === 'register') return (
           <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
         </div>
       )}
-      {scanError && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[210] w-[min(92vw,520px)]">
-          <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 p-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-widest text-amber-300">AI анализ</p>
-                <p className="mt-1 text-sm font-bold text-amber-100">{scanError}</p>
-                <p className="mt-2 text-xs font-semibold text-amber-200/80">Совет: сфотографируйте блюдо крупнее, при хорошем свете, без лишних предметов в кадре.</p>
-              </div>
-              <button onClick={() => setScanError(null)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-black text-amber-200 border border-amber-500/30 hover:bg-amber-500/10">OK</button>
-            </div>
-          </div>
-        </div>
-      )}
       {paywall.isPaywallOpen && (
         <PlansScreen currentPlan={currentUser?.plan || 'free'} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
       )}
@@ -2355,7 +2557,27 @@ if (authState === 'register') return (
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              
+        <div className="space-y-2 text-left">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
+          <input
+            value={inviteCode}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInviteCode(v);
+              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
+              setInviteError(null);
+            }}
+            placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
+            className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
+          />
+          {requireInvite ? (
+            <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
+          ) : null}
+          {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
+        </div>
+
+<div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-sm text-slate-300 mb-1">Приём пищи</div>
                   <select
@@ -2454,7 +2676,7 @@ if (authState === 'register') return (
             </div>
           </div>
         </div>
-        {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
+        {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
         ))}
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
@@ -2553,7 +2775,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   ) : (
                     <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
                   )}
-                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length ? (
+                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length && (
                     <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
@@ -2562,7 +2784,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                         ))}
                       </div>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               )}
 
@@ -2578,7 +2800,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
     </div></div></header>
       <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold">Вы еще ничего не ели сегодня</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
-        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
+        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
         {activeTab === 'family' && (
           <div className="max-w-4xl mx-auto space-y-10 py-10 animate-in fade-in duration-700">
@@ -2587,10 +2809,10 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить локальный профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
                 <button 
-                  onClick={() => setAuthState('register')} 
-                  disabled={allUsers.length >= 5}
+                  onClick={() => void startLocalRegistration()} 
+                  disabled={allUsers.length >= 5 || inviteChecking}
                   className="w-full py-6 bg-slate-900 border-2 border-dashed border-slate-800 rounded-[2.5rem] font-black text-slate-500 hover:text-indigo-300 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={20} /> {allUsers.length >= 5 ? 'Лимит профилей (5) достигнут' : 'Добавить профиль'}
@@ -2607,7 +2829,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                 <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
-              <p className="text-slate-400">Параллельный анализ от 2 экспертов + Peer Review + синтез.</p>
+              <p className="text-slate-400">Параллельный анализ от 4 экспертов + независимая проверка + синтез.</p>
             </header>
 
             <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
@@ -2661,7 +2883,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                           {!isUser && score !== null && (
                             <div className="mb-4">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Chairman Synthesis</div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Синтез (итог)</div>
                                 <div className={clsx(
                                   'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
                                   score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
@@ -2726,20 +2948,16 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                             <BrainCircuit size={14} /> Совет обсуждает…
                           </div>
                           <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Router'
-                              : councilStage === 'experts' ? 'Experts'
-                              : councilStage === 'review' ? 'Peer Review'
-                              : councilStage === 'chairman' ? 'Chairman'
-                              : '…'}
+                            {councilStage === 'router' ? 'Маршрутизация' : councilStage === 'experts' ? 'Эксперты' : councilStage === 'review' ? 'Проверка' : councilStage === 'chairman' ? 'Синтез' : '…'}
                           </span>
                         </div>
 
                         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
                           {[
-                            { id: 'router', label: 'Router' },
+                            { id: 'router', label: 'Маршрут' },
                             { id: 'experts', label: 'Эксперты' },
-                            { id: 'review', label: 'Review' },
-                            { id: 'chairman', label: 'Synthesis' },
+                            { id: 'review', label: 'Проверка' },
+                            { id: 'chairman', label: 'Синтез' },
                           ].map((s) => {
                             const order = ['router','experts','review','chairman'] as const;
                             const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
@@ -2861,10 +3079,18 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
 
 {activeTab === 'pro' && (<div className="max-w-4xl mx-auto space-y-12 py-10 animate-in zoom-in duration-700"><div className="text-center space-y-6"><div className="w-28 h-28 bg-gradient-to-br from-amber-400 to-orange-600 rounded-[3rem] flex items-center justify-center text-white mx-auto shadow-[0_20px_50px_rgba(245,158,11,0.2)]"><Crown size={56} /></div><h1 className="text-5xl font-black text-slate-50">FitFocus Pro</h1><p className="text-slate-400 text-xl font-medium">Все, что нужно для быстрого и здорового результата</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6">{[{ title: "Безлимитный AI Анализ", desc: "Узнайте КБЖУ любого блюда за секунду по фото" }, { title: "Персональный Коучинг", desc: "Ежедневные советы на основе ваших данных" }, { title: "Пошаговые рецепты", desc: "AI составит рецепт любого блюда прямо по вашему фото" }, { title: "Экспорт отчетов", desc: "PDF-выгрузка для врача или фитнес-тренера" }].map((f, i) => (<div key={i} className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 flex items-center gap-8 shadow-sm group hover:border-indigo-500/20 transition-all text-left"><div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner shrink-0"><CheckCircle size={32} /></div><div><h4 className="text-xl font-black text-slate-100 mb-1">{f.title}</h4><p className="text-slate-500 font-medium">{f.desc}</p></div></div>))}</div><button onClick={paywall.openPaywall} className="w-full py-8 bg-indigo-600 text-white rounded-[3rem] font-black text-2xl shadow-[0_20px_50px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all hover:-translate-y-1 active:scale-95">Выбрать тарифный план</button></div>)}
         {activeTab === 'course' && (<div className="space-y-10 animate-in fade-in duration-700"><header className="flex items-center justify-between text-left"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Обучение</h1><p className="text-slate-400 font-medium">Ваш навигатор в мире нутрициологии</p></div><div className="flex items-center gap-6"><div className="text-right"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Пройдено</p><p className="text-2xl font-black text-slate-100 tabular-nums">{currentUser?.courseProgress?.completedLessonIds.length || 0} <span className="text-sm text-slate-600">/ {COURSE_LIBRARY.length}</span></p></div></div></header><div className="space-y-12">{[1, 2, 3, 4].map(weekNum => (<div key={weekNum} className="space-y-6"><div className="flex items-center gap-6"><h2 className="text-2xl font-black text-slate-200">Неделя {weekNum}</h2><div className="h-1 bg-slate-800 flex-1 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${(COURSE_LIBRARY.filter(l => l.week === weekNum && currentUser?.courseProgress?.completedLessonIds.includes(l.id)).length / COURSE_LIBRARY.filter(l => l.week === weekNum).length) * 100}%` }} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">{COURSE_LIBRARY.filter(l => l.week === weekNum).map(lesson => { const done = currentUser?.courseProgress?.completedLessonIds.includes(lesson.id); return (<button key={lesson.id} onClick={() => { setCurrentLesson(lesson); setIsLessonViewOpen(true); }} className={`p-8 rounded-[2.5rem] text-left border transition-all relative group ${done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800 shadow-xl hover:border-indigo-500/30'}`}>{done && <CheckCircle size={24} className="absolute top-8 right-8 text-emerald-500" />}<span className={`text-[10px] font-black uppercase tracking-widest block mb-4 ${done ? 'text-emerald-500' : 'text-slate-600'}`}>Урок {lesson.id.split('_')[0].replace('l','')}</span><h4 className={`text-xl font-black leading-tight mb-2 ${done ? 'text-emerald-100' : 'text-slate-100'}`}>{lesson.title}</h4><p className={`text-xs font-bold tabular-nums ${done ? 'text-emerald-500/60' : 'text-slate-500'}`}>{Math.ceil(lesson.readTimeSec/60)} минут чтения</p></button>); })}</div></div>))}</div></div>)}
-        {activeTab === 'settings' && (
+        
+        {activeTab === 'admin' && isAdmin && (
+          <AdminScreen />
+        )}
+
+{activeTab === 'settings' && (
           <SettingsScreen
             settings={settings}
             onChange={setSettings}
+            serverSession={!!googleMe?.sub}
+            onServerLogout={logout}
+            onDeleteAccount={deleteAccount}
             user={currentUser}
             onChangeUser={(u) => u && persistUser(u)}
             onExportBackup={onExportBackup}

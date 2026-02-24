@@ -71,12 +71,20 @@ export type WeeklyMenuDay = {
   snack: string;
 };
 
+export type ShoppingListItem = { name: string; grams: number };
+
 export type WeeklyMenu = {
   days: WeeklyMenuDay[];
+  /** legacy текстовый список */
   shoppingList: string[];
+  /** новый агрегированный список (в граммах) */
+  shoppingListItems?: ShoppingListItem[];
+  weekStart?: string; // YYYY-MM-DD
 };
 
 export type FavoriteRecipe = {
+  allergens?: string[];
+  intolerances?: string[];
   id: string;
   title: string;
   createdAt: string; // ISO
@@ -387,3 +395,12 @@ export interface CouncilResponse {
 
 // PRO photo analysis meta
 export type AnalysisMeta = { confidence: number; compressed: boolean; enhancedRun: boolean; reasons?: string[] };
+export type DietaryRestrictions = {
+  allergens: string[];        // аллергены (строгий запрет)
+  intolerances: string[];     // непереносимость / избегать
+  excludedFoods: string[];    // не ем / исключить
+  severity: "strict" | "avoid";
+  notes?: string;
+};
+
+

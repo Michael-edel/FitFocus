@@ -30,3 +30,9 @@ Remove-Item .\README_PATCH.txt
 .wrangler
 fitfocus.zip
 ui.zip
+*.zip
+
+
+functions/api/debug/
+wrangler.toml
+

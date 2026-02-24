@@ -1,3 +1,4 @@
+import { json } from "../_lib/auth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -47,17 +48,85 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     };
 
     const now = Math.floor(Date.now() / 1000);
+if (!env.DB) return json({ error: "Server missing DB binding" }, 500);
+
+const sid = crypto.randomUUID();
+const ttl = 60 * 60 * 24 * 30; // 30 days
+const expiresAt = now + ttl;
+
+// Upsert user (minimal) so we have a record for exports/admin later.
+await env.DB.prepare(
+  "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET email=excluded.email"
+)
+  .bind(user.sub, user.email, Date.now())
+  .run();
+
+// Closed beta (invite codes)
+const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
+if (requireInvite) {
+  const inviteCode = String(body?.inviteCode || "").trim();
+  if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  // atomic consume: only if not revoked/expired and has remaining uses
+  const upd = await env.DB.prepare(
+    `UPDATE invite_codes
+     SET uses = uses + 1
+     WHERE code = ?
+       AND revoked = 0
+       AND (expires_at IS NULL OR expires_at > ?)
+       AND uses < COALESCE(max_uses, 1)`
+  )
+    .bind(inviteCode, nowSec)
+    .run();
+
+  if (!upd?.changes) {
+    return json({ error: "INVITE_INVALID" }, 403);
+  }
+
+  // record redemption (best-effort)
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS invite_redemptions (code TEXT, user_id TEXT, redeemed_at INTEGER NOT NULL, PRIMARY KEY(code, user_id))"
+  ).run();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
+  )
+    .bind(inviteCode, user.sub, nowSec)
+    .run();
+}
+
+
+// Optional: auto-promote admins/supports by email (enterprise convenience)
+const adminEmails = String((env as any).ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+if (adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
+  await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
+}
+// Create server-tracked session (enterprise layer)
+const ua = request.headers.get("user-agent") || "";
+const ip =
+  request.headers.get("cf-connecting-ip") ||
+  request.headers.get("x-forwarded-for") ||
+  request.headers.get("x-real-ip") ||
+  "";
+
+await env.DB.prepare(
+  "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
+)
+  .bind(sid, user.sub, now, expiresAt, ua.slice(0, 500), String(ip).slice(0, 100))
+  .run();
+
+
     const session = await signSessionJwt(
       {
-        v: 1,
+        v: 2,
         sub: user.sub,
+        sid,
         email: user.email,
         name: user.name,
         picture: user.picture,
         iat: now,
       },
-      env.AUTH_JWT_SECRET,
-      60 * 60 * 24 * 30 // 30 days
+      env.AUTH_JWT_SECRET,      ttl
     );
 
     const headers = new Headers();
@@ -70,7 +139,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
         secure: isHttps,
         sameSite: "Lax",
         path: "/",
-        maxAge: 60 * 60 * 24 * 30,
+                maxAge: ttl,
       })
     );
 
@@ -82,6 +151,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
 type Env = {
   AUTH_JWT_SECRET: string;
+  DB: any;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_ID_LOCAL?: string;
   GOOGLE_CLIENT_ID_PROD?: string;
@@ -90,11 +160,6 @@ type Env = {
   VITE_GOOGLE_CLIENT_ID_PROD?: string;
 };
 
-function json(data: any, status = 200, headers?: Headers) {
-  const h = headers ? new Headers(headers) : new Headers();
-  h.set("Content-Type", "application/json; charset=utf-8");
-  return new Response(JSON.stringify(data), { status, headers: h });
-}
 
 function cookieSerialize(
   name: string,

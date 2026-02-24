@@ -32,11 +32,30 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 async function callAiProxy(model: string, contents: any, feature: string, config?: any) {
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
+  // ✅ Глобальная языковая политика продукта
+  // Gemini часто "уходит" в английский на названиях блюд/ингредиентов (особенно vision).
+  // Поэтому добавляем жёсткую инструкцию в начало каждого запроса.
+  const RU_POLICY =
+    "ВАЖНО: отвечай строго на русском языке. " +
+    "Все названия блюд, продуктов и ингредиентов — только на русском (без латиницы). " +
+    "Единицы: граммы (г), миллилитры (мл), килокалории (ккал). " +
+    "Если возвращаешь JSON — все строковые значения тоже на русском.";
+
   // ✅ Нормализуем contents (на всякий случай) — текст всегда Content[]
   if (typeof contents === "string") {
-    contents = [{ role: "user", parts: [{ text: contents }] }];
+    contents = [{ role: "user", parts: [{ text: `${RU_POLICY}\n\n${contents}` }] }];
   } else if (contents && !Array.isArray(contents) && Array.isArray((contents as any).parts)) {
-    contents = [contents];
+    // Один Content (часто для vision). Подмешиваем RU_POLICY первой текстовой частью.
+    const c: any = contents;
+    const parts = Array.isArray(c.parts) ? [...c.parts] : [];
+    parts.unshift({ text: RU_POLICY });
+    contents = [{ ...c, role: c.role || "user", parts }];
+  } else if (Array.isArray(contents)) {
+    // Content[]
+    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }, ...contents];
+  } else {
+    // Непредвиденный формат — всё равно обеспечиваем инструкцию
+    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }];
   }
 
   // ✅ Gemini не принимает поле `config` — прокидываем как `generationConfig`
@@ -102,72 +121,6 @@ function extractTextFromGemini(data: any): string {
 
   if (!out.length && typeof data?.output_text === "string") return data.output_text;
   return out.join("\n").trim();
-}
-
-// ---------------------------
-// B2C-hardening helpers
-// ---------------------------
-
-/**
- * Gemini иногда возвращает JSON внутри markdown/текста.
- * Для B2C нельзя падать на JSON.parse(text) — сначала извлекаем JSON-объект/массив.
- */
-function extractJsonString(raw: string): string {
-  const text = String(raw || "").trim();
-  if (!text) throw new Error("AI вернул пустой ответ");
-
-  // Remove common markdown fences
-  const unfenced = text
-    .replace(/^\s*```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
-
-  // Prefer JSON object/array boundaries
-  const firstObj = unfenced.indexOf("{");
-  const firstArr = unfenced.indexOf("[");
-  let start = -1;
-  let end = -1;
-
-  if (firstObj === -1 && firstArr === -1) {
-    throw new Error("AI не вернул JSON. Попробуйте ещё раз.");
-  }
-
-  if (firstArr !== -1 && (firstObj === -1 || firstArr < firstObj)) {
-    start = firstArr;
-    end = unfenced.lastIndexOf("]");
-  } else {
-    start = firstObj;
-    end = unfenced.lastIndexOf("}");
-  }
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("AI вернул повреждённый JSON. Попробуйте ещё раз.");
-  }
-  return unfenced.slice(start, end + 1).trim();
-}
-
-function safeParseAiJson<T = any>(raw: string): T {
-  const jsonStr = extractJsonString(raw);
-  try {
-    return JSON.parse(jsonStr) as T;
-  } catch {
-    throw new Error("AI вернул невалидный JSON. Попробуйте ещё раз.");
-  }
-}
-
-function isNonEmptyString(x: any): x is string {
-  return typeof x === "string" && x.trim().length > 0;
-}
-
-function normalizePaywallMessage(msg: string) {
-  const m = String(msg || "");
-  if (m.toUpperCase().includes("PAYWALL") || m.toLowerCase().includes("free limit") || m.includes("402")) {
-    return "Лимит AI на сегодня исчерпан. Попробуйте завтра или включите PRO.";
-  }
-  if (m.includes("429") || m.toLowerCase().includes("cooldown") || m.toLowerCase().includes("rate")) {
-    return "Слишком много запросов. Подождите пару секунд и попробуйте снова.";
-  }
-  return m;
 }
 
 
@@ -348,51 +301,49 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
           required: ["day", "breakfast", "lunch", "dinner", "snack"]
         }
       },
-      shoppingList: { type: "ARRAY", items: { type: "STRING" } }
+      shoppingList: { type: "ARRAY", items: { type: "STRING" } },
+      shoppingListItems: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            grams: { type: "NUMBER" }
+          },
+          required: ["name", "grams"]
+        }
+      }
     },
-    required: ["days", "shoppingList"]
+    required: ["days", "shoppingList", "shoppingListItems"]
   } as const;
 
   const prompt = `Составь простое меню на 7 дней для пользователя.
 Пользователь: ${user.name}, пол: ${user.gender}, возраст: ${user.age}, рост: ${user.height} см, вес: ${user.weight} кг, цель: ${user.goal}.
 Дневные KPI: ${plan.dailyKpi.calories} ккал, Б ${plan.dailyKpi.protein} г, Ж ${plan.dailyKpi.fat} г, У ${plan.dailyKpi.carbs} г.
-Ограничения/исключения (если есть): ${user.exclusions || "нет"}.
+Ограничения (если есть):
+- Аллергены (строго): ${(user.dietary?.allergens || []).join(', ') || 'нет'}
+- Непереносимость/избегать: ${(user.dietary?.intolerances || []).join(', ') || 'нет'}
+- Не ем совсем: ${(user.dietary?.excludedFoods || []).join(', ') || (user.exclusions || 'нет')}
+- Строгость: ${user.dietary?.severity || 'strict'}.
 
 Требования:
 - Верни СТРОГО валидный JSON по schema (без текста, без markdown).
 - 7 дней в массиве days, порядок: Понедельник..Воскресенье.
 - Блюда должны быть простые, из доступных продуктов, повторы допустимы.
 - Порции в описании коротко (пример: "курица 150г + гречка 80г + салат").
-- shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.`;
+- shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.
+- shoppingListItems: агрегированный список покупок с весом в граммах на неделю. Формат: [{name, grams}]. Названия строго на русском.`;
 
-  const call = async (p: string) => {
-    const r = await callAiProxy("gemini-2.5-flash", p, "weekly_menu", {
-      responseMimeType: "application/json",
-      responseSchema: schema
-    });
-    return r;
-  };
+  const res = await callAiProxy("gemini-2.5-flash", prompt, "weekly_menu", {
+    responseMimeType: "application/json",
+    responseSchema: schema
+  });
 
-  let obj: any;
-  try {
-    const res = await call(prompt);
-    obj = safeParseAiJson(res.text || "{}");
-  } catch (e: any) {
-    // One repair retry (B2C): ask to return ONLY JSON.
-    const repair = `${prompt}\n\nВАЖНО: Верни ТОЛЬКО валидный JSON (без пояснений, без markdown, без \`\`\`json). Если есть сомнения — всё равно заполни поля, не оставляй пустыми.`;
-    try {
-      const res2 = await call(repair);
-      obj = safeParseAiJson(res2.text || "{}");
-    } catch (e2: any) {
-      throw new Error(normalizePaywallMessage(e2?.message || e?.message || "Не удалось сгенерировать меню на неделю."));
-    }
-  }
+  let obj: any = {};
+  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
 
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const days = Array.isArray(obj.days) ? obj.days : [];
-  if (!Array.isArray(days) || days.length < 7) {
-    throw new Error("AI не смог составить меню на 7 дней. Попробуйте ещё раз.");
-  }
   const normDays = dayNames.map((dn, i) => {
     const d: any = days[i] || {};
     return {
@@ -404,24 +355,44 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     };
   });
 
-  // Ensure meals are not empty (B2C: better to fail than show blank cards)
-  const hasAnyMeal = normDays.some(d => [d.breakfast, d.lunch, d.dinner, d.snack].some(isNonEmptyString));
-  if (!hasAnyMeal) {
-    throw new Error("AI вернул пустое меню. Попробуйте ещё раз.");
-  }
-
   const shoppingList = (Array.isArray(obj.shoppingList) ? obj.shoppingList : [])
     .map((s: any) => String(s).trim())
     .filter(Boolean)
     .slice(0, 40);
 
-  if (!shoppingList.length) {
-    // Not critical, but nice: keep UX consistent
-    // Provide at least a placeholder item rather than rendering nothing.
-    shoppingList.push("Овощи/фрукты по сезону");
-  }
+  const shoppingListItems = (Array.isArray(obj.shoppingListItems) ? obj.shoppingListItems : [])
+    .map((it: any) => ({
+      name: String(it?.name || "").trim(),
+      grams: Math.max(0, Math.round(Number(it?.grams || 0)))
+    }))
+    .filter((it: any) => it.name && it.grams > 0)
+    .slice(0, 120);
 
-  return { days: normDays, shoppingList };
+  // weekStart (UTC Monday) for storage/export
+  const weekStart = (() => {
+    const d0 = new Date();
+    const date = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()));
+    const day = date.getUTCDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    date.setUTCDate(date.getUTCDate() + diff);
+    return date.toISOString().slice(0, 10);
+  })();
+
+  // Best-effort: store normalized items server-side for aggregated shopping list + CSV export
+  try {
+    await fetch("/api/weekly_menu/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems })
+    });
+  } catch {}
+
+  // Legacy list fallback from items if shoppingList empty
+  const legacyFromItems = shoppingListItems.map((it: any) => `${it.name} — ${it.grams} г`);
+  const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
+
+  return { days: normDays, shoppingList: finalShoppingList, shoppingListItems, weekStart };
 }
 
 /**
@@ -449,6 +420,7 @@ export async function generateFamilyWeeklyMenu(
       activityLevel: p.activityLevel,
       goal: p.goal,
       exclusions: p.exclusions || "",
+      dietary: p.dietary || null,
       targets
     };
   });
@@ -460,7 +432,32 @@ export async function generateFamilyWeeklyMenu(
   const individualExcl = people
     .map(p => p.exclusions ? `${p.name}: ${p.exclusions}` : "")
     .filter(Boolean)
-    .join("; ");
+    .join("; ")
+const dietaryBlock = (() => {
+  const strictAllergens = Array.from(new Set(people.flatMap(p => (p.dietary?.allergens || [])))).filter(Boolean);
+  const intolerances = Array.from(new Set(people.flatMap(p => (p.dietary?.intolerances || [])))).filter(Boolean);
+  const excludedFoods = Array.from(new Set(people.flatMap(p => (p.dietary?.excludedFoods || [])))).filter(Boolean);
+  const perPerson = people.map(p => {
+    const a = (p.dietary?.allergens || []).join(", ");
+    const i = (p.dietary?.intolerances || []).join(", ");
+    const e = (p.dietary?.excludedFoods || []).join(", ");
+    const parts = [
+      a ? `аллергены: ${a}` : "",
+      i ? `избегать: ${i}` : "",
+      e ? `не ем: ${e}` : ""
+    ].filter(Boolean);
+    return parts.length ? `${p.name}: ${parts.join(" / ")}` : "";
+  }).filter(Boolean).join("; ");
+
+  return {
+    strictAllergens,
+    intolerances,
+    excludedFoods,
+    perPerson,
+  };
+})();
+
+;
 
   const schema = {
     type: "OBJECT",
@@ -507,9 +504,20 @@ export async function generateFamilyWeeklyMenu(
           required: ["day", "breakfast", "lunch", "dinner", "snack"]
         }
       },
-      shoppingList: { type: "ARRAY", items: { type: "STRING" } }
+      shoppingList: { type: "ARRAY", items: { type: "STRING" } },
+      shoppingListItems: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            grams: { type: "NUMBER" }
+          },
+          required: ["name", "grams"]
+        }
+      }
     },
-    required: ["days", "shoppingList"]
+    required: ["days", "shoppingList", "shoppingListItems"]
   } as const;
 
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
@@ -525,18 +533,8 @@ export async function generateFamilyWeeklyMenu(
     responseSchema: schema
   });
 
-  let obj: any;
-  try {
-    obj = safeParseAiJson(res.text || "{}");
-  } catch (e: any) {
-    // One repair retry (B2C)
-    const repair = `${prompt}\n\nВАЖНО: Верни ТОЛЬКО валидный JSON (без пояснений/markdown). Не оставляй пустыми meals/portions.`;
-    const res2 = await callAiProxy("gemini-2.5-flash", repair, "family_menu", {
-      responseMimeType: "application/json",
-      responseSchema: schema
-    });
-    obj = safeParseAiJson(res2.text || "{}");
-  }
+  let obj: any = {};
+  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
 
   const daysRaw = Array.isArray(obj.days) ? obj.days : [];
   const normMeal = (m: any): any => {
@@ -638,7 +636,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         },
       },
       {
-        text: 'Анализируй это блюдо. Верни JSON с полями: name (название), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name и percent), notes (массив строк). Ответ строго в формате JSON.',
+        text: 'Анализируй это блюдо. Верни JSON с полями: name (название блюда НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
@@ -666,12 +664,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
       required: ["name", "calories", "protein", "fat", "carbs", "ingredients"]
     }
   });
-  const obj: any = safeParseAiJson(response.text || "{}");
-  // Minimal sanity checks for B2C (avoid crashing downstream UI)
-  if (!isNonEmptyString(obj?.name) || typeof obj?.calories !== "number") {
-    throw new Error("Не удалось распознать блюдо. Попробуйте другое фото или введите вручную.");
-  }
-  return obj;
+  return JSON.parse(response.text || "{}");
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
@@ -729,11 +722,7 @@ export async function getCoachAdvice(data: any): Promise<any> {
       }
     }
   );
-  const obj: any = safeParseAiJson(response.text || "{}");
-  if (!isNonEmptyString(obj?.title) || !isNonEmptyString(obj?.advice) || !Array.isArray(obj?.bullets)) {
-    throw new Error("AI‑коуч вернул неожиданный формат ответа. Попробуйте ещё раз.");
-  }
-  return obj;
+  return JSON.parse(response.text || "{}");
 }
 
 /**
@@ -849,7 +838,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   });
 
   let parsed: any;
-  try { parsed = safeParseAiJson(r1.text || "{}"); } catch { parsed = {}; }
+  try { parsed = JSON.parse(r1.text || "{}"); } catch { parsed = {}; }
   let plan = normalizePlan(parsed);
 
   // FIX B: если модель вернула нули/пустые KPI, берём из профиля, чтобы не было "0 ккал".
@@ -867,7 +856,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
       responseSchema: schema
     });
     let parsed2: any;
-    try { parsed2 = safeParseAiJson(r2.text || "{}"); } catch { parsed2 = plan; }
+    try { parsed2 = JSON.parse(r2.text || "{}"); } catch { parsed2 = plan; }
     plan = normalizePlan(parsed2);
   }
 
