@@ -179,7 +179,13 @@ export default function ShoppingListCard({
                         />
                         <span>{it.name}</span>
                       </span>
-                      <span className="text-slate-300 font-black">{it.display_qty}</span>
+                      <span className="text-slate-300 font-black">
+    {it.display_qty && it.display_qty.trim().length > 0
+      ? it.display_qty
+      : it.grams
+        ? `${it.grams} г`
+        : ""}
+  </span>
                     </label>
                   ))}
                 </div>
