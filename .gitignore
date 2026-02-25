@@ -32,13 +32,13 @@ fitfocus.zip
 ui.zip
 *.zip
 
-# Docker (not used)
-Dockerfile
-Dockerfile.dev
-docker-compose.yml
-.dockerignore
-README_DOCKER.txt
-README_DOCKER_LOCAL_AUTH.md
 
 functions/api/debug/
 
+
+### Docker (disabled)
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+.dockerignore
+README_DOCKER*
