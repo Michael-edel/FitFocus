@@ -3,15 +3,16 @@ compatibility_date = "2026-02-17"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
+# DEV по умолчанию
 [[d1_databases]]
 binding = "DB"
-database_name = "fitfocus_local"
-database_id = "00000000-0000-0000-0000-000000000001"
+database_name = "fitfocus-dev"
+database_id = "061ae786-9341-4bd7-8efe-025dd1bac6d5"
 migrations_dir = "migrations"
 
 [env.production]
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "fitfocus"
-database_id = "061ae786-9341-4bd7-8efe-025dd1bac6d5"
+database_id = "9da92622-ae54-4057-b505-f7a6901c1839"
 migrations_dir = "migrations"
