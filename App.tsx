@@ -1385,18 +1385,35 @@ const forecastNextWeek = useMemo(() => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
   // Local logout + (if present) server session logout
-  void (async () => {
-    if (googleMe?.sub) {
-      try { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); } catch {}
+  if (googleMe?.sub) {
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // ignore
     }
-  })();
+  }
+
+  // Clear local auth + state
+  try {
+    localStorage.removeItem('fitfocus_last_user_id');
+    sessionStorage.clear();
+  } catch {}
 
   setGoogleMe(null);
   setCurrentUser(null);
   setAuthState('auth_choice');
-  localStorage.removeItem('fitfocus_last_user_id');
+
+  // Workaround: after logout some screens may still have async effects mounted;
+  // force a clean navigation so the user never sees a blank screen.
+  setTimeout(() => {
+    try {
+      window.location.assign('/');
+    } catch {
+      window.location.href = '/';
+    }
+  }, 0);
 }, [googleMe?.sub]);
 
 
