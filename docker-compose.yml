@@ -1,0 +1,31 @@
+services:
+  fitfocus:
+    build: .
+    ports:
+      - "5173:5173"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    # deps ставим ТОЛЬКО тут
+    command: sh -lc "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - DOCKER=true
+
+
+  wrangler:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    ports:
+      - "8788:8788"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    # ВАЖНО: никаких npm ci / npm i тут!
+    command: sh -lc "npx --yes wrangler@4 pages dev . --ip 0.0.0.0 --port 8788"
+    depends_on:
+      - fitfocus
+
+volumes:
+  node_modules:
