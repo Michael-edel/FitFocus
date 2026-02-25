@@ -1068,7 +1068,7 @@ const openEditFood = (item: FoodEntry) => {
     age: 25,
     activityLevel: ActivityLevel.MODERATELY_ACTIVE,
     goal: Goal.LOSS,
-    targetWeight: 65,
+    targetWeight: 0,
     dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
     plan: 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
@@ -1212,6 +1212,9 @@ const openEditFood = (item: FoodEntry) => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
   const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
+  const regTargetWeightValid = Number(regData.targetWeight) > 0;
+  const regActivityValid = !!regData.activityLevel;
+  const regStep2Valid = regNameValid && regTargetWeightValid && regActivityValid;
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -2318,7 +2321,68 @@ if (authState === 'register') return (
                     ))}
                   </div>
 
-                  {/* Интенсивность цели (Smart Deficit Engine) */}
+                  
+
+{/* Желаемый вес и уровень активности */}
+<div className="space-y-2 mt-6">
+  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Желаемый вес и активность</label>
+  <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+    <div className="text-xs text-slate-400 font-semibold">
+      Эти параметры нужны для корректного расчёта калорий, меню и рекомендаций экспертов.
+    </div>
+
+    <div className={clsx("flex items-center justify-between p-4 rounded-[1.25rem] border", regTargetWeightValid ? "border-slate-800" : "border-amber-500/40")}>
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Желаемый вес (кг)</label>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base"
+        value={regData.targetWeight || ''}
+        onChange={e => setRegData(prev => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
+        placeholder="Напр. 85"
+      />
+    </div>
+
+    <div className={clsx("space-y-2", regActivityValid ? "" : "")}>
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Уровень активности</div>
+      </div>
+      <div className="grid grid-cols-1 gap-1.5">
+        {[
+          { id: ActivityLevel.SEDENTARY, label: 'Сидячий', hint: 'мало ходьбы, без тренировок' },
+          { id: ActivityLevel.LIGHTLY_ACTIVE, label: 'Лёгкий', hint: 'ходьба/лёгкие тренировки 1–3 р/нед' },
+          { id: ActivityLevel.MODERATELY_ACTIVE, label: 'Умеренный', hint: 'тренировки 3–5 р/нед или много ходьбы' },
+          { id: ActivityLevel.VERY_ACTIVE, label: 'Высокий', hint: 'интенсивно 6–7 р/нед' },
+          { id: ActivityLevel.EXTRA_ACTIVE, label: 'Очень высокий', hint: 'тяжёлая физ. работа + тренировки' }
+        ].map(opt => (
+          <button
+            key={String(opt.id)}
+            type="button"
+            onClick={() => setRegData(prev => ({ ...prev, activityLevel: opt.id }))}
+            className={clsx(
+              "w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all",
+              regData.activityLevel === opt.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span>{opt.label}</span>
+              <span className="text-[10px] text-slate-500 font-semibold">{opt.hint}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {!regTargetWeightValid && (
+      <div className="text-[11px] text-amber-300/90 font-semibold">
+        Укажите желаемый вес — без него эксперты могут дать некорректные рекомендации.
+      </div>
+    )}
+  </div>
+</div>
+
+{/* Интенсивность цели (Smart Deficit Engine) */}
                   {(regData.goal === Goal.LOSS || regData.goal === Goal.GAIN) && (
                     <div className="space-y-2 mt-4 p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 animate-in slide-in-from-top-2 duration-300">
                       <div className="flex items-center justify-between ml-1">
@@ -2572,7 +2636,7 @@ if (authState === 'register') return (
             <button type="button" onClick={() => setOnboardingStep(2)} disabled={!regStep1Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep1Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Рассчитать мой план</button>
           ) : (
             <>
-              <button onClick={handleActivateWithTransition} disabled={!regNameValid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regNameValid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
+              <button onClick={handleActivateWithTransition} disabled={!regStep2Valid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep2Valid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
               <button type="button" onClick={() => onboardingStep === 2 && setOnboardingStep(1)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад к параметрам</button>
             </>
           )}
