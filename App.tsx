@@ -1411,7 +1411,9 @@ const forecastNextWeek = useMemo(() => {
 
   // Clear ONLY the authenticated session (cookies / in-memory auth), but keep user data.
   // Used by "Выйти из приложения".
-  const clearSessionOnly = useCallback(async () => {
+    // Выход из приложения: очищаем ТОЛЬКО сессию (куки/авторизация) и in-memory состояние.
+  // Локальные профили и их данные НЕ удаляются.
+  const logout = useCallback(async () => {
     // Best-effort: clear server session cookie
     try {
       await fetch('/api/logout', { method: 'POST', credentials: 'include' });
@@ -1420,56 +1422,48 @@ const forecastNextWeek = useMemo(() => {
     }
 
     // Clear auth-related memory state
-    try { setGoogleMe(null); } catch { /* ignore */ }
-    try { setGoogleSessionId(null); } catch { /* ignore */ }
+    setGoogleMe(null);
+    setGoogleSessionId(null);
+    setCurrentUser(null);
 
-    // Reset app to auth choice screen, but keep local profiles/data in storage.
-    try { setCurrentUser(null); } catch { /* ignore */ }
+    // Сброс user-scoped in-memory данных, чтобы они не "прилипали" к следующему входу.
+    setFoodDiary([]);
+    setFoodHistory([]);
+    setCoachCard(null);
+    setCoachLoading(false);
+    setNewWeight('');
+    setShoppingList([]);
+    setShoppingChecked({});
+    setWeeklyMenu(null);
+    setWeeklyMenuItems([]);
+    setAiCouncilResult(null);
+    setAiCouncilHistory([]);
+    setAiCouncilLoading(false);
+    setAiCouncilInput('');
+
+    // Навигация
+    setActiveTab('dashboard');
     setAuthState('auth_choice');
-  }, [setAuthState, setGoogleMe, setGoogleSessionId, setCurrentUser]);
-
-  const logout = useCallback(async () => {
-  // ВАЖНО: "Выйти" — это выход из приложения/сессии, НЕ удаление профиля/аккаунта.
-  // Мы сохраняем список локальных профилей и просто возвращаем пользователя к экрану выбора.
-
-  // Local logout + (if present) server session logout
-  if (googleMe?.sub) {
-    try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    } catch {
-      // ignore
-    }
-  }
-
-  // Clear only session-related data (do NOT touch fitfocus_all_users)
-  clearSessionOnly();
-
-  // Reset SPA state (без принудительного reload — иначе иногда появляется "тёмный экран")
-  // Важно: это НЕ удаляет профили и НЕ чистит сохранённые данные профиля.
-  // Удаление профиля доступно только на экране выбора/регистрации.
-  setGoogleMe(null);
-  setCurrentUser(null);
-
-  // Сброс user-scoped in-memory данных, чтобы они не "прилипали" к новому профилю.
-  setFoodDiary([]);
-  setFoodHistory([]);
-  setCoachCard(null);
-  setCoachLoading(false);
-  setNewWeight('');
-  setShoppingList([]);
-  setShoppingChecked({});
-  setWeeklyMenu(null);
-  setWeeklyMenuItems([]);
-  setAiCouncilResult(null);
-  setAiCouncilHistory([]);
-  setAiCouncilLoading(false);
-  setAiCouncilInput('');
-
-  // Навигация
-  setActiveTab('dashboard');
-  setAuthState('auth_choice');
-}, [clearSessionOnly]);
-
+  }, [
+    setGoogleMe,
+    setGoogleSessionId,
+    setCurrentUser,
+    setFoodDiary,
+    setFoodHistory,
+    setCoachCard,
+    setCoachLoading,
+    setNewWeight,
+    setShoppingList,
+    setShoppingChecked,
+    setWeeklyMenu,
+    setWeeklyMenuItems,
+    setAiCouncilResult,
+    setAiCouncilHistory,
+    setAiCouncilLoading,
+    setAiCouncilInput,
+    setActiveTab,
+    setAuthState,
+  ]);
 
 const deleteAccount = useCallback(async () => {
   if (!googleMe?.sub) return;
