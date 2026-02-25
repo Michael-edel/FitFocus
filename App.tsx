@@ -829,29 +829,35 @@ const App: React.FC = () => {
     } catch {}
   }, [currentUser]);
 
-  const deleteUserProfile = useCallback((userId: string) => {
-    // 1) Удаляем все данные пользователя из localStorage
+  const deleteUserProfile = useCallback(async (user: LocalUser) => {
+    // 1) Удаляем все данные пользователя из localStorage (локальный кеш)
+    const userId = user.id;
     const prefix = `fitfocus_data_${userId}_`;
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith(prefix)) localStorage.removeItem(k);
     }
 
-    // 2) Удаляем из списка профилей
-    setAllUsers(prev => {
-      const next = prev.filter(u => u.id !== userId);
-      localStorage.setItem('fitfocus_all_users', JSON.stringify(next));
-      return next;
-    });
+    // 2) Удаляем профиль из списка профилей
+    setAllUsers(prev => prev.filter(u => u.id !== userId));
 
-    // 3) Если удалили "последнего" или текущего — сбрасываем
-    const lastId = localStorage.getItem('fitfocus_last_user_id');
-    if (lastId === userId) localStorage.removeItem('fitfocus_last_user_id');
-
+    // 3) Если это текущий выбранный профиль — сбрасываем
     if (currentUser?.id === userId) {
       setCurrentUser(null);
-      setAuthState('auth_choice');
+      localStorage.removeItem('fitfocus_last_user_id');
     }
+
+    // 4) ВАЖНО: если в браузере ещё есть активная сессия Cloudflare/Google,
+    // то при следующем открытии приложение снова «подтянет» профиль с сервера.
+    // Поэтому при удалении профиля на экране входа делаем logout_all.
+    try {
+      await fetch('/api/logout_all', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+
+    // Пояснение для Google-профиля: это удаляет только локальный профиль/кеш.
+    // Полное удаление аккаунта — в Настройки → Аккаунт → Удалить аккаунт.
   }, [currentUser]);
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -2160,11 +2166,11 @@ await loginAsUser(newUser);
             <button
               type="button"
               className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
-              title="Удалить локальный профиль"
+              title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"}
               onClick={(e) => {
                 e.stopPropagation();
                 const ok = confirm(`Удалить локальный профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
-                if (ok) deleteUserProfile(user.id);
+                if (ok) deleteUserProfile(user);
               }}
             >
               <Trash2 size={20} />
@@ -2936,7 +2942,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить локальный профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"} onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
                 <button 
                   onClick={() => void startLocalRegistration()} 
                   disabled={allUsers.length >= 5 || inviteChecking}
