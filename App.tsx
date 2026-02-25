@@ -1409,6 +1409,25 @@ const forecastNextWeek = useMemo(() => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
+  // Clear ONLY the authenticated session (cookies / in-memory auth), but keep user data.
+  // Used by "Выйти из приложения".
+  const clearSessionOnly = useCallback(async () => {
+    // Best-effort: clear server session cookie
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // ignore
+    }
+
+    // Clear auth-related memory state
+    try { setGoogleMe(null); } catch { /* ignore */ }
+    try { setGoogleSessionId(null); } catch { /* ignore */ }
+
+    // Reset app to auth choice screen, but keep local profiles/data in storage.
+    try { setCurrentUser(null); } catch { /* ignore */ }
+    setAuthState('auth_choice');
+  }, [setAuthState, setGoogleMe, setGoogleSessionId, setCurrentUser]);
+
   const logout = useCallback(async () => {
   // ВАЖНО: "Выйти" — это выход из приложения/сессии, НЕ удаление профиля/аккаунта.
   // Мы сохраняем список локальных профилей и просто возвращаем пользователя к экрану выбора.
