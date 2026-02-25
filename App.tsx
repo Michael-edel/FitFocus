@@ -832,10 +832,34 @@ const App: React.FC = () => {
   const deleteUserProfile = useCallback(async (user: LocalUser) => {
     // 1) Удаляем все данные пользователя из localStorage (локальный кеш)
     const userId = user.id;
-    const prefix = `fitfocus_data_${userId}_`;
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+    // Раньше удалялись только fitfocus_data_${id}_*, из-за чего часть данных "возвращалась".
+    // Теперь чистим ВСЕ ключи, связанные с userId.
+    try {
+      const prefix = `fitfocus_data_${userId}_`;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        // Не удаляем список профилей целиком — его обновляем отдельно.
+        if (k === 'fitfocus_all_users') continue;
+
+        const tokenA = `_${userId}_`;
+        const tokenB = `_${userId}`;
+        if (k.startsWith(prefix) || k.includes(tokenA) || k.endsWith(tokenB) || k.includes(userId)) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Также чистим sessionStorage (на случай кэшей экранов/совета)
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.includes(userId)) sessionStorage.removeItem(k);
+      }
+    } catch {
+      // ignore
     }
 
     // 2) Удаляем профиль из списка профилей
@@ -1386,6 +1410,9 @@ const forecastNextWeek = useMemo(() => {
   }, [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useCallback(async () => {
+  // ВАЖНО: "Выйти" — это выход из приложения/сессии, НЕ удаление профиля/аккаунта.
+  // Мы сохраняем список локальных профилей и просто возвращаем пользователя к экрану выбора.
+
   // Local logout + (if present) server session logout
   if (googleMe?.sub) {
     try {
@@ -1395,25 +1422,19 @@ const forecastNextWeek = useMemo(() => {
     }
   }
 
-  // Clear local auth + state
+  // Clear only session-related data (do NOT touch fitfocus_all_users)
   try {
     localStorage.removeItem('fitfocus_last_user_id');
+    localStorage.removeItem('fitfocus_auth_token');
+    localStorage.removeItem('fitfocus_profile');
     sessionStorage.clear();
   } catch {}
 
+  // Reset SPA state (без принудительного reload — иначе иногда появляется "тёмный экран")
   setGoogleMe(null);
   setCurrentUser(null);
+  setSelectedTab('overview');
   setAuthState('auth_choice');
-
-  // Workaround: after logout some screens may still have async effects mounted;
-  // force a clean navigation so the user never sees a blank screen.
-  setTimeout(() => {
-    try {
-      window.location.assign('/');
-    } catch {
-      window.location.href = '/';
-    }
-  }, 0);
 }, [googleMe?.sub]);
 
 
@@ -2825,7 +2846,13 @@ if (authState === 'register') return (
         {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
         ))}
-        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
+        <button
+          onClick={logout}
+          title="Выйти из приложения (вернуться к выбору профиля)"
+          className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"
+        >
+          <X size={20} /> <span className="font-bold">Выйти из приложения</span>
+        </button>
       </nav>
       <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
         {activeTab === 'dashboard' && (
