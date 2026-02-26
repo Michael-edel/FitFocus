@@ -315,6 +315,23 @@ const compressFoodPhoto = async (
   file: File,
   opts?: { maxSide?: number; quality?: number; thumbSize?: number }
 ): Promise<CompressedPhoto> => {
+  // iOS часто отдаёт HEIC/HEIF. Конвертируем в JPEG в браузере, чтобы дальше работать через canvas.
+  const lowerName = (file?.name || '').toLowerCase();
+  const isHeic = (file?.type || '').includes('heic') || (file?.type || '').includes('heif') || lowerName.endsWith('.heic') || lowerName.endsWith('.heif');
+  if (isHeic) {
+    try {
+      const mod: any = await import('heic2any');
+      const heic2any = mod?.default ?? mod;
+      const converted: any = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      const blob: Blob = Array.isArray(converted) ? converted[0] : converted;
+      const nextName = lowerName.replace(/\.(heic|heif)$/i, '.jpg') || 'photo.jpg';
+      file = new File([blob], nextName, { type: 'image/jpeg' });
+    } catch (e) {
+      // Если конвертация недоступна, подскажем пользователю альтернативу.
+      alert('Фото в формате HEIC/HEIF. Пожалуйста, выберите JPG/PNG или нажмите «Снять» (камера), чтобы приложение само сделало JPEG.');
+      throw e;
+    }
+  }
   const maxSide = opts?.maxSide ?? 768;
   const quality = opts?.quality ?? 0.72;
   const thumbSize = opts?.thumbSize ?? 140;
