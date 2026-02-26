@@ -34,11 +34,5 @@ ui.zip
 
 
 functions/api/debug/
+wrangler.toml
 
-
-### Docker (disabled)
-Dockerfile
-Dockerfile.*
-docker-compose.yml
-.dockerignore
-README_DOCKER*
