@@ -35,3 +35,10 @@ ui.zip
 
 functions/api/debug/
 
+
+### Docker (disabled)
+Dockerfile
+Dockerfile.*
+docker-compose.yml
+.dockerignore
+README_DOCKER*
