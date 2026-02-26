@@ -829,29 +829,59 @@ const App: React.FC = () => {
     } catch {}
   }, [currentUser]);
 
-  const deleteUserProfile = useCallback((userId: string) => {
-    // 1) Удаляем все данные пользователя из localStorage
-    const prefix = `fitfocus_data_${userId}_`;
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+  const deleteUserProfile = useCallback(async (user: LocalUser) => {
+    // 1) Удаляем все данные пользователя из localStorage (локальный кеш)
+    const userId = user.id;
+    // Раньше удалялись только fitfocus_data_${id}_*, из-за чего часть данных "возвращалась".
+    // Теперь чистим ВСЕ ключи, связанные с userId.
+    try {
+      const prefix = `fitfocus_data_${userId}_`;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        // Не удаляем список профилей целиком — его обновляем отдельно.
+        if (k === 'fitfocus_all_users') continue;
+
+        const tokenA = `_${userId}_`;
+        const tokenB = `_${userId}`;
+        if (k.startsWith(prefix) || k.includes(tokenA) || k.endsWith(tokenB) || k.includes(userId)) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {
+      // ignore
     }
 
-    // 2) Удаляем из списка профилей
-    setAllUsers(prev => {
-      const next = prev.filter(u => u.id !== userId);
-      localStorage.setItem('fitfocus_all_users', JSON.stringify(next));
-      return next;
-    });
+    // Также чистим sessionStorage (на случай кэшей экранов/совета)
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.includes(userId)) sessionStorage.removeItem(k);
+      }
+    } catch {
+      // ignore
+    }
 
-    // 3) Если удалили "последнего" или текущего — сбрасываем
-    const lastId = localStorage.getItem('fitfocus_last_user_id');
-    if (lastId === userId) localStorage.removeItem('fitfocus_last_user_id');
+    // 2) Удаляем профиль из списка профилей
+    setAllUsers(prev => prev.filter(u => u.id !== userId));
 
+    // 3) Если это текущий выбранный профиль — сбрасываем
     if (currentUser?.id === userId) {
       setCurrentUser(null);
-      setAuthState('auth_choice');
+      localStorage.removeItem('fitfocus_last_user_id');
     }
+
+    // 4) ВАЖНО: если в браузере ещё есть активная сессия Cloudflare/Google,
+    // то при следующем открытии приложение снова «подтянет» профиль с сервера.
+    // Поэтому при удалении профиля на экране входа делаем logout_all.
+    try {
+      await fetch('/api/logout_all', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+
+    // Пояснение для Google-профиля: это удаляет только локальный профиль/кеш.
+    // Полное удаление аккаунта — в Настройки → Аккаунт → Удалить аккаунт.
   }, [currentUser]);
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -1379,20 +1409,61 @@ const forecastNextWeek = useMemo(() => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(() => {
-  // Local logout + (if present) server session logout
-  void (async () => {
-    if (googleMe?.sub) {
-      try { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); } catch {}
+  // Clear ONLY the authenticated session (cookies / in-memory auth), but keep user data.
+  // Used by "Выйти из приложения".
+    // Выход из приложения: очищаем ТОЛЬКО сессию (куки/авторизация) и in-memory состояние.
+  // Локальные профили и их данные НЕ удаляются.
+  const logout = useCallback(async () => {
+    // Best-effort: clear server session cookie
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // ignore
     }
-  })();
 
-  setGoogleMe(null);
-  setCurrentUser(null);
-  setAuthState('auth_choice');
-  localStorage.removeItem('fitfocus_last_user_id');
-}, [googleMe?.sub]);
+    // Clear auth-related memory state
+    setGoogleMe(null);
+    setGoogleSessionId(null);
+    setCurrentUser(null);
 
+    // Сброс user-scoped in-memory данных, чтобы они не "прилипали" к следующему входу.
+    setFoodDiary([]);
+    setFoodHistory([]);
+    setCoachCard(null);
+    setCoachLoading(false);
+    setNewWeight('');
+    setShoppingList([]);
+    setShoppingChecked({});
+    setWeeklyMenu(null);
+    setWeeklyMenuItems([]);
+    setAiCouncilResult(null);
+    setAiCouncilHistory([]);
+    setAiCouncilLoading(false);
+    setAiCouncilInput('');
+
+    // Навигация
+    setActiveTab('dashboard');
+    setAuthState('auth_choice');
+  }, [
+    setGoogleMe,
+    setGoogleSessionId,
+    setCurrentUser,
+    setFoodDiary,
+    setFoodHistory,
+    setCoachCard,
+    setCoachLoading,
+    setNewWeight,
+    setShoppingList,
+    setShoppingChecked,
+    setWeeklyMenu,
+    setWeeklyMenuItems,
+    setAiCouncilResult,
+    setAiCouncilHistory,
+    setAiCouncilLoading,
+    setAiCouncilInput,
+    setActiveTab,
+    setAuthState,
+  ]);
 
 const deleteAccount = useCallback(async () => {
   if (!googleMe?.sub) return;
@@ -1773,6 +1844,24 @@ setAuthState('auth_choice');
   const startLocalRegistration = useCallback(async () => {
     const ok = await ensureInviteOk();
     if (!ok) return;
+
+    // Starting a new local profile must begin from a clean slate.
+    // (Otherwise previous profile's in-memory data can appear in a fresh profile.)
+    setCurrentUser(null);
+    setFoodDiary([]);
+    setFoodHistory([]);
+    setShoppingList([]);
+    setShoppingChecked({});
+    setWeeklyMenu(null);
+    setWeeklyMenuItems([]);
+    setCoachCard(null);
+    setCoachLoading(false);
+    setAiCouncilResult(null);
+    setAiCouncilHistory([]);
+    setAiCouncilLoading(false);
+    setAiCouncilInput('');
+    setNewWeight('');
+
     setAuthState('register');
   }, [ensureInviteOk]);
 
@@ -2160,11 +2249,11 @@ await loginAsUser(newUser);
             <button
               type="button"
               className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
-              title="Удалить локальный профиль"
+              title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"}
               onClick={(e) => {
                 e.stopPropagation();
                 const ok = confirm(`Удалить локальный профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
-                if (ok) deleteUserProfile(user.id);
+                if (ok) deleteUserProfile(user);
               }}
             >
               <Trash2 size={20} />
@@ -2802,7 +2891,13 @@ if (authState === 'register') return (
         {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
         ))}
-        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
+        <button
+          onClick={logout}
+        title="Закрыть приложение (вернуться к выбору профиля)"
+          className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"
+        >
+          <X size={20} /> <span className="font-bold">Закрыть приложение</span>
+        </button>
       </nav>
       <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
         {activeTab === 'dashboard' && (
@@ -2827,7 +2922,7 @@ if (authState === 'register') return (
                 carbs: clampGram(dailyStats.carbs)
               };
               return (
-                <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
+                <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{targets.calories > 0 ? Math.round((dailyStats.calories / targets.calories) * 100) : 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
               );
             })()}
               <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
@@ -2936,7 +3031,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title="Удалить локальный профиль" onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u.id); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"} onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
                 <button 
                   onClick={() => void startLocalRegistration()} 
                   disabled={allUsers.length >= 5 || inviteChecking}
