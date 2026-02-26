@@ -270,8 +270,9 @@ const handlePick = async (file?: File) => {
                   {r.recipe.ingredients.slice(0, 6).map((ing, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="text-indigo-300">•</span>
-                      <span className="flex-1">
-                        {ing.name}{ing.amount ? <span className="text-slate-500"> — {ing.amount}</span> : null}
+                      <span className="flex-1 flex items-start justify-between gap-4">
+                        <span className="min-w-0">{ing.name}</span>
+                        {ing.amount ? <span className="text-slate-500 whitespace-nowrap">{ing.amount}</span> : null}
                       </span>
                     </li>
                   ))}
