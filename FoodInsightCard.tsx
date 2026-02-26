@@ -476,7 +476,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                             <div className="ff-infocard__recipeSub text-[10px] uppercase font-black text-slate-400 mt-3">Ингредиенты</div>
                             <ul className="ff-infocard__recipeList text-[12px] text-slate-300 mt-1">
                               {recipe.ingredients.slice(0, 18).map((it: any, i: number) => (
-                                <li key={i} className="list-disc ml-4">{it.name}{it.amount ? ` — ${it.amount}` : ''}</li>
+                                <li key={i} className="list-disc ml-4 flex items-start justify-between gap-4"><span className="min-w-0">{it.name}</span>{it.amount ? <span className="text-slate-500 whitespace-nowrap">{it.amount}</span> : null}</li>
                               ))}
                             </ul>
                           </>
