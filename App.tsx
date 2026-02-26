@@ -1409,61 +1409,34 @@ const forecastNextWeek = useMemo(() => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  // Clear ONLY the authenticated session (cookies / in-memory auth), but keep user data.
-  // Used by "Выйти из приложения".
-    // Выход из приложения: очищаем ТОЛЬКО сессию (куки/авторизация) и in-memory состояние.
-  // Локальные профили и их данные НЕ удаляются.
   const logout = useCallback(async () => {
-    // Best-effort: clear server session cookie
+  // ВАЖНО: "Выйти" — это выход из приложения/сессии, НЕ удаление профиля/аккаунта.
+  // Мы сохраняем список локальных профилей и просто возвращаем пользователя к экрану выбора.
+
+  // Local logout + (if present) server session logout
+  if (googleMe?.sub) {
     try {
       await fetch('/api/logout', { method: 'POST', credentials: 'include' });
     } catch {
       // ignore
     }
+  }
 
-    // Clear auth-related memory state
-    setGoogleMe(null);
-    setGoogleSessionId(null);
-    setCurrentUser(null);
+  // Clear only session-related data (do NOT touch fitfocus_all_users)
+  try {
+    localStorage.removeItem('fitfocus_last_user_id');
+    localStorage.removeItem('fitfocus_auth_token');
+    localStorage.removeItem('fitfocus_profile');
+    sessionStorage.clear();
+  } catch {}
 
-    // Сброс user-scoped in-memory данных, чтобы они не "прилипали" к следующему входу.
-    setFoodDiary([]);
-    setFoodHistory([]);
-    setCoachCard(null);
-    setCoachLoading(false);
-    setNewWeight('');
-    setShoppingList([]);
-    setShoppingChecked({});
-    setWeeklyMenu(null);
-    setWeeklyMenuItems([]);
-    setAiCouncilResult(null);
-    setAiCouncilHistory([]);
-    setAiCouncilLoading(false);
-    setAiCouncilInput('');
+  // Reset SPA state (без принудительного reload — иначе иногда появляется "тёмный экран")
+  setGoogleMe(null);
+  setCurrentUser(null);
+  setSelectedTab('overview');
+  setAuthState('auth_choice');
+}, [googleMe?.sub]);
 
-    // Навигация
-    setActiveTab('dashboard');
-    setAuthState('auth_choice');
-  }, [
-    setGoogleMe,
-    setGoogleSessionId,
-    setCurrentUser,
-    setFoodDiary,
-    setFoodHistory,
-    setCoachCard,
-    setCoachLoading,
-    setNewWeight,
-    setShoppingList,
-    setShoppingChecked,
-    setWeeklyMenu,
-    setWeeklyMenuItems,
-    setAiCouncilResult,
-    setAiCouncilHistory,
-    setAiCouncilLoading,
-    setAiCouncilInput,
-    setActiveTab,
-    setAuthState,
-  ]);
 
 const deleteAccount = useCallback(async () => {
   if (!googleMe?.sub) return;
@@ -1844,24 +1817,6 @@ setAuthState('auth_choice');
   const startLocalRegistration = useCallback(async () => {
     const ok = await ensureInviteOk();
     if (!ok) return;
-
-    // Starting a new local profile must begin from a clean slate.
-    // (Otherwise previous profile's in-memory data can appear in a fresh profile.)
-    setCurrentUser(null);
-    setFoodDiary([]);
-    setFoodHistory([]);
-    setShoppingList([]);
-    setShoppingChecked({});
-    setWeeklyMenu(null);
-    setWeeklyMenuItems([]);
-    setCoachCard(null);
-    setCoachLoading(false);
-    setAiCouncilResult(null);
-    setAiCouncilHistory([]);
-    setAiCouncilLoading(false);
-    setAiCouncilInput('');
-    setNewWeight('');
-
     setAuthState('register');
   }, [ensureInviteOk]);
 
@@ -2893,10 +2848,10 @@ if (authState === 'register') return (
         ))}
         <button
           onClick={logout}
-        title="Закрыть приложение (вернуться к выбору профиля)"
+          title="Выйти из приложения (вернуться к выбору профиля)"
           className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"
         >
-          <X size={20} /> <span className="font-bold">Закрыть приложение</span>
+          <X size={20} /> <span className="font-bold">Выйти из приложения</span>
         </button>
       </nav>
       <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
@@ -2922,7 +2877,7 @@ if (authState === 'register') return (
                 carbs: clampGram(dailyStats.carbs)
               };
               return (
-                <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{targets.calories > 0 ? Math.round((dailyStats.calories / targets.calories) * 100) : 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
+                <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
               );
             })()}
               <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
