@@ -27,18 +27,6 @@ const AGENTS: AIAgent[] = [
   }
 ];
 
-
-function activityLabel(level: any): string {
-  // ActivityLevel enum values are numeric multipliers; show human label for readability
-  const v = Number(level);
-  if (!v) return 'не указан';
-  if (v <= 1.21) return `сидячий (x${v})`;
-  if (v <= 1.38) return `лёгкая активность (x${v})`;
-  if (v <= 1.56) return `умеренная активность (x${v})`;
-  if (v <= 1.73) return `высокая активность (x${v})`;
-  return `очень высокая активность (x${v})`;
-}
-
 export async function runCouncil(
   query: string,
   user: UserProfile,
@@ -50,7 +38,7 @@ export async function runCouncil(
     Пользователь: ${user.name}
     Пол: ${user.gender}, Возраст: ${user.age} лет, Рост: ${user.height} см, Вес: ${user.weight} кг.
     Цель: ${user.goal}${user.targetWeight ? `, целевой вес: ${user.targetWeight} кг` : ''}.
-    Уровень активности: ${activityLabel(user.activityLevel)} (используй это текстовое значение в ответах). Коэффициент активности: x${Number(user.activityLevel || 0).toFixed(2)} (только для расчётов, не показывай пользователю без запроса).
+    Уровень активности: ${user.activityLevel}.
     Интенсивность: ${user.goal === 'LOSS' ? `дефицит ${user.lossDeficit ?? ''} ккал/день` : user.goal === 'GAIN' ? `профицит ${user.gainSurplus ?? ''} ккал/день` : 'поддержание'}.
     Исключения/ограничения (если есть): ${user.exclusions || 'нет'}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
@@ -59,13 +47,16 @@ export async function runCouncil(
     Запрос: "${query}"
   `;
 
-  // 1. ROUTING (disabled): always run all 4 experts to match UI promise
-  const activeAgents = AGENTS;
-
+  // 1. ROUTING
+  const routerPrompt = `Проанализируй запрос пользователя: "${query}". Выбери ровно 2 агентов из списка [architect, nutritionist, physiologist, psychologist], чья помощь наиболее важна. Верни только ID через запятую.`;
+  const selectedRolesRaw = await callModel(routerPrompt, 'chairman');
+  const selectedRoles = selectedRolesRaw.split(',').map(s => s.trim() as AIAgentRole).filter(r => AGENTS.find(a => a.id === r));
+  
+  const activeAgents = AGENTS.filter(a => selectedRoles.includes(a.id));
 
   // 2. EXPERT THOUGHTS
   const thoughts = await Promise.all(activeAgents.map(async agent => {
-    const text = await callModel(`${agent.systemPrompt}\nКонтекст: ${context}\nДай краткое экспертное мнение по запросу. НЕ спрашивай рост/вес/возраст — они уже есть в контексте. Если целевой вес или уровень активности не указаны в контексте — НЕ выдумывай числа, попроси уточнить. Если в контексте указан коэффициент активности (например x1.55), не выводи его в ответе — используй текстовую метку активности (например «умеренная активность»). Если данных не хватает, спрашивай только то, чего нет.`, agent.id);
+    const text = await callModel(`${agent.systemPrompt}\nКонтекст: ${context}\nДай краткое экспертное мнение по запросу. НЕ спрашивай рост/вес/возраст — они уже есть в контексте. Если данных не хватает, спрашивай только то, чего нет.`, agent.id);
     return { agentId: agent.id, agentName: agent.name, text };
   }));
 
