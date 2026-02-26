@@ -895,59 +895,29 @@ const App: React.FC = () => {
     } catch {}
   }, [currentUser]);
 
-  const deleteUserProfile = useCallback(async (user: LocalUser) => {
-    // 1) Удаляем все данные пользователя из localStorage (локальный кеш)
-    const userId = user.id;
-    // Раньше удалялись только fitfocus_data_${id}_*, из-за чего часть данных "возвращалась".
-    // Теперь чистим ВСЕ ключи, связанные с userId.
-    try {
-      const prefix = `fitfocus_data_${userId}_`;
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (!k) continue;
-        // Не удаляем список профилей целиком — его обновляем отдельно.
-        if (k === 'fitfocus_all_users') continue;
-
-        const tokenA = `_${userId}_`;
-        const tokenB = `_${userId}`;
-        if (k.startsWith(prefix) || k.includes(tokenA) || k.endsWith(tokenB) || k.includes(userId)) {
-          localStorage.removeItem(k);
-        }
-      }
-    } catch {
-      // ignore
+  const deleteUserProfile = useCallback((userId: string) => {
+    // 1) Удаляем все данные пользователя из localStorage
+    const prefix = `fitfocus_data_${userId}_`;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
     }
 
-    // Также чистим sessionStorage (на случай кэшей экранов/совета)
-    try {
-      for (let i = sessionStorage.length - 1; i >= 0; i--) {
-        const k = sessionStorage.key(i);
-        if (k && k.includes(userId)) sessionStorage.removeItem(k);
-      }
-    } catch {
-      // ignore
-    }
+    // 2) Удаляем из списка профилей
+    setAllUsers(prev => {
+      const next = prev.filter(u => u.id !== userId);
+      localStorage.setItem('fitfocus_all_users', JSON.stringify(next));
+      return next;
+    });
 
-    // 2) Удаляем профиль из списка профилей
-    setAllUsers(prev => prev.filter(u => u.id !== userId));
+    // 3) Если удалили "последнего" или текущего — сбрасываем
+    const lastId = localStorage.getItem('fitfocus_last_user_id');
+    if (lastId === userId) localStorage.removeItem('fitfocus_last_user_id');
 
-    // 3) Если это текущий выбранный профиль — сбрасываем
     if (currentUser?.id === userId) {
       setCurrentUser(null);
-      localStorage.removeItem('fitfocus_last_user_id');
+      setAuthState('auth_choice');
     }
-
-    // 4) ВАЖНО: если в браузере ещё есть активная сессия Cloudflare/Google,
-    // то при следующем открытии приложение снова «подтянет» профиль с сервера.
-    // Поэтому при удалении профиля на экране входа делаем logout_all.
-    try {
-      await fetch('/api/logout_all', { method: 'POST' });
-    } catch {
-      // ignore
-    }
-
-    // Пояснение для Google-профиля: это удаляет только локальный профиль/кеш.
-    // Полное удаление аккаунта — в Настройки → Аккаунт → Удалить аккаунт.
   }, [currentUser]);
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -1179,7 +1149,7 @@ const openEditFood = (item: FoodEntry) => {
     age: 25,
     activityLevel: ActivityLevel.MODERATELY_ACTIVE,
     goal: Goal.LOSS,
-    targetWeight: 0,
+    targetWeight: 65,
     dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
     plan: 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
@@ -1323,9 +1293,6 @@ const openEditFood = (item: FoodEntry) => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
   const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
-  const regTargetWeightValid = Number(regData.targetWeight) > 0;
-  const regActivityValid = !!regData.activityLevel;
-  const regStep2Valid = regNameValid && regTargetWeightValid && regActivityValid;
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -1477,32 +1444,18 @@ const openEditFood = (item: FoodEntry) => {
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(async () => {
-  // ВАЖНО: "Выйти" — это выход из приложения/сессии, НЕ удаление профиля/аккаунта.
-  // Мы сохраняем список локальных профилей и просто возвращаем пользователя к экрану выбора.
-
+  const logout = useCallback(() => {
   // Local logout + (if present) server session logout
-  if (googleMe?.sub) {
-    try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    } catch {
-      // ignore
+  void (async () => {
+    if (googleMe?.sub) {
+      try { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); } catch {}
     }
-  }
+  })();
 
-  // Clear only session-related data (do NOT touch fitfocus_all_users)
-  try {
-    localStorage.removeItem('fitfocus_last_user_id');
-    localStorage.removeItem('fitfocus_auth_token');
-    localStorage.removeItem('fitfocus_profile');
-    sessionStorage.clear();
-  } catch {}
-
-  // Reset SPA state (без принудительного reload — иначе иногда появляется "тёмный экран")
   setGoogleMe(null);
   setCurrentUser(null);
-  setSelectedTab('overview');
   setAuthState('auth_choice');
+  localStorage.removeItem('fitfocus_last_user_id');
 }, [googleMe?.sub]);
 
 
@@ -2270,11 +2223,11 @@ const logWeight = useCallback(() => {
             <button
               type="button"
               className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all"
-              title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"}
+              title="Удалить локальный профиль"
               onClick={(e) => {
                 e.stopPropagation();
                 const ok = confirm(`Удалить локальный профиль "${user.name || 'Профиль'}"? Данные восстановить нельзя.`);
-                if (ok) deleteUserProfile(user);
+                if (ok) deleteUserProfile(user.id);
               }}
             >
               <Trash2 size={20} />
@@ -2431,68 +2384,7 @@ if (authState === 'register') return (
                     ))}
                   </div>
 
-                  
-
-{/* Желаемый вес и уровень активности */}
-<div className="space-y-2 mt-6">
-  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Желаемый вес и активность</label>
-  <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
-    <div className="text-xs text-slate-400 font-semibold">
-      Эти параметры нужны для корректного расчёта калорий, меню и рекомендаций экспертов.
-    </div>
-
-    <div className={clsx("flex items-center justify-between p-4 rounded-[1.25rem] border", regTargetWeightValid ? "border-slate-800" : "border-amber-500/40")}>
-      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Желаемый вес (кг)</label>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={1}
-        className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base"
-        value={regData.targetWeight || ''}
-        onChange={e => setRegData(prev => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
-        placeholder="Напр. 85"
-      />
-    </div>
-
-    <div className={clsx("space-y-2", regActivityValid ? "" : "")}>
-      <div className="flex items-center justify-between">
-        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Уровень активности</div>
-      </div>
-      <div className="grid grid-cols-1 gap-1.5">
-        {[
-          { id: ActivityLevel.SEDENTARY, label: 'Сидячий', hint: 'мало ходьбы, без тренировок' },
-          { id: ActivityLevel.LIGHTLY_ACTIVE, label: 'Лёгкий', hint: 'ходьба/лёгкие тренировки 1–3 р/нед' },
-          { id: ActivityLevel.MODERATELY_ACTIVE, label: 'Умеренный', hint: 'тренировки 3–5 р/нед или много ходьбы' },
-          { id: ActivityLevel.VERY_ACTIVE, label: 'Высокий', hint: 'интенсивно 6–7 р/нед' },
-          { id: ActivityLevel.EXTRA_ACTIVE, label: 'Очень высокий', hint: 'тяжёлая физ. работа + тренировки' }
-        ].map(opt => (
-          <button
-            key={String(opt.id)}
-            type="button"
-            onClick={() => setRegData(prev => ({ ...prev, activityLevel: opt.id }))}
-            className={clsx(
-              "w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all",
-              regData.activityLevel === opt.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500"
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <span>{opt.label}</span>
-              <span className="text-[10px] text-slate-500 font-semibold">{opt.hint}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-
-    {!regTargetWeightValid && (
-      <div className="text-[11px] text-amber-300/90 font-semibold">
-        Укажите желаемый вес — без него эксперты могут дать некорректные рекомендации.
-      </div>
-    )}
-  </div>
-</div>
-
-{/* Интенсивность цели (Smart Deficit Engine) */}
+                  {/* Интенсивность цели (Smart Deficit Engine) */}
                   {(regData.goal === Goal.LOSS || regData.goal === Goal.GAIN) && (
                     <div className="space-y-2 mt-4 p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 animate-in slide-in-from-top-2 duration-300">
                       <div className="flex items-center justify-between ml-1">
@@ -2746,7 +2638,7 @@ if (authState === 'register') return (
             <button type="button" onClick={() => setOnboardingStep(2)} disabled={!regStep1Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep1Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Рассчитать мой план</button>
           ) : (
             <>
-              <button onClick={handleActivateWithTransition} disabled={!regStep2Valid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep2Valid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
+              <button onClick={handleActivateWithTransition} disabled={!regNameValid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regNameValid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
               <button type="button" onClick={() => onboardingStep === 2 && setOnboardingStep(1)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад к параметрам</button>
             </>
           )}
@@ -2912,13 +2804,7 @@ if (authState === 'register') return (
         {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center gap-2 md:gap-4 p-3 md:p-4 rounded-[1.5rem] transition-all w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={24} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] md:text-base font-bold">{tab.label}</span></button>
         ))}
-        <button
-          onClick={logout}
-          title="Выйти из приложения (вернуться к выбору профиля)"
-          className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"
-        >
-          <X size={20} /> <span className="font-bold">Выйти из приложения</span>
-        </button>
+        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
       <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
         {activeTab === 'dashboard' && (
@@ -3144,19 +3030,6 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
         {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
         {activeTab === 'family' && (
-<<<<<<< HEAD
-          <div className="max-w-4xl mx-auto space-y-10 py-10 animate-in fade-in duration-700">
-            <header className="flex items-center justify-between"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Семья</h1><p className="text-slate-400 font-medium">До 5 профилей в одном аккаунте (Family)</p></div><button onClick={() => setAuthState('auth_choice')} className="px-6 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all">Сменить профиль</button></header>
-            {paywall.plan !== 'family' ? (
-              <div className="bg-slate-900 p-10 rounded-[3rem] border border-slate-800 shadow-xl space-y-4"><h3 className="text-2xl font-black text-slate-100">Открыть Family</h3><p className="text-slate-500 font-medium text-left">Семейный доступ даёт до 5 отдельных профилей с независимой статистикой и отчётами.</p><button onClick={paywall.openPaywall} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg shadow-xl shadow-indigo-900/30 hover:bg-indigo-700 transition-all">Перейти на Family</button></div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{allUsers.map(u => (<div key={u.id} onClick={() => void loginAsUser(u)} className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center gap-6 hover:border-indigo-500/20 transition-all text-left group cursor-pointer"><div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-300 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">{u.name?.[0]?.toUpperCase() || 'F'}</div><div className="flex-1"><div className="flex items-center justify-between"><p className="font-black text-slate-100 text-lg">{u.name}</p>{u.id === currentUser?.id && <span className="text-[10px] px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-black tracking-widest uppercase">Активен</span>}</div><p className="text-xs text-slate-500 font-medium tabular-nums">Вес: {u.weight} кг • Цель: {u.goal}</p></div><button type="button" className="p-3 rounded-xl hover:bg-rose-500/10 text-slate-600 hover:text-rose-400 transition-all" title={u.googleSub ? "Удалить локальный профиль (Google аккаунт останется)" : "Удалить локальный профиль"} onClick={(e) => { e.stopPropagation(); const ok = confirm(`Удалить локальный профиль "${u.name || 'Профиль'}"? Данные восстановить нельзя.`); if (ok) deleteUserProfile(u); }}><Trash2 size={18} /></button><LogIn size={18} className="text-slate-600 group-hover:text-indigo-300 transition-colors shrink-0" /></div>))}</div>
-                <button 
-                  onClick={() => void startLocalRegistration()} 
-                  disabled={allUsers.length >= 5 || inviteChecking}
-                  className="w-full py-6 bg-slate-900 border-2 border-dashed border-slate-800 rounded-[2.5rem] font-black text-slate-500 hover:text-indigo-300 hover:border-indigo-500/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-=======
           <div className="max-w-4xl mx-auto space-y-8 py-10 animate-in fade-in duration-700">
             <header className="flex items-start justify-between gap-4">
               <div className="text-left">
@@ -3167,7 +3040,6 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                 <button
                   onClick={() => void loadCloudFamily()}
                   className="px-4 py-3 bg-slate-900 border border-slate-800 rounded-full font-black text-xs uppercase tracking-widest text-slate-400 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
->>>>>>> e3066ba (fix: show weekly shopping list grams (use shoppingListItems))
                 >
                   Обновить
                 </button>
