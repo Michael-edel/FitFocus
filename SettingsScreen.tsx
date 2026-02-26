@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile } from './types';
 import { Goal } from './types';
 import { Check, Volume2, Music, Languages, Palette, AlertTriangle } from 'lucide-react';
@@ -119,22 +119,6 @@ export default function SettingsScreen({
   const [cacheClearedTs, setCacheClearedTs] = useState<number | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
 
-	// UX: allow changing target weight + activity after onboarding
-	const activityOptions = useMemo(
-		() => [
-			{ value: 1.2, label: 'Сидячий образ жизни' },
-			{ value: 1.375, label: 'Лёгкая активность (1–3 тренировки/нед)' },
-			{ value: 1.55, label: 'Умеренная активность (3–5 трен./нед)' },
-			{ value: 1.725, label: 'Высокая активность (6–7 трен./нед)' },
-			{ value: 1.9, label: 'Очень высокая активность (физ. работа/спорт)' },
-		],
-		[]
-	);
-
-	const [targetWeight, setTargetWeight] = useState<number>(user?.targetWeight ?? 0);
-	const [activityLevel, setActivityLevel] = useState<number>(user?.activityLevel ?? 1.2);
-	const [profileSavedMsg, setProfileSavedMsg] = useState<string | null>(null);
-
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const onPickImport = () => fileInputRef.current?.click();
@@ -150,8 +134,6 @@ export default function SettingsScreen({
     setAckLoss(!!user?.riskAcknowledgedLoss);
     setAckGain(!!user?.riskAcknowledgedGain);
     setCacheCleared(false);
-		setTargetWeight(user?.targetWeight ?? 0);
-		setActivityLevel(user?.activityLevel ?? 1.2);
   }, [user?.id]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
@@ -178,69 +160,6 @@ export default function SettingsScreen({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Profile parameters */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-[2rem] p-6 md:p-8 shadow-xl space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-300">
-                <Goal size={18} />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-100">Параметры профиля</h3>
-                <p className="text-slate-400 text-sm">Целевой вес и активность можно менять позже.</p>
-              </div>
-            </div>
-            <button
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
-              onClick={() => {
-                if (!user || !onChangeUser) return;
-                const tw = Number(targetWeight);
-                const al = Number(activityLevel);
-                if (!Number.isFinite(tw) || tw <= 0) {
-                  setProfileSavedMsg('Укажите корректный целевой вес');
-                  return;
-                }
-                onChangeUser({ ...user, targetWeight: tw, activityLevel: al });
-                setProfileSavedMsg('Сохранено');
-                window.setTimeout(() => setProfileSavedMsg(null), 2000);
-              }}
-            >
-              Сохранить
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Целевой вес (кг)</label>
-              <input
-                type="number"
-                min={30}
-                max={250}
-                step={0.1}
-                value={targetWeight || ''}
-                onChange={(e) => setTargetWeight(Number(e.target.value))}
-                className="w-full bg-slate-950/40 border border-slate-800 rounded-2xl px-4 py-3 text-slate-100 font-bold"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Уровень активности</label>
-              <select
-                value={activityLevel}
-                onChange={(e) => setActivityLevel(Number(e.target.value))}
-                className="w-full bg-slate-950/40 border border-slate-800 rounded-2xl px-4 py-3 text-slate-100 font-bold"
-              >
-                {activityOptions.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {profileSavedMsg && (
-            <div className="text-sm font-bold text-emerald-300">{profileSavedMsg}</div>
-          )}
-        </div>
         <Card title="Тема" icon={<Palette className="w-5 h-5" />}>
           <div className="space-y-3">
             <Option
