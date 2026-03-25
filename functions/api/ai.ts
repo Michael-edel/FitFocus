@@ -1,4 +1,5 @@
 import { requireUser, json as jsonV } from "./_lib/auth";
+import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
 
 
@@ -262,6 +263,18 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   // Enterprise Layer: require authenticated user (server-driven)
   let user: any;
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
+  try { await requireBetaAccess(env as any, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
+  let bodyText = "";
+  let body: any = null;
+  try {
+    bodyText = await request.text();
+    body = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
+  }
+
+  const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
+
   const features = await loadFeatures(env as any);
   const settings = await loadSettings(env as any);
   const budgetGuardEnabled = isEnabled(features, "ai_budget_guard_enabled", false);
@@ -275,13 +288,15 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const now = Date.now();
   const d0 = new Date(now);
   const dayStart = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate())).getTime();
+  const safeMode = isEnabled(features, "ai_safe_mode", false);
+  const fallbackMode = isEnabled(features, "ai_fallback_mode", true);
 
   // Emergency: force fallback for everyone (kill switch)
   if (emergencyFallback) {
     const profile = await loadUserProfile(env as any, String(user.sub));
     const fallback = buildFallback(feature, profile);
-    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
-    return json({ ok: true, data: fallback, fallback: true }, 200);
+    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null });
+    return jsonResponse({ ...fallback, text: JSON.stringify(fallback) }, 200, { "X-FF-AI-Fallback": "1" });
   }
 
   // Budget Guard (admin-managed)
@@ -323,26 +338,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     }
   }
 
-  const safeMode = isEnabled(features, "ai_safe_mode", false);
-  const fallbackMode = isEnabled(features, "ai_fallback_mode", true);
-
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
 
   const contentLength = request.headers.get("content-length");
   if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
     return jsonResponse({ error: { message: "Payload too large" } }, 413);
   }
-
-  let bodyText = "";
-  let body: any = null;
-  try {
-    bodyText = await request.text();
-    body = bodyText ? JSON.parse(bodyText) : {};
-  } catch {
-    return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
-  }
-
-  const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
 
   // Safe mode: apply conservative limits and settings (toggled via feature_flags.ai_safe_mode)
   if (safeMode) {
@@ -578,7 +579,7 @@ async function loadUserProfile(env: any, userId: string): Promise<any> {
 function calcTargetCalories(profile: any): number {
   // Очень грубая оценка: если есть цель и активность — подстраиваем.
   // Это fallback, не медицинская рекомендация.
-  const weight = Number(profile?.weight_kg || profile?.weightKg || profile?.weight || 70);
+  const weight = Number(profile?.weight_kg || profile?.weightKg || 70);
   const base = Math.round(weight * 30); // ~ поддержание
   const goal = String(profile?.goal || profile?.goalType || "loss");
   const activity = String(profile?.activity_level || profile?.activityLevel || "medium");
@@ -626,8 +627,8 @@ function buildFallbackWeeklyMenu(profile: any) {
 
 function buildFallbackAdvice(profile: any) {
   const target = calcTargetCalories(profile);
-  const w = profile?.weight_kg || profile?.weightKg || profile?.weight;
-  const tw = profile?.target_weight_kg || profile?.targetWeightKg || profile?.targetWeight;
+  const w = profile?.weight_kg || profile?.weightKg;
+  const tw = profile?.target_weight_kg || profile?.targetWeightKg;
   const act = profile?.activity_level || profile?.activityLevel;
   return {
     fallback: true,

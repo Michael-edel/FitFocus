@@ -3,7 +3,6 @@ import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodIt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets } from "./profileMath";
-import { getEffectiveWeight, sanitizeWeightHistory } from "./weight";
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -67,6 +66,7 @@ async function callAiProxy(model: string, contents: any, feature: string, config
     const payload = { ...basePayload, model: m };
     const res = await fetch("/api/ai", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
@@ -708,7 +708,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  */
 export async function getCoachAdvice(data: any): Promise<any> {
   const response = await callAiProxy('gemini-2.5-flash', 
-    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Дай краткий совет на сегодня. Если встречается одиночная аномальная запись веса, считай её вероятной ошибкой ввода и не делай жёстких медицинских выводов. Учитывай целевой вес пользователя, если он передан. Верни JSON с полями title, advice, bullets (массив строк).`,
+    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
       responseMimeType: "application/json",
@@ -828,23 +828,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     );
   };
 
-  const cleanWeights = sanitizeWeightHistory(user.weightHistory, user.weight);
-  const effectiveWeight = getEffectiveWeight(user.weightHistory, user.weight);
-  const userForPlan = { ...user, weight: effectiveWeight, weightHistory: cleanWeights.history };
-  const goalGapKg = user.targetWeight ? Number((user.targetWeight - effectiveWeight).toFixed(1)) : null;
-
-  const basePrompt = `Ты — фитнес-коуч и нутрициолог.
-Создай персональный план питания и активности для пользователя: ${JSON.stringify(userForPlan)}.
-У пользователя целевой вес: ${user.targetWeight ?? 'не указан'} кг. Текущий вес для расчётов: ${effectiveWeight} кг.${goalGapKg !== null ? ` До цели ${goalGapKg > 0 ? '+' : ''}${goalGapKg} кг.` : ''}
-Если в исходной истории веса есть аномальные точки, игнорируй их и опирайся на очищенную историю. Не драматизируй и не ставь диагнозы по одной записи.
-
-Формат ответа:
-- Верни ТОЛЬКО валидный JSON без пояснений/markdown.
-- Строго по схеме AIPlan.
-- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.
-- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.
-- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.
-`;
+  const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
 
   const repairPrompt = (badJson: any) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
 
@@ -885,7 +869,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
  */
 export async function generatePlateauExplanation(data: any): Promise<string> {
   const response = await callAiProxy('gemini-2.5-flash', 
-    `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Если в данных встречаются аномальные единичные точки веса, не делай жёстких выводов и мягко предложи перепроверить запись. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
+    `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
     'plateau'
   );
   return response.text || "Не удалось получить объяснение от AI.";

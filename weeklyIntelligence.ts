@@ -1,5 +1,4 @@
 import { Goal, UserProfile, FoodItem, UserHabit } from "./types";
-import { sanitizeWeightHistory } from "./weight";
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 
 function clamp(n: number, min: number, max: number): number {
@@ -16,10 +15,9 @@ export interface WeeklyIntelligenceResult {
 }
 
 function calculateWeightDelta(history: any[], days: number): number {
-  const clean = sanitizeWeightHistory(history).history;
-  if (!clean || clean.length < 2) return 0;
-  const now = clean[clean.length - 1];
-  const past = clean
+  if (!history || history.length < 2) return 0;
+  const now = history[history.length - 1];
+  const past = history
     .slice()
     .reverse()
     .find(e => new Date(now.date).getTime() - new Date(e.date).getTime() >= days * 86400000);

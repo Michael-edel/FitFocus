@@ -1,5 +1,4 @@
 import type { FoodItem, UserHabit, UserProfile } from '../types';
-import { sanitizeWeightHistory } from '../weight';
 
 export function calcBmi(weightKg: number, heightCm: number) {
   const h = heightCm / 100;
@@ -15,9 +14,8 @@ export function bmiCategory(bmi: number) {
 }
 
 export function calcGoalProgressPct(user: UserProfile) {
-  const clean = sanitizeWeightHistory(user.weightHistory, user.weight).history;
-  const start = (clean?.[0]?.weight ?? user.weight);
-  const cur = clean?.[clean.length - 1]?.weight ?? user.weight;
+  const start = (user.weightHistory?.[0]?.weight ?? user.weight);
+  const cur = user.weight;
   const tgt = user.targetWeight;
   const denom = (start - tgt);
   if (!denom) return 0;
