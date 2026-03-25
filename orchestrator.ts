@@ -1,4 +1,5 @@
 import { AIAgent, AIAgentRole, CouncilResponse, UserProfile, FoodItem, UserHabit } from './types';
+import { sanitizeWeightHistory, getEffectiveWeight } from './weight';
 
 const AGENTS: AIAgent[] = [
   {
@@ -34,14 +35,19 @@ export async function runCouncil(
   callModel: (prompt: string, role: AIAgentRole) => Promise<string>
 ): Promise<CouncilResponse> {
   
+  const sanitized = sanitizeWeightHistory(user.weightHistory, user.weight);
+  const effectiveWeight = getEffectiveWeight(user.weightHistory, user.weight);
+  const goalDelta = user.targetWeight ? Number((user.targetWeight - effectiveWeight).toFixed(1)) : null;
+
   const context = `
     Пользователь: ${user.name}
-    Пол: ${user.gender}, Возраст: ${user.age} лет, Рост: ${user.height} см, Вес: ${user.weight} кг.
-    Цель: ${user.goal}${user.targetWeight ? `, целевой вес: ${user.targetWeight} кг` : ''}.
+    Пол: ${user.gender}, Возраст: ${user.age} лет, Рост: ${user.height} см, Текущий вес для расчётов: ${effectiveWeight} кг.
+    Цель: ${user.goal}${user.targetWeight ? `, целевой вес: ${user.targetWeight} кг` : ''}${goalDelta !== null ? `, осталось до цели: ${goalDelta > 0 ? '+' : ''}${goalDelta} кг` : ''}.
     Уровень активности: ${user.activityLevel}.
     Интенсивность: ${user.goal === 'LOSS' ? `дефицит ${user.lossDeficit ?? ''} ккал/день` : user.goal === 'GAIN' ? `профицит ${user.gainSurplus ?? ''} ккал/день` : 'поддержание'}.
     Исключения/ограничения (если есть): ${user.exclusions || 'нет'}.
-    История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
+    Санитизированная история веса (последние 14 записей): ${JSON.stringify(sanitized.history.slice(-14))}.
+    Подозрительные записи веса: ${sanitized.anomalies.length ? JSON.stringify(sanitized.anomalies.slice(-6)) : 'не обнаружены'}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.
     Дневник питания (последние 10 записей): ${JSON.stringify((history.diary || []).slice(-10))}.
     Запрос: "${query}"
@@ -56,7 +62,7 @@ export async function runCouncil(
 
   // 2. EXPERT THOUGHTS
   const thoughts = await Promise.all(activeAgents.map(async agent => {
-    const text = await callModel(`${agent.systemPrompt}\nКонтекст: ${context}\nДай краткое экспертное мнение по запросу. НЕ спрашивай рост/вес/возраст — они уже есть в контексте. Если данных не хватает, спрашивай только то, чего нет.`, agent.id);
+    const text = await callModel(`${agent.systemPrompt}\nКонтекст: ${context}\nДай краткое экспертное мнение по запросу. НЕ спрашивай рост/вес/возраст — они уже есть в контексте. Если есть аномальная запись веса, считай её вероятной ошибкой ввода, не ставь диагнозов и не делай жёстких выводов по одной точке. Если данных не хватает, спрашивай только то, чего нет.`, agent.id);
     return { agentId: agent.id, agentName: agent.name, text };
   }));
 
@@ -81,7 +87,7 @@ export async function runCouncil(
     Результаты рецензирования:
     ${peerReviews.map(r => `[${r.agentName} о коллеге]: ${r.text}`).join('\n')}
     
-    Сформируй итоговый ответ на русском языке. Ответ должен быть структурированным, дружелюбным и содержать конкретные шаги.
+    Сформируй итоговый ответ на русском языке. Ответ должен быть структурированным, дружелюбным и содержать конкретные шаги. Если в истории веса есть аномальная точка, мягко попроси перепроверить запись и не драматизируй. Не используй формулировки вроде «срочно», «опасно», «медицинская проблема» без нескольких подтверждающих фактов. Для расчётов и выводов опирайся на санитизированную историю и текущую цель по весу.
     В конце добавь "Agreement Score: X/100", где X - уровень согласия экспертов.
   `;
 
