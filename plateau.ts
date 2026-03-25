@@ -1,4 +1,5 @@
 import type { UserProfile } from "./types";
+import { sanitizeWeightHistory } from "./weight";
 
 /**
  * Определение плато веса.
@@ -11,7 +12,7 @@ import type { UserProfile } from "./types";
  *    не ниже первого более чем на 0.1 кг → плато.
  */
 export function detectPlateau(user: UserProfile): boolean {
-  const history = user.weightHistory ?? [];
+  const history = sanitizeWeightHistory(user.weightHistory, user.weight).history;
   if (history.length < 28) return false;
 
   const sorted = [...history]

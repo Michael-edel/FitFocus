@@ -578,7 +578,7 @@ async function loadUserProfile(env: any, userId: string): Promise<any> {
 function calcTargetCalories(profile: any): number {
   // Очень грубая оценка: если есть цель и активность — подстраиваем.
   // Это fallback, не медицинская рекомендация.
-  const weight = Number(profile?.weight_kg || profile?.weightKg || 70);
+  const weight = Number(profile?.weight_kg || profile?.weightKg || profile?.weight || 70);
   const base = Math.round(weight * 30); // ~ поддержание
   const goal = String(profile?.goal || profile?.goalType || "loss");
   const activity = String(profile?.activity_level || profile?.activityLevel || "medium");
@@ -626,8 +626,8 @@ function buildFallbackWeeklyMenu(profile: any) {
 
 function buildFallbackAdvice(profile: any) {
   const target = calcTargetCalories(profile);
-  const w = profile?.weight_kg || profile?.weightKg;
-  const tw = profile?.target_weight_kg || profile?.targetWeightKg;
+  const w = profile?.weight_kg || profile?.weightKg || profile?.weight;
+  const tw = profile?.target_weight_kg || profile?.targetWeightKg || profile?.targetWeight;
   const act = profile?.activity_level || profile?.activityLevel;
   return {
     fallback: true,
