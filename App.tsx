@@ -58,7 +58,7 @@ import { Gender, Goal, UserProfile, FoodItem, MealType, ActivityLevel, CoachTask
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
-import { addWeight, weightDelta, getEffectiveWeight, sanitizeWeightHistory } from './weight';
+import { addWeight, weightDelta } from './weight';
 import { createTask } from './coach';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
@@ -1349,33 +1349,19 @@ const openEditFood = (item: FoodEntry) => {
 
   const forecast = useMemo(() => {
     if (!regData.weight || !regTargets.calories) return null;
-    const deltaPerWeek = regData.goal === Goal.LOSS ? -Number(regData.lossDeficit || DEFAULT_DEFICIT) / 7700 * 7 : regData.goal === Goal.GAIN ? Number(regData.gainSurplus || DEFAULT_SURPLUS) / 7700 * 7 : 0;
-    const gap = Number(regData.targetWeight || 0) - Number(regData.weight || 0);
-    const weeksToGoal = (regData.goal === Goal.MAINTAIN || !deltaPerWeek || !gap || Math.sign(deltaPerWeek) !== Math.sign(gap))
-      ? null
-      : Math.max(1, Math.ceil(Math.abs(gap / deltaPerWeek)));
+    const deficit = regData.goal === Goal.LOSS ? -Number(regData.lossDeficit || DEFAULT_DEFICIT) : regData.goal === Goal.GAIN ? Number(regData.gainSurplus || DEFAULT_SURPLUS) : 0;
+    const weeklyDeltaKg = (deficit * 7) / 7700;
     return {
-      week4Weight: (regData.weight + deltaPerWeek * 4).toFixed(1),
-      weeklyDelta: (deltaPerWeek > 0 ? '+' : '') + deltaPerWeek.toFixed(2),
-      targetWeight: Number(regData.targetWeight || 0).toFixed(1),
-      weeksToGoal,
-      gap: gap.toFixed(1),
+      week4Weight: (regData.weight + weeklyDeltaKg * 4).toFixed(1),
+      weeklyDelta: (weeklyDeltaKg > 0 ? '+' : '') + weeklyDeltaKg.toFixed(2),
     };
-  }, [regData.weight, regData.targetWeight, regData.goal, regTargets.calories, regData.lossDeficit, regData.gainSurplus]);
+  }, [regData.weight, regData.goal, regTargets.calories, regData.lossDeficit, regData.gainSurplus]);
 
   const canAddProfile = useCallback((users: UserProfile[]) => users.length < 5, []);
   
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
   const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
-  const regTargetWeightValid = useMemo(() => {
-    const current = Number(regData.weight) || 0;
-    const target = Number(regData.targetWeight) || 0;
-    if (!target) return false;
-    if (regData.goal === Goal.LOSS) return target < current;
-    if (regData.goal === Goal.GAIN) return target > current;
-    return Math.abs(target - current) <= 0.5;
-  }, [regData.weight, regData.targetWeight, regData.goal]);
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -1409,8 +1395,7 @@ const openEditFood = (item: FoodEntry) => {
 
   const targets = useMemo(() => {
     if (!currentUser) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
-    const effectiveWeight = getEffectiveWeight(currentUser.weightHistory, currentUser.weight);
-    return calculateDailyTargets({ ...currentUser, weight: effectiveWeight });
+    return calculateDailyTargets(currentUser);
   }, [currentUser]);
 
   const weekly = useMemo(() => {
@@ -1831,7 +1816,14 @@ const deleteAccount = useCallback(async () => {
     } catch {}
 
     const serverUser = me?.user || null;
+    const hasServerAccess = me?.hasAccess !== false;
     setGoogleMe(serverUser);
+
+    if (serverUser?.sub && requireInvite && !hasServerAccess) {
+      setInviteError('Для доступа к закрытой бете нужен действующий код приглашения. Введите код и повторите вход через Google.');
+      setAuthState('auth_choice');
+      return;
+    }
 
     // 2) Server-driven: load profile from D1 (independent of device)
     if (serverUser?.sub) {
@@ -1985,9 +1977,8 @@ const logWeight = useCallback(() => {
       const todayKey = getTodayKey();
       const todayHabits = currentUser.dailyHabits?.[todayKey] || {};
       const habitsDone = Object.values(todayHabits).filter(Boolean).length;
-      const sanitizedWeights = sanitizeWeightHistory(currentUser.weightHistory, currentUser.weight);
       const advice = await getCoachAdvice({
-        user: { name: currentUser.name, goal: currentUser.goal, currentWeight: getEffectiveWeight(currentUser.weightHistory, currentUser.weight), targetWeight: currentUser.targetWeight, caloriesTarget: targets.calories, proteinTarget: targets.protein, fatTarget: targets.fat, carbsTarget: targets.carbs, adaptationMultiplier: currentUser.adaptationMultiplier, weightAnomalies: sanitizedWeights.anomalies.length },
+        user: { name: currentUser.name, goal: currentUser.goal, caloriesTarget: targets.calories, proteinTarget: targets.protein, fatTarget: targets.fat, carbsTarget: targets.carbs, adaptationMultiplier: currentUser.adaptationMultiplier },
         today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
       });
       setCoachCard(advice); incrementUsage('aiCoachCount');
@@ -2092,10 +2083,6 @@ const logWeight = useCallback(() => {
       }
     } catch {}
     if (!regNameValid) return;
-    if (!regTargetWeightValid) {
-      setPlanError(regData.goal === Goal.LOSS ? 'Целевой вес для похудения должен быть ниже текущего.' : regData.goal === Goal.GAIN ? 'Целевой вес для набора должен быть выше текущего.' : 'Для поддержания укажите текущий вес как целевой.');
-      return;
-    }
     setPlanError(null);
     const safeName = regData.name.trim();
     let newUser: UserProfile = {
@@ -2156,7 +2143,7 @@ const logWeight = useCallback(() => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, userId: newUser.id }),
+          body: JSON.stringify({ code, userId: googleMe?.sub || newUser.id }),
         });
         const rj = await rr.json().catch(() => null);
         if (!rr.ok || rj?.ok !== true) {
@@ -2467,33 +2454,10 @@ if (authState === 'register') return (
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ваша цель</label>
                   <div className="grid grid-cols-1 gap-1.5">
                     {[{ id: Goal.LOSS, label: 'Похудение' }, { id: Goal.MAINTAIN, label: 'Поддержание' }, { id: Goal.GAIN, label: 'Набор' }].map(g => (
-                      <button key={g.id} onClick={() => setRegData(prev => ({...prev, goal: g.id, targetWeight: g.id === Goal.LOSS ? Math.min(Number(prev.targetWeight || prev.weight - 5), Math.max(25, Number(prev.weight || 0) - 1)) : g.id === Goal.GAIN ? Math.max(Number(prev.targetWeight || prev.weight + 3), Number(prev.weight || 0) + 1) : Number(prev.weight || prev.targetWeight || 0)}))} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.goal === g.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
+                      <button key={g.id} onClick={() => setRegData({...regData, goal: g.id})} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.goal === g.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
                         <div className="flex items-center justify-between"><span>{g.label}</span>{aiRecommendedGoal === g.id && <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-black uppercase tracking-widest">AI Рекомендует</span>}</div>
                       </button>
                     ))}
-                  </div>
-
-                  <div className="space-y-1.5 mt-3">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Целевой вес</label>
-                    <div className={clsx("flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border", regTargetWeightValid ? "border-slate-800" : "border-amber-500/40")}>
-                      <div>
-                        <div className="text-xs font-black text-white">{regData.goal === Goal.MAINTAIN ? 'Вес удержания' : 'Нужный вес'}</div>
-                        <div className="text-[10px] font-semibold text-slate-500 mt-1">{regData.goal === Goal.LOSS ? 'Для похудения цель должна быть ниже текущего веса.' : regData.goal === Goal.GAIN ? 'Для набора цель должна быть выше текущего веса.' : 'Для поддержания цель равна текущему весу.'}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="number" inputMode="decimal" className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.targetWeight} onChange={e => setRegData(prev => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))} />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">кг</span>
-                      </div>
-                    </div>
-                    {forecast && (
-                      <div className="rounded-[1rem] border border-slate-800 bg-slate-900/40 p-3 text-[11px] font-semibold text-slate-400">
-                        <div>Через 4 недели при текущей стратегии: <span className="font-black text-white tabular-nums">{forecast.week4Weight} кг</span> ({forecast.weeklyDelta} кг/нед)</div>
-                        <div className="mt-1">До цели: <span className="font-black text-indigo-300 tabular-nums">{forecast.gap} кг</span>{forecast.weeksToGoal ? <> · ориентир <span className="font-black text-white tabular-nums">~{forecast.weeksToGoal}</span> нед.</> : ''}</div>
-                      </div>
-                    )}
-                    {!regTargetWeightValid && (
-                      <div className="text-[10px] font-black text-amber-300 ml-1">Проверьте целевой вес: он должен соответствовать выбранной цели.</div>
-                    )}
                   </div>
 
                   {/* Интенсивность цели (Smart Deficit Engine) */}

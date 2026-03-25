@@ -2,6 +2,7 @@
 // Server-driven source-of-truth for UserProfile (stored as JSON in D1)
 
 import { requireUser, json } from "./_lib/auth";
+import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
@@ -14,6 +15,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+
+  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+
+  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
   const row = await db
