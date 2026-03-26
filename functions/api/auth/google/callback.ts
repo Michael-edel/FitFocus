@@ -135,11 +135,35 @@ export const onRequestGet: PagesFunction<{
 
     // Closed beta invite handling
     const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
-    if (requireInvite && !inviteCode) {
+
+    const adminEmails = String((env as any).ADMIN_EMAILS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const bootstrapEmails = String((env as any).BOOTSTRAP_ADMIN_EMAILS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const emailLc = user.email.toLowerCase();
+    const listedAdmin = !!(user.email && adminEmails.includes(emailLc));
+    const anyAdmin = bootstrapEmails.length && user.email
+      ? await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first()
+      : null;
+    const bootstrapAdminEligible = !!(bootstrapEmails.length && user.email && !anyAdmin && bootstrapEmails.includes(emailLc));
+
+    const existingAccess = await env.DB.prepare(
+      `SELECT
+         EXISTS(SELECT 1 FROM invite_redemptions WHERE user_id = ?) AS has_redemption,
+         EXISTS(SELECT 1 FROM user_roles WHERE user_id = ? AND role = 'admin') AS is_admin`
+    ).bind(user.sub, user.sub).first<any>();
+
+    const alreadyHasAccess = !!(existingAccess?.has_redemption || existingAccess?.is_admin || listedAdmin || bootstrapAdminEligible);
+
+    if (!alreadyHasAccess && requireInvite && !inviteCode) {
       return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
     }
 
-    if (inviteCode) {
+    if (!alreadyHasAccess && inviteCode) {
       // idempotent: if already redeemed by this user, do not consume again
       const existing = await env.DB.prepare(
         "SELECT 1 as ok FROM invite_redemptions WHERE code = ? AND user_id = ? LIMIT 1"
@@ -166,26 +190,14 @@ export const onRequestGet: PagesFunction<{
     }
 
     // Admin role by email list
-    const adminEmails = String((env as any).ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (adminEmails.length && user.email && adminEmails.includes(user.email.toLowerCase())) {
+    if (listedAdmin) {
       await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
     }
     // Bootstrap admin (B2C-safe):
     // - only when there are NO admins yet
     // - only for emails listed in BOOTSTRAP_ADMIN_EMAILS
-    const bootstrapEmails = String((env as any).BOOTSTRAP_ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-
-    if (bootstrapEmails.length && user.email) {
-      const anyAdmin = await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first();
-      if (!anyAdmin && bootstrapEmails.includes(user.email.toLowerCase())) {
-        await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
-      }
+    if (bootstrapAdminEligible) {
+      await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
     }
 
 

@@ -463,6 +463,48 @@ const MacroBar: React.FC<{ label: string; current: number; target: number; color
 });
 
 
+
+const StickyKPIBar: React.FC<{
+  calories: number;
+  targetCalories: number;
+  protein: number;
+  targetProtein: number;
+  habitsDone: number;
+  primaryLabel: string;
+}> = React.memo(({ calories, targetCalories, protein, targetProtein, habitsDone, primaryLabel }) => {
+  const caloriePct = Math.max(0, Math.min(100, Math.round((calories / Math.max(1, targetCalories)) * 100)));
+  const proteinLeft = Math.max(0, Math.round(targetProtein - protein));
+  return (
+    <div className="md:hidden sticky z-40 -mx-1" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+      <div className="mx-1 rounded-[1.7rem] border border-slate-800/90 bg-slate-950/80 backdrop-blur-xl shadow-2xl shadow-slate-950/20 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-500">Сегодня</p>
+            <p className="text-sm font-black text-slate-100 truncate">{primaryLabel}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-sm font-black text-slate-100 tabular-nums">{Math.round(calories)} / {Math.round(targetCalories)}</p>
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-500">ккал</p>
+          </div>
+        </div>
+        <div className="mt-3 h-2 rounded-full bg-slate-900 overflow-hidden">
+          <div className="h-full rounded-full bg-indigo-400" style={{ width: `${caloriePct}%` }} />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-left">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-500">Белок</p>
+            <p className="text-sm font-black text-slate-100 tabular-nums">{Math.round(protein)} / {Math.round(targetProtein)} г</p>
+          </div>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-500">Фокус</p>
+            <p className="text-sm font-black text-slate-100">{proteinLeft > 0 ? `+${proteinLeft} г белка` : `Привычки ${habitsDone}/4`}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 type FoodDiaryGroupedProps = {
   items: FoodEntry[];
   selectedIds: Set<string>;
@@ -491,6 +533,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
   mealTypeLabel,
 }) => {
   const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const [mobileActionItem, setMobileActionItem] = useState<FoodEntry | null>(null);
 
   const groups = order
     .map((mt) => {
@@ -502,21 +545,10 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
     .filter(Boolean) as Array<{ mt: MealType; title: string; calories: number; groupItems: FoodEntry[] }>;
 
   const runMobileMealAction = (item: FoodEntry) => {
-    const action = window.prompt('Действие: edit / photo / delete', 'edit');
-    if (!action) return;
-    const normalized = action.trim().toLowerCase();
-    if (normalized === 'edit') {
-      openEdit(item);
-      return;
-    }
-    if (normalized === 'photo' && (item.photoThumb || item.photo)) {
-      deletePhoto(item.id);
-      return;
-    }
-    if (normalized === 'delete') {
-      deleteEntry(item.id);
-    }
+    setMobileActionItem(item);
   };
+
+  const closeMobileActions = () => setMobileActionItem(null);
 
   return (
     <div className="space-y-6">
@@ -641,19 +673,9 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            openEdit(item);
-                          }}
-                          className="min-h-[40px] px-4 rounded-full bg-slate-950/70 border border-slate-700/60 text-slate-200 text-xs font-black uppercase tracking-widest"
-                        >
-                          Правка
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
                             runMobileMealAction(item);
                           }}
-                          className="min-h-[40px] px-4 rounded-full bg-slate-950/70 border border-slate-700/60 text-slate-300 text-xs font-black uppercase tracking-widest"
+                          className="min-h-[40px] px-4 rounded-full bg-slate-950/70 border border-slate-700/60 text-slate-200 text-xs font-black uppercase tracking-widest"
                         >
                           Действия
                         </button>
@@ -671,6 +693,33 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
         <div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner">
           <Utensils size={48} className="opacity-20" />
           <p className="font-bold">Вы еще ничего не ели сегодня</p>
+        </div>
+      )}
+
+      {mobileActionItem && (
+        <div className="md:hidden fixed inset-0 z-[80]">
+          <button type="button" className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={closeMobileActions} aria-label="Закрыть действия" />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-[2rem] border-t border-slate-800 bg-slate-950 px-5 pt-5 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+            <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-slate-800" />
+            <div className="flex items-center gap-3 text-left">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shrink-0">
+                {(mobileActionItem.photoThumb || mobileActionItem.photo) ? <img src={(mobileActionItem.photoThumb || mobileActionItem.photo)!} alt={mobileActionItem.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-indigo-400"><Utensils size={20} /></div>}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest font-black text-slate-500">{mealTypeLabel(mobileActionItem.mealType)}</p>
+                <p className="text-lg font-black text-slate-100 truncate">{mobileActionItem.name}</p>
+                <p className="text-sm font-semibold text-slate-400 tabular-nums">{Math.round(mobileActionItem.calories)} ккал · Б {Math.round(mobileActionItem.protein)} · Ж {Math.round(mobileActionItem.fat)} · У {Math.round(mobileActionItem.carbs)}</p>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              <button type="button" onClick={() => { closeMobileActions(); openEdit(mobileActionItem); }} className="w-full min-h-[52px] rounded-[1.4rem] border border-slate-800 bg-slate-900 text-slate-100 font-black">Правка записи</button>
+              {(mobileActionItem.photoThumb || mobileActionItem.photo) && (
+                <button type="button" onClick={() => { closeMobileActions(); deletePhoto(mobileActionItem.id); }} className="w-full min-h-[52px] rounded-[1.4rem] border border-amber-500/20 bg-amber-500/10 text-amber-200 font-black">Удалить только фото</button>
+              )}
+              <button type="button" onClick={() => { closeMobileActions(); deleteEntry(mobileActionItem.id); }} className="w-full min-h-[52px] rounded-[1.4rem] border border-rose-500/20 bg-rose-500/10 text-rose-200 font-black">Удалить запись</button>
+              <button type="button" onClick={closeMobileActions} className="w-full min-h-[52px] rounded-[1.4rem] border border-slate-800 bg-transparent text-slate-400 font-black">Отмена</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2963,6 +3012,14 @@ if (authState === 'register') return (
               <div className="text-left"><h1 className="text-4xl font-black text-slate-200 mb-2">Привет, <span className="text-slate-50">{currentUser?.name}</span>! 👋</h1><p className="text-slate-400 font-medium">Ваш путь к цели под контролем ({paywall.plan})</p></div>
               <div className="flex items-center gap-3 bg-slate-900 p-2 rounded-[2rem] shadow-sm border border-slate-800"><div className="flex flex-col gap-2 items-center px-2 py-1"><div className="flex gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20"><Scale size={20} className="text-indigo-400 mr-2" /><input type="number" placeholder="Вес" className="bg-transparent w-16 text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="bg-indigo-600 text-white p-4 rounded-[1.5rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all"><Plus size={20} /></button></div>
             </header>
+            <StickyKPIBar
+              calories={dailyStats.calories}
+              targetCalories={targets.calories}
+              protein={dailyStats.protein}
+              targetProtein={targets.protein}
+              habitsDone={['water','steps','breakfast','sleep'].filter((key) => !!currentUser?.dailyHabits?.[getTodayKey()]?.[key as keyof UserHabit]).length}
+              primaryLabel={Math.max(0, Math.round(targets.protein - dailyStats.protein)) > 40 ? `Добрать ${Math.max(0, Math.round(targets.protein - dailyStats.protein))} г белка` : `Осталось ${Math.max(0, Math.round(targets.calories - dailyStats.calories))} ккал`}
+            />
             {(() => {
               const proteinLeft = Math.max(0, Math.round(targets.protein - dailyStats.protein));
               const caloriesLeft = Math.max(0, Math.round(targets.calories - dailyStats.calories));
@@ -3060,9 +3117,9 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
     </div>
   </div>
 </div></div></div>)}
-            {weekly && paywall.canUsePro && (<div className="bg-gradient-to-br from-indigo-600/20 via-purple-600/20 to-rose-500/20 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/20 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-600"><div className="flex items-start justify-between"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 opacity-80 block mb-1">AI-Аналитика недели (PRO)</span><div className="mt-4"><div className="flex items-center justify-between gap-6"><h3 className="text-4xl font-black text-white flex items-center gap-3"><span className="tabular-nums">{weekly.wis}</span><span className="text-lg font-black text-indigo-300 opacity-50">/ 100</span></h3><span className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest", weekly.wis >= 80 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : weekly.wis >= 60 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : weekly.wis >= 40 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30")}>{weekly.status}</span></div><div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div></div></div><div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Адаптация</p><p className="text-sm font-black tabular-nums text-white">{weekly.adaptationIndex}/100</p></div></div><div className="mt-2 space-y-2 text-sm font-semibold opacity-90"><p className="font-black text-indigo-100 flex items-center gap-2"><TrendingUp size={16} />Прогноз следующей недели: {forecastNextWeek > 0 ? '+' : ''}{forecastNextWeek.toFixed(2)} кг</p><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/80"><ShieldCheck size={14} className="text-white/80" />Интенсивность учтена</div></div>{weeklyReports.length > 0 && (<div className="mt-8 border-t border-white/10 pt-6"><span className="text-[10px] font-black uppercase tracking-widest text-white/60 block mb-4">История AI-отчётов</span><div className="space-y-4">{weeklyReports.slice().reverse().map((r, idx) => (<div key={idx} className="p-5 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 group hover:border-white/20 transition-all"><div className="flex justify-between items-center"><div className="text-left"><span className="text-sm font-black text-indigo-300">{r.weekKey}</span><p className="text-[10px] font-black uppercase tracking-widest text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p></div><div className="text-right"><span className="text-xs font-black text-white tabular-nums">{r.data.wis}/100</span><p className="text-[8px] font-black uppercase tracking-widest text-white/40">WIS Score</p></div></div>{r.aiText && (<p className="text-sm font-medium text-white/80 leading-relaxed text-left border-l-2 border-indigo-400/30 pl-4">{r.aiText}</p>)}<button onClick={() => exportWeeklyPDF(r)} className="w-full py-3 rounded-xl bg-white/10 border border-white/10 text-white font-bold hover:bg-white/20 transition flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Download size={14} /> Экспорт в PDF</button></div>))}</div></div>)}</div>)}
+            {weekly && paywall.canUsePro && (<div className="bg-gradient-to-br from-indigo-600/20 via-purple-600/20 to-rose-500/20 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/20 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-600"><div className="flex items-start justify-between"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 opacity-80 block mb-1">AI-Аналитика недели (PRO)</span><div className="mt-4"><div className="flex items-center justify-between gap-6"><h3 className="text-4xl font-black text-white flex items-center gap-3"><span className="tabular-nums">{weekly.wis}</span><span className="text-lg font-black text-indigo-300 opacity-50">/ 100</span></h3><span className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest", weekly.wis >= 80 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : weekly.wis >= 60 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : weekly.wis >= 40 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30")}>{weekly.status}</span></div><div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div></div></div><div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Адаптация</p><p className="text-sm font-black tabular-nums text-white">{weekly.adaptationIndex}/100</p></div></div><div className="mt-2 space-y-2 text-sm font-semibold opacity-90"><p className="font-black text-indigo-100 flex items-center gap-2"><TrendingUp size={16} />Прогноз следующей недели: {forecastNextWeek > 0 ? '+' : ''}{forecastNextWeek.toFixed(2)} кг</p><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/80"><ShieldCheck size={14} className="text-white/80" />Интенсивность учтена</div></div>{weeklyReports.length > 0 && (<div className="mt-8 border-t border-white/10 pt-6"><span className="text-[10px] font-black uppercase tracking-widest text-white/60 block mb-4">История AI-отчётов</span><div className="space-y-4">{weeklyReports.slice().reverse().map((r, idx) => (<div key={idx} className="p-5 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 group hover:border-white/20 transition-all"><div className="flex justify-between items-center"><div className="text-left"><span className="text-sm font-black text-indigo-300">{r.weekKey}</span><p className="text-[10px] font-black uppercase tracking-widest text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p></div><div className="text-right"><span className="text-xs font-black text-white tabular-nums">{r.data.wis}/100</span><p className="text-[8px] font-black uppercase tracking-widest text-white/40">WIS Score</p></div></div>{r.aiText && (<><div className="md:hidden rounded-[1.4rem] border border-white/10 bg-white/5 p-4 text-left"><ul className="space-y-2 text-sm font-semibold text-white/85"><li>• Вес за 7 дней: {r.data.weightDelta7 > 0 ? '+' : ''}{r.data.weightDelta7.toFixed(1)} кг</li><li>• Комплаенс: {r.data.compliance}%</li><li>• {String(r.aiText).split(/(?<=[.!?])\s+/).slice(0,2).join(' ')}</li></ul></div><p className="hidden md:block text-sm font-medium text-white/80 leading-relaxed text-left border-l-2 border-indigo-400/30 pl-4">{r.aiText}</p></>)}<button onClick={() => exportWeeklyPDF(r)} className="w-full py-3 rounded-xl bg-white/10 border border-white/10 text-white font-bold hover:bg-white/20 transition flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Download size={14} /> Экспорт в PDF</button></div>))}</div></div>)}</div>)}
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-10 rounded-[3rem] text-white shadow-2xl shadow-indigo-950/20 relative overflow-hidden group"><div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:scale-110 transition-transform" /><div className="relative z-10 flex flex-col h-full space-y-6"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner border border-white/10"><Sparkles size={28} /></div><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">AI Коучинг</span><h3 className="text-2xl font-black">{coachCard ? coachCard.title : "Ваш коуч рядом"}</h3></div></div><div className="flex-1 flex flex-col justify-center">{coachLoading ? (<div className="flex items-center gap-3 font-bold animate-pulse"><Loader2 className="animate-spin" /> Формирую рекомендации...</div>) : (<div className="space-y-4"><p className="text-lg font-medium leading-relaxed italic opacity-90 text-left">{coachCard ? `"${coachCard.advice}"` : "Нажмите, чтобы получить персональный анализ вашего дня и привычек."}</p>{todayTask && (<div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-xl"><span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2 block text-white text-left">Задача дня:</span><div className="flex items-start gap-4 cursor-pointer" onClick={() => handleToggleTask(todayTask.date)}><div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center transition-all ${todayTask.completed ? 'bg-white text-indigo-600 shadow-lg shadow-white/20' : 'bg-white/10 border-2 border-white/30 text-transparent'}`}><CheckCircle2 size={14} fill="currentColor" /></div><span className={`text-lg font-bold leading-snug text-left ${todayTask.completed ? 'line-through opacity-50' : ''}`}>{todayTask.text}</span></div></div>)}</div>)}</div>{!coachCard && !coachLoading && (<button onClick={handleGetCoachAdvice} className="w-fit px-10 py-4 bg-white text-indigo-600 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl hover:scale-105 transition-all active:scale-95">Получить совет</button>)}</div></div>
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-10 rounded-[3rem] text-white shadow-2xl shadow-indigo-950/20 relative overflow-hidden group"><div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:scale-110 transition-transform" /><div className="relative z-10 flex flex-col h-full space-y-6"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner border border-white/10"><Sparkles size={28} /></div><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">AI Коучинг</span><h3 className="text-2xl font-black">{coachCard ? coachCard.title : "Ваш коуч рядом"}</h3></div></div><div className="flex-1 flex flex-col justify-center">{coachLoading ? (<div className="flex items-center gap-3 font-bold animate-pulse"><Loader2 className="animate-spin" /> Формирую рекомендации...</div>) : (<div className="space-y-4"><div className="md:hidden rounded-[1.8rem] bg-white/10 border border-white/15 p-4 text-left"><p className="text-sm font-black text-white/90">{coachCard?.title || 'Совет дня'}</p><ul className="mt-3 space-y-2 text-sm font-semibold text-white/85"><li>• {Math.max(0, Math.round(targets.calories - dailyStats.calories)) > 0 ? `Осталось ${Math.max(0, Math.round(targets.calories - dailyStats.calories))} ккал до дневной цели` : 'Калории на день уже закрыты'}</li><li>• {Math.max(0, Math.round(targets.protein - dailyStats.protein)) > 0 ? `Доберите ещё ${Math.max(0, Math.round(targets.protein - dailyStats.protein))} г белка` : 'Белок на сегодня почти закрыт'}</li><li>• {coachCard ? coachCard.advice.split(/(?<=[.!?])\s+/).slice(0, 1).join(' ') : 'Нажмите, чтобы получить персональный анализ дня.'}</li></ul></div><div className="hidden md:block"><p className="text-lg font-medium leading-relaxed italic opacity-90 text-left">{coachCard ? `"${coachCard.advice}"` : "Нажмите, чтобы получить персональный анализ вашего дня и привычек."}</p></div>{todayTask && (<div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-xl"><span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2 block text-white text-left">Задача дня:</span><div className="flex items-start gap-4 cursor-pointer" onClick={() => handleToggleTask(todayTask.date)}><div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center transition-all ${todayTask.completed ? 'bg-white text-indigo-600 shadow-lg shadow-white/20' : 'bg-white/10 border-2 border-white/30 text-transparent'}`}><CheckCircle2 size={14} fill="currentColor" /></div><span className={`text-lg font-bold leading-snug text-left ${todayTask.completed ? 'line-through opacity-50' : ''}`}>{todayTask.text}</span></div></div>)}</div>)}</div>{!coachCard && !coachLoading && (<button onClick={handleGetCoachAdvice} className="w-fit px-10 py-4 bg-white text-indigo-600 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl hover:scale-105 transition-all active:scale-95">Получить совет</button>)}</div></div>
                 <div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 flex flex-col justify-between group"><div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-500"><BookOpen size={20} /></div><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Курс обучения</span></div><div className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 border border-emerald-500/20"><Flame size={12} fill="currentColor" /> {currentUser?.courseProgress?.streak || 0} Дней</div></div><div className="bg-slate-950 p-6 rounded-[2rem] flex items-center gap-6 border border-slate-800 group-hover:border-indigo-500/20 transition-all shadow-inner"><div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-sm border border-slate-800"><CheckSquare size={32} className="text-indigo-400" /></div><div className="text-left"><h4 className="text-2xl font-black text-slate-100 leading-tight mb-1">Урок {currentLesson?.week || 1}: {currentLesson?.title}</h4><p className="text-sm text-slate-500 font-bold tabular-nums">{Math.ceil((currentLesson?.readTimeSec || 0) / 60)} минут чтения</p></div></div></div><button onClick={() => setIsLessonViewOpen(true)} className="w-full mt-8 py-5 bg-slate-800 text-slate-300 rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3 border border-slate-700 hover:border-indigo-500 shadow-lg">Открыть урок <ChevronRight size={20} /></button></div>
              </div>
            </div>
@@ -3274,6 +3331,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
       </label>
     </div></div></header>
       <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
+      <StickyKPIBar calories={dailyStats.calories} targetCalories={targets.calories} protein={dailyStats.protein} targetProtein={targets.protein} habitsDone={['water','steps','breakfast','sleep'].filter((key) => !!currentUser?.dailyHabits?.[getTodayKey()]?.[key as keyof UserHabit]).length} primaryLabel={Math.max(0, Math.round(targets.protein - dailyStats.protein)) > 0 ? `Добрать ${Math.max(0, Math.round(targets.protein - dailyStats.protein))} г белка` : `Осталось ${Math.max(0, Math.round(targets.calories - dailyStats.calories))} ккал`} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold text-slate-400">Вы еще ничего не ели сегодня</p><p className="text-sm font-semibold text-slate-500 max-w-md">Сделайте первый снимок еды или загрузите фото — запись появится здесь, а КБЖУ обновится автоматически.</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div><button type="button" onClick={() => setIsCameraOpen(true)} className="md:hidden fixed right-4 z-40 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-2xl shadow-indigo-950/30 border border-indigo-400/30 flex items-center justify-center" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 112px)' }} aria-label="Добавить еду"><Plus size={26} /></button></div>)}
         {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
