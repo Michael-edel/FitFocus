@@ -239,6 +239,12 @@ export interface UserProfile {
   googleSub?: string;
   /** аватар из Google */
   picture?: string;
+  /** onboarding уже завершён */
+  onboardingCompleted?: boolean;
+  /** выбранный темп плана */
+  planIntensity?: 'soft' | 'standard' | 'fast';
+  /** ритм жизни/предпочтения, собранные в onboarding */
+  lifestyleFlags?: string[];
 }
 
 export interface NutritionIntake {
