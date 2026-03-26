@@ -1225,11 +1225,13 @@ const openEditFood = (item: FoodEntry) => {
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
     riskAckLoss: false,
-    riskAckGain: false
+    riskAckGain: false,
+    planIntensity: 'standard' as 'soft' | 'standard' | 'fast',
+    lifestyleFlags: [] as string[]
   });
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
-  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3 | 4>(1);
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   const [activationStep, setActivationStep] = useState(0);
   const activationTimerRef = useRef<number | null>(null);
@@ -1388,11 +1390,47 @@ const openEditFood = (item: FoodEntry) => {
     };
   }, [regData.weight, regData.goal, regTargets.calories, regData.lossDeficit, regData.gainSurplus]);
 
+
+  useEffect(() => {
+    setRegData(prev => {
+      const next = { ...prev };
+      if (prev.goal === Goal.MAINTAIN && prev.targetWeight !== prev.weight) {
+        next.targetWeight = prev.weight;
+      }
+      if (prev.goal === Goal.LOSS) {
+        const desired = prev.planIntensity === 'soft' ? 300 : prev.planIntensity === 'fast' ? 650 : DEFAULT_DEFICIT;
+        if (prev.lossDeficit !== desired) next.lossDeficit = desired;
+      }
+      if (prev.goal === Goal.GAIN) {
+        const desired = prev.planIntensity === 'soft' ? 150 : prev.planIntensity === 'fast' ? 350 : DEFAULT_SURPLUS;
+        if (prev.gainSurplus !== desired) next.gainSurplus = desired;
+      }
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [regData.goal, regData.planIntensity, regData.weight]);
+
   const canAddProfile = useCallback((users: UserProfile[]) => users.length < 5, []);
   
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
-  const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
+  const regStep1Valid = true;
+  const regStep2Valid = Number(regData.weight) >= 35 && Number(regData.weight) <= 300 && Number(regData.height) >= 130 && Number(regData.height) <= 230 && Number(regData.age) >= 14 && Number(regData.age) <= 80;
+  const regTargetWeightValid = regData.goal === Goal.MAINTAIN
+    ? Number(regData.targetWeight) > 0
+    : regData.goal === Goal.LOSS
+      ? Number(regData.targetWeight) > 0 && Number(regData.targetWeight) < Number(regData.weight)
+      : Number(regData.targetWeight) > Number(regData.weight);
+  const regStep3Valid = regTargetWeightValid;
+  const onboardingTotalSteps = 4;
+  const lifestyleOptions = [
+    'Сидячая работа',
+    'Много хожу',
+    'Тренируюсь 1–2 раза',
+    'Тренируюсь 3+ раза',
+    'Часто ем вне дома',
+    'Хочу простой план',
+    'Нужен семейный режим',
+  ];
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -2208,7 +2246,10 @@ const logWeight = useCallback(() => {
       // Store as YYYY-MM-DD to keep charts/labels clean (avoid showing time parts)
       weightHistory: [{ date: new Date().toISOString().slice(0, 10), weight: regData.weight }], 
       tasks: [], 
-      plan: regData.plan
+      plan: regData.plan,
+      onboardingCompleted: true,
+      planIntensity: regData.planIntensity,
+      lifestyleFlags: regData.lifestyleFlags
     };
     setDevPlanOverride(regData.plan);
     try {
@@ -2519,306 +2560,195 @@ if (authState === 'register') return (
             <div className="absolute inset-[2px] bg-slate-900 rounded-[1.1rem] z-0" />
             <div className="relative w-[48px] h-[48px] bg-indigo-600 rounded-[1rem] flex items-center justify-center text-white font-black text-xl shadow-2xl animate-pulse">FF</div>
           </div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-100 tracking-tight">Настроим ваш персональный AI‑план</h1>
-          <p className="text-[10px] md:text-xs text-slate-400 font-semibold max-w-xs mx-auto">Мы рассчитаем метаболизм, цель и дневные KPI на основе ваших данных.</p>
+          <h1 className="text-xl md:text-2xl font-black text-slate-100 tracking-tight">Запустим ваш FitFocus за 1 минуту</h1>
+          <p className="text-[10px] md:text-xs text-slate-400 font-semibold max-w-md mx-auto">Быстро соберём базовые данные, цель и ритм жизни — и сразу покажем готовый AI‑план, меню и задачи на сегодня.</p>
         </div>
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center gap-2 text-[10px] font-black text-slate-50 uppercase tracking-widest">
-            <span className={clsx("w-2 h-2 rounded-full", onboardingStep === 1 ? "bg-indigo-400" : "bg-slate-700")} />
-            <span className={clsx("w-2 h-2 rounded-full", onboardingStep === 2 ? "bg-indigo-400" : "bg-slate-700")} />
-            <span>Шаг {onboardingStep} из 2</span>
+            {Array.from({ length: onboardingTotalSteps }).map((_, idx) => (
+              <span key={idx} className={clsx("w-2 h-2 rounded-full", onboardingStep === idx + 1 ? "bg-indigo-400" : onboardingStep > idx + 1 ? "bg-emerald-400" : "bg-slate-700")} />
+            ))}
+            <span>Шаг {onboardingStep} из {onboardingTotalSteps}</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden border border-slate-700/70">
+            <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-300" style={{ width: `${(onboardingStep / onboardingTotalSteps) * 100}%` }} />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {onboardingStep === 1 ? (
-            <div className="space-y-4 md:col-span-2 max-w-md mx-auto w-full">
-              <div className="grid grid-cols-1 gap-2">
-                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Вес (кг)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.weight} onChange={e => setRegData({...regData, weight: Math.max(0, Number(e.target.value) || 0)})} /></div>
-                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
-                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.age} onChange={e => setRegData({...regData, age: Math.max(0, Math.floor(Number(e.target.value) || 0))})} /></div>
-              </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Пол</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[{ id: Gender.MALE, label: 'Мужской' }, { id: Gender.FEMALE, label: 'Женский' }].map(g => (
-                    <button key={g.id} onClick={() => setRegData({...regData, gender: g.id})} className={clsx("w-full p-4 text-center rounded-[1.25rem] border text-xs font-black transition-all", regData.gender === g.id ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-800 text-slate-500')}>{g.label}</button>
-                  ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          {onboardingStep === 1 && (
+            <>
+              <div className="space-y-4 md:col-span-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 grid place-items-center"><Brain className="w-5 h-5 text-indigo-300" /></div>
+                    <p className="mt-3 text-sm font-black text-white">AI-план под вашу цель</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Калории, макросы, недельный фокус и первые шаги.</p>
+                  </div>
+                  <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 grid place-items-center"><Camera className="w-5 h-5 text-indigo-300" /></div>
+                    <p className="mt-3 text-sm font-black text-white">Фото еды и дневник</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Сканируйте приёмы пищи, чтобы видеть КБЖУ и прогресс.</p>
+                  </div>
+                  <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 grid place-items-center"><Users className="w-5 h-5 text-indigo-300" /></div>
+                    <p className="mt-3 text-sm font-black text-white">Меню и покупки</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-400">Список покупок, привычки и семейный режим в одном месте.</p>
+                  </div>
+                </div>
+                <div className="rounded-[2rem] border border-indigo-500/20 bg-indigo-500/5 px-5 py-4 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Что будет через минуту</p>
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm font-bold text-slate-200">
+                    <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/60 px-4 py-3">1. Персональная цель по калориям</div>
+                    <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/60 px-4 py-3">2. План и меню на неделю</div>
+                    <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/60 px-4 py-3">3. Первое действие на сегодня</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
+            </>
+          )}
+
+          {onboardingStep === 2 && (
             <>
               <div className="space-y-4">
-                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Имя профиля</label><input type="text" className={clsx("w-full p-3.5 bg-slate-950 rounded-[1.25rem] border outline-none transition-all font-bold text-white placeholder:text-slate-500 text-sm", !regNameValid ? "border-amber-500/40" : "border-slate-800")} value={regData.name} onChange={e => setRegData(prev => ({...prev, name: e.target.value}))} placeholder="Наталья" /></div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ваша цель</label>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {[{ id: Goal.LOSS, label: 'Похудение' }, { id: Goal.MAINTAIN, label: 'Поддержание' }, { id: Goal.GAIN, label: 'Набор' }].map(g => (
-                      <button key={g.id} onClick={() => setRegData({...regData, goal: g.id})} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.goal === g.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                        <div className="flex items-center justify-between"><span>{g.label}</span>{aiRecommendedGoal === g.id && <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-black uppercase tracking-widest">AI Рекомендует</span>}</div>
-                      </button>
-                    ))}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Базовые данные</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Вес (кг)</label><input type="number" inputMode="decimal" className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.weight} onChange={e => setRegData({...regData, weight: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                    <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" inputMode="numeric" className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                    <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</label><input type="number" inputMode="numeric" className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.age} onChange={e => setRegData({...regData, age: Math.max(0, Math.floor(Number(e.target.value) || 0))})} /></div>
                   </div>
-
-                  {/* Интенсивность цели (Smart Deficit Engine) */}
-                  {(regData.goal === Goal.LOSS || regData.goal === Goal.GAIN) && (
-                    <div className="space-y-2 mt-4 p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 animate-in slide-in-from-top-2 duration-300">
-                      <div className="flex items-center justify-between ml-1">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Интенсивность цели</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
-                            const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
-                            if (!isFinite(tdee)) return;
-                            if (regData.goal === Goal.LOSS) {
-                              const rec = Math.max(MIN_DEFICIT, Math.min(Math.min(500, Math.round((tdee*0.2)/50)*50), MAX_DEFICIT));
-                              setRegData({ ...regData, lossDeficit: rec, riskAckLoss: false });
-                            }
-                            if (regData.goal === Goal.GAIN) {
-                              const rec = Math.max(MIN_SURPLUS, Math.min(Math.min(300, Math.round((tdee*0.1)/50)*50), MAX_SURPLUS));
-                              setRegData({ ...regData, gainSurplus: rec, riskAckGain: false });
-                            }
-                          }}
-                          className="text-[10px] font-black px-2 py-1 rounded-full border border-slate-800 bg-slate-950 text-slate-300 hover:border-indigo-500/30"
-                        >
-                          Рекомендовать
-                        </button>
-                      </div>
-                      {regData.goal === Goal.LOSS ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          {[250, 500, 750].map(v => (
-                            <button
-                              key={v}
-                              type="button"
-                              onClick={() => setRegData(prev => ({ ...prev, lossDeficit: v }))}
-                              className={clsx(
-                                "w-full p-3 text-center rounded-[1rem] border text-[10px] font-black transition-all",
-                                Number(regData.lossDeficit || DEFAULT_DEFICIT) === v
-                                  ? "bg-rose-600/10 border-rose-500 text-rose-200"
-                                  : "bg-slate-900 border-slate-800 text-slate-500 hover:border-rose-500/30"
-                              )}
-                            >
-                              -{v} ккал
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-3 gap-2">
-                          {[150, 300, 500].map(v => (
-                            <button
-                              key={v}
-                              type="button"
-                              onClick={() => setRegData(prev => ({ ...prev, gainSurplus: v }))}
-                              className={clsx(
-                                "w-full p-3 text-center rounded-[1rem] border text-[10px] font-black transition-all",
-                                Number(regData.gainSurplus || DEFAULT_SURPLUS) === v
-                                  ? "bg-emerald-600/10 border-emerald-500 text-emerald-200"
-                                  : "bg-slate-900 border-slate-800 text-slate-500 hover:border-rose-500/30"
-                              )}
-                            >
-                              +{v} ккал
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {(() => {
-                        const ready = regData.weight && regData.height && regData.age && regData.activityLevel;
-                        if (!ready) return null;
-                        const tdee = calculateTDEE({
-                          gender: regData.gender,
-                          weight: Number(regData.weight),
-                          height: Number(regData.height),
-                          age: Number(regData.age),
-                          activityLevel: regData.activityLevel,
-                          goal: regData.goal,
-                          adaptationMultiplier: 1.0,
-                          lossDeficit: Number(regData.lossDeficit ?? DEFAULT_DEFICIT),
-                          gainSurplus: Number(regData.gainSurplus ?? DEFAULT_SURPLUS),
-                          riskAcknowledgedLoss: !!(regData as any).riskAckLoss,
-                          riskAcknowledgedGain: !!(regData as any).riskAckGain,
-                        } as any);
-                        const off = regData.goal === Goal.LOSS
-                          ? Number(regData.lossDeficit ?? DEFAULT_DEFICIT)
-                          : regData.goal === Goal.GAIN
-                            ? Number(regData.gainSurplus ?? DEFAULT_SURPLUS)
-                            : 0;
-                        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
-                        const tooAggressive = (regData.goal === Goal.LOSS && off > limit) || (regData.goal === Goal.GAIN && off > limit);
-                        if (!tooAggressive) return null;
-                        return (
-                          <div className="mt-2 p-3 rounded-[1rem] bg-amber-500/5 border border-amber-500/20 flex items-start gap-2">
-                            <AlertTriangle size={16} className="text-amber-400 mt-0.5" />
-                            <div className="text-left text-[11px] text-amber-200 font-semibold leading-snug">
-                              Слишком агрессивная интенсивность для вашего TDEE (~{Math.round(tdee)} ккал/день). Рекомендуем не превышать {limit} ккал/день.
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {(() => {
-                        const ready = regData.weight && regData.height && regData.age && regData.activityLevel;
-                        if (!ready) return null;
-                        // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
-                        const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
-                        if (!isFinite(tdee)) return null;
-                        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
-                        const val = regData.goal === Goal.LOSS ? Number(regData.lossDeficit ?? DEFAULT_DEFICIT) : Number(regData.gainSurplus ?? DEFAULT_SURPLUS);
-                        const isAggressive = (regData.goal === Goal.LOSS && val > limit) || (regData.goal === Goal.GAIN && val > limit);
-                        if (!isAggressive) return null;
-                        const ackKey = regData.goal === Goal.LOSS ? "riskAckLoss" : "riskAckGain";
-                        const ack = (regData as any)[ackKey];
-                        return (
-                          <label className="mt-2 flex items-start gap-2 p-3 rounded-[1rem] bg-slate-950 border border-slate-800 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!ack}
-                              onChange={(e) => setRegData({ ...regData, [ackKey]: e.target.checked } as any)}
-                              className="mt-0.5"
-                            />
-                            <div className="text-[11px] text-slate-300 font-semibold leading-snug">
-                              Я понимаю риски агрессивной интенсивности и хочу продолжить.
-                            </div>
-                          </label>
-                        );
-                      })()}
-                      <div className="text-[10px] text-slate-600 font-semibold mt-1 px-1">
-                        Выбор влияет на прогноз, WIS и «ожидаемое» изменение веса.
-                      </div>
-                    </div>
-                  )}
                 </div>
-
-<div className="space-y-2 mt-6">
-  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Аллергены и непереносимость</label>
-  <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
-    <div className="text-xs text-slate-400 font-semibold">
-      Эти ограничения будут учитываться при генерации недельного меню (в том числе общего меню на семью).
-    </div>
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-      {[
-        "орехи",
-        "молоко/лактоза",
-        "яйца",
-        "рыба/морепродукты",
-        "глютен",
-        "соя",
-        "арахис",
-        "кунжут"
-      ].map(tag => {
-        const selected = (regData.dietary?.allergens || []).includes(tag);
-        return (
-          <button
-            key={tag}
-            type="button"
-            onClick={() => {
-              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
-              const next = selected
-                ? prev.allergens.filter(x => x !== tag)
-                : [...prev.allergens, tag];
-              setRegData(r => ({ ...r, dietary: { ...prev, allergens: next } }));
-            }}
-            className={clsx(
-              "px-3 py-2 rounded-[1rem] border text-xs font-black transition-all text-left",
-              selected ? "bg-rose-500/10 border-rose-400/40 text-rose-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
-            )}
-          >
-            {tag}
-          </button>
-        );
-      })}
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Что избегать (непереносимость / предпочтение)</label>
-        <input
-          type="text"
-          value={(regData.dietary?.intolerances || []).join(", ")}
-          onChange={(e) => {
-            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
-            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
-            setRegData(r => ({ ...r, dietary: { ...prev, intolerances: next } }));
-          }}
-          placeholder="например: лук, чеснок, острое"
-          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Не ем совсем</label>
-        <input
-          type="text"
-          value={(regData.dietary?.excludedFoods || []).join(", ")}
-          onChange={(e) => {
-            const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
-            const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 20);
-            setRegData(r => ({ ...r, dietary: { ...prev, excludedFoods: next } }));
-          }}
-          placeholder="например: свинина, грибы"
-          className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
-        />
-      </div>
-    </div>
-
-    <div className="flex items-center gap-2">
-      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Строгость</label>
-      {[
-        { id: "strict", label: "Строго" },
-        { id: "avoid", label: "По возможности" }
-      ].map(opt => {
-        const selected = (regData.dietary?.severity || "strict") === opt.id;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => {
-              const prev = regData.dietary || { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' };
-              setRegData(r => ({ ...r, dietary: { ...prev, severity: opt.id as any } }));
-            }}
-            className={clsx(
-              "px-3 py-1.5 rounded-full border text-[10px] font-black transition-all",
-              selected ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-200" : "bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700"
-            )}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  </div>
-</div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Тариф</label>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {[ { id: 'free' as TariffPlan, label: 'Free', hint: 'AI лимиты' }, { id: 'pro' as TariffPlan, label: 'Pro', hint: 'Без лимит + PDF' }, { id: 'family' as TariffPlan, label: 'Family', hint: '5 профилей' } ].map(p => (
-                      <button key={p.id} onClick={() => setRegData({ ...regData, plan: p.id })} className={clsx("w-full p-2.5 text-left rounded-[1rem] border text-xs font-black transition-all", regData.plan === p.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-500")}>
-                        <div className="flex items-center justify-between"><div className="flex items-center gap-2">{p.id === 'pro' && <Crown size={12} className="text-indigo-300" />}{p.id === 'family' && <Users size={12} className="text-indigo-300" />}<span>{p.label}</span></div><span className="text-[7px] px-1.5 py-0.5 rounded-full bg-slate-900/40 border border-slate-800 text-slate-400 uppercase tracking-widest">{p.hint}</span></div>
-                      </button>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Пол</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[{ id: Gender.MALE, label: 'Мужской' }, { id: Gender.FEMALE, label: 'Женский' }].map(g => (
+                      <button key={g.id} onClick={() => setRegData({...regData, gender: g.id})} className={clsx("w-full p-4 text-center rounded-[1.25rem] border text-xs font-black transition-all", regData.gender === g.id ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-800 text-slate-500')}>{g.label}</button>
                     ))}
                   </div>
                 </div>
               </div>
               <div className="space-y-4">
-                <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 shadow-xl">
-                  <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">AI Расчёт</p><span className="ff-ai-pill !py-0.5 !px-2"><BrainCircuit size={10} className="text-indigo-300" /><span className="ff-ai-pill__text !text-[7px]">анализ</span></span></div><p className="text-[9px] font-black text-slate-600 uppercase tabular-nums">BMI {regBMI ? regBMI.toFixed(1) : "—"}</p></div>
-                  <div className="grid grid-cols-2 gap-2 mb-3"><div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">BMR</p><p className="text-lg font-black text-white">{regBMR}</p></div><div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">TDEE</p><p className="text-lg font-black text-white">{regTDEE}</p></div></div>
-                  <div className="p-3 rounded-[1rem] bg-indigo-500/5 border border-indigo-500/20"><p className="text-[8px] font-black text-indigo-400 uppercase mb-1">Цель на день</p><div className="text-sm font-bold text-slate-300 mt-2">{regTargets.calories} ккал<div className="mt-1 text-slate-400 text-xs font-semibold tabular-nums">{regTargets.protein} г белка • {regTargets.fat} г жиров • {regTargets.carbs} г углеводов</div></div><div className="mt-4 text-[11px] text-slate-500 leading-relaxed font-medium">Расчёт выполнен по формуле <span className="text-slate-400 font-semibold">Миффлина–Сан Жеора</span>.<br/>TDEE = BMR × коэффициент активности.<br/>Стратегия: {regData.goal === Goal.LOSS ? `дефицит ${regData.lossDeficit} ккал` : regData.goal === Goal.GAIN ? `профицит ${regData.gainSurplus} ккал` : 'баланс энергии'}.</div></div>
+                <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Быстрое превью</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">BMI</p><p className="text-lg font-black text-white">{regBMI ? regBMI.toFixed(1) : '—'}</p></div>
+                    <div className="rounded-[1rem] bg-slate-900/40 p-3 border border-slate-800"><p className="text-[8px] font-black text-slate-500 uppercase">Рекомендация</p><p className="text-sm font-black text-indigo-300">{aiRecommendedGoal === Goal.LOSS ? 'Похудение' : aiRecommendedGoal === Goal.GAIN ? 'Набор' : 'Поддержание'}</p></div>
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-slate-300">Мы используем эти данные для расчёта метаболизма и безопасного темпа прогресса.</p>
                 </div>
-                {forecast && (<div className="p-4 rounded-[1.5rem] bg-gradient-to-br from-indigo-950/40 to-slate-950 border border-indigo-800/40 shadow-xl"><div className="flex items-center gap-2 mb-2 text-indigo-300"><TrendingUp size={14} /><span className="text-[9px] font-black uppercase tracking-widest">AI Прогноз · 4 недели</span></div><div className="space-y-1"><p className="text-xs font-bold text-slate-200">Вес через месяц: <span className="text-indigo-300 font-black tabular-nums">{forecast.week4Weight} кг</span></p><p className="text-[10px] text-slate-500 italic">Изменение: {forecast.weeklyDelta} кг/нед</p></div></div>)}
+                {!regStep2Valid && <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-200">Проверьте диапазоны: возраст 14–80, рост 130–230 см, вес 35–300 кг.</div>}
+              </div>
+            </>
+          )}
+
+          {onboardingStep === 3 && (
+            <>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Цель</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[{ id: Goal.LOSS, label: 'Похудение' }, { id: Goal.MAINTAIN, label: 'Поддержание' }, { id: Goal.GAIN, label: 'Набор' }].map(opt => (
+                      <button key={opt.id} type="button" onClick={() => setRegData({ ...regData, goal: opt.id, targetWeight: opt.id === Goal.MAINTAIN ? regData.weight : regData.targetWeight })} className={clsx("w-full p-4 rounded-[1.25rem] border text-left text-sm font-black transition-all", regData.goal === opt.id ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-400")}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Целевой вес (кг)</label>
+                  <input type="number" inputMode="decimal" className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.targetWeight} onChange={e => setRegData({...regData, targetWeight: Math.max(0, Number(e.target.value) || 0)})} disabled={regData.goal === Goal.MAINTAIN} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Активность</label>
+                  <select value={regData.activityLevel} onChange={e => setRegData({ ...regData, activityLevel: e.target.value as ActivityLevel })} className="w-full p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none text-sm font-bold text-white">
+                    <option value={ActivityLevel.SEDENTARY}>Сидячий образ жизни</option>
+                    <option value={ActivityLevel.LIGHTLY_ACTIVE}>Лёгкая активность</option>
+                    <option value={ActivityLevel.MODERATELY_ACTIVE}>Умеренная активность</option>
+                    <option value={ActivityLevel.VERY_ACTIVE}>Высокая активность</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Темп плана</p>
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    {[
+                      { id: 'soft', label: 'Мягко', hint: regData.goal === Goal.LOSS ? 'примерно −0.25 кг/нед' : regData.goal === Goal.GAIN ? 'мягкий профицит' : 'ровный режим' },
+                      { id: 'standard', label: 'Стандарт', hint: regData.goal === Goal.LOSS ? 'примерно −0.45 кг/нед' : regData.goal === Goal.GAIN ? 'умеренный профицит' : 'баланс без качелей' },
+                      { id: 'fast', label: 'Быстрее', hint: regData.goal === Goal.LOSS ? 'агрессивнее, под контроль' : regData.goal === Goal.GAIN ? 'ускоренный набор' : 'не рекомендуется' },
+                    ].map(opt => (
+                      <button key={opt.id} type="button" onClick={() => setRegData({ ...regData, planIntensity: opt.id as any })} className={clsx("w-full rounded-[1.25rem] border px-4 py-3 text-left transition-all", regData.planIntensity === opt.id ? 'bg-indigo-600/10 border-indigo-500 text-indigo-200' : 'bg-slate-900/30 border-slate-800 text-slate-300')}>
+                        <div className="flex items-center justify-between gap-3"><span className="text-sm font-black">{opt.label}</span><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{opt.hint}</span></div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Предпросмотр результата</p>
+                  <p className="mt-3 text-3xl font-black text-white tabular-nums">{regTargets.calories} ккал</p>
+                  <p className="mt-2 text-sm font-bold text-slate-300 tabular-nums">{regTargets.protein}Б · {regTargets.fat}Ж · {regTargets.carbs}У</p>
+                  <p className="mt-4 text-sm font-semibold text-slate-400">Ожидаемый темп: <span className="text-indigo-300 font-black">{forecast?.weeklyDelta ?? '—'} кг/нед</span></p>
+                </div>
+                {!regStep3Valid && <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-200">Проверьте целевой вес: для похудения он должен быть ниже текущего, для набора — выше.</div>}
+              </div>
+            </>
+          )}
+
+          {onboardingStep === 4 && (
+            <>
+              <div className="space-y-4">
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Как к вам обращаться</label><input type="text" className={clsx("w-full p-3.5 bg-slate-950 rounded-[1.25rem] border outline-none transition-all font-bold text-white placeholder:text-slate-500 text-sm", !regNameValid ? "border-amber-500/40" : "border-slate-800")} value={regData.name} onChange={e => setRegData(prev => ({...prev, name: e.target.value}))} placeholder="Михаил" /></div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ритм жизни</label>
+                  <div className="flex flex-wrap gap-2">
+                    {lifestyleOptions.map(flag => {
+                      const selected = regData.lifestyleFlags.includes(flag);
+                      return (
+                        <button key={flag} type="button" onClick={() => setRegData(prev => ({ ...prev, lifestyleFlags: selected ? prev.lifestyleFlags.filter(x => x !== flag) : [...prev.lifestyleFlags, flag] }))} className={clsx("px-3 py-2 rounded-full border text-xs font-black transition-all", selected ? "bg-indigo-600/10 border-indigo-500 text-indigo-200" : "bg-slate-950 border-slate-800 text-slate-400")}>{flag}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="rounded-[1.75rem] border border-indigo-500/20 bg-indigo-500/5 p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Что создадим сразу после запуска</p>
+                  <div className="mt-3 space-y-2 text-sm font-bold text-slate-200">
+                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 px-4 py-3">• Дневной KPI: {regTargets.calories} ккал</div>
+                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 px-4 py-3">• Меню и список покупок на неделю</div>
+                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 px-4 py-3">• Первое действие на сегодня и AI‑коучинг</div>
+                  </div>
+                </div>
+                <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950 p-5 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">После onboarding</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-300">Сразу попадёте на обзор с понятными действиями: внести вес, добавить еду по фото и открыть план.</p>
+                </div>
               </div>
             </>
           )}
         </div>
         <div className="pt-4 space-y-3">
-          {onboardingStep === 1 ? (
-            <button type="button" onClick={() => setOnboardingStep(2)} disabled={!regStep1Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep1Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Рассчитать мой план</button>
-          ) : (
+          {onboardingStep === 1 && (
+            <button type="button" onClick={() => setOnboardingStep(2)} className="w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40">Начать настройку</button>
+          )}
+          {onboardingStep === 2 && (
             <>
-              <button onClick={handleActivateWithTransition} disabled={!regNameValid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regNameValid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Создать AI-план</button>
-              <button type="button" onClick={() => onboardingStep === 2 && setOnboardingStep(1)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад к параметрам</button>
+              <button type="button" onClick={() => setOnboardingStep(3)} disabled={!regStep2Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep2Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Далее: цель</button>
+              <button type="button" onClick={() => setOnboardingStep(1)} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all">Назад</button>
             </>
           )}
-          <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Без регистрации • Данные на устройстве</p>
+          {onboardingStep === 3 && (
+            <>
+              <button type="button" onClick={() => setOnboardingStep(4)} disabled={!regStep3Valid} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regStep3Valid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Далее: ритм жизни</button>
+              <button type="button" onClick={() => setOnboardingStep(2)} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all">Назад</button>
+            </>
+          )}
+          {onboardingStep === 4 && (
+            <>
+              <button onClick={handleActivateWithTransition} disabled={!regNameValid || isActivatingPlan} className={clsx("w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50", regNameValid ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40" : "bg-slate-800 text-slate-600")}>Собрать мой AI‑план</button>
+              <button type="button" onClick={() => setOnboardingStep(3)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад</button>
+            </>
+          )}
+          <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Закрытая beta • персональный план создаётся автоматически</p>
+        </div>
         </div>
         </div>
       </div>
