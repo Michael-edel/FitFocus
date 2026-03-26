@@ -48,6 +48,22 @@ export default function ShoppingListCard({
   const [items, setItems] = useState<ShoppingItem[] | null>(null);
   const [onlyUnchecked, setOnlyUnchecked] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [fallbackChecked, setFallbackChecked] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`fitfocus_shopping_fallback_${weekStart}`);
+      setFallbackChecked(raw ? JSON.parse(raw) : {});
+    } catch {
+      setFallbackChecked({});
+    }
+  }, [weekStart]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`fitfocus_shopping_fallback_${weekStart}`, JSON.stringify(fallbackChecked));
+    } catch {}
+  }, [weekStart, fallbackChecked]);
 
   const load = useCallback(async () => {
     if (!weekStart) return;
@@ -116,6 +132,14 @@ export default function ShoppingListCard({
       // ignore
     }
   }, [groups, fallbackList]);
+
+  const fallbackParsed = useMemo(() => (fallbackList || []).map((row) => {
+    const parts = String(row || '').split('—');
+    return {
+      name: (parts[0] || '').trim().replace(/^•\s*/, ''),
+      qty: (parts.slice(1).join('—') || '').trim(),
+    };
+  }).filter((it) => it.name), [fallbackList]);
 
   const content =
     items && items.length ? (
@@ -190,13 +214,38 @@ export default function ShoppingListCard({
       </div>
     ) : (
       <div className="mt-3">
-        {fallbackList?.length ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-            {fallbackList.slice(0, 30).map((s, i) => (
-              <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">
-                • {s}
-              </div>
-            ))}
+        {fallbackParsed.length ? (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-slate-300 font-bold text-sm">
+              <input
+                type="checkbox"
+                className="accent-slate-200"
+                checked={onlyUnchecked}
+                onChange={(e) => setOnlyUnchecked(e.target.checked)}
+              />
+              Только некупленное
+            </label>
+            <div className="grid grid-cols-1 gap-2 text-sm font-bold text-slate-200">
+              {fallbackParsed.filter((it) => !onlyUnchecked || !fallbackChecked[it.name]).map((it, i) => (
+                <label key={`${it.name}_${i}`} className={clsx(
+                  "flex items-center justify-between gap-3 p-3 rounded-[1.2rem] border",
+                  fallbackChecked[it.name]
+                    ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through"
+                    : "bg-slate-950/30 border-slate-800 text-slate-200"
+                )}>
+                  <span className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="accent-slate-200"
+                      checked={!!fallbackChecked[it.name]}
+                      onChange={(e) => setFallbackChecked((prev) => ({ ...prev, [it.name]: e.target.checked }))}
+                    />
+                    <span>{it.name}</span>
+                  </span>
+                  {it.qty ? <span className="text-slate-300 font-black whitespace-nowrap">{it.qty}</span> : null}
+                </label>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="text-slate-500 font-bold text-sm">Пока нет списка покупок.</div>
