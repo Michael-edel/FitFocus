@@ -18,8 +18,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
-
   const db = requireDB(env);
   const row = await db
     .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")

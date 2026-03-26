@@ -264,10 +264,22 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let user: any;
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   try { await requireBetaAccess(env as any, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
+  const MAX_BYTES = 4 * 1024 * 1024;
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength && contentLength > MAX_BYTES) {
+    return jsonResponse({ error: { message: "Payload too large" } }, 413);
+  }
+
   let bodyText = "";
   let body: any = null;
   try {
     bodyText = await request.text();
+    if (!contentLength) {
+      const estimatedBytes = new TextEncoder().encode(bodyText).byteLength;
+      if (estimatedBytes > MAX_BYTES) {
+        return jsonResponse({ error: { message: "Payload too large" } }, 413);
+      }
+    }
     body = bodyText ? JSON.parse(bodyText) : {};
   } catch {
     return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
@@ -339,11 +351,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
-
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
-    return jsonResponse({ error: { message: "Payload too large" } }, 413);
-  }
 
   // Safe mode: apply conservative limits and settings (toggled via feature_flags.ai_safe_mode)
   if (safeMode) {
