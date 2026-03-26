@@ -5,13 +5,6 @@ pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "fitfocus_local"
-database_id = "00000000-0000-0000-0000-000000000001"
-migrations_dir = "migrations"
-
-[env.production]
-[[env.production.d1_databases]]
-binding = "DB"
 database_name = "fitfocus"
 database_id = "061ae786-9341-4bd7-8efe-025dd1bac6d5"
 migrations_dir = "migrations"

@@ -65,6 +65,7 @@ import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
 import { WeightTrendChart, HabitStreaksCard } from './charts';
 import FoodInsightCard from './FoodInsightCard';
+import ShoppingListCard from './ShoppingListCard';
 import PlansScreen from './PlansScreen';
 import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
@@ -1237,6 +1238,36 @@ const openEditFood = (item: FoodEntry) => {
   const [planIntroOpen, setPlanIntroOpen] = useState(false);
   const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
   const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
+  const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
+  const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
+  const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setPlanTaskDone({});
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(`fitfocus_plan_task_done_${currentUser.id}`);
+      setPlanTaskDone(raw ? JSON.parse(raw) : {});
+    } catch {
+      setPlanTaskDone({});
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    safeSetItem(`fitfocus_plan_task_done_${currentUser.id}`, JSON.stringify(planTaskDone));
+  }, [currentUser?.id, planTaskDone]);
+
+  useEffect(() => {
+    const next: Record<string, boolean> = {};
+    const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+    (currentUser?.aiPlan?.weeklyMenu?.days ?? []).forEach((day, idx) => {
+      next[day.day] = isMobile ? idx === 0 : idx < 2;
+    });
+    setPlanWeekExpanded(next);
+  }, [currentUser?.aiPlan?.weeklyMenu?.weekStart, currentUser?.aiPlan?.weeklyMenu?.days?.length]);
   const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
   const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
   const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
@@ -1690,6 +1721,75 @@ const deleteAccount = useCallback(async () => {
     return { label: 'Высокая', color: 'text-rose-300', level: 'high' as const };
   }, [currentUser, adaptationIndex]);
 
+  const goalLabel = useMemo(() => {
+    if (!currentUser) return 'цель';
+    if (currentUser.goal === Goal.LOSS) return currentUser.targetWeight ? `снижение до ${currentUser.targetWeight} кг` : 'снижение веса';
+    if (currentUser.goal === Goal.GAIN) return currentUser.targetWeight ? `набор до ${currentUser.targetWeight} кг` : 'набор веса';
+    return currentUser.targetWeight ? `поддержание около ${currentUser.targetWeight} кг` : 'поддержание веса';
+  }, [currentUser]);
+
+  const overviewTodayActions = useMemo(() => {
+    const proteinLeft = Math.max(0, Math.round((targets.protein || 0) - (dailyStats.protein || 0)));
+    const caloriesLeft = Math.max(0, Math.round((targets.calories || 0) - (dailyStats.calories || 0)));
+    const habitDone = habits.filter(h => h.current >= h.goal).length;
+    return [
+      {
+        icon: '📸',
+        title: dailyStats.calories > 0 ? `Осталось ${caloriesLeft} ккал` : 'Добавить первый приём пищи',
+        hint: dailyStats.calories > 0 ? 'закрыть дневную норму без перегруза' : 'быстро запустить дневник',
+        action: () => setActiveTab('nutrition'),
+      },
+      {
+        icon: '🥚',
+        title: proteinLeft > 0 ? `Добрать ${proteinLeft} г белка` : 'Белок на день закрыт',
+        hint: proteinLeft > 0 ? 'это удержит сытость и план' : 'можно держать текущий ритм',
+        action: () => setActiveTab('nutrition'),
+      },
+      {
+        icon: '✅',
+        title: `Привычки: ${habitDone}/${habits.length}`,
+        hint: habitDone >= Math.max(1, habits.length - 1) ? 'отличный темп на сегодня' : 'отметьте хотя бы 1 полезное действие',
+        action: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+      },
+    ];
+  }, [targets.protein, targets.calories, dailyStats.protein, dailyStats.calories, habits]);
+
+  const coachAdviceBrief = useMemo(() => {
+    const text = String(coachCard?.advice || '').replace(/["“”]/g, '').trim();
+    if (!text) return [] as string[];
+    return text
+      .split(/(?<=[.!?])\s+/)
+      .map(t => t.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .map(t => t.replace(/[.!?]+$/, ''));
+  }, [coachCard?.advice]);
+
+  const planQuickBullets = useMemo(() => {
+    const kpi = currentUser?.aiPlan?.dailyKpi;
+    return [
+      kpi ? `${kpi.calories} ккал и ${kpi.protein} г белка в день` : 'Соблюдать дневной KPI по калориям и белку',
+      currentUser?.aiPlan?.weeklyFocus ? `Фокус: ${currentUser.aiPlan.weeklyFocus}` : 'Сделать 3 маленьких действия из плана',
+      currentUser?.targetWeight ? `Цель: прийти к ${currentUser.targetWeight} кг без резких скачков` : 'Держать плавный темп без перегруза',
+    ];
+  }, [currentUser?.aiPlan, currentUser?.targetWeight]);
+
+  const adaptationHeadline = useMemo(() => {
+    if (!currentUser || currentUser.goal === Goal.MAINTAIN) return 'Смотрим на устойчивость стратегии';
+    if (currentUser.goal === Goal.LOSS && weightDeltaN > 1) return 'Есть отклонение — план стоит поджать';
+    if (currentUser.goal === Goal.LOSS && compliancePct < 60) return 'Главный рычаг сейчас — вернуть комплаенс';
+    if (currentUser.goal === Goal.GAIN && weightDeltaN < 0) return 'Масса не растёт — усиливаем питание';
+    return 'Динамика управляемая — продолжаем без резких шагов';
+  }, [currentUser, weightDeltaN, compliancePct]);
+
+  const adaptationSubline = useMemo(() => {
+    if (!currentUser) return '';
+    if (currentUser.goal === Goal.LOSS && weightDeltaN > 1) return 'Вес растёт быстрее, чем ожидает стратегия. Проверьте скрытые калории и регулярность дневника.';
+    if (compliancePct < 60) return 'Сначала стабилизируем выполнение плана: питание, вода, шаги и сон.';
+    if (adaptationIndex >= 70) return 'Организм адаптируется. Возможно, нужен рефид или мягкая коррекция нагрузки.';
+    return 'Сейчас важнее сохранить последовательность, чем пытаться ускориться.';
+  }, [currentUser, weightDeltaN, compliancePct, adaptationIndex]);
+
   const refeedSuggestion = useMemo(() => {
     if (!currentUser) return { type: 'stay' as const };
     if (currentUser.goal !== Goal.LOSS) return { type: 'stay' as const };
@@ -1816,7 +1916,14 @@ const deleteAccount = useCallback(async () => {
     } catch {}
 
     const serverUser = me?.user || null;
+    const hasServerAccess = me?.hasAccess !== false;
     setGoogleMe(serverUser);
+
+    if (serverUser?.sub && requireInvite && !hasServerAccess) {
+      setInviteError('Для доступа к закрытой бете нужен действующий код приглашения. Введите код и повторите вход через Google.');
+      setAuthState('auth_choice');
+      return;
+    }
 
     // 2) Server-driven: load profile from D1 (independent of device)
     if (serverUser?.sub) {
@@ -2136,7 +2243,7 @@ const logWeight = useCallback(() => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, userId: newUser.id }),
+          body: JSON.stringify({ code, userId: googleMe?.sub || newUser.id }),
         });
         const rj = await rr.json().catch(() => null);
         if (!rr.ok || rj?.ok !== true) {
@@ -2430,7 +2537,7 @@ if (authState === 'register') return (
                 <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
                 <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.age} onChange={e => setRegData({...regData, age: Math.max(0, Math.floor(Number(e.target.value) || 0))})} /></div>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Пол</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[{ id: Gender.MALE, label: 'Мужской' }, { id: Gender.FEMALE, label: 'Женский' }].map(g => (
@@ -2826,7 +2933,7 @@ if (authState === 'register') return (
           </div>
         </div>
       )}
-      <nav className="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center md:top-0 md:left-0 md:w-64 md:h-full md:flex-col md:justify-start md:border-r md:border-t-0 z-50">
+      <nav className="fixed bottom-0 left-0 w-full bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center md:top-0 md:left-0 md:w-64 md:h-full md:flex-col md:justify-start md:border-r md:border-t-0 z-50" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
         <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
           <div className="flex items-center gap-3">
             <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
@@ -2836,7 +2943,8 @@ if (authState === 'register') return (
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-black text-slate-100 tracking-tight leading-none">FitFocus</span>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Premium</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Beta</span>
+              <span className="mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-200">Beta · полный доступ</span>
               <div className="mt-2 flex items-center gap-2">
                 <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
                   {aiBadge.label}
@@ -2875,7 +2983,7 @@ if (authState === 'register') return (
         ))}
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
-      <main className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
+      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}>
         {activeTab === 'dashboard' && (
           <div className="space-y-10 animate-in fade-in duration-700">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -2883,6 +2991,18 @@ if (authState === 'register') return (
               <div className="flex items-center gap-3 bg-slate-900 p-2 rounded-[2rem] shadow-sm border border-slate-800"><div className="flex flex-col gap-2 items-center px-2 py-1"><div className="flex gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20"><Scale size={20} className="text-indigo-400 mr-2" /><input type="number" placeholder="Вес" className="bg-transparent w-16 text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="bg-indigo-600 text-white p-4 rounded-[1.5rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all"><Plus size={20} /></button></div>
             </header>
             {plateau && currentUser?.goal === Goal.LOSS && (<div className="p-6 rounded-[2.5rem] border border-amber-500/30 bg-amber-500/5 backdrop-blur-md flex items-start gap-4 animate-in slide-in-from-top-4 duration-500"><div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0 border border-amber-500/20"><AlertTriangle size={24} /></div><div className="text-left"><p className="text-[11px] font-black uppercase tracking-widest text-amber-500 mb-1">Обнаружено плато (28 дней анализа)</p><h3 className="text-lg font-black text-slate-100">Ваш вес стабилизировался</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-200"><ShieldCheck size={14} className="text-amber-300" />Интенсивность учтена</div><p className="text-sm font-medium text-slate-400 mt-2">Это естественная адаптация организма. AI-коуч подготовил для вас обновленные рекомендации в разделе «План» и ежедневных задачах.</p></div></div>)}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {overviewTodayActions.map((item, idx) => (
+                <button key={idx} type="button" onClick={item.action} className="rounded-[1.8rem] border border-slate-800 bg-slate-900/70 p-4 text-left shadow-lg shadow-black/10 hover:border-indigo-500/30 transition-all active:scale-[0.99]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-2xl">{item.icon}</span>
+                    <ChevronRight size={18} className="text-slate-500" />
+                  </div>
+                  <div className="mt-4 text-base font-black text-white leading-tight">{item.title}</div>
+                  <div className="mt-1 text-xs font-semibold text-slate-400">{item.hint}</div>
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {(() => {
               const clampGram = (v: unknown) => {
@@ -2904,7 +3024,7 @@ if (authState === 'register') return (
               <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
               <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8 flex flex-col"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Мой вес</h3><div className="flex flex-col items-end"><span className="text-lg font-black text-slate-50 tabular-nums">{weightTrend?.current || currentUser?.weight} кг</span><div className="flex gap-2 mt-1">{weightTrend && weightTrend.delta7 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta7 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>7д: {weightTrend.delta7 > 0 ? '+' : ''}{weightTrend.delta7.toFixed(1)}</span>}{weightTrend && weightTrend.delta30 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta30 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>30д: {weightTrend.delta30 > 0 ? '+' : ''}{weightTrend.delta30.toFixed(1)}</span>}</div></div></div><div className="flex-1 min-h-[200px]"><WeightTrendChart weightHistory={currentUser?.weightHistory || []} /></div><div className="flex justify-between items-center text-[10px] font-black text-slate-600 uppercase tracking-widest pt-4 border-t border-slate-800"><span>Неделя 1</span><span>Неделя {Math.ceil((currentUser?.weightHistory.length || 1) / 7)}</span></div></div>
             </div>
-            {currentUser && paywall.canUsePro && (<div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500"><div className="flex items-start justify-between gap-4"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Метаболическая адаптация</span><h3 className="text-3xl font-black text-slate-100 flex items-center gap-2"><span className="tabular-nums">{adaptationIndex}</span><span className="text-sm font-black text-slate-600">/ 100</span><span className={clsx("text-sm font-black ml-4 px-3 py-1 rounded-full bg-slate-950 border border-slate-800", adaptationStatus.color)}>{adaptationStatus.label}</span></h3><p className="text-sm font-semibold text-slate-400 mt-2 text-left">Комплаенс: <span className="tabular-nums font-black text-slate-200">{compliancePct}%</span> · Дельта {deltaDays} дн.: <span className="tabular-nums font-black text-slate-200">{weightDeltaN.toFixed(1)} кг</span></p></div><div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400"><Activity size={28} /></div></div><div className="space-y-2"><div className="h-3 rounded-full bg-slate-950 overflow-hidden border border-slate-800"><div className={clsx("h-full rounded-full transition-all duration-1000 ease-out", adaptationIndex < 35 ? "bg-emerald-500" : adaptationIndex < 70 ? "bg-amber-500" : "bg-rose-500")} style={{ width: `${Math.max(4, adaptationIndex)}%` }} /></div><div className="flex items-center justify-between text-[10px] font-black text-slate-600 uppercase tracking-widest px-1"><span>Низкая</span><span>Средняя</span><span>Высокая</span></div></div><div className="p-6 rounded-[2rem] bg-slate-950/50 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-2"><RefreshCcw size={16} className={clsx(refeedSuggestion.type === 'refeed' ? "text-indigo-400" : "text-slate-500")} /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Рекомендация AI</span></div>{refeedDate && (<span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-600/10 border border-indigo-500/20 px-3 py-1 rounded-full">Рефид: {refeedDate}</span>)}</div>{refeedSuggestion.type === 'refeed' ? (<div className="space-y-4"><p className="text-sm font-bold text-slate-200 leading-relaxed">Предлагаю провести «рефид-день» завтра: <span className="font-black tabular-nums text-indigo-400">{refeedSuggestion.caloriesTomorrow}</span> ккал. Это поможет снизить адаптацию и перезагрузить метаболизм.</p><button type="button" onClick={scheduleRefeedTomorrow} className="w-full py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest bg-indigo-600/10 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all shadow-lg">Запланировать рефид на завтра</button></div>) : refeedSuggestion.type === 'adjust' ? (<p className="text-sm font-bold text-slate-300 leading-relaxed">Мягкая адаптация: попробуйте снизить норму на <span className="font-black text-amber-400">200 ккал</span> или добавить <span className="font-black text-amber-400">+{refeedSuggestion.stepsExtra} шагов</span> в день.</p>) : (<p className="text-sm font-bold text-slate-400 leading-relaxed italic">Динамика в норме — продолжаем текущую стратегию без изменений.</p>)}</div><div className="space-y-4"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Info size={16} className="text-indigo-400" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Интерпретация</span></div><button type="button" disabled={adaptLoading} onClick={async () => { if (!currentUser) return; setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id }); setAdaptLoading(true); // FIX: call generatePlateauExplanation instead of missing getAdaptationExplanation.
+            {currentUser && paywall.canUsePro && (<div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500"><div className="flex items-start justify-between gap-4"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Метаболическая адаптация</span><h3 className="text-3xl font-black text-slate-100 flex items-center gap-2"><span className="tabular-nums">{adaptationIndex}</span><span className="text-sm font-black text-slate-600">/ 100</span><span className={clsx("text-sm font-black ml-4 px-3 py-1 rounded-full bg-slate-950 border border-slate-800", adaptationStatus.color)}>{adaptationStatus.label}</span></h3><p className="text-sm font-semibold text-slate-400 mt-2 text-left">Комплаенс: <span className="tabular-nums font-black text-slate-200">{compliancePct}%</span> · Дельта {deltaDays} дн.: <span className="tabular-nums font-black text-slate-200">{weightDeltaN.toFixed(1)} кг</span></p></div><div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400"><Activity size={28} /></div></div><div className="space-y-2"><div className="h-3 rounded-full bg-slate-950 overflow-hidden border border-slate-800"><div className={clsx("h-full rounded-full transition-all duration-1000 ease-out", adaptationIndex < 35 ? "bg-emerald-500" : adaptationIndex < 70 ? "bg-amber-500" : "bg-rose-500")} style={{ width: `${Math.max(4, adaptationIndex)}%` }} /></div><div className="flex items-center justify-between text-[10px] font-black text-slate-600 uppercase tracking-widest px-1"><span>Низкая</span><span>Средняя</span><span>Высокая</span></div></div><div className="p-6 rounded-[2rem] bg-slate-950/50 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-2"><RefreshCcw size={16} className={clsx(refeedSuggestion.type === 'refeed' ? "text-indigo-400" : "text-slate-500")} /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Рекомендация AI</span></div>{refeedDate && (<span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-600/10 border border-indigo-500/20 px-3 py-1 rounded-full">Рефид: {refeedDate}</span>)}</div>{refeedSuggestion.type === 'refeed' ? (<div className="space-y-4"><p className="text-sm font-bold text-slate-200 leading-relaxed">Предлагаю провести «рефид-день» завтра: <span className="font-black tabular-nums text-indigo-400">{refeedSuggestion.caloriesTomorrow}</span> ккал. Это поможет снизить адаптацию и перезагрузить метаболизм.</p><button type="button" onClick={scheduleRefeedTomorrow} className="w-full py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest bg-indigo-600/10 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all shadow-lg">Запланировать рефид на завтра</button></div>) : refeedSuggestion.type === 'adjust' ? (<p className="text-sm font-bold text-slate-300 leading-relaxed">Мягкая адаптация: попробуйте снизить норму на <span className="font-black text-amber-400">200 ккал</span> или добавить <span className="font-black text-amber-400">+{refeedSuggestion.stepsExtra} шагов</span> в день.</p>) : (<div className="space-y-2"><p className="text-sm font-bold text-slate-200 leading-relaxed">{adaptationHeadline}</p><p className="text-xs font-semibold text-slate-400 leading-relaxed">{adaptationSubline}</p></div>)}</div><div className="space-y-4"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Info size={16} className="text-indigo-400" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Интерпретация</span></div><button type="button" disabled={adaptLoading} onClick={async () => { if (!currentUser) return; setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id }); setAdaptLoading(true); // FIX: call generatePlateauExplanation instead of missing getAdaptationExplanation.
 const txt = await generatePlateauExplanation({ name: currentUser.name, goal: currentUser.goal, compliancePct, weightDeltaN, expectedN, adaptationIndex, suggestion: refeedSuggestion, }); setAdaptNote(txt); setAdaptLoading(false); }} className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95", adaptLoading ? "opacity-60 border-slate-800 bg-slate-900" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300")}>{adaptLoading ? "AI думает..." : "Объяснить"}</button></div><div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 space-y-3">
   <div className="flex items-center justify-between gap-3">
     <label className="flex items-center gap-2 text-[11px] font-bold text-slate-300 select-none">
@@ -2925,46 +3045,88 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
 </div></div></div>)}
             {weekly && paywall.canUsePro && (<div className="bg-gradient-to-br from-indigo-600/20 via-purple-600/20 to-rose-500/20 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/20 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-600"><div className="flex items-start justify-between"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 opacity-80 block mb-1">AI-Аналитика недели (PRO)</span><div className="mt-4"><div className="flex items-center justify-between gap-6"><h3 className="text-4xl font-black text-white flex items-center gap-3"><span className="tabular-nums">{weekly.wis}</span><span className="text-lg font-black text-indigo-300 opacity-50">/ 100</span></h3><span className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest", weekly.wis >= 80 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : weekly.wis >= 60 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : weekly.wis >= 40 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30")}>{weekly.status}</span></div><div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div></div></div><div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Адаптация</p><p className="text-sm font-black tabular-nums text-white">{weekly.adaptationIndex}/100</p></div></div><div className="mt-2 space-y-2 text-sm font-semibold opacity-90"><p className="font-black text-indigo-100 flex items-center gap-2"><TrendingUp size={16} />Прогноз следующей недели: {forecastNextWeek > 0 ? '+' : ''}{forecastNextWeek.toFixed(2)} кг</p><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/80"><ShieldCheck size={14} className="text-white/80" />Интенсивность учтена</div></div>{weeklyReports.length > 0 && (<div className="mt-8 border-t border-white/10 pt-6"><span className="text-[10px] font-black uppercase tracking-widest text-white/60 block mb-4">История AI-отчётов</span><div className="space-y-4">{weeklyReports.slice().reverse().map((r, idx) => (<div key={idx} className="p-5 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 group hover:border-white/20 transition-all"><div className="flex justify-between items-center"><div className="text-left"><span className="text-sm font-black text-indigo-300">{r.weekKey}</span><p className="text-[10px] font-black uppercase tracking-widest text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p></div><div className="text-right"><span className="text-xs font-black text-white tabular-nums">{r.data.wis}/100</span><p className="text-[8px] font-black uppercase tracking-widest text-white/40">WIS Score</p></div></div>{r.aiText && (<p className="text-sm font-medium text-white/80 leading-relaxed text-left border-l-2 border-indigo-400/30 pl-4">{r.aiText}</p>)}<button onClick={() => exportWeeklyPDF(r)} className="w-full py-3 rounded-xl bg-white/10 border border-white/10 text-white font-bold hover:bg-white/20 transition flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Download size={14} /> Экспорт в PDF</button></div>))}</div></div>)}</div>)}
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-10 rounded-[3rem] text-white shadow-2xl shadow-indigo-950/20 relative overflow-hidden group"><div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:scale-110 transition-transform" /><div className="relative z-10 flex flex-col h-full space-y-6"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner border border-white/10"><Sparkles size={28} /></div><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">AI Коучинг</span><h3 className="text-2xl font-black">{coachCard ? coachCard.title : "Ваш коуч рядом"}</h3></div></div><div className="flex-1 flex flex-col justify-center">{coachLoading ? (<div className="flex items-center gap-3 font-bold animate-pulse"><Loader2 className="animate-spin" /> Формирую рекомендации...</div>) : (<div className="space-y-4"><p className="text-lg font-medium leading-relaxed italic opacity-90 text-left">{coachCard ? `"${coachCard.advice}"` : "Нажмите, чтобы получить персональный анализ вашего дня и привычек."}</p>{todayTask && (<div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 shadow-xl"><span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2 block text-white text-left">Задача дня:</span><div className="flex items-start gap-4 cursor-pointer" onClick={() => handleToggleTask(todayTask.date)}><div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center transition-all ${todayTask.completed ? 'bg-white text-indigo-600 shadow-lg shadow-white/20' : 'bg-white/10 border-2 border-white/30 text-transparent'}`}><CheckCircle2 size={14} fill="currentColor" /></div><span className={`text-lg font-bold leading-snug text-left ${todayTask.completed ? 'line-through opacity-50' : ''}`}>{todayTask.text}</span></div></div>)}</div>)}</div>{!coachCard && !coachLoading && (<button onClick={handleGetCoachAdvice} className="w-fit px-10 py-4 bg-white text-indigo-600 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl hover:scale-105 transition-all active:scale-95">Получить совет</button>)}</div></div>
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 md:p-10 rounded-[3rem] text-white shadow-2xl shadow-indigo-950/20 relative overflow-hidden group"><div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:scale-110 transition-transform" /><div className="relative z-10 flex flex-col h-full space-y-5"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner border border-white/10"><Sparkles size={28} /></div><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">AI Коучинг v3</span><h3 className="text-2xl font-black">{coachCard ? coachCard.title : "Ваш коуч рядом"}</h3><p className="text-sm text-white/70 font-semibold mt-1">Фокус на действиях, а не на длинных отчётах.</p></div></div><div className="flex-1 flex flex-col justify-center">{coachLoading ? (<div className="flex items-center gap-3 font-bold animate-pulse"><Loader2 className="animate-spin" /> Формирую рекомендации...</div>) : (<div className="space-y-4">{coachAdviceBrief.length ? (<div className="grid gap-3">{coachAdviceBrief.map((line, idx) => (<div key={idx} className="rounded-[1.4rem] border border-white/15 bg-white/10 px-4 py-3 text-left font-semibold leading-relaxed">• {line}</div>))}</div>) : (<p className="text-lg font-medium leading-relaxed italic opacity-90 text-left">Нажмите, чтобы получить персональный анализ вашего дня и привычек.</p>)}{todayTask && (<div className="bg-white/10 backdrop-blur-md p-5 rounded-[2rem] border border-white/20 shadow-xl"><div className="flex items-center justify-between gap-3 mb-2"><span className="text-[10px] font-black uppercase tracking-widest opacity-70 block text-white text-left">Задача дня</span><span className="text-[10px] font-black uppercase tracking-widest text-white/70">1 действие</span></div><div className="flex items-start gap-4 cursor-pointer" onClick={() => handleToggleTask(todayTask.date)}><div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center transition-all ${todayTask.completed ? 'bg-white text-indigo-600 shadow-lg shadow-white/20' : 'bg-white/10 border-2 border-white/30 text-transparent'}`}><CheckCircle2 size={14} fill="currentColor" /></div><span className={`text-lg font-bold leading-snug text-left ${todayTask.completed ? 'line-through opacity-50' : ''}`}>{todayTask.text}</span></div></div>)}</div>)}</div>{!coachCard && !coachLoading && (<button onClick={handleGetCoachAdvice} className="w-fit px-8 py-4 bg-white text-indigo-600 rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl hover:scale-105 transition-all active:scale-95">Получить совет</button>)}</div></div>
                 <div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 flex flex-col justify-between group"><div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-500"><BookOpen size={20} /></div><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Курс обучения</span></div><div className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 border border-emerald-500/20"><Flame size={12} fill="currentColor" /> {currentUser?.courseProgress?.streak || 0} Дней</div></div><div className="bg-slate-950 p-6 rounded-[2rem] flex items-center gap-6 border border-slate-800 group-hover:border-indigo-500/20 transition-all shadow-inner"><div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-sm border border-slate-800"><CheckSquare size={32} className="text-indigo-400" /></div><div className="text-left"><h4 className="text-2xl font-black text-slate-100 leading-tight mb-1">Урок {currentLesson?.week || 1}: {currentLesson?.title}</h4><p className="text-sm text-slate-500 font-bold tabular-nums">{Math.ceil((currentLesson?.readTimeSec || 0) / 60)} минут чтения</p></div></div></div><button onClick={() => setIsLessonViewOpen(true)} className="w-full mt-8 py-5 bg-slate-800 text-slate-300 rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-3 border border-slate-700 hover:border-indigo-500 shadow-lg">Открыть урок <ChevronRight size={20} /></button></div>
              </div>
            </div>
          )}
-        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all"><Sparkles size={16} /> Показать кратко</button></header><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Первые задачи</p><div className="mt-3 space-y-2">{(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => (<div key={i} className="flex items-start gap-2 p-3 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold"><CheckCircle2 size={18} className="text-indigo-300 mt-0.5" /><span>{t}</span></div>))}{(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (<p className="text-sm text-slate-500 font-semibold">План ещё генерируется или отсутствует.</p>)}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> {currentUser?.aiPlan?.mealTemplate?.breakfast ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> {currentUser?.aiPlan?.mealTemplate?.lunch ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> {currentUser?.aiPlan?.mealTemplate?.dinner ?? '—'}</div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> {currentUser?.aiPlan?.mealTemplate?.snack ?? '—'}</div></div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={handleGenerateWeeklyMenu} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><div className="text-slate-200 font-black mb-2">{d.day}</div><div className="text-xs text-slate-300 font-semibold space-y-1"><div><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div></div></div>))}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}{(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
-                <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
-                  <div className="text-lg font-semibold mb-3">Список покупок</div>
-                  <div className="space-y-2">
-                    {(() => {
-                      const items = currentUser?.aiPlan?.weeklyMenu?.shoppingListItems ?? [];
-                      if (items.length) {
-                        const agg = new Map<string, { name: string; grams: number }>();
-                        for (const it of items) {
-                          const key = (it?.name || '').trim().toLowerCase();
-                          if (!key) continue;
-                          const grams = Number(it.grams || 0);
-                          const prev = agg.get(key);
-                          if (prev) prev.grams += grams;
-                          else agg.set(key, { name: (it.name || '').trim(), grams });
-                        }
-                        const list = Array.from(agg.values()).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-                        return list.map((it, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-700 text-sm"
-                          >
-                            <span className="truncate">• {it.name}</span>
-                            <span className="text-white/70 whitespace-nowrap">{formatGramsPretty(it.grams)}</span>
-                          </div>
-                        ));
-                      }
+        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all min-h-[44px]"><Sparkles size={16} /> Показать кратко</button></header>{!currentUser?.aiPlan && (<div className="p-6 rounded-[2rem] border border-amber-500/20 bg-amber-500/5 text-left"><div className="flex items-start gap-3"><div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-300 shrink-0"><Sparkles size={18} /></div><div><p className="text-sm font-black text-amber-100">План ещё подготавливается</p><p className="mt-1 text-sm text-amber-200/80 font-semibold">Сначала заполните профиль и дождитесь генерации AI-плана. Пока план не готов, разделы показывают безопасные заглушки вместо пустого экрана.</p></div></div></div>)}
 
-                      return (currentUser?.aiPlan?.weeklyMenu?.shoppingList ?? []).map((item, idx) => (
-                        <div key={idx} className="px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-700 text-sm">• {item}</div>
-                      ));
-                    })()}
-                  </div>
-                </div>
-              ) : null}</div>
+          <div className="p-5 md:p-6 rounded-[2rem] bg-gradient-to-br from-indigo-600/15 via-slate-950 to-slate-950 border border-indigo-500/20 text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-black text-indigo-300 uppercase tracking-widest">Сегодня</p>
+                <h3 className="mt-2 text-xl font-black text-white">Что важно сделать сегодня</h3>
+                <p className="mt-1 text-sm text-slate-400 font-semibold">Минимум действий, которые двигают к цели и не перегружают.</p>
+              </div>
+              <div className="shrink-0 px-3 py-2 rounded-full bg-slate-950/70 border border-slate-800 text-[11px] font-black uppercase tracking-widest text-slate-300">
+                {Object.values(planTaskDone).filter(Boolean).length}/{Math.min(3, currentUser?.aiPlan?.firstTasks?.length || 0)} выполнено
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => {
+                const key = `${i}:${t}`;
+                const done = !!planTaskDone[key];
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPlanTaskDone(prev => ({ ...prev, [key]: !prev[key] }))}
+                    className={clsx(
+                      "min-h-[72px] w-full text-left flex items-start gap-3 p-4 rounded-[1.5rem] border transition-all active:scale-[0.99]",
+                      done
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-100"
+                        : "bg-slate-900/40 border-slate-800 text-slate-200 hover:border-indigo-500/30"
+                    )}
+                  >
+                    <span className={clsx("mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center shrink-0", done ? "border-emerald-400 bg-emerald-500/20 text-emerald-300" : "border-slate-700 text-slate-500")}>{done ? <CheckCircle2 size={16} /> : <span className="w-2.5 h-2.5 rounded-full bg-current opacity-70" />}</span>
+                    <span className="font-bold leading-relaxed">{t}</span>
+                  </button>
+                );
+              })}
+              {(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (
+                <div className="p-4 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 text-sm text-slate-500 font-semibold">Первые задачи появятся после генерации плана.</div>
+              )}
+            </div>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
+              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
+              <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Сводка за 30 секунд</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><div className="mt-4 grid gap-2">{planQuickBullets.map((point, idx) => (<div key={idx} className="rounded-[1.2rem] border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm font-semibold text-slate-200">• {point}</div>))}</div><p className="mt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-black uppercase tracking-widest"><span className="text-indigo-300">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</span>{currentUser?.targetWeight ? <span className="px-3 py-1 rounded-full bg-slate-900/50 border border-slate-800 text-slate-300">Цель: {goalLabel}</span> : null}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.breakfast || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.lunch || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.dinner || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.snack || ''} /></div></div></div></div>
+
+          {planRulesExpanded && (
+            <div className="p-5 md:p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+              <div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила недели</p><button type="button" onClick={() => setPlanRulesExpanded(false)} className="text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300">Скрыть</button></div>
+              <div className="mt-4 grid grid-cols-1 gap-3">
+                {(currentUser?.aiPlan?.rules ?? []).map((rule, idx) => (
+                  <div key={idx} className="p-4 rounded-[1.4rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold leading-relaxed">• {rule}</div>
+                ))}
+                {(!currentUser?.aiPlan?.rules || currentUser.aiPlan.rules.length === 0) && <div className="text-sm text-slate-500 font-semibold">Правила появятся после генерации плана.</div>}
+              </div>
+            </div>
+          )}
+
+          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left"><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div></div><ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
+            {(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
+              <ShoppingListCard
+                weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
+                title="Список покупок"
+                fallbackList={(() => {
+                  const items = currentUser?.aiPlan?.weeklyMenu?.shoppingListItems ?? [];
+                  if (items.length) {
+                    return items
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+                      .map((it) => `${it.name} — ${formatGramsPretty(it.grams)}`);
+                  }
+                  return currentUser?.aiPlan?.weeklyMenu?.shoppingList ?? [];
+                })()}
+              />
+            ) : null}
+          </div>
 
 
               {/* Cloud Family (B2C) — visible переключатель "Я / Семья" */}
@@ -3095,7 +3257,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
       </label>
     </div></div></header>
       <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold">Вы еще ничего не ели сегодня</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={24} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-16 pr-6 py-6 bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold text-slate-400">Вы еще ничего не ели сегодня</p><p className="text-sm font-semibold text-slate-500 max-w-md">Сделайте первый снимок еды или загрузите фото — запись появится здесь, а КБЖУ обновится автоматически.</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
         {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
         {activeTab === 'workouts' && <WorkoutsScreen />}
         {activeTab === 'family' && (

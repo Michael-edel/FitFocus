@@ -66,6 +66,7 @@ async function callAiProxy(model: string, contents: any, feature: string, config
     const payload = { ...basePayload, model: m };
     const res = await fetch("/api/ai", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
