@@ -38,6 +38,7 @@ import {
   BrainCircuit,
   Brain,
   ShieldCheck,
+  MoreHorizontal,
   AlertTriangle,
   Info,
   RefreshCcw,
@@ -995,9 +996,28 @@ const App: React.FC = () => {
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const sidebarTabs = [
+    { id: 'dashboard', icon: Activity, label: 'Обзор' },
+    { id: 'council', icon: MessageSquareText, label: 'AI Совет' },
+    { id: 'plan', icon: Sparkles, label: 'План' },
+    { id: 'nutrition', icon: Utensils, label: 'Питание' },
+    { id: 'recipes', icon: ChefHat, label: 'Рецепты' },
+    { id: 'workouts', icon: Dumbbell, label: 'Зал' },
+    { id: 'course', icon: BookOpen, label: 'Курс' },
+    { id: 'family', icon: Users, label: 'Семья' },
+    ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []),
+    { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' },
+    { id: 'settings', icon: Settings, label: 'Настройки' }
+  ] as const;
+  const mobilePrimaryTabIds = ['dashboard', 'council', 'plan', 'nutrition'] as const;
+  const mobilePrimaryTabs = sidebarTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id as any));
+  const mobileMoreTabs = sidebarTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id as any));
+
 
   // Load Cloud Family context when opening Family / Plan (so users can see family mode immediately)
   useEffect(() => {
+    setMobileMoreOpen(false);
     if (activeTab === 'family' || activeTab === 'plan') {
       void loadCloudFamily();
     }
@@ -2863,7 +2883,22 @@ if (authState === 'register') return (
           </div>
         </div>
       )}
-      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex justify-between items-center gap-1 md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+
+      {mobileMoreOpen && (
+        <div className="fixed inset-0 z-[120] md:hidden">
+          <button type="button" aria-label="Закрыть меню" onClick={() => setMobileMoreOpen(false)} className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+          <div className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2">
+            <div className="px-2 pt-1 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Ещё разделы</div>
+            {mobileMoreTabs.map((tab) => (
+              <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id as any); setMobileMoreOpen(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
+                <tab.icon size={20} className={tab.id === 'pro' && activeTab !== tab.id ? 'text-amber-500' : ''} />
+                <span className="font-black">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center gap-2 overflow-x-auto overflow-y-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-visible md:border-r md:border-t-0 md:px-4 md:pt-4 z-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
         <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
           <div className="flex items-center gap-3">
             <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
@@ -2908,17 +2943,21 @@ if (authState === 'register') return (
             </div>
           </div>
         </div>
-        {[ { id: 'dashboard', icon: Activity, label: 'Обзор' }, { id: 'council', icon: MessageSquareText, label: 'AI Совет' }, { id: 'plan', icon: Sparkles, label: 'План' }, { id: 'nutrition', icon: Utensils, label: 'Питание' }, { id: 'recipes', icon: ChefHat, label: 'Рецепты' }, { id: 'workouts', icon: Dumbbell, label: 'Зал' }, { id: 'course', icon: BookOpen, label: 'Курс' }, { id: 'family', icon: Users, label: 'Семья' }, ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []), { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' }, { id: 'settings', icon: Settings, label: 'Настройки' } ].map((tab) => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-4 px-2 py-2 md:p-4 rounded-[1.2rem] md:rounded-[1.5rem] transition-all flex-1 min-w-0 max-w-[78px] md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] leading-tight text-center md:text-base font-bold">{tab.label}</span></button>
+        {mobilePrimaryTabs.map((tab) => (
+          <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id as any)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={20} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] leading-tight text-center font-bold">{tab.label}</span></button>
+        ))}
+        <button type="button" onClick={() => setMobileMoreOpen(true)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><MoreHorizontal size={20} /><span className="text-[10px] leading-tight text-center font-bold">Ещё</span></button>
+        {sidebarTabs.map((tab) => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-base font-bold">{tab.label}</span></button>
         ))}
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
-      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)' }}>
+      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 124px)' }}>
         {activeTab === 'dashboard' && (
           <div className="space-y-10 animate-in fade-in duration-700">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="text-left"><h1 className="text-4xl font-black text-slate-200 mb-2">Привет, <span className="text-slate-50">{currentUser?.name}</span>! 👋</h1><p className="text-slate-400 font-medium">Ваш путь к цели под контролем ({paywall.plan})</p></div>
-              <div className="w-full md:w-auto flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 bg-slate-900 p-2 rounded-[2rem] shadow-sm border border-slate-800"><div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1 py-1"><div className="grid grid-cols-2 gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20 text-center min-w-0"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer px-2"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="w-full sm:w-auto flex items-center gap-2"><div className="flex-1 sm:flex-none flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20 min-w-0"><Scale size={20} className="text-indigo-400 mr-2 shrink-0" /><input type="number" placeholder="Вес" className="bg-transparent w-full sm:w-16 text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="shrink-0 min-w-[56px] h-[56px] bg-indigo-600 text-white rounded-[1.5rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={20} /></button></div></div>
+              <div className="w-full md:w-auto flex flex-col gap-3 bg-slate-900 p-2 rounded-[2rem] shadow-sm border border-slate-800 overflow-hidden"><div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1 py-1"><div className="grid grid-cols-2 gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20 text-center min-w-0"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer px-2"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full"><div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20"><Scale size={20} className="text-indigo-400 mr-2 shrink-0" /><input type="number" placeholder="Вес" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button></div></div>
             </header>
             {plateau && currentUser?.goal === Goal.LOSS && (<div className="p-6 rounded-[2.5rem] border border-amber-500/30 bg-amber-500/5 backdrop-blur-md flex items-start gap-4 animate-in slide-in-from-top-4 duration-500"><div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0 border border-amber-500/20"><AlertTriangle size={24} /></div><div className="text-left"><p className="text-[11px] font-black uppercase tracking-widest text-amber-500 mb-1">Обнаружено плато (28 дней анализа)</p><h3 className="text-lg font-black text-slate-100">Ваш вес стабилизировался</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-200"><ShieldCheck size={14} className="text-amber-300" />Интенсивность учтена</div><p className="text-sm font-medium text-slate-400 mt-2">Это естественная адаптация организма. AI-коуч подготовил для вас обновленные рекомендации в разделе «План» и ежедневных задачах.</p></div></div>)}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
