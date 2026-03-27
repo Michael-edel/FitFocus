@@ -548,7 +548,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                   role="button"
                   className="bg-slate-900 p-4 md:p-6 rounded-[2.2rem] md:rounded-[2.5rem] border border-slate-800 shadow-xl hover:border-slate-700 transition-all cursor-pointer"
                 >
-                  <div className="flex items-start gap-3 md:gap-4">
+                  <div className="grid grid-cols-[auto_56px_minmax(0,1fr)_auto] md:grid-cols-[auto_96px_minmax(0,1fr)_auto] items-center gap-3 md:gap-4 w-full">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(item.id)}
@@ -556,51 +556,48 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                         e.stopPropagation();
                         toggleSelected(item.id);
                       }}
-                      className="mt-10 md:mt-5 h-6 w-6 rounded-md accent-indigo-400 shrink-0"
+                      className="h-6 w-6 rounded-md accent-indigo-400 shrink-0"
                       title="Выбрать"
                     />
 
-                    <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-950 rounded-[1.4rem] md:rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-slate-800/50 overflow-hidden shrink-0">
+                    <div className="w-14 h-14 md:w-24 md:h-24 bg-slate-950 rounded-xl md:rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-slate-800/50 overflow-hidden shrink-0">
                       {hasPhoto ? (
                         <img src={(item.photoThumb || item.photo)!} alt={item.name} className="w-full h-full object-cover" />
                       ) : (
-                        <Utensils size={28} />
+                        <Utensils size={24} className="md:w-7 md:h-7" />
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 text-left">
-                          <h4 className="text-2xl md:text-xl font-black text-slate-100 leading-tight truncate">{item.name}</h4>
-                          <p className="mt-2 text-[11px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest tabular-nums">
-                            {formatTime(item.timestamp)} · {mealTypeLabel(item.mealType)}
-                          </p>
-                          <p className="mt-2 text-sm md:text-base font-black text-slate-300 tabular-nums">
-                            Б:{Math.round(item.protein)} · Ж:{Math.round(item.fat)} · У:{Math.round(item.carbs)}
-                          </p>
-                        </div>
+                    <div className="min-w-0 flex flex-col gap-1 text-left">
+                      <h4 className="text-base md:text-xl font-semibold md:font-black text-slate-100 leading-tight truncate">{item.name}</h4>
+                      <p className="text-[10px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest tabular-nums truncate">
+                        {formatTime(item.timestamp)} · {mealTypeLabel(item.mealType)}
+                      </p>
+                      <p className="text-xs md:text-base font-black text-slate-300 tabular-nums truncate">
+                        Б:{Math.round(item.protein)} · Ж:{Math.round(item.fat)} · У:{Math.round(item.carbs)}
+                      </p>
+                    </div>
 
-                        <div className="shrink-0 flex flex-col items-end gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMobileActionsFor((prev) => (prev === item.id ? null : item.id));
-                            }}
-                            className="md:hidden w-10 h-10 rounded-full border border-slate-700 bg-slate-950/80 text-slate-300 flex items-center justify-center"
-                            aria-label="Действия"
-                          >
-                            <MoreHorizontal size={18} />
-                          </button>
+                    <div className="shrink-0 flex flex-col items-end gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileActionsFor((prev) => (prev === item.id ? null : item.id));
+                        }}
+                        className="md:hidden w-9 h-9 rounded-full border border-slate-700 bg-slate-950/80 text-slate-300 flex items-center justify-center"
+                        aria-label="Действия"
+                      >
+                        <MoreHorizontal size={18} />
+                      </button>
 
-                          <div className="text-right tabular-nums">
-                            <div className="text-4xl md:text-3xl font-black text-slate-50 leading-none">{Math.round(item.calories)}</div>
-                            <div className="text-sm md:text-xs font-bold text-slate-500 mt-1">Ккал</div>
-                          </div>
-                        </div>
+                      <div className="text-right tabular-nums whitespace-nowrap">
+                        <div className="text-xl md:text-3xl font-bold md:font-black text-slate-50 leading-none">{Math.round(item.calories)}</div>
+                        <div className="text-[10px] md:text-xs font-bold text-slate-500 mt-1">Ккал</div>
                       </div>
+                    </div>
 
-                      <div className="hidden md:flex items-center gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="hidden md:flex items-center gap-2 mt-4 col-start-3 col-span-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => openEdit(item)}
@@ -633,7 +630,6 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                         </button>
                       </div>
                     </div>
-                  </div>
 
                   {mobileOpen && (
                     <div className="md:hidden mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 gap-2" onClick={(e) => e.stopPropagation()}>
@@ -2456,7 +2452,7 @@ const logWeight = useCallback(() => {
 );
 
 if (authState === 'register') return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden text-left">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-950 relative text-left" style={{ maxWidth: '100vw' }}>
       {/* Premium backdrop */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-32 -left-24 w-[520px] h-[520px] rounded-full bg-indigo-600/20 blur-3xl" />
@@ -2830,7 +2826,10 @@ if (authState === 'register') return (
   );
 
   return (
-    <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
+    <div
+      className="min-h-[100dvh] md:min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-950 px-4 md:pl-64 md:px-0 text-slate-100 text-left"
+      style={{ maxWidth: '100vw' }}
+    >
       {isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
@@ -3029,7 +3028,7 @@ if (authState === 'register') return (
                 carbs: clampGram(dailyStats.carbs)
               };
               return (
-                <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-64 flex items-center justify-center"><PieChart width={200} height={200}><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
+                <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 w-full"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="flex flex-col items-center gap-4 w-full"><div className="w-full flex justify-center"><div className="w-40 h-40 md:w-52 md:h-52"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={macroPieData} innerRadius="58%" outerRadius="86%" paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart></ResponsiveContainer></div></div><div className="text-center"><span className="text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="mt-1 block text-[10px] font-bold text-slate-500 uppercase tracking-widest">от цели по ккал</span></div><div className="grid grid-cols-3 gap-3 w-full">{macroPieData.map((m, i) => (<div key={i} className="rounded-[1.25rem] border border-slate-800 bg-slate-950/60 px-3 py-3 text-center space-y-1 min-w-0"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[10px] font-black text-slate-50 uppercase tracking-widest truncate">{m.name}</p><p className="text-sm font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div></div>
               );
             })()}
               <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl border border-slate-800 space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
