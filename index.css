@@ -919,52 +919,128 @@ body {
 }
 
 @media (max-width: 640px) {
+  .ff-infocard {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 20px);
+    padding: 10px;
+    border-radius: 1.75rem;
+  }
+  .ff-infocard__header {
+    padding: 0 2px;
+    margin-bottom: 10px;
+  }
+  .ff-infocard__title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+  .ff-infocard__close {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+  .ff-infocard__stage {
+    aspect-ratio: 1 / 1.02;
+    border-radius: 1.5rem;
+  }
   .ff-infocard__bubble {
-    width: 100px;
-    height: 100px;
+    width: 112px;
+    height: 112px;
+    top: 54%;
   }
   .ff-infocard__bubbleValue {
-    font-size: 32px;
+    font-size: 34px;
   }
-  .ff-infocard__callout {
-    padding: 4px 8px;
+  .ff-infocard__bubbleHint {
+    font-size: 10px;
+    margin-top: 4px;
   }
-  .ff-infocard__calloutName {
+  .ff-infocard__svg,
+  .ff-infocard__vector,
+  .ff-infocard__callout,
+  .ff-infocard__haloArea {
+    display: none;
+  }
+  .ff-infocard__macros {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    gap: 8px;
+  }
+  .ff-infocard__macro {
+    padding: 10px 8px;
+    border-radius: 16px;
+  }
+  .ff-infocard__macroK {
     font-size: 10px;
   }
-  .ff-infocard__haloArea {
-    box-shadow:
-      0 0 0 2px rgba(255,122,47,0.40),
-      0 0 28px rgba(255,122,47,0.40),
-      0 0 62px rgba(255,122,47,0.20);
+  .ff-infocard__macroV {
+    font-size: 15px;
+  }
+  .ff-infocard__notes {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: 1.25rem;
+  }
+  .ff-infocard__note {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .ff-infocard__ingredientsList {
+    margin-top: 10px;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .ff-infocard__ingredient {
+    min-height: 64px;
+    padding: 12px 10px;
+    border-radius: 1rem;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+  }
+  .ff-infocard__ingredientName {
+    line-height: 1.25;
+  }
+  .ff-infocard__ingredientPct {
+    font-size: 18px;
+    line-height: 1;
   }
   .ff-infocard__tooltip{
     bottom: 10px;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 12px;
   }
   .ff-infocard__recipePhoto{
     height: 120px;
   }
   .ff-infocard__scrollArea{
-    max-height: 52vh;
+    max-height: 52dvh;
   }
 }
 
 @media (max-width: 420px) {
-  .ff-infocard__callout {
-    max-width: 56vw;
+  .ff-infocard__bubble {
+    width: 104px;
+    height: 104px;
   }
-  .ff-infocard__calloutName {
-    font-size: 11px;
+  .ff-infocard__bubbleValue {
+    font-size: 30px;
   }
-  .ff-infocard__calloutPct {
-    font-size: 11px;
+  .ff-infocard__ingredientsList {
+    grid-template-columns: 1fr;
+  }
+  .ff-infocard__ingredient {
+    min-height: 56px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
 }
 
 @media (max-width: 360px) {
-  .ff-infocard__callout {
-    max-width: 62vw;
+  .ff-infocard__title {
+    font-size: 10px;
   }
 }
 
