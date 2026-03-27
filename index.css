@@ -1294,3 +1294,44 @@ body {
 .consensus-gradient {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
 }
+
+
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .ff-infocard {
+    width: min(100vw - 16px, 100%);
+    margin-inline: auto;
+  }
+
+  .ff-infocard__uiLayer {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    inset: 0;
+    padding: 10px;
+  }
+
+  .ff-infocard__bubble {
+    position: static;
+    transform: none;
+    margin: 0 auto auto;
+  }
+
+  .ff-infocard__macros {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    margin-top: auto;
+  }
+}
