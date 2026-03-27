@@ -630,7 +630,6 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                         </button>
                       </div>
                     </div>
-                  </div>
 
                   {mobileOpen && (
                     <div className="md:hidden mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 gap-2" onClick={(e) => e.stopPropagation()}>
