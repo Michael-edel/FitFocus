@@ -478,6 +478,7 @@ type FoodDiaryGroupedProps = {
   mealTypeLabel: (m: MealType) => string;
 };
 
+
 const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
   items,
   selectedIds,
@@ -491,6 +492,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
   formatTime,
   mealTypeLabel,
 }) => {
+  const [mobileActionsFor, setMobileActionsFor] = React.useState<string | null>(null);
   const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
   const groups = order
@@ -506,9 +508,9 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
     <div className="space-y-6">
       {groups.map((g) => (
         <div key={g.mt} className="rounded-[3rem] border border-slate-800 bg-slate-900/60 shadow-xl overflow-hidden">
-          <div className="px-8 py-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="px-5 py-5 md:px-8 md:py-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-baseline gap-3">
-              <h3 className="text-2xl font-black text-slate-100">{g.title}</h3>
+              <h3 className="text-2xl md:text-3xl font-black text-slate-100">{g.title}</h3>
               <span className="text-sm font-black text-slate-500 tabular-nums">{Math.round(g.calories)} ккал</span>
             </div>
 
@@ -516,7 +518,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
               <button
                 disabled={!selectedIds.size}
                 onClick={() => bulkMoveTo(g.mt)}
-                className="text-[10px] px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-black tracking-widest uppercase hover:bg-indigo-500/15 transition disabled:opacity-40"
+                className="min-h-[40px] text-[10px] px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-black tracking-widest uppercase hover:bg-indigo-500/15 transition disabled:opacity-40"
                 title="Перенести выбранные в этот прием пищи"
               >
                 → {g.title}
@@ -525,7 +527,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
               <button
                 disabled={!selectedIds.size}
                 onClick={bulkDelete}
-                className="text-[10px] px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition disabled:opacity-40"
+                className="min-h-[40px] text-[10px] px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition disabled:opacity-40"
                 title="Удалить выбранные"
               >
                 Удалить выбранные
@@ -533,94 +535,145 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
             </div>
           </div>
 
-          <div className="p-6 space-y-4">
-            {g.groupItems.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  if ((item.photoThumb || item.photo) && item.insight) openInsight(item);
-                }}
-                role="button"
-                className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800 shadow-xl flex items-center justify-between group hover:border-slate-700 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(item.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggleSelected(item.id);
-                    }}
-                    className="h-4 w-4 accent-indigo-400"
-                    title="Выбрать"
-                  />
-
-                  <div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-slate-800/50 overflow-hidden shrink-0">
-                    {(item.photoThumb || item.photo) ? (
-                      <img src={(item.photoThumb || item.photo)!} alt={item.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <Utensils size={28} />
-                    )}
-                  </div>
-
-                  <div className="text-left flex-1 min-w-0">
-                    <h4 className="text-xl font-black text-slate-100 mb-1 truncate">{item.name}</h4>
-                    <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest tabular-nums">
-                      {formatTime(item.timestamp)} · {mealTypeLabel(item.mealType)} · Б:{Math.round(item.protein)} Ж:{Math.round(item.fat)} У:{Math.round(item.carbs)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-end w-40 shrink-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
+          <div className="p-4 md:p-6 space-y-4">
+            {g.groupItems.map((item) => {
+              const hasPhoto = !!(item.photoThumb || item.photo);
+              const mobileOpen = mobileActionsFor === item.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    if (hasPhoto && item.insight) openInsight(item);
+                  }}
+                  role="button"
+                  className="bg-slate-900 p-4 md:p-6 rounded-[2.2rem] md:rounded-[2.5rem] border border-slate-800 shadow-xl hover:border-slate-700 transition-all cursor-pointer"
+                >
+                  <div className="flex items-start gap-3 md:gap-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={(e) => {
                         e.stopPropagation();
-                        openEdit(item);
+                        toggleSelected(item.id);
                       }}
-                      className="text-[10px] px-3 py-1 rounded-full bg-slate-950/60 border border-slate-700/50 text-slate-200 font-black tracking-widest uppercase hover:bg-slate-900 transition"
-                      title="Корректировать данные"
-                    >
-                      Правка
-                    </button>
+                      className="mt-10 md:mt-5 h-6 w-6 rounded-md accent-indigo-400 shrink-0"
+                      title="Выбрать"
+                    />
 
-                    {(item.photoThumb || item.photo) && (
+                    <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-950 rounded-[1.4rem] md:rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-slate-800/50 overflow-hidden shrink-0">
+                      {hasPhoto ? (
+                        <img src={(item.photoThumb || item.photo)!} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Utensils size={28} />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 text-left">
+                          <h4 className="text-2xl md:text-xl font-black text-slate-100 leading-tight truncate">{item.name}</h4>
+                          <p className="mt-2 text-[11px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest tabular-nums">
+                            {formatTime(item.timestamp)} · {mealTypeLabel(item.mealType)}
+                          </p>
+                          <p className="mt-2 text-sm md:text-base font-black text-slate-300 tabular-nums">
+                            Б:{Math.round(item.protein)} · Ж:{Math.round(item.fat)} · У:{Math.round(item.carbs)}
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 flex flex-col items-end gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMobileActionsFor((prev) => (prev === item.id ? null : item.id));
+                            }}
+                            className="md:hidden w-10 h-10 rounded-full border border-slate-700 bg-slate-950/80 text-slate-300 flex items-center justify-center"
+                            aria-label="Действия"
+                          >
+                            <MoreHorizontal size={18} />
+                          </button>
+
+                          <div className="text-right tabular-nums">
+                            <div className="text-4xl md:text-3xl font-black text-slate-50 leading-none">{Math.round(item.calories)}</div>
+                            <div className="text-sm md:text-xs font-bold text-slate-500 mt-1">Ккал</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="hidden md:flex items-center gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(item)}
+                          className="min-h-[36px] text-[10px] px-3 py-1 rounded-full bg-slate-950/60 border border-slate-700/50 text-slate-200 font-black tracking-widest uppercase hover:bg-slate-900 transition"
+                          title="Корректировать данные"
+                        >
+                          Правка
+                        </button>
+
+                        {hasPhoto && (
+                          <button
+                            type="button"
+                            onClick={() => deletePhoto(item.id)}
+                            title="Удалить только фото"
+                            className="min-h-[36px] text-[10px] px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-200 font-black tracking-widest uppercase hover:bg-amber-500/15 transition flex items-center gap-2"
+                          >
+                            <Trash2 size={14} />
+                            Фото
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => deleteEntry(item.id)}
+                          title="Удалить запись (фото и данные)"
+                          className="min-h-[36px] text-[10px] px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition flex items-center gap-2"
+                        >
+                          <Trash2 size={14} />
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {mobileOpen && (
+                    <div className="md:hidden mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deletePhoto(item.id);
+                        onClick={() => {
+                          setMobileActionsFor(null);
+                          openEdit(item);
                         }}
-                        title="Удалить только фото"
-                        className="text-[10px] px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-200 font-black tracking-widest uppercase hover:bg-amber-500/15 transition flex items-center gap-2"
+                        className="min-h-[44px] px-4 rounded-[1.1rem] bg-slate-950/60 border border-slate-700/50 text-slate-200 font-black tracking-widest uppercase text-[11px]"
                       >
-                        <Trash2 size={14} />
-                        Фото
+                        Правка
                       </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteEntry(item.id);
-                      }}
-                      title="Удалить запись (фото и данные)"
-                      className="text-[10px] px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition flex items-center gap-2"
-                    >
-                      <Trash2 size={14} />
-                      Удалить
-                    </button>
-                  </div>
-
-                  <div className="text-right tabular-nums">
-                    <div className="text-2xl font-black text-slate-50 leading-none">{Math.round(item.calories)}</div>
-                    <div className="text-xs font-bold text-slate-600 mt-1">Ккал</div>
-                  </div>
+                      {hasPhoto && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileActionsFor(null);
+                            deletePhoto(item.id);
+                          }}
+                          className="min-h-[44px] px-4 rounded-[1.1rem] bg-amber-500/10 border border-amber-500/20 text-amber-200 font-black tracking-widest uppercase text-[11px]"
+                        >
+                          Удалить фото
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileActionsFor(null);
+                          deleteEntry(item.id);
+                        }}
+                        className="min-h-[44px] px-4 rounded-[1.1rem] bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase text-[11px]"
+                      >
+                        Удалить запись
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}
@@ -634,6 +687,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
     </div>
   );
 };
+
 
 
 const App: React.FC = () => {
@@ -2776,7 +2830,7 @@ if (authState === 'register') return (
   );
 
   return (
-    <div className="min-h-screen pb-24 md:pb-0 md:pl-64 bg-slate-950 text-slate-100 text-left">
+    <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
       {isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
@@ -2898,7 +2952,7 @@ if (authState === 'register') return (
           </div>
         </div>
       )}
-      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center gap-2 overflow-x-auto overflow-y-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-visible md:border-r md:border-t-0 md:px-4 md:pt-4 z-50 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/92 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-visible md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
         <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
           <div className="flex items-center gap-3">
             <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
@@ -2952,7 +3006,7 @@ if (authState === 'register') return (
         ))}
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
-      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 124px)' }}>
+      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)' }}>
         {activeTab === 'dashboard' && (
           <div className="space-y-10 animate-in fade-in duration-700">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
