@@ -73,6 +73,8 @@ export type WeeklyMenuDay = {
 
 export type ShoppingListItem = { name: string; grams: number };
 
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
 export type WeeklyMenu = {
   days: WeeklyMenuDay[];
   shoppingList: string[];
@@ -182,6 +184,14 @@ export interface UsageStats {
   weekKey?: string;                // YYYY-WW
   familyMenuCount?: number;
 }
+
+export type DietaryPrefs = {
+  allergens: string[];
+  intolerances: string[];
+  excludedFoods: string[];
+  severity: 'strict' | 'medium' | 'soft' | 'avoid';
+  notes?: string;
+};
 
 export interface UserProfile {
   id: string;
@@ -293,6 +303,8 @@ export interface FoodItem {
     photoThumb?: string; // small data URL (cropped/resized)
 insight?: FoodInsight;
 }
+
+export type FoodEntry = FoodItem & { mealType: MealType };
 
 export interface WorkoutPlan {
   id: string;

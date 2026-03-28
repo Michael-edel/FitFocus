@@ -207,6 +207,19 @@ export default function AdminScreen() {
     }
   };
 
+
+
+  const saveFlags = async () => {
+    const keys = Object.keys(flagsDirty);
+    if (!keys.length) return;
+    for (const key of keys) {
+      await saveFlag(key);
+    }
+  };
+
+  const loadUserRoles = async (userId: string) => {
+    await loadUserDetails(userId);
+  };
   const saveFlag = async (key: string) => {
     const d = flagsDirty[key];
     if (!d) return;
