@@ -21,7 +21,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const family_id = body.family_id ? String(body.family_id) : null;
     const items = Array.isArray(body.items) ? body.items : [];
 
-    if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, { status: 400 });
 
     const norm = items
       .map((it: any) => ({
@@ -51,7 +51,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     return json({ ok: true, stored: norm.length, week_start });
   } catch (e: any) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return toApiError(e);
   }
 };

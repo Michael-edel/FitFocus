@@ -2,7 +2,7 @@ import Stripe from "stripe";
 
 export async function onRequestPost({ request, env }) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-    apiVersion: "2023-10-16"
+    apiVersion: "2024-06-20"
   });
 
   const sig = request.headers.get("stripe-signature");

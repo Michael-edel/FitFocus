@@ -54,7 +54,6 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     return json({ ok: true, updated_at: updatedAt }, 200);
   } catch (e: any) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return toApiError(e);
   }
 };
