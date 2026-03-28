@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, LogOut, Trash2, Shield, UserCircle2 } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -155,11 +155,66 @@ export default function SettingsScreen({
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <div className="mb-8 text-left">
-        <div className="text-3xl font-black text-slate-100">Настройки</div>
-        <div className="text-slate-400 mt-2">Персонализируйте интерфейс. Часть функций будет добавлена позже.</div>
+        <div className="text-3xl font-black text-slate-100">Настройки и аккаунт</div>
+        <div className="text-slate-400 mt-2">Здесь находятся параметры интерфейса, выход из аккаунта и удаление профиля.</div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title="Аккаунт" icon={<UserCircle2 className="w-5 h-5" />}>
+          <div className="space-y-3 text-left">
+            <div className="p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
+              <div className="text-slate-500 text-xs font-black uppercase tracking-widest">Профиль</div>
+              <div className="mt-2 text-slate-100 font-black text-lg break-words">{user?.name || 'FitFocus User'}</div>
+              {user?.email ? (
+                <div className="text-slate-400 text-sm mt-1 break-all">{user.email}</div>
+              ) : (
+                <div className="text-slate-500 text-sm mt-1">Email не привязан в локальном профиле</div>
+              )}
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-700 bg-slate-900/70 text-[11px] font-black text-slate-300">
+                <Shield className="w-4 h-4" />
+                {serverSession ? 'Активная защищённая сессия' : 'Локальный профиль на устройстве'}
+              </div>
+            </div>
+
+            <button
+              onClick={() => { void onServerLogout?.(); }}
+              disabled={!onServerLogout}
+              className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left disabled:opacity-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-slate-100 font-black">Выйти из аккаунта</div>
+                  <div className="text-slate-400 text-sm mt-1">Завершить текущую сессию и вернуться на экран входа.</div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-200 shrink-0">
+                  <LogOut className="w-5 h-5" />
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { void onDeleteAccount?.(); }}
+              disabled={!onDeleteAccount || !serverSession}
+              className="w-full p-4 rounded-[1.25rem] border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-rose-100 font-black">Удалить аккаунт</div>
+                  <div className="text-rose-200/80 text-sm mt-1">Полностью удалить облачный аккаунт и выйти из приложения. Действие необратимо.</div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-950/40 border border-rose-500/20 flex items-center justify-center text-rose-200 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+              </div>
+            </button>
+
+            {!serverSession && (
+              <div className="p-4 rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-100 text-sm font-semibold">
+                Удаление аккаунта доступно только для авторизованной облачной сессии. Для локального профиля используйте выход и очистку данных браузера.
+              </div>
+            )}
+          </div>
+        </Card>
         <Card title="Тема" icon={<Palette className="w-5 h-5" />}>
           <div className="space-y-3">
             <Option
