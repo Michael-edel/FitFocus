@@ -3158,17 +3158,8 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
       Прочитано
     </label>
     {adaptNote && (
-      <button
-        type="button"
-        onClick={() => setAdaptExpanded(v => !v)}
-        className={clsx(
-          "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border transition-all",
-          !adaptExpanded
-            ? "border-indigo-400/40 bg-indigo-500/20 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.15)]"
-            : "border-indigo-500/20 bg-indigo-600/10 text-indigo-200 hover:bg-indigo-600 hover:text-white"
-        )}
-      >
-        {adaptExpanded ? 'Свернуть' : 'Развернуть ↓'}
+      <button type="button" onClick={() => setAdaptExpanded(v => !v)} className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-600/10 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all">
+        {adaptExpanded ? 'Свернуть' : 'Развернуть'}
       </button>
     )}
   </div>
@@ -3177,6 +3168,17 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
       {adaptNote || "Нажмите «Объяснить», чтобы AI интерпретировал вашу динамику веса и комплаенс режима."}
     </div>
   </div>
+  {adaptNote && adaptExpanded && (
+    <div className="pt-2 flex justify-end">
+      <button
+        type="button"
+        onClick={() => setAdaptExpanded(false)}
+        className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-600/10 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all"
+      >
+        Свернуть
+      </button>
+    </div>
+  )}
 </div></div></div>)}
             {weekly && paywall.canUsePro && (<div className="bg-gradient-to-br from-indigo-600/20 via-purple-600/20 to-rose-500/20 backdrop-blur-md p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-white/20 shadow-2xl space-y-6 animate-in slide-in-from-bottom-4 duration-600"><div className="flex items-start justify-between"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 opacity-80 block mb-1">AI-Аналитика недели (PRO)</span><div className="mt-4"><div className="flex items-center justify-between gap-6"><h3 className="text-4xl font-black text-white flex items-center gap-3"><span className="tabular-nums">{weekly.wis}</span><span className="text-lg font-black text-indigo-300 opacity-50">/ 100</span></h3><span className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest", weekly.wis >= 80 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : weekly.wis >= 60 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : weekly.wis >= 40 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30")}>{weekly.status}</span></div><div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div></div></div><div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Комплаенс</p><p className="text-sm font-black tabular-nums text-white">{weekly.compliance}%</p></div><div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Адаптация</p><p className="text-sm font-black tabular-nums text-white">{weekly.adaptationIndex}/100</p></div></div><div className="mt-2 space-y-2 text-sm font-semibold opacity-90"><p className="font-black text-indigo-100 flex items-center gap-2"><TrendingUp size={16} />Прогноз следующей недели: {forecastNextWeek > 0 ? '+' : ''}{forecastNextWeek.toFixed(2)} кг</p><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/80"><ShieldCheck size={14} className="text-white/80" />Интенсивность учтена</div></div>{weeklyReports.length > 0 && (<div className="mt-8 border-t border-white/10 pt-6"><span className="text-[10px] font-black uppercase tracking-widest text-white/60 block mb-4">История AI-отчётов</span><div className="space-y-4">{weeklyReports.slice().reverse().map((r, idx) => (<div key={idx} className="p-5 rounded-[2rem] bg-white/5 border border-white/10 space-y-4 group hover:border-white/20 transition-all"><div className="flex justify-between items-center"><div className="text-left"><span className="text-sm font-black text-indigo-300">{r.weekKey}</span><p className="text-[10px] font-black uppercase tracking-widest text-white/40">{new Date(r.createdAt).toLocaleDateString()}</p></div><div className="text-right"><span className="text-xs font-black text-white tabular-nums">{r.data.wis}/100</span><p className="text-[8px] font-black uppercase tracking-widest text-white/40">WIS Score</p></div></div>{r.aiText && (<p className="text-sm font-medium text-white/80 leading-relaxed text-left border-l-2 border-indigo-400/30 pl-4">{r.aiText}</p>)}<button onClick={() => exportWeeklyPDF(r)} className="w-full py-3 rounded-xl bg-white/10 border border-white/10 text-white font-bold hover:bg-white/20 transition flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Download size={14} /> Экспорт в PDF</button></div>))}</div></div>)}</div>)}
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -3225,7 +3227,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             </div>
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
-              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className={clsx("min-h-[48px] px-4 py-3 rounded-[1.3rem] border font-black text-sm transition-all", planRulesExpanded ? "bg-slate-950/70 border-slate-800 text-slate-200 hover:border-indigo-500/30" : "bg-indigo-500/10 border-indigo-500/30 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.12)]")}>{planRulesExpanded ? 'Скрыть правила' : 'Показать правила ↓'}</button>
+              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
               <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
             </div>
           </div>
@@ -3241,10 +3243,13 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                 ))}
                 {(!currentUser?.aiPlan?.rules || currentUser.aiPlan.rules.length === 0) && <div className="text-sm text-slate-500 font-semibold">Правила появятся после генерации плана.</div>}
               </div>
+              <div className="mt-4 flex justify-end">
+                <button type="button" onClick={() => setPlanRulesExpanded(false)} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button>
+              </div>
             </div>
           )}
 
-          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className={clsx("w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left transition-all", !expanded && "bg-indigo-500/5 hover:bg-indigo-500/10")}><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className={clsx("text-[11px] font-black uppercase tracking-widest mt-1", expanded ? "text-slate-500" : "text-indigo-300")}>{expanded ? 'Скрыть детали' : 'Показать меню дня ↓'}</div></div><ChevronDown size={18} className={clsx('transition-transform', expanded ? 'text-slate-400 rotate-180' : 'text-indigo-300')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
+          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left"><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div></div><ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div><div className="pt-1 flex justify-end"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: false }))} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
             {(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
               <ShoppingListCard
                 weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
@@ -3681,31 +3686,37 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                               <button
                                 type="button"
                                 onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                                className={clsx(
-                                  "flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all",
-                                  expanded
-                                    ? "text-slate-500 hover:text-indigo-400"
-                                    : "text-indigo-300"
-                                )}
+                                className="flex items-center gap-2 text-slate-500 hover:text-indigo-400 font-black text-[10px] uppercase tracking-widest transition-all"
                               >
-                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета ↓'}
+                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета'}
                                 <ChevronDown className={clsx('transition-transform', expanded && 'rotate-180')} size={14} />
                               </button>
 
                               {expanded && (
-                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in zoom-in-95">
-                                  {resp.thoughts.map((t, i) => (
-                                    <div
-                                      key={i}
-                                      className={clsx(
-                                        'p-5 rounded-3xl border',
-                                        t.isReview ? 'bg-slate-900/50 border-slate-800 italic' : 'bg-indigo-500/5 border-indigo-500/20'
-                                      )}
+                                <div className="mt-4 space-y-4 animate-in zoom-in-95">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {resp.thoughts.map((t, i) => (
+                                      <div
+                                        key={i}
+                                        className={clsx(
+                                          'p-5 rounded-3xl border',
+                                          t.isReview ? 'bg-slate-900/50 border-slate-800 italic' : 'bg-indigo-500/5 border-indigo-500/20'
+                                        )}
+                                      >
+                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2">{t.agentName}</p>
+                                        <p className="text-sm text-slate-300">"{t.text}"</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: false }))}
+                                      className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
                                     >
-                                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2">{t.agentName}</p>
-                                      <p className="text-sm text-slate-300">"{t.text}"</p>
-                                    </div>
-                                  ))}
+                                      Свернуть
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
