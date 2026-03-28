@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, LogOut, Trash2, Shield, UserCircle2 } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
+
+type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type Props = {
   serverSession?: boolean;
@@ -19,6 +21,10 @@ type Props = {
   onImportBackup?: (file: File) => void;
   onConnectAutosave?: () => Promise<boolean>;
   autosaveEnabled?: boolean;
+  syncState?: SyncState;
+  lastProfileSyncAt?: number | null;
+  onSyncNow?: () => Promise<void> | void;
+  onReloadFromCloud?: () => Promise<void> | void;
 };
 
 const Card: React.FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
@@ -58,6 +64,35 @@ const Option: React.FC<{
     </div>
   </button>
 );
+
+
+const goalOptions = [
+  { value: Goal.LOSS, label: 'Снижение веса' },
+  { value: Goal.MAINTAIN, label: 'Поддержание' },
+  { value: Goal.GAIN, label: 'Набор массы' },
+] as const;
+
+const syncStateLabel = (state: SyncState | undefined) => {
+  switch (state) {
+    case 'saving':
+      return 'Сохраняем изменения…';
+    case 'saved':
+      return 'Облачный профиль синхронизирован';
+    case 'error':
+      return 'Ошибка синхронизации — изменения остались локально';
+    default:
+      return 'Локальные изменения ждут синхронизации';
+  }
+};
+
+const formatSyncTs = (ts?: number | null) => {
+  if (!ts) return 'Ещё не синхронизировано';
+  try {
+    return new Date(ts).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  } catch {
+    return 'Ещё не синхронизировано';
+  }
+};
 
 const Toggle: React.FC<{
   label: string;
@@ -109,6 +144,10 @@ export default function SettingsScreen({
   serverSession,
   onServerLogout,
   onDeleteAccount,
+  syncState,
+  lastProfileSyncAt,
+  onSyncNow,
+  onReloadFromCloud,
 }: Props) {
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
@@ -120,6 +159,32 @@ export default function SettingsScreen({
   const [cacheCleared, setCacheCleared] = useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const [draftName, setDraftName] = useState('');
+  const [draftGoal, setDraftGoal] = useState<Goal>(Goal.MAINTAIN);
+  const [draftTargetWeight, setDraftTargetWeight] = useState('');
+  const [draftAge, setDraftAge] = useState('');
+  const [draftHeight, setDraftHeight] = useState('');
+  const [profileDirty, setProfileDirty] = useState(false);
+
+  const profileSummary = useMemo(() => {
+    if (!user) return null;
+    return {
+      name: (user.name || '').trim() || 'Пользователь',
+      email: user.email || 'Без e-mail',
+      targetWeight: Number(user.targetWeight || 0),
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    setDraftName(user.name || '');
+    setDraftGoal(user.goal || Goal.MAINTAIN);
+    setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
+    setDraftAge(user.age ? String(user.age) : '');
+    setDraftHeight(user.height ? String(user.height) : '');
+    setProfileDirty(false);
+  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -152,69 +217,174 @@ export default function SettingsScreen({
     }
   };
 
+  const saveProfileDraft = () => {
+    if (!user || !onChangeUser) return;
+    const safeName = draftName.trim() || user.name || 'Пользователь';
+    const parsedTargetWeight = Number(draftTargetWeight || 0);
+    const parsedAge = Number(draftAge || 0);
+    const parsedHeight = Number(draftHeight || 0);
+
+    onChangeUser({
+      ...user,
+      name: safeName,
+      goal: draftGoal,
+      targetWeight: Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 ? parsedTargetWeight : user.targetWeight,
+      age: Number.isFinite(parsedAge) && parsedAge > 0 ? Math.round(parsedAge) : user.age,
+      height: Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : user.height,
+    });
+    setProfileDirty(false);
+  };
+
+  const syncDescription = syncStateLabel(syncState);
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <div className="mb-8 text-left">
-        <div className="text-3xl font-black text-slate-100">Настройки и аккаунт</div>
-        <div className="text-slate-400 mt-2">Здесь находятся параметры интерфейса, выход из аккаунта и удаление профиля.</div>
+        <div className="text-3xl font-black text-slate-100">Настройки</div>
+        <div className="text-slate-400 mt-2">Персонализируйте интерфейс. Часть функций будет добавлена позже.</div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Аккаунт" icon={<UserCircle2 className="w-5 h-5" />}>
-          <div className="space-y-3 text-left">
-            <div className="p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
-              <div className="text-slate-500 text-xs font-black uppercase tracking-widest">Профиль</div>
-              <div className="mt-2 text-slate-100 font-black text-lg break-words">{user?.name || 'FitFocus User'}</div>
-              {user?.email ? (
-                <div className="text-slate-400 text-sm mt-1 break-all">{user.email}</div>
-              ) : (
-                <div className="text-slate-500 text-sm mt-1">Email не привязан в локальном профиле</div>
-              )}
-              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-700 bg-slate-900/70 text-[11px] font-black text-slate-300">
-                <Shield className="w-4 h-4" />
-                {serverSession ? 'Активная защищённая сессия' : 'Локальный профиль на устройстве'}
+        {user && onChangeUser && (
+          <Card title="Профиль и аккаунт" icon={<UserCircle2 className="w-5 h-5" />}>
+            <div className="space-y-4 text-left">
+              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
+                <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Профиль</div>
+                <div className="grid grid-cols-1 gap-3">
+                  <label className="space-y-1">
+                    <div className="text-sm text-slate-400 font-semibold">Имя</div>
+                    <input
+                      value={draftName}
+                      onChange={(e) => { setDraftName(e.target.value); setProfileDirty(true); }}
+                      className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                      placeholder="Как к вам обращаться"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <div className="text-sm text-slate-400 font-semibold">Цель</div>
+                    <select
+                      value={draftGoal}
+                      onChange={(e) => { setDraftGoal(e.target.value as Goal); setProfileDirty(true); }}
+                      className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                    >
+                      {goalOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Желаемый вес</div>
+                      <input
+                        value={draftTargetWeight}
+                        onChange={(e) => { setDraftTargetWeight(e.target.value); setProfileDirty(true); }}
+                        inputMode="decimal"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="кг"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Возраст</div>
+                      <input
+                        value={draftAge}
+                        onChange={(e) => { setDraftAge(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="лет"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Рост</div>
+                      <input
+                        value={draftHeight}
+                        onChange={(e) => { setDraftHeight(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="см"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={saveProfileDraft}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
+                    disabled={!profileDirty}
+                  >
+                    <Save className="w-4 h-4" />
+                    Сохранить профиль
+                  </button>
+                  <div className="text-sm text-slate-400">
+                    {profileSummary?.email}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Cloud + Sync</div>
+                    <div className="text-slate-100 font-black">{syncDescription}</div>
+                    <div className="text-slate-400 text-sm mt-1">Последняя синхронизация: {formatSyncTs(lastProfileSyncAt)}</div>
+                    <div className="text-slate-500 text-sm mt-2">Профиль хранится локально для мгновенного отклика и в облаке для доступа с других устройств.</div>
+                  </div>
+                  <div className={["w-11 h-11 rounded-2xl flex items-center justify-center border", syncState === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : syncState === 'saved' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'].join(' ')}>
+                    <Cloud className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                  <button
+                    onClick={() => void onSyncNow?.()}
+                    className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left disabled:opacity-50"
+                    disabled={!serverSession || !onSyncNow}
+                  >
+                    <div className="text-slate-100 font-black">Синхронизировать сейчас</div>
+                    <div className="text-slate-400 text-sm mt-1">Принудительно отправить профиль и локальные данные в облако.</div>
+                  </button>
+
+                  <button
+                    onClick={() => void onReloadFromCloud?.()}
+                    className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left disabled:opacity-50"
+                    disabled={!serverSession || !onReloadFromCloud}
+                  >
+                    <div className="text-slate-100 font-black">Перезагрузить из облака</div>
+                    <div className="text-slate-400 text-sm mt-1">Подтянуть актуальные данные профиля с сервера и обновить это устройство.</div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => void onServerLogout?.()}
+                  className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left disabled:opacity-50 flex items-center justify-between gap-3"
+                  disabled={!onServerLogout}
+                >
+                  <div>
+                    <div className="text-slate-100 font-black">Выйти из аккаунта</div>
+                    <div className="text-slate-400 text-sm mt-1">Завершить текущую сессию и вернуться на экран входа.</div>
+                  </div>
+                  <LogOut className="w-5 h-5 text-slate-300" />
+                </button>
+
+                <button
+                  onClick={() => void onDeleteAccount?.()}
+                  className="w-full p-4 rounded-[1.25rem] border border-rose-500/30 bg-rose-500/10 hover:border-rose-400/40 transition-all text-left disabled:opacity-50 flex items-center justify-between gap-3"
+                  disabled={!serverSession || !onDeleteAccount}
+                >
+                  <div>
+                    <div className="text-rose-100 font-black">Удалить аккаунт</div>
+                    <div className="text-rose-200/80 text-sm mt-1">Полностью удалить облачный профиль и выйти из приложения.</div>
+                  </div>
+                  <Trash2 className="w-5 h-5 text-rose-200" />
+                </button>
               </div>
             </div>
-
-            <button
-              onClick={() => { void onServerLogout?.(); }}
-              disabled={!onServerLogout}
-              className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left disabled:opacity-50"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-slate-100 font-black">Выйти из аккаунта</div>
-                  <div className="text-slate-400 text-sm mt-1">Завершить текущую сессию и вернуться на экран входа.</div>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-200 shrink-0">
-                  <LogOut className="w-5 h-5" />
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => { void onDeleteAccount?.(); }}
-              disabled={!onDeleteAccount || !serverSession}
-              className="w-full p-4 rounded-[1.25rem] border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/15 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-rose-100 font-black">Удалить аккаунт</div>
-                  <div className="text-rose-200/80 text-sm mt-1">Полностью удалить облачный аккаунт и выйти из приложения. Действие необратимо.</div>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-rose-950/40 border border-rose-500/20 flex items-center justify-center text-rose-200 shrink-0">
-                  <Trash2 className="w-5 h-5" />
-                </div>
-              </div>
-            </button>
-
-            {!serverSession && (
-              <div className="p-4 rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-100 text-sm font-semibold">
-                Удаление аккаунта доступно только для авторизованной облачной сессии. Для локального профиля используйте выход и очистку данных браузера.
-              </div>
-            )}
-          </div>
-        </Card>
+          </Card>
+        )}
         <Card title="Тема" icon={<Palette className="w-5 h-5" />}>
           <div className="space-y-3">
             <Option
