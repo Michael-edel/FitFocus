@@ -176,10 +176,13 @@ export default function ShoppingListCard({
             <div key={g.category} className="rounded-[1.5rem] bg-slate-950/40 border border-slate-800">
               <button
                 onClick={() => setCollapsed((p) => ({ ...p, [g.category]: !p[g.category] }))}
-                className="w-full flex items-center justify-between px-4 py-3"
+                className={clsx(
+                  "w-full flex items-center justify-between px-4 py-3 transition-all rounded-[1.5rem]",
+                  isCollapsed && "bg-indigo-500/5"
+                )}
               >
                 <div className="text-slate-200 font-black text-sm">{CATEGORY_LABEL[g.category]}</div>
-                <div className="text-slate-500 font-black text-xs">{isCollapsed ? "Показать" : "Скрыть"}</div>
+                <div className={clsx("font-black text-xs", isCollapsed ? "text-indigo-300" : "text-slate-500")}>{isCollapsed ? "Показать ↓" : "Скрыть"}</div>
               </button>
 
               {!isCollapsed && (
