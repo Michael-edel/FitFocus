@@ -1724,6 +1724,8 @@ const deleteAccount = useCallback(async () => {
   }, [resetUsageIfNewTime]);
 
 
+  const suppressNextFullProfileSyncRef = useRef(false);
+
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
     try {
@@ -1740,6 +1742,35 @@ const deleteAccount = useCallback(async () => {
       setProfileSyncState('error');
     }
   }, []);
+
+  const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
+    if (!currentUser) return;
+
+    const nextUser = { ...currentUser, ...patch } as UserProfile;
+    suppressNextFullProfileSyncRef.current = true;
+    persistUser(nextUser);
+
+    setProfileSyncState('saving');
+    try {
+      const r = await fetch('/api/profile', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
+      const payload = await r.json().catch(() => null);
+      const serverProfile = payload?.profile as UserProfile | undefined;
+      if (serverProfile) {
+        suppressNextFullProfileSyncRef.current = true;
+        persistUser(serverProfile);
+      }
+      setProfileSyncState('saved');
+      setLastProfileSyncAt(Date.now());
+    } catch {
+      setProfileSyncState('error');
+    }
+  }, [currentUser, persistUser]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!currentUser) return;
@@ -1789,6 +1820,10 @@ const deleteAccount = useCallback(async () => {
   const profileSaveTimer = useRef<number | null>(null);
   useEffect(() => {
     if (!currentUser) return;
+    if (suppressNextFullProfileSyncRef.current) {
+      suppressNextFullProfileSyncRef.current = false;
+      return;
+    }
     if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
     profileSaveTimer.current = window.setTimeout(async () => {
       await pushProfileToCloud(currentUser);
@@ -3123,8 +3158,17 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
       Прочитано
     </label>
     {adaptNote && (
-      <button type="button" onClick={() => setAdaptExpanded(v => !v)} className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-600/10 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all">
-        {adaptExpanded ? 'Свернуть' : 'Развернуть'}
+      <button
+        type="button"
+        onClick={() => setAdaptExpanded(v => !v)}
+        className={clsx(
+          "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border transition-all",
+          !adaptExpanded
+            ? "border-indigo-400/40 bg-indigo-500/20 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.15)]"
+            : "border-indigo-500/20 bg-indigo-600/10 text-indigo-200 hover:bg-indigo-600 hover:text-white"
+        )}
+      >
+        {adaptExpanded ? 'Свернуть' : 'Развернуть ↓'}
       </button>
     )}
   </div>
@@ -3181,7 +3225,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             </div>
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
-              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
+              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className={clsx("min-h-[48px] px-4 py-3 rounded-[1.3rem] border font-black text-sm transition-all", planRulesExpanded ? "bg-slate-950/70 border-slate-800 text-slate-200 hover:border-indigo-500/30" : "bg-indigo-500/10 border-indigo-500/30 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.12)]")}>{planRulesExpanded ? 'Скрыть правила' : 'Показать правила ↓'}</button>
               <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
             </div>
           </div>
@@ -3200,7 +3244,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             </div>
           )}
 
-          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left"><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div></div><ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
+          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className={clsx("w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left transition-all", !expanded && "bg-indigo-500/5 hover:bg-indigo-500/10")}><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className={clsx("text-[11px] font-black uppercase tracking-widest mt-1", expanded ? "text-slate-500" : "text-indigo-300")}>{expanded ? 'Скрыть детали' : 'Показать меню дня ↓'}</div></div><ChevronDown size={18} className={clsx('transition-transform', expanded ? 'text-slate-400 rotate-180' : 'text-indigo-300')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
             {(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
               <ShoppingListCard
                 weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
@@ -3637,9 +3681,14 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                               <button
                                 type="button"
                                 onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                                className="flex items-center gap-2 text-slate-500 hover:text-indigo-400 font-black text-[10px] uppercase tracking-widest transition-all"
+                                className={clsx(
+                                  "flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all",
+                                  expanded
+                                    ? "text-slate-500 hover:text-indigo-400"
+                                    : "text-indigo-300"
+                                )}
                               >
-                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета'}
+                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета ↓'}
                                 <ChevronDown className={clsx('transition-transform', expanded && 'rotate-180')} size={14} />
                               </button>
 
@@ -3819,6 +3868,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             onDeleteAccount={deleteAccount}
             user={currentUser}
             onChangeUser={(u) => u && persistUser(u)}
+            onPatchUser={(patch) => void patchProfileInCloud(patch)}
             onExportBackup={onExportBackup}
             onImportBackup={onImportBackup}
             onConnectAutosave={onConnectAutosave}

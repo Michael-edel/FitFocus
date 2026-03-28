@@ -17,6 +17,7 @@ type Props = {
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
   onChangeUser?: (next: UserProfile) => void;
+  onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
   onConnectAutosave?: () => Promise<boolean>;
@@ -137,6 +138,7 @@ export default function SettingsScreen({
   onChange,
   user,
   onChangeUser,
+  onPatchUser,
   onExportBackup,
   onImportBackup,
   onConnectAutosave,
@@ -217,21 +219,26 @@ export default function SettingsScreen({
     }
   };
 
-  const saveProfileDraft = () => {
-    if (!user || !onChangeUser) return;
+  const saveProfileDraft = async () => {
+    if (!user) return;
     const safeName = draftName.trim() || user.name || 'Пользователь';
     const parsedTargetWeight = Number(draftTargetWeight || 0);
     const parsedAge = Number(draftAge || 0);
     const parsedHeight = Number(draftHeight || 0);
 
-    onChangeUser({
-      ...user,
+    const patch: Partial<UserProfile> = {
       name: safeName,
       goal: draftGoal,
       targetWeight: Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 ? parsedTargetWeight : user.targetWeight,
       age: Number.isFinite(parsedAge) && parsedAge > 0 ? Math.round(parsedAge) : user.age,
       height: Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : user.height,
-    });
+    };
+
+    if (serverSession && onPatchUser) {
+      await onPatchUser(patch);
+    } else if (onChangeUser) {
+      onChangeUser({ ...user, ...patch });
+    }
     setProfileDirty(false);
   };
 
