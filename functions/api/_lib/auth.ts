@@ -26,7 +26,8 @@ async function hmacVerify(data: string, signatureB64Url: string, secret: string)
     false,
     ["verify"]
   );
-  return crypto.subtle.verify("HMAC", key, b64urlToBytes(signatureB64Url), new TextEncoder().encode(data));
+  const sig = b64urlToBytes(signatureB64Url);
+  return crypto.subtle.verify("HMAC", key, sig.buffer as ArrayBuffer, new TextEncoder().encode(data));
 }
 
 function parseJwtPayload(token: string): any | null {
@@ -56,7 +57,7 @@ export async function verifySessionJwt(token: string, secret: string): Promise<a
 
 export async function requireUser(
   request: Request,
-  env: { AUTH_JWT_SECRET?: string; DB?: any }
+  env: { AUTH_JWT_SECRET?: string; DB?: D1Database }
 ): Promise<SessionUser> {
   const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
   if (!token) throw new Error("UNAUTH");

@@ -55,7 +55,7 @@ import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { COURSE_LIBRARY } from './lessons';
-import { Gender, Goal, UserProfile, FoodItem, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse } from './types';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -3233,7 +3233,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                                   const person = allUsers.find(u => u.id === pid);
                                   const nm = person?.name || (pid === currentUser.id ? 'Вы' : pid);
                                   if (!ptxt) return null;
-                                  return <div key={pid} className="text-[11px] text-slate-400"><span className="text-slate-500 font-black">{nm}:</span> <MealParts value={ptxt} /></div>;
+                                  return <div key={pid} className="text-[11px] text-slate-400"><span className="text-slate-500 font-black">{nm}:</span> <MealParts value={String(ptxt)} /></div>;
                                 })}
                               </div>
                             </div>

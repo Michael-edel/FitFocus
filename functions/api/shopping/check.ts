@@ -21,8 +21,8 @@ async function handle(request: Request, env: Env) {
   const checked = Boolean(body.checked);
   const family_id = body.family_id ? String(body.family_id) : null;
 
-  if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, { status: 400 });
-  if (!ingredient_name) return json({ error: "BAD_INGREDIENT" }, { status: 400 });
+  if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
+  if (!ingredient_name) return json({ error: "BAD_INGREDIENT" }, 400);
 
   const updated_at = nowMs();
   const val = checked ? 1 : 0;
@@ -45,7 +45,8 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   try {
     return await handle(request, env);
   } catch (e: any) {
-    return toApiError(e);
+    const apiErr = toApiError(e);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }
 };
 
@@ -53,6 +54,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     return await handle(request, env);
   } catch (e: any) {
-    return toApiError(e);
+    const apiErr = toApiError(e);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }
 };
