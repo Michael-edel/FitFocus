@@ -26,18 +26,6 @@ const getEnv = (key: string): string | undefined => {
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-async function callAI(args: { feature: string; prompt: string; imageBase64?: string; schema?: any; model?: string }) {
-  const contents = args.imageBase64
-    ? [{ role: 'user', parts: [{ text: args.prompt }, { inlineData: { mimeType: 'image/jpeg', data: args.imageBase64 } }] }]
-    : args.prompt;
-  const config = args.schema
-    ? { responseMimeType: 'application/json', responseSchema: args.schema }
-    : undefined;
-  const res = await callAiProxy(args.model || 'gemini-2.5-flash', contents, args.feature, config);
-  return typeof res?.text === 'string' ? JSON.parse(res.text || '{}') : res;
-}
-
-
 /**
  * Прокси-вызов для AI (используется для соблюдения лимитов на сервере)
  */

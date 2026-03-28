@@ -38,7 +38,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const body = await request.json().catch(() => null);
+  const body = await request.json<any>().catch(() => null);
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
   const items: { key: string; value: string }[] = Array.isArray(body.items)
