@@ -21,7 +21,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const week = String(url.searchParams.get("week") || "");
     const family_id = url.searchParams.get("family_id");
 
-    if (!isIsoDay(week)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(week)) return json({ error: "BAD_WEEK" }, { status: 400 });
 
     if (family_id) {
       const famId = String(family_id);
@@ -36,7 +36,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         )
         .bind(famId, user.sub)
         .first<any>();
-      if (!mem) return json({ error: "FORBIDDEN" }, 403);
+      if (!mem) return json({ error: "FORBIDDEN" }, { status: 403 });
 
       const rows = await db
         .prepare(
@@ -82,7 +82,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
     return json({ week_start: week, items, total_grams: totalGrams });
   } catch (e: any) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return toApiError(e);
   }
 };

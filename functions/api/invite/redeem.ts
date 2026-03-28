@@ -11,7 +11,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const db = requireDB(env as any);
 
-    const body = await request.json().catch(() => null);
+    const body = await request.json<any>().catch(() => null);
     const code = String(body?.code || "").trim();
     const userId = String(body?.userId || "").trim();
 
