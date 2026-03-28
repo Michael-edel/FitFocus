@@ -1,4 +1,5 @@
 import { requireUser, json as jsonV } from "./_lib/auth";
+import { requireDB } from "./_lib/db";
 import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
 
@@ -180,7 +181,7 @@ async function resolveIdentityKey(request: Request, env: Env) {
 }
 
 
-async function enforceDailyLimit(db: any, userId: string, feature: string, limit: number): Promise<void> {
+async function enforceDailyLimit(db: D1Database | undefined, userId: string, feature: string, limit: number): Promise<void> {
   if (!db) return;
   const d = new Date();
   const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
@@ -205,7 +206,8 @@ async function logAiEvent(env: any, args: {
   safeMode: boolean;
   requestJson?: any;
   responseJson?: any;
-  error?: string;
+  error?: string | null;
+  [key: string]: unknown;
 }) {
   try {
     if (!env?.DB) return;
@@ -325,13 +327,13 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
       if (exceedCalls || exceedUserCost || exceedTotalCost) {
         if (onLimitAction === "block") {
-          return json({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
+          return jsonV({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
         }
         // default: fallback
         const profile = await loadUserProfile(env as any, String(user.sub));
         const fallback = buildFallback(feature, profile);
         await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
-        return json({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
+        return jsonV({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
       }
     } catch {
       // never break product if guard check fails
