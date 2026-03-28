@@ -47,7 +47,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const body = await request.json<any>().catch(() => null);
+  const body = await request.json().catch(() => null);
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
   // Enforce user ownership
