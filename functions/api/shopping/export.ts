@@ -1,6 +1,6 @@
 // /api/shopping/export
 // GET: CSV export of aggregated shopping list for a week (per user)
-import { requireUser, json } from "../_lib/auth";
+import { requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
@@ -60,7 +60,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       },
     });
   } catch (e: any) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return toApiError(e);
   }
 };

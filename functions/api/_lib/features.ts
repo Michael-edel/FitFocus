@@ -2,7 +2,7 @@
 
 export type FeatureMap = Record<string, boolean>;
 
-export async function loadFeatures(env: { DB?: D1Database }): Promise<FeatureMap> {
+export async function loadFeatures(env: { DB?: any }): Promise<FeatureMap> {
   if (!env.DB) return {};
   const rows = await env.DB.prepare("SELECT key, enabled, rollout_percentage FROM feature_flags").all<{
     key: string;
@@ -24,7 +24,7 @@ export function isEnabled(features: FeatureMap, key: string, fallback = false): 
 
 export type SettingMap = Record<string, string>;
 
-export async function loadSettings(env: { DB?: D1Database }): Promise<SettingMap> {
+export async function loadSettings(env: { DB?: any }): Promise<SettingMap> {
   if (!env.DB) return {};
   const rows = await env.DB.prepare("SELECT key, value FROM feature_settings").all<{ key: string; value: string }>();
   const settings: SettingMap = {};

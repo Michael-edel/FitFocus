@@ -1,9 +1,9 @@
-import { weightDelta } from '../weight';
+import { weightDelta } from './weight';
 import { UserProfile, Goal, FoodItem, UserHabit } from './types';
 import { detectPlateau, plateauAdjustmentCalories } from './plateau';
 import { calculateDailyTargets } from './profileMath';
 import { calculateCompliance, adaptiveTDEE } from './adaptive';
-import { generatePlateauExplanation } from '../geminiService';
+import { generatePlateauExplanation } from './geminiService';
 
 export async function generateDailyTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): Promise<string> {
   // 1. Проверка на плато
