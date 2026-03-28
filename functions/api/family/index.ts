@@ -6,6 +6,15 @@ import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function safeJsonParse<T = any>(value: unknown, fallback: T): T {
+  if (!value || typeof value !== "string") return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -27,15 +36,54 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const members = await db
       .prepare(
-        `SELECT user_id, role, status, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at
-         FROM family_members
-         WHERE family_id = ? AND status = 'active'
-         ORDER BY role DESC, created_at ASC`
+        `SELECT
+           m.user_id,
+           m.role,
+           m.status,
+           m.sex,
+           m.age,
+           m.height_cm,
+           m.weight_kg,
+           m.activity,
+           m.goal,
+           m.created_at,
+           m.updated_at,
+           u.name AS user_name,
+           u.email AS user_email,
+           u.picture AS user_picture,
+           up.profile_json
+         FROM family_members m
+         LEFT JOIN users u ON u.id = m.user_id
+         LEFT JOIN user_profiles up ON up.user_id = m.user_id
+         WHERE m.family_id = ? AND m.status = 'active'
+         ORDER BY CASE WHEN m.role = 'owner' THEN 0 ELSE 1 END, m.created_at ASC`
       )
       .bind(fam.id)
       .all<any>();
 
-    return json({ family: fam, members: members.results || [] }, 200);
+    const normalizedMembers = (members.results || []).map((m: any) => {
+      const profile = safeJsonParse<any>(m.profile_json, {});
+      return {
+        user_id: m.user_id,
+        name: profile?.name || m.user_name || m.user_id,
+        email: profile?.email || m.user_email || null,
+        picture: profile?.picture || m.user_picture || null,
+        role: m.role,
+        status: m.status,
+        sex: m.sex,
+        age: m.age,
+        height_cm: m.height_cm,
+        weight_kg: m.weight_kg,
+        activity: m.activity,
+        goal: m.goal,
+        created_at: m.created_at,
+        updated_at: m.updated_at,
+        dietary: profile?.dietary || null,
+        exclusions: profile?.exclusions || "",
+      };
+    });
+
+    return json({ family: fam, members: normalizedMembers }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);

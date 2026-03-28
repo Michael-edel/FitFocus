@@ -7,74 +7,6 @@ import { requireDB, nowMs } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
-const EDITABLE_PROFILE_FIELDS = new Set([
-  'name',
-  'gender',
-  'weight',
-  'height',
-  'age',
-  'activityLevel',
-  'goal',
-  'targetWeight',
-  'adaptationMultiplier',
-  'lastAdaptationDate',
-  'lastCheckInDate',
-  'familyMembers',
-  'exclusions',
-  'familyExclusions',
-  'lossDeficit',
-  'gainSurplus',
-  'riskAcknowledgedLoss',
-  'riskAcknowledgedGain',
-  'courseProgress',
-  'lessonQuizAnswers',
-  'planTier',
-  'proUnlockedAt',
-  'usage',
-  'dailyHabits',
-  'tasks',
-  'plan',
-  'aiPlan',
-  'weightHistory',
-  'dietary',
-]);
-
-function sanitizePatch(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  const source = input as Record<string, unknown>;
-  const patch: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (!EDITABLE_PROFILE_FIELDS.has(key)) continue;
-    patch[key] = value;
-  }
-  return patch;
-}
-
-async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
-  const row = await db
-    .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
-    .bind(userId)
-    .first<{ profile_json: string }>();
-
-  if (!row?.profile_json) return null;
-  try {
-    const parsed = JSON.parse(row.profile_json) as Record<string, unknown>;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function withProtectedFields(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>) {
-  return {
-    ...profile,
-    id: user.sub,
-    googleSub: user.sub,
-    email: user.email,
-    name: typeof profile.name === 'string' && profile.name.trim().length ? profile.name : (user.name ?? 'Пользователь'),
-    picture: profile.picture ?? user.picture,
-  };
-}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -86,11 +18,24 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
-  const db = requireDB(env);
-  const profile = await loadProfile(db, user.sub);
-  if (!profile) return json({ profile: null }, 200);
+  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
-  return json({ profile: withProtectedFields(user, profile) }, 200);
+  const db = requireDB(env);
+  const row = await db
+    .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
+    .bind(user.sub)
+    .first<{ profile_json: string }>();
+
+  if (!row?.profile_json) {
+    // No profile yet: return null so UI can show onboarding
+    return json({ profile: null }, 200);
+  }
+
+  try {
+    return json({ profile: JSON.parse(row.profile_json) }, 200);
+  } catch {
+    return json({ error: "PROFILE_CORRUPT" }, 500);
+  }
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
@@ -101,13 +46,12 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
-
   const db = requireDB(env);
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
+  const body = await request.json<any>().catch(() => null);
+  if (!body) return json({ error: "BAD_JSON" }, 400);
 
-  const profile = withProtectedFields(user, body);
+  // Enforce user ownership
+  const profile = { ...body, id: user.sub, googleSub: user.sub, email: user.email, name: body.name ?? user.name, picture: body.picture ?? user.picture };
 
   const t = nowMs();
   await db
@@ -118,38 +62,5 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub, JSON.stringify(profile), t)
     .run();
 
-  return json({ profile, updatedFields: Object.keys(body), mode: 'replace' }, 200);
-};
-
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try {
-    user = await requireUser(request, env);
-  } catch {
-    return json({ error: "UNAUTH" }, 401);
-  }
-
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
-
-  const db = requireDB(env);
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
-
-  const patch = sanitizePatch(body);
-  const updatedFields = Object.keys(patch);
-  if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
-
-  const current = (await loadProfile(db, user.sub)) ?? {};
-  const profile = withProtectedFields(user, { ...current, ...patch });
-
-  const t = nowMs();
-  await db
-    .prepare(
-      "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
-    )
-    .bind(user.sub, JSON.stringify(profile), t)
-    .run();
-
-  return json({ profile, updatedFields, mode: 'patch' }, 200);
+  return json({ profile }, 200);
 };
