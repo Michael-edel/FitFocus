@@ -28,11 +28,7 @@ type ItemKey =
   | "buckwheat"
   | "cottage_cheese"
   | "berries"
-  | "nuts"
-  | "apple"
-  | "turkey_breast"
-  | "tofu"
-  | "pumpkin_seeds";
+  | "nuts";
 
 const BASE_DAY_KCAL = 2000;
 
@@ -51,71 +47,17 @@ const ITEM_META: Record<ItemKey, { name: string; grams: number }> = {
   cottage_cheese: { name: "Творог", grams: 200 },
   berries: { name: "Ягоды", grams: 120 },
   nuts: { name: "Орехи", grams: 30 },
-  apple: { name: "Яблоко", grams: 150 },
-  turkey_breast: { name: "Индейка", grams: 180 },
-  tofu: { name: "Тофу", grams: 180 },
-  pumpkin_seeds: { name: "Тыквенные семечки", grams: 25 },
 };
 
-function normalizeToken(v: unknown) {
-  return String(v || "").toLowerCase().replace(/ё/g, "е").trim();
-}
-
-function buildFamilyRestrictionSet(members: any[]) {
-  const tokens = new Set<string>();
-  for (const member of members) {
-    const profile = (() => {
-      if (!member?.profile_json || typeof member.profile_json !== "string") return {};
-      try { return JSON.parse(member.profile_json); } catch { return {}; }
-    })();
-    const lists = [
-      ...(profile?.dietary?.allergens || []),
-      ...(profile?.dietary?.intolerances || []),
-      ...(profile?.dietary?.excludedFoods || []),
-      ...String(profile?.exclusions || "").split(","),
-    ];
-    for (const item of lists) {
-      const token = normalizeToken(item);
-      if (token) tokens.add(token);
-    }
-  }
-  return tokens;
-}
-
-function hasRestriction(tokens: Set<string>, variants: string[]) {
-  return variants.some((variant) => {
-    const v = normalizeToken(variant);
-    for (const token of tokens) {
-      if (token.includes(v) || v.includes(token)) return true;
-    }
-    return false;
-  });
-}
-
-function pickProtein(tokens: Set<string>) {
-  if (hasRestriction(tokens, ["курица", "chicken"])) return "turkey_breast" as ItemKey;
-  return "chicken_breast" as ItemKey;
-}
-
-function buildDeterministicSharedMenu(restrictions: Set<string>) {
+function buildDeterministicSharedMenu() {
   const days = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
-  const dairyRestricted = hasRestriction(restrictions, ["лакт", "молок", "молоч", "йогурт", "творог", "dairy", "lactose"]);
-  const nutsRestricted = hasRestriction(restrictions, ["орех", "nuts", "nut"]);
-  const eggsRestricted = hasRestriction(restrictions, ["яйц", "egg"]);
-  const protein = pickProtein(restrictions);
-  const breakfastItems: ItemKey[] = ["oatmeal", dairyRestricted ? "apple" : "greek_yogurt", "banana", eggsRestricted ? "berries" : "egg"];
-  const snackItems: ItemKey[] = [dairyRestricted ? "tofu" : "cottage_cheese", "berries", nutsRestricted ? "pumpkin_seeds" : "nuts"];
-  const breakfastTitle = dairyRestricted ? "Овсянка + фруктовый завтрак" : "Овсянка + йогурт + фрукт";
-  const snackTitle = dairyRestricted ? "Тофу + ягоды + семечки" : (nutsRestricted ? "Творог + ягоды + семечки" : "Творог + ягоды + орехи");
-  const lunchTitle = protein === "turkey_breast" ? "Индейка + рис + салат" : "Курица + рис + салат";
-  const dinnerTitle = protein === "turkey_breast" ? "Индейка + гречка + салат" : "Курица + гречка + салат";
   const sharedDay = () => ({
-    breakfast: { title: breakfastTitle, items: breakfastItems },
-    lunch: { title: lunchTitle, items: [protein, "rice", "salad_mix", "olive_oil"] as ItemKey[] },
-    dinner: { title: dinnerTitle, items: [protein, "buckwheat", "salad_mix", "olive_oil"] as ItemKey[] },
-    snack: { title: snackTitle, items: snackItems },
+    breakfast: { title: "Овсянка + йогурт + фрукт", items: ["oatmeal","greek_yogurt","banana","egg"] as ItemKey[] },
+    lunch: { title: "Курица + рис + салат", items: ["chicken_breast","rice","salad_mix","olive_oil"] as ItemKey[] },
+    dinner: { title: "Курица + гречка + салат", items: ["chicken_breast","buckwheat","salad_mix","olive_oil"] as ItemKey[] },
+    snack: { title: "Творог + ягоды + орехи", items: ["cottage_cheese","berries","nuts"] as ItemKey[] },
   });
-  return { version: 2, safety: { dairyRestricted, nutsRestricted, eggsRestricted }, days: days.map((name)=>({ name, ...sharedDay() })) };
+  return { version: 1, days: days.map((name)=>({ name, ...sharedDay() })) };
 }
 
 function memberTargetKcal(member: any): number {
@@ -203,20 +145,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (fam.owner_user_id !== user.sub) throw new Error("FORBIDDEN");
 
     const now = Math.floor(nowMs() / 1000);
-
-    const members = await db
-      .prepare(
-        `SELECT m.user_id, m.goal, m.sex, m.age, m.height_cm, m.weight_kg, m.activity, up.profile_json
-         FROM family_members m
-         LEFT JOIN user_profiles up ON up.user_id = m.user_id
-         WHERE m.family_id = ? AND m.status = 'active'`
-      )
-      .bind(fam.id)
-      .all<any>();
-
-    const membersList = members.results || [];
-    const familyRestrictions = buildFamilyRestrictionSet(membersList);
-    const shared = buildDeterministicSharedMenu(familyRestrictions);
+    const shared = buildDeterministicSharedMenu();
 
     const existing = await db
       .prepare("SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1")
@@ -239,6 +168,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     // Compute and store portions for all active members (B2C sync)
+    const members = await db
+      .prepare(
+        `SELECT user_id, goal, sex, age, height_cm, weight_kg, activity
+         FROM family_members
+         WHERE family_id = ? AND status = 'active'`
+      )
+      .bind(fam.id)
+      .all<any>();
+
+    const membersList = members.results || [];
 
     for (const m of membersList) {
       const kcal = memberTargetKcal(m);

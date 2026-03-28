@@ -183,29 +183,40 @@ export default function ShoppingListCard({
               </button>
 
               {!isCollapsed && (
-                <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {g.items.map((it) => (
-                    <label
-                      key={it.name}
-                      className={clsx(
-                        "flex items-center justify-between gap-3 p-3 rounded-[1.2rem] border font-bold text-sm",
-                        it.checked
-                          ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through"
-                          : "bg-slate-950/30 border-slate-800 text-slate-200"
-                      )}
+                <div className="px-4 pb-4 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {g.items.map((it) => (
+                      <label
+                        key={it.name}
+                        className={clsx(
+                          "flex items-center justify-between gap-3 p-3 rounded-[1.2rem] border font-bold text-sm",
+                          it.checked
+                            ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through"
+                            : "bg-slate-950/30 border-slate-800 text-slate-200"
+                        )}
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            className="accent-slate-200"
+                            checked={it.checked}
+                            onChange={(e) => toggleChecked(it.name, e.target.checked)}
+                          />
+                          <span>{it.name}</span>
+                        </span>
+                        <span className="text-slate-300 font-black">{it.display_qty}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsed((p) => ({ ...p, [g.category]: true }))}
+                      className="px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-300 font-black text-xs hover:bg-slate-900/70 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
                     >
-                      <span className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="accent-slate-200"
-                          checked={it.checked}
-                          onChange={(e) => toggleChecked(it.name, e.target.checked)}
-                        />
-                        <span>{it.name}</span>
-                      </span>
-                      <span className="text-slate-300 font-black">{it.display_qty}</span>
-                    </label>
-                  ))}
+                      Свернуть
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
