@@ -889,6 +889,8 @@ const App: React.FC = () => {
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string }
@@ -1469,8 +1471,10 @@ const openEditFood = (item: FoodEntry) => {
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
+    setProfileSyncState('saving');
     setAllUsers(prev => {
-      const next = prev.map(u => u.id === updated.id ? updated : u);
+      const found = prev.some(u => u.id === updated.id);
+      const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
       safeSetItem('fitfocus_all_users', JSON.stringify(next));
       return next;
     });
@@ -1627,6 +1631,8 @@ const openEditFood = (item: FoodEntry) => {
 
   setGoogleMe(null);
   setCurrentUser(null);
+  setProfileSyncState('idle');
+  setLastProfileSyncAt(null);
   setAuthState('auth_choice');
   localStorage.removeItem('fitfocus_last_user_id');
 }, [googleMe?.sub]);
@@ -1662,7 +1668,7 @@ const deleteAccount = useCallback(async () => {
   const loginAsUser = useCallback(async (user: UserProfile) => {
     const userWithResetUsage = resetUsageIfNewTime(user);
 
-    // Server-driven hydration for cross-device: load KV blobs from D1
+    // Server-driven hydration for cross-device: load KV blobs from D1, fallback to local cache.
     const prefix = `fitfocus_data_${user.id}_`;
     let kv: Record<string, string> = {};
     try {
@@ -1671,13 +1677,17 @@ const deleteAccount = useCallback(async () => {
         const data = await r.json();
         const items = Array.isArray(data?.items) ? data.items : [];
         for (const it of items) {
-          if (it?.key && typeof it.value === 'string') kv[it.key] = it.value;
+          if (it?.key && typeof it.value === 'string') {
+            kv[it.key] = it.value;
+            try { localStorage.setItem(it.key, it.value); } catch {}
+          }
         }
       }
     } catch {}
 
     const readKV = <T,>(suffix: string, fallback: T): T => {
-      const raw = kv[prefix + suffix];
+      const fullKey = prefix + suffix;
+      const raw = kv[fullKey] ?? localStorage.getItem(fullKey);
       if (!raw) return fallback;
       try { return JSON.parse(raw) as T; } catch { return fallback; }
     };
@@ -1709,8 +1719,71 @@ const deleteAccount = useCallback(async () => {
     setCoachCard(readKV('last_coach_card', null));
     setCurrentLesson(pickLessonForToday(userWithTask));
     setAuthState('app');
+    setProfileSyncState('saved');
+    setLastProfileSyncAt(Date.now());
   }, [resetUsageIfNewTime]);
 
+
+  const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
+    setProfileSyncState('saving');
+    try {
+      const r = await fetch('/api/profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
+      setProfileSyncState('saved');
+      setLastProfileSyncAt(Date.now());
+    } catch {
+      setProfileSyncState('error');
+    }
+  }, []);
+
+  const syncAllLocalDataNow = useCallback(async () => {
+    if (!currentUser) return;
+    const prefix = `fitfocus_data_${currentUser.id}_`;
+    const items: { key: string; value: string }[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (!k.startsWith(prefix) && !k.startsWith(`fitfocus_council_history_${currentUser.id}`)) continue;
+        const v = localStorage.getItem(k);
+        if (typeof v === 'string') items.push({ key: k, value: v });
+      }
+      if (items.length) {
+        await fetch('/api/state', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items }),
+        });
+      }
+      await pushProfileToCloud(currentUser);
+    } catch {
+      setProfileSyncState('error');
+    }
+  }, [currentUser, pushProfileToCloud]);
+
+  const reloadUserFromCloud = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const pr = await fetch('/api/profile', { credentials: 'include' });
+      if (!pr.ok) throw new Error('PROFILE_LOAD_FAILED');
+      const pj = await pr.json();
+      const profile = pj?.profile as UserProfile | null;
+      if (!profile) return;
+      await loginAsUser(profile);
+      setAllUsers([profile]);
+      safeSetItem('fitfocus_all_users', JSON.stringify([profile]));
+      setProfileSyncState('saved');
+      setLastProfileSyncAt(Date.now());
+    } catch {
+      setProfileSyncState('error');
+    }
+  }, [currentUser, loginAsUser]);
 
   // Server-driven: persist profile changes to D1 (debounced)
   const profileSaveTimer = useRef<number | null>(null);
@@ -1718,16 +1791,9 @@ const deleteAccount = useCallback(async () => {
     if (!currentUser) return;
     if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
     profileSaveTimer.current = window.setTimeout(async () => {
-      try {
-        await fetch('/api/profile', {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentUser),
-        });
-      } catch {}
+      await pushProfileToCloud(currentUser);
     }, 500);
-  }, [currentUser]);
+  }, [currentUser, pushProfileToCloud]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
@@ -1977,6 +2043,20 @@ setAuthState('auth_choice');
   useEffect(() => {
     void bootstrapAuth();
   }, [bootstrapAuth]);
+
+  useEffect(() => {
+    if (!googleMe?.sub || !currentUser) return;
+    const syncFromCloud = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      void reloadUserFromCloud();
+    };
+    window.addEventListener('online', syncFromCloud);
+    document.addEventListener('visibilitychange', syncFromCloud);
+    return () => {
+      window.removeEventListener('online', syncFromCloud);
+      document.removeEventListener('visibilitychange', syncFromCloud);
+    };
+  }, [googleMe?.sub, currentUser?.id, reloadUserFromCloud]);
 
   // Load public env flags (no auth)
   useEffect(() => {
@@ -3743,6 +3823,10 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
             onImportBackup={onImportBackup}
             onConnectAutosave={onConnectAutosave}
             autosaveEnabled={autosaveEnabled}
+            syncState={profileSyncState}
+            lastProfileSyncAt={lastProfileSyncAt}
+            onSyncNow={syncAllLocalDataNow}
+            onReloadFromCloud={reloadUserFromCloud}
           />
         )}
       </main>
