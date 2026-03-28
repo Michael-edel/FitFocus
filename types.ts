@@ -104,6 +104,10 @@ export interface FamilyMember {
   goal: Goal;
   /** индивидуальные исключения (аллергии/не люблю) */
   exclusions?: string;
+  /** персональные dietary-ограничения для семейного меню */
+  dietary?: DietaryRestrictions;
+  email?: string;
+  picture?: string;
 }
 
 export type FamilyMenuCookingMode = "all_meals" | "once_per_day";
@@ -239,6 +243,8 @@ export interface UserProfile {
   googleSub?: string;
   /** аватар из Google */
   picture?: string;
+  /** аллергии, непереносимости и исключённые продукты */
+  dietary?: DietaryRestrictions;
 }
 
 export interface NutritionIntake {
