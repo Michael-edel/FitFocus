@@ -1346,6 +1346,30 @@ const openEditFood = (item: FoodEntry) => {
   const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
   const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
   const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
+
+  const collectFamilyRestrictions = (member: any): string[] => {
+    const dietary = member?.dietary || {};
+    return [
+      ...(Array.isArray(dietary.allergens) ? dietary.allergens : []),
+      ...(Array.isArray(dietary.intolerances) ? dietary.intolerances : []),
+      ...(Array.isArray(dietary.excludedFoods) ? dietary.excludedFoods : []),
+      ...String(member?.exclusions || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ]
+      .map((x) => String(x).trim())
+      .filter(Boolean);
+  };
+
+  const formatFamilyGoal = (goal?: string) => {
+    const v = String(goal || '').toUpperCase();
+    if (v === 'LOSS') return 'Похудение';
+    if (v === 'MAINTAIN') return 'Удержание';
+    if (v === 'GAIN') return 'Набор';
+    return '—';
+  };
+
   const [familyMenuPrefs, setFamilyMenuPrefs] = useState<{ includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }>({
     includeIds: [],
     cookingMode: 'all_meals',
@@ -3539,22 +3563,64 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                     </div>
                   </div>
 
+                  <div className="p-4 rounded-[1.6rem] bg-slate-900/40 border border-slate-800">
+                    <p className="text-sm font-bold text-slate-100">
+                      Ограничения семьи
+                    </p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Аллергии, непереносимости и исключённые продукты каждого участника будут
+                      учитываться при генерации общего меню.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {cloudFamilyMembers.map((m: any, i: number) => (
-                      <div key={`${m.user_id}-${i}`} className="p-5 rounded-[2rem] bg-slate-900/40 border border-slate-800">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-black text-slate-100 break-all">{m.user_id}</p>
-                            <p className="text-xs text-slate-500 font-semibold mt-1">
-                              Роль: {m.role || 'member'} • Цель: {m.goal || '—'}
-                            </p>
+                    {cloudFamilyMembers.map((m: any, i: number) => {
+                      const restrictions = collectFamilyRestrictions(m);
+
+                      return (
+                        <div
+                          key={`${m.user_id}-${i}`}
+                          className="p-5 rounded-[2rem] bg-slate-900/40 border border-slate-800 min-w-0 overflow-hidden"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-slate-100 truncate">
+                                {m.name || m.user_id}
+                              </p>
+
+                              <p className="text-xs text-slate-500 mt-1 break-all">
+                                {m.email || m.user_id}
+                              </p>
+
+                              <p className="text-xs text-slate-500 mt-1">
+                                Цель: {formatFamilyGoal(m.goal)}
+                              </p>
+                            </div>
+
+                            <span className="text-[10px] px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-400">
+                              {m.role || 'member'}
+                            </span>
                           </div>
-                          <span className="text-[10px] px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-400 font-black tracking-widest uppercase">
-                            active
-                          </span>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {restrictions.length ? (
+                              restrictions.map((item) => (
+                                <span
+                                  key={item}
+                                  className="px-2 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 text-[11px]"
+                                >
+                                  {item}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-500">
+                                Ограничения не указаны
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <p className="text-xs text-slate-500 font-semibold">
                     Советы: поставьте цели участникам (похудение/удержание), затем нажмите “Сгенерировать семейное меню”.
