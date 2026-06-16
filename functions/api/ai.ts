@@ -81,6 +81,18 @@ function jsonResponse(obj: any, status = 200, extraHeaders: Record<string,string
   });
 }
 
+function getGeminiUsage(data: any) {
+  const usage = data?.usageMetadata || {};
+  const inputTokens = Number(usage.promptTokenCount || 0);
+  const outputTokens = Number(usage.candidatesTokenCount || 0);
+  const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens || 0);
+  return { inputTokens, outputTokens, totalTokens };
+}
+
+function estimateCostUsd(inputTokens: number, outputTokens: number, inputPerMillion: number, outputPerMillion: number) {
+  return (inputTokens / 1_000_000) * inputPerMillion + (outputTokens / 1_000_000) * outputPerMillion;
+}
+
 function getCookie(req: Request, name: string) {
   const c = req.headers.get("Cookie") || "";
   const m = c.match(new RegExp("(^|;\\s*)" + name.replace(/[-[\]{}()*+?.,\\^$|#\\s]/g, "\\$&") + "=([^;]*)"));
@@ -220,9 +232,7 @@ async function logAiEvent(env: any, args: {
     const ts = Date.now();
     const reqStr = args.requestJson ? JSON.stringify(args.requestJson).slice(0, 40000) : null;
     const resStr = args.responseJson ? JSON.stringify(args.responseJson).slice(0, 40000) : null;
-    await env.DB.prepare(
-      "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
+    const baseValues = [
       id,
       args.userId,
       ts,
@@ -233,7 +243,27 @@ async function logAiEvent(env: any, args: {
       reqStr,
       resStr,
       args.error || null
-    ).run();
+    ];
+    try {
+      await env.DB.prepare(
+        `INSERT INTO ai_events (
+          id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error,
+          model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, is_fallback
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        ...baseValues,
+        args.model || null,
+        Math.max(0, Math.round(Number(args.inputTokens || 0))),
+        Math.max(0, Math.round(Number(args.outputTokens || 0))),
+        Math.max(0, Math.round(Number(args.totalTokens || 0))),
+        Math.max(0, Number(args.estimatedCostUsd || 0)),
+        args.isFallback ? 1 : 0
+      ).run();
+    } catch {
+      await env.DB.prepare(
+        "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(...baseValues).run();
+    }
   } catch {
     // never break request
   }
@@ -290,6 +320,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const maxCallsPerUserDay = Math.max(0, Math.floor(getSettingNumber(settings, "ai_max_calls_per_user_day", 0)));
   const maxCostPerUserDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_per_user_day_usd", 0));
   const maxCostTotalDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_total_day_usd", 0));
+  const inputCostPerMillion = Math.max(0, getSettingNumber(settings, "ai_cost_input_per_1m_usd", 0));
+  const outputCostPerMillion = Math.max(0, getSettingNumber(settings, "ai_cost_output_per_1m_usd", 0));
 
   // UTC day start (ms)
   const now = Date.now();
@@ -302,7 +334,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   if (emergencyFallback) {
     const profile = await loadUserProfile(env as any, String(user.sub));
     const fallback = buildFallback(feature, profile);
-    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null });
+    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_emergency", isFallback: true });
     return jsonResponse({ ...fallback, text: JSON.stringify(fallback) }, 200, { "X-FF-AI-Fallback": "1" });
   }
 
@@ -480,6 +512,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         requestJson: body,
         responseJson: fallback,
         error: (err && (err.message || String(err))) || "fetch_failed",
+        model: "fallback_fetch_failed",
+        isFallback: true,
       });
       return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
         status: 200,
@@ -515,6 +549,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       requestJson: body,
       responseJson: fallback,
       error: data?.error?.message || data?.error || `status_${geminiResp!.status}`,
+      model: "fallback_status",
+      isFallback: true,
     });
     return new Response(JSON.stringify({ ...fallback, text: JSON.stringify(fallback) }), {
       status: 200,
@@ -535,7 +571,23 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   
-  await logAiEvent(env as any, { userId: String(user.sub), feature, status: geminiResp.status, latencyMs: latency, safeMode, requestJson: body, responseJson: { text: extractedText } , error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null });
+  const usage = getGeminiUsage(data);
+  await logAiEvent(env as any, {
+    userId: String(user.sub),
+    feature,
+    status: geminiResp.status,
+    latencyMs: latency,
+    safeMode,
+    requestJson: body,
+    responseJson: { text: extractedText },
+    error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null,
+    model,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    estimatedCostUsd: estimateCostUsd(usage.inputTokens, usage.outputTokens, inputCostPerMillion, outputCostPerMillion),
+    isFallback: false,
+  });
 return new Response(JSON.stringify({ ...data, text: extractedText }), {
     status: geminiResp.status,
     headers: {
