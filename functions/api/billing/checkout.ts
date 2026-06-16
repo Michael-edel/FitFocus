@@ -1,16 +1,27 @@
 import Stripe from "stripe";
+import { json, requireUser } from "../_lib/auth";
 
-export async function onRequestPost({ request, env }) {
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-    apiVersion: "2024-06-20"
-  });
-  
-  const { priceId } = await request.json();
-  const uid = request.headers.get("X-FF-UID");
+type Env = {
+  AUTH_JWT_SECRET: string;
+  DB: D1Database;
+  STRIPE_SECRET_KEY: string;
+  APP_URL: string;
+};
 
-  if (!uid) {
-    return new Response("Missing X-FF-UID", { status: 400 });
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
+  let user;
+  try {
+    user = await requireUser(request, env);
+  } catch {
+    return json({ error: "UNAUTH" }, 401);
   }
+
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    apiVersion: "2023-10-16"
+  });
+
+  const { priceId } = await request.json().catch(() => ({}));
+  if (!priceId || typeof priceId !== "string") return json({ error: "BAD_REQUEST" }, 400);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -20,19 +31,16 @@ export async function onRequestPost({ request, env }) {
       cancel_url: env.APP_URL + "/?billing=cancel",
       subscription_data: {
         metadata: {
-          ff_uid: uid
+          ff_uid: user.sub
         }
       },
       metadata: {
-        ff_uid: uid
+        ff_uid: user.sub
       }
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return json({ url: session.url });
+  } catch (error: any) {
+    return json({ error: String(error?.message || error) }, 500);
   }
 }

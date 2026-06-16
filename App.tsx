@@ -3001,26 +3001,6 @@ if (authState === 'register') return (
                 />
               </div>
 
-              
-        <div className="space-y-2 text-left">
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
-          <input
-            value={inviteCode}
-            onChange={(e) => {
-              const v = e.target.value;
-              setInviteCode(v);
-              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
-              setInviteError(null);
-            }}
-            placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
-            className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
-          />
-          {requireInvite ? (
-            <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
-          ) : null}
-          {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
-        </div>
-
 <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-sm text-slate-300 mb-1">Приём пищи</div>
