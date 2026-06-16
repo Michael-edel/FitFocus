@@ -183,6 +183,14 @@ export interface UsageStats {
   familyMenuCount?: number;
 }
 
+export type DietaryRestrictions = {
+  allergens: string[];
+  intolerances: string[];
+  excludedFoods: string[];
+  severity: "strict" | "avoid";
+  notes?: string;
+};
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -201,6 +209,7 @@ export interface UserProfile {
   exclusions: string; 
   /** общие семейные исключения (аллергены/запреты, влияет на общую готовку) */
   familyExclusions?: string;
+  dietary?: DietaryRestrictions;
   /** пользовательский дефицит для похудения (ккал/день) */
   lossDeficit?: number;
   /** пользовательский профицит для набора (ккал/день) */
@@ -292,7 +301,11 @@ export interface FoodItem {
   photo?: string; // data URL
     photoThumb?: string; // small data URL (cropped/resized)
 insight?: FoodInsight;
+  mealType?: MealType;
 }
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type FoodEntry = FoodItem;
 
 export interface WorkoutPlan {
   id: string;

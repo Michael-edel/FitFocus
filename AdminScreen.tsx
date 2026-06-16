@@ -227,6 +227,13 @@ export default function AdminScreen() {
     }
   };
 
+  const saveFlags = async () => {
+    const keys = Object.keys(flagsDirty);
+    for (const key of keys) {
+      await saveFlag(key);
+    }
+  };
+
   const saveSetting = async (key: string) => {
     const value = settingsDirty[key];
     if (typeof value !== "string") return;
@@ -873,7 +880,7 @@ export default function AdminScreen() {
                   </div>
                   <button
                     className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs hover:bg-white/10"
-                    onClick={() => { setSelectedUserId(u.id); void loadUserRoles(u.id); }}
+                    onClick={() => { setSelectedUserId(u.id); void loadUserDetails(u.id); }}
                     title="Открыть роли"
                   >
                     Роли

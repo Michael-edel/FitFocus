@@ -1,6 +1,7 @@
 import { requireUser, json as jsonV } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
+import { requireDB } from "./_lib/db";
 
 
 /**
@@ -185,7 +186,7 @@ async function enforceDailyLimit(db: any, userId: string, feature: string, limit
   const d = new Date();
   const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
   const row = await db.prepare("SELECT count FROM usage_daily WHERE user_id = ? AND day = ? AND feature = ?")
-    .bind(userId, day, feature).first<{ count: number }>();
+    .bind(userId, day, feature).first();
   const current = Number(row?.count || 0);
   if (current >= limit) {
     const err: any = new Error("DAILY_LIMIT");
@@ -206,6 +207,12 @@ async function logAiEvent(env: any, args: {
   requestJson?: any;
   responseJson?: any;
   error?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimatedCostUsd?: number;
+  isFallback?: boolean;
 }) {
   try {
     if (!env?.DB) return;
@@ -306,17 +313,17 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
       // per-user calls today
       const callsRow = await db.prepare("SELECT COUNT(*) as cnt FROM ai_events WHERE user_id = ? AND ts >= ?")
-        .bind(String(user.sub), dayStart).first<any>();
+        .bind(String(user.sub), dayStart).first();
       const callsToday = Number(callsRow?.cnt || 0);
 
       // per-user cost today
       const costUserRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE user_id = ? AND ts >= ?")
-        .bind(String(user.sub), dayStart).first<any>();
+        .bind(String(user.sub), dayStart).first();
       const costUserToday = Number(costUserRow?.cost || 0);
 
       // total cost today
       const costTotalRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE ts >= ?")
-        .bind(dayStart).first<any>();
+        .bind(dayStart).first();
       const costTotalToday = Number(costTotalRow?.cost || 0);
 
       const exceedCalls = maxCallsPerUserDay > 0 && callsToday >= maxCallsPerUserDay;
@@ -325,13 +332,13 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
       if (exceedCalls || exceedUserCost || exceedTotalCost) {
         if (onLimitAction === "block") {
-          return json({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
+          return jsonV({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
         }
         // default: fallback
         const profile = await loadUserProfile(env as any, String(user.sub));
         const fallback = buildFallback(feature, profile);
         await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
-        return json({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
+        return jsonV({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
       }
     } catch {
       // never break product if guard check fails

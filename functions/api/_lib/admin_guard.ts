@@ -21,7 +21,7 @@ async function isAdmin(db: D1Database, userId: string): Promise<boolean> {
   const res = await db
     .prepare("SELECT 1 as ok FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1")
     .bind(userId)
-    .all<{ ok: number }>();
+    .all();
   return (res.results?.length || 0) > 0;
 }
 
