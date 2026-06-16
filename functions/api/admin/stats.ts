@@ -45,6 +45,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // usage_daily is optional; if not present, return 0
   let aiCalls = 0;
   let mealsLogged = 0;
+  let aiCallsEvents = 0;
+  let aiErrorsEvents = 0;
+  let aiAvgLatency = 0;
   try {
     const ai = await db
       .prepare("SELECT SUM(count) as c FROM usage_daily WHERE day = ? AND feature LIKE 'ai_%'")
@@ -57,11 +60,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(day)
       .first<{ c: number }>();
     mealsLogged = Number(meals?.c || 0);
+  } catch {}
 
-  // AI events metrics (if table exists)
-  let aiCallsEvents = 0;
-  let aiErrorsEvents = 0;
-  let aiAvgLatency = 0;
+  // ai_events is optional; expose richer AI telemetry when the table exists.
   try {
     const start = new Date();
     start.setUTCHours(0,0,0,0);
@@ -76,7 +77,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     aiErrorsEvents = Number(agg?.errors || 0);
     aiAvgLatency = Math.round(Number(agg?.avg_latency || 0));
   } catch {}
-  } catch {}
 
   return json({
     stats: {
@@ -86,7 +86,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         pro_active: Number(proActive?.c || 0),
         family_active: Number(familyActive?.c || 0),
       },
-      today: { day, ai_calls: aiCalls, meals_logged: mealsLogged },
+      today: {
+        day,
+        ai_calls: aiCalls,
+        meals_logged: mealsLogged,
+        ai_event_calls: aiCallsEvents,
+        ai_event_errors: aiErrorsEvents,
+        ai_event_avg_latency_ms: aiAvgLatency,
+      },
     },
   });
 };
