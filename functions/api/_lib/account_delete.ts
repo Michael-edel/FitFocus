@@ -13,10 +13,14 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
     WHERE id = ?
   `).bind(userId).run();
 
-  // Best-effort: remove family membership; if owner, mark family deleted and detach members/menus
+  // Best-effort: remove family membership; if owner, detach members and generated family data.
   const fam = await db.prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1").bind(userId).first<any>();
   if (fam?.id) {
     await db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id).run();
+    await db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id).run();
+    await db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id).run();
+    await db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(fam.id).run();
+    await db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(fam.id).run();
     await db.prepare("DELETE FROM family_members WHERE family_id = ?").bind(fam.id).run();
     // keep families row for audit; will be hard-deleted when user hard-deleted
   } else {
@@ -24,7 +28,7 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
   }
 
   // Revoke all sessions (logout everywhere)
-  await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+  await db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId).run();
 
   // Optional: reduce PII immediately (keep email for restore window; you can anonymize after hard delete)
   // You may choose to null name/picture here, but keep minimal for restore UX.
@@ -41,13 +45,20 @@ export async function hardDeleteAccount(db: D1Database, userId: string): Promise
     db.prepare("DELETE FROM invite_redemptions WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM ai_events WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_profiles WHERE user_id = ?").bind(userId),
-    // Recipes: some builds use owner_user_id
-    db.prepare("DELETE FROM recipes WHERE owner_user_id = ?").bind(userId),
+    db.prepare("DELETE FROM recipes WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM weekly_menu_items WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM shopping_checked WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM family_invites WHERE created_by_user_id = ? OR used_by_user_id = ?").bind(userId, userId),
+    db.prepare("DELETE FROM weekly_menu_portions WHERE user_id = ?").bind(userId),
   ];
 
   // Family: if owner, remove family entities; otherwise membership already removed by soft delete
   const fam = await db.prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1").bind(userId).first<any>();
   if (fam?.id) {
+    stmts.push(db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id));
+    stmts.push(db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id));
+    stmts.push(db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(fam.id));
+    stmts.push(db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(fam.id));
     stmts.push(db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id));
     stmts.push(db.prepare("DELETE FROM family_members WHERE family_id = ?").bind(fam.id));
     stmts.push(db.prepare("DELETE FROM families WHERE id = ?").bind(fam.id));
