@@ -671,17 +671,17 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
     export async function analyzeFoodPhotoEnhanced(base64: string): Promise<any> {
       const schema = {
-        type: "object",
+        type: "OBJECT",
         properties: {
-          name: { type: "string" },
-          calories: { type: "number" },
-          protein: { type: "number" },
-          fat: { type: "number" },
-          carbs: { type: "number" },
-          ingredients: { type: "array", items: { type: "string" } },
-          notes: { type: "array", items: { type: "string" } },
-          portionGrams: { type: "number" },
-          modelConfidence: { type: "number" }
+          name: { type: "STRING" },
+          calories: { type: "NUMBER" },
+          protein: { type: "NUMBER" },
+          fat: { type: "NUMBER" },
+          carbs: { type: "NUMBER" },
+          ingredients: { type: "ARRAY", items: { type: "STRING" } },
+          notes: { type: "ARRAY", items: { type: "STRING" } },
+          portionGrams: { type: "NUMBER" },
+          modelConfidence: { type: "NUMBER" }
         },
         required: ["name","calories","protein","fat","carbs","ingredients","notes"]
       };
@@ -695,12 +695,22 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
 - Дай modelConfidence от 0 до 1
 Верни строго JSON по схеме.`;
 
-      return callAI({
-        feature: "food-photo-enhanced",
-        prompt,
-        imageBase64: base64,
-        schema
+      const response = await callAiProxy("gemini-2.5-flash", {
+        parts: [
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64,
+            },
+          },
+          { text: prompt },
+        ],
+      }, "foodphoto_enhanced", {
+        responseMimeType: "application/json",
+        responseSchema: schema,
       });
+
+      return JSON.parse(response.text || "{}");
     }
 
 /**

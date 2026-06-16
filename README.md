@@ -8,7 +8,7 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 *   **Metabolic Engine**: Динамический расчет BMR и TDEE по формуле Миффлина–Сан Жеора.
 *   **AI Coach**: Ежедневные персональные советы и задачи на основе текущего прогресса.
 *   **Weekly Intelligence (WIS)**: Еженедельные отчеты с анализом адаптации и прогнозом веса.
-*   **Local-First Architecture**: Все личные данные хранятся исключительно в LocalStorage браузера.
+*   **Hybrid Storage**: быстрый локальный кэш в `localStorage` + серверный источник правды в Cloudflare D1 для Google-профилей, сессий, beta invite, family/shopping данных и синхронизируемого состояния.
 *   **Premium PDF Engine**: Генерация детальных медицинских отчетов с поддержкой кириллицы.
 
 ## Технологический стек
@@ -17,7 +17,8 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 *   **AI**: Google Gemini API (Flash/Pro) с гибридным режимом (Direct/Proxy).
 *   **Charts**: Recharts для визуализации трендов веса и привычек.
 *   **PDF**: jsPDF + autoTable с кастомной интеграцией шрифта Inter.
-*   **Backend**: Cloudflare Pages Functions (Serverless) для защиты API-ключей.
+*   **Backend**: Cloudflare Pages Functions (Serverless) для OAuth, D1 persistence, AI proxy, Stripe webhook и админских API.
+*   **Database**: Cloudflare D1, миграции в `migrations/`, binding `DB`.
 
 ## Быстрый старт
 
@@ -53,9 +54,30 @@ npm run dev
 В проде добавьте URI вида:
 `https://<ваш-домен>/api/auth/google/callback`
 
+## Cloudflare deploy
+
+Production deploy ожидает Cloudflare Pages + D1:
+
+1. Собрать frontend: `npm run build`.
+2. Применить D1 миграции: `npx wrangler d1 migrations apply fitfocus`.
+3. Проверить binding в `wrangler.toml`: `DB` должен указывать на D1 database `fitfocus`.
+4. Настроить secrets/vars в Cloudflare Pages:
+   - `AUTH_JWT_SECRET`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GEMINI_API_KEY`
+   - `REQUIRE_INVITE` (`1` для закрытой beta)
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET`
+   - `APP_URL`
+   - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
+5. В Google Cloud Console добавить redirect URI:
+   `https://<ваш-домен>/api/auth/google/callback`.
+
 ## Безопасность и Приватность
 
 Приложение использует архитектуру "Privacy-by-Design":
-*   **Нулевая серверная база данных**: Профили не привязаны к облачным аккаунтам.
+*   **HttpOnly sessions**: авторизация через `ff_session`, проверяемую в D1 sessions.
+*   **Beta access control**: закрытая beta управляется `REQUIRE_INVITE`, `invite_codes` и `invite_redemptions`.
 *   **Защита ключей**: В Production-среде доступ к Gemini осуществляется через прокси с ограничением по IP и хешированием.
 *   **Offline-first**: Основной функционал доступен без интернета благодаря Service Worker.

@@ -1,8 +1,17 @@
 import Stripe from "stripe";
 
-export async function onRequestPost({ request, env }) {
+type Env = {
+  DB: D1Database;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  PRICE_PRO_MONTHLY?: string;
+  PRICE_PRO_YEARLY?: string;
+  PRICE_FAMILY_MONTHLY?: string;
+};
+
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-    apiVersion: "2024-06-20"
+    apiVersion: "2023-10-16"
   });
 
   const sig = request.headers.get("stripe-signature");
@@ -11,8 +20,8 @@ export async function onRequestPost({ request, env }) {
   let event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+  } catch (err: any) {
+    return new Response(`Webhook Error: ${String(err?.message || err)}`, { status: 400 });
   }
 
   // Обработка событий подписки
@@ -34,7 +43,7 @@ export async function onRequestPost({ request, env }) {
         if (priceId === env.PRICE_FAMILY_MONTHLY) plan = "family";
       }
 
-      await env.FITFOCUS_DB.prepare(
+      await env.DB.prepare(
         `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at) 
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(user_id) DO UPDATE SET plan=?2, status=?3, stripe_customer_id=?4, stripe_subscription_id=?5, current_period_end=?6, updated_at=?7`

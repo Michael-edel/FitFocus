@@ -21,7 +21,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const family_id = body.family_id ? String(body.family_id) : null;
     const updates = Array.isArray(body.updates) ? body.updates : [];
 
-    if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, { status: 400 });
+    if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
 
     const norm = updates
       .map((u: any) => ({
@@ -48,6 +48,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     return json({ ok: true, updated: norm.length, week_start });
   } catch (e: any) {
-    return toApiError(e);
+    const apiErr = toApiError(e);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }
 };
