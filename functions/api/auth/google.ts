@@ -61,6 +61,18 @@ await env.DB.prepare(
   .bind(user.sub, user.email, Date.now())
   .run();
 
+// Restore soft-deleted accounts when the same Google user logs in during the grace window.
+await env.DB.prepare(
+  `UPDATE users
+   SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
+   WHERE id = ?
+     AND deleted_at IS NOT NULL
+     AND deletion_scheduled_at IS NOT NULL
+     AND deletion_scheduled_at > datetime('now')`
+)
+  .bind(now, user.sub)
+  .run();
+
 // Closed beta (invite codes)
 const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
 if (requireInvite) {

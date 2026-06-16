@@ -38,7 +38,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     } catch {}
   }
 
-  await logAdminEvent(db, { adminUserId: user.id, action: 'cleanup_deleted', meta: { found: ids.length, deleted, limit } });
+  await logAdminEvent(db, { adminUserId: user.sub, action: 'cleanup_deleted', meta: { found: ids.length, deleted, limit } });
 
   return json({ ok: true, found: ids.length, deleted }, 200);
 };
