@@ -26,7 +26,7 @@ async function hmacVerify(data: string, signatureB64Url: string, secret: string)
     false,
     ["verify"]
   );
-  return crypto.subtle.verify("HMAC", key, b64urlToBytes(signatureB64Url), new TextEncoder().encode(data));
+  return crypto.subtle.verify("HMAC", key, b64urlToBytes(signatureB64Url) as BufferSource, new TextEncoder().encode(data));
 }
 
 function parseJwtPayload(token: string): any | null {
@@ -84,7 +84,7 @@ export async function requireUser(
   // Account lifecycle: block deleted/disabled users (B2C safe delete)
   const urow = await env.DB.prepare("SELECT is_active, deleted_at FROM users WHERE id = ? LIMIT 1")
     .bind(payload.sub)
-    .first<any>();
+    .first();
   if (urow && (Number(urow.is_active ?? 1) === 0 || urow.deleted_at)) {
     // Revoke current session as well (best-effort)
     try { await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ?").bind(sid).run(); } catch {}
@@ -93,7 +93,7 @@ export async function requireUser(
 
 
   // RBAC layer: load roles from DB (auto-assign 'user' for everyone)
-  let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all<{ role: string }>();
+  let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all();
   let roles = (rolesRows.results || []).map((r) => String(r.role)).filter(Boolean);
   if (roles.length === 0) {
     // Assign baseline role for existing users (one-time)

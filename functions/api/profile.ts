@@ -54,11 +54,11 @@ async function loadProfile(db: D1Database, userId: string): Promise<Record<strin
   const row = await db
     .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
     .bind(userId)
-    .first<{ profile_json: string }>();
+    .first();
 
   if (!row?.profile_json) return null;
   try {
-    const parsed = JSON.parse(row.profile_json) as Record<string, unknown>;
+    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
@@ -104,7 +104,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const profile = withProtectedFields(user, body);
@@ -132,7 +132,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);

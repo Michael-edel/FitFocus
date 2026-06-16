@@ -23,7 +23,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const { results } = await db
     .prepare("SELECT k, v FROM user_kv WHERE user_id = ? AND k LIKE ?")
     .bind(user.sub, prefix + "%")
-    .all<{ k: string; v: string }>();
+    .all();
 
   const items = (results || []).map((r) => ({ key: r.k, value: r.v }));
   return json({ items }, 200);
@@ -38,7 +38,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const body = await request.json<any>().catch(() => null);
+  const body: any = await request.json().catch(() => null);
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
   const items: { key: string; value: string }[] = Array.isArray(body.items)

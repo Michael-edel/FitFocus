@@ -6,7 +6,7 @@ export async function hasBetaAccess(env: { DB?: D1Database; REQUIRE_INVITE?: str
   if (Array.isArray(user?.roles) && user.roles.includes('admin')) return true;
   const db = (env as any)?.DB;
   if (!db) return false;
-  const row = await db.prepare('SELECT 1 as ok FROM invite_redemptions WHERE user_id = ? LIMIT 1').bind(user.sub).first<{ ok: number }>();
+  const row = await db.prepare('SELECT 1 as ok FROM invite_redemptions WHERE user_id = ? LIMIT 1').bind(user.sub).first();
   return !!row?.ok;
 }
 
