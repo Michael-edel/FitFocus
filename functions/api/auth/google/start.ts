@@ -50,17 +50,19 @@ export const onRequestGet: PagesFunction<{
   // We allow only same-origin style redirects to reduce abuse.
   // In local dev: http://localhost:5173 or http://127.0.0.1:5173
   // In prod: your app origin.
-  let redirectUrl = redirect;
-  try {
-    const ru = new URL(redirectUrl);
-    // basic sanity: only http/https
-    if (!/^https?:$/.test(ru.protocol)) throw new Error("bad protocol");
-  } catch {
-    // fallback to request origin
-    redirectUrl = getBaseUrl(request);
+  const baseUrl = getBaseUrl(request);
+  let redirectUrl = baseUrl;
+  if (redirect) {
+    try {
+      const ru = new URL(redirect);
+      if (/^https?:$/.test(ru.protocol) && ru.origin === baseUrl) {
+        redirectUrl = ru.origin;
+      }
+    } catch {
+      // fallback to request origin
+    }
   }
 
-  const baseUrl = getBaseUrl(request);
   const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
   const nonce = crypto.randomUUID();

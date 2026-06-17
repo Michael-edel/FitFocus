@@ -84,10 +84,21 @@ export const onRequestGet: PagesFunction<{
     if (expected !== stateSig) return json({ error: "Invalid state" }, 400);
 
     const parsed = JSON.parse(rawState) as { r: string; i?: string; n: string; t: number };
-    const redirectAfter = parsed?.r || getBaseUrl(request);
+    const requestBase = getBaseUrl(request);
+    let redirectAfter = requestBase;
+    if (parsed?.r) {
+      try {
+        const ru = new URL(parsed.r);
+        if (/^https?:$/.test(ru.protocol) && ru.origin === requestBase) {
+          redirectAfter = ru.origin;
+        }
+      } catch {
+        redirectAfter = requestBase;
+      }
+    }
     const inviteCode = parsed?.i || "";
 
-    const baseUrl = getBaseUrl(request);
+    const baseUrl = requestBase;
     const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
     // Exchange code -> tokens

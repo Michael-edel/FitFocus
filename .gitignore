@@ -22,7 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-Remove-Item .\README_PATCH.txt
 
 .env
 .env.local
