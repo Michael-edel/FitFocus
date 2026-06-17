@@ -1041,27 +1041,6 @@ const App: React.FC = () => {
     return true;
   }, []);
 
-  // ---- Weekly menus (personal + family) ----
-  const handleGenerateWeeklyMenu = useCallback(async () => {
-    if (!currentUser?.aiPlan) return;
-    setWeeklyMenuError(null);
-    setWeeklyMenuLoading(true);
-    try {
-      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
-      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
-      setCurrentUser(updatedUser);
-      setAllUsers(prev => {
-        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
-        safeSetItem('fitfocus_all_users', JSON.stringify(next));
-        return next;
-      });
-    } catch (e: any) {
-      setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
-    } finally {
-      setWeeklyMenuLoading(false);
-    }
-  }, [currentUser]);
-
   useEffect(() => {
     if (!currentUser) return;
     // 1) load prefs from saved menu
@@ -1604,6 +1583,22 @@ const openEditFood = (item: FoodEntry) => {
       return next;
     });
   }, []);
+
+  // ---- Weekly menus (personal + family) ----
+  const handleGenerateWeeklyMenu = useCallback(async () => {
+    if (!currentUser?.aiPlan) return;
+    setWeeklyMenuError(null);
+    setWeeklyMenuLoading(true);
+    try {
+      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
+      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
+      persistUser(updatedUser);
+    } catch (e: any) {
+      setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
+    } finally {
+      setWeeklyMenuLoading(false);
+    }
+  }, [currentUser, persistUser]);
 
   const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
     const today = new Date().toLocaleDateString('en-CA');
