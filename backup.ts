@@ -7,12 +7,22 @@ export type BackupPayload = {
   localStorage: Record<string, string>;
 };
 
+function isFitFocusBackupKey(key: string): boolean {
+  return (
+    key.startsWith('fitfocus_') ||
+    key.startsWith('ff_') ||
+    key.startsWith('fitfocus_data_') ||
+    key.startsWith('ff_dev_plan_override_scope_')
+  );
+}
+
 export function createBackupPayload(): BackupPayload {
   const data: Record<string, string> = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k) continue;
+      if (!isFitFocusBackupKey(k)) continue;
       const v = localStorage.getItem(k);
       if (v == null) continue;
       data[k] = v;
@@ -38,6 +48,7 @@ export function applyBackupPayload(payload: unknown): { ok: boolean; error?: str
     for (const [k, v] of Object.entries(ls)) {
       if (typeof k !== 'string') continue;
       if (typeof v !== 'string') continue;
+      if (!isFitFocusBackupKey(k)) continue;
       try { localStorage.setItem(k, v); } catch {}
     }
     return { ok: true };
