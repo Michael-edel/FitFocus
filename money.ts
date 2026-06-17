@@ -16,7 +16,6 @@ export function formatKzt(value: number) {
 // =========================
 // TEST / DEV PLAN OVERRIDES
 // =========================
-const DEV_PLAN_KEY = "ff_dev_plan_override"; // "free" | "pro" | "family" | ""
 const DEV_PLAN_SCOPE_PREFIX = "ff_dev_plan_override_scope_";
 
 function isTestModeEnabled() {
@@ -25,12 +24,13 @@ function isTestModeEnabled() {
 }
 
 function keyForScope(userId?: string | null) {
-  return userId ? `${DEV_PLAN_SCOPE_PREFIX}${userId}` : DEV_PLAN_KEY;
+  return userId ? `${DEV_PLAN_SCOPE_PREFIX}${userId}` : null;
 }
 
 export function setDevPlanOverride(plan: TariffPlan | "", userId?: string | null) {
   if (!isTestModeEnabled()) return;
   const key = keyForScope(userId);
+  if (!key) return;
   if (!plan) localStorage.removeItem(key);
   else localStorage.setItem(key, plan);
 }
@@ -38,7 +38,8 @@ export function setDevPlanOverride(plan: TariffPlan | "", userId?: string | null
 export function getDevPlanOverride(userId?: string | null): TariffPlan | null {
   if (!isTestModeEnabled()) return null;
   const key = keyForScope(userId);
-  const v = localStorage.getItem(key) || localStorage.getItem(DEV_PLAN_KEY);
+  if (!key) return null;
+  const v = localStorage.getItem(key);
   if (v === "free" || v === "pro" || v === "family") return v as TariffPlan;
   return null;
 }
