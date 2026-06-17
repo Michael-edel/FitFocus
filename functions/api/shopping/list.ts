@@ -25,6 +25,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     if (family_id) {
       const famId = String(family_id);
+      const sharedUserId = `family:${famId}`;
 
       // Ensure current user is in this family (active)
       const mem = await db
@@ -43,18 +44,23 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
           `SELECT
              w.ingredient_name as name,
              SUM(w.grams) as grams,
-             COALESCE(MAX(sc.checked), 0) as checked
+             COALESCE(MAX(sc_shared.checked), MAX(sc_user.checked), 0) as checked
            FROM weekly_menu_items w
-           LEFT JOIN shopping_checked sc
-             ON sc.user_id = ?
-            AND sc.week_start = ?
-            AND sc.family_id = ?
-            AND sc.ingredient_name = w.ingredient_name
+           LEFT JOIN shopping_checked sc_shared
+             ON sc_shared.user_id = ?
+            AND sc_shared.week_start = ?
+            AND sc_shared.family_id = ?
+            AND sc_shared.ingredient_name = w.ingredient_name
+           LEFT JOIN shopping_checked sc_user
+             ON sc_user.user_id = ?
+            AND sc_user.week_start = ?
+            AND sc_user.family_id = ?
+            AND sc_user.ingredient_name = w.ingredient_name
            WHERE w.week_start = ? AND w.family_id = ?
            GROUP BY w.ingredient_name
            ORDER BY w.ingredient_name`
         )
-        .bind(user.sub, week, famId, week, famId)
+        .bind(sharedUserId, week, famId, user.sub, week, famId, week, famId)
         .all<any>();
 
       const items = (rows?.results || [])

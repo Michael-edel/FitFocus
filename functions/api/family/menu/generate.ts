@@ -121,6 +121,14 @@ function buildPortionsForMember(shared: any, kcalPerDay: number) {
   return { portions, totals: totalsArr, kcalPerDay };
 }
 
+function formatMealPortion(ingredients: { name: string; grams: number }[], kcal: number): string {
+  const totalGrams = ingredients.reduce((sum, it) => sum + Number(it.grams || 0), 0);
+  const parts = ingredients
+    .map((it) => `${it.name} ${Math.max(1, Math.round(Number(it.grams || 0)))}г`)
+    .join(" + ");
+  return `всего ~${Math.max(1, Math.round(totalGrams))}г: ${parts} (≈${Math.max(1, Math.round(kcal))} ккал)`;
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -178,10 +186,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .all<any>();
 
     const membersList = members.results || [];
+    const portionsByUser: Record<string, ReturnType<typeof buildPortionsForMember>> = {};
 
     for (const m of membersList) {
       const kcal = memberTargetKcal(m);
       const computed = buildPortionsForMember(shared, kcal);
+      portionsByUser[String(m.user_id)] = computed;
 
       // Upsert portions
       await db
@@ -210,7 +220,70 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
     }
 
-    return json({ ok: true, weekStart, menuId, shared, members: membersList.length }, 200);
+    const mealShares: Record<"breakfast" | "lunch" | "dinner" | "snack", number> = {
+      breakfast: 0.25,
+      lunch: 0.35,
+      dinner: 0.30,
+      snack: 0.10,
+    };
+
+    const shoppingListItems = Object.entries(
+      membersList.reduce((acc: Record<string, number>, m: any) => {
+        const computed = portionsByUser[String(m.user_id)];
+        for (const item of computed?.totals || []) {
+          acc[item.name] = (acc[item.name] || 0) + Number(item.grams || 0);
+        }
+        return acc;
+      }, {})
+    )
+      .map(([name, grams]) => ({ name, grams: Math.round(Number(grams || 0)) }))
+      .filter((it) => it.name && it.grams > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+    const familyWeeklyMenu = {
+      prefs: {
+        includeIds: membersList.map((m: any) => String(m.user_id)),
+        cookingMode: "all_meals" as const,
+        budgetPerWeek: undefined,
+        currency: "KZT",
+      },
+      weekStart,
+      days: shared.days.map((day: any, dayIdx: number) => {
+        const buildMeal = (mealKey: "breakfast" | "lunch" | "dinner" | "snack") => {
+          const baseMeal = day[mealKey];
+          const portions: Record<string, string> = {};
+          for (const m of membersList) {
+            const userId = String(m.user_id);
+            const computed = portionsByUser[userId];
+            const meal = computed?.portions?.[dayIdx]?.meals?.[mealKey];
+            const ingredients = Array.isArray(meal?.ingredients) ? meal.ingredients : [];
+            const targetKcal = memberTargetKcal(m);
+            portions[userId] = formatMealPortion(ingredients, targetKcal * mealShares[mealKey]);
+          }
+          return {
+            base: String(baseMeal?.title || ""),
+            portions,
+          };
+        };
+
+        return {
+          day: String(day?.name || ""),
+          breakfast: buildMeal("breakfast"),
+          lunch: buildMeal("lunch"),
+          dinner: buildMeal("dinner"),
+          snack: buildMeal("snack"),
+          };
+        }),
+      shoppingListItems,
+      shoppingList: shoppingListItems.map((it) => `${it.name} — ${it.grams} г`),
+    };
+
+    await db
+      .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
+      .bind(JSON.stringify(familyWeeklyMenu), user.sub, now, menuId)
+      .run();
+
+    return json({ ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);

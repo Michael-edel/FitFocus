@@ -934,7 +934,8 @@ const App: React.FC = () => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось сгенерировать семейное меню');
     await loadFamilyShopping();
-  }, [cloudFamily?.id, weekStartISO, loadFamilyShopping]);
+    await loadCloudFamily();
+  }, [cloudFamily?.id, weekStartISO, loadFamilyShopping, loadCloudFamily]);
 
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';

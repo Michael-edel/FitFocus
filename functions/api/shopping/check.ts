@@ -26,6 +26,7 @@ async function handle(request: Request, env: Env) {
 
   const updated_at = nowMs();
   const val = checked ? 1 : 0;
+  const sharedUserId = family_id ? `family:${family_id}` : user.sub;
 
   // SQLite UPSERT on composite PK
   await db
@@ -35,7 +36,7 @@ async function handle(request: Request, env: Env) {
        ON CONFLICT(user_id, week_start, family_id, ingredient_name)
        DO UPDATE SET checked=excluded.checked, updated_at=excluded.updated_at`
     )
-    .bind(user.sub, week_start, family_id, ingredient_name, val, updated_at)
+    .bind(sharedUserId, week_start, family_id, ingredient_name, val, updated_at)
     .run();
 
   return json({ ok: true, week_start, ingredient_name, checked });
