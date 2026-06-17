@@ -1982,6 +1982,32 @@ const deleteAccount = useCallback(async () => {
 
   const suppressNextFullProfileSyncRef = useRef(false);
 
+  const syncLocalStateToCloud = useCallback(async (userId: string) => {
+    const prefixes = [
+      `fitfocus_data_${userId}_`,
+      `fitfocus_council_history_${userId}`,
+      `fitfocus_plan_task_done_${userId}`,
+      `fitfocus_family_menu_prefs_${userId}`,
+      `ff_`,
+    ];
+    const items: { key: string; value: string }[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (!prefixes.some((prefix) => k.startsWith(prefix))) continue;
+      const v = localStorage.getItem(k);
+      if (typeof v === 'string') items.push({ key: k, value: v });
+    }
+    if (!items.length) return;
+    const r = await fetch('/api/state', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    if (!r.ok) throw new Error('STATE_SYNC_FAILED');
+  }, []);
+
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
     try {
@@ -1992,12 +2018,17 @@ const deleteAccount = useCallback(async () => {
         body: JSON.stringify(profile),
       });
       if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
+      try {
+        await syncLocalStateToCloud(profile.id);
+      } catch {
+        throw new Error('STATE_SYNC_FAILED');
+      }
       setProfileSyncState('saved');
       setLastProfileSyncAt(Date.now());
     } catch {
       setProfileSyncState('error');
     }
-  }, []);
+  }, [syncLocalStateToCloud]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
     if (!currentUser) return;
@@ -2030,35 +2061,13 @@ const deleteAccount = useCallback(async () => {
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!currentUser) return;
-    const prefixes = [
-      `fitfocus_data_${currentUser.id}_`,
-      `fitfocus_council_history_${currentUser.id}`,
-      `fitfocus_plan_task_done_${currentUser.id}`,
-      `fitfocus_family_menu_prefs_${currentUser.id}`,
-      `ff_`,
-    ];
-    const items: { key: string; value: string }[] = [];
     try {
-      for (let i = 0; i < localStorage.length; i += 1) {
-        const k = localStorage.key(i);
-        if (!k) continue;
-        if (!prefixes.some((prefix) => k.startsWith(prefix))) continue;
-        const v = localStorage.getItem(k);
-        if (typeof v === 'string') items.push({ key: k, value: v });
-      }
-      if (items.length) {
-        await fetch('/api/state', {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items }),
-        });
-      }
+      await syncLocalStateToCloud(currentUser.id);
       await pushProfileToCloud(currentUser);
     } catch {
       setProfileSyncState('error');
     }
-  }, [currentUser, pushProfileToCloud]);
+  }, [currentUser, pushProfileToCloud, syncLocalStateToCloud]);
 
   const reloadUserFromCloud = useCallback(async () => {
     if (!currentUser) return;
