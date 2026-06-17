@@ -70,8 +70,6 @@ import ShoppingListCard from './ShoppingListCard';
 import PlansScreen from './PlansScreen';
 import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
-import { downloadShortHealthReportPdf, downloadDetailedHealthReportPdf } from './pdf';
-import { ensurePdfInterFont } from './pdf/font';
 import SettingsScreen from './SettingsScreen';
 import AdminScreen from './AdminScreen';
 import {
@@ -85,8 +83,6 @@ import {
 } from './backup';
 import RecipesScreen from './RecipesScreen';
 import WorkoutsScreen from './WorkoutsScreen';
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -1543,8 +1539,14 @@ const openEditFood = (item: FoodEntry) => {
   }, [weekly, currentUser]);
 
   const exportWeeklyPDF = async (report: any) => {
-    const doc = new jsPDF();
-    await ensurePdfInterFont(doc);
+    const [{ default: jsPDF }, autoTableModule, { ensurePdfInterFont }] = await Promise.all([
+  import('jspdf'),
+  import('jspdf-autotable'),
+  import('./pdf/font'),
+]);
+const autoTable = autoTableModule.default;
+const doc = new jsPDF();
+await ensurePdfInterFont(doc);
     doc.setFont("Inter", "normal");
     doc.setFontSize(18);
     doc.text("FitFocus — Еженедельный AI-отчёт (WIS)", 14, 20);
@@ -2028,11 +2030,13 @@ const deleteAccount = useCallback(async () => {
 
   const exportShortPdf = useCallback(async () => {
     if (!currentUser) return;
+    const { downloadShortHealthReportPdf } = await import('./pdf');
     await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
   }, [currentUser, targets, foodDiary, habits]);
 
   const exportDetailedPdf = useCallback(async () => {
     if (!currentUser) return;
+    const { downloadDetailedHealthReportPdf } = await import('./pdf');
     await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
   }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
