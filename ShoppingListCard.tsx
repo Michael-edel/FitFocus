@@ -40,10 +40,12 @@ export default function ShoppingListCard({
   weekStart,
   title = "Список покупок",
   fallbackList,
+  userId,
 }: {
   weekStart: string;
   title?: string;
   fallbackList?: string[];
+  userId?: string | null;
 }) {
   const [items, setItems] = useState<ShoppingItem[] | null>(null);
   const [onlyUnchecked, setOnlyUnchecked] = useState(false);
@@ -52,18 +54,26 @@ export default function ShoppingListCard({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(`fitfocus_shopping_fallback_${weekStart}`);
+      const scopedKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : null;
+      const legacyKey = `fitfocus_shopping_fallback_${weekStart}`;
+      const raw = (scopedKey ? localStorage.getItem(scopedKey) : null) || localStorage.getItem(legacyKey);
       setFallbackChecked(raw ? JSON.parse(raw) : {});
+      if (scopedKey && raw) {
+        localStorage.setItem(scopedKey, raw);
+        localStorage.removeItem(legacyKey);
+      }
     } catch {
       setFallbackChecked({});
     }
-  }, [weekStart]);
+  }, [userId, weekStart]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(`fitfocus_shopping_fallback_${weekStart}`, JSON.stringify(fallbackChecked));
+      const scopedKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : `fitfocus_shopping_fallback_${weekStart}`;
+      localStorage.setItem(scopedKey, JSON.stringify(fallbackChecked));
+      if (userId) localStorage.removeItem(`fitfocus_shopping_fallback_${weekStart}`);
     } catch {}
-  }, [weekStart, fallbackChecked]);
+  }, [userId, weekStart, fallbackChecked]);
 
   const load = useCallback(async () => {
     if (!weekStart) return;
