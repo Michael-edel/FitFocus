@@ -206,15 +206,26 @@ const safeSetItem = (key: string, value: string) => {
   }
 };
 
+const safeRemoveItem = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+    enqueueRemoteKVDelete(key);
+  } catch {
+    // ignore
+  }
+};
+
 // --- Server-driven persistence (D1 remote) ---
 // We keep localStorage as a fast cache, but D1 is the source-of-truth.
 // Any key under fitfocus_data_* is mirrored to /api/state.
 type KVItem = { key: string; value: string };
 const __kvQueue: KVItem[] = [];
+const __kvDeleteQueue: string[] = [];
 let __kvTimer: number | null = null;
+let __kvDeleteTimer: number | null = null;
 
 function enqueueRemoteKVWrite(key: string, value: string) {
-  if (!key.startsWith('fitfocus_data_') && !key.startsWith('fitfocus_council_history_')) return;
+  if (!key.startsWith('fitfocus_') && !key.startsWith('ff_')) return;
   __kvQueue.push({ key, value });
 
   if (__kvTimer != null) return;
@@ -231,6 +242,28 @@ function enqueueRemoteKVWrite(key: string, value: string) {
       });
     } catch {
       // ignore network errors; will retry on next write
+    }
+  }, 400);
+}
+
+function enqueueRemoteKVDelete(key: string) {
+  if (!key.startsWith('fitfocus_') && !key.startsWith('ff_')) return;
+  __kvDeleteQueue.push(key);
+
+  if (__kvDeleteTimer != null) return;
+  __kvDeleteTimer = window.setTimeout(async () => {
+    __kvDeleteTimer = null;
+    const batch = __kvDeleteQueue.splice(0, __kvDeleteQueue.length);
+    if (!batch.length) return;
+    try {
+      await Promise.all(batch.map((k) =>
+        fetch(`/api/state?key=${encodeURIComponent(k)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+      ));
+    } catch {
+      // ignore network errors; deletes will eventually be cleaned up by resync
     }
   }, 400);
 }
@@ -1009,7 +1042,7 @@ const App: React.FC = () => {
   const persistFamilyMenuPrefs = useCallback((prefs: { includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }) => {
     if (!currentUser) return;
     try {
-      localStorage.setItem(`fitfocus_family_menu_prefs_${currentUser.id}`, JSON.stringify({
+      safeSetItem(`fitfocus_family_menu_prefs_${currentUser.id}`, JSON.stringify({
         includeIds: prefs.includeIds,
         cookingMode: prefs.cookingMode,
         budgetPerWeek: prefs.budgetPerWeek ? Number(prefs.budgetPerWeek) : undefined,
@@ -1023,19 +1056,19 @@ const App: React.FC = () => {
     const prefix = `fitfocus_data_${userId}_`;
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+      if (k && k.startsWith(prefix)) safeRemoveItem(k);
     }
 
     // 2) Удаляем из списка профилей
     setAllUsers(prev => {
       const next = prev.filter(u => u.id !== userId);
-      localStorage.setItem('fitfocus_all_users', JSON.stringify(next));
+      safeSetItem('fitfocus_all_users', JSON.stringify(next));
       return next;
     });
 
     // 3) Если удалили "последнего" или текущего — сбрасываем
     const lastId = localStorage.getItem('fitfocus_last_user_id');
-    if (lastId === userId) localStorage.removeItem('fitfocus_last_user_id');
+    if (lastId === userId) safeRemoveItem('fitfocus_last_user_id');
 
     if (currentUser?.id === userId) {
       setCurrentUser(null);
@@ -1125,8 +1158,8 @@ const App: React.FC = () => {
     const kRead = `ff_adapt_read_${currentUser.id}`;
     const kExp = `ff_adapt_expanded_${currentUser.id}`;
     try {
-      localStorage.setItem(kRead, adaptRead ? '1' : '0');
-      localStorage.setItem(kExp, adaptExpanded ? '1' : '0');
+      safeSetItem(kRead, adaptRead ? '1' : '0');
+      safeSetItem(kExp, adaptExpanded ? '1' : '0');
     } catch {}
   }, [adaptRead, adaptExpanded, currentUser?.id]);
 
@@ -1143,7 +1176,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    try { localStorage.setItem('ff_settings', JSON.stringify(settings)); } catch {}
+    try { safeSetItem('ff_settings', JSON.stringify(settings)); } catch {}
   }, [settings]);
 
   // AI Council: load/save chat history per user (localStorage)
@@ -1175,7 +1208,7 @@ const App: React.FC = () => {
   const persistCouncilHistory = useCallback((msgs: CouncilChatMsg[]) => {
     if (!currentUser) return;
     const key = `fitfocus_council_history_${currentUser.id}`;
-    try { localStorage.setItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
+    try { safeSetItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
   }, [currentUser?.id]);
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
@@ -1216,7 +1249,7 @@ const App: React.FC = () => {
 
   const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
     setFavoriteRecipes(next);
-    try { localStorage.setItem('ff_fav_recipes', JSON.stringify(next)); } catch {}
+    try { safeSetItem('ff_fav_recipes', JSON.stringify(next)); } catch {}
   }, []);
 
   const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
@@ -1660,7 +1693,7 @@ await ensurePdfInterFont(doc);
   setProfileSyncState('idle');
   setLastProfileSyncAt(null);
   setAuthState('auth_choice');
-  localStorage.removeItem('fitfocus_last_user_id');
+  safeRemoveItem('fitfocus_last_user_id');
 }, [googleMe?.sub]);
 
 
@@ -1695,11 +1728,12 @@ const deleteAccount = useCallback(async () => {
     const userWithResetUsage = resetUsageIfNewTime(user);
 
     // Server-driven hydration for cross-device: load KV blobs from D1, fallback to local cache.
-    const prefix = `fitfocus_data_${user.id}_`;
+    const prefixes = [`fitfocus_data_${user.id}_`, `ff_`];
     let kv: Record<string, string> = {};
     try {
-      const r = await fetch(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
-      if (r.ok) {
+      for (const prefix of prefixes) {
+        const r = await fetch(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
+        if (!r.ok) continue;
         const data = await r.json();
         const items = Array.isArray(data?.items) ? data.items : [];
         for (const it of items) {
@@ -1712,7 +1746,7 @@ const deleteAccount = useCallback(async () => {
     } catch {}
 
     const readKV = <T,>(suffix: string, fallback: T): T => {
-      const fullKey = prefix + suffix;
+      const fullKey = `fitfocus_data_${user.id}_${suffix}`;
       const raw = kv[fullKey] ?? localStorage.getItem(fullKey);
       if (!raw) return fallback;
       try { return JSON.parse(raw) as T; } catch { return fallback; }
@@ -1800,13 +1834,19 @@ const deleteAccount = useCallback(async () => {
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!currentUser) return;
-    const prefix = `fitfocus_data_${currentUser.id}_`;
+    const prefixes = [
+      `fitfocus_data_${currentUser.id}_`,
+      `fitfocus_council_history_${currentUser.id}`,
+      `fitfocus_plan_task_done_${currentUser.id}`,
+      `fitfocus_family_menu_prefs_${currentUser.id}`,
+      `ff_`,
+    ];
     const items: { key: string; value: string }[] = [];
     try {
       for (let i = 0; i < localStorage.length; i += 1) {
         const k = localStorage.key(i);
         if (!k) continue;
-        if (!k.startsWith(prefix) && !k.startsWith(`fitfocus_council_history_${currentUser.id}`)) continue;
+        if (!prefixes.some((prefix) => k.startsWith(prefix))) continue;
         const v = localStorage.getItem(k);
         if (typeof v === 'string') items.push({ key: k, value: v });
       }
@@ -1935,7 +1975,7 @@ const deleteAccount = useCallback(async () => {
     const d = new Date(); d.setDate(d.getDate() + 1);
     const key = `ff_refeed_${currentUser.id}`;
     const value = d.toISOString().slice(0, 10);
-    localStorage.setItem(key, value);
+    safeSetItem(key, value);
     setRefeedDate(value);
   }, [currentUser]);
 
@@ -2568,7 +2608,7 @@ const logWeight = useCallback(() => {
             onChange={(e) => {
               const v = e.target.value;
               setInviteCode(v);
-              try { localStorage.setItem('fitfocus_invite_code', v); } catch {}
+              try { safeSetItem('fitfocus_invite_code', v); } catch {}
               setInviteError(null);
             }}
             placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
@@ -3669,7 +3709,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                     const ok = confirm('Очистить историю AI Совета?');
                     if (!ok) return;
                     const key = `fitfocus_council_history_${currentUser.id}`;
-                    try { localStorage.removeItem(key); } catch {}
+                    safeRemoveItem(key);
                     setCouncilMessages([]);
                     setCouncilResponse(null);
                     setExpandedCouncilThoughtIds({});
