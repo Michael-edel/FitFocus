@@ -734,7 +734,7 @@ const App: React.FC = () => {
   const [familyNameDraft, setFamilyNameDraft] = useState<string>('Моя семья');
 
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
-  const [familyShopping, setFamilyShopping] = useState<{ week_start: string; items: {name:string; grams:number}[] } | null>(null);
+  const [familyShopping, setFamilyShopping] = useState<{ week_start: string; items: {name:string; grams:number; checked?: boolean}[] } | null>(null);
   const [familyShoppingLoading, setFamilyShoppingLoading] = useState(false);
 
   const weekStartISO = useCallback((d = new Date()) => {
@@ -839,6 +839,36 @@ const App: React.FC = () => {
       setFamilyShopping(null);
     } finally {
       setFamilyShoppingLoading(false);
+    }
+  }, [cloudFamily?.id, weekStartISO]);
+
+  const toggleFamilyShoppingItem = useCallback(async (ingredientName: string, checked: boolean) => {
+    if (!cloudFamily?.id) return;
+    const week = weekStartISO();
+    setFamilyShopping((prev) => prev ? ({
+      ...prev,
+      items: prev.items.map((it) => it.name === ingredientName ? { ...it, checked } : it),
+    }) : prev);
+    try {
+      const res = await fetch('/api/shopping/check', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week_start: week,
+          ingredient_name: ingredientName,
+          checked,
+          family_id: cloudFamily.id,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить список покупок');
+    } catch (e) {
+      setFamilyShopping((prev) => prev ? ({
+        ...prev,
+        items: prev.items.map((it) => it.name === ingredientName ? { ...it, checked: !checked } : it),
+      }) : prev);
+      throw e;
     }
   }, [cloudFamily?.id, weekStartISO]);
 
@@ -3365,10 +3395,21 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       ) : familyShopping?.items?.length ? (
                         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
                           {familyShopping.items.slice(0, 30).map((it, i) => (
-                            <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                              <span className="truncate">• {it.name}</span>
-                              <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                            </div>
+                            <label key={i} className={clsx(
+                              "p-3 rounded-[1.2rem] border flex items-center justify-between gap-3 cursor-pointer transition-all",
+                              it.checked ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through" : "bg-slate-950/40 border-slate-800 text-slate-200"
+                            )}>
+                              <span className="flex items-center gap-3 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  className="accent-indigo-400 shrink-0"
+                                  checked={!!it.checked}
+                                  onChange={(e) => void toggleFamilyShoppingItem(it.name, e.target.checked)}
+                                />
+                                <span className="truncate">• {it.name}</span>
+                              </span>
+                              <span className="text-slate-400 tabular-nums shrink-0">{formatGramsPretty(it.grams)}</span>
+                            </label>
                           ))}
                         </div>
                       ) : (
@@ -3679,10 +3720,21 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   ) : familyShopping?.items?.length ? (
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
                       {familyShopping.items.slice(0, 60).map((it, idx) => (
-                        <div key={idx} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                          <span className="truncate">• {it.name}</span>
-                          <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                        </div>
+                        <label key={idx} className={clsx(
+                          "p-3 rounded-[1.2rem] border flex items-center justify-between gap-3 cursor-pointer transition-all",
+                          it.checked ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through" : "bg-slate-950/40 border-slate-800 text-slate-200"
+                        )}>
+                          <span className="flex items-center gap-3 min-w-0">
+                            <input
+                              type="checkbox"
+                              className="accent-indigo-400 shrink-0"
+                              checked={!!it.checked}
+                              onChange={(e) => void toggleFamilyShoppingItem(it.name, e.target.checked)}
+                            />
+                            <span className="truncate">• {it.name}</span>
+                          </span>
+                          <span className="text-slate-400 tabular-nums shrink-0">{formatGramsPretty(it.grams)}</span>
+                        </label>
                       ))}
                     </div>
                   ) : (
