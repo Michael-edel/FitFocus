@@ -1857,6 +1857,7 @@ const deleteAccount = useCallback(async () => {
 
     const storedHabits: UserHabit[] = readKV('habits', INITIAL_HABITS);
     const storedAllUsers: UserProfile[] = readKV('all_users', []);
+    const storedWeeklyReports: WeeklyStoredReport[] = readKV('weekly_reports', []);
     const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
 
     const userWithOffsets: UserProfile = { 
@@ -1869,6 +1870,7 @@ const deleteAccount = useCallback(async () => {
     if (Array.isArray(storedAllUsers) && storedAllUsers.length > 0) {
       setAllUsers(storedAllUsers);
     }
+    setWeeklyReports(storedWeeklyReports);
     setFoodDiary(storedDiary);
     setHabits(storedHabits);
     setFoodHistory(readKV('history', []));
