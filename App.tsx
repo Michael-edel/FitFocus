@@ -1965,7 +1965,15 @@ const deleteAccount = useCallback(async () => {
       `fitfocus_council_history_${userId}`,
       `fitfocus_plan_task_done_${userId}`,
       `fitfocus_family_menu_prefs_${userId}`,
-      `ff_`,
+      `ff_settings`,
+      `ff_refeed_${userId}`,
+      `ff_adapt_read_${userId}`,
+      `ff_adapt_expanded_${userId}`,
+      `ff_fav_recipes`,
+      `ff_gemini_cooldown_until`,
+      `ff_ai_last_status_v1`,
+      `ff_ai_last_action_v1`,
+      `ff_ai_feature_lastcall_v1:`,
     ];
     const items: { key: string; value: string }[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
