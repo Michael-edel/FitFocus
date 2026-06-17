@@ -84,11 +84,15 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined
-            if (id.includes('react') || id.includes('react-dom')) return 'vendor-react'
-            if (id.includes('recharts')) return 'vendor-charts'
-            if (id.includes('jspdf')) return 'vendor-pdf'
-            if (id.includes('heic2any')) return 'vendor-heic'
-            if (id.includes('lucide-react')) return 'vendor-icons'
+
+            const normalizedId = id.replace(/\\/g, '/')
+            const isReactPackage = /\/node_modules\/(react|react-dom)\//.test(normalizedId)
+
+            if (isReactPackage) return 'vendor-react'
+            if (normalizedId.includes('/node_modules/recharts/')) return 'vendor-charts'
+            if (normalizedId.includes('/node_modules/jspdf')) return 'vendor-pdf'
+            if (normalizedId.includes('/node_modules/heic2any/')) return 'vendor-heic'
+            if (normalizedId.includes('/node_modules/lucide-react/')) return 'vendor-icons'
             return 'vendor'
           }
         }
