@@ -1274,15 +1274,38 @@ const App: React.FC = () => {
   }, [settings.theme]);
 
   // Favorite recipes
-  const favoriteRecipesRepo = useMemo(() => new JsonRepo('ff_fav_recipes'), []);
-  const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>(() => {
-    return favoriteRecipesRepo.load<FavoriteRecipe[]>([]);
-  });
+  const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setFavoriteRecipes([]);
+      return;
+    }
+    const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
+    const legacyKey = `ff_fav_recipes`;
+    try {
+      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      if (!raw) {
+        setFavoriteRecipes([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setFavoriteRecipes(Array.isArray(parsed) ? parsed : []);
+      safeSetItem(key, JSON.stringify(Array.isArray(parsed) ? parsed : []));
+      safeRemoveItem(legacyKey);
+    } catch {
+      setFavoriteRecipes([]);
+    }
+  }, [currentUser?.id]);
 
   const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
     setFavoriteRecipes(next);
-    try { favoriteRecipesRepo.save(next); } catch {}
-  }, [favoriteRecipesRepo]);
+    if (!currentUser?.id) return;
+    try {
+      safeSetItem(`fitfocus_data_${currentUser.id}_favorite_recipes`, JSON.stringify(next));
+      safeRemoveItem(`ff_fav_recipes`);
+    } catch {}
+  }, [currentUser?.id]);
 
   const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
     persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
