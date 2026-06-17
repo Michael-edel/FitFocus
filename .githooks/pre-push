@@ -1,7 +1,16 @@
 #!/bin/sh
-branch="$(git rev-parse --abbrev-ref HEAD)"
+set -eu
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+auto_push="$(git config --bool --get fitfocus.autoPush 2>/dev/null || true)"
+
+if [ "$auto_push" = "true" ]; then
+  exit 0
+fi
+
 if [ "$branch" = "main" ]; then
-  echo "❌ Прямой push в main запрещён. Работай через dev/feature."
+  echo "❌ Прямой push в main запрещён. Работай через dev/feature или включи fitfocus.autoPush."
   exit 1
 fi
+
 exit 0
