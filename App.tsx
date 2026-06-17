@@ -1983,13 +1983,12 @@ const deleteAccount = useCallback(async () => {
   }, []);
 
   function allUsersStorageKey(userId?: string | null) {
-    return userId ? `fitfocus_data_${userId}_all_users` : 'fitfocus_all_users';
+    return `fitfocus_data_${userId || 'unknown'}_all_users`;
   }
 
   function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: UserProfile[]) {
     if (!ownerUserId) return;
     safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(next));
-    safeRemoveItem('fitfocus_all_users');
   }
 
   function readStoredAllUsersSnapshot(): UserProfile[] | null {
