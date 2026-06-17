@@ -20,6 +20,9 @@ type Stats = {
   today: {
     day: string;
     ai_calls: number;
+    ai_event_calls?: number;
+    ai_event_errors?: number;
+    ai_event_avg_latency_ms?: number;
     ai_calls_events?: number;
     ai_errors_events?: number;
     ai_avg_latency_ms?: number;
@@ -689,12 +692,12 @@ export default function AdminScreen() {
           </div>
           <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
             <div className="text-slate-400 font-bold">AI вызовы (ai_events)</div>
-            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_calls_events ?? 0}</div>
-            <div className="text-slate-400 font-semibold mt-1">Ошибки: {stats?.today?.ai_errors_events ?? 0}</div>
+            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_event_calls ?? stats?.today?.ai_calls_events ?? 0}</div>
+            <div className="text-slate-400 font-semibold mt-1">Ошибки: {stats?.today?.ai_event_errors ?? stats?.today?.ai_errors_events ?? 0}</div>
           </div>
           <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
             <div className="text-slate-400 font-bold">Средняя задержка</div>
-            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_avg_latency_ms ?? 0} ms</div>
+            <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_event_avg_latency_ms ?? stats?.today?.ai_avg_latency_ms ?? 0} ms</div>
           </div>
         </div>
 
@@ -846,7 +849,7 @@ export default function AdminScreen() {
                   <button
                     disabled={loading || !!s.revoked}
                     onClick={() => revokeSession(s.id)}
-                    className={`px-3 py-2 rounded-2xl font-black \${s.revoked ? "bg-slate-800 text-slate-500" : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-200"}`}
+                    className={`px-3 py-2 rounded-2xl font-black ${s.revoked ? "bg-slate-800 text-slate-500" : "bg-rose-500/10 hover:bg-rose-500/20 text-rose-200"}`}
                   >
                     {s.revoked ? "Отозвана" : "Отозвать"}
                   </button>
