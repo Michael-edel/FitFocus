@@ -72,6 +72,7 @@ import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
 import SettingsScreen from './SettingsScreen';
 import AdminScreen from './AdminScreen';
+import { JsonRepo } from './storage/repos';
 import {
   applyBackupPayload,
   createBackupPayload,
@@ -911,7 +912,8 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
+  const inviteCodeRepo = useMemo(() => new JsonRepo('fitfocus_invite_code'), []);
+  const [inviteCode, setInviteCode] = useState<string>(() => inviteCodeRepo.load('') || localStorage.getItem('fitfocus_invite_code') || '');
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
@@ -1167,17 +1169,14 @@ const App: React.FC = () => {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
   // Settings
+  const settingsRepo = useMemo(() => new JsonRepo('ff_settings'), []);
   const [settings, setSettings] = useState<AppSettings>(() => {
-    try {
-      const raw = localStorage.getItem('ff_settings');
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false };
+    return settingsRepo.load<AppSettings>({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false });
   });
 
   useEffect(() => {
-    try { safeSetItem('ff_settings', JSON.stringify(settings)); } catch {}
-  }, [settings]);
+    try { settingsRepo.save(settings); } catch {}
+  }, [settings, settingsRepo]);
 
   // AI Council: load/save chat history per user (localStorage)
   useEffect(() => {
@@ -1239,18 +1238,15 @@ const App: React.FC = () => {
   }, [settings.theme]);
 
   // Favorite recipes
+  const favoriteRecipesRepo = useMemo(() => new JsonRepo('ff_fav_recipes'), []);
   const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>(() => {
-    try {
-      const raw = localStorage.getItem('ff_fav_recipes');
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return [];
+    return favoriteRecipesRepo.load<FavoriteRecipe[]>([]);
   });
 
   const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
     setFavoriteRecipes(next);
-    try { safeSetItem('ff_fav_recipes', JSON.stringify(next)); } catch {}
-  }, []);
+    try { favoriteRecipesRepo.save(next); } catch {}
+  }, [favoriteRecipesRepo]);
 
   const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
     persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
@@ -2608,7 +2604,7 @@ const logWeight = useCallback(() => {
             onChange={(e) => {
               const v = e.target.value;
               setInviteCode(v);
-              try { safeSetItem('fitfocus_invite_code', v); } catch {}
+              try { inviteCodeRepo.save(v); } catch {}
               setInviteError(null);
             }}
             placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
