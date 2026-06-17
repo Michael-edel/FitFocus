@@ -1122,9 +1122,6 @@ const App: React.FC = () => {
     });
 
     // 3) Если удалили "последнего" или текущего — сбрасываем
-    const lastId = localStorage.getItem('fitfocus_last_user_id');
-    if (lastId === userId) safeRemoveItem('fitfocus_last_user_id');
-
     if (currentUser?.id === userId) {
       setCurrentUser(null);
       setAuthState('auth_choice');
@@ -1860,7 +1857,6 @@ await ensurePdfInterFont(doc);
   setProfileSyncState('idle');
   setLastProfileSyncAt(null);
   setAuthState('auth_choice');
-  safeRemoveItem('fitfocus_last_user_id');
 }, [googleMe?.sub]);
 
 
@@ -1996,23 +1992,25 @@ const deleteAccount = useCallback(async () => {
     safeRemoveItem('fitfocus_all_users');
   }
 
-  function readStoredAllUsersSnapshot(preferredUserId?: string | null): UserProfile[] | null {
+  function readStoredAllUsersSnapshot(): UserProfile[] | null {
     const candidates: string[] = [];
-    if (preferredUserId) candidates.push(allUsersStorageKey(preferredUserId));
     for (let i = 0; i < localStorage.length; i += 1) {
       const k = localStorage.key(i);
       if (!k || !k.startsWith('fitfocus_data_') || !k.endsWith('_all_users')) continue;
       if (!candidates.includes(k)) candidates.push(k);
     }
+    let best: UserProfile[] | null = null;
     for (const key of candidates) {
       try {
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed as UserProfile[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (!best || parsed.length > best.length) best = parsed as UserProfile[];
+        }
       } catch {}
     }
-    return null;
+    return best;
   }
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
@@ -2342,16 +2340,12 @@ const deleteAccount = useCallback(async () => {
 
 // No server session -> restore local profiles or show profile chooser
 try {
-  const lastId = localStorage.getItem('fitfocus_last_user_id');
-  const all = readStoredAllUsersSnapshot(lastId);
+  const all = readStoredAllUsersSnapshot();
   if (Array.isArray(all) && all.length > 0) {
     setAllUsers(all);
-    if (lastId) {
-      const last = all.find((u) => String(u?.id) === String(lastId)) || null;
-      if (last) {
-        void loginAsUser(last);
-        return;
-      }
+    if (all.length === 1) {
+      void loginAsUser(all[0]);
+      return;
     }
   }
 } catch {}
