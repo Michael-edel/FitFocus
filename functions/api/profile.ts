@@ -47,6 +47,19 @@ function sanitizePatch(input: unknown): Record<string, unknown> {
   return patch;
 }
 
+function sanitizeStateItems(input: unknown): { key: string; value: string }[] {
+  if (!Array.isArray(input)) return [];
+  const items: { key: string; value: string }[] = [];
+  for (const entry of input) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const key = typeof (entry as any).key === 'string' ? (entry as any).key : '';
+    const value = typeof (entry as any).value === 'string' ? (entry as any).value : '';
+    if (!key) continue;
+    items.push({ key, value });
+  }
+  return items;
+}
+
 async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | "pro" | "family"> {
   try {
     const row = await db
@@ -123,19 +136,30 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
+  const stateItems = sanitizeStateItems((body as any).stateItems);
   const serverPlan = await loadActivePlan(db, user.sub);
   const profile = withProtectedFields(user, { ...patch, plan: serverPlan });
 
   const t = nowMs();
-  await db
-    .prepare(
-      "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
-    )
-    .bind(user.sub, JSON.stringify(profile), t)
-    .run();
+  const statements = [
+    db
+      .prepare(
+        "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
+          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
+      )
+      .bind(user.sub, JSON.stringify(profile), t),
+    ...stateItems.map((it) =>
+      db
+        .prepare(
+          "INSERT INTO user_kv (user_id, k, v, updated_at) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
+        )
+        .bind(user.sub, it.key, it.value, t)
+    ),
+  ];
+  await db.batch(statements);
 
-  return json({ profile, updatedFields: Object.keys(patch), mode: 'replace' }, 200);
+  return json({ profile, updatedFields: Object.keys(patch), stateItems: stateItems.length, mode: 'replace' }, 200);
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
@@ -153,6 +177,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
+  const stateItems = sanitizeStateItems((body as any).stateItems);
   const updatedFields = Object.keys(patch);
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
 
@@ -161,13 +186,23 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const profile = withProtectedFields(user, { ...current, ...patch, plan: serverPlan });
 
   const t = nowMs();
-  await db
-    .prepare(
-      "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
-    )
-    .bind(user.sub, JSON.stringify(profile), t)
-    .run();
+  const statements = [
+    db
+      .prepare(
+        "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
+          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
+      )
+      .bind(user.sub, JSON.stringify(profile), t),
+    ...stateItems.map((it) =>
+      db
+        .prepare(
+          "INSERT INTO user_kv (user_id, k, v, updated_at) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
+        )
+        .bind(user.sub, it.key, it.value, t)
+    ),
+  ];
+  await db.batch(statements);
 
-  return json({ profile, updatedFields, mode: 'patch' }, 200);
+  return json({ profile, updatedFields, stateItems: stateItems.length, mode: 'patch' }, 200);
 };
