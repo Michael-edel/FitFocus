@@ -39,7 +39,7 @@ export function evictLargeLocalStorage(): void {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k) continue;
-      if (!k.startsWith(STORAGE_KEYS.councilHistoryPrefix)) continue;
+      if (!k.startsWith(STORAGE_KEYS.dataPrefix) || !k.endsWith(STORAGE_KEYS.councilHistorySuffix)) continue;
       try {
         const hist = JSON.parse(localStorage.getItem(k) || "[]");
         if (Array.isArray(hist) && hist.length > 60) {
