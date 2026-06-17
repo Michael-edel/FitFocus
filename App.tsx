@@ -3519,6 +3519,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               <ShoppingListCard
                 weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
                 title="Список покупок"
+                userId={currentUser?.id}
                 fallbackList={(() => {
                   const items = currentUser?.aiPlan?.weeklyMenu?.shoppingListItems ?? [];
                   if (items.length) {
