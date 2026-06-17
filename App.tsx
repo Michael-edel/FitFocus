@@ -1215,14 +1215,47 @@ const App: React.FC = () => {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
   // Settings
-  const settingsRepo = useMemo(() => new JsonRepo('ff_settings'), []);
   const [settings, setSettings] = useState<AppSettings>(() => {
-    return settingsRepo.load<AppSettings>({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false });
+    try {
+      const raw = localStorage.getItem('ff_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed as AppSettings;
+      }
+    } catch {}
+    return { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false };
   });
 
   useEffect(() => {
-    try { settingsRepo.save(settings); } catch {}
-  }, [settings, settingsRepo]);
+    if (!currentUser?.id) {
+      try { safeSetItem('ff_settings', JSON.stringify(settings)); } catch {}
+      return;
+    }
+    const key = `fitfocus_data_${currentUser.id}_settings`;
+    const legacyKey = 'ff_settings';
+    try {
+      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') setSettings(parsed as AppSettings);
+        safeSetItem(key, raw);
+        safeRemoveItem(legacyKey);
+      } else {
+        safeSetItem(key, JSON.stringify(settings));
+      }
+    } catch {}
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    try {
+      if (currentUser?.id) {
+        safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
+        safeRemoveItem('ff_settings');
+      } else {
+        safeSetItem('ff_settings', JSON.stringify(settings));
+      }
+    } catch {}
+  }, [settings, currentUser?.id]);
 
   // AI Council: load/save chat history per user (localStorage)
   useEffect(() => {
