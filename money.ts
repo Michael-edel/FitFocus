@@ -17,29 +17,36 @@ export function formatKzt(value: number) {
 // TEST / DEV PLAN OVERRIDES
 // =========================
 const DEV_PLAN_KEY = "ff_dev_plan_override"; // "free" | "pro" | "family" | ""
+const DEV_PLAN_SCOPE_PREFIX = "ff_dev_plan_override_scope_";
 
 function isTestModeEnabled() {
   // Enabled in local dev automatically OR explicitly via env
   return Boolean((import.meta as any).env?.DEV) || (import.meta as any).env?.VITE_TEST_MODE === "1";
 }
 
-export function setDevPlanOverride(plan: TariffPlan | "") {
-  if (!isTestModeEnabled()) return;
-  if (!plan) localStorage.removeItem(DEV_PLAN_KEY);
-  else localStorage.setItem(DEV_PLAN_KEY, plan);
+function keyForScope(userId?: string | null) {
+  return userId ? `${DEV_PLAN_SCOPE_PREFIX}${userId}` : DEV_PLAN_KEY;
 }
 
-export function getDevPlanOverride(): TariffPlan | null {
+export function setDevPlanOverride(plan: TariffPlan | "", userId?: string | null) {
+  if (!isTestModeEnabled()) return;
+  const key = keyForScope(userId);
+  if (!plan) localStorage.removeItem(key);
+  else localStorage.setItem(key, plan);
+}
+
+export function getDevPlanOverride(userId?: string | null): TariffPlan | null {
   if (!isTestModeEnabled()) return null;
-  const v = localStorage.getItem(DEV_PLAN_KEY);
+  const key = keyForScope(userId);
+  const v = localStorage.getItem(key) || localStorage.getItem(DEV_PLAN_KEY);
   if (v === "free" || v === "pro" || v === "family") return v as TariffPlan;
   return null;
 }
 
-export function getEffectivePlan(realPlan: TariffPlan): TariffPlan {
+export function getEffectivePlan(realPlan: TariffPlan, userId?: string | null): TariffPlan {
   // Force maximum plan for testing (Family = max)
   if (isTestModeEnabled() && (import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
-  const override = getDevPlanOverride();
+  const override = getDevPlanOverride(userId);
   return override ?? realPlan;
 }
 

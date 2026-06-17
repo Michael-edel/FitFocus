@@ -6,10 +6,12 @@ import { TariffPlan } from './types';
 
 export default function PlansScreen({ 
   currentPlan, 
+  userId,
   onSelect, 
   onClose 
 }: {
   currentPlan?: TariffPlan;
+  userId?: string | null;
   onSelect: (p: TariffPlan) => void;
   onClose: () => void;
 }) {
@@ -22,7 +24,7 @@ export default function PlansScreen({
   const [receiptId, setReceiptId] = useState('');
 
   const devEnabled = (import.meta as any).env?.DEV || (import.meta as any).env?.VITE_TEST_MODE === "1";
-  const currentOverride = devEnabled ? getDevPlanOverride() : null;
+  const currentOverride = devEnabled ? getDevPlanOverride(userId) : null;
 
   const checkoutTitle = useMemo(() => {
     if (checkoutPlan === 'pro') return `PRO — ${formatKzt(PRICES.proMonthly)}/мес`;
@@ -170,7 +172,7 @@ export default function PlansScreen({
               </div>
               <button
                 onClick={() => {
-                  setDevPlanOverride("");
+                  setDevPlanOverride("", userId);
                   window.location.reload();
                 }}
                 className="px-6 py-3 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold transition-all"
@@ -184,7 +186,7 @@ export default function PlansScreen({
                 <button
                   key={p}
                   onClick={() => {
-                    setDevPlanOverride(p);
+                    setDevPlanOverride(p, userId);
                     window.location.reload();
                   }}
                   className={`px-6 py-3 rounded-full border-2 transition-all font-bold ${
