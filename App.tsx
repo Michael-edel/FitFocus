@@ -1213,12 +1213,15 @@ const App: React.FC = () => {
   // AI Council: load/save chat history per user (localStorage)
   useEffect(() => {
     if (!currentUser) return;
-    const key = `fitfocus_council_history_${currentUser.id}`;
+    const key = `fitfocus_data_${currentUser.id}_council_history`;
+    const legacyKey = `fitfocus_council_history_${currentUser.id}`;
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) setCouncilMessages(parsed);
+        safeSetItem(key, raw);
+        safeRemoveItem(legacyKey);
       } else {
         setCouncilMessages([]);
       }
@@ -1238,8 +1241,9 @@ const App: React.FC = () => {
 
   const persistCouncilHistory = useCallback((msgs: CouncilChatMsg[]) => {
     if (!currentUser) return;
-    const key = `fitfocus_council_history_${currentUser.id}`;
+    const key = `fitfocus_data_${currentUser.id}_council_history`;
     try { safeSetItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
+    safeRemoveItem(`fitfocus_council_history_${currentUser.id}`);
   }, [currentUser?.id]);
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
@@ -3846,8 +3850,9 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                     if (!currentUser) return;
                     const ok = confirm('Очистить историю AI Совета?');
                     if (!ok) return;
-                    const key = `fitfocus_council_history_${currentUser.id}`;
+                    const key = `fitfocus_data_${currentUser.id}_council_history`;
                     safeRemoveItem(key);
+                    safeRemoveItem(`fitfocus_council_history_${currentUser.id}`);
                     setCouncilMessages([]);
                     setCouncilResponse(null);
                     setExpandedCouncilThoughtIds({});
