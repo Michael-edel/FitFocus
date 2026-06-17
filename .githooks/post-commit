@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+auto_push="$(git config --bool --get fitfocus.autoPush 2>/dev/null || true)"
+remote="$(git config --get fitfocus.autoPushRemote 2>/dev/null || echo origin)"
+
+if [ "$auto_push" != "true" ]; then
+  exit 0
+fi
+
+if [ "$branch" = "HEAD" ]; then
+  echo "⚠️  Auto-push пропущен: detached HEAD."
+  exit 0
+fi
+
+echo "🚀 Auto-push: $branch -> $remote"
+git push "$remote" "HEAD:$branch"

@@ -26,6 +26,28 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 2.  Настройте `GEMINI_API_KEY` в файле `.env.local`.
 3.  Запустите сервер разработки: `npm run dev`
 
+## Git workflow
+
+1. Установить хуки:
+
+```powershell
+.\scripts\install-githooks.ps1
+```
+
+2. Включить авто-пуш после коммита:
+
+```powershell
+.\scripts\install-githooks.ps1 -EnableAutoPush
+```
+
+3. Разово отправить текущую ветку на `origin`:
+
+```powershell
+.\scripts\push-current-branch.ps1
+```
+
+Авто-пуш по умолчанию выключен. Это сохраняет защиту `main`, но позволяет включать автоматическую отправку только когда она нужна.
+
 ## Локальная разработка (backend + Google OAuth)
 
 Проект использует Cloudflare Pages Functions (Wrangler) и локальную D1 базу.
