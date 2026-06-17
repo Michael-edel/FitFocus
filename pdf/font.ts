@@ -2,23 +2,11 @@ import { jsPDF } from "jspdf";
 
 const INTER_FONT_NAME = "Inter";
 const INTER_FONT_FILES = {
-  normal: "pdf-fonts/NotoSans-Regular.ttf",
-  bold: "pdf-fonts/NotoSans-Bold.ttf",
+  normal: new URL("./fonts/NotoSans-Regular.ttf", import.meta.url).toString(),
+  bold: new URL("./fonts/NotoSans-Bold.ttf", import.meta.url).toString(),
 } as const;
 
 let interFontLoaded = false;
-
-const getPublicBaseUrl = () => {
-  try {
-    // Vite base URL (usually "/")
-    // In some environments (like previews), it can be something else.
-    // Ensure it always ends with "/".
-    const base = (import.meta as any)?.env?.BASE_URL || "/";
-    return base.endsWith("/") ? base : `${base}/`;
-  } catch {
-    return "/";
-  }
-};
 
 const looksLikeHtml = (u8: Uint8Array) => {
   // quick detect: "<!DO", "<htm", "<HTM"
@@ -48,11 +36,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   return btoa(binary);
 };
 
-const loadInterFontBytes = async (fontPath: string): Promise<ArrayBuffer> => {
-  const base = getPublicBaseUrl();
-  // build absolute URL to avoid weird relative resolution in previews
-  const url = new URL(`${base}${fontPath}`, globalThis.location?.origin || "http://localhost").toString();
-
+const loadInterFontBytes = async (url: string): Promise<ArrayBuffer> => {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Не удалось загрузить шрифт (${res.status}). URL: ${url}`);
