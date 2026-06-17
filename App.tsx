@@ -2606,7 +2606,7 @@ const logWeight = useCallback(() => {
       tasks: [], 
       plan: regData.plan
     };
-    setDevPlanOverride(regData.plan);
+    setDevPlanOverride(regData.plan, newUser.id);
     try {
       setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id });
       const aiPlan = await generatePersonalPlan(newUser);
@@ -3230,7 +3230,7 @@ if (authState === 'register') return (
       )}
       {paywall.isPaywallOpen && (
         <React.Suspense fallback={<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60"><div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 px-5 py-4 text-sm font-semibold text-slate-200"><Loader2 className="h-4 w-4 animate-spin text-indigo-400" />Загрузка тарифа...</div></div>}>
-          <PlansScreen currentPlan={currentUser?.plan || 'free'} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
+          <PlansScreen currentPlan={currentUser?.plan || 'free'} userId={currentUser?.id} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
         </React.Suspense>
       )}
       
