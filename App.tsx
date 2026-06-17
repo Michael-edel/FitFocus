@@ -952,8 +952,7 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const inviteCodeRepo = useMemo(() => new JsonRepo('fitfocus_invite_code'), []);
-  const [inviteCode, setInviteCode] = useState<string>(() => inviteCodeRepo.load('') || localStorage.getItem('fitfocus_invite_code') || '');
+  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
@@ -967,6 +966,31 @@ const App: React.FC = () => {
   null | { sub?: string; email?: string }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const key = `fitfocus_data_${currentUser.id}_invite_code`;
+    const legacyKey = 'fitfocus_invite_code';
+    try {
+      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      if (raw !== null) {
+        setInviteCode(raw);
+        safeSetItem(key, raw);
+        safeRemoveItem(legacyKey);
+      }
+    } catch {}
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    try {
+      if (currentUser?.id) {
+        safeSetItem(`fitfocus_data_${currentUser.id}_invite_code`, inviteCode);
+        safeRemoveItem('fitfocus_invite_code');
+      } else {
+        safeSetItem('fitfocus_invite_code', inviteCode);
+      }
+    } catch {}
+  }, [inviteCode, currentUser?.id]);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -2783,14 +2807,13 @@ const logWeight = useCallback(() => {
         
         <div className="space-y-2 text-left">
           <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
-          <input
-            value={inviteCode}
-            onChange={(e) => {
-              const v = e.target.value;
-              setInviteCode(v);
-              try { inviteCodeRepo.save(v); } catch {}
-              setInviteError(null);
-            }}
+            <input
+              value={inviteCode}
+              onChange={(e) => {
+                const v = e.target.value;
+                setInviteCode(v);
+                setInviteError(null);
+              }}
             placeholder={requireInvite ? "Обязательно для входа" : "Опционально"}
             className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
           />
