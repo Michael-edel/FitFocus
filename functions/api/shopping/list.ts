@@ -40,19 +40,28 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
       const rows = await db
         .prepare(
-          `SELECT ingredient_name as name, SUM(grams) as grams
-           FROM weekly_menu_items
-           WHERE week_start = ? AND family_id = ?
-           GROUP BY ingredient_name
-           ORDER BY ingredient_name`
+          `SELECT
+             w.ingredient_name as name,
+             SUM(w.grams) as grams,
+             COALESCE(MAX(sc.checked), 0) as checked
+           FROM weekly_menu_items w
+           LEFT JOIN shopping_checked sc
+             ON sc.user_id = ?
+            AND sc.week_start = ?
+            AND sc.family_id = ?
+            AND sc.ingredient_name = w.ingredient_name
+           WHERE w.week_start = ? AND w.family_id = ?
+           GROUP BY w.ingredient_name
+           ORDER BY w.ingredient_name`
         )
-        .bind(week, famId)
+        .bind(user.sub, week, famId, week, famId)
         .all<any>();
 
       const items = (rows?.results || [])
         .map((r: any) => ({
           name: String(r.name || "").trim(),
           grams: Math.max(0, Math.round(Number(r.grams || 0))),
+          checked: Boolean(r.checked),
         }))
         .filter((it: any) => it.name && it.grams > 0);
 
@@ -63,19 +72,28 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     // Personal scope
     const rows = await db
       .prepare(
-        `SELECT ingredient_name as name, SUM(grams) as grams
-         FROM weekly_menu_items
-         WHERE user_id = ? AND week_start = ? AND family_id IS NULL
-         GROUP BY ingredient_name
-         ORDER BY ingredient_name`
+        `SELECT
+           w.ingredient_name as name,
+           SUM(w.grams) as grams,
+           COALESCE(MAX(sc.checked), 0) as checked
+         FROM weekly_menu_items w
+         LEFT JOIN shopping_checked sc
+           ON sc.user_id = ?
+          AND sc.week_start = ?
+          AND sc.family_id IS NULL
+          AND sc.ingredient_name = w.ingredient_name
+         WHERE w.user_id = ? AND w.week_start = ? AND w.family_id IS NULL
+         GROUP BY w.ingredient_name
+         ORDER BY w.ingredient_name`
       )
-      .bind(user.sub, week)
+      .bind(user.sub, week, user.sub, week)
       .all<any>();
 
     const items = (rows?.results || [])
       .map((r: any) => ({
         name: String(r.name || "").trim(),
         grams: Math.max(0, Math.round(Number(r.grams || 0))),
+        checked: Boolean(r.checked),
       }))
       .filter((it: any) => it.name && it.grams > 0);
 
