@@ -1,6 +1,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { defineConfig, loadEnv } from 'vite'
+import crypto from 'node:crypto'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -22,9 +23,9 @@ export default defineConfig(({ mode }) => {
     ? 'http://wrangler:8788'
     : 'http://localhost:8788'
 
-  console.log('Vite mode:', mode)
-  console.log('Docker detected:', isDocker)
-  console.log('Backend target:', backendTarget)
+  console.log('🔧 Vite mode:', mode)
+  console.log('🐳 Docker detected:', isDocker)
+  console.log('➡ Backend target:', backendTarget)
 
   return {
     envDir: '.',
@@ -78,26 +79,6 @@ export default defineConfig(({ mode }) => {
         }
       })
     ],
-
-    build: {
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (!id.includes('node_modules')) return undefined
-
-            const normalizedId = id.replace(/\\/g, '/')
-            const isReactPackage = /\/node_modules\/(react|react-dom)\//.test(normalizedId)
-
-            if (isReactPackage) return 'vendor-react'
-            if (normalizedId.includes('/node_modules/recharts/')) return 'vendor-charts'
-            if (normalizedId.includes('/node_modules/jspdf')) return 'vendor-pdf'
-            if (normalizedId.includes('/node_modules/heic2any/')) return 'vendor-heic'
-            if (normalizedId.includes('/node_modules/lucide-react/')) return 'vendor-icons'
-            return 'vendor'
-          }
-        }
-      }
-    },
 
     resolve: {
       alias: {
