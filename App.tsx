@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import CameraCapture from './ui/components/CameraCapture';
 import clsx from 'clsx';
 import { 
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer
@@ -67,11 +66,8 @@ import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from 
 import { WeightTrendChart, HabitStreaksCard } from './charts';
 import FoodInsightCard from './FoodInsightCard';
 import ShoppingListCard from './ShoppingListCard';
-import PlansScreen from './PlansScreen';
 import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
-import SettingsScreen from './SettingsScreen';
-import AdminScreen from './AdminScreen';
 import { JsonRepo } from './storage/repos';
 import {
   applyBackupPayload,
@@ -82,8 +78,13 @@ import {
   supportsFileSystemAccessApi,
   writeBackupToHandle,
 } from './backup';
-import RecipesScreen from './RecipesScreen';
-import WorkoutsScreen from './WorkoutsScreen';
+
+const PlansScreen = React.lazy(() => import('./PlansScreen'));
+const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
+const AdminScreen = React.lazy(() => import('./AdminScreen'));
+const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
+const WorkoutsScreen = React.lazy(() => import('./WorkoutsScreen'));
+const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -3017,7 +3018,9 @@ if (authState === 'register') return (
         </div>
       )}
       {paywall.isPaywallOpen && (
-        <PlansScreen currentPlan={currentUser?.plan || 'free'} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
+        <React.Suspense fallback={<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60"><div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 px-5 py-4 text-sm font-semibold text-slate-200"><Loader2 className="h-4 w-4 animate-spin text-indigo-400" />Загрузка тарифа...</div></div>}>
+          <PlansScreen currentPlan={currentUser?.plan || 'free'} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
+        </React.Suspense>
       )}
       
       {editFoodModal && (
@@ -3440,10 +3443,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
         <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
       </label>
     </div></div></header>
-      <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
+      <React.Suspense fallback={null}>
+        <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
+      </React.Suspense>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={22} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-14 md:pl-16 pr-5 md:pr-6 py-5 md:py-6 bg-slate-900 border border-slate-800 rounded-[2rem] md:rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold text-slate-400">Вы еще ничего не ели сегодня</p><p className="text-sm font-semibold text-slate-500 max-w-md">Сделайте первый снимок еды или загрузите фото — запись появится здесь, а КБЖУ обновится автоматически.</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
-        {activeTab === 'recipes' && (<RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />)}
-        {activeTab === 'workouts' && <WorkoutsScreen />}
+        {activeTab === 'recipes' && (
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
+            <RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />
+          </React.Suspense>
+        )}
+        {activeTab === 'workouts' && (
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка тренировок...</div>}>
+            <WorkoutsScreen />
+          </React.Suspense>
+        )}
         {activeTab === 'family' && (
           <div className="max-w-4xl mx-auto space-y-8 py-10 animate-in fade-in duration-700">
             <header className="flex items-start justify-between gap-4">
@@ -3953,28 +3966,32 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
         {activeTab === 'course' && (<div className="space-y-10 animate-in fade-in duration-700"><header className="flex items-center justify-between text-left"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Обучение</h1><p className="text-slate-400 font-medium">Ваш навигатор в мире нутрициологии</p></div><div className="flex items-center gap-6"><div className="text-right"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Пройдено</p><p className="text-2xl font-black text-slate-100 tabular-nums">{currentUser?.courseProgress?.completedLessonIds.length || 0} <span className="text-sm text-slate-600">/ {COURSE_LIBRARY.length}</span></p></div></div></header><div className="space-y-12">{[1, 2, 3, 4].map(weekNum => (<div key={weekNum} className="space-y-6"><div className="flex items-center gap-6"><h2 className="text-2xl font-black text-slate-200">Неделя {weekNum}</h2><div className="h-1 bg-slate-800 flex-1 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${(COURSE_LIBRARY.filter(l => l.week === weekNum && currentUser?.courseProgress?.completedLessonIds.includes(l.id)).length / COURSE_LIBRARY.filter(l => l.week === weekNum).length) * 100}%` }} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">{COURSE_LIBRARY.filter(l => l.week === weekNum).map(lesson => { const done = currentUser?.courseProgress?.completedLessonIds.includes(lesson.id); return (<button key={lesson.id} onClick={() => { setCurrentLesson(lesson); setIsLessonViewOpen(true); }} className={`p-8 rounded-[2.5rem] text-left border transition-all relative group ${done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800 shadow-xl hover:border-indigo-500/30'}`}>{done && <CheckCircle size={24} className="absolute top-8 right-8 text-emerald-500" />}<span className={`text-[10px] font-black uppercase tracking-widest block mb-4 ${done ? 'text-emerald-500' : 'text-slate-600'}`}>Урок {lesson.id.split('_')[0].replace('l','')}</span><h4 className={`text-xl font-black leading-tight mb-2 ${done ? 'text-emerald-100' : 'text-slate-100'}`}>{lesson.title}</h4><p className={`text-xs font-bold tabular-nums ${done ? 'text-emerald-500/60' : 'text-slate-500'}`}>{Math.ceil(lesson.readTimeSec/60)} минут чтения</p></button>); })}</div></div>))}</div></div>)}
         
         {activeTab === 'admin' && isAdmin && (
-          <AdminScreen />
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
+            <AdminScreen />
+          </React.Suspense>
         )}
 
 {activeTab === 'settings' && (
-          <SettingsScreen
-            settings={settings}
-            onChange={setSettings}
-            serverSession={!!googleMe?.sub}
-            onServerLogout={logout}
-            onDeleteAccount={deleteAccount}
-            user={currentUser}
-            onChangeUser={(u) => u && persistUser(u)}
-            onPatchUser={(patch) => void patchProfileInCloud(patch)}
-            onExportBackup={onExportBackup}
-            onImportBackup={onImportBackup}
-            onConnectAutosave={onConnectAutosave}
-            autosaveEnabled={autosaveEnabled}
-            syncState={profileSyncState}
-            lastProfileSyncAt={lastProfileSyncAt}
-            onSyncNow={syncAllLocalDataNow}
-            onReloadFromCloud={reloadUserFromCloud}
-          />
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
+            <SettingsScreen
+              settings={settings}
+              onChange={setSettings}
+              serverSession={!!googleMe?.sub}
+              onServerLogout={logout}
+              onDeleteAccount={deleteAccount}
+              user={currentUser}
+              onChangeUser={(u) => u && persistUser(u)}
+              onPatchUser={(patch) => void patchProfileInCloud(patch)}
+              onExportBackup={onExportBackup}
+              onImportBackup={onImportBackup}
+              onConnectAutosave={onConnectAutosave}
+              autosaveEnabled={autosaveEnabled}
+              syncState={profileSyncState}
+              lastProfileSyncAt={lastProfileSyncAt}
+              onSyncNow={syncAllLocalDataNow}
+              onReloadFromCloud={reloadUserFromCloud}
+            />
+          </React.Suspense>
         )}
       </main>
       {/* Family menu pre-questions */}
