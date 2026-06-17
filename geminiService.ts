@@ -183,20 +183,13 @@ export type AiLastStatus = {
 const recordAiStatus = (s: AiLastStatus) => {
   try {
     localStorage.setItem(LS_STATUS_KEY(), JSON.stringify(s));
-    if (aiStorageScope) localStorage.removeItem("ff_ai_last_status_v1");
   } catch {}
 };
 
 export const readAiStatus = (): AiLastStatus | null => {
   try {
-    const raw = localStorage.getItem(LS_STATUS_KEY()) || localStorage.getItem("ff_ai_last_status_v1");
+    const raw = localStorage.getItem(LS_STATUS_KEY());
     if (!raw) return null;
-    if (raw) {
-      if (aiStorageScope) {
-        localStorage.setItem(LS_STATUS_KEY(), raw);
-        localStorage.removeItem("ff_ai_last_status_v1");
-      }
-    }
     return JSON.parse(raw) as AiLastStatus;
   } catch { return null; }
 };
@@ -205,11 +198,7 @@ const nowMs = () => Date.now();
 
 const getCooldownUntil = (): number => {
   try {
-    const v = localStorage.getItem(LS_COOLDOWN_KEY()) || localStorage.getItem("ff_gemini_cooldown_until");
-    if (v && aiStorageScope) {
-      localStorage.setItem(LS_COOLDOWN_KEY(), v);
-      localStorage.removeItem("ff_gemini_cooldown_until");
-    }
+    const v = localStorage.getItem(LS_COOLDOWN_KEY());
     return v ? Number(v) || 0 : 0;
   } catch { return 0; }
 };
@@ -217,17 +206,12 @@ const getCooldownUntil = (): number => {
 const setFeatureLastCall = (feature: string) => {
   try {
     localStorage.setItem(LS_FEATURE_LASTCALL_PREFIX() + feature, String(nowMs()));
-    if (aiStorageScope) localStorage.removeItem("ff_ai_feature_lastcall_v1:" + feature);
   } catch {}
 };
 
 const getFeatureLastCall = (feature: string): number => {
   try {
-    const v = localStorage.getItem(LS_FEATURE_LASTCALL_PREFIX() + feature) || localStorage.getItem("ff_ai_feature_lastcall_v1:" + feature);
-    if (v && aiStorageScope) {
-      localStorage.setItem(LS_FEATURE_LASTCALL_PREFIX() + feature, v);
-      localStorage.removeItem("ff_ai_feature_lastcall_v1:" + feature);
-    }
+    const v = localStorage.getItem(LS_FEATURE_LASTCALL_PREFIX() + feature);
     return v ? Number(v) || 0 : 0;
   } catch { return 0; }
 };
@@ -258,7 +242,7 @@ export const clearAiCache = () => {
 export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) => {
   try {
     const now = nowMs();
-    const cdRaw = localStorage.getItem(LS_COOLDOWN_KEY()) || localStorage.getItem("ff_gemini_cooldown_until");
+    const cdRaw = localStorage.getItem(LS_COOLDOWN_KEY());
     const cooldownUntil = cdRaw ? parseInt(cdRaw, 10) : 0;
     const cooling = cooldownUntil > now;
     if (cooling && !opts?.force) {
@@ -272,16 +256,14 @@ export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) =>
       return false;
     }
     localStorage.removeItem(LS_COOLDOWN_KEY());
-    localStorage.removeItem("ff_gemini_cooldown_until");
     if (feature) {
       localStorage.removeItem(LS_FEATURE_LASTCALL_PREFIX() + feature);
-      localStorage.removeItem("ff_ai_feature_lastcall_v1:" + feature);
     } else {
       const keys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (!k) continue;
-        if (k.startsWith(LS_FEATURE_LASTCALL_PREFIX()) || k.startsWith("ff_ai_feature_lastcall_v1:")) keys.push(k);
+        if (k.startsWith(LS_FEATURE_LASTCALL_PREFIX())) keys.push(k);
       }
       keys.forEach(k => localStorage.removeItem(k));
     }
@@ -295,10 +277,7 @@ export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) =>
 export const setLastAiAction = (action: { feature: string; type: string; userId: string } | null) => {
   try {
     if (!action) localStorage.removeItem(LS_LAST_ACTION_KEY());
-    else {
-      localStorage.setItem(LS_LAST_ACTION_KEY(), JSON.stringify(action));
-      if (aiStorageScope) localStorage.removeItem("ff_ai_last_action_v1");
-    }
+    else localStorage.setItem(LS_LAST_ACTION_KEY(), JSON.stringify(action));
   } catch {}
 };
 
@@ -307,11 +286,7 @@ export const setLastAiAction = (action: { feature: string; type: string; userId:
  */
 export const getLastAiAction = (): { feature: string; type: string; userId: string } | null => {
   try {
-    const raw = localStorage.getItem(LS_LAST_ACTION_KEY()) || localStorage.getItem("ff_ai_last_action_v1");
-    if (raw && aiStorageScope) {
-      localStorage.setItem(LS_LAST_ACTION_KEY(), raw);
-      localStorage.removeItem("ff_ai_last_action_v1");
-    }
+    const raw = localStorage.getItem(LS_LAST_ACTION_KEY());
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 };
