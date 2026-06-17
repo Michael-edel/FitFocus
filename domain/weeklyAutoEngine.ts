@@ -20,7 +20,7 @@ function getWeekKey(date = new Date()): string {
 }
 
 function storageKey(userId: string) {
-  return `ff_weekly_reports_${userId}`;
+  return `fitfocus_data_${userId}_weekly_reports`;
 }
 
 const lastAttemptKey = (userId: string) => `ff_last_weekly_ai_attempt_${userId}`;

@@ -23,10 +23,6 @@ function storageKey(userId: string) {
   return `fitfocus_data_${userId}_weekly_reports`;
 }
 
-function legacyStorageKey(userId: string) {
-  return `ff_weekly_reports_${userId}`;
-}
-
 const lastAttemptKey = (userId: string) => `ff_last_weekly_ai_attempt_${userId}`;
 const inFlightKey = (userId: string) => `ff_weekly_ai_inflight_${userId}`;
 
@@ -50,12 +46,7 @@ function clearInFlight(userId: string) {
 export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
   try {
     const key = storageKey(userId);
-    const legacy = legacyStorageKey(userId);
-    const raw = localStorage.getItem(key) || localStorage.getItem(legacy);
-    if (raw) {
-      localStorage.setItem(key, raw);
-      localStorage.removeItem(legacy);
-    }
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -64,7 +55,6 @@ export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
 
 function saveWeeklyReports(userId: string, reports: WeeklyStoredReport[]) {
   localStorage.setItem(storageKey(userId), JSON.stringify(reports.slice(-4)));
-  localStorage.removeItem(legacyStorageKey(userId));
 }
 
 /**
