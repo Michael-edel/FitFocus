@@ -1,7 +1,6 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { defineConfig, loadEnv } from 'vite'
-import crypto from 'node:crypto'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -23,9 +22,9 @@ export default defineConfig(({ mode }) => {
     ? 'http://wrangler:8788'
     : 'http://localhost:8788'
 
-  console.log('🔧 Vite mode:', mode)
-  console.log('🐳 Docker detected:', isDocker)
-  console.log('➡ Backend target:', backendTarget)
+  console.log('Vite mode:', mode)
+  console.log('Docker detected:', isDocker)
+  console.log('Backend target:', backendTarget)
 
   return {
     envDir: '.',
@@ -79,6 +78,22 @@ export default defineConfig(({ mode }) => {
         }
       })
     ],
+
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (id.includes('react') || id.includes('react-dom')) return 'vendor-react'
+            if (id.includes('recharts')) return 'vendor-charts'
+            if (id.includes('jspdf')) return 'vendor-pdf'
+            if (id.includes('heic2any')) return 'vendor-heic'
+            if (id.includes('lucide-react')) return 'vendor-icons'
+            return 'vendor'
+          }
+        }
+      }
+    },
 
     resolve: {
       alias: {
