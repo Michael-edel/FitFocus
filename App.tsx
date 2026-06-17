@@ -1047,7 +1047,15 @@ const App: React.FC = () => {
     const saved = currentUser.aiPlan?.familyWeeklyMenu?.prefs;
     // 2) or from localStorage
     let ls: any = null;
-    try { ls = JSON.parse(localStorage.getItem(`fitfocus_family_menu_prefs_${currentUser.id}`) || 'null'); } catch {}
+    const newPrefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
+    const legacyPrefsKey = `fitfocus_family_menu_prefs_${currentUser.id}`;
+    try {
+      ls = JSON.parse(localStorage.getItem(newPrefsKey) || localStorage.getItem(legacyPrefsKey) || 'null');
+      if (ls) {
+        safeSetItem(newPrefsKey, JSON.stringify(ls));
+        safeRemoveItem(legacyPrefsKey);
+      }
+    } catch {}
     const fromStore = ls && typeof ls === 'object' ? ls : null;
     const baseInclude = (saved?.includeIds?.length ? saved.includeIds : (fromStore?.includeIds?.length ? fromStore.includeIds : []));
     const includeIds = baseInclude.length ? baseInclude : allUsers.map(u => u.id);
@@ -1063,12 +1071,13 @@ const App: React.FC = () => {
   const persistFamilyMenuPrefs = useCallback((prefs: { includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }) => {
     if (!currentUser) return;
     try {
-      safeSetItem(`fitfocus_family_menu_prefs_${currentUser.id}`, JSON.stringify({
+      safeSetItem(`fitfocus_data_${currentUser.id}_family_menu_prefs`, JSON.stringify({
         includeIds: prefs.includeIds,
         cookingMode: prefs.cookingMode,
         budgetPerWeek: prefs.budgetPerWeek ? Number(prefs.budgetPerWeek) : undefined,
         currency: prefs.currency
       }));
+      safeRemoveItem(`fitfocus_family_menu_prefs_${currentUser.id}`);
     } catch {}
   }, [currentUser]);
 
@@ -1368,7 +1377,13 @@ const openEditFood = (item: FoodEntry) => {
       return;
     }
     try {
-      const raw = localStorage.getItem(`fitfocus_plan_task_done_${currentUser.id}`);
+      const newKey = `fitfocus_data_${currentUser.id}_plan_task_done`;
+      const oldKey = `fitfocus_plan_task_done_${currentUser.id}`;
+      const raw = localStorage.getItem(newKey) || localStorage.getItem(oldKey);
+      if (raw) {
+        safeSetItem(newKey, raw);
+        safeRemoveItem(oldKey);
+      }
       setPlanTaskDone(raw ? JSON.parse(raw) : {});
     } catch {
       setPlanTaskDone({});
@@ -1377,7 +1392,8 @@ const openEditFood = (item: FoodEntry) => {
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    safeSetItem(`fitfocus_plan_task_done_${currentUser.id}`, JSON.stringify(planTaskDone));
+    safeSetItem(`fitfocus_data_${currentUser.id}_plan_task_done`, JSON.stringify(planTaskDone));
+    safeRemoveItem(`fitfocus_plan_task_done_${currentUser.id}`);
   }, [currentUser?.id, planTaskDone]);
 
   useEffect(() => {
