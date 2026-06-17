@@ -1467,12 +1467,29 @@ const openEditFood = (item: FoodEntry) => {
         safeSetItem('fitfocus_all_users', JSON.stringify(next));
         return next;
       });
+
+      if (cloudFamily?.id && Array.isArray(familyWeeklyMenu.shoppingListItems) && familyWeeklyMenu.shoppingListItems.length) {
+        const week = weekStartISO();
+        const res = await fetch('/api/weekly_menu/items', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            week_start: week,
+            family_id: cloudFamily.id,
+            items: familyWeeklyMenu.shoppingListItems,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось синхронизировать семейный список покупок');
+        await loadFamilyShopping();
+      }
     } catch (e: any) {
       setFamilyMenuError(e?.message || 'Не удалось сгенерировать семейное меню на неделю.');
     } finally {
       setFamilyMenuLoading(false);
     }
-  }, [currentUser, allUsers, familyMenuPrefs, persistFamilyMenuPrefs]);
+  }, [currentUser, allUsers, familyMenuPrefs, persistFamilyMenuPrefs, cloudFamily?.id, weekStartISO, loadFamilyShopping]);
   const [planError, setPlanError] = useState<string | null>(null);
 
   // Cinematic AI activation steps
@@ -3461,13 +3478,20 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   ) : (
                     <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
                   )}
-                  {currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length && (
+                  {(currentUser?.aiPlan?.familyWeeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length) && (
                     <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                        {currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
-                          <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
-                        ))}
+                        {(currentUser.aiPlan.familyWeeklyMenu.shoppingListItems || []).length
+                          ? currentUser.aiPlan.familyWeeklyMenu.shoppingListItems!.slice(0, 40).map((it, i) => (
+                              <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
+                                <span className="truncate">• {it.name}</span>
+                                <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
+                              </div>
+                            ))
+                          : currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
+                              <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
+                            ))}
                       </div>
                     </div>
                   )}

@@ -563,6 +563,13 @@ const dietaryBlock = (() => {
     .map((s: any) => String(s).trim())
     .filter(Boolean)
     .slice(0, 60);
+  const shoppingListItems = (Array.isArray(obj.shoppingListItems) ? obj.shoppingListItems : [])
+    .map((it: any) => ({
+      name: String(it?.name || "").trim(),
+      grams: Math.max(0, Math.round(Number(it?.grams || 0))),
+    }))
+    .filter((it: any) => it.name && it.grams > 0)
+    .slice(0, 80);
 
   // Валидация: пользователю важно видеть "сколько кому" — требуем вес/ккал в каждой порции.
   const hasWeightAndKcal = (s: string) => {
@@ -614,14 +621,21 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
         .map((s: any) => String(s).trim())
         .filter(Boolean)
         .slice(0, 60);
-      return { prefs, days: rnormDays, shoppingList: rshoppingList };
+      const rshoppingListItems = (Array.isArray(robj.shoppingListItems) ? robj.shoppingListItems : shoppingListItems)
+        .map((it: any) => ({
+          name: String(it?.name || "").trim(),
+          grams: Math.max(0, Math.round(Number(it?.grams || 0))),
+        }))
+        .filter((it: any) => it.name && it.grams > 0)
+        .slice(0, 80);
+      return { prefs, days: rnormDays, shoppingList: rshoppingList, shoppingListItems: rshoppingListItems };
     } catch {
       // если ремонт не удался — возвращаем как есть (без падений)
-      return { prefs, days: normDays, shoppingList };
+      return { prefs, days: normDays, shoppingList, shoppingListItems };
     }
   }
 
-  return { prefs, days: normDays, shoppingList };
+  return { prefs, days: normDays, shoppingList, shoppingListItems };
 }
 
 /**

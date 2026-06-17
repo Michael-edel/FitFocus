@@ -137,6 +137,8 @@ export type FamilyWeeklyMenu = {
   prefs: FamilyMenuPrefs;
   days: FamilyWeeklyMenuDay[];
   shoppingList: string[];
+  shoppingListItems?: ShoppingListItem[];
+  weekStart?: string;
 };
 
 export type CourseLessonTag = "protein" | "calories" | "habits" | "plateau" | "evening" | "mindset" | "sleep" | "water" | "steps";
@@ -408,4 +410,3 @@ export interface CouncilResponse {
 
 // PRO photo analysis meta
 export type AnalysisMeta = { confidence: number; compressed: boolean; enhancedRun: boolean; reasons?: string[] };
-
