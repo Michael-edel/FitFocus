@@ -49,7 +49,7 @@ import {
   History
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu } from './geminiService';
+import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
@@ -966,6 +966,10 @@ const App: React.FC = () => {
   null | { sub?: string; email?: string }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+
+  useEffect(() => {
+    setAiStorageScope(currentUser?.id ?? null);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
