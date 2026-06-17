@@ -1179,21 +1179,35 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const kRead = `ff_adapt_read_${currentUser.id}`;
-    const kExp = `ff_adapt_expanded_${currentUser.id}`;
+    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
+    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
+    const legacyRead = `ff_adapt_read_${currentUser.id}`;
+    const legacyExp = `ff_adapt_expanded_${currentUser.id}`;
     try {
-      setAdaptRead(localStorage.getItem(kRead) === '1');
-      setAdaptExpanded(localStorage.getItem(kExp) === '1');
+      const readValue = localStorage.getItem(kRead) ?? localStorage.getItem(legacyRead);
+      const expValue = localStorage.getItem(kExp) ?? localStorage.getItem(legacyExp);
+      if (readValue !== null) {
+        setAdaptRead(readValue === '1');
+        safeSetItem(kRead, readValue);
+        safeRemoveItem(legacyRead);
+      }
+      if (expValue !== null) {
+        setAdaptExpanded(expValue === '1');
+        safeSetItem(kExp, expValue);
+        safeRemoveItem(legacyExp);
+      }
     } catch {}
   }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) return;
-    const kRead = `ff_adapt_read_${currentUser.id}`;
-    const kExp = `ff_adapt_expanded_${currentUser.id}`;
+    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
+    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
     try {
       safeSetItem(kRead, adaptRead ? '1' : '0');
       safeSetItem(kExp, adaptExpanded ? '1' : '0');
+      safeRemoveItem(`ff_adapt_read_${currentUser.id}`);
+      safeRemoveItem(`ff_adapt_expanded_${currentUser.id}`);
     } catch {}
   }, [adaptRead, adaptExpanded, currentUser?.id]);
 
