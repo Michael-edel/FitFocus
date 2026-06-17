@@ -151,6 +151,7 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
     .first<any>();
 
   if (fam?.id) {
+    await db.prepare("UPDATE families SET is_active = 0 WHERE id = ?").bind(fam.id).run();
     await db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id).run();
     await db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id).run();
     await db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id).run();
