@@ -2378,8 +2378,8 @@ const logWeight = useCallback(() => {
     } catch {}
 
 
-    // Closed beta: redeem invite for local profiles as well (bind to local user id)
-    if (requireInvite) {
+    // Closed beta: redeem invite only for authenticated Google sessions.
+    if (requireInvite && googleMe?.sub) {
       const code = String(inviteCode || '').trim();
       if (!code) {
         setPlanError('Требуется код приглашения.');
@@ -2390,7 +2390,7 @@ const logWeight = useCallback(() => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, userId: googleMe?.sub || newUser.id }),
+          body: JSON.stringify({ code }),
         });
         const rj = await rr.json().catch(() => null);
         if (!rr.ok || rj?.ok !== true) {

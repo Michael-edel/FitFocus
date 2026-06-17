@@ -1,21 +1,20 @@
 // /api/invite/redeem
-// Public endpoint to redeem (consume) beta invite code for a given local user id.
-// Used for local (device) profiles so closed-beta can be enforced even without Google auth.
+// Authenticated endpoint to redeem (consume) beta invite code for the current user.
 
-import { json } from "../_lib/auth";
+import { json, requireUser } from "../_lib/auth";
 import { requireDB, nowMs, toApiError } from "../_lib/db";
 
 type Env = { DB: D1Database };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
+    const user = await requireUser(request, env as any);
     const db = requireDB(env as any);
 
     const body: any = await request.json().catch(() => null);
     const code = String(body?.code || "").trim();
-    const userId = String(body?.userId || "").trim();
 
-    if (!code || !userId) return json({ ok: false, error: "BAD_REQUEST" }, 400);
+    if (!code) return json({ ok: false, error: "BAD_REQUEST" }, 400);
 
     const nowSec = Math.floor(nowMs() / 1000);
 
@@ -27,7 +26,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // 1) Try insert redemption first (idempotent).
     const ins = await db
       .prepare("INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)")
-      .bind(code, userId, nowSec)
+      .bind(code, user.sub, nowSec)
       .run();
 
     // Already redeemed for this user -> ok (do not increment uses again)
@@ -48,7 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     if (!upd?.changes) {
       // rollback redemption insert (so user can try another code)
-      await db.prepare("DELETE FROM invite_redemptions WHERE code = ? AND user_id = ?").bind(code, userId).run();
+      await db.prepare("DELETE FROM invite_redemptions WHERE code = ? AND user_id = ?").bind(code, user.sub).run();
       return json({ ok: false, error: "INVITE_INVALID" }, 403);
     }
 

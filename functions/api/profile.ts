@@ -28,12 +28,9 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'riskAcknowledgedGain',
   'courseProgress',
   'lessonQuizAnswers',
-  'planTier',
-  'proUnlockedAt',
   'usage',
   'dailyHabits',
   'tasks',
-  'plan',
   'aiPlan',
   'weightHistory',
   'dietary',
@@ -48,6 +45,20 @@ function sanitizePatch(input: unknown): Record<string, unknown> {
     patch[key] = value;
   }
   return patch;
+}
+
+async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | "pro" | "family"> {
+  try {
+    const row = await db
+      .prepare(
+        "SELECT plan FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing') ORDER BY updated_at DESC LIMIT 1"
+      )
+      .bind(userId)
+      .first<{ plan?: string }>();
+    const plan = String(row?.plan || "").toLowerCase();
+    if (plan === "pro" || plan === "family") return plan;
+  } catch {}
+  return "free";
 }
 
 async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
@@ -66,6 +77,8 @@ async function loadProfile(db: D1Database, userId: string): Promise<Record<strin
 }
 
 function withProtectedFields(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>) {
+  const plan = String(profile.plan || "free");
+  const normalizedPlan = plan === "pro" || plan === "family" ? plan : "free";
   return {
     ...profile,
     id: user.sub,
@@ -73,6 +86,8 @@ function withProtectedFields(user: { sub: string; email?: string; name?: string;
     email: user.email,
     name: typeof profile.name === 'string' && profile.name.trim().length ? profile.name : (user.name ?? 'Пользователь'),
     picture: profile.picture ?? user.picture,
+    plan: normalizedPlan,
+    planTier: normalizedPlan === "free" ? "free" : "pro",
   };
 }
 
@@ -89,8 +104,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   const profile = await loadProfile(db, user.sub);
   if (!profile) return json({ profile: null }, 200);
-
-  return json({ profile: withProtectedFields(user, profile) }, 200);
+  const serverPlan = await loadActivePlan(db, user.sub);
+  return json({ profile: withProtectedFields(user, { ...profile, plan: serverPlan }) }, 200);
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
@@ -107,7 +122,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
-  const profile = withProtectedFields(user, body);
+  const patch = sanitizePatch(body);
+  const serverPlan = await loadActivePlan(db, user.sub);
+  const profile = withProtectedFields(user, { ...patch, plan: serverPlan });
 
   const t = nowMs();
   await db
@@ -118,7 +135,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub, JSON.stringify(profile), t)
     .run();
 
-  return json({ profile, updatedFields: Object.keys(body), mode: 'replace' }, 200);
+  return json({ profile, updatedFields: Object.keys(patch), mode: 'replace' }, 200);
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
@@ -140,7 +157,8 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
 
   const current = (await loadProfile(db, user.sub)) ?? {};
-  const profile = withProtectedFields(user, { ...current, ...patch });
+  const serverPlan = await loadActivePlan(db, user.sub);
+  const profile = withProtectedFields(user, { ...current, ...patch, plan: serverPlan });
 
   const t = nowMs();
   await db
