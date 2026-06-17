@@ -1,8 +1,10 @@
 import { jsPDF } from "jspdf";
 
 const INTER_FONT_NAME = "Inter";
-const INTER_FONT_FILE = "Inter-VariableFont.ttf";
-const INTER_FONT_STYLES = ["normal", "bold"] as const;
+const INTER_FONT_FILES = {
+  normal: "pdf-fonts/NotoSans-Regular.ttf",
+  bold: "pdf-fonts/NotoSans-Bold.ttf",
+} as const;
 
 let interFontLoaded = false;
 
@@ -46,14 +48,14 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
   return btoa(binary);
 };
 
-const loadInterFontBytes = async (): Promise<ArrayBuffer> => {
+const loadInterFontBytes = async (fontPath: string): Promise<ArrayBuffer> => {
   const base = getPublicBaseUrl();
   // build absolute URL to avoid weird relative resolution in previews
-  const url = new URL(`${base}${INTER_FONT_FILE}`, globalThis.location?.origin || "http://localhost").toString();
+  const url = new URL(`${base}${fontPath}`, globalThis.location?.origin || "http://localhost").toString();
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
-    throw new Error(`Не удалось загрузить шрифт Inter (${res.status}). URL: ${url}`);
+    throw new Error(`Не удалось загрузить шрифт (${res.status}). URL: ${url}`);
   }
 
   const ct = (res.headers.get("content-type") || "").toLowerCase();
@@ -64,7 +66,7 @@ const loadInterFontBytes = async (): Promise<ArrayBuffer> => {
   if (looksLikeHtml(u8)) {
     const head = new TextDecoder().decode(u8.slice(0, 200));
     throw new Error(
-      `Inter.ttf вернулся как HTML (SPA fallback/redirect). content-type=${ct || "(empty)"} url=${url}. head=${head}`
+      `Font file вернулся как HTML (SPA fallback/redirect). content-type=${ct || "(empty)"} url=${url}. head=${head}`
     );
   }
 
@@ -77,14 +79,14 @@ const loadInterFontBytes = async (): Promise<ArrayBuffer> => {
 
   if (!ctLooksOk && !looksLikeFont(u8)) {
     throw new Error(
-      `Inter.ttf не похож на шрифт. content-type=${ct || "(empty)"} url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
+      `Font file не похож на шрифт. content-type=${ct || "(empty)"} url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
     );
   }
 
   if (!looksLikeFont(u8)) {
     // even if ct is "font/ttf", verify content – some CDNs send html with wrong ct
     throw new Error(
-      `Inter.ttf загружен, но сигнатура файла не TTF/OTF/TTC. url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
+      `Font file загружен, но сигнатура файла не TTF/OTF/TTC. url=${url}. bytes=${Array.from(u8.slice(0, 4))}`
     );
   }
 
@@ -94,12 +96,15 @@ const loadInterFontBytes = async (): Promise<ArrayBuffer> => {
 export const ensurePdfInterFont = async (doc: jsPDF) => {
   if (interFontLoaded) return;
 
-  const fontBytes = await loadInterFontBytes();
-  const base64 = arrayBufferToBase64(fontBytes);
-
-  doc.addFileToVFS(INTER_FONT_FILE, base64);
-  for (const style of INTER_FONT_STYLES) {
-    doc.addFont(INTER_FONT_FILE, INTER_FONT_NAME, style);
+  for (const [style, fontPath] of Object.entries(INTER_FONT_FILES) as Array<[
+    "normal" | "bold",
+    string,
+  ]>) {
+    const fontBytes = await loadInterFontBytes(fontPath);
+    const base64 = arrayBufferToBase64(fontBytes);
+    const fileName = fontPath.split("/").pop()!;
+    doc.addFileToVFS(fileName, base64);
+    doc.addFont(fileName, INTER_FONT_NAME, style);
   }
 
   interFontLoaded = true;
