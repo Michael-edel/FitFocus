@@ -1,8 +1,8 @@
 import { jsPDF } from "jspdf";
 
 const INTER_FONT_NAME = "Inter";
-const INTER_FONT_STYLE = "normal";
 const INTER_FONT_FILE = "Inter-VariableFont.ttf";
+const INTER_FONT_STYLES = ["normal", "bold"] as const;
 
 let interFontLoaded = false;
 
@@ -98,7 +98,9 @@ export const ensurePdfInterFont = async (doc: jsPDF) => {
   const base64 = arrayBufferToBase64(fontBytes);
 
   doc.addFileToVFS(INTER_FONT_FILE, base64);
-  doc.addFont(INTER_FONT_FILE, INTER_FONT_NAME, INTER_FONT_STYLE);
+  for (const style of INTER_FONT_STYLES) {
+    doc.addFont(INTER_FONT_FILE, INTER_FONT_NAME, style);
+  }
 
   interFontLoaded = true;
 };
