@@ -1092,7 +1092,11 @@ const App: React.FC = () => {
     // 2) Удаляем из списка профилей
     setAllUsers(prev => {
       const next = prev.filter(u => u.id !== userId);
-      safeSetItem('fitfocus_all_users', JSON.stringify(next));
+      if (currentUser?.id) {
+        safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify(next));
+      } else {
+        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+      }
       return next;
     });
 
@@ -1470,7 +1474,8 @@ const openEditFood = (item: FoodEntry) => {
       setCurrentUser(updatedUser);
       setAllUsers(prev => {
         const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
-        safeSetItem('fitfocus_all_users', JSON.stringify(next));
+        safeSetItem(`fitfocus_data_${updatedUser.id}_all_users`, JSON.stringify(next));
+        safeRemoveItem('fitfocus_all_users');
         return next;
       });
 
@@ -1595,7 +1600,8 @@ const openEditFood = (item: FoodEntry) => {
     setAllUsers(prev => {
       const found = prev.some(u => u.id === updated.id);
       const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
-      safeSetItem('fitfocus_all_users', JSON.stringify(next));
+      safeSetItem(`fitfocus_data_${updated.id}_all_users`, JSON.stringify(next));
+      safeRemoveItem('fitfocus_all_users');
       return next;
     });
   }, []);
@@ -1846,6 +1852,7 @@ const deleteAccount = useCallback(async () => {
     });
 
     const storedHabits: UserHabit[] = readKV('habits', INITIAL_HABITS);
+    const storedAllUsers: UserProfile[] = readKV('all_users', []);
     const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
 
     const userWithOffsets: UserProfile = { 
@@ -1855,6 +1862,9 @@ const deleteAccount = useCallback(async () => {
     };
 
     setCurrentUser(userWithOffsets);
+    if (Array.isArray(storedAllUsers) && storedAllUsers.length > 0) {
+      setAllUsers(storedAllUsers);
+    }
     setFoodDiary(storedDiary);
     setHabits(storedHabits);
     setFoodHistory(readKV('history', []));
@@ -1957,7 +1967,11 @@ const deleteAccount = useCallback(async () => {
       if (!profile) return;
       await loginAsUser(profile);
       setAllUsers([profile]);
-      safeSetItem('fitfocus_all_users', JSON.stringify([profile]));
+      if (currentUser?.id) {
+        safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify([profile]));
+      } else {
+        safeSetItem('fitfocus_all_users', JSON.stringify([profile]));
+      }
       setProfileSyncState('saved');
       setLastProfileSyncAt(Date.now());
     } catch {
