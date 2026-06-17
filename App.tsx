@@ -951,7 +951,7 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const [inviteCode, setInviteCode] = useState<string>(() => localStorage.getItem('fitfocus_invite_code') || '');
+  const [inviteCode, setInviteCode] = useState<string>('');
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
@@ -989,8 +989,6 @@ const App: React.FC = () => {
       if (currentUser?.id) {
         safeSetItem(`fitfocus_data_${currentUser.id}_invite_code`, inviteCode);
         safeRemoveItem('fitfocus_invite_code');
-      } else {
-        safeSetItem('fitfocus_invite_code', inviteCode);
       }
     } catch {}
   }, [inviteCode, currentUser?.id]);
@@ -1242,22 +1240,10 @@ const App: React.FC = () => {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
   // Settings
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    try {
-      const raw = localStorage.getItem('ff_settings');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') return parsed as AppSettings;
-      }
-    } catch {}
-    return { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false };
-  });
+  const [settings, setSettings] = useState<AppSettings>(() => ({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false }));
 
   useEffect(() => {
-    if (!currentUser?.id) {
-      try { safeSetItem('ff_settings', JSON.stringify(settings)); } catch {}
-      return;
-    }
+    if (!currentUser?.id) return;
     const key = `fitfocus_data_${currentUser.id}_settings`;
     const legacyKey = 'ff_settings';
     try {
@@ -1275,12 +1261,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     try {
-      if (currentUser?.id) {
-        safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
-        safeRemoveItem('ff_settings');
-      } else {
-        safeSetItem('ff_settings', JSON.stringify(settings));
-      }
+      if (!currentUser?.id) return;
+      safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
+      safeRemoveItem('ff_settings');
     } catch {}
   }, [settings, currentUser?.id]);
 
