@@ -1117,10 +1117,7 @@ const App: React.FC = () => {
     // 2) Удаляем из списка профилей
     setAllUsers(prev => {
       const next = prev.filter(u => u.id !== userId);
-      if (currentUser?.id) {
-        safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify(next));
-      }
-      safeRemoveItem('fitfocus_all_users');
+      persistAllUsersSnapshot(currentUser?.id, next);
       return next;
     });
 
@@ -1557,8 +1554,7 @@ const openEditFood = (item: FoodEntry) => {
       setCurrentUser(updatedUser);
       setAllUsers(prev => {
         const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
-        safeSetItem(`fitfocus_data_${updatedUser.id}_all_users`, JSON.stringify(next));
-        safeRemoveItem('fitfocus_all_users');
+        persistAllUsersSnapshot(updatedUser.id, next);
         return next;
       });
 
@@ -1683,11 +1679,10 @@ const openEditFood = (item: FoodEntry) => {
     setAllUsers(prev => {
       const found = prev.some(u => u.id === updated.id);
       const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
-      safeSetItem(`fitfocus_data_${updated.id}_all_users`, JSON.stringify(next));
-      safeRemoveItem('fitfocus_all_users');
+      persistAllUsersSnapshot(updated.id, next);
       return next;
     });
-  }, []);
+  }, [persistAllUsersSnapshot]);
 
   // ---- Weekly menus (personal + family) ----
   const handleGenerateWeeklyMenu = useCallback(async () => {
@@ -1990,6 +1985,16 @@ const deleteAccount = useCallback(async () => {
     if (!r.ok) throw new Error('STATE_SYNC_FAILED');
   }, []);
 
+  function allUsersStorageKey(userId?: string | null) {
+    return userId ? `fitfocus_data_${userId}_all_users` : 'fitfocus_all_users';
+  }
+
+  function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: UserProfile[]) {
+    if (!ownerUserId) return;
+    safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(next));
+    safeRemoveItem('fitfocus_all_users');
+  }
+
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
     try {
@@ -2061,16 +2066,13 @@ const deleteAccount = useCallback(async () => {
       if (!profile) return;
       await loginAsUser(profile);
       setAllUsers([profile]);
-      if (currentUser?.id) {
-        safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify([profile]));
-      }
-      safeRemoveItem('fitfocus_all_users');
+      persistAllUsersSnapshot(currentUser?.id ?? profile.id, [profile]);
       setProfileSyncState('saved');
       setLastProfileSyncAt(Date.now());
     } catch {
       setProfileSyncState('error');
     }
-  }, [currentUser, loginAsUser]);
+  }, [currentUser, loginAsUser, persistAllUsersSnapshot]);
 
   // Server-driven: persist profile changes to D1 (debounced)
   const profileSaveTimer = useRef<number | null>(null);
@@ -2322,10 +2324,10 @@ const deleteAccount = useCallback(async () => {
       return;
     }
 
-// No server session -> restore local profiles or show profile chooser
+  // No server session -> restore local profiles or show profile chooser
 try {
   const lastId = localStorage.getItem('fitfocus_last_user_id');
-  const scopedKey = lastId ? `fitfocus_data_${lastId}_all_users` : null;
+  const scopedKey = lastId ? allUsersStorageKey(lastId) : null;
   const scopedRaw = scopedKey ? localStorage.getItem(scopedKey) : null;
   const legacyRaw = localStorage.getItem('fitfocus_all_users');
   const raw = scopedRaw || legacyRaw;
