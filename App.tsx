@@ -54,7 +54,7 @@ import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { COURSE_LIBRARY } from './lessons';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse, FamilyWeeklyMenu } from './types';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -736,6 +736,7 @@ const App: React.FC = () => {
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
   const [familyShopping, setFamilyShopping] = useState<{ week_start: string; items: {name:string; grams:number; checked?: boolean}[] } | null>(null);
   const [familyShoppingLoading, setFamilyShoppingLoading] = useState(false);
+  const [cloudFamilyMenu, setCloudFamilyMenu] = useState<FamilyWeeklyMenu | null>(null);
 
   const weekStartISO = useCallback((d = new Date()) => {
     const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -807,11 +808,18 @@ const App: React.FC = () => {
     try {
       setCloudFamilyLoading(true);
       setCloudFamilyError(null);
-      const res = await fetch('/api/family', { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось загрузить семью');
+      const week = weekStartISO();
+      const [familyRes, menuRes] = await Promise.all([
+        fetch('/api/family', { credentials: 'include' }),
+        fetch(`/api/family/menu?week=${encodeURIComponent(week)}`, { credentials: 'include' }),
+      ]);
+      const data = await familyRes.json().catch(() => ({}));
+      if (!familyRes.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось загрузить семью');
       setCloudFamily(data.family || null);
       setCloudFamilyMembers(Array.isArray(data.members) ? data.members : []);
+      const menuData = await menuRes.json().catch(() => ({}));
+      const serverMenu = menuData?.shared?.menu && typeof menuData.shared.menu === 'object' ? menuData.shared.menu : null;
+      setCloudFamilyMenu(serverMenu);
       // Auto switch scope if user is in a family
       if (data.family && planScope !== 'family') {
         // keep user's choice, but first time default to family for visibility
@@ -821,6 +829,7 @@ const App: React.FC = () => {
       setCloudFamilyError(e?.message || 'Ошибка');
       setCloudFamily(null);
       setCloudFamilyMembers([]);
+      setCloudFamilyMenu(null);
     } finally {
       setCloudFamilyLoading(false);
     }
@@ -1433,6 +1442,8 @@ const openEditFood = (item: FoodEntry) => {
     currency: 'KZT'
   });
 
+  const familyMenu = cloudFamilyMenu ?? currentUser?.aiPlan?.familyWeeklyMenu ?? null;
+
 
   const handleGenerateFamilyWeeklyMenu = useCallback(async () => {
     if (!currentUser?.aiPlan) return;
@@ -1468,6 +1479,22 @@ const openEditFood = (item: FoodEntry) => {
         return next;
       });
 
+      if (cloudFamily?.id) {
+        const week = weekStartISO();
+        const menuRes = await fetch('/api/family/menu', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            weekStart: week,
+            menu: familyWeeklyMenu,
+          }),
+        });
+        const menuData = await menuRes.json().catch(() => ({}));
+        if (!menuRes.ok) throw new Error(menuData?.error?.message || menuData?.error || 'Не удалось сохранить семейное меню на сервере');
+        setCloudFamilyMenu(familyWeeklyMenu);
+      }
+
       if (cloudFamily?.id && Array.isArray(familyWeeklyMenu.shoppingListItems) && familyWeeklyMenu.shoppingListItems.length) {
         const week = weekStartISO();
         const res = await fetch('/api/weekly_menu/items', {
@@ -1484,6 +1511,7 @@ const openEditFood = (item: FoodEntry) => {
         if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось синхронизировать семейный список покупок');
         await loadFamilyShopping();
       }
+      await loadCloudFamily();
     } catch (e: any) {
       setFamilyMenuError(e?.message || 'Не удалось сгенерировать семейное меню на неделю.');
     } finally {
@@ -3450,13 +3478,13 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setFamilyMenuPrefsOpen(true)} disabled={!currentUser?.aiPlan || familyMenuLoading} className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-black text-[11px] uppercase tracking-widest hover:border-indigo-500/30 disabled:opacity-50">Параметры</button>
-                      <button onClick={handleGenerateFamilyWeeklyMenu} disabled={familyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{familyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.familyWeeklyMenu ? 'Обновить' : 'Сгенерировать')}</button>
+                      <button onClick={handleGenerateFamilyWeeklyMenu} disabled={familyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{familyMenuLoading ? 'Генерирую…' : (familyMenu ? 'Обновить' : 'Сгенерировать')}</button>
                     </div>
                   </div>
                   {familyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{familyMenuError}</p>)}
-                  {currentUser?.aiPlan?.familyWeeklyMenu ? (
+                  {familyMenu ? (
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {currentUser.aiPlan.familyWeeklyMenu.days.map((d, i) => (
+                      {familyMenu.days.map((d, i) => (
                         <div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                           <div className="text-slate-200 font-black mb-2">{d.day}</div>
                           {([['Завтрак', d.breakfast], ['Обед', d.lunch], ['Ужин', d.dinner], ['Перекус', d.snack]] as const).map(([label, meal], j) => (
@@ -3478,18 +3506,18 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                   ) : (
                     <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
                   )}
-                  {(currentUser?.aiPlan?.familyWeeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.familyWeeklyMenu?.shoppingList?.length) && (
+                  {(familyMenu?.shoppingListItems?.length || familyMenu?.shoppingList?.length) && (
                     <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                       <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                        {(currentUser.aiPlan.familyWeeklyMenu.shoppingListItems || []).length
-                          ? currentUser.aiPlan.familyWeeklyMenu.shoppingListItems!.slice(0, 40).map((it, i) => (
+                        {(familyMenu?.shoppingListItems || []).length
+                          ? familyMenu!.shoppingListItems!.slice(0, 40).map((it, i) => (
                               <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
                                 <span className="truncate">• {it.name}</span>
                                 <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
                               </div>
                             ))
-                          : currentUser.aiPlan.familyWeeklyMenu.shoppingList.slice(0, 40).map((s, i) => (
+                          : familyMenu!.shoppingList.slice(0, 40).map((s, i) => (
                               <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
                             ))}
                       </div>
