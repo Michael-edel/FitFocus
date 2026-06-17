@@ -84,6 +84,40 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.')
       }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              if (id.includes('/pdf/')) return 'pdf';
+              if (id.includes('/ui/components/CameraCapture')) return 'camera';
+              if (id.includes('/charts')) return 'charts';
+              if (id.includes('/geminiService')) return 'ai-core';
+              if (id.includes('/weeklyAutoEngine') || id.includes('/orchestrator')) return 'ai-reasoning';
+              return undefined;
+            }
+
+            if (
+              id.includes('react-dom') ||
+              id.includes('/react/') ||
+              id.includes('scheduler') ||
+              id.includes('use-sync-external-store') ||
+              id.includes('react-is') ||
+              id.includes('loose-envify') ||
+              id.includes('js-tokens')
+            ) return 'react-vendor';
+            if (id.includes('lucide-react')) return 'icons-vendor';
+            if (id.includes('recharts')) return 'charts-vendor';
+            if (id.includes('@google/genai')) return 'google-ai-vendor';
+            if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf-vendor';
+            if (id.includes('heic2any')) return 'heic-vendor';
+            if (id.includes('stripe')) return 'stripe-vendor';
+            if (id.includes('clsx')) return 'utils-vendor';
+            return 'vendor';
+          }
+        }
+      }
     }
   }
 })
