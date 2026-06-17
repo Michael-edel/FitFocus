@@ -2076,16 +2076,23 @@ const deleteAccount = useCallback(async () => {
   const scheduleRefeedTomorrow = useCallback(() => {
     if (!currentUser) return;
     const d = new Date(); d.setDate(d.getDate() + 1);
-    const key = `ff_refeed_${currentUser.id}`;
+    const key = `fitfocus_data_${currentUser.id}_refeed`;
     const value = d.toISOString().slice(0, 10);
     safeSetItem(key, value);
+    safeRemoveItem(`ff_refeed_${currentUser.id}`);
     setRefeedDate(value);
   }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
-    const key = `ff_refeed_${currentUser.id}`;
-    setRefeedDate(localStorage.getItem(key));
+    const key = `fitfocus_data_${currentUser.id}_refeed`;
+    const legacyKey = `ff_refeed_${currentUser.id}`;
+    const value = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+    if (value) {
+      safeSetItem(key, value);
+      safeRemoveItem(legacyKey);
+    }
+    setRefeedDate(value);
   }, [currentUser?.id]);
 
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
