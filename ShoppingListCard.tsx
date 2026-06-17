@@ -54,14 +54,13 @@ export default function ShoppingListCard({
 
   useEffect(() => {
     try {
-      const scopedKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : null;
-      const legacyKey = `fitfocus_shopping_fallback_${weekStart}`;
-      const raw = (scopedKey ? localStorage.getItem(scopedKey) : null) || localStorage.getItem(legacyKey);
-      setFallbackChecked(raw ? JSON.parse(raw) : {});
-      if (scopedKey && raw) {
-        localStorage.setItem(scopedKey, raw);
-        localStorage.removeItem(legacyKey);
+      if (!userId) {
+        setFallbackChecked({});
+        return;
       }
+      const scopedKey = `fitfocus_data_${userId}_shopping_fallback_${weekStart}`;
+      const raw = localStorage.getItem(scopedKey);
+      setFallbackChecked(raw ? JSON.parse(raw) : {});
     } catch {
       setFallbackChecked({});
     }
@@ -69,9 +68,9 @@ export default function ShoppingListCard({
 
   useEffect(() => {
     try {
-      const scopedKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : `fitfocus_shopping_fallback_${weekStart}`;
+      if (!userId) return;
+      const scopedKey = `fitfocus_data_${userId}_shopping_fallback_${weekStart}`;
       localStorage.setItem(scopedKey, JSON.stringify(fallbackChecked));
-      if (userId) localStorage.removeItem(`fitfocus_shopping_fallback_${weekStart}`);
     } catch {}
   }, [userId, weekStart, fallbackChecked]);
 
