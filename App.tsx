@@ -68,7 +68,6 @@ import FoodInsightCard from './FoodInsightCard';
 import ShoppingListCard from './ShoppingListCard';
 import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
-import { JsonRepo } from './storage/repos';
 import {
   applyBackupPayload,
   createBackupPayload,
