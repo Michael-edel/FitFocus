@@ -1119,9 +1119,8 @@ const App: React.FC = () => {
       const next = prev.filter(u => u.id !== userId);
       if (currentUser?.id) {
         safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify(next));
-      } else {
-        safeSetItem('fitfocus_all_users', JSON.stringify(next));
       }
+      safeRemoveItem('fitfocus_all_users');
       return next;
     });
 
@@ -2064,9 +2063,8 @@ const deleteAccount = useCallback(async () => {
       setAllUsers([profile]);
       if (currentUser?.id) {
         safeSetItem(`fitfocus_data_${currentUser.id}_all_users`, JSON.stringify([profile]));
-      } else {
-        safeSetItem('fitfocus_all_users', JSON.stringify([profile]));
       }
+      safeRemoveItem('fitfocus_all_users');
       setProfileSyncState('saved');
       setLastProfileSyncAt(Date.now());
     } catch {
@@ -2326,11 +2324,17 @@ const deleteAccount = useCallback(async () => {
 
 // No server session -> restore local profiles or show profile chooser
 try {
-  const raw = localStorage.getItem('fitfocus_all_users');
-  const all = raw ? (JSON.parse(raw) as any[]) : [];
   const lastId = localStorage.getItem('fitfocus_last_user_id');
+  const scopedKey = lastId ? `fitfocus_data_${lastId}_all_users` : null;
+  const scopedRaw = scopedKey ? localStorage.getItem(scopedKey) : null;
+  const legacyRaw = localStorage.getItem('fitfocus_all_users');
+  const raw = scopedRaw || legacyRaw;
+  const all = raw ? (JSON.parse(raw) as any[]) : [];
   if (Array.isArray(all) && all.length > 0) {
     setAllUsers(all);
+    if (scopedKey && scopedRaw) {
+      safeRemoveItem('fitfocus_all_users');
+    }
     const last = lastId ? all.find((u) => String(u?.id) === String(lastId)) : null;
     if (last) {
       void loginAsUser(last);
