@@ -818,7 +818,21 @@ const App: React.FC = () => {
       setCloudFamilyMembers(Array.isArray(data.members) ? data.members : []);
       const menuData = await menuRes.json().catch(() => ({}));
       const serverMenu = menuData?.shared?.menu && typeof menuData.shared.menu === 'object' ? menuData.shared.menu : null;
-      setCloudFamilyMenu(serverMenu);
+      const looksLikeFamilyWeeklyMenu =
+        !!serverMenu &&
+        typeof serverMenu === 'object' &&
+        Array.isArray((serverMenu as any).days) &&
+        typeof (serverMenu as any).prefs === 'object' &&
+        Array.isArray((serverMenu as any).shoppingList) &&
+        (serverMenu as any).days.every((day: any) =>
+          day &&
+          typeof day === 'object' &&
+          ['breakfast', 'lunch', 'dinner', 'snack'].every((mealKey) => {
+            const meal = day[mealKey];
+            return meal && typeof meal === 'object' && typeof meal.base === 'string' && typeof meal.portions === 'object';
+          })
+        );
+      setCloudFamilyMenu(looksLikeFamilyWeeklyMenu ? (serverMenu as FamilyWeeklyMenu) : null);
       // Auto switch scope if user is in a family
       if (data.family && planScope !== 'family') {
         // keep user's choice, but first time default to family for visibility
