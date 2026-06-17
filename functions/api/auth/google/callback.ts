@@ -61,6 +61,7 @@ export const onRequestGet: PagesFunction<{
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   AUTH_JWT_SECRET: string;
+  APP_URL?: string;
   ADMIN_EMAILS?: string;
   BOOTSTRAP_ADMIN_EMAILS?: string;
 }> = async ({ request, env }) => {
@@ -84,7 +85,7 @@ export const onRequestGet: PagesFunction<{
     if (expected !== stateSig) return json({ error: "Invalid state" }, 400);
 
     const parsed = JSON.parse(rawState) as { r: string; i?: string; n: string; t: number };
-    const requestBase = getBaseUrl(request);
+    const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
     let redirectAfter = requestBase;
     if (parsed?.r) {
       try {
@@ -242,3 +243,14 @@ export const onRequestGet: PagesFunction<{
     return json({ error: "Server error", details: String(e?.message || e) }, 500);
   }
 };
+
+function normalizeAppUrl(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}

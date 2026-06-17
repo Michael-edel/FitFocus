@@ -35,6 +35,7 @@ export const onRequestGet: PagesFunction<{
   DB: D1Database;
   GOOGLE_CLIENT_ID: string;
   AUTH_JWT_SECRET: string;
+  APP_URL?: string;
 }> = async ({ request, env }) => {
   if (!env.GOOGLE_CLIENT_ID) {
     return jsonResponse({ error: "Missing GOOGLE_CLIENT_ID" }, 500);
@@ -50,7 +51,7 @@ export const onRequestGet: PagesFunction<{
   // We allow only same-origin style redirects to reduce abuse.
   // In local dev: http://localhost:5173 or http://127.0.0.1:5173
   // In prod: your app origin.
-  const baseUrl = getBaseUrl(request);
+  const baseUrl = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
   let redirectUrl = baseUrl;
   if (redirect) {
     try {
@@ -81,3 +82,14 @@ export const onRequestGet: PagesFunction<{
 
   return Response.redirect(auth.toString(), 302);
 };
+
+function normalizeAppUrl(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}

@@ -69,7 +69,7 @@ Production deploy ожидает Cloudflare Pages + D1:
    - `REQUIRE_INVITE` (`1` для закрытой beta)
    - `STRIPE_SECRET_KEY`
    - `STRIPE_WEBHOOK_SECRET`
-   - `APP_URL`
+   - `APP_URL` (должен совпадать с публичным origin приложения, который вы добавляете в Google OAuth redirect URI)
    - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
 5. В Google Cloud Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/google/callback`.
