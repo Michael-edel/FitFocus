@@ -1959,7 +1959,7 @@ const deleteAccount = useCallback(async () => {
 
   const suppressNextFullProfileSyncRef = useRef(false);
 
-  const syncLocalStateToCloud = useCallback(async (userId: string) => {
+  const collectLocalStateItems = useCallback((userId: string) => {
     const prefixes = [
       `fitfocus_data_${userId}_`,
       `fitfocus_council_history_${userId}`,
@@ -1975,14 +1975,7 @@ const deleteAccount = useCallback(async () => {
       const v = localStorage.getItem(k);
       if (typeof v === 'string') items.push({ key: k, value: v });
     }
-    if (!items.length) return;
-    const r = await fetch('/api/state', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    });
-    if (!r.ok) throw new Error('STATE_SYNC_FAILED');
+    return items;
   }, []);
 
   function allUsersStorageKey(userId?: string | null) {
@@ -1998,24 +1991,20 @@ const deleteAccount = useCallback(async () => {
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
     try {
+      const stateItems = collectLocalStateItems(profile.id);
       const r = await fetch('/api/profile', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({ ...profile, stateItems }),
       });
       if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
-      try {
-        await syncLocalStateToCloud(profile.id);
-      } catch {
-        throw new Error('STATE_SYNC_FAILED');
-      }
       setProfileSyncState('saved');
       setLastProfileSyncAt(Date.now());
     } catch {
       setProfileSyncState('error');
     }
-  }, [syncLocalStateToCloud]);
+  }, [collectLocalStateItems]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
     if (!currentUser) return;
@@ -2026,11 +2015,12 @@ const deleteAccount = useCallback(async () => {
 
     setProfileSyncState('saving');
     try {
+      const stateItems = collectLocalStateItems(nextUser.id);
       const r = await fetch('/api/profile', {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ ...patch, stateItems }),
       });
       if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
       const payload = await r.json().catch(() => null);
@@ -2044,17 +2034,16 @@ const deleteAccount = useCallback(async () => {
     } catch {
       setProfileSyncState('error');
     }
-  }, [currentUser, persistUser]);
+  }, [collectLocalStateItems, currentUser, persistUser]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!currentUser) return;
     try {
-      await syncLocalStateToCloud(currentUser.id);
       await pushProfileToCloud(currentUser);
     } catch {
       setProfileSyncState('error');
     }
-  }, [currentUser, pushProfileToCloud, syncLocalStateToCloud]);
+  }, [currentUser, pushProfileToCloud]);
 
   const reloadUserFromCloud = useCallback(async () => {
     if (!currentUser) return;
