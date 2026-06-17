@@ -3571,7 +3571,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
 
 
 
-              {paywall.plan === 'family' && allUsers.length > 1 && (
+              {(cloudFamily?.id || (paywall.plan === 'family' && allUsers.length > 1)) && (
                 <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
                   <div className="flex items-center justify-between gap-3">
                     <div>
