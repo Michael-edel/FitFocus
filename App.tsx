@@ -1996,6 +1996,25 @@ const deleteAccount = useCallback(async () => {
     safeRemoveItem('fitfocus_all_users');
   }
 
+  function readStoredAllUsersSnapshot(preferredUserId?: string | null): UserProfile[] | null {
+    const candidates: string[] = [];
+    if (preferredUserId) candidates.push(allUsersStorageKey(preferredUserId));
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith('fitfocus_data_') || !k.endsWith('_all_users')) continue;
+      if (!candidates.includes(k)) candidates.push(k);
+    }
+    for (const key of candidates) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed as UserProfile[];
+      } catch {}
+    }
+    return null;
+  }
+
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
     try {
@@ -2321,23 +2340,18 @@ const deleteAccount = useCallback(async () => {
       return;
     }
 
-  // No server session -> restore local profiles or show profile chooser
+// No server session -> restore local profiles or show profile chooser
 try {
   const lastId = localStorage.getItem('fitfocus_last_user_id');
-  const scopedKey = lastId ? allUsersStorageKey(lastId) : null;
-  const scopedRaw = scopedKey ? localStorage.getItem(scopedKey) : null;
-  const legacyRaw = localStorage.getItem('fitfocus_all_users');
-  const raw = scopedRaw || legacyRaw;
-  const all = raw ? (JSON.parse(raw) as any[]) : [];
+  const all = readStoredAllUsersSnapshot(lastId);
   if (Array.isArray(all) && all.length > 0) {
     setAllUsers(all);
-    if (scopedKey && scopedRaw) {
-      safeRemoveItem('fitfocus_all_users');
-    }
-    const last = lastId ? all.find((u) => String(u?.id) === String(lastId)) : null;
-    if (last) {
-      void loginAsUser(last);
-      return;
+    if (lastId) {
+      const last = all.find((u) => String(u?.id) === String(lastId)) || null;
+      if (last) {
+        void loginAsUser(last);
+        return;
+      }
     }
   }
 } catch {}
