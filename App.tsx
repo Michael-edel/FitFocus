@@ -277,7 +277,7 @@ const evictLargeLocalStorage = () => {
 
     // 1) Trim council chat history
     for (const k of keys) {
-      if (!k.startsWith('fitfocus_council_history_')) continue;
+      if (!k.startsWith('fitfocus_data_') || !k.endsWith('_council_history')) continue;
       try {
         const arr = JSON.parse(localStorage.getItem(k) || '[]');
         if (Array.isArray(arr) && arr.length > 30) {
@@ -973,13 +973,11 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
     const key = `fitfocus_data_${currentUser.id}_invite_code`;
-    const legacyKey = 'fitfocus_invite_code';
     try {
-      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      const raw = localStorage.getItem(key);
       if (raw !== null) {
         setInviteCode(raw);
         safeSetItem(key, raw);
-        safeRemoveItem(legacyKey);
       }
     } catch {}
   }, [currentUser?.id]);
@@ -988,7 +986,6 @@ const App: React.FC = () => {
     try {
       if (currentUser?.id) {
         safeSetItem(`fitfocus_data_${currentUser.id}_invite_code`, inviteCode);
-        safeRemoveItem('fitfocus_invite_code');
       }
     } catch {}
   }, [inviteCode, currentUser?.id]);
@@ -1073,12 +1070,10 @@ const App: React.FC = () => {
     // 2) or from localStorage
     let ls: any = null;
     const newPrefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
-    const legacyPrefsKey = `fitfocus_family_menu_prefs_${currentUser.id}`;
     try {
-      ls = JSON.parse(localStorage.getItem(newPrefsKey) || localStorage.getItem(legacyPrefsKey) || 'null');
+      ls = JSON.parse(localStorage.getItem(newPrefsKey) || 'null');
       if (ls) {
         safeSetItem(newPrefsKey, JSON.stringify(ls));
-        safeRemoveItem(legacyPrefsKey);
       }
     } catch {}
     const fromStore = ls && typeof ls === 'object' ? ls : null;
@@ -1102,7 +1097,6 @@ const App: React.FC = () => {
         budgetPerWeek: prefs.budgetPerWeek ? Number(prefs.budgetPerWeek) : undefined,
         currency: prefs.currency
       }));
-      safeRemoveItem(`fitfocus_family_menu_prefs_${currentUser.id}`);
     } catch {}
   }, [currentUser]);
 
@@ -1199,20 +1193,16 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
     const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
-    const legacyRead = `ff_adapt_read_${currentUser.id}`;
-    const legacyExp = `ff_adapt_expanded_${currentUser.id}`;
     try {
-      const readValue = localStorage.getItem(kRead) ?? localStorage.getItem(legacyRead);
-      const expValue = localStorage.getItem(kExp) ?? localStorage.getItem(legacyExp);
+      const readValue = localStorage.getItem(kRead);
+      const expValue = localStorage.getItem(kExp);
       if (readValue !== null) {
         setAdaptRead(readValue === '1');
         safeSetItem(kRead, readValue);
-        safeRemoveItem(legacyRead);
       }
       if (expValue !== null) {
         setAdaptExpanded(expValue === '1');
         safeSetItem(kExp, expValue);
-        safeRemoveItem(legacyExp);
       }
     } catch {}
   }, [currentUser?.id]);
@@ -1224,8 +1214,6 @@ const App: React.FC = () => {
     try {
       safeSetItem(kRead, adaptRead ? '1' : '0');
       safeSetItem(kExp, adaptExpanded ? '1' : '0');
-      safeRemoveItem(`ff_adapt_read_${currentUser.id}`);
-      safeRemoveItem(`ff_adapt_expanded_${currentUser.id}`);
     } catch {}
   }, [adaptRead, adaptExpanded, currentUser?.id]);
 
@@ -1238,14 +1226,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
     const key = `fitfocus_data_${currentUser.id}_settings`;
-    const legacyKey = 'ff_settings';
     try {
-      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') setSettings(parsed as AppSettings);
         safeSetItem(key, raw);
-        safeRemoveItem(legacyKey);
       } else {
         safeSetItem(key, JSON.stringify(settings));
       }
@@ -1256,7 +1242,6 @@ const App: React.FC = () => {
     try {
       if (!currentUser?.id) return;
       safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
-      safeRemoveItem('ff_settings');
     } catch {}
   }, [settings, currentUser?.id]);
 
@@ -1264,14 +1249,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
     const key = `fitfocus_data_${currentUser.id}_council_history`;
-    const legacyKey = `fitfocus_council_history_${currentUser.id}`;
     try {
-      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) setCouncilMessages(parsed);
         safeSetItem(key, raw);
-        safeRemoveItem(legacyKey);
       } else {
         setCouncilMessages([]);
       }
@@ -1293,7 +1276,6 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const key = `fitfocus_data_${currentUser.id}_council_history`;
     try { safeSetItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
-    safeRemoveItem(`fitfocus_council_history_${currentUser.id}`);
   }, [currentUser?.id]);
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
@@ -1332,9 +1314,8 @@ const App: React.FC = () => {
       return;
     }
     const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
-    const legacyKey = `ff_fav_recipes`;
     try {
-      const raw = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+      const raw = localStorage.getItem(key);
       if (!raw) {
         setFavoriteRecipes([]);
         return;
@@ -1342,7 +1323,6 @@ const App: React.FC = () => {
       const parsed = JSON.parse(raw);
       setFavoriteRecipes(Array.isArray(parsed) ? parsed : []);
       safeSetItem(key, JSON.stringify(Array.isArray(parsed) ? parsed : []));
-      safeRemoveItem(legacyKey);
     } catch {
       setFavoriteRecipes([]);
     }
@@ -1353,7 +1333,6 @@ const App: React.FC = () => {
     if (!currentUser?.id) return;
     try {
       safeSetItem(`fitfocus_data_${currentUser.id}_favorite_recipes`, JSON.stringify(next));
-      safeRemoveItem(`ff_fav_recipes`);
     } catch {}
   }, [currentUser?.id]);
 
@@ -1459,11 +1438,9 @@ const openEditFood = (item: FoodEntry) => {
     }
     try {
       const newKey = `fitfocus_data_${currentUser.id}_plan_task_done`;
-      const oldKey = `fitfocus_plan_task_done_${currentUser.id}`;
-      const raw = localStorage.getItem(newKey) || localStorage.getItem(oldKey);
+      const raw = localStorage.getItem(newKey);
       if (raw) {
         safeSetItem(newKey, raw);
-        safeRemoveItem(oldKey);
       }
       setPlanTaskDone(raw ? JSON.parse(raw) : {});
     } catch {
@@ -1474,7 +1451,6 @@ const openEditFood = (item: FoodEntry) => {
   useEffect(() => {
     if (!currentUser?.id) return;
     safeSetItem(`fitfocus_data_${currentUser.id}_plan_task_done`, JSON.stringify(planTaskDone));
-    safeRemoveItem(`fitfocus_plan_task_done_${currentUser.id}`);
   }, [currentUser?.id, planTaskDone]);
 
   useEffect(() => {
@@ -1958,14 +1934,6 @@ const deleteAccount = useCallback(async () => {
   const collectLocalStateItems = useCallback((userId: string) => {
     const prefixes = [
       `fitfocus_data_${userId}_`,
-      `fitfocus_council_history_${userId}`,
-      `fitfocus_plan_task_done_${userId}`,
-      `fitfocus_family_menu_prefs_${userId}`,
-      `ff_settings`,
-      `ff_refeed_${userId}`,
-      `ff_adapt_read_${userId}`,
-      `ff_adapt_expanded_${userId}`,
-      `ff_fav_recipes`,
       `ff_gemini_cooldown_until`,
       `ff_ai_last_status_v1`,
       `ff_ai_last_action_v1`,
@@ -2181,18 +2149,15 @@ const deleteAccount = useCallback(async () => {
     const key = `fitfocus_data_${currentUser.id}_refeed`;
     const value = d.toISOString().slice(0, 10);
     safeSetItem(key, value);
-    safeRemoveItem(`ff_refeed_${currentUser.id}`);
     setRefeedDate(value);
   }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
     const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const legacyKey = `ff_refeed_${currentUser.id}`;
-    const value = localStorage.getItem(key) || localStorage.getItem(legacyKey);
+    const value = localStorage.getItem(key);
     if (value) {
       safeSetItem(key, value);
-      safeRemoveItem(legacyKey);
     }
     setRefeedDate(value);
   }, [currentUser?.id]);
@@ -3960,7 +3925,6 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                     if (!ok) return;
                     const key = `fitfocus_data_${currentUser.id}_council_history`;
                     safeRemoveItem(key);
-                    safeRemoveItem(`fitfocus_council_history_${currentUser.id}`);
                     setCouncilMessages([]);
                     setCouncilResponse(null);
                     setExpandedCouncilThoughtIds({});
