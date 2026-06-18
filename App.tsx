@@ -1196,6 +1196,8 @@ const openEditFood = (item: FoodEntry) => {
   const suppressNextFullProfileSyncRef = useRef(false);
   const suppressProfileSyncStateRef = useRef(false);
   const hasPendingProfileChangesRef = useRef(false);
+  const lastAutoCloudSyncAttemptAtRef = useRef(0);
+  const CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS = 60_000;
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
@@ -1783,6 +1785,11 @@ await ensurePdfInterFont(doc);
     if (!googleMe?.sub || !currentUser) return;
     const syncFromCloud = () => {
       if (document.visibilityState && document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastAutoCloudSyncAttemptAtRef.current < CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS) {
+        return;
+      }
+      lastAutoCloudSyncAttemptAtRef.current = now;
       if (hasPendingProfileChangesRef.current || profileSyncState === 'error') {
         void syncAllLocalDataNow();
         return;
