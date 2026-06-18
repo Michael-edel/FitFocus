@@ -491,7 +491,7 @@ export default function RegistrationScreen({
                 <button type="button" onClick={() => onboardingStep === 2 && setOnboardingStep(1)} disabled={isActivatingPlan} className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50">Назад к параметрам</button>
               </>
             )}
-            <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Без регистрации • Данные на устройстве</p>
+            <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Сначала локально • затем в облако</p>
           </div>
         </div>
       </div>

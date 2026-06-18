@@ -68,10 +68,18 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
           void params.loginAsUser(profile);
           return;
         }
+      }
+    } catch {}
 
-        params.setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-        params.setAuthState('register');
-        return;
+    try {
+      const all = readStoredAllUsersSnapshot<UserProfile>();
+      if (Array.isArray(all) && all.length > 0) {
+        params.setAllUsers(all);
+        const localProfile = all[0];
+        if (localProfile) {
+          void params.loginAsUser(localProfile);
+          return;
+        }
       }
     } catch {}
 
