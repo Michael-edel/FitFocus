@@ -92,6 +92,8 @@ export default function CouncilScreen({
               const approveCount = votes.filter((v) => v.stance === 'approve').length;
               const adjustCount = votes.filter((v) => v.stance === 'adjust').length;
               const rejectCount = votes.filter((v) => v.stance === 'reject').length;
+              const nextSteps = resp?.nextSteps ?? [];
+              const contradictions = resp?.contradictions ?? [];
               const expanded = !!expandedCouncilThoughtIds[m.id];
               return (
                 <div key={m.id} className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -143,6 +145,34 @@ export default function CouncilScreen({
                             <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                               4 эксперта в голосовании
                             </div>
+                          </div>
+                        )}
+                        {(nextSteps.length > 0 || contradictions.length > 0) && (
+                          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {nextSteps.length > 0 && (
+                              <div className="rounded-3xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-3">Что учесть дальше</div>
+                                <ul className="space-y-2">
+                                  {nextSteps.map((step, idx) => (
+                                    <li key={`${m.id}-step-${idx}`} className="text-sm text-slate-300 leading-snug">
+                                      • {step}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {contradictions.length > 0 && (
+                              <div className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-4">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-300 mb-3">Замечания экспертов</div>
+                                <ul className="space-y-2">
+                                  {contradictions.slice(0, 4).map((item, idx) => (
+                                    <li key={`${m.id}-contradiction-${idx}`} className="text-sm text-slate-300 leading-snug">
+                                      • {item}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

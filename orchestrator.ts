@@ -113,18 +113,63 @@ export async function runCouncil(
     };
   }));
 
-  const agreementMatch = draftAnswer.match(/Agreement Score: (\d+)/);
-  const agreementScore = agreementMatch ? parseInt(agreementMatch[1]) : 85;
+  const voteAverage = Math.round(voteChecks.reduce((sum, vote) => sum + vote.score, 0) / Math.max(1, voteChecks.length));
   const approveCount = voteChecks.filter(v => v.stance === 'approve').length;
   const adjustCount = voteChecks.filter(v => v.stance === 'adjust').length;
   const rejectCount = voteChecks.filter(v => v.stance === 'reject').length;
   const votesSummary = `Голоса: ${approveCount} approve, ${adjustCount} adjust, ${rejectCount} reject.`;
 
+  const needsRevision = voteAverage < 70 || rejectCount > 0 || adjustCount >= 3;
+  let finalAnswer = draftAnswer.replace(/Agreement Score: \d+\/100/, '').trim();
+  let decisionReason = `Запрос обработан всеми 4 экспертами. ${votesSummary} Бриф председателя: ${routerBrief}`;
+  let nextSteps: string[] = [];
+  let contradictions: string[] = [];
+
+  if (needsRevision) {
+    const critiqueSummary = voteChecks
+      .map((v) => `${v.agentName}: ${v.stance} (${v.score}) — ${v.reason}`)
+      .join('\n');
+    const revisionPrompt = `
+      Ты Председатель Совета. Перепиши финальный ответ на основе замечаний экспертов.
+      Важно:
+      - сохрани полезные части ответа;
+      - убери или смягчи спорные места;
+      - если данных недостаточно, прямо обозначь это;
+      - сделай ответ короче и предсказуемее;
+      - не добавляй новые не подтверждённые факты;
+      - если есть конфликт мнений, выбери более осторожную формулировку.
+
+      Запрос: "${query}"
+
+      Черновик:
+      ${draftAnswer}
+
+      Замечания экспертов:
+      ${critiqueSummary}
+
+      Верни только обновлённый финальный ответ на русском языке.
+    `;
+    const revisedAnswer = await callModel(revisionPrompt, 'chairman');
+    if (revisedAnswer && revisedAnswer.trim()) {
+      finalAnswer = revisedAnswer.trim();
+      decisionReason = `Ответ доработан по итогам голосования. ${votesSummary} Бриф председателя: ${routerBrief}`;
+      nextSteps = [
+        'Использовать более осторожную формулировку при низком согласии экспертов',
+        'Снимать спорные рекомендации в пользу ближайших безопасных шагов',
+      ];
+      contradictions = voteChecks
+        .filter((v) => v.stance !== 'approve')
+        .map((v) => `${v.agentName}: ${v.reason}`);
+    }
+  }
+
   return {
-    finalAnswer: draftAnswer.replace(/Agreement Score: \d+\/100/, '').trim(),
-    decisionReason: `Запрос обработан всеми 4 экспертами. ${votesSummary} Бриф председателя: ${routerBrief}`,
+    finalAnswer,
+    decisionReason,
     thoughts: [...thoughts, ...peerReviews],
     votes: voteChecks,
-    agreementScore
+    agreementScore: voteAverage,
+    contradictions,
+    nextSteps
   };
 }
