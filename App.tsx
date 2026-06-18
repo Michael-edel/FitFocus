@@ -50,7 +50,6 @@ import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateau
 import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
-import { COURSE_LIBRARY } from './lessons';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse, FamilyWeeklyMenu } from './types';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
@@ -417,10 +416,11 @@ const compressFoodPhoto = async (
 };
 
 
-const pickLessonForToday = (user: UserProfile): CourseLesson => {
+const pickLessonForToday = (user: UserProfile, lessons: CourseLesson[]): CourseLesson | null => {
+  if (!lessons.length) return null;
   const completedIds = user.courseProgress?.completedLessonIds || [];
-  const nextLesson = COURSE_LIBRARY.find(l => !completedIds.includes(l.id));
-  return nextLesson || COURSE_LIBRARY[0];
+  const nextLesson = lessons.find(l => !completedIds.includes(l.id));
+  return nextLesson || lessons[0];
 };
 
 const PREMIUM_GATES = {
@@ -1188,6 +1188,7 @@ const App: React.FC = () => {
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
   const [selectedQuizOption, setSelectedQuizOption] = useState<LessonQuizOption | null>(null);
+  const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
 
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
@@ -1800,6 +1801,7 @@ await ensurePdfInterFont(doc);
       carbs: acc.carbs + item.carbs,
     }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
   }, [foodDiary]);
+  const lessons = courseLibrary ?? [];
 
   const weightTrend = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory || []).length < 2) return undefined;
@@ -1922,7 +1924,7 @@ const deleteAccount = useCallback(async () => {
     setFoodHistory(readKV('history', []));
     setFoodFavorites(readKV('favorites', []));
     setCoachCard(readKV('last_coach_card', null));
-    setCurrentLesson(pickLessonForToday(userWithTask));
+    setCurrentLesson(null);
     setAuthState('app');
     setProfileSyncState('saved');
     setLastProfileSyncAt(Date.now());
@@ -2320,6 +2322,30 @@ setAuthState('auth_choice');
   useEffect(() => {
     void bootstrapAuth();
   }, [bootstrapAuth]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const mod = await import('./lessons');
+        if (!alive) return;
+        setCourseLibrary(mod.COURSE_LIBRARY);
+      } catch {
+        if (!alive) return;
+        setCourseLibrary([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser || !courseLibrary) return;
+    if (currentLesson) return;
+    const nextLesson = pickLessonForToday(currentUser, courseLibrary);
+    if (nextLesson) setCurrentLesson(nextLesson);
+  }, [currentUser, courseLibrary, currentLesson]);
 
   useEffect(() => {
     if (!googleMe?.sub || !currentUser) return;
@@ -4184,7 +4210,7 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
         )}
 
 {activeTab === 'pro' && (<div className="max-w-4xl mx-auto space-y-12 py-10 animate-in zoom-in duration-700"><div className="text-center space-y-6"><div className="w-28 h-28 bg-gradient-to-br from-amber-400 to-orange-600 rounded-[3rem] flex items-center justify-center text-white mx-auto shadow-[0_20px_50px_rgba(245,158,11,0.2)]"><Crown size={56} /></div><h1 className="text-5xl font-black text-slate-50">FitFocus Pro</h1><p className="text-slate-400 text-xl font-medium">Все, что нужно для быстрого и здорового результата</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6">{[{ title: "Безлимитный AI Анализ", desc: "Узнайте КБЖУ любого блюда за секунду по фото" }, { title: "Персональный Коучинг", desc: "Ежедневные советы на основе ваших данных" }, { title: "Пошаговые рецепты", desc: "AI составит рецепт любого блюда прямо по вашему фото" }, { title: "Экспорт отчетов", desc: "PDF-выгрузка для врача или фитнес-тренера" }].map((f, i) => (<div key={i} className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 flex items-center gap-8 shadow-sm group hover:border-indigo-500/20 transition-all text-left"><div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner shrink-0"><CheckCircle size={32} /></div><div><h4 className="text-xl font-black text-slate-100 mb-1">{f.title}</h4><p className="text-slate-500 font-medium">{f.desc}</p></div></div>))}</div><button onClick={paywall.openPaywall} className="w-full py-8 bg-indigo-600 text-white rounded-[3rem] font-black text-2xl shadow-[0_20px_50px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all hover:-translate-y-1 active:scale-95">Выбрать тарифный план</button></div>)}
-        {activeTab === 'course' && (<div className="space-y-10 animate-in fade-in duration-700"><header className="flex items-center justify-between text-left"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Обучение</h1><p className="text-slate-400 font-medium">Ваш навигатор в мире нутрициологии</p></div><div className="flex items-center gap-6"><div className="text-right"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Пройдено</p><p className="text-2xl font-black text-slate-100 tabular-nums">{currentUser?.courseProgress?.completedLessonIds.length || 0} <span className="text-sm text-slate-600">/ {COURSE_LIBRARY.length}</span></p></div></div></header><div className="space-y-12">{[1, 2, 3, 4].map(weekNum => (<div key={weekNum} className="space-y-6"><div className="flex items-center gap-6"><h2 className="text-2xl font-black text-slate-200">Неделя {weekNum}</h2><div className="h-1 bg-slate-800 flex-1 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${(COURSE_LIBRARY.filter(l => l.week === weekNum && currentUser?.courseProgress?.completedLessonIds.includes(l.id)).length / COURSE_LIBRARY.filter(l => l.week === weekNum).length) * 100}%` }} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">{COURSE_LIBRARY.filter(l => l.week === weekNum).map(lesson => { const done = currentUser?.courseProgress?.completedLessonIds.includes(lesson.id); return (<button key={lesson.id} onClick={() => { setCurrentLesson(lesson); setIsLessonViewOpen(true); }} className={`p-8 rounded-[2.5rem] text-left border transition-all relative group ${done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800 shadow-xl hover:border-indigo-500/30'}`}>{done && <CheckCircle size={24} className="absolute top-8 right-8 text-emerald-500" />}<span className={`text-[10px] font-black uppercase tracking-widest block mb-4 ${done ? 'text-emerald-500' : 'text-slate-600'}`}>Урок {lesson.id.split('_')[0].replace('l','')}</span><h4 className={`text-xl font-black leading-tight mb-2 ${done ? 'text-emerald-100' : 'text-slate-100'}`}>{lesson.title}</h4><p className={`text-xs font-bold tabular-nums ${done ? 'text-emerald-500/60' : 'text-slate-500'}`}>{Math.ceil(lesson.readTimeSec/60)} минут чтения</p></button>); })}</div></div>))}</div></div>)}
+        {activeTab === 'course' && (!courseLibrary ? (<div className="space-y-10 animate-in fade-in duration-700"><div className="p-8 rounded-[2rem] bg-slate-900 border border-slate-800 text-slate-400 font-medium">Загружаю курс...</div></div>) : (<div className="space-y-10 animate-in fade-in duration-700"><header className="flex items-center justify-between text-left"><div className="text-left"><h1 className="text-4xl font-black text-slate-100 mb-2">Обучение</h1><p className="text-slate-400 font-medium">Ваш навигатор в мире нутрициологии</p></div><div className="flex items-center gap-6"><div className="text-right"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Пройдено</p><p className="text-2xl font-black text-slate-100 tabular-nums">{currentUser?.courseProgress?.completedLessonIds.length || 0} <span className="text-sm text-slate-600">/ {lessons.length}</span></p></div></div></header><div className="space-y-12">{[1, 2, 3, 4].map(weekNum => (<div key={weekNum} className="space-y-6"><div className="flex items-center gap-6"><h2 className="text-2xl font-black text-slate-200">Неделя {weekNum}</h2><div className="h-1 bg-slate-800 flex-1 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${(lessons.filter(l => l.week === weekNum && currentUser?.courseProgress?.completedLessonIds.includes(l.id)).length / lessons.filter(l => l.week === weekNum).length) * 100}%` }} /></div></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">{lessons.filter(l => l.week === weekNum).map(lesson => { const done = currentUser?.courseProgress?.completedLessonIds.includes(lesson.id); return (<button key={lesson.id} onClick={() => { setCurrentLesson(lesson); setIsLessonViewOpen(true); }} className={`p-8 rounded-[2.5rem] text-left border transition-all relative group ${done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-800 shadow-xl hover:border-indigo-500/30'}`}>{done && <CheckCircle size={24} className="absolute top-8 right-8 text-emerald-500" />}<span className={`text-[10px] font-black uppercase tracking-widest block mb-4 ${done ? 'text-emerald-500' : 'text-slate-600'}`}>Урок {lesson.id.split('_')[0].replace('l','')}</span><h4 className={`text-xl font-black leading-tight mb-2 ${done ? 'text-emerald-100' : 'text-slate-100'}`}>{lesson.title}</h4><p className={`text-xs font-bold tabular-nums ${done ? 'text-emerald-500/60' : 'text-slate-500'}`}>{Math.ceil(lesson.readTimeSec/60)} минут чтения</p></button>); })}</div></div>))}</div></div>))}
         
         {activeTab === 'admin' && isAdmin && (
           <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
