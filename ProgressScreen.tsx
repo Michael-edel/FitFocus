@@ -322,6 +322,18 @@ export default function ProgressScreen({
 
   const latestPhoto = progressPhotosSorted[0] || null;
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
+  const firstMeasurement = recentMeasurements[0] || null;
+  const measurementSpanDays =
+    latestMeasurement && firstMeasurement
+      ? Math.max(0, Math.round((new Date(latestMeasurement.date).getTime() - new Date(firstMeasurement.date).getTime()) / 86400000))
+      : null;
+  const photoSpanDays =
+    latestPhoto && firstPhoto
+      ? Math.max(0, Math.round((new Date(latestPhoto.date).getTime() - new Date(firstPhoto.date).getTime()) / 86400000))
+      : null;
+  const weightSinceStart = formatDelta(latestMeasurement?.weight, firstMeasurement?.weight, 'кг');
+  const waistSinceStart = formatDelta(latestMeasurement?.waistCm, firstMeasurement?.waistCm, 'см');
+  const pulseSinceStart = formatDelta(latestMeasurement?.restingPulse, firstMeasurement?.restingPulse, 'уд/мин');
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
@@ -569,6 +581,47 @@ export default function ProgressScreen({
           </div>
           <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
             Обновлено: {formatDate(wearableMetricsUpdatedAt || currentUser?.wearableMetricsUpdatedAt)}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Динамика прогресса</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-100">Старт, текущие цифры и изменение</h2>
+            <p className="mt-2 text-sm font-medium text-slate-400">Этот блок собирает фото, замеры и вес в одну короткую сводку, чтобы прогресс читался с первого взгляда.</p>
+          </div>
+          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <TrendingUp size={12} className="text-indigo-300" />
+            История тела
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес с начала</div>
+            <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{firstMeasurement?.weight ? `${firstMeasurement.weight.toFixed(1)} кг` : '—'}</div>
+            <div className="mt-1 text-sm text-slate-400">{weightSinceStart}</div>
+          </div>
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия с начала</div>
+            <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{firstMeasurement?.waistCm ? `${firstMeasurement.waistCm} см` : '—'}</div>
+            <div className="mt-1 text-sm text-slate-400">{waistSinceStart}</div>
+          </div>
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Пульс с начала</div>
+            <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{firstMeasurement?.restingPulse ? `${firstMeasurement.restingPulse} уд/мин` : '—'}</div>
+            <div className="mt-1 text-sm text-slate-400">{pulseSinceStart}</div>
+          </div>
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото и замеры</div>
+            <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{`${progressPhotosSorted.length} / ${recentMeasurements.length}`}</div>
+            <div className="mt-1 text-sm text-slate-400">
+              {photoSpanDays !== null && measurementSpanDays !== null
+                ? `${photoSpanDays} дн. по фото · ${measurementSpanDays} дн. по замерам`
+                : 'Добавьте фото и первый замер'}
+            </div>
           </div>
         </div>
       </section>
