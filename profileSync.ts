@@ -21,28 +21,55 @@ function withFetch(fetchImpl?: typeof fetch) {
   return fetchImpl ?? fetch;
 }
 
+async function handleProfileConflict(
+  response: Response,
+  deps: ProfileSyncDeps,
+): Promise<UserProfile | null> {
+  const payload = await response.json().catch(() => null);
+  const serverProfile = payload?.profile as UserProfile | undefined;
+  if (!serverProfile) return null;
+  if (deps.suppressNextFullProfileSyncRef) {
+    deps.suppressNextFullProfileSyncRef.current = true;
+  }
+  deps.persistUser(serverProfile);
+  await deps.loginAsUser(serverProfile);
+  return serverProfile;
+}
+
 export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   const fetchFn = withFetch(deps.fetchImpl);
   deps.setProfileSyncState('saving');
   try {
     const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
+    const body = { ...profile, baseVersion: profile.version ?? 0, stateItems };
     const r = await fetchFn('/api/profile', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...profile, baseVersion: profile.version ?? 0, stateItems }),
+      body: JSON.stringify(body),
     });
-    const payload = await r.json().catch(() => null);
-    if (r.status === 409 && payload?.profile) {
-      if (deps.suppressNextFullProfileSyncRef) {
-        deps.suppressNextFullProfileSyncRef.current = true;
+    if (r.status === 409) {
+      const serverProfile = await handleProfileConflict(r, deps);
+      if (serverProfile) {
+        const retry = await fetchFn('/api/profile', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...profile, baseVersion: serverProfile.version ?? 0, stateItems }),
+        });
+        const retryPayload = await retry.json().catch(() => null);
+        if (retry.ok && retryPayload?.profile) {
+          if (deps.suppressNextFullProfileSyncRef) {
+            deps.suppressNextFullProfileSyncRef.current = true;
+          }
+          deps.persistUser(retryPayload.profile as UserProfile);
+          deps.setProfileSyncState('saved');
+          deps.setLastProfileSyncAt(Date.now());
+          return;
+        }
       }
-      deps.persistUser(payload.profile as UserProfile);
-      await deps.loginAsUser(payload.profile as UserProfile);
-      deps.setProfileSyncState('saved');
-      deps.setLastProfileSyncAt(Date.now());
-      return;
     }
+    const payload = await r.json().catch(() => null);
     if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
     const serverProfile = payload?.profile as UserProfile | undefined;
     if (serverProfile) {
@@ -77,17 +104,28 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
     });
-    const payload = await r.json().catch(() => null);
-    if (r.status === 409 && payload?.profile) {
-      if (deps.suppressNextFullProfileSyncRef) {
-        deps.suppressNextFullProfileSyncRef.current = true;
+    if (r.status === 409) {
+      const serverProfile = await handleProfileConflict(r, deps);
+      if (serverProfile) {
+        const retry = await fetchFn('/api/profile', {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...patch, baseVersion: serverProfile.version ?? 0, stateItems }),
+        });
+        const retryPayload = await retry.json().catch(() => null);
+        if (retry.ok && retryPayload?.profile) {
+          if (deps.suppressNextFullProfileSyncRef) {
+            deps.suppressNextFullProfileSyncRef.current = true;
+          }
+          deps.persistUser(retryPayload.profile as UserProfile);
+          deps.setProfileSyncState('saved');
+          deps.setLastProfileSyncAt(Date.now());
+          return;
+        }
       }
-      deps.persistUser(payload.profile as UserProfile);
-      await deps.loginAsUser(payload.profile as UserProfile);
-      deps.setProfileSyncState('saved');
-      deps.setLastProfileSyncAt(Date.now());
-      return;
     }
+    const payload = await r.json().catch(() => null);
     if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
     const serverProfile = payload?.profile as UserProfile | undefined;
     if (serverProfile) {
