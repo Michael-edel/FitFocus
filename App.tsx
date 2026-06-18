@@ -2243,10 +2243,20 @@ const logWeight = useCallback(() => {
     };
   }, []);
 
+  const closeLessonView = useCallback(() => {
+    setIsQuizActive(false);
+    setIsLessonViewOpen(false);
+    setSelectedQuizOption(null);
+    setCurrentLesson(null);
+  }, []);
+
   const handleMarkLessonRead = useCallback(() => {
     if (!currentUser || !currentLesson) return;
     const progress = currentUser.courseProgress || { completedLessonIds: [], streak: 0 };
-    if (progress.completedLessonIds.includes(currentLesson.id)) return setIsLessonViewOpen(false);
+    if (progress.completedLessonIds.includes(currentLesson.id)) {
+      closeLessonView();
+      return;
+    }
     const todayStr = new Date().toLocaleDateString('en-CA');
     const nextProgress = {
       completedLessonIds: [...progress.completedLessonIds, currentLesson.id],
@@ -2255,16 +2265,21 @@ const logWeight = useCallback(() => {
       streak: (progress.streak || 0) + 1
     };
     persistUser({ ...currentUser, courseProgress: nextProgress });
-    if (currentLesson.quiz) setIsQuizActive(true);
-    else setIsLessonViewOpen(false);
-  }, [currentUser, currentLesson, persistUser]);
+    closeLessonView();
+  }, [closeLessonView, currentUser, currentLesson, persistUser]);
+
+  const handleStartLessonQuiz = useCallback(() => {
+    if (!currentLesson?.quiz) return;
+    setSelectedQuizOption(null);
+    setIsQuizActive(true);
+  }, [currentLesson]);
 
   const handleQuizSubmit = useCallback(() => {
     if (!currentUser || !currentLesson || !selectedQuizOption) return;
     const newAnswer = { lessonId: currentLesson.id, optionId: selectedQuizOption.id, date: new Date().toLocaleDateString('en-CA') };
     persistUser({ ...currentUser, lessonQuizAnswers: [...(currentUser.lessonQuizAnswers || []), newAnswer] });
-    setIsQuizActive(false); setIsLessonViewOpen(false); setSelectedQuizOption(null);
-  }, [currentUser, currentLesson, selectedQuizOption, persistUser]);
+    closeLessonView();
+  }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
 
   const todayTask = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -2719,16 +2734,8 @@ const logWeight = useCallback(() => {
               currentUser={currentUser}
               courseLibrary={courseLibrary}
               lessons={lessons}
-              currentLesson={currentLesson}
-              isLessonViewOpen={isLessonViewOpen}
-              isQuizActive={isQuizActive}
-              selectedQuizOption={selectedQuizOption}
               setCurrentLesson={setCurrentLesson}
               setIsLessonViewOpen={setIsLessonViewOpen}
-              setIsQuizActive={setIsQuizActive}
-              setSelectedQuizOption={setSelectedQuizOption}
-              handleMarkLessonRead={handleMarkLessonRead}
-              handleQuizSubmit={handleQuizSubmit}
             />
           </React.Suspense>
         )}
@@ -2789,10 +2796,10 @@ const logWeight = useCallback(() => {
           currentLesson={currentLesson}
           isQuizActive={isQuizActive}
           selectedQuizOption={selectedQuizOption}
-          setIsLessonViewOpen={setIsLessonViewOpen}
-          setIsQuizActive={setIsQuizActive}
+          onClose={closeLessonView}
           setSelectedQuizOption={setSelectedQuizOption}
           handleMarkLessonRead={handleMarkLessonRead}
+          handleStartLessonQuiz={handleStartLessonQuiz}
           handleQuizSubmit={handleQuizSubmit}
         />
       </React.Suspense>
