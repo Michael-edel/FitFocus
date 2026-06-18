@@ -1509,7 +1509,13 @@ await ensurePdfInterFont(doc);
     profileSaveTimer.current = window.setTimeout(async () => {
       await pushProfileToCloud(currentUser);
     }, 500);
-  }, [currentUser, googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState, pushProfileToCloud]);
+    return () => {
+      if (profileSaveTimer.current) {
+        window.clearTimeout(profileSaveTimer.current);
+        profileSaveTimer.current = null;
+      }
+    };
+  }, [currentUser, googleMe?.sub, pushProfileToCloud]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
