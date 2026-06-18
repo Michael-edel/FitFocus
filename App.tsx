@@ -778,6 +778,7 @@ const App: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
 
@@ -1400,11 +1401,13 @@ await ensurePdfInterFont(doc);
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
+      setProfileSyncNote(null);
       return;
     }
     await pushProfileToCloudService(profile, {
       currentUser,
       setProfileSyncState,
+      setProfileSyncNote,
       setLastProfileSyncAt,
       setAllUsers,
       persistUser,
@@ -1420,6 +1423,7 @@ await ensurePdfInterFont(doc);
     await patchProfileInCloudService(patch, {
       currentUser,
       setProfileSyncState,
+      setProfileSyncNote,
       setLastProfileSyncAt,
       setAllUsers,
       persistUser,
@@ -1434,12 +1438,14 @@ await ensurePdfInterFont(doc);
   const syncAllLocalDataNow = useCallback(async () => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
+      setProfileSyncNote(null);
       setLastProfileSyncAt(null);
       return;
     }
     await syncAllLocalDataNowService({
       currentUser,
       setProfileSyncState,
+      setProfileSyncNote,
       setLastProfileSyncAt,
       setAllUsers,
       persistUser,
@@ -1454,11 +1460,13 @@ await ensurePdfInterFont(doc);
   const reloadUserFromCloud = useCallback(async () => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
+      setProfileSyncNote(null);
       return;
     }
     await reloadUserFromCloudService({
       currentUser,
       setProfileSyncState,
+      setProfileSyncNote,
       setLastProfileSyncAt,
       setAllUsers,
       persistUser,
@@ -1478,6 +1486,9 @@ await ensurePdfInterFont(doc);
       if (profileSyncState !== 'idle') {
         setProfileSyncState('idle');
       }
+      if (profileSyncNote) {
+        setProfileSyncNote(null);
+      }
       if (lastProfileSyncAt !== null) {
         setLastProfileSyncAt(null);
       }
@@ -1491,7 +1502,7 @@ await ensurePdfInterFont(doc);
     profileSaveTimer.current = window.setTimeout(async () => {
       await pushProfileToCloud(currentUser);
     }, 500);
-  }, [currentUser, googleMe?.sub, lastProfileSyncAt, profileSyncState, pushProfileToCloud]);
+  }, [currentUser, googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState, pushProfileToCloud]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
@@ -2087,15 +2098,17 @@ const logWeight = useCallback(() => {
       return {
         label: 'Cloud: error',
         cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
-        title: `Ошибка синхронизации. Последний успешный синк: ${lastSync}`,
+        title: profileSyncNote
+          ? `${profileSyncNote} Последний успешный синк: ${lastSync}`
+          : `Ошибка синхронизации. Последний успешный синк: ${lastSync}`,
       };
     }
     return {
       label: 'Cloud: idle',
       cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
-      title: `Синхронизация готова. Последний синк: ${lastSync}`,
+      title: profileSyncNote || `Синхронизация готова. Последний синк: ${lastSync}`,
     };
-  }, [googleMe?.sub, lastProfileSyncAt, profileSyncState]);
+  }, [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
 
   const workspaceProps = {
     meta: {
