@@ -6,12 +6,14 @@ import { TariffPlan } from './types';
 export default function PlansScreen({ 
   currentPlan, 
   userId,
+  isAdmin = false,
   onSelect, 
   onCheckoutPlan,
   onClose 
 }: {
   currentPlan?: TariffPlan;
   userId?: string | null;
+  isAdmin?: boolean;
   onSelect: (p: TariffPlan) => void;
   onCheckoutPlan: (p: Exclude<TariffPlan, 'free'>) => Promise<string | null>;
   onClose: () => void;
@@ -130,6 +132,9 @@ export default function PlansScreen({
                 onClick={() => {
                   if (p.id === 'free') {
                     onSelect('free');
+                    onClose();
+                  } else if (isAdmin) {
+                    onSelect(p.id);
                     onClose();
                   } else {
                     setCheckoutPlan(p.id);
