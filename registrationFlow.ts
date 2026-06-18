@@ -13,6 +13,7 @@ type RegDataLike = {
   goal: UserProfile['goal'];
   targetWeight: number;
   plan: UserProfile['plan'];
+  medicalRestrictions?: string;
   lossDeficit?: number;
   gainSurplus?: number;
 };
@@ -75,6 +76,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     adaptationMultiplier: 1.0,
     familyMembers: [],
     exclusions: '',
+    medicalRestrictions: deps.regData.medicalRestrictions?.trim() || '',
     lossDeficit: Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT),
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
     riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,

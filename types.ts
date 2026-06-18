@@ -214,6 +214,8 @@ export interface UserProfile {
   lastCheckInDate?: string; 
   familyMembers: FamilyMember[];
   exclusions: string; 
+  /** медицинские ограничения, противопоказания, лекарства или особые условия */
+  medicalRestrictions?: string;
   /** общие семейные исключения (аллергены/запреты, влияет на общую готовку) */
   familyExclusions?: string;
   dietary?: DietaryRestrictions;

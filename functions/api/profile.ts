@@ -21,6 +21,7 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'lastCheckInDate',
   'familyMembers',
   'exclusions',
+  'medicalRestrictions',
   'familyExclusions',
   'lossDeficit',
   'gainSurplus',

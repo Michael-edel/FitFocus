@@ -1119,6 +1119,7 @@ const openEditFood = (item: FoodEntry) => {
     goal: Goal.LOSS,
     targetWeight: 65,
     dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
+    medicalRestrictions: '',
     plan: isTestModeEnabled() ? 'family' as TariffPlan : 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
