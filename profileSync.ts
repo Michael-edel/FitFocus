@@ -30,9 +30,27 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...profile, stateItems }),
+      body: JSON.stringify({ ...profile, baseVersion: profile.version ?? 0, stateItems }),
     });
+    const payload = await r.json().catch(() => null);
+    if (r.status === 409 && payload?.profile) {
+      if (deps.suppressNextFullProfileSyncRef) {
+        deps.suppressNextFullProfileSyncRef.current = true;
+      }
+      deps.persistUser(payload.profile as UserProfile);
+      await deps.loginAsUser(payload.profile as UserProfile);
+      deps.setProfileSyncState('saved');
+      deps.setLastProfileSyncAt(Date.now());
+      return;
+    }
     if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
+    const serverProfile = payload?.profile as UserProfile | undefined;
+    if (serverProfile) {
+      if (deps.suppressNextFullProfileSyncRef) {
+        deps.suppressNextFullProfileSyncRef.current = true;
+      }
+      deps.persistUser(serverProfile);
+    }
     deps.setProfileSyncState('saved');
     deps.setLastProfileSyncAt(Date.now());
   } catch {
@@ -57,10 +75,20 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...patch, stateItems }),
+      body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
     });
-    if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
     const payload = await r.json().catch(() => null);
+    if (r.status === 409 && payload?.profile) {
+      if (deps.suppressNextFullProfileSyncRef) {
+        deps.suppressNextFullProfileSyncRef.current = true;
+      }
+      deps.persistUser(payload.profile as UserProfile);
+      await deps.loginAsUser(payload.profile as UserProfile);
+      deps.setProfileSyncState('saved');
+      deps.setLastProfileSyncAt(Date.now());
+      return;
+    }
+    if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
     const serverProfile = payload?.profile as UserProfile | undefined;
     if (serverProfile) {
       if (deps.suppressNextFullProfileSyncRef) {

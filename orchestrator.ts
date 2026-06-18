@@ -1,4 +1,4 @@
-import { AIAgent, AIAgentRole, CouncilResponse, UserProfile, FoodItem, UserHabit } from './types';
+import { AIAgent, AIAgentRole, CouncilResponse, UserProfile, FoodItem, UserHabit, CouncilVote } from './types';
 
 const AGENTS: AIAgent[] = [
   {
@@ -47,12 +47,11 @@ export async function runCouncil(
     Запрос: "${query}"
   `;
 
-  // 1. ROUTING
-  const routerPrompt = `Проанализируй запрос пользователя: "${query}". Выбери ровно 2 агентов из списка [architect, nutritionist, physiologist, psychologist], чья помощь наиболее важна. Верни только ID через запятую.`;
-  const selectedRolesRaw = await callModel(routerPrompt, 'chairman');
-  const selectedRoles = selectedRolesRaw.split(',').map(s => s.trim() as AIAgentRole).filter(r => AGENTS.find(a => a.id === r));
-  
-  const activeAgents = AGENTS.filter(a => selectedRoles.includes(a.id));
+  // 1. ROUTING / BRIEFING
+  // Always involve all 4 experts so the council behaves like a true multi-disciplinary board.
+  const routerPrompt = `Проанализируй запрос пользователя: "${query}". Кратко определи приоритеты обсуждения для всех 4 экспертов: architect, nutritionist, physiologist, psychologist. Не выбирай подмножество, а дай короткий бриф по каждому направлению.`;
+  const routerBrief = await callModel(routerPrompt, 'chairman');
+  const activeAgents = AGENTS;
 
   // 2. EXPERT THOUGHTS
   const thoughts = await Promise.all(activeAgents.map(async agent => {
@@ -85,15 +84,47 @@ export async function runCouncil(
     В конце добавь "Agreement Score: X/100", где X - уровень согласия экспертов.
   `;
 
-  const finalAnswer = await callModel(synthesisPrompt, 'chairman');
-  
-  const agreementMatch = finalAnswer.match(/Agreement Score: (\d+)/);
+  const draftAnswer = await callModel(synthesisPrompt, 'chairman');
+
+  // 5. VOTING
+  const voteChecks = await Promise.all(activeAgents.map(async (agent): Promise<CouncilVote> => {
+    const votePrompt = `
+      Ты ${agent.name}. Оцени финальный черновик ответа председателя для запроса "${query}".
+      Черновик:
+      ${draftAnswer}
+
+      Верни строго в формате:
+      stance: approve|adjust|reject
+      score: 0-100
+      reason: краткое объяснение одной фразой
+    `;
+    const raw = await callModel(votePrompt, agent.id);
+    const stanceMatch = raw.match(/stance:\s*(approve|adjust|reject)/i);
+    const scoreMatch = raw.match(/score:\s*(\d{1,3})/i);
+    const reasonMatch = raw.match(/reason:\s*(.+)$/im);
+    const score = Math.max(0, Math.min(100, scoreMatch ? parseInt(scoreMatch[1], 10) : 75));
+    const stance = (stanceMatch?.[1]?.toLowerCase() as CouncilVote['stance']) || (score >= 80 ? 'approve' : score >= 55 ? 'adjust' : 'reject');
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      stance,
+      score,
+      reason: (reasonMatch?.[1] || raw).trim().slice(0, 220),
+    };
+  }));
+
+  const agreementMatch = draftAnswer.match(/Agreement Score: (\d+)/);
   const agreementScore = agreementMatch ? parseInt(agreementMatch[1]) : 85;
+  const approveCount = voteChecks.filter(v => v.stance === 'approve').length;
+  const adjustCount = voteChecks.filter(v => v.stance === 'adjust').length;
+  const rejectCount = voteChecks.filter(v => v.stance === 'reject').length;
+  const votesSummary = `Голоса: ${approveCount} approve, ${adjustCount} adjust, ${rejectCount} reject.`;
 
   return {
-    finalAnswer: finalAnswer.replace(/Agreement Score: \d+\/100/, '').trim(),
-    decisionReason: `Запрос обработан агентами: ${activeAgents.map(a => a.name).join(', ')}.`,
+    finalAnswer: draftAnswer.replace(/Agreement Score: \d+\/100/, '').trim(),
+    decisionReason: `Запрос обработан всеми 4 экспертами. ${votesSummary} Бриф председателя: ${routerBrief}`,
     thoughts: [...thoughts, ...peerReviews],
+    votes: voteChecks,
     agreementScore
   };
 }
