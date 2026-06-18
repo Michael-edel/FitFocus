@@ -346,7 +346,7 @@ export default function PlanScreen({
                       <div>
                         <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300">День недели</div>
                         <h3 className="mt-1 text-2xl font-black text-white">{d.day}</h3>
-                        <p className="mt-2 text-sm text-slate-400 font-semibold">Быстрый обзор: один активный день, приёмы пищи разнесены по карточкам, граммовки внутри карточки, БЖУ в шапке.</p>
+                        <p className="mt-2 text-sm text-slate-300 font-semibold">Один активный день. Карточки ниже показывают приёмы пищи, долю от дня и порции.</p>
                       </div>
                       {summary && (
                         <div className="grid grid-cols-2 gap-2 min-w-[240px]">
@@ -355,8 +355,21 @@ export default function PlanScreen({
                             <div className="mt-1 text-xl font-black text-white tabular-nums">{summary.calories} ккал</div>
                           </div>
                           <div className="p-3 rounded-[1.1rem] bg-slate-900/60 border border-slate-800">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Б/Ж/У</div>
-                            <div className="mt-1 text-sm font-black text-white tabular-nums">{summary.protein}Б · {summary.fat}Ж · {summary.carbs}У</div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">БЖУ</div>
+                            <div className="mt-1 grid grid-cols-3 gap-2">
+                              <div className="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-1 text-center">
+                                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Б</div>
+                                <div className="mt-0.5 text-sm font-black text-white tabular-nums">{summary.protein}</div>
+                              </div>
+                              <div className="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-1 text-center">
+                                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ж</div>
+                                <div className="mt-0.5 text-sm font-black text-white tabular-nums">{summary.fat}</div>
+                              </div>
+                              <div className="rounded-lg bg-slate-950/50 border border-slate-800 px-2 py-1 text-center">
+                                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">У</div>
+                                <div className="mt-0.5 text-sm font-black text-white tabular-nums">{summary.carbs}</div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -409,9 +422,9 @@ export default function PlanScreen({
                                 >
                                   <div className="min-w-0">
                                     <div className={clsx('text-[11px] font-black uppercase tracking-widest', idx === 0 ? 'text-emerald-300' : 'text-amber-300')}>{idx === 0 ? 'Блюдо' : 'Дополнение'}</div>
-                                    <div className="mt-1 text-sm font-semibold text-slate-100 leading-relaxed break-words">{line.text}</div>
+                                    <div className="mt-1 text-sm font-semibold text-slate-50 leading-relaxed break-words">{line.text}</div>
                                   </div>
-                                  {line.qty ? <div className="shrink-0 text-[11px] font-black uppercase tracking-widest text-slate-300 tabular-nums whitespace-nowrap">{line.qty}</div> : null}
+                                  {line.qty ? <div className="shrink-0 text-[11px] font-black uppercase tracking-widest text-slate-200 tabular-nums whitespace-nowrap">{line.qty}</div> : null}
                                 </div>
                               )) : (
                                 <div className="rounded-[1rem] bg-slate-900/35 border border-slate-800 px-3 py-3 text-sm text-slate-500 font-semibold">Описание меню отсутствует.</div>
