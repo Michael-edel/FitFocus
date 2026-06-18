@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import {
   Activity,
@@ -53,6 +53,7 @@ type ProgressScreenProps = {
 };
 
 type MetricKey = 'weight' | 'waistCm' | 'chestCm' | 'hipsCm' | 'restingPulse';
+type ProgressSectionId = 'summary' | 'compare' | 'dynamics' | 'measurements' | 'photos' | 'timeline';
 
 const metricMeta: Record<MetricKey, { label: string; unit: string; color: string }> = {
   weight: { label: 'Вес', unit: 'кг', color: '#818CF8' },
@@ -199,6 +200,7 @@ export default function ProgressScreen({
   onOpenSettings,
 }: ProgressScreenProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
+  const [activeSection, setActiveSection] = useState<ProgressSectionId>('summary');
   const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>('all');
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [draftWeight, setDraftWeight] = useState('');
@@ -609,6 +611,32 @@ export default function ProgressScreen({
 
   const hasMeasurements = recentMeasurements.length > 0;
   const hasPhotos = progressPhotosSorted.length > 0;
+  const scrollToSection = (sectionId: ProgressSectionId) => {
+    setActiveSection(sectionId);
+    document.getElementById(`progress-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  useEffect(() => {
+    const sectionIds: ProgressSectionId[] = ['summary', 'compare', 'dynamics', 'measurements', 'photos', 'timeline'];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible?.target?.id) return;
+        const found = sectionIds.find((id) => `progress-${id}` === visible.target.id);
+        if (found) setActiveSection(found);
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: [0.15, 0.3, 0.6] }
+    );
+
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(`progress-${id}`);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -644,7 +672,34 @@ export default function ProgressScreen({
         </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="sticky top-3 z-20 rounded-[1.5rem] border border-slate-800 bg-slate-950/80 p-2 shadow-xl shadow-black/20 backdrop-blur-md">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'summary', label: 'Сводка' },
+            { id: 'compare', label: 'Сравнение' },
+            { id: 'dynamics', label: 'График' },
+            { id: 'measurements', label: 'Замеры' },
+            { id: 'photos', label: 'Фото' },
+            { id: 'timeline', label: 'Лента' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id as ProgressSectionId)}
+              className={clsx(
+                'rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all border',
+                activeSection === item.id
+                  ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-transparent bg-transparent text-slate-500 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/40'
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section id="progress-summary" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 scroll-mt-28">
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -735,7 +790,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+      <section id="progress-compare" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Динамика прогресса</div>
@@ -1145,7 +1200,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+      <section id="progress-dynamics" className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr] scroll-mt-28">
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -1255,7 +1310,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section id="progress-measurements" className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] scroll-mt-28">
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -1349,7 +1404,7 @@ export default function ProgressScreen({
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+        <div id="progress-photos" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
           <div className="flex flex-col gap-3">
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Снимки прогресса</div>
             <h2 className="text-2xl font-black text-slate-100">Визуальная история тела</h2>
@@ -1406,7 +1461,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+      <section id="progress-timeline" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Лента прогресса</div>
