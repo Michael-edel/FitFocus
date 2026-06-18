@@ -6,7 +6,7 @@ Purpose: accept a snapshot from an iPhone bridge, typically a small native app o
 
 ## Required transport
 
-- Authenticated session cookie from FitFocus
+- Authenticated session cookie from FitFocus, or `Authorization: Bearer <token>` from `POST /api/mobile/token`
 - `Content-Type: application/json`
 
 ## Example payload
@@ -57,4 +57,3 @@ Success returns the updated profile and new version:
 ```
 
 If the profile version changed on the server, the endpoint returns `409` with `PROFILE_CONFLICT` and the current server profile.
-
