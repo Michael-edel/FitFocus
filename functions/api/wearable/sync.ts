@@ -5,23 +5,9 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
+import { normalizeWearableSyncSnapshot } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
-
-type WearableProvider = "apple_health" | "google_fit" | "fitbit" | "garmin" | "manual";
-
-const ALLOWED_PROVIDERS = new Set<WearableProvider>(["apple_health", "google_fit", "fitbit", "garmin", "manual"]);
-
-function parseNumber(value: unknown): number | undefined {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function sanitizeProvider(value: unknown): WearableProvider {
-  const provider = String(value || "manual").toLowerCase();
-  if (ALLOWED_PROVIDERS.has(provider as WearableProvider)) return provider as WearableProvider;
-  return "manual";
-}
 
 async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | "pro" | "family"> {
   try {
@@ -102,26 +88,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
-  const provider = sanitizeProvider(body.provider);
-  const timestamp = typeof body.date === "string" && body.date.trim() ? body.date : (typeof body.metricsUpdatedAt === "string" && body.metricsUpdatedAt.trim() ? body.metricsUpdatedAt : new Date().toISOString());
-  const stepsToday = parseNumber(body.stepsToday ?? body.steps);
-  const activeMinutesToday = parseNumber(body.activeMinutesToday ?? body.activeMinutes ?? body.moveMinutes);
-  const sleepHoursLastNight = parseNumber(body.sleepHoursLastNight ?? body.sleepHours);
-  const restingPulse = parseNumber(body.restingPulse ?? body.pulse);
-  const weight = parseNumber(body.weight);
-
-  if (
-    typeof stepsToday !== "number" &&
-    typeof activeMinutesToday !== "number" &&
-    typeof sleepHoursLastNight !== "number" &&
-    typeof restingPulse !== "number" &&
-    typeof weight !== "number"
-  ) {
+  const payload = normalizeWearableSyncSnapshot(body);
+  if (!payload) {
     return json({ error: "NO_WEARABLE_DATA" }, 400);
   }
 
   const currentMeta = await loadProfileMeta(db, user.sub);
-  const baseVersion = Number(body.baseVersion ?? 0);
+  const baseVersion = Number(payload.baseVersion ?? 0);
   if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
     return conflictResponse(user as any, currentMeta.profile, currentMeta.version);
   }
@@ -130,20 +103,24 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const serverPlan = await loadActivePlan(db, user.sub);
   const now = nowMs();
   const nextVersion = (currentMeta.version || 0) + 1;
+  const timestamp =
+    (typeof payload.date === "string" && payload.date) ||
+    (typeof payload.metricsUpdatedAt === "string" && payload.metricsUpdatedAt) ||
+    new Date().toISOString();
   const nextProfile: Record<string, unknown> = withProtectedFields(user as any, {
     ...currentProfile,
     plan: serverPlan,
     version: nextVersion,
-    wearableProvider: provider,
+    wearableProvider: payload.provider || "manual",
     wearableEnabled: true,
     wearableConnectedAt: (currentProfile as any).wearableConnectedAt || timestamp,
     wearableLastSyncAt: timestamp,
     wearableMetricsUpdatedAt: timestamp,
-    ...(typeof stepsToday === "number" ? { wearableStepsToday: Math.round(stepsToday) } : {}),
-    ...(typeof activeMinutesToday === "number" ? { wearableActiveMinutesToday: Math.round(activeMinutesToday) } : {}),
-    ...(typeof sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: Number(sleepHoursLastNight.toFixed(1)) } : {}),
-    ...(typeof restingPulse === "number" && restingPulse > 0 ? { restingPulse: Math.round(restingPulse), restingPulseMeasuredAt: timestamp } : {}),
-    ...(typeof weight === "number" && weight > 0 ? { weight, weightHistory: pushWeightHistory(currentProfile, weight, timestamp) } : {}),
+    ...(typeof payload.stepsToday === "number" ? { wearableStepsToday: Math.round(payload.stepsToday) } : {}),
+    ...(typeof payload.activeMinutesToday === "number" ? { wearableActiveMinutesToday: Math.round(payload.activeMinutesToday) } : {}),
+    ...(typeof payload.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: Number(payload.sleepHoursLastNight.toFixed(1)) } : {}),
+    ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: Math.round(payload.pulse), restingPulseMeasuredAt: timestamp } : {}),
+    ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight, weightHistory: pushWeightHistory(currentProfile, payload.weight, timestamp) } : {}),
   });
 
   await db
@@ -158,16 +135,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     {
       profile: nextProfile,
       updatedFields: Object.keys({
-        ...(typeof stepsToday === "number" ? { wearableStepsToday: true } : {}),
-        ...(typeof activeMinutesToday === "number" ? { wearableActiveMinutesToday: true } : {}),
-        ...(typeof sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: true } : {}),
-        ...(typeof restingPulse === "number" && restingPulse > 0 ? { restingPulse: true } : {}),
-        ...(typeof weight === "number" && weight > 0 ? { weight: true } : {}),
+        ...(typeof payload.stepsToday === "number" ? { wearableStepsToday: true } : {}),
+        ...(typeof payload.activeMinutesToday === "number" ? { wearableActiveMinutesToday: true } : {}),
+        ...(typeof payload.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: true } : {}),
+        ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: true } : {}),
+        ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: true } : {}),
       }),
-      source: provider,
+      source: payload.provider || "manual",
       version: nextVersion,
     },
     200
   );
 };
-

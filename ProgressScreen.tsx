@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { WeightTrendChart } from './charts';
 import { downloadProgressComparisonPdf } from './pdf';
+import { normalizeWearableSyncSnapshot } from './wearableSync';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
@@ -134,16 +135,16 @@ const parseNumber = (value: unknown) => {
 const parseWearableJson = (text: string): WearableImportPayload | null => {
   try {
     const raw = JSON.parse(text);
-    if (!raw || typeof raw !== 'object') return null;
-    const obj = raw as Record<string, unknown>;
+    const obj = normalizeWearableSyncSnapshot(raw);
+    if (!obj) return null;
     return {
-      provider: typeof obj.provider === 'string' ? obj.provider as WearableProvider : typeof obj.source === 'string' ? obj.source as WearableProvider : undefined,
-      stepsToday: parseNumber(obj.stepsToday ?? obj.steps ?? obj.dailySteps ?? obj.stepCount) ?? undefined,
-      activeMinutesToday: parseNumber(obj.activeMinutesToday ?? obj.activeMinutes ?? obj.moveMinutes) ?? undefined,
-      sleepHoursLastNight: parseNumber(obj.sleepHoursLastNight ?? obj.sleepHours ?? obj.sleep) ?? undefined,
-      weight: parseNumber(obj.weight ?? obj.bodyWeight) ?? undefined,
-      pulse: parseNumber(obj.pulse ?? obj.restingPulse) ?? undefined,
-      date: typeof obj.date === 'string' ? obj.date : typeof obj.recordedAt === 'string' ? obj.recordedAt : undefined,
+      provider: obj.provider,
+      stepsToday: obj.stepsToday,
+      activeMinutesToday: obj.activeMinutesToday,
+      sleepHoursLastNight: obj.sleepHoursLastNight,
+      weight: obj.weight,
+      pulse: obj.pulse,
+      date: obj.date || obj.metricsUpdatedAt,
     };
   } catch {
     return null;
