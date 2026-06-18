@@ -7,6 +7,7 @@ type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 type ProfileSyncDeps = {
   currentUser: UserProfile | null;
   setProfileSyncState: Dispatch<SetStateAction<ProfileSyncState>>;
+  setProfileSyncNote?: Dispatch<SetStateAction<string | null>>;
   setLastProfileSyncAt: Dispatch<SetStateAction<number | null>>;
   setAllUsers: Dispatch<SetStateAction<UserProfile[]>>;
   persistUser: (updated: UserProfile) => void;
@@ -35,6 +36,7 @@ async function handleProfileConflict(
   if (deps.suppressNextFullProfileSyncRef) {
     deps.suppressNextFullProfileSyncRef.current = true;
   }
+  deps.setProfileSyncNote?.('Обнаружен конфликт версий. Обновляем данные и повторяем синхронизацию.');
   deps.persistUser(serverProfile);
   await deps.loginAsUser(serverProfile);
   return serverProfile;
@@ -50,6 +52,7 @@ function buildRetryProfile(localProfile: UserProfile, serverProfile: UserProfile
 
 export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   const fetchFn = withFetch(deps.fetchImpl);
+  deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
     const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
@@ -61,6 +64,7 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       body: JSON.stringify(body),
     });
     if (isAccessDeniedStatus(r.status)) {
+      deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');
       return;
     }
@@ -96,8 +100,10 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       deps.persistUser(serverProfile);
     }
     deps.setProfileSyncState('saved');
+    deps.setProfileSyncNote?.('Синхронизировано с облаком.');
     deps.setLastProfileSyncAt(Date.now());
   } catch {
+    deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
     deps.setProfileSyncState('error');
   }
 }
@@ -112,6 +118,7 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
   deps.persistUser(nextUser);
 
   const fetchFn = withFetch(deps.fetchImpl);
+  deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
     const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
@@ -122,6 +129,7 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
     });
     if (isAccessDeniedStatus(r.status)) {
+      deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');
       return;
     }
@@ -157,8 +165,10 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       deps.persistUser(serverProfile);
     }
     deps.setProfileSyncState('saved');
+    deps.setProfileSyncNote?.('Синхронизировано с облаком.');
     deps.setLastProfileSyncAt(Date.now());
   } catch {
+    deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
     deps.setProfileSyncState('error');
   }
 }
@@ -174,6 +184,7 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
   try {
     const pr = await fetchFn('/api/profile', { credentials: 'include' });
     if (isAccessDeniedStatus(pr.status)) {
+      deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');
       return;
     }
@@ -187,8 +198,10 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
     deps.setAllUsers(nextAllUsers);
     (deps.persistAllUsersSnapshotImpl ?? persistAllUsersSnapshot)(deps.currentUser?.id ?? profile.id, nextAllUsers);
     deps.setProfileSyncState('saved');
+    deps.setProfileSyncNote?.('Профиль загружен из облака.');
     deps.setLastProfileSyncAt(Date.now());
   } catch {
+    deps.setProfileSyncNote?.('Не удалось загрузить профиль из облака.');
     deps.setProfileSyncState('error');
   }
 }
