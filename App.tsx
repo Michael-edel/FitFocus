@@ -1398,6 +1398,10 @@ await ensurePdfInterFont(doc);
   const suppressNextFullProfileSyncRef = useRef(false);
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
+    if (!googleMe?.sub) {
+      setProfileSyncState('idle');
+      return;
+    }
     await pushProfileToCloudService(profile, {
       currentUser,
       setProfileSyncState,
@@ -1410,7 +1414,7 @@ await ensurePdfInterFont(doc);
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
     await patchProfileInCloudService(patch, {
@@ -1428,6 +1432,11 @@ await ensurePdfInterFont(doc);
   }, [currentUser, loginAsUser, persistUser]);
 
   const syncAllLocalDataNow = useCallback(async () => {
+    if (!googleMe?.sub) {
+      setProfileSyncState('idle');
+      setLastProfileSyncAt(null);
+      return;
+    }
     await syncAllLocalDataNowService({
       currentUser,
       setProfileSyncState,
@@ -1440,9 +1449,13 @@ await ensurePdfInterFont(doc);
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
   const reloadUserFromCloud = useCallback(async () => {
+    if (!googleMe?.sub) {
+      setProfileSyncState('idle');
+      return;
+    }
     await reloadUserFromCloudService({
       currentUser,
       setProfileSyncState,
@@ -1455,12 +1468,21 @@ await ensurePdfInterFont(doc);
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
   // Server-driven: persist profile changes to D1 (debounced)
   const profileSaveTimer = useRef<number | null>(null);
   useEffect(() => {
     if (!currentUser) return;
+    if (!googleMe?.sub) {
+      if (profileSyncState !== 'idle') {
+        setProfileSyncState('idle');
+      }
+      if (lastProfileSyncAt !== null) {
+        setLastProfileSyncAt(null);
+      }
+      return;
+    }
     if (suppressNextFullProfileSyncRef.current) {
       suppressNextFullProfileSyncRef.current = false;
       return;
@@ -1469,7 +1491,7 @@ await ensurePdfInterFont(doc);
     profileSaveTimer.current = window.setTimeout(async () => {
       await pushProfileToCloud(currentUser);
     }, 500);
-  }, [currentUser, pushProfileToCloud]);
+  }, [currentUser, googleMe?.sub, lastProfileSyncAt, profileSyncState, pushProfileToCloud]);
 
   const deltaDays = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
@@ -2040,6 +2062,13 @@ const logWeight = useCallback(() => {
 
   const syncBadge = useMemo(() => {
     const lastSync = lastProfileSyncAt ? new Date(lastProfileSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+    if (!googleMe?.sub) {
+      return {
+        label: 'Cloud: local',
+        cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
+        title: 'Облачная синхронизация не активна: войдите в Google, чтобы сохранять данные между устройствами.',
+      };
+    }
     if (profileSyncState === 'saving') {
       return {
         label: 'Cloud: saving',
@@ -2066,7 +2095,7 @@ const logWeight = useCallback(() => {
       cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
       title: `Синхронизация готова. Последний синк: ${lastSync}`,
     };
-  }, [lastProfileSyncAt, profileSyncState]);
+  }, [googleMe?.sub, lastProfileSyncAt, profileSyncState]);
 
   const workspaceProps = {
     meta: {
