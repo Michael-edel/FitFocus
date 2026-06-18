@@ -30,7 +30,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cameraOpen, setCameraOpen, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent } = nutrition;
 
   const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
-  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, onPatchUser, syncState } = progress;
+  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
@@ -135,6 +135,10 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             wearableEnabled={wearableEnabled}
             wearableConnectedAt={wearableConnectedAt}
             wearableLastSyncAt={wearableLastSyncAt}
+            wearableStepsToday={wearableStepsToday}
+            wearableActiveMinutesToday={wearableActiveMinutesToday}
+            wearableSleepHoursLastNight={wearableSleepHoursLastNight}
+            wearableMetricsUpdatedAt={wearableMetricsUpdatedAt}
             onPatchUser={onPatchUser}
             syncState={syncState}
             lastProfileSyncAt={lastProfileSyncAt}

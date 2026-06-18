@@ -293,6 +293,14 @@ export interface UserProfile {
   wearableConnectedAt?: string;
   /** когда данные с носимого устройства синхронизировались последний раз */
   wearableLastSyncAt?: string;
+  /** шаги, подтянутые/введённые за сегодня */
+  wearableStepsToday?: number;
+  /** активные минуты */
+  wearableActiveMinutesToday?: number;
+  /** сон прошлой ночи, в часах */
+  wearableSleepHoursLastNight?: number;
+  /** когда обновлялись wearable-метрики */
+  wearableMetricsUpdatedAt?: string;
 }
 
 export interface NutritionIntake {

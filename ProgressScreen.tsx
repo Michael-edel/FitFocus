@@ -37,6 +37,10 @@ type ProgressScreenProps = {
   wearableEnabled?: boolean;
   wearableConnectedAt?: string;
   wearableLastSyncAt?: string;
+  wearableStepsToday?: number;
+  wearableActiveMinutesToday?: number;
+  wearableSleepHoursLastNight?: number;
+  wearableMetricsUpdatedAt?: string;
   onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
   syncState?: SyncState;
   lastProfileSyncAt?: number | null;
@@ -105,6 +109,10 @@ export default function ProgressScreen({
   wearableEnabled,
   wearableConnectedAt,
   wearableLastSyncAt,
+  wearableStepsToday,
+  wearableActiveMinutesToday,
+  wearableSleepHoursLastNight,
+  wearableMetricsUpdatedAt,
   onPatchUser,
   syncState,
   lastProfileSyncAt,
@@ -118,6 +126,9 @@ export default function ProgressScreen({
   const [draftChest, setDraftChest] = useState('');
   const [draftHips, setDraftHips] = useState('');
   const [draftPulse, setDraftPulse] = useState('');
+  const [draftSteps, setDraftSteps] = useState('');
+  const [draftActiveMinutes, setDraftActiveMinutes] = useState('');
+  const [draftSleepHours, setDraftSleepHours] = useState('');
   const [draftSaving, setDraftSaving] = useState(false);
 
   const recentMeasurements = useMemo(() => {
@@ -133,7 +144,10 @@ export default function ProgressScreen({
     setDraftChest(typeof latest?.chestCm === 'number' ? String(latest.chestCm) : '');
     setDraftHips(typeof latest?.hipsCm === 'number' ? String(latest.hipsCm) : '');
     setDraftPulse(typeof latest?.restingPulse === 'number' ? String(latest.restingPulse) : '');
-  }, [currentWeight, recentMeasurements]);
+    setDraftSteps(typeof wearableStepsToday === 'number' ? String(wearableStepsToday) : '');
+    setDraftActiveMinutes(typeof wearableActiveMinutesToday === 'number' ? String(wearableActiveMinutesToday) : '');
+    setDraftSleepHours(typeof wearableSleepHoursLastNight === 'number' ? String(wearableSleepHoursLastNight) : '');
+  }, [currentWeight, recentMeasurements, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableStepsToday]);
 
   const latestMeasurement = recentMeasurements.length ? recentMeasurements[recentMeasurements.length - 1] : null;
   const previousMeasurement = recentMeasurements.length > 1 ? recentMeasurements[recentMeasurements.length - 2] : null;
@@ -207,7 +221,10 @@ export default function ProgressScreen({
     const nextChest = parse(draftChest);
     const nextHips = parse(draftHips);
     const nextPulse = parse(draftPulse);
-    if (!nextWeight && !nextWaist && !nextChest && !nextHips && !nextPulse) return;
+    const nextSteps = parse(draftSteps);
+    const nextActiveMinutes = parse(draftActiveMinutes);
+    const nextSleepHours = parse(draftSleepHours);
+    if (!nextWeight && !nextWaist && !nextChest && !nextHips && !nextPulse && !nextSteps && !nextActiveMinutes && !nextSleepHours) return;
     setDraftSaving(true);
     try {
       const now = new Date().toISOString();
@@ -226,8 +243,12 @@ export default function ProgressScreen({
         chestCm: nextChest ?? currentUser.chestCm,
         hipsCm: nextHips ?? currentUser.hipsCm,
         restingPulse: nextPulse ?? currentUser.restingPulse,
+        wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
+        wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
+        wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
         bloodPressureMeasuredAt: currentUser.bloodPressureMeasuredAt,
         bodyMeasurementsMeasuredAt: (nextWaist || nextChest || nextHips || nextPulse) ? now : currentUser.bodyMeasurementsMeasuredAt,
+        wearableMetricsUpdatedAt: (nextSteps || nextActiveMinutes || nextSleepHours) ? now : currentUser.wearableMetricsUpdatedAt,
         restingPulseMeasuredAt: nextPulse ? now : currentUser.restingPulseMeasuredAt,
         measurementsHistory: [
           historyEntry,
@@ -346,6 +367,24 @@ export default function ProgressScreen({
           </div>
           <div className="mt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Последний sync</div>
           <div className="mt-1 text-sm text-slate-300">{formatDate(wearableLastSyncAt || currentUser?.wearableLastSyncAt)}</div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Шаги</div>
+              <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{typeof wearableStepsToday === 'number' ? wearableStepsToday.toLocaleString('ru-RU') : '—'}</div>
+            </div>
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Активность</div>
+              <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{typeof wearableActiveMinutesToday === 'number' ? `${wearableActiveMinutesToday} мин` : '—'}</div>
+            </div>
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сон</div>
+              <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{typeof wearableSleepHoursLastNight === 'number' ? `${wearableSleepHoursLastNight.toFixed(1)} ч` : '—'}</div>
+            </div>
+          </div>
+          <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Обновлено: {formatDate(wearableMetricsUpdatedAt || currentUser?.wearableMetricsUpdatedAt)}
+          </div>
         </div>
       </section>
 
@@ -674,6 +713,18 @@ export default function ProgressScreen({
             <label className="space-y-2 sm:col-span-2">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Бёдра</div>
               <input value={draftHips} onChange={(e) => setDraftHips(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="см" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Шаги</div>
+              <input value={draftSteps} onChange={(e) => setDraftSteps(e.target.value)} inputMode="numeric" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="12000" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Активные минуты</div>
+              <input value={draftActiveMinutes} onChange={(e) => setDraftActiveMinutes(e.target.value)} inputMode="numeric" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="45" />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сон прошлой ночи</div>
+              <input value={draftSleepHours} onChange={(e) => setDraftSleepHours(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="7.5" />
             </label>
           </div>
 
