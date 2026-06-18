@@ -105,6 +105,7 @@ const RegistrationScreen = React.lazy(() => import('./RegistrationScreen'));
 const AuthChoiceScreen = React.lazy(() => import('./AuthChoiceScreen'));
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
+const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -1310,6 +1311,68 @@ const App: React.FC = () => {
   const [coachLoading, setCoachLoading] = useState(false);
 
   const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
+  const handleCouncilSubmit = useCallback(async () => {
+    if (!currentUser) return;
+    const q = councilInput.trim();
+    if (!q) return;
+
+    const nowIso = new Date().toISOString();
+    const userMsg = { id: `u_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`, role: 'user' as const, text: q, createdAt: nowIso };
+    setCouncilInput('');
+    setShowCouncilThoughts(false);
+
+    setCouncilMessages(prev => {
+      const next = [...prev, userMsg];
+      persistCouncilHistory(next);
+      return next;
+    });
+
+    setCouncilLoading(true);
+    setCouncilResponse(null);
+    setCouncilStage('router');
+
+    const timers: any[] = [];
+    timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
+    timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
+    timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
+
+    try {
+      const r = await callAiCouncil(q, currentUser, foodDiary, habits);
+
+      const assistantMsg = {
+        id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
+        role: 'assistant' as const,
+        text: r.finalAnswer,
+        createdAt: new Date().toISOString(),
+        response: r
+      };
+
+      setCouncilMessages(prev => {
+        const next = [...prev, assistantMsg];
+        persistCouncilHistory(next);
+        return next;
+      });
+
+      setCouncilResponse(r);
+    } catch (err: any) {
+      const msg = err?.message || 'Ошибка совета.';
+      const assistantMsg = {
+        id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
+        role: 'assistant' as const,
+        text: `⚠️ ${msg}`,
+        createdAt: new Date().toISOString()
+      };
+      setCouncilMessages(prev => {
+        const next = [...prev, assistantMsg];
+        persistCouncilHistory(next);
+        return next;
+      });
+    } finally {
+      timers.forEach(t => clearTimeout(t));
+      setCouncilLoading(false);
+      setCouncilStage('idle');
+    }
+  }, [currentUser, councilInput, foodDiary, habits, persistCouncilHistory]);
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2716,270 +2779,29 @@ const logWeight = useCallback(() => {
           </React.Suspense>
         )}
         {activeTab === 'council' && (
-          <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-10 duration-700">
-            <header className="text-left">
-              <div className="flex items-center gap-3 text-indigo-400 mb-2">
-                <BrainCircuit size={28} />
-                <span className="text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">Multi-Agent v2</span>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-black">AI Совет Экспертов</h1>
-              <p className="text-slate-400">Параллельный анализ от 4 экспертов + независимая проверка + синтез.</p>
-            </header>
-
-            <div className="bg-slate-900 rounded-[3rem] border border-slate-800 h-[640px] flex flex-col overflow-hidden shadow-2xl">
-              <div className="px-6 md:px-10 py-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  <History size={14} /> История совета
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!currentUser) return;
-                    const ok = confirm('Очистить историю AI Совета?');
-                    if (!ok) return;
-                    const key = `fitfocus_data_${currentUser.id}_council_history`;
-                    safeRemoveItem(key);
-                    setCouncilMessages([]);
-                    setCouncilResponse(null);
-                    setExpandedCouncilThoughtIds({});
-                  }}
-                  className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all"
-                >
-                  <Trash2 size={14} /> Очистить
-                </button>
-              </div>
-              <div ref={councilScrollRef} className="flex-1 p-6 md:p-10 overflow-y-auto space-y-8 scrollbar-hide">
-                {/* Chat history */}
-                <div className="space-y-6">
-                  {councilMessages.length === 0 && !councilLoading && (
-                    <div className="h-full flex flex-col items-center justify-center opacity-50 py-24">
-                      <MessageCircle size={72} className="mb-6 text-slate-800" />
-                      <p className="text-center font-bold text-slate-500 text-lg">Задайте вопрос о прогрессе,
-                        <br />метаболизме, рационе или привычках.</p>
-                    </div>
-                  )}
-
-                  {councilMessages.map((m) => {
-                    const isUser = m.role === 'user';
-                    const resp = m.response;
-                    const score = resp?.agreementScore ?? null;
-                    const expanded = !!expandedCouncilThoughtIds[m.id];
-                    return (
-                      <div key={m.id} className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
-                        <div
-                          className={clsx(
-                            'max-w-[85%] p-5 md:p-6 rounded-[2.5rem] border shadow-xl',
-                            isUser
-                              ? 'bg-indigo-600/10 border-indigo-500/20 text-slate-100'
-                              : 'bg-slate-950 border-slate-800 text-slate-200'
-                          )}
-                        >
-                          {!isUser && score !== null && (
-                            <div className="mb-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Синтез (итог)</div>
-                                <div className={clsx(
-                                  'text-[10px] px-3 py-1 rounded-full border font-black uppercase tracking-widest tabular-nums',
-                                  score >= 80 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                  : score >= 55 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                                  : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
-                                )}>
-                                  Agreement {score}%
-                                </div>
-                              </div>
-                              <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                                <div
-                                  className={clsx('h-full rounded-full transition-all',
-                                    score >= 80 ? 'bg-emerald-500' : score >= 55 ? 'bg-amber-500' : 'bg-rose-500'
-                                  )}
-                                  style={{ width: `${score}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
-
-                          {!isUser && resp?.thoughts?.length ? (
-                            <div className="mt-4">
-                              <button
-                                type="button"
-                                onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                                className="flex items-center gap-2 text-slate-500 hover:text-indigo-400 font-black text-[10px] uppercase tracking-widest transition-all"
-                              >
-                                {expanded ? 'Скрыть ход мыслей' : 'Показать ход мыслей совета'}
-                                <ChevronDown className={clsx('transition-transform', expanded && 'rotate-180')} size={14} />
-                              </button>
-
-                              {expanded && (
-                                <div className="mt-4 space-y-4 animate-in zoom-in-95">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {resp.thoughts.map((t, i) => (
-                                      <div
-                                        key={i}
-                                        className={clsx(
-                                          'p-5 rounded-3xl border',
-                                          t.isReview ? 'bg-slate-900/50 border-slate-800 italic' : 'bg-indigo-500/5 border-indigo-500/20'
-                                        )}
-                                      >
-                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-2">{t.agentName}</p>
-                                        <p className="text-sm text-slate-300">"{t.text}"</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="flex justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedCouncilThoughtIds(prev => ({ ...prev, [m.id]: false }))}
-                                      className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
-                                    >
-                                      Свернуть
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {councilLoading && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[85%] p-5 md:p-6 rounded-[2.5rem] bg-slate-900 border border-slate-800 shadow-xl">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">
-                            <BrainCircuit size={14} /> Совет обсуждает…
-                          </div>
-                          <span className="text-[10px] font-black text-slate-500 uppercase">
-                            {councilStage === 'router' ? 'Маршрутизация' : councilStage === 'experts' ? 'Эксперты' : councilStage === 'review' ? 'Проверка' : councilStage === 'chairman' ? 'Синтез' : '…'}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-                          {[
-                            { id: 'router', label: 'Маршрут' },
-                            { id: 'experts', label: 'Эксперты' },
-                            { id: 'review', label: 'Проверка' },
-                            { id: 'chairman', label: 'Синтез' },
-                          ].map((s) => {
-                            const order = ['router','experts','review','chairman'] as const;
-                            const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
-                            const myIdx = order.indexOf(s.id as any);
-                            const done = myIdx < curIdx;
-                            const active = myIdx === curIdx;
-                            return (
-                              <div
-                                key={s.id}
-                                className={clsx(
-                                  'py-2 rounded-2xl border text-[10px] font-black uppercase tracking-widest',
-                                  done ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                                  : active ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300 animate-pulse'
-                                  : 'bg-slate-950 border-slate-800 text-slate-600'
-                                )}
-                              >
-                                {s.label}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">
-                          <span className="ff-ai-dot" />
-                          <span className="ff-ai-dot ff-ai-dot--2" />
-                          <span className="ff-ai-dot ff-ai-dot--3" />
-                          <span className="ml-2">идёт обсуждение…</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!currentUser) return;
-                  const q = councilInput.trim();
-                  if (!q) return;
-
-                  const nowIso = new Date().toISOString();
-                  const userMsg = { id: `u_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`, role: 'user' as const, text: q, createdAt: nowIso };
-                  setCouncilInput('');
-                  setShowCouncilThoughts(false);
-
-                  setCouncilMessages(prev => {
-                    const next = [...prev, userMsg];
-                    persistCouncilHistory(next);
-                    return next;
-                  });
-
-                  setCouncilLoading(true);
-                  setCouncilResponse(null);
-                  setCouncilStage('router');
-
-                  const timers: any[] = [];
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
-                  timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
-
-                  try {
-                    const r = await callAiCouncil(q, currentUser, foodDiary, habits);
-
-                    const assistantMsg = {
-                      id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
-                      role: 'assistant' as const,
-                      text: r.finalAnswer,
-                      createdAt: new Date().toISOString(),
-                      response: r
-                    };
-
-                    setCouncilMessages(prev => {
-                      const next = [...prev, assistantMsg];
-                      persistCouncilHistory(next);
-                      return next;
-                    });
-
-                    setCouncilResponse(r);
-                  } catch (err: any) {
-                    const msg = err?.message || 'Ошибка совета.';
-                    const assistantMsg = {
-                      id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
-                      role: 'assistant' as const,
-                      text: `⚠️ ${msg}`,
-                      createdAt: new Date().toISOString()
-                    };
-                    setCouncilMessages(prev => {
-                      const next = [...prev, assistantMsg];
-                      persistCouncilHistory(next);
-                      return next;
-                    });
-                  } finally {
-                    timers.forEach(t => clearTimeout(t));
-                    setCouncilLoading(false);
-                    setCouncilStage('idle');
-                  }
-                }}
-                className="p-5 md:p-8 bg-slate-950 border-t border-slate-800 flex gap-4"
-              >
-                <textarea
-                  rows={1}
-                  className="flex-1 bg-slate-900 border border-slate-800 p-4 md:p-6 rounded-3xl outline-none text-white focus:border-indigo-500 transition-all resize-none"
-                  value={councilInput}
-                  onChange={(e) => setCouncilInput(e.target.value)}
-                  placeholder="Ваш вопрос экспертам..."
-                />
-                <button
-                  disabled={councilLoading || !councilInput.trim()}
-                  className="bg-indigo-600 p-4 md:p-6 rounded-3xl text-white hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center min-w-[64px]"
-                >
-                  {councilLoading ? <Loader2 className="animate-spin" /> : <Send size={26} />}
-                </button>
-              </form>
-            </div>
-          </div>
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка AI Совета...</div>}>
+            <CouncilScreen
+              councilInput={councilInput}
+              setCouncilInput={setCouncilInput}
+              councilLoading={councilLoading}
+              councilStage={councilStage}
+              councilMessages={councilMessages}
+              expandedCouncilThoughtIds={expandedCouncilThoughtIds}
+              setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}
+              councilScrollRef={councilScrollRef}
+              handleCouncilSubmit={handleCouncilSubmit}
+              onClearHistory={() => {
+                if (!currentUser) return;
+                const ok = confirm('Очистить историю AI Совета?');
+                if (!ok) return;
+                const key = `fitfocus_data_${currentUser.id}_council_history`;
+                safeRemoveItem(key);
+                setCouncilMessages([]);
+                setCouncilResponse(null);
+                setExpandedCouncilThoughtIds({});
+              }}
+            />
+          </React.Suspense>
         )}
 
 {activeTab === 'pro' && (<div className="max-w-4xl mx-auto space-y-12 py-10 animate-in zoom-in duration-700"><div className="text-center space-y-6"><div className="w-28 h-28 bg-gradient-to-br from-amber-400 to-orange-600 rounded-[3rem] flex items-center justify-center text-white mx-auto shadow-[0_20px_50px_rgba(245,158,11,0.2)]"><Crown size={56} /></div><h1 className="text-5xl font-black text-slate-50">FitFocus Pro</h1><p className="text-slate-400 text-xl font-medium">Все, что нужно для быстрого и здорового результата</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6">{[{ title: "Безлимитный AI Анализ", desc: "Узнайте КБЖУ любого блюда за секунду по фото" }, { title: "Персональный Коучинг", desc: "Ежедневные советы на основе ваших данных" }, { title: "Пошаговые рецепты", desc: "AI составит рецепт любого блюда прямо по вашему фото" }, { title: "Экспорт отчетов", desc: "PDF-выгрузка для врача или фитнес-тренера" }].map((f, i) => (<div key={i} className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 flex items-center gap-8 shadow-sm group hover:border-indigo-500/20 transition-all text-left"><div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-inner shrink-0"><CheckCircle size={32} /></div><div><h4 className="text-xl font-black text-slate-100 mb-1">{f.title}</h4><p className="text-slate-500 font-medium">{f.desc}</p></div></div>))}</div><button onClick={paywall.openPaywall} className="w-full py-8 bg-indigo-600 text-white rounded-[3rem] font-black text-2xl shadow-[0_20px_50px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all hover:-translate-y-1 active:scale-95">Выбрать тарифный план</button></div>)}
