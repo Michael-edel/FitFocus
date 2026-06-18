@@ -5,6 +5,8 @@ This folder contains a minimal native iOS bridge that can:
 - request HealthKit permissions
 - read today's steps, active minutes, sleep hours, resting pulse, and weight
 - send a normalized snapshot to `POST /api/wearable/sync`
+- keep the FitFocus base URL and mobile token on the device
+- sync on button tap or by pulling down on the screen
 
 ## How auth works
 
@@ -12,6 +14,7 @@ The bridge can use a bearer token obtained from FitFocus:
 
 - `POST /api/mobile/token` exchanges an existing web session for a token
 - the token is sent as `Authorization: Bearer <token>`
+- the app stores the token locally so you do not need to enter it again after relaunch
 
 ## What to add in Xcode
 
@@ -19,11 +22,21 @@ Create a new iOS app target and add these files:
 
 - `WearableSyncSnapshot.swift`
 - `FitFocusWearableBridge.swift`
+- `ContentView.swift`
+- `FitFocusWearableBridgeApp.swift`
 
-Then call:
+The current app shell already provides:
 
-1. `requestAccess()` once after the user grants consent
-2. `syncNow(baseVersion:)` when the bridge should push data to FitFocus
+- a token screen with persistent base URL and token inputs
+- a `Request access` button for HealthKit
+- a `Sync now` button
+- pull-to-sync via the system refresh gesture
+
+After setup:
+
+1. Call `requestAccess()` once after the user grants consent
+2. Call `syncNow(appVersion:)` when the bridge should push data to FitFocus
+3. Pull down on the screen whenever you want to refresh the snapshot
 
 ## Example payload
 
@@ -43,4 +56,3 @@ Then call:
   "baseVersion": 12
 }
 ```
-
