@@ -6,7 +6,7 @@ const INTER_FONT_FILES = {
   bold: new URL("./fonts/NotoSans-Bold.ttf", import.meta.url).toString(),
 } as const;
 
-let interFontLoaded = false;
+const registeredDocs = new WeakSet<jsPDF>();
 
 const looksLikeHtml = (u8: Uint8Array) => {
   // quick detect: "<!DO", "<htm", "<HTM"
@@ -78,7 +78,7 @@ const loadInterFontBytes = async (url: string): Promise<ArrayBuffer> => {
 };
 
 export const ensurePdfInterFont = async (doc: jsPDF) => {
-  if (interFontLoaded) return;
+  if (registeredDocs.has(doc)) return;
 
   for (const [style, fontPath] of Object.entries(INTER_FONT_FILES) as Array<[
     "normal" | "bold",
@@ -91,5 +91,5 @@ export const ensurePdfInterFont = async (doc: jsPDF) => {
     doc.addFont(fileName, INTER_FONT_NAME, style);
   }
 
-  interFontLoaded = true;
+  registeredDocs.add(doc);
 };
