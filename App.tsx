@@ -55,7 +55,6 @@ import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS
 import { calculateBMR, calculateTDEE, calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
 import { addWeight, weightDelta } from './weight';
-import { createTask } from './coach';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
@@ -77,6 +76,7 @@ import {
   safeRemoveItem,
   safeSetItem,
 } from './storage/hybrid';
+import { hydrateSessionFromCloud } from './sessionHydration';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -1772,64 +1772,21 @@ const deleteAccount = useCallback(async () => {
 }, [googleMe?.sub, logout]);
 
   const loginAsUser = useCallback(async (user: UserProfile) => {
-    const userWithResetUsage = resetUsageIfNewTime(user);
-
-    // Server-driven hydration for cross-device: load KV blobs from D1, fallback to local cache.
-    const prefixes = [`fitfocus_data_${user.id}_`, `ff_`];
-    let kv: Record<string, string> = {};
-    try {
-      for (const prefix of prefixes) {
-        const r = await fetch(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
-        if (!r.ok) continue;
-        const data = await r.json();
-        const items = Array.isArray(data?.items) ? data.items : [];
-        for (const it of items) {
-          if (it?.key && typeof it.value === 'string') {
-            kv[it.key] = it.value;
-            try { localStorage.setItem(it.key, it.value); } catch {}
-          }
-        }
-      }
-    } catch {}
-
-    const readKV = <T,>(suffix: string, fallback: T): T => {
-      const fullKey = `fitfocus_data_${user.id}_${suffix}`;
-      const raw = kv[fullKey] ?? localStorage.getItem(fullKey);
-      if (!raw) return fallback;
-      try { return JSON.parse(raw) as T; } catch { return fallback; }
-    };
-
-    const storedDiaryRaw: FoodItem[] = readKV('diary', []);
-    // Keep only thumbnails in memory to avoid huge payloads
-    const storedDiary: FoodItem[] = (storedDiaryRaw || []).map((it: any) => {
-      if (!it || typeof it !== 'object') return it;
-      const copy: any = { ...it };
-      if (typeof copy.photo === 'string') delete copy.photo;
-      if (typeof copy.photoThumb === 'string' && copy.photoThumb.length > 120_000) delete copy.photoThumb;
-      return copy;
+    const hydrated = await hydrateSessionFromCloud(user, {
+      resetUsageIfNewTime,
+      initialHabits: INITIAL_HABITS,
     });
 
-    const storedHabits: UserHabit[] = readKV('habits', INITIAL_HABITS);
-    const storedAllUsers: UserProfile[] = readKV('all_users', []);
-    const storedWeeklyReports: WeeklyStoredReport[] = readKV('weekly_reports', []);
-    const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
-
-    const userWithOffsets: UserProfile = { 
-      ...userWithTask, 
-      lossDeficit: userWithTask.lossDeficit ?? DEFAULT_DEFICIT, 
-      gainSurplus: userWithTask.gainSurplus ?? DEFAULT_SURPLUS 
-    };
-
-    setCurrentUser(userWithOffsets);
-    if (Array.isArray(storedAllUsers) && storedAllUsers.length > 0) {
-      setAllUsers(storedAllUsers);
+    setCurrentUser(hydrated.currentUser);
+    if (Array.isArray(hydrated.allUsers) && hydrated.allUsers.length > 0) {
+      setAllUsers(hydrated.allUsers);
     }
-    setWeeklyReports(storedWeeklyReports);
-    setFoodDiary(storedDiary);
-    setHabits(storedHabits);
-    setFoodHistory(readKV('history', []));
-    setFoodFavorites(readKV('favorites', []));
-    setCoachCard(readKV('last_coach_card', null));
+    setWeeklyReports(hydrated.weeklyReports);
+    setFoodDiary(hydrated.foodDiary);
+    setHabits(hydrated.habits);
+    setFoodHistory(hydrated.foodHistory);
+    setFoodFavorites(hydrated.foodFavorites);
+    setCoachCard(hydrated.coachCard);
     setCurrentLesson(null);
     setAuthState('app');
     setProfileSyncState('saved');
