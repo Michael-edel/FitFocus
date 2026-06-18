@@ -2068,6 +2068,16 @@ await ensurePdfInterFont(doc);
   }, [bootstrapAuth]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('billing') !== 'success') return;
+    if (!currentUser) return;
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('billing');
+    window.history.replaceState({}, '', cleanUrl.toString());
+    void reloadUserFromCloud();
+  }, [currentUser?.id, reloadUserFromCloud]);
+
+  useEffect(() => {
     let alive = true;
     (async () => {
       try {
@@ -2949,7 +2959,30 @@ if (authState === 'register') return (
       )}
       {paywall.isPaywallOpen && (
         <React.Suspense fallback={<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60"><div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 px-5 py-4 text-sm font-semibold text-slate-200"><Loader2 className="h-4 w-4 animate-spin text-indigo-400" />Загрузка тарифа...</div></div>}>
-          <PlansScreen currentPlan={currentUser?.plan || 'free'} userId={currentUser?.id} onSelect={(p) => { if (currentUser) persistUser({ ...currentUser, plan: p, planTier: (p === 'free' ? 'free' : 'pro'), proUnlockedAt: (p !== 'free' ? new Date().toISOString() : undefined) }); }} onClose={paywall.closePaywall} />
+          <PlansScreen
+            currentPlan={currentUser?.plan || 'free'}
+            userId={currentUser?.id}
+            onSelect={(p) => {
+              if (currentUser && p === 'free') {
+                persistUser({ ...currentUser, plan: p, planTier: 'free', proUnlockedAt: undefined });
+              }
+            }}
+            onCheckoutPlan={async (plan) => {
+              const r = await fetch('/api/billing/checkout', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plan }),
+              });
+              const j = await r.json().catch(() => null);
+              if (!r.ok) {
+                alert(j?.error ? `Не удалось открыть оплату: ${j.error}` : 'Не удалось открыть оплату.');
+                return null;
+              }
+              return typeof j?.url === 'string' ? j.url : null;
+            }}
+            onClose={paywall.closePaywall}
+          />
         </React.Suspense>
       )}
       
