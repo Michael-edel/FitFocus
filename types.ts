@@ -197,6 +197,14 @@ export type DietaryRestrictions = {
   notes?: string;
 };
 
+export type HealthMeasurement = {
+  date: string;
+  weight?: number;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  restingPulse?: number;
+};
+
 export interface UserProfile {
   id: string;
   version?: number;
@@ -208,6 +216,7 @@ export interface UserProfile {
   activityLevel: ActivityLevel;
   goal: Goal;
   weightHistory: { date: string; weight: number }[];
+  measurementsHistory?: HealthMeasurement[];
   targetWeight: number;
   adaptationMultiplier: number; 
   lastAdaptationDate?: string;

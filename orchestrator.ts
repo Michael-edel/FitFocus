@@ -51,6 +51,7 @@ export async function runCouncil(
     Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
     Давление: ${formatBloodPressure(user)}.
     Пульс покоя: ${user.restingPulse ? `${Math.round(Number(user.restingPulse))} уд/мин` : 'нет'}.
+    Последний замер: ${JSON.stringify((user.measurementsHistory || []).slice(0, 1))}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.
     Дневник питания (последние 10 записей): ${JSON.stringify((history.diary || []).slice(-10))}.

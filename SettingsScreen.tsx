@@ -172,6 +172,11 @@ export default function SettingsScreen({
   const [draftRestingPulse, setDraftRestingPulse] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
 
+  const latestMeasurement = useMemo(() => {
+    const list = user?.measurementsHistory || [];
+    return list.length ? list[0] : null;
+  }, [user?.measurementsHistory]);
+
   const profileSummary = useMemo(() => {
     if (!user) return null;
     return {
@@ -237,6 +242,10 @@ export default function SettingsScreen({
     const parsedBloodPressureDiastolic = Number(draftBloodPressureDiastolic || 0);
     const parsedRestingPulse = Number(draftRestingPulse || 0);
     const bloodPressureMeasuredAt = new Date().toISOString();
+    const hasMeasurement =
+      (Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0) ||
+      (Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0) ||
+      (Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0);
 
     const patch: Partial<UserProfile> = {
       name: safeName,
@@ -250,6 +259,18 @@ export default function SettingsScreen({
       restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : user.restingPulse,
       restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? bloodPressureMeasuredAt : user.restingPulseMeasuredAt,
     };
+
+    if (hasMeasurement) {
+      const history = user.measurementsHistory || [];
+      const entry = {
+        date: bloodPressureMeasuredAt,
+        weight: user.weight,
+        bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : undefined,
+        bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : undefined,
+        restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : undefined,
+      };
+      patch.measurementsHistory = [entry, ...history].slice(0, 30);
+    }
 
     if (serverSession && onPatchUser) {
       await onPatchUser(patch);
@@ -274,6 +295,17 @@ export default function SettingsScreen({
             <div className="space-y-4 text-left">
               <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
                 <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Профиль</div>
+                {latestMeasurement && (
+                  <div className="mb-3 rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+                    <div className="font-black text-slate-200 uppercase tracking-widest text-[10px]">Последний замер</div>
+                    <div className="mt-1">
+                      {latestMeasurement.bloodPressureSystolic && latestMeasurement.bloodPressureDiastolic
+                        ? `${latestMeasurement.bloodPressureSystolic}/${latestMeasurement.bloodPressureDiastolic} мм рт. ст.`
+                        : 'Давление не указано'}
+                      {latestMeasurement.restingPulse ? ` · Пульс ${latestMeasurement.restingPulse} уд/мин` : ''}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-3">
                   <label className="space-y-1">
                     <div className="text-sm text-slate-400 font-semibold">Имя</div>
