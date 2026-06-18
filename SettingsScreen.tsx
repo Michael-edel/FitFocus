@@ -74,7 +74,7 @@ const goalOptions = [
 ] as const;
 
 const wearableOptions: Array<{ value: WearableProvider; label: string; note: string }> = [
-  { value: 'apple_health', label: 'Apple Health', note: 'iPhone / Apple Watch' },
+  { value: 'apple_health', label: 'Apple Health', note: 'iPhone / Apple Watch · HealthKit' },
   { value: 'google_fit', label: 'Google Fit', note: 'Android / Wear OS' },
   { value: 'fitbit', label: 'Fitbit', note: 'Часы и браслеты Fitbit' },
   { value: 'garmin', label: 'Garmin', note: 'Спортивные часы Garmin' },
@@ -748,7 +748,9 @@ export default function SettingsScreen({
                     <div className="text-slate-100 font-black">{wearableSummary}</div>
                     <div className="text-slate-500 text-sm mt-2">
                       {user?.wearableProvider && user.wearableEnabled !== false
-                        ? 'Источник подключён и может передавать шаги, сон и пульс.'
+                        ? (user.wearableProvider === 'apple_health'
+                            ? 'Apple Health подключён. iPhone-клиент может отправлять HealthKit-снимки в FitFocus через /api/wearable/sync.'
+                            : 'Источник подключён и может передавать шаги, сон и пульс.')
                         : 'Выберите Apple Health, Google Fit, Fitbit или Garmin для синхронизации.'}
                     </div>
                   </div>
