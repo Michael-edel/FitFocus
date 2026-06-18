@@ -486,6 +486,15 @@ export default function ProgressScreen({
   };
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';
+  const wearableIsConnected = !!wearableProvider && wearableEnabled !== false;
+  const wearableSourceHint = wearableProvider === 'apple_health'
+    ? 'Apple Health получает данные через iPhone bridge и отправляет их в FitFocus.'
+    : wearableProvider
+      ? 'Источник подключён и может обновлять шаги, сон и пульс.'
+      : 'Выберите источник синхронизации в настройках.';
+  const wearableConnectedLabel = formatDate(wearableConnectedAt || currentUser?.wearableConnectedAt);
+  const wearableSyncLabel = formatDate(wearableLastSyncAt || currentUser?.wearableLastSyncAt);
+  const wearableMetricsLabel = formatDate(wearableMetricsUpdatedAt || currentUser?.wearableMetricsUpdatedAt);
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
 
   const applyWearableProvider = async (provider: WearableProvider) => {
@@ -839,14 +848,37 @@ export default function ProgressScreen({
             <div>
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Смарт-часы</div>
               <div className="mt-2 text-2xl font-black text-slate-100">{wearableSummary}</div>
-              <div className="mt-1 text-sm font-semibold text-slate-400">{wearableProvider && wearableEnabled !== false ? 'Интеграция включена' : 'Источник можно выбрать и подключить'}</div>
+              <div className="mt-1 text-sm font-semibold text-slate-400">
+                {wearableIsConnected ? 'Интеграция включена' : 'Источник можно выбрать и подключить'}
+              </div>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-300">
               <Watch size={18} />
             </div>
           </div>
-          <div className="mt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Последний sync</div>
-          <div className="mt-1 text-sm text-slate-300">{formatDate(wearableLastSyncAt || currentUser?.wearableLastSyncAt)}</div>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Источник</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{wearableSummary}</div>
+              <div className="mt-1 text-xs text-slate-400">{wearableSourceHint}</div>
+            </div>
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Подключено</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{wearableConnectedLabel}</div>
+              <div className="mt-1 text-xs text-slate-400">Когда источник стал активен в профиле</div>
+            </div>
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Последний sync</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{wearableSyncLabel}</div>
+              <div className="mt-1 text-xs text-slate-400">Последняя отправка шагов, сна и пульса</div>
+            </div>
+            <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Обновлено</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{wearableMetricsLabel}</div>
+              <div className="mt-1 text-xs text-slate-400">Когда wearable-метрики попали в профиль</div>
+            </div>
+          </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
@@ -863,7 +895,7 @@ export default function ProgressScreen({
             </div>
           </div>
           <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
-            Обновлено: {formatDate(wearableMetricsUpdatedAt || currentUser?.wearableMetricsUpdatedAt)}
+            Данные берутся из выбранного wearable-источника и обновляются через sync в профиле.
           </div>
         </div>
       </section>
