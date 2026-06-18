@@ -50,7 +50,7 @@ import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateau
 import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, CouncilResponse, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -90,6 +90,7 @@ import {
 } from './profileSync';
 import { type RegistrationData } from './RegistrationScreen';
 import { runRegistrationFlow } from './registrationFlow';
+import { useCouncilChat } from './useCouncilChat';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -1118,17 +1119,6 @@ const App: React.FC = () => {
     }
   }, [planScope, cloudFamily?.id, loadFamilyShopping]);
 
-  // AI Council (Orchestrator v2)
-  const [councilInput, setCouncilInput] = useState('');
-  const [councilLoading, setCouncilLoading] = useState(false);
-  const [councilResponse, setCouncilResponse] = useState<CouncilResponse | null>(null);
-  const [showCouncilThoughts, setShowCouncilThoughts] = useState(false);
-  const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
-  type CouncilChatMsg = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; response?: CouncilResponse };
-  const [councilMessages, setCouncilMessages] = useState<CouncilChatMsg[]>([]);
-  const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
-  const councilScrollRef = useRef<HTMLDivElement | null>(null);
-
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [newWeight, setNewWeight] = useState<string>('');
@@ -1202,39 +1192,6 @@ const App: React.FC = () => {
       safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
     } catch {}
   }, [settings, currentUser?.id]);
-
-  // AI Council: load/save chat history per user (localStorage)
-  useEffect(() => {
-    if (!currentUser) return;
-    const key = `fitfocus_data_${currentUser.id}_council_history`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setCouncilMessages(parsed);
-        safeSetItem(key, raw);
-      } else {
-        setCouncilMessages([]);
-      }
-    } catch {
-      setCouncilMessages([]);
-    }
-    setExpandedCouncilThoughtIds({});
-    setCouncilResponse(null);
-    setCouncilStage('idle');
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    // keep view pinned to the bottom during conversation
-    if (!councilScrollRef.current) return;
-    councilScrollRef.current.scrollTop = councilScrollRef.current.scrollHeight;
-  }, [councilMessages.length, councilLoading, activeTab]);
-
-  const persistCouncilHistory = useCallback((msgs: CouncilChatMsg[]) => {
-    if (!currentUser) return;
-    const key = `fitfocus_data_${currentUser.id}_council_history`;
-    try { safeSetItem(key, JSON.stringify(msgs.slice(-50))); } catch {}
-  }, [currentUser?.id]);
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
   const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {
@@ -1313,68 +1270,19 @@ const App: React.FC = () => {
   const [coachLoading, setCoachLoading] = useState(false);
 
   const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
-  const handleCouncilSubmit = useCallback(async () => {
-    if (!currentUser) return;
-    const q = councilInput.trim();
-    if (!q) return;
-
-    const nowIso = new Date().toISOString();
-    const userMsg = { id: `u_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`, role: 'user' as const, text: q, createdAt: nowIso };
-    setCouncilInput('');
-    setShowCouncilThoughts(false);
-
-    setCouncilMessages(prev => {
-      const next = [...prev, userMsg];
-      persistCouncilHistory(next);
-      return next;
-    });
-
-    setCouncilLoading(true);
-    setCouncilResponse(null);
-    setCouncilStage('router');
-
-    const timers: any[] = [];
-    timers.push(setTimeout(() => setCouncilStage(s => (s === 'router' ? 'experts' : s)), 350));
-    timers.push(setTimeout(() => setCouncilStage(s => (s === 'experts' ? 'review' : s)), 900));
-    timers.push(setTimeout(() => setCouncilStage(s => (s === 'review' ? 'chairman' : s)), 1400));
-
-    try {
-      const r = await callAiCouncil(q, currentUser, foodDiary, habits);
-
-      const assistantMsg = {
-        id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
-        role: 'assistant' as const,
-        text: r.finalAnswer,
-        createdAt: new Date().toISOString(),
-        response: r
-      };
-
-      setCouncilMessages(prev => {
-        const next = [...prev, assistantMsg];
-        persistCouncilHistory(next);
-        return next;
-      });
-
-      setCouncilResponse(r);
-    } catch (err: any) {
-      const msg = err?.message || 'Ошибка совета.';
-      const assistantMsg = {
-        id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
-        role: 'assistant' as const,
-        text: `⚠️ ${msg}`,
-        createdAt: new Date().toISOString()
-      };
-      setCouncilMessages(prev => {
-        const next = [...prev, assistantMsg];
-        persistCouncilHistory(next);
-        return next;
-      });
-    } finally {
-      timers.forEach(t => clearTimeout(t));
-      setCouncilLoading(false);
-      setCouncilStage('idle');
-    }
-  }, [currentUser, councilInput, foodDiary, habits, persistCouncilHistory]);
+  // AI Council (Orchestrator v2)
+  const {
+    councilInput,
+    setCouncilInput,
+    councilLoading,
+    councilStage,
+    councilMessages,
+    expandedCouncilThoughtIds,
+    setExpandedCouncilThoughtIds,
+    councilScrollRef,
+    handleCouncilSubmit,
+    clearCouncilHistory,
+  } = useCouncilChat({ currentUser, foodDiary, habits });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2792,16 +2700,7 @@ const logWeight = useCallback(() => {
               setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}
               councilScrollRef={councilScrollRef}
               handleCouncilSubmit={handleCouncilSubmit}
-              onClearHistory={() => {
-                if (!currentUser) return;
-                const ok = confirm('Очистить историю AI Совета?');
-                if (!ok) return;
-                const key = `fitfocus_data_${currentUser.id}_council_history`;
-                safeRemoveItem(key);
-                setCouncilMessages([]);
-                setCouncilResponse(null);
-                setExpandedCouncilThoughtIds({});
-              }}
+              onClearHistory={clearCouncilHistory}
             />
           </React.Suspense>
         )}
