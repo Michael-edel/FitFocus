@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { UserProfile } from './types';
-import { collectLocalStateItems, persistAllUsersSnapshot } from './storage/hybrid';
+import { collectLocalStateItems, persistAllUsersSnapshot, readStoredAllUsersSnapshot } from './storage/hybrid';
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -156,8 +156,10 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
     const profile = pj?.profile as UserProfile | null;
     if (!profile) return;
     await deps.loginAsUser(profile);
-    deps.setAllUsers([profile]);
-    (deps.persistAllUsersSnapshotImpl ?? persistAllUsersSnapshot)(deps.currentUser?.id ?? profile.id, [profile]);
+    const storedAllUsers = readStoredAllUsersSnapshot<UserProfile>();
+    const nextAllUsers = Array.isArray(storedAllUsers) && storedAllUsers.length > 0 ? storedAllUsers : [profile];
+    deps.setAllUsers(nextAllUsers);
+    (deps.persistAllUsersSnapshotImpl ?? persistAllUsersSnapshot)(deps.currentUser?.id ?? profile.id, nextAllUsers);
     deps.setProfileSyncState('saved');
     deps.setLastProfileSyncAt(Date.now());
   } catch {
