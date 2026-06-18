@@ -200,6 +200,7 @@ export default function ProgressScreen({
   const [draftSaving, setDraftSaving] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [wearablePasteDraft, setWearablePasteDraft] = useState('');
   const wearableImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const recentMeasurements = useMemo(() => {
@@ -417,12 +418,11 @@ export default function ProgressScreen({
     }
   };
 
-  const importWearableFile = async (file: File) => {
+  const importWearableText = async (text: string) => {
     if (!onPatchUser || !currentUser) return;
     setImportError(null);
     setImportBusy(true);
     try {
-      const text = await file.text();
       const payload = parseWearableImport(text);
       if (!payload) throw new Error('Не удалось распознать JSON/CSV формат');
 
@@ -455,6 +455,11 @@ export default function ProgressScreen({
     } finally {
       setImportBusy(false);
     }
+  };
+
+  const importWearableFile = async (file: File) => {
+    const text = await file.text();
+    await importWearableText(text);
   };
 
   const hasMeasurements = recentMeasurements.length > 0;
@@ -768,6 +773,33 @@ export default function ProgressScreen({
               >
                 Очистить
               </button>
+            </div>
+            <div className="mt-4">
+              <textarea
+                value={wearablePasteDraft}
+                onChange={(e) => setWearablePasteDraft(e.target.value)}
+                rows={5}
+                placeholder={`Вставьте JSON/CSV сюда, например:\n{"provider":"google_fit","stepsToday":8400,"activeMinutesToday":42,"sleepHoursLastNight":7.4}\nили\nprovider,stepsToday,activeMinutesToday,sleepHoursLastNight\nfitbit,8400,42,7.4`}
+                className="w-full rounded-[1rem] border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/40"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void importWearableText(wearablePasteDraft)}
+                  disabled={!onPatchUser || importBusy || !wearablePasteDraft.trim()}
+                  className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-emerald-600 hover:bg-emerald-500 text-white font-black transition-all disabled:opacity-50"
+                >
+                  <Cloud className="w-4 h-4" />
+                  {importBusy ? 'Импортируем…' : 'Импорт из текста'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWearablePasteDraft('')}
+                  className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-300 font-black transition-all"
+                >
+                  Очистить поле
+                </button>
+              </div>
             </div>
             {importError ? (
               <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
