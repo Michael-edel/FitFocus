@@ -101,6 +101,11 @@ const formatShortDate = (iso: string) => {
   return `${day}.${month}`;
 };
 
+const toDateKey = (iso?: string | null) => {
+  if (!iso) return '';
+  return iso.includes('T') ? iso.slice(0, 10) : iso;
+};
+
 const formatDelta = (current?: number | null, prev?: number | null, unit = '') => {
   if (typeof current !== 'number' || typeof prev !== 'number') return '—';
   const diff = current - prev;
@@ -247,6 +252,40 @@ export default function ProgressScreen({
     return [...(progressPhotos || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [progressPhotos]);
 
+  const progressDateKeys = useMemo(() => {
+    const keys = new Set<string>();
+    recentMeasurements.forEach((item) => keys.add(toDateKey(item.date)));
+    progressPhotosSorted.forEach((photo) => keys.add(toDateKey(photo.date)));
+    return [...keys].filter(Boolean).sort();
+  }, [progressPhotosSorted, recentMeasurements]);
+
+  const [compareFromKey, setCompareFromKey] = useState('');
+  const [compareToKey, setCompareToKey] = useState('');
+
+  React.useEffect(() => {
+    if (!progressDateKeys.length) return;
+    setCompareFromKey((current) => (current && progressDateKeys.includes(current) ? current : progressDateKeys[0]));
+    setCompareToKey((current) => (current && progressDateKeys.includes(current) ? current : progressDateKeys[progressDateKeys.length - 1]));
+  }, [progressDateKeys]);
+
+  const measurementByDate = useMemo(() => {
+    const map = new Map<string, (typeof recentMeasurements)[number]>();
+    recentMeasurements.forEach((item) => {
+      const key = toDateKey(item.date);
+      if (key) map.set(key, item);
+    });
+    return map;
+  }, [recentMeasurements]);
+
+  const photoByDate = useMemo(() => {
+    const map = new Map<string, ProgressPhoto>();
+    progressPhotosSorted.forEach((photo) => {
+      const key = toDateKey(photo.date);
+      if (key && !map.has(key)) map.set(key, photo);
+    });
+    return map;
+  }, [progressPhotosSorted]);
+
   const timelineGroups = useMemo(() => {
     type TimelineItem =
       | { kind: 'measurement'; date: string; title: string; detail: string; tone: string }
@@ -335,6 +374,13 @@ export default function ProgressScreen({
   const weightSinceStart = formatDelta(latestMeasurement?.weight, firstMeasurement?.weight, 'кг');
   const waistSinceStart = formatDelta(latestMeasurement?.waistCm, firstMeasurement?.waistCm, 'см');
   const pulseSinceStart = formatDelta(latestMeasurement?.restingPulse, firstMeasurement?.restingPulse, 'уд/мин');
+  const compareFromMeasurement = compareFromKey ? measurementByDate.get(compareFromKey) || null : null;
+  const compareToMeasurement = compareToKey ? measurementByDate.get(compareToKey) || null : null;
+  const compareFromPhoto = compareFromKey ? photoByDate.get(compareFromKey) || null : null;
+  const compareToPhoto = compareToKey ? photoByDate.get(compareToKey) || null : null;
+  const compareWeightDelta = formatDelta(compareToMeasurement?.weight, compareFromMeasurement?.weight, 'кг');
+  const compareWaistDelta = formatDelta(compareToMeasurement?.waistCm, compareFromMeasurement?.waistCm, 'см');
+  const comparePulseDelta = formatDelta(compareToMeasurement?.restingPulse, compareFromMeasurement?.restingPulse, 'уд/мин');
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
@@ -806,6 +852,101 @@ export default function ProgressScreen({
                 {importError}
               </div>
             ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сравнение дат</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-100">До и после на выбранных точках</h2>
+            <p className="mt-2 text-sm font-medium text-slate-400">Выберите две даты и сравните, что изменилось в весе, талии, пульсе и фото.</p>
+          </div>
+          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <CalendarDays size={12} className="text-fuchsia-300" />
+            Выбранные даты
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Первая дата</div>
+                <div className="mt-1 text-slate-100 font-black">{compareFromKey ? formatShortDate(compareFromKey) : '—'}</div>
+              </div>
+              <select
+                value={compareFromKey}
+                onChange={(e) => setCompareFromKey(e.target.value)}
+                className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
+              >
+                {progressDateKeys.map((key) => (
+                  <option key={key} value={key}>{formatShortDate(key)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareFromMeasurement?.weight ? `${compareFromMeasurement.weight.toFixed(1)} кг` : '—'}</div>
+              </div>
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareFromMeasurement?.waistCm ? `${compareFromMeasurement.waistCm} см` : '—'}</div>
+              </div>
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareFromPhoto ? 'есть' : '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вторая дата</div>
+                <div className="mt-1 text-slate-100 font-black">{compareToKey ? formatShortDate(compareToKey) : '—'}</div>
+              </div>
+              <select
+                value={compareToKey}
+                onChange={(e) => setCompareToKey(e.target.value)}
+                className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
+              >
+                {progressDateKeys.map((key) => (
+                  <option key={key} value={key}>{formatShortDate(key)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareToMeasurement?.weight ? `${compareToMeasurement.weight.toFixed(1)} кг` : '—'}</div>
+              </div>
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareToMeasurement?.waistCm ? `${compareToMeasurement.waistCm} см` : '—'}</div>
+              </div>
+              <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото</div>
+                <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{compareToPhoto ? 'есть' : '—'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[1.4rem] border border-indigo-500/20 bg-indigo-500/10 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Вес</div>
+            <div className="mt-2 text-xl font-black text-slate-100">{compareWeightDelta}</div>
+          </div>
+          <div className="rounded-[1.4rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Талия</div>
+            <div className="mt-2 text-xl font-black text-slate-100">{compareWaistDelta}</div>
+          </div>
+          <div className="rounded-[1.4rem] border border-sky-500/20 bg-sky-500/10 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-sky-200">Пульс</div>
+            <div className="mt-2 text-xl font-black text-slate-100">{comparePulseDelta}</div>
           </div>
         </div>
       </section>
