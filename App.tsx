@@ -1,9 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { 
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer
-} from 'recharts';
-import { 
   Activity, 
   Utensils, 
   Camera, 
@@ -63,7 +60,6 @@ import { createTask } from './coach';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
-import { WeightTrendChart, HabitStreaksCard } from './charts';
 import FoodInsightCard from './FoodInsightCard';
 import ShoppingListCard from './ShoppingListCard';
 import { usePaywall } from './usePaywall';
@@ -84,6 +80,7 @@ const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
 const WorkoutsScreen = React.lazy(() => import('./WorkoutsScreen'));
 const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
+const DashboardCharts = React.lazy(() => import('./charts'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -1808,14 +1805,6 @@ await ensurePdfInterFont(doc);
     }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
   }, [foodDiary]);
 
-  const macroPieData = useMemo(() => {
-    return [
-      { name: 'Белки', value: dailyStats.protein * 4, color: 'var(--ff-chart-protein)' },
-      { name: 'Жиры', value: dailyStats.fat * 9, color: 'var(--ff-chart-fat)' },
-      { name: 'Углеводы', value: dailyStats.carbs * 4, color: 'var(--ff-chart-carbs)' }
-    ];
-  }, [dailyStats]);
-
   const weightTrend = useMemo(() => {
     if (!currentUser || (currentUser.weightHistory || []).length < 2) return undefined;
     const sorted = [...currentUser.weightHistory].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -3367,27 +3356,38 @@ if (authState === 'register') return (
               <div className="w-full md:w-auto flex flex-col gap-3 bg-slate-900 p-2 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-800 overflow-hidden"><div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1 py-1"><div className="grid grid-cols-2 gap-2"><button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Краткий PDF</button><button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20 text-center min-w-0"><Download size={14} /> Детальный PDF</button></div><label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer px-2"><input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />Детально (лог еды)</label></div><div className="grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full"><div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20"><Scale size={20} className="text-indigo-400 mr-2 shrink-0" /><input type="number" placeholder="Вес" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} /></div><button onClick={logWeight} className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button></div></div>
             </header>
             {plateau && currentUser?.goal === Goal.LOSS && (<div className="p-6 rounded-[2.5rem] border border-amber-500/30 bg-amber-500/5 backdrop-blur-md flex items-start gap-4 animate-in slide-in-from-top-4 duration-500"><div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0 border border-amber-500/20"><AlertTriangle size={24} /></div><div className="text-left"><p className="text-[11px] font-black uppercase tracking-widest text-amber-500 mb-1">Обнаружено плато (28 дней анализа)</p><h3 className="text-lg font-black text-slate-100">Ваш вес стабилизировался</h3><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest text-amber-200"><ShieldCheck size={14} className="text-amber-300" />Интенсивность учтена</div><p className="text-sm font-medium text-slate-400 mt-2">Это естественная адаптация организма. AI-коуч подготовил для вас обновленные рекомендации в разделе «План» и ежедневных задачах.</p></div></div>)}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {(() => {
-              const clampGram = (v: unknown) => {
-                const n = typeof v === 'number' ? v : Number(v);
-                if (!Number.isFinite(n)) return 0;
-                // protect UI from floating noise like 27.299999999999997
-                const r = Math.round(n);
-                return Math.max(0, Math.min(9999, r));
-              };
-              const grams = {
-                protein: clampGram(dailyStats.protein),
-                fat: clampGram(dailyStats.fat),
-                carbs: clampGram(dailyStats.carbs)
-              };
-              return (
-                <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3><div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400"><TrendingUp size={20} /></div></div><div className="relative h-48 md:h-64 flex items-center justify-center"><PieChart width={160} height={160} className="md:hidden"><Pie data={macroPieData} innerRadius={46} outerRadius={72} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`mobile-cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><PieChart width={200} height={200} className="hidden md:block"><Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">{macroPieData.map((entry, index) => <Cell key={`desktop-cell-${index}`} fill={entry.color} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} /></PieChart><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-2xl md:text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span></div></div><div className="grid grid-cols-3 gap-3 md:gap-4">{macroPieData.map((m, i) => (<div key={i} className="text-center space-y-1"><div className="w-2 h-2 rounded-full mx-auto" style={{ backgroundColor: m.color }} /><p className="text-[9px] md:text-[10px] font-black text-slate-50 uppercase tracking-widest">{m.name}</p><p className="text-sm md:text-base font-black text-slate-200 tabular-nums">{i === 0 ? grams.protein : i === 1 ? grams.fat : grams.carbs} г</p></div>))}</div></div>
-              );
-            })()}
-              <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Полезные привычки</h3><div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400"><CheckCircle2 size={20} /></div></div><div className="space-y-4">{[ { key: 'water', title: 'Пить воду', icon: Droplets }, { key: 'steps', title: '10,000 шагов', icon: Footprints }, { key: 'breakfast', title: 'Здоровый завтрак', icon: Leaf }, { key: 'sleep', title: 'Сон 8 часов', icon: Moon } ].map((h) => { const isDone = currentUser?.dailyHabits?.[getTodayKey()]?.[h.key as any]; const streak = calculateStreak(currentUser?.dailyHabits, h.key); const IconComp = h.icon; return (<div key={h.key} className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer" onClick={() => handleToggleHabit(h.key as any)}><div className="flex items-center gap-4"><div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isDone ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950' : 'bg-slate-900 border-2 border-slate-700 text-transparent group-hover:border-indigo-500'}`}><CheckCircle2 size={14} fill="currentColor" /></div><div className="flex flex-col text-left"><span className={`font-bold ${isDone ? 'text-slate-600 line-through' : 'text-slate-200'}`}>{h.title}</span>{streak > 1 && <span className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Flame size={10} fill="currentColor" /> {streak} дня серия</span>}</div></div><IconComp size={18} className={isDone ? 'text-emerald-400' : 'text-slate-600'} /></div>); })}</div><HabitStreaksCard dailyHabits={currentUser?.dailyHabits} /></div>
-              <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col"><div className="flex items-center justify-between"><h3 className="text-xl font-black text-slate-100">Мой вес</h3><div className="flex flex-col items-end"><span className="text-lg font-black text-slate-50 tabular-nums">{weightTrend?.current || currentUser?.weight} кг</span><div className="flex gap-2 mt-1">{weightTrend && weightTrend.delta7 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta7 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>7д: {weightTrend.delta7 > 0 ? '+' : ''}{weightTrend.delta7.toFixed(1)}</span>}{weightTrend && weightTrend.delta30 !== 0 && <span className={`text-[10px] font-bold px-2 py-1 rounded-lg tabular-nums ${weightTrend.delta30 < 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>30д: {weightTrend.delta30 > 0 ? '+' : ''}{weightTrend.delta30.toFixed(1)}</span>}</div></div></div><div className="flex-1 min-h-[200px]"><WeightTrendChart weightHistory={currentUser?.weightHistory || []} /></div><div className="flex justify-between items-center text-[10px] font-black text-slate-600 uppercase tracking-widest pt-4 border-t border-slate-800"><span>Неделя 1</span><span>Неделя {Math.ceil((currentUser?.weightHistory.length || 1) / 7)}</span></div></div>
-            </div>
+            <React.Suspense
+              fallback={
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 animate-pulse">
+                    <div className="h-6 w-40 bg-slate-800 rounded mb-6" />
+                    <div className="h-56 bg-slate-950 rounded-[2rem]" />
+                  </div>
+                  <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 animate-pulse">
+                    <div className="h-6 w-40 bg-slate-800 rounded mb-6" />
+                    <div className="space-y-3">
+                      <div className="h-16 bg-slate-950 rounded-[1.5rem]" />
+                      <div className="h-16 bg-slate-950 rounded-[1.5rem]" />
+                      <div className="h-16 bg-slate-950 rounded-[1.5rem]" />
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 animate-pulse">
+                    <div className="h-6 w-32 bg-slate-800 rounded mb-6" />
+                    <div className="h-56 bg-slate-950 rounded-[2rem]" />
+                  </div>
+                </div>
+              }
+            >
+              <DashboardCharts
+                dailyStats={dailyStats}
+                targets={targets}
+                weightHistory={currentUser?.weightHistory || []}
+                dailyHabits={currentUser?.dailyHabits}
+                weightTrend={weightTrend}
+                currentWeight={currentUser?.weight}
+                onToggleHabit={(habitKey) => handleToggleHabit(habitKey)}
+              />
+            </React.Suspense>
             {currentUser && paywall.canUsePro && (<div className="bg-slate-900 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500"><div className="flex items-start justify-between gap-4"><div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Метаболическая адаптация</span><h3 className="text-3xl font-black text-slate-100 flex items-center gap-2"><span className="tabular-nums">{adaptationIndex}</span><span className="text-sm font-black text-slate-600">/ 100</span><span className={clsx("text-sm font-black ml-4 px-3 py-1 rounded-full bg-slate-950 border border-slate-800", adaptationStatus.color)}>{adaptationStatus.label}</span></h3><p className="text-sm font-semibold text-slate-400 mt-2 text-left">Комплаенс: <span className="tabular-nums font-black text-slate-200">{compliancePct}%</span> · Дельта {deltaDays} дн.: <span className="tabular-nums font-black text-slate-200">{weightDeltaN.toFixed(1)} кг</span></p></div><div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400"><Activity size={28} /></div></div><div className="space-y-2"><div className="h-3 rounded-full bg-slate-950 overflow-hidden border border-slate-800"><div className={clsx("h-full rounded-full transition-all duration-1000 ease-out", adaptationIndex < 35 ? "bg-emerald-500" : adaptationIndex < 70 ? "bg-amber-500" : "bg-rose-500")} style={{ width: `${Math.max(4, adaptationIndex)}%` }} /></div><div className="flex items-center justify-between text-[10px] font-black text-slate-600 uppercase tracking-widest px-1"><span>Низкая</span><span>Средняя</span><span>Высокая</span></div></div><div className="p-6 rounded-[2rem] bg-slate-950/50 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-2"><RefreshCcw size={16} className={clsx(refeedSuggestion.type === 'refeed' ? "text-indigo-400" : "text-slate-500")} /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Рекомендация AI</span></div>{refeedDate && (<span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 bg-indigo-600/10 border border-indigo-500/20 px-3 py-1 rounded-full">Рефид: {refeedDate}</span>)}</div>{refeedSuggestion.type === 'refeed' ? (<div className="space-y-4"><p className="text-sm font-bold text-slate-200 leading-relaxed">Предлагаю провести «рефид-день» завтра: <span className="font-black tabular-nums text-indigo-400">{refeedSuggestion.caloriesTomorrow}</span> ккал. Это поможет снизить адаптацию и перезагрузить метаболизм.</p><button type="button" onClick={scheduleRefeedTomorrow} className="w-full py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest bg-indigo-600/10 border border-indigo-500/30 text-indigo-200 hover:bg-indigo-600 hover:text-white transition-all shadow-lg">Запланировать рефид на завтра</button></div>) : refeedSuggestion.type === 'adjust' ? (<p className="text-sm font-bold text-slate-300 leading-relaxed">Мягкая адаптация: попробуйте снизить норму на <span className="font-black text-amber-400">200 ккал</span> или добавить <span className="font-black text-amber-400">+{refeedSuggestion.stepsExtra} шагов</span> в день.</p>) : (<p className="text-sm font-bold text-slate-400 leading-relaxed italic">Динамика в норме — продолжаем текущую стратегию без изменений.</p>)}</div><div className="space-y-4"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Info size={16} className="text-indigo-400" /><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Интерпретация</span></div><button type="button" disabled={adaptLoading} onClick={async () => { if (!currentUser) return; setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id }); setAdaptLoading(true); // FIX: call generatePlateauExplanation instead of missing getAdaptationExplanation.
 const txt = await generatePlateauExplanation({ name: currentUser.name, goal: currentUser.goal, compliancePct, weightDeltaN, expectedN, adaptationIndex, suggestion: refeedSuggestion, }); setAdaptNote(txt); setAdaptLoading(false); }} className={clsx("px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95", adaptLoading ? "opacity-60 border-slate-800 bg-slate-900" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300")}>{adaptLoading ? "AI думает..." : "Объяснить"}</button></div><div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 space-y-3">
   <div className="flex items-center justify-between gap-3">
