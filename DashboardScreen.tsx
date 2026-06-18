@@ -3,7 +3,9 @@ import clsx from 'clsx';
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BrainCircuit,
+  Camera,
   Download,
   Info,
   Plus,
@@ -88,6 +90,16 @@ type DashboardScreenProps = {
   weekly: WeeklyAnalytics | null;
   weeklyReports: WeeklyAnalytics[];
   exportWeeklyPDF: (report: WeeklyAnalytics) => void;
+  onOpenProgress: () => void;
+};
+
+const formatShortDateTime = (iso?: string | null) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
 };
 
 export default function DashboardScreen({
@@ -131,6 +143,7 @@ export default function DashboardScreen({
   weekly,
   weeklyReports,
   exportWeeklyPDF,
+  onOpenProgress,
 }: DashboardScreenProps) {
   const aiRefeedLabel =
     refeedSuggestion.type === 'refeed'
@@ -138,6 +151,13 @@ export default function DashboardScreen({
       : refeedSuggestion.type === 'adjust'
         ? `Мягкая адаптация: +${refeedSuggestion.stepsExtra} шагов`
         : 'Динамика в норме';
+  const currentWeightLabel = typeof currentUser?.weight === 'number' ? `${currentUser.weight.toFixed(1)} кг` : '—';
+  const measurementsCount = currentUser?.measurementsHistory?.length ?? 0;
+  const progressPhotosCount = currentUser?.progressPhotos?.length ?? 0;
+  const wearableState = currentUser?.wearableEnabled ? 'Подключено' : 'Не подключено';
+  const wearableDetail = currentUser?.wearableEnabled
+    ? `Обновлено ${formatShortDateTime(currentUser?.wearableMetricsUpdatedAt)}`
+    : 'Подключите Apple Health, Google Fit или другой источник.';
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -183,6 +203,61 @@ export default function DashboardScreen({
           </div>
         </div>
       </header>
+
+      <section className="rounded-[2rem] md:rounded-[2.5rem] border border-slate-800 bg-slate-900/80 p-5 md:p-6 shadow-xl shadow-black/20 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-500">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="space-y-2 text-left">
+            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Прогресс</div>
+            <h2 className="text-xl md:text-2xl font-black text-slate-100">Фото, замеры и смарт-часы в одном месте</h2>
+            <p className="max-w-3xl text-sm md:text-base font-medium text-slate-400">
+              Откройте отдельный экран прогресса, чтобы увидеть динамику тела, последние замеры и синхронизацию с носимыми устройствами.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenProgress}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-indigo-200 transition-all hover:bg-indigo-500/20 hover:border-indigo-400/40"
+          >
+            <TrendingUp size={16} />
+            Открыть прогресс
+            <ArrowRight size={16} />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес сейчас</div>
+              <Scale size={14} className="text-indigo-300" />
+            </div>
+            <div className="mt-3 text-2xl font-black text-slate-100 tabular-nums">{currentWeightLabel}</div>
+            <div className="mt-1 text-xs text-slate-500">Быстрый вход в дневник и историю замеров.</div>
+          </div>
+          <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Замеры</div>
+              <Scale size={14} className="text-emerald-300" />
+            </div>
+            <div className="mt-3 text-2xl font-black text-slate-100 tabular-nums">{measurementsCount}</div>
+            <div className="mt-1 text-xs text-slate-500">Обхваты тела и другие показатели.</div>
+          </div>
+          <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото прогресса</div>
+              <Camera size={14} className="text-fuchsia-300" />
+            </div>
+            <div className="mt-3 text-2xl font-black text-slate-100 tabular-nums">{progressPhotosCount}</div>
+            <div className="mt-1 text-xs text-slate-500">Визуальная история формы и веса.</div>
+          </div>
+          <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Смарт-часы</div>
+              <Activity size={14} className="text-sky-300" />
+            </div>
+            <div className="mt-3 text-lg font-black text-slate-100">{wearableState}</div>
+            <div className="mt-1 text-xs text-slate-500">{wearableDetail}</div>
+          </div>
+        </div>
+      </section>
 
       {plateau && currentUser?.goal === Goal.LOSS && (
         <div className="p-6 rounded-[2.5rem] border border-amber-500/30 bg-amber-500/5 backdrop-blur-md flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
