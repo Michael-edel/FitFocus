@@ -2820,6 +2820,7 @@ const logWeight = useCallback(() => {
         <PlanIntroModal
           currentUser={currentUser}
           planError={planError}
+          open={planIntroOpen}
           onClose={() => setPlanIntroOpen(false)}
           onOpenPlan={() => setActiveTab('plan')}
           onOpenNutrition={() => setActiveTab('nutrition')}
