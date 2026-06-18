@@ -76,10 +76,10 @@ const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
 const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
 const WorkoutsScreen = React.lazy(() => import('./WorkoutsScreen'));
-const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
 const DashboardCharts = React.lazy(() => import('./charts'));
 const FoodInsightCard = React.lazy(() => import('./FoodInsightCard'));
 const ShoppingListCard = React.lazy(() => import('./ShoppingListCard'));
+const NutritionScreen = React.lazy(() => import('./NutritionScreen'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -3670,19 +3670,38 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
               )}
 
               <div className="mt-6"/><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">{(currentUser?.aiPlan?.rules ?? []).slice(0, 6).map((r, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold">• {r}</div>))}</div></div></div>)}
-         {activeTab === 'nutrition' && (<div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-5"><div className="text-left"><h1 className="text-[2.4rem] leading-none md:text-4xl font-black text-slate-100 mb-2">Анализ еды</h1><p className="text-slate-400 font-medium">Фотографируйте — AI посчитает все сам</p></div><div className="flex items-center gap-4"><div className="text-right hidden sm:block"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Осталось сегодня</p><p className="text-xl font-black text-indigo-400 tabular-nums">{checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0} AI Сканов</p></div><div className="flex items-center gap-3">
-      <button type="button" onClick={() => setCameraOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
-        <Camera size={24} /><span>Снять</span>
-      </button>
-      <label title="Можно выбрать сразу несколько фото (Shift/Ctrl)" className="bg-slate-800 hover:bg-slate-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-slate-900/30 active:scale-95">
-        <Plus size={24} /><span>Загрузить</span>
-        <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
-      </label>
-    </div></div></header>
-      <React.Suspense fallback={null}>
-        <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
-      </React.Suspense>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10"><div className="lg:col-span-2 space-y-6"><div className="relative group"><Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-400 transition-colors" size={22} /><input type="text" placeholder="Поиск блюда в истории..." className="w-full pl-14 md:pl-16 pr-5 md:pr-6 py-5 md:py-6 bg-slate-900 border border-slate-800 rounded-[2rem] md:rounded-[2.5rem] shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-slate-100 placeholder:text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setShowSearchResults(true)} />{showSearchResults && searchResults.length > 0 && (<div className="absolute top-full left-0 w-full mt-4 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 z-20 overflow-hidden animate-in fade-in slide-in-from-top-4">{searchResults.map((res, i) => (<div key={i} onClick={() => { addFoodToDiary(res); setSearchQuery(''); setShowSearchResults(false); }} className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"><span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span><span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span></div>))}</div>)}</div><div className="space-y-4">{foodDiary.length === 0 ? (<div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner"><Utensils size={48} className="opacity-20" /><p className="font-bold text-slate-400">Вы еще ничего не ели сегодня</p><p className="text-sm font-semibold text-slate-500 max-w-md">Сделайте первый снимок еды или загрузите фото — запись появится здесь, а КБЖУ обновится автоматически.</p></div>) : (<FoodDiaryGrouped items={foodDiary} selectedIds={selectedFoodIds} toggleSelected={toggleFoodSelected} bulkMoveTo={bulkUpdateMealType} bulkDelete={bulkRemoveSelectedFoods} deleteEntry={deleteFoodEntry} deletePhoto={deleteFoodPhoto} openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })} openEdit={openEditFood} formatTime={formatTime} mealTypeLabel={mealTypeLabel} />)}</div></div><div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10"><h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3><div className="space-y-8"><MacroBar label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" /><MacroBar label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" /><MacroBar label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" /><MacroBar label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" /></div></div></div></div>)}
+         {activeTab === 'nutrition' && (
+           <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
+             <NutritionScreen
+               cameraOpen={cameraOpen}
+               setCameraOpen={setCameraOpen}
+               handlePhotoUpload={handlePhotoUpload}
+               processPhotoFiles={processPhotoFiles}
+               remainingScans={checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0}
+               searchQuery={searchQuery}
+               setSearchQuery={setSearchQuery}
+               showSearchResults={showSearchResults}
+               setShowSearchResults={setShowSearchResults}
+               searchResults={searchResults}
+               addFoodToDiary={addFoodToDiary}
+               foodDiary={foodDiary}
+               selectedFoodIds={selectedFoodIds}
+               toggleFoodSelected={toggleFoodSelected}
+               bulkUpdateMealType={bulkUpdateMealType}
+               bulkRemoveSelectedFoods={bulkRemoveSelectedFoods}
+               deleteFoodEntry={deleteFoodEntry}
+               deleteFoodPhoto={deleteFoodPhoto}
+               openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })}
+               openEditFood={openEditFood}
+               formatTime={formatTime}
+               mealTypeLabel={mealTypeLabel}
+               dailyStats={dailyStats}
+               targets={targets}
+               MacroBarComponent={MacroBar}
+               FoodDiaryGroupedComponent={FoodDiaryGrouped}
+             />
+           </React.Suspense>
+         )}
         {activeTab === 'recipes' && (
           <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
             <RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />
