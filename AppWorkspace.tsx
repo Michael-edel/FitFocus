@@ -46,6 +46,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             dailyStats={dailyStats}
             targets={targets}
             weightHistory={weightHistory}
+            measurementsHistory={progress.measurementsHistory}
+            progressPhotos={progress.progressPhotos}
             dailyHabits={dailyHabits}
             weightTrend={weightTrend}
             currentWeight={currentWeight}

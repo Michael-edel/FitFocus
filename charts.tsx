@@ -16,6 +16,8 @@ import {
 import { calculateStreak, getTodayKey } from './habits';
 
 type WeightPoint = { date: string; weight: number };
+type MeasurementPoint = { date: string };
+type ProgressPhotoPoint = { date: string };
 type DailyStats = {
   calories: number;
   protein: number;
@@ -29,6 +31,8 @@ type DashboardChartsPanelProps = {
   dailyStats: DailyStats;
   targets: Targets;
   weightHistory: WeightPoint[];
+  measurementsHistory?: MeasurementPoint[];
+  progressPhotos?: ProgressPhotoPoint[];
   dailyHabits:
     | Record<
         string,
@@ -137,6 +141,105 @@ export function WeightTrendChart({ weightHistory, targetWeight }: { weightHistor
   );
 }
 
+export function ProgressArchiveChart({
+  measurementsHistory,
+  progressPhotos,
+}: {
+  measurementsHistory?: MeasurementPoint[];
+  progressPhotos?: ProgressPhotoPoint[];
+}) {
+  const data = useMemo(() => {
+    const photoDates = [...(progressPhotos || [])]
+      .filter((item) => item?.date)
+      .map((item) => item.date)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const measurementDates = [...(measurementsHistory || [])]
+      .filter((item) => item?.date)
+      .map((item) => item.date)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const allDates = Array.from(new Set([...photoDates, ...measurementDates]))
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    let photoCount = 0;
+    let measurementCount = 0;
+    let photoIndex = 0;
+    let measurementIndex = 0;
+
+    return allDates.map((date) => {
+      while (photoIndex < photoDates.length && photoDates[photoIndex] <= date) {
+        photoCount += 1;
+        photoIndex += 1;
+      }
+      while (measurementIndex < measurementDates.length && measurementDates[measurementIndex] <= date) {
+        measurementCount += 1;
+        measurementIndex += 1;
+      }
+      return {
+        date,
+        label: formatShortDate(date),
+        photos: photoCount,
+        measurements: measurementCount,
+      };
+    });
+  }, [measurementsHistory, progressPhotos]);
+
+  if (!data.length) {
+    return (
+      <div className="p-6 rounded-[2rem] border-2 border-dashed border-slate-800 text-slate-500 text-sm font-bold text-center">
+        Добавьте фото и первый замер — здесь появится динамика прогресса.
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id="colorProgressPhotos" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f472b6" stopOpacity={0.28} />
+              <stop offset="95%" stopColor="#f472b6" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="colorProgressMeasurements" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.24} />
+              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+          <XAxis
+            dataKey="label"
+            interval="preserveStartEnd"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 10, fontWeight: '800', fill: '#475569' }}
+          />
+          <YAxis
+            allowDecimals={false}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 10, fontWeight: '800', fill: '#475569' }}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#0f172a',
+              borderRadius: '1.5rem',
+              border: '1px solid #1e293b',
+              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+              fontWeight: '800',
+              fontSize: '12px',
+              color: '#f8fafc',
+            }}
+            itemStyle={{ color: '#f8fafc' }}
+            labelStyle={{ color: '#64748b', marginBottom: '4px' }}
+          />
+          <Area type="monotone" dataKey="measurements" stroke="#22c55e" strokeWidth={3} fill="url(#colorProgressMeasurements)" fillOpacity={1} name="Замеры" />
+          <Area type="monotone" dataKey="photos" stroke="#f472b6" strokeWidth={3} fill="url(#colorProgressPhotos)" fillOpacity={1} name="Фото" />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function HabitStreaksCard({
   dailyHabits,
 }: {
@@ -225,6 +328,8 @@ export default function DashboardChartsPanel({
   dailyStats,
   targets,
   weightHistory,
+  measurementsHistory,
+  progressPhotos,
   dailyHabits,
   weightTrend,
   currentWeight,
@@ -270,7 +375,7 @@ export default function DashboardChartsPanel({
     'text-sky-300';
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
       <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3>
@@ -392,6 +497,30 @@ export default function DashboardChartsPanel({
         <div className="flex justify-between items-center text-[10px] font-black text-slate-600 uppercase tracking-widest pt-4 border-t border-slate-800">
           <span>Неделя 1</span>
           <span>Неделя {Math.ceil((weightHistory.length || 1) / 7)}</span>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-black text-slate-100">Фото и замеры</h3>
+          <div className="w-10 h-10 rounded-xl bg-fuchsia-500/10 flex items-center justify-center text-fuchsia-300">◎</div>
+        </div>
+        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <span>Архив по дням</span>
+          <span>{(progressPhotos?.length || 0) + (measurementsHistory?.length || 0)} записей</span>
+        </div>
+        <div className="flex-1 min-h-[200px]">
+          <ProgressArchiveChart measurementsHistory={measurementsHistory} progressPhotos={progressPhotos} />
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2">
+            <div className="text-slate-500">Фото</div>
+            <div className="mt-1 text-sm text-slate-100 tabular-nums">{progressPhotos?.length || 0}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2">
+            <div className="text-slate-500">Замеры</div>
+            <div className="mt-1 text-sm text-slate-100 tabular-nums">{measurementsHistory?.length || 0}</div>
+          </div>
         </div>
       </div>
     </div>
