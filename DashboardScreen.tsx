@@ -90,6 +90,8 @@ type DashboardScreenProps = {
   weekly: WeeklyAnalytics | null;
   weeklyReports: WeeklyAnalytics[];
   exportWeeklyPDF: (report: WeeklyAnalytics) => void;
+  measurementsHistory?: UserProfile['measurementsHistory'];
+  progressPhotos?: UserProfile['progressPhotos'];
   onOpenProgress: () => void;
 };
 
@@ -143,6 +145,8 @@ export default function DashboardScreen({
   weekly,
   weeklyReports,
   exportWeeklyPDF,
+  measurementsHistory,
+  progressPhotos,
   onOpenProgress,
 }: DashboardScreenProps) {
   const aiRefeedLabel =
@@ -320,6 +324,8 @@ export default function DashboardScreen({
           dailyStats={dailyStats}
           targets={targets}
           weightHistory={weightHistory || []}
+          measurementsHistory={measurementsHistory}
+          progressPhotos={progressPhotos}
           dailyHabits={dailyHabits}
           weightTrend={weightTrend}
           currentWeight={currentWeight}
