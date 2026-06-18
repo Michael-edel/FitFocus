@@ -1193,9 +1193,14 @@ const openEditFood = (item: FoodEntry) => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
 
+  const suppressNextFullProfileSyncRef = useRef(false);
+  const suppressProfileSyncStateRef = useRef(false);
+
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
-    setProfileSyncState('saving');
+    if (!suppressProfileSyncStateRef.current) {
+      setProfileSyncState('saving');
+    }
     setAllUsers(prev => {
       const found = prev.some(u => u.id === updated.id);
       const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
@@ -1403,8 +1408,6 @@ await ensurePdfInterFont(doc);
   }, [resetUsageIfNewTime]);
 
 
-  const suppressNextFullProfileSyncRef = useRef(false);
-
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
@@ -1423,6 +1426,7 @@ await ensurePdfInterFont(doc);
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
+      suppressProfileSyncStateRef,
     });
   }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
@@ -1439,6 +1443,7 @@ await ensurePdfInterFont(doc);
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
+      suppressProfileSyncStateRef,
     });
   }, [currentUser, loginAsUser, persistUser]);
 
@@ -1461,6 +1466,7 @@ await ensurePdfInterFont(doc);
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
+      suppressProfileSyncStateRef,
     });
   }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
@@ -1482,6 +1488,7 @@ await ensurePdfInterFont(doc);
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
+      suppressProfileSyncStateRef,
     });
   }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 

@@ -16,6 +16,7 @@ type ProfileSyncDeps = {
   persistAllUsersSnapshotImpl?: typeof persistAllUsersSnapshot;
   fetchImpl?: typeof fetch;
   suppressNextFullProfileSyncRef?: MutableRefObject<boolean>;
+  suppressProfileSyncStateRef?: MutableRefObject<boolean>;
 };
 
 function withFetch(fetchImpl?: typeof fetch) {
@@ -35,6 +36,9 @@ async function handleProfileConflict(
   if (!serverProfile) return null;
   if (deps.suppressNextFullProfileSyncRef) {
     deps.suppressNextFullProfileSyncRef.current = true;
+  }
+  if (deps.suppressProfileSyncStateRef) {
+    deps.suppressProfileSyncStateRef.current = true;
   }
   deps.setProfileSyncNote?.('Обнаружен конфликт версий. Обновляем данные и повторяем синхронизацию.');
   deps.persistUser(serverProfile);
@@ -83,6 +87,9 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
           if (deps.suppressNextFullProfileSyncRef) {
             deps.suppressNextFullProfileSyncRef.current = true;
           }
+          if (deps.suppressProfileSyncStateRef) {
+            deps.suppressProfileSyncStateRef.current = true;
+          }
           deps.persistUser(retryPayload.profile as UserProfile);
           deps.setProfileSyncState('saved');
           deps.setLastProfileSyncAt(Date.now());
@@ -97,6 +104,9 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       if (deps.suppressNextFullProfileSyncRef) {
         deps.suppressNextFullProfileSyncRef.current = true;
       }
+      if (deps.suppressProfileSyncStateRef) {
+        deps.suppressProfileSyncStateRef.current = true;
+      }
       deps.persistUser(serverProfile);
     }
     deps.setProfileSyncState('saved');
@@ -105,6 +115,10 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
   } catch {
     deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
     deps.setProfileSyncState('error');
+  } finally {
+    if (deps.suppressProfileSyncStateRef) {
+      deps.suppressProfileSyncStateRef.current = false;
+    }
   }
 }
 
@@ -114,6 +128,9 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
   const nextUser = { ...deps.currentUser, ...patch } as UserProfile;
   if (deps.suppressNextFullProfileSyncRef) {
     deps.suppressNextFullProfileSyncRef.current = true;
+  }
+  if (deps.suppressProfileSyncStateRef) {
+    deps.suppressProfileSyncStateRef.current = true;
   }
   deps.persistUser(nextUser);
 
@@ -148,6 +165,9 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
           if (deps.suppressNextFullProfileSyncRef) {
             deps.suppressNextFullProfileSyncRef.current = true;
           }
+          if (deps.suppressProfileSyncStateRef) {
+            deps.suppressProfileSyncStateRef.current = true;
+          }
           deps.persistUser(retryPayload.profile as UserProfile);
           deps.setProfileSyncState('saved');
           deps.setLastProfileSyncAt(Date.now());
@@ -162,6 +182,9 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       if (deps.suppressNextFullProfileSyncRef) {
         deps.suppressNextFullProfileSyncRef.current = true;
       }
+      if (deps.suppressProfileSyncStateRef) {
+        deps.suppressProfileSyncStateRef.current = true;
+      }
       deps.persistUser(serverProfile);
     }
     deps.setProfileSyncState('saved');
@@ -170,6 +193,10 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
   } catch {
     deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
     deps.setProfileSyncState('error');
+  } finally {
+    if (deps.suppressProfileSyncStateRef) {
+      deps.suppressProfileSyncStateRef.current = false;
+    }
   }
 }
 
@@ -192,6 +219,12 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
     const pj = await pr.json();
     const profile = pj?.profile as UserProfile | null;
     if (!profile) return;
+    if (deps.suppressNextFullProfileSyncRef) {
+      deps.suppressNextFullProfileSyncRef.current = true;
+    }
+    if (deps.suppressProfileSyncStateRef) {
+      deps.suppressProfileSyncStateRef.current = true;
+    }
     await deps.loginAsUser(profile);
     const storedAllUsers = readStoredAllUsersSnapshot<UserProfile>();
     const nextAllUsers = Array.isArray(storedAllUsers) && storedAllUsers.length > 0 ? storedAllUsers : [profile];
@@ -203,5 +236,9 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
   } catch {
     deps.setProfileSyncNote?.('Не удалось загрузить профиль из облака.');
     deps.setProfileSyncState('error');
+  } finally {
+    if (deps.suppressProfileSyncStateRef) {
+      deps.suppressProfileSyncStateRef.current = false;
+    }
   }
 }
