@@ -1103,6 +1103,9 @@ const App: React.FC = () => {
     { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' },
     { id: 'settings', icon: Settings, label: 'Настройки' }
   ] as const;
+  const sidebarCoreTabs = sidebarTabs.filter(tab => ['dashboard', 'council', 'plan', 'nutrition'].includes(tab.id));
+  const sidebarFeatureTabs = sidebarTabs.filter(tab => ['recipes', 'workouts', 'course', 'family', 'admin'].includes(tab.id));
+  const sidebarUtilityTabs = sidebarTabs.filter(tab => ['pro', 'settings'].includes(tab.id));
   const mobilePrimaryTabIds = ['dashboard', 'council', 'plan', 'nutrition'] as const;
   const mobilePrimaryTabs = sidebarTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id as any));
   const mobileMoreTabs = sidebarTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id as any));
@@ -2580,9 +2583,49 @@ const logWeight = useCallback(() => {
           <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id as any)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={20} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] leading-tight text-center font-bold">{tab.label}</span></button>
         ))}
         <button type="button" onClick={() => setMobileMoreOpen(true)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><MoreHorizontal size={20} /><span className="text-[10px] leading-tight text-center font-bold">Ещё</span></button>
-        {sidebarTabs.map((tab) => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-base font-bold">{tab.label}</span></button>
-        ))}
+        <div className="hidden md:block w-full px-2 space-y-3">
+          <div>
+            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Основное</div>
+            {sidebarCoreTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+              >
+                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
+                <span className="text-base font-bold">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/70">
+            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Разделы</div>
+            {sidebarFeatureTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+              >
+                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
+                <span className="text-base font-bold">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/70">
+            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Сервис</div>
+            {sidebarUtilityTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+              >
+                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
+                <span className="text-base font-bold">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
       </nav>
       <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
