@@ -1266,11 +1266,11 @@ const App: React.FC = () => {
     persistFavorites([]);
   }, [persistFavorites]);
 
-  const paywall = usePaywall(currentUser?.plan || 'free');
+  const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
   const modeBadge = useMemo(() => {
-    if (isTestModeEnabled()) {
+    if (requireInvite || isTestModeEnabled()) {
       return {
-        text: `TEST · ${planLabel(paywall.plan)}`,
+        text: 'BETA · ПОЛНЫЙ ДОСТУП',
         cls: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200',
       };
     }
@@ -1278,7 +1278,7 @@ const App: React.FC = () => {
       text: `PLAN · ${planLabel(paywall.plan)}`,
       cls: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200',
     };
-  }, [paywall.plan]);
+  }, [paywall.plan, requireInvite]);
   const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
 
   const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
@@ -2389,12 +2389,20 @@ const logWeight = useCallback(() => {
       )}
       {paywall.isPaywallOpen && (
         <React.Suspense fallback={<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60"><div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 px-5 py-4 text-sm font-semibold text-slate-200"><Loader2 className="h-4 w-4 animate-spin text-indigo-400" />Загрузка тарифа...</div></div>}>
-          <PlansScreen
-            currentPlan={currentUser?.plan || 'free'}
+            <PlansScreen
+            currentPlan={paywall.plan}
             userId={currentUser?.id}
+            isAdmin={isAdmin}
             onSelect={(p) => {
-              if (currentUser && p === 'free') {
-                persistUser({ ...currentUser, plan: p, planTier: 'free', proUnlockedAt: undefined });
+              if (!currentUser) return;
+              persistUser({
+                ...currentUser,
+                plan: p,
+                planTier: p === 'free' ? 'free' : 'pro',
+                proUnlockedAt: p === 'free' ? undefined : new Date().toISOString(),
+              });
+              if (isTestModeEnabled()) {
+                setDevPlanOverride(p, currentUser.id);
               }
             }}
             onCheckoutPlan={async (plan) => {
