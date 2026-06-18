@@ -333,6 +333,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 Пользователь: ${user.name}, пол: ${user.gender}, возраст: ${user.age}, рост: ${user.height} см, вес: ${user.weight} кг, цель: ${user.goal}.
 Дневные KPI: ${plan.dailyKpi.calories} ккал, Б ${plan.dailyKpi.protein} г, Ж ${plan.dailyKpi.fat} г, У ${plan.dailyKpi.carbs} г.
 Ограничения (если есть):
+- Медицинские ограничения: ${user.medicalRestrictions || 'нет'}
 - Аллергены (строго): ${(user.dietary?.allergens || []).join(', ') || 'нет'}
 - Непереносимость/избегать: ${(user.dietary?.intolerances || []).join(', ') || 'нет'}
 - Не ем совсем: ${(user.dietary?.excludedFoods || []).join(', ') || (user.exclusions || 'нет')}
@@ -432,6 +433,7 @@ export async function generateFamilyWeeklyMenu(
       activityLevel: p.activityLevel,
       goal: p.goal,
       exclusions: p.exclusions || "",
+      medicalRestrictions: p.medicalRestrictions || "",
       dietary: p.dietary || null,
       targets
     };
@@ -443,6 +445,10 @@ export async function generateFamilyWeeklyMenu(
   const globalExcl = [owner.familyExclusions || ""].filter(Boolean).join("; ").trim();
   const individualExcl = people
     .map(p => p.exclusions ? `${p.name}: ${p.exclusions}` : "")
+    .filter(Boolean)
+    .join("; ")
+  const medicalBlock = people
+    .map(p => p.medicalRestrictions ? `${p.name}: ${p.medicalRestrictions}` : "")
     .filter(Boolean)
     .join("; ")
 const dietaryBlock = (() => {
@@ -538,7 +544,7 @@ const dietaryBlock = (() => {
     return `${p.name} (${p.gender}, ${p.age} лет): цель ${t?.calories ?? "?"} ккал/день; Б${t?.protein ?? "?"} Ж${t?.fat ?? "?"} У${t?.carbs ?? "?"}`;
   }).join("\n");
 
-  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
+  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
 
   const res = await callAiProxy("gemini-2.5-flash", prompt, "family_menu", {
     responseMimeType: "application/json",

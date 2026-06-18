@@ -35,6 +35,7 @@ export type RegistrationData = {
     severity: 'strict' | 'avoid';
     notes: string;
   };
+  medicalRestrictions: string;
   plan: TariffPlan;
   lossDeficit?: number;
   gainSurplus?: number;
@@ -453,6 +454,21 @@ export default function RegistrationScreen({
                           );
                         })}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Медицинские ограничения</label>
+                    <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+                      <div className="text-xs text-slate-400 font-semibold">
+                        Укажите диагнозы, травмы, лекарства, противопоказания к нагрузке или питанию. Это поможет AI не советовать лишнее.
+                      </div>
+                      <textarea
+                        value={regData.medicalRestrictions || ''}
+                        onChange={(e) => setRegData(prev => ({ ...prev, medicalRestrictions: e.target.value }))}
+                        placeholder="например: гипертония 1 степени, травма колена, не назначать высокоинтенсивные тренировки"
+                        className="w-full min-h-[96px] p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm resize-y"
+                      />
                     </div>
                   </div>
 

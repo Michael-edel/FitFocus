@@ -41,6 +41,7 @@ export async function runCouncil(
     Уровень активности: ${user.activityLevel}.
     Интенсивность: ${user.goal === 'LOSS' ? `дефицит ${user.lossDeficit ?? ''} ккал/день` : user.goal === 'GAIN' ? `профицит ${user.gainSurplus ?? ''} ккал/день` : 'поддержание'}.
     Исключения/ограничения (если есть): ${user.exclusions || 'нет'}.
+    Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.
     Дневник питания (последние 10 записей): ${JSON.stringify((history.diary || []).slice(-10))}.
