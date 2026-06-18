@@ -149,22 +149,37 @@ export default function DashboardScreen({
           <p className="text-slate-400 font-medium text-base md:text-lg">Ваш путь к цели под контролем ({paywallPlan})</p>
         </div>
         <div className="w-full md:w-auto flex flex-col gap-3 bg-slate-900 p-2 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-800 overflow-hidden">
-          <div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1 py-1">
+          <div className="px-2 pt-1">
+            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Отчёты</div>
+            <p className="mt-1 text-[11px] text-slate-500 font-semibold">Экспорт дневного режима и детализации.</p>
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1">
             <div className="grid grid-cols-2 gap-2">
               <button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Краткий PDF</button>
               <button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20 text-center min-w-0"><Download size={14} /> Детальный PDF</button>
             </div>
-            <label className="flex items-center gap-1 text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer px-2">
+            <label className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest cursor-pointer px-2 py-1 rounded-xl bg-slate-950/40 border border-slate-800/60">
               <input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />
-              Детально (лог еды)
+              Детально: лог еды
             </label>
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full">
-            <div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20">
-              <Scale size={20} className="text-indigo-400 mr-2 shrink-0" />
-              <input type="number" placeholder="Вес" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} />
+          <div className="px-2 pt-2 border-t border-slate-800/70">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Вес сегодня</div>
+                <p className="mt-1 text-[11px] text-slate-500 font-semibold">Быстро записать замер в дневник.</p>
+              </div>
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-300">
+                <Scale size={16} />
+              </div>
             </div>
-            <button onClick={logWeight} className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full">
+              <div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20">
+                <input type="number" aria-label="Вес сегодня" placeholder="90.0" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} />
+                <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">кг</span>
+              </div>
+              <button onClick={logWeight} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
+            </div>
           </div>
         </div>
       </header>
