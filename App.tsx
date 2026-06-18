@@ -1195,11 +1195,15 @@ const openEditFood = (item: FoodEntry) => {
 
   const suppressNextFullProfileSyncRef = useRef(false);
   const suppressProfileSyncStateRef = useRef(false);
+  const hasPendingProfileChangesRef = useRef(false);
 
   const persistUser = useCallback((updated: UserProfile) => {
     setCurrentUser(updated);
     if (!suppressProfileSyncStateRef.current) {
       setProfileSyncState('saving');
+    }
+    if (googleMe?.sub && !suppressNextFullProfileSyncRef.current) {
+      hasPendingProfileChangesRef.current = true;
     }
     setAllUsers(prev => {
       const found = prev.some(u => u.id === updated.id);
@@ -1207,7 +1211,7 @@ const openEditFood = (item: FoodEntry) => {
       persistAllUsersSnapshot(updated.id, next);
       return next;
     });
-  }, [persistAllUsersSnapshot]);
+  }, [googleMe?.sub, persistAllUsersSnapshot]);
 
   // ---- Weekly menus (personal + family) ----
   const handleGenerateWeeklyMenu = useCallback(async () => {
@@ -1469,6 +1473,12 @@ await ensurePdfInterFont(doc);
       suppressProfileSyncStateRef,
     });
   }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+
+  useEffect(() => {
+    if (profileSyncState === 'saved') {
+      hasPendingProfileChangesRef.current = false;
+    }
+  }, [profileSyncState]);
 
   const reloadUserFromCloud = useCallback(async () => {
     if (!googleMe?.sub) {
@@ -1773,6 +1783,10 @@ await ensurePdfInterFont(doc);
     if (!googleMe?.sub || !currentUser) return;
     const syncFromCloud = () => {
       if (document.visibilityState && document.visibilityState !== 'visible') return;
+      if (hasPendingProfileChangesRef.current || profileSyncState === 'error') {
+        void syncAllLocalDataNow();
+        return;
+      }
       void reloadUserFromCloud();
     };
     window.addEventListener('online', syncFromCloud);
@@ -1781,7 +1795,7 @@ await ensurePdfInterFont(doc);
       window.removeEventListener('online', syncFromCloud);
       document.removeEventListener('visibilitychange', syncFromCloud);
     };
-  }, [googleMe?.sub, currentUser?.id, reloadUserFromCloud]);
+  }, [googleMe?.sub, currentUser?.id, profileSyncState, reloadUserFromCloud, syncAllLocalDataNow]);
 
   // Load public env flags (no auth)
   useEffect(() => {
