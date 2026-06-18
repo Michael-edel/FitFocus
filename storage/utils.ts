@@ -50,6 +50,42 @@ export function evictLargeLocalStorage(): void {
 
     // 3) Best-effort: remove full-size photos from food log entries if present
     // (We don't know exact shape here; repo migrations should handle it in future.)
+    // 4) Trim large profile snapshots so new progress photos do not blow up quota.
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(STORAGE_KEYS.dataPrefix) || !k.endsWith('_all_users')) continue;
+      try {
+        const raw = localStorage.getItem(k);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) continue;
+        let changed = false;
+        const next = parsed.map((user: any) => {
+          if (!user || typeof user !== 'object') return user;
+          const copy = { ...user };
+          if (Array.isArray(copy.progressPhotos) && copy.progressPhotos.length > 6) {
+            copy.progressPhotos = copy.progressPhotos.slice(0, 6).map((photo: any) => {
+              if (!photo || typeof photo !== 'object') return photo;
+              return {
+                ...photo,
+                photo: typeof photo.thumb === 'string' && photo.thumb ? photo.thumb : photo.photo,
+              };
+            });
+            changed = true;
+          }
+          if (Array.isArray(copy.measurementsHistory) && copy.measurementsHistory.length > 30) {
+            copy.measurementsHistory = copy.measurementsHistory.slice(0, 30);
+            changed = true;
+          }
+          return copy;
+        });
+        if (changed) {
+          localStorage.setItem(k, JSON.stringify(next));
+        }
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     // ignore
   }

@@ -208,6 +208,13 @@ export type HealthMeasurement = {
   restingPulse?: number;
 };
 
+export type ProgressPhoto = {
+  date: string;
+  photo: string;
+  thumb: string;
+  note?: string;
+};
+
 export interface UserProfile {
   id: string;
   version?: number;
@@ -220,6 +227,7 @@ export interface UserProfile {
   goal: Goal;
   weightHistory: { date: string; weight: number }[];
   measurementsHistory?: HealthMeasurement[];
+  progressPhotos?: ProgressPhoto[];
   targetWeight: number;
   adaptationMultiplier: number; 
   lastAdaptationDate?: string;
