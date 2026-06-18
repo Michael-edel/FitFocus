@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto } from './types';
+import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -73,6 +73,22 @@ const goalOptions = [
   { value: Goal.GAIN, label: 'Набор массы' },
 ] as const;
 
+const wearableOptions: Array<{ value: WearableProvider; label: string; note: string }> = [
+  { value: 'apple_health', label: 'Apple Health', note: 'iPhone / Apple Watch' },
+  { value: 'google_fit', label: 'Google Fit', note: 'Android / Wear OS' },
+  { value: 'fitbit', label: 'Fitbit', note: 'Часы и браслеты Fitbit' },
+  { value: 'garmin', label: 'Garmin', note: 'Спортивные часы Garmin' },
+  { value: 'manual', label: 'Ручной импорт', note: 'CSV / JSON из часов' },
+] as const;
+
+const wearableProviderLabel: Record<WearableProvider, string> = {
+  apple_health: 'Apple Health',
+  google_fit: 'Google Fit',
+  fitbit: 'Fitbit',
+  garmin: 'Garmin',
+  manual: 'Ручной импорт',
+};
+
 const syncStateLabel = (state: SyncState | undefined) => {
   switch (state) {
     case 'saving':
@@ -90,6 +106,15 @@ const formatSyncTs = (ts?: number | null) => {
   if (!ts) return 'Ещё не синхронизировано';
   try {
     return new Date(ts).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  } catch {
+    return 'Ещё не синхронизировано';
+  }
+};
+
+const formatIsoSyncTs = (iso?: string | null) => {
+  if (!iso) return 'Ещё не синхронизировано';
+  try {
+    return new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
   } catch {
     return 'Ещё не синхронизировано';
   }
@@ -216,6 +241,7 @@ export default function SettingsScreen({
   const [progressPhotoBusy, setProgressPhotoBusy] = useState(false);
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
+  const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
@@ -241,6 +267,38 @@ export default function SettingsScreen({
       ].filter(Boolean).join(' · ') || '—',
     };
   }, [user]);
+
+  const wearableSummary = user?.wearableProvider && user.wearableEnabled !== false
+    ? wearableProviderLabel[user.wearableProvider]
+    : 'Не подключено';
+
+  const syncWearableProvider = async (provider: WearableProvider) => {
+    if (!user || !onPatchUser) return;
+    const now = new Date().toISOString();
+    setWearableBusy(provider);
+    try {
+      await onPatchUser({
+        wearableProvider: provider,
+        wearableEnabled: true,
+        wearableConnectedAt: user.wearableConnectedAt || now,
+        wearableLastSyncAt: now,
+      });
+    } finally {
+      setWearableBusy(null);
+    }
+  };
+
+  const disconnectWearable = async () => {
+    if (!user || !onPatchUser) return;
+    setWearableBusy('disconnect');
+    try {
+      await onPatchUser({
+        wearableEnabled: false,
+      });
+    } finally {
+      setWearableBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -679,6 +737,90 @@ export default function SettingsScreen({
                   >
                     <div className="text-slate-100 font-black">Перезагрузить из облака</div>
                     <div className="text-slate-400 text-sm mt-1">Подтянуть актуальные данные профиля с сервера и обновить это устройство.</div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Смарт-часы</div>
+                    <div className="text-slate-100 font-black">{wearableSummary}</div>
+                    <div className="text-slate-500 text-sm mt-2">
+                      {user?.wearableProvider && user.wearableEnabled !== false
+                        ? 'Источник подключён и может передавать шаги, сон и пульс.'
+                        : 'Выберите Apple Health, Google Fit, Fitbit или Garmin для синхронизации.'}
+                    </div>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center border bg-sky-500/10 border-sky-500/30 text-sky-300">
+                    <Watch className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 mt-4">
+                  {wearableOptions.map((option) => {
+                    const selected = user?.wearableProvider === option.value && user.wearableEnabled !== false;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => void syncWearableProvider(option.value)}
+                        disabled={!onPatchUser || wearableBusy !== null}
+                        className={[
+                          'w-full rounded-[1.25rem] border px-4 py-4 text-left transition-all',
+                          selected ? 'border-sky-500/40 bg-sky-500/10' : 'border-slate-800 bg-slate-950/30 hover:border-slate-700',
+                          wearableBusy !== null ? 'opacity-60 cursor-wait' : '',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-slate-100 font-black">{option.label}</div>
+                            <div className="text-slate-500 text-sm mt-1">{option.note}</div>
+                          </div>
+                          <div className={[
+                            'text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border',
+                            selected ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-slate-800 bg-slate-900 text-slate-500',
+                          ].join(' ')}>
+                            {selected ? 'подключено' : 'выбрать'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                  <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Последний sync</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm">{formatIsoSyncTs(user?.wearableLastSyncAt)}</div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Шаги</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm tabular-nums">{typeof user?.wearableStepsToday === 'number' ? user.wearableStepsToday.toLocaleString('ru-RU') : '—'}</div>
+                  </div>
+                  <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сон</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm tabular-nums">{typeof user?.wearableSleepHoursLastNight === 'number' ? `${user.wearableSleepHoursLastNight.toFixed(1)} ч` : '—'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void onSyncNow?.()}
+                    disabled={!serverSession || !onSyncNow}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Синхронизировать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void disconnectWearable()}
+                    disabled={!user?.wearableProvider || wearableBusy !== null}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-300 font-black transition-all disabled:opacity-50"
+                  >
+                    Отключить часы
                   </button>
                 </div>
               </div>
