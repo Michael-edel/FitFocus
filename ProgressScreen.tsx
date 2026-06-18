@@ -23,6 +23,7 @@ import {
   YAxis,
 } from 'recharts';
 import { WeightTrendChart } from './charts';
+import { downloadProgressComparisonPdf } from './pdf';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
@@ -389,6 +390,28 @@ export default function ProgressScreen({
   const compareWaistDelta = formatDelta(compareToMeasurement?.waistCm, compareFromMeasurement?.waistCm, 'см');
   const comparePulseDelta = formatDelta(compareToMeasurement?.restingPulse, compareFromMeasurement?.restingPulse, 'уд/мин');
   const compareModeLabel = compareMode === 'matched' ? 'Только дни с фото и замерами' : 'Все доступные даты';
+  const canExportComparison = Boolean(compareFromKey && compareToKey);
+
+  const exportComparisonPdf = async () => {
+    if (!currentUser || !canExportComparison) return;
+    await downloadProgressComparisonPdf({
+      userName: currentUser.name,
+      fromKey: compareFromKey,
+      toKey: compareToKey,
+      fromLabel: compareFromKey ? formatShortDate(compareFromKey) : '—',
+      toLabel: compareToKey ? formatShortDate(compareToKey) : '—',
+      fromWeight: compareFromMeasurement?.weight,
+      toWeight: compareToMeasurement?.weight,
+      fromWaist: compareFromMeasurement?.waistCm,
+      toWaist: compareToMeasurement?.waistCm,
+      fromPulse: compareFromMeasurement?.restingPulse,
+      toPulse: compareToMeasurement?.restingPulse,
+      fromPhoto: Boolean(compareFromPhoto),
+      toPhoto: Boolean(compareToPhoto),
+      totalPhotos: progressPhotosSorted.length,
+      totalMeasurements: recentMeasurements.length,
+    });
+  };
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
@@ -897,6 +920,15 @@ export default function ProgressScreen({
             >
               <TrendingUp size={12} className="text-indigo-300" />
               Первое / последнее
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportComparisonPdf()}
+              disabled={!canExportComparison}
+              className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-200 transition-all hover:bg-indigo-500/20 hover:border-indigo-400/40 disabled:opacity-40"
+            >
+              <Cloud size={12} className="text-indigo-300" />
+              Экспорт PDF
             </button>
           </div>
         </div>
