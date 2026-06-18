@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound, Link2 } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -256,6 +256,7 @@ export default function SettingsScreen({
   const [mobileTokenExpiresAt, setMobileTokenExpiresAt] = useState<number | null>(null);
   const [mobileTokenError, setMobileTokenError] = useState<string | null>(null);
   const [mobileTokenCopiedAt, setMobileTokenCopiedAt] = useState<number | null>(null);
+  const [bridgeSetupCopiedAt, setBridgeSetupCopiedAt] = useState<number | null>(null);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
@@ -286,6 +287,17 @@ export default function SettingsScreen({
     ? wearableProviderLabel[user.wearableProvider]
     : 'Не подключено';
   const bridgeBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fitfocus.pages.dev';
+  const bridgeSetupLink = useMemo(() => {
+    if (!mobileTokenValue || !bridgeBaseUrl) return '';
+    const params = new URLSearchParams({
+      baseURL: bridgeBaseUrl,
+      token: mobileTokenValue,
+    });
+    if (mobileTokenExpiresAt) {
+      params.set('expiresAt', String(mobileTokenExpiresAt));
+    }
+    return `fitfocusbridge://setup?${params.toString()}`;
+  }, [bridgeBaseUrl, mobileTokenExpiresAt, mobileTokenValue]);
 
   const syncWearableProvider = async (provider: WearableProvider) => {
     if (!user || !onPatchUser) return;
@@ -320,6 +332,7 @@ export default function SettingsScreen({
     setMobileTokenBusy(true);
     setMobileTokenError(null);
     setMobileTokenCopiedAt(null);
+    setBridgeSetupCopiedAt(null);
     try {
       const response = await fetch('/api/mobile/token', {
         method: 'POST',
@@ -355,6 +368,16 @@ export default function SettingsScreen({
       setMobileTokenCopiedAt(Date.now());
     } catch {
       setMobileTokenError('Не удалось скопировать токен');
+    }
+  };
+
+  const copyBridgeSetup = async () => {
+    if (!bridgeSetupLink) return;
+    try {
+      await navigator.clipboard.writeText(bridgeSetupLink);
+      setBridgeSetupCopiedAt(Date.now());
+    } catch {
+      setMobileTokenError('Не удалось скопировать ссылку для bridge');
     }
   };
 
@@ -908,6 +931,46 @@ export default function SettingsScreen({
                             {mobileTokenCopiedAt ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bridgeSetupLink && (
+                    <div className="mt-3 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-widest text-emerald-200/80">One-tap setup</div>
+                          <div className="mt-1 text-slate-100 font-black">Откройте bridge одной ссылкой</div>
+                          <div className="mt-2 text-sm text-emerald-100/80">
+                            Эта ссылка подставит base URL и token в iPhone bridge автоматически. После копирования отправьте её на iPhone и откройте в приложении FitFocus Bridge.
+                          </div>
+                        </div>
+                        <div className="w-11 h-11 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 flex items-center justify-center text-emerald-200">
+                          <Link2 className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-[0.9rem] border border-emerald-500/20 bg-slate-950/50 px-3 py-2 text-xs font-mono text-emerald-100 break-all">
+                        {bridgeSetupLink}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void copyBridgeSetup()}
+                          className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all"
+                        >
+                          <Copy className="w-4 h-4" />
+                          {bridgeSetupCopiedAt ? 'Ссылка скопирована' : 'Копировать setup link'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copyMobileToken()}
+                          className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-emerald-500/20 bg-slate-950/40 hover:bg-slate-900 text-emerald-100 font-black transition-all"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                          Копировать token отдельно
+                        </button>
                       </div>
                     </div>
                   )}
