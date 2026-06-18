@@ -87,6 +87,19 @@ export default function PlanScreen({
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
+  const mealTemplateFields = [
+    { key: 'breakfast', label: 'Завтрак', value: currentUserAiPlan?.mealTemplate?.breakfast || '' },
+    { key: 'lunch', label: 'Обед', value: currentUserAiPlan?.mealTemplate?.lunch || '' },
+    { key: 'dinner', label: 'Ужин', value: currentUserAiPlan?.mealTemplate?.dinner || '' },
+    { key: 'snack', label: 'Перекус', value: currentUserAiPlan?.mealTemplate?.snack || '' },
+  ] as const;
+
+  const cleanMealTemplateText = (label: string, value: string) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const rx = new RegExp(`^${label}\\s*[:\\-–—]?\\s*`, 'i');
+    return raw.replace(rx, '').trim();
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -172,11 +185,33 @@ export default function PlanScreen({
         </div>
         <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
           <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 text-sm font-bold text-slate-200">
-            <div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={currentUserAiPlan?.mealTemplate?.breakfast || ''} /></div>
-            <div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={currentUserAiPlan?.mealTemplate?.lunch || ''} /></div>
-            <div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={currentUserAiPlan?.mealTemplate?.dinner || ''} /></div>
-            <div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={currentUserAiPlan?.mealTemplate?.snack || ''} /></div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-bold text-slate-200">
+            {mealTemplateFields.map((item) => {
+              const cleaned = cleanMealTemplateText(item.label, item.value);
+              const lines = cleaned
+                .split(/\n+/g)
+                .map((line) => line.trim())
+                .filter(Boolean);
+
+              return (
+                <div key={item.key} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.label}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300/80">1 приём</span>
+                  </div>
+                  <div className="mt-3 space-y-2 text-slate-100 leading-relaxed">
+                    {lines.length > 0 ? lines.map((line, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-indigo-400/80 shrink-0" />
+                        <span>{line}</span>
+                      </div>
+                    )) : (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
