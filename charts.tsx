@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import clsx from 'clsx';
 import {
   AreaChart,
   Area,
@@ -6,6 +7,7 @@ import {
   Cell,
   Pie,
   PieChart,
+  ReferenceLine,
   Tooltip,
   ResponsiveContainer,
   XAxis,
@@ -44,6 +46,7 @@ type DashboardChartsPanelProps = {
     delta30?: number;
   } | null;
   currentWeight?: number | null;
+  targetWeight?: number | null;
   onToggleHabit: (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => void;
 };
 
@@ -56,7 +59,7 @@ function formatShortDate(iso: string) {
   return `${parts[2]}.${parts[1]}`;
 }
 
-export function WeightTrendChart({ weightHistory }: { weightHistory: WeightPoint[] }) {
+export function WeightTrendChart({ weightHistory, targetWeight }: { weightHistory: WeightPoint[]; targetWeight?: number | null }) {
   const data = useMemo(() => {
     const clean = (weightHistory || [])
       .filter((p) => p?.date && typeof p.weight === 'number' && !Number.isNaN(p.weight))
@@ -71,6 +74,13 @@ export function WeightTrendChart({ weightHistory }: { weightHistory: WeightPoint
       </div>
     );
   }
+
+  const yValues = [
+    ...data.map((d) => d.weight),
+    ...(typeof targetWeight === 'number' && Number.isFinite(targetWeight) ? [targetWeight] : []),
+  ];
+  const yMin = Math.min(...yValues) - 1;
+  const yMax = Math.max(...yValues) + 1;
 
   return (
     <div className="h-[220px] w-full">
@@ -91,8 +101,10 @@ export function WeightTrendChart({ weightHistory }: { weightHistory: WeightPoint
             tick={{ fontSize: 10, fontWeight: '800', fill: '#475569' }}
           />
           <YAxis 
-            domain={['dataMin - 1', 'dataMax + 1']} 
-            hide
+            domain={[yMin, yMax]}
+            tick={{ fontSize: 10, fontWeight: '800', fill: '#475569' }}
+            axisLine={false}
+            tickLine={false}
           />
           <Tooltip 
             contentStyle={{ 
@@ -107,6 +119,9 @@ export function WeightTrendChart({ weightHistory }: { weightHistory: WeightPoint
             itemStyle={{ color: '#818CF8' }}
             labelStyle={{ color: '#64748b', marginBottom: '4px' }}
           />
+          {typeof targetWeight === 'number' && Number.isFinite(targetWeight) ? (
+            <ReferenceLine y={targetWeight} stroke="#818CF8" strokeDasharray="6 4" strokeOpacity={0.7} label={{ value: 'цель', position: 'insideTopRight', fill: '#a5b4fc', fontSize: 10, fontWeight: 800 }} />
+          ) : null}
           <Area 
             type="monotone" 
             dataKey="weight" 
@@ -127,6 +142,16 @@ export function HabitStreaksCard({
 }: {
   dailyHabits: Record<string, { water: boolean; steps: boolean; breakfast: boolean; sleep: boolean }> | undefined;
 }) {
+  const last7Days = useMemo(() => {
+    const days: string[] = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
+      days.push(d.toISOString().slice(0, 10));
+    }
+    return days;
+  }, []);
+
   const streaks = useMemo(() => {
     return {
       water: calculateStreak(dailyHabits || {}, 'water'),
@@ -135,6 +160,23 @@ export function HabitStreaksCard({
       sleep: calculateStreak(dailyHabits || {}, 'sleep'),
     };
   }, [dailyHabits]);
+
+  const weekProgress = useMemo(() => {
+    const result: Record<'water' | 'steps' | 'breakfast' | 'sleep', { done: number; total: number }> = {
+      water: { done: 0, total: 7 },
+      steps: { done: 0, total: 7 },
+      breakfast: { done: 0, total: 7 },
+      sleep: { done: 0, total: 7 },
+    };
+    for (const day of last7Days) {
+      const row = dailyHabits?.[day];
+      if (!row) continue;
+      (Object.keys(result) as Array<keyof typeof result>).forEach((key) => {
+        if (row[key]) result[key].done += 1;
+      });
+    }
+    return result;
+  }, [dailyHabits, last7Days]);
 
   const items = [
     { key: 'water', label: 'Вода', icon: '💧' },
@@ -148,7 +190,7 @@ export function HabitStreaksCard({
       {items.map((it) => (
         <div
           key={it.key}
-          className="p-4 rounded-[1.5rem] bg-slate-800/50 border border-slate-800 flex flex-col gap-1 transition-all hover:border-indigo-500/30 hover:bg-slate-800"
+          className="p-4 rounded-[1.5rem] bg-slate-800/50 border border-slate-800 flex flex-col gap-1 transition-all hover:border-indigo-500/30 hover:bg-slate-800 cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{it.label}</span>
@@ -156,6 +198,15 @@ export function HabitStreaksCard({
           </div>
           <div className="text-lg font-black text-slate-100">
             {streaks[it.key as keyof typeof streaks]} <span className="text-[8px] text-indigo-400 uppercase">дн.</span>
+          </div>
+          <div className="mt-1 h-1.5 rounded-full bg-slate-900 overflow-hidden border border-slate-700">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-emerald-400 to-amber-400"
+              style={{ width: `${Math.min(100, Math.round((weekProgress[it.key as keyof typeof weekProgress].done / weekProgress[it.key as keyof typeof weekProgress].total) * 100))}%` }}
+            />
+          </div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-600 tabular-nums">
+            {weekProgress[it.key as keyof typeof weekProgress].done}/{weekProgress[it.key as keyof typeof weekProgress].total} за 7 дней
           </div>
         </div>
       ))}
@@ -177,6 +228,7 @@ export default function DashboardChartsPanel({
   dailyHabits,
   weightTrend,
   currentWeight,
+  targetWeight,
   onToggleHabit,
 }: DashboardChartsPanelProps) {
   const macroPieData = useMemo(
@@ -210,13 +262,21 @@ export default function DashboardChartsPanel({
   );
 
   const currentWeightValue = currentWeight ?? weightTrend?.current ?? 0;
+  const caloriePercent = targets.calories > 0 ? Math.round((dailyStats.calories / targets.calories) * 100) : 0;
+  const caloriePercentClass =
+    caloriePercent > 110 ? 'text-rose-300' :
+    caloriePercent > 100 ? 'text-amber-300' :
+    caloriePercent >= 90 ? 'text-emerald-300' :
+    'text-sky-300';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3>
-          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400">%</div>
+          <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center font-black', caloriePercentClass, caloriePercent > 100 ? 'bg-rose-500/10' : 'bg-indigo-500/10')}>
+            %
+          </div>
         </div>
         <div className="relative h-48 md:h-64 flex items-center justify-center">
           <PieChart width={160} height={160} className="md:hidden">
@@ -236,9 +296,14 @@ export default function DashboardChartsPanel({
             <Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} />
           </PieChart>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-2xl md:text-3xl font-black text-slate-100 tabular-nums">{Math.round((dailyStats.calories / targets.calories) * 100) || 0}%</span>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ккал</span>
+            <span className={clsx('text-2xl md:text-3xl font-black tabular-nums', caloriePercentClass)}>{caloriePercent}%</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">От нормы</span>
           </div>
+        </div>
+        <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 -mt-2">
+          <span>100% = норма</span>
+          <span className="text-slate-700">•</span>
+          <span>{caloriePercent > 100 ? 'Выше плана' : caloriePercent >= 90 ? 'В пределах плана' : 'Ниже плана'}</span>
         </div>
         <div className="grid grid-cols-3 gap-3 md:gap-4">
           {macroPieData.map((m, i) => (
@@ -309,9 +374,21 @@ export default function DashboardChartsPanel({
             </div>
           </div>
         </div>
+        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <span>Период: последние 30 дней</span>
+          <span>{targetWeight ? `Цель: ${targetWeight} кг` : 'Цель не задана'}</span>
+        </div>
         <div className="flex-1 min-h-[200px]">
           <WeightTrendChart weightHistory={weightHistory} />
         </div>
+        {targetWeight ? (
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <span className="h-2 w-2 rounded-full bg-indigo-400" />
+            <span>Линия цели: {targetWeight} кг</span>
+          </div>
+        ) : (
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Добавьте целевой вес в профиле, чтобы видеть линию цели.</div>
+        )}
         <div className="flex justify-between items-center text-[10px] font-black text-slate-600 uppercase tracking-widest pt-4 border-t border-slate-800">
           <span>Неделя 1</span>
           <span>Неделя {Math.ceil((weightHistory.length || 1) / 7)}</span>
