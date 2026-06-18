@@ -210,6 +210,7 @@ export default function DashboardScreen({
           dailyHabits={dailyHabits}
           weightTrend={weightTrend}
           currentWeight={currentWeight}
+          targetWeight={currentUser?.targetWeight ?? null}
           onToggleHabit={(habitKey) => handleToggleHabit(habitKey)}
         />
       </React.Suspense>
