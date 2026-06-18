@@ -80,6 +80,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             weekly={weekly}
             weeklyReports={weeklyReports}
             exportWeeklyPDF={exportWeeklyPDF}
+            onOpenProgress={() => setActiveTab('progress')}
           />
         </React.Suspense>
       )}
