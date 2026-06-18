@@ -6,6 +6,8 @@ type Env = {
   DB: D1Database;
   STRIPE_SECRET_KEY: string;
   APP_URL: string;
+  PRICE_PRO_MONTHLY?: string;
+  PRICE_FAMILY_MONTHLY?: string;
 };
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
@@ -20,8 +22,14 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     apiVersion: "2023-10-16"
   });
 
-  const { priceId } = await request.json().catch(() => ({}));
-  if (!priceId || typeof priceId !== "string") return json({ error: "BAD_REQUEST" }, 400);
+  const body = await request.json().catch(() => ({}));
+  const plan = String((body as any)?.plan || "").trim();
+  const priceId =
+    plan === "pro" ? env.PRICE_PRO_MONTHLY :
+    plan === "family" ? env.PRICE_FAMILY_MONTHLY :
+    null;
+
+  if (!priceId) return json({ error: "BAD_REQUEST" }, 400);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -31,11 +39,13 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       cancel_url: env.APP_URL + "/?billing=cancel",
       subscription_data: {
         metadata: {
-          ff_uid: user.sub
+          ff_uid: user.sub,
+          ff_plan: plan,
         }
       },
       metadata: {
-        ff_uid: user.sub
+        ff_uid: user.sub,
+        ff_plan: plan,
       }
     });
 

@@ -1,18 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Check, X, Crown, Users, Zap } from 'lucide-react';
 import { formatKzt, planLabel, setDevPlanOverride, getDevPlanOverride } from './money';
-import { PAYMENT_LINKS } from './constants';
 import { TariffPlan } from './types';
 
 export default function PlansScreen({ 
   currentPlan, 
   userId,
   onSelect, 
+  onCheckoutPlan,
   onClose 
 }: {
   currentPlan?: TariffPlan;
   userId?: string | null;
   onSelect: (p: TariffPlan) => void;
+  onCheckoutPlan: (p: Exclude<TariffPlan, 'free'>) => Promise<string | null>;
   onClose: () => void;
 }) {
   const PRICES = {
@@ -21,16 +22,8 @@ export default function PlansScreen({
   };
 
   const [checkoutPlan, setCheckoutPlan] = useState<null | 'pro' | 'family'>(null);
-  const [receiptId, setReceiptId] = useState('');
-
   const devEnabled = (import.meta as any).env?.DEV || (import.meta as any).env?.VITE_TEST_MODE === "1";
   const currentOverride = devEnabled ? getDevPlanOverride(userId) : null;
-
-  const checkoutTitle = useMemo(() => {
-    if (checkoutPlan === 'pro') return `PRO — ${formatKzt(PRICES.proMonthly)}/мес`;
-    if (checkoutPlan === 'family') return `FAMILY — ${formatKzt(PRICES.familyMonthly)}/мес`;
-    return '';
-  }, [checkoutPlan]);
 
   const openPay = (url: string) => {
     try {
@@ -223,46 +216,22 @@ export default function PlansScreen({
               </button>
             </div>
 
-            <div className="ff-plans__sheetSubtitle">{checkoutTitle}</div>
+            <div className="ff-plans__sheetSubtitle">
+              {checkoutPlan === 'pro' ? `PRO — ${formatKzt(PRICES.proMonthly)}/мес` : `FAMILY — ${formatKzt(PRICES.familyMonthly)}/мес`}
+            </div>
             <div className="ff-plans__sheetHint">
-              Выберите удобный способ оплаты. После оплаты вернитесь в приложение и нажмите «Активировать».
-            </div>
-
-            <div className="ff-plans__methods">
-              <button className="ff-plans__method ff-plans__method--primary" onClick={() => openPay(PAYMENT_LINKS.kaspi)}>
-                <div className="ff-plans__methodName">
-                  Kaspi
-                  <span className="ff-plans__badge">Рекомендуем</span>
-                </div>
-                <div className="ff-plans__methodDesc">Kaspi Pay / QR</div>
-              </button>
-              <button className="ff-plans__method" onClick={() => openPay(PAYMENT_LINKS.card)}>
-                <div className="ff-plans__methodName">Банковская карта</div>
-                <div className="ff-plans__methodDesc">Visa / Mastercard</div>
-              </button>
-            </div>
-
-            <div className="ff-plans__sheetField">
-              <div className="ff-plans__sheetLabel text-[12px] font-bold mb-1 ml-1">ID чека / номер транзакции (после оплаты)</div>
-              <input
-                value={receiptId}
-                onChange={(e) => setReceiptId(e.target.value)}
-                placeholder="Например: KSP-82917364"
-                className="w-full p-4 bg-slate-950 rounded-[1.5rem] border border-slate-800 font-bold text-white mb-1"
-              />
-              <div className="text-[11px] opacity-60 ml-1">Мы используем этот номер для ручной проверки оплаты.</div>
+              Оплата открывается через Stripe Checkout. После оплаты вернитесь в приложение, план обновится с сервера.
             </div>
 
             <button
               className="ff-plans__activate mt-4"
-              disabled={!receiptId.trim()}
-              onClick={() => {
-                onSelect(checkoutPlan);
+              onClick={async () => {
+                const url = await onCheckoutPlan(checkoutPlan);
+                if (url) openPay(url);
                 setCheckoutPlan(null);
-                setReceiptId('');
               }}
             >
-              Активировать после оплаты
+              Открыть Stripe Checkout
             </button>
 
             <button className="ff-plans__back mt-2" onClick={() => setCheckoutPlan(null)}>
