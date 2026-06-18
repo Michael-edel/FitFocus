@@ -82,6 +82,12 @@ import {
   deleteAccountSession,
   ensureInviteCodeIsValid,
 } from './authSession';
+import {
+  patchProfileInCloud as patchProfileInCloudService,
+  pushProfileToCloud as pushProfileToCloudService,
+  reloadUserFromCloud as reloadUserFromCloudService,
+  syncAllLocalDataNow as syncAllLocalDataNowService,
+} from './profileSync';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -1775,79 +1781,64 @@ await ensurePdfInterFont(doc);
   const suppressNextFullProfileSyncRef = useRef(false);
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
-    setProfileSyncState('saving');
-    try {
-      const stateItems = collectLocalStateItems(profile.id);
-      const r = await fetch('/api/profile', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...profile, stateItems }),
-      });
-      if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
-      setProfileSyncState('saved');
-      setLastProfileSyncAt(Date.now());
-    } catch {
-      setProfileSyncState('error');
-    }
-  }, [collectLocalStateItems]);
+    await pushProfileToCloudService(profile, {
+      currentUser,
+      setProfileSyncState,
+      setLastProfileSyncAt,
+      setAllUsers,
+      persistUser,
+      loginAsUser,
+      collectLocalStateItemsImpl: collectLocalStateItems,
+      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
+      fetchImpl: fetch,
+      suppressNextFullProfileSyncRef,
+    });
+  }, [currentUser, loginAsUser, persistUser]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
-    if (!currentUser) return;
-
-    const nextUser = { ...currentUser, ...patch } as UserProfile;
-    suppressNextFullProfileSyncRef.current = true;
-    persistUser(nextUser);
-
-    setProfileSyncState('saving');
-    try {
-      const stateItems = collectLocalStateItems(nextUser.id);
-      const r = await fetch('/api/profile', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...patch, stateItems }),
-      });
-      if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
-      const payload = await r.json().catch(() => null);
-      const serverProfile = payload?.profile as UserProfile | undefined;
-      if (serverProfile) {
-        suppressNextFullProfileSyncRef.current = true;
-        persistUser(serverProfile);
-      }
-      setProfileSyncState('saved');
-      setLastProfileSyncAt(Date.now());
-    } catch {
-      setProfileSyncState('error');
-    }
-  }, [collectLocalStateItems, currentUser, persistUser]);
+    await patchProfileInCloudService(patch, {
+      currentUser,
+      setProfileSyncState,
+      setLastProfileSyncAt,
+      setAllUsers,
+      persistUser,
+      loginAsUser,
+      collectLocalStateItemsImpl: collectLocalStateItems,
+      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
+      fetchImpl: fetch,
+      suppressNextFullProfileSyncRef,
+    });
+  }, [currentUser, loginAsUser, persistUser]);
 
   const syncAllLocalDataNow = useCallback(async () => {
-    if (!currentUser) return;
-    try {
-      await pushProfileToCloud(currentUser);
-    } catch {
-      setProfileSyncState('error');
-    }
-  }, [currentUser, pushProfileToCloud]);
+    await syncAllLocalDataNowService({
+      currentUser,
+      setProfileSyncState,
+      setLastProfileSyncAt,
+      setAllUsers,
+      persistUser,
+      loginAsUser,
+      collectLocalStateItemsImpl: collectLocalStateItems,
+      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
+      fetchImpl: fetch,
+      suppressNextFullProfileSyncRef,
+    });
+  }, [currentUser, loginAsUser, persistUser]);
 
   const reloadUserFromCloud = useCallback(async () => {
-    if (!currentUser) return;
-    try {
-      const pr = await fetch('/api/profile', { credentials: 'include' });
-      if (!pr.ok) throw new Error('PROFILE_LOAD_FAILED');
-      const pj = await pr.json();
-      const profile = pj?.profile as UserProfile | null;
-      if (!profile) return;
-      await loginAsUser(profile);
-      setAllUsers([profile]);
-      persistAllUsersSnapshot(currentUser?.id ?? profile.id, [profile]);
-      setProfileSyncState('saved');
-      setLastProfileSyncAt(Date.now());
-    } catch {
-      setProfileSyncState('error');
-    }
-  }, [currentUser, loginAsUser, persistAllUsersSnapshot]);
+    await reloadUserFromCloudService({
+      currentUser,
+      setProfileSyncState,
+      setLastProfileSyncAt,
+      setAllUsers,
+      persistUser,
+      loginAsUser,
+      collectLocalStateItemsImpl: collectLocalStateItems,
+      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
+      fetchImpl: fetch,
+      suppressNextFullProfileSyncRef,
+    });
+  }, [currentUser, loginAsUser, persistUser]);
 
   // Server-driven: persist profile changes to D1 (debounced)
   const profileSaveTimer = useRef<number | null>(null);
