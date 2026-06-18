@@ -109,6 +109,8 @@ const PlanScreen = React.lazy(() => import('./PlanScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
 const ProScreen = React.lazy(() => import('./ProScreen'));
 const CourseScreen = React.lazy(() => import('./CourseScreen'));
+const PlanIntroModal = React.lazy(() => import('./PlanIntroModal'));
+const LessonViewModal = React.lazy(() => import('./LessonViewModal'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -2832,8 +2834,27 @@ const logWeight = useCallback(() => {
         </div>
       )}
 
-      {planIntroOpen && currentUser?.aiPlan && (<div className="fixed inset-0 z-[2000] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4"><div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left"><div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Ваш AI‑план готов</p><h3 className="mt-1 text-2xl font-black text-white">{currentUser.aiPlan.title}</h3><p className="mt-2 text-sm text-slate-400 font-semibold">{currentUser.aiPlan.strategySummary}</p></div><button onClick={() => setPlanIntroOpen(false)} className="w-10 h-10 rounded-[1.2rem] border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all grid place-items-center text-slate-200"><X size={18} /></button></div><div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3"><div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-1 text-xl font-black text-white tabular-nums">{currentUser.aiPlan.dailyKpi.calories} ккал</p><p className="text-sm font-black text-slate-200 tabular-nums">{currentUser.aiPlan.dailyKpi.protein}Б · {currentUser.aiPlan.dailyKpi.fat}Ж · {currentUser.aiPlan.dailyKpi.carbs}У</p><p className="mt-3 text-xs text-indigo-300 font-black uppercase tracking-widest">Фокус недели: {currentUser.aiPlan.weeklyFocus}</p></div><div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Первые шаги</p><div className="mt-2 space-y-2">{currentUser.aiPlan.firstTasks.slice(0,3).map((t, i) => (<div key={i} className="text-sm font-bold text-slate-200">• {t}</div>))}</div></div></div>{planError && <p className="mt-4 text-xs text-amber-300 font-bold">{planError}</p>}<div className="mt-6 grid gap-2"><button onClick={() => { setPlanIntroOpen(false); setActiveTab('plan'); }} className="w-full py-4 rounded-[2rem] font-black text-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-xl shadow-indigo-900/40 hover:from-indigo-500 hover:to-violet-500 transition-all active:scale-[0.98]">Открыть полный план</button><button onClick={() => { setPlanIntroOpen(false); setActiveTab('nutrition'); }} className="w-full py-4 rounded-[2rem] font-black text-sm text-slate-200 border border-slate-800 bg-slate-950 hover:border-indigo-500/30 transition-all">Начать дневник сегодня</button></div></div></div>)}
-      {isLessonViewOpen && currentLesson && (<div className="fixed inset-0 bg-slate-950 z-[200] overflow-y-auto animate-in slide-in-from-right duration-500"><div className="max-w-3xl mx-auto px-6 py-12 pb-32 space-y-12">{!isQuizActive ? (<><button onClick={() => setIsLessonViewOpen(false)} className="flex items-center gap-3 text-slate-500 font-black text-xs uppercase tracking-widest hover:text-indigo-400 transition-colors bg-slate-900 px-6 py-3 rounded-full border border-slate-800"><ChevronLeft size={20} /> Назад</button><header className="space-y-4 text-left"><div className="flex gap-2">{currentLesson.tags.map(t => <span key={t} className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-500/20">{t}</span>)}</div><h1 className="text-5xl font-black text-slate-50 leading-tight">{currentLesson.title}</h1></header><div className="space-y-8 text-xl text-slate-400 leading-relaxed font-medium text-left">{currentLesson.content.map((p, i) => <p key={i}>{p}</p>)}</div><div className="bg-slate-900 p-10 rounded-[3rem] space-y-4 border border-slate-800 shadow-2xl text-left"><h3 className="text-2xl font-black text-slate-200">Главный вывод:</h3><p className="text-xl font-bold text-indigo-400 italic">"{currentLesson.takeaway}"</p></div><button onClick={handleMarkLessonRead} className="w-full py-6 bg-slate-100 text-slate-950 rounded-[2.5rem] font-black text-lg shadow-2xl shadow-black/50 hover:bg-white transition-all">Прочитано</button></>) : (<div className="py-20 text-center space-y-12 animate-in zoom-in"><div className="w-24 h-24 bg-indigo-500/10 rounded-[2rem] flex items-center justify-center text-indigo-400 mx-auto shadow-inner border border-indigo-500/20"><Award size={48} /></div><h2 className="text-4xl font-black text-slate-100">{currentLesson.quiz?.question}</h2><div className="grid gap-4">{currentLesson.quiz?.options.map(o => (<button key={o.id} onClick={() => setSelectedQuizOption(o)} className={`w-full p-6 rounded-[2rem] border-4 transition-all text-xl font-black ${selectedQuizOption?.id === o.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-500'}`}>{o.text}</button>))}</div><button onClick={handleQuizSubmit} disabled={!selectedQuizOption} className="w-full py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg disabled:opacity-20 transition-all shadow-xl shadow-indigo-900/40">Завершить урок</button></div>)}</div></div>)}
+      <React.Suspense fallback={null}>
+        <PlanIntroModal
+          currentUser={currentUser}
+          planError={planError}
+          onClose={() => setPlanIntroOpen(false)}
+          onOpenPlan={() => setActiveTab('plan')}
+          onOpenNutrition={() => setActiveTab('nutrition')}
+        />
+      </React.Suspense>
+      <React.Suspense fallback={null}>
+        <LessonViewModal
+          currentLesson={currentLesson}
+          isQuizActive={isQuizActive}
+          selectedQuizOption={selectedQuizOption}
+          setIsLessonViewOpen={setIsLessonViewOpen}
+          setIsQuizActive={setIsQuizActive}
+          setSelectedQuizOption={setSelectedQuizOption}
+          handleMarkLessonRead={handleMarkLessonRead}
+          handleQuizSubmit={handleQuizSubmit}
+        />
+      </React.Suspense>
     </div>
   );
 };
