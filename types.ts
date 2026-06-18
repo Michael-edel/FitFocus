@@ -216,6 +216,13 @@ export interface UserProfile {
   exclusions: string; 
   /** медицинские ограничения, противопоказания, лекарства или особые условия */
   medicalRestrictions?: string;
+  /** текущее артериальное давление в состоянии покоя */
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  bloodPressureMeasuredAt?: string;
+  /** пульс в состоянии покоя */
+  restingPulse?: number;
+  restingPulseMeasuredAt?: string;
   /** общие семейные исключения (аллергены/запреты, влияет на общую готовку) */
   familyExclusions?: string;
   dietary?: DietaryRestrictions;

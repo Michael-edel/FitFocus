@@ -36,6 +36,9 @@ export type RegistrationData = {
     notes: string;
   };
   medicalRestrictions: string;
+  bloodPressureSystolic: number;
+  bloodPressureDiastolic: number;
+  restingPulse: number;
   plan: TariffPlan;
   lossDeficit?: number;
   gainSurplus?: number;
@@ -469,6 +472,50 @@ export default function RegistrationScreen({
                         placeholder="например: гипертония 1 степени, травма колена, не назначать высокоинтенсивные тренировки"
                         className="w-full min-h-[96px] p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm resize-y"
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Давление и пульс</label>
+                    <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+                      <div className="text-xs text-slate-400 font-semibold">
+                        Эти значения помогут AI аккуратнее подбирать нагрузку и рекомендации по восстановлению.
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Систолическое</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.bloodPressureSystolic || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, bloodPressureSystolic: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="120"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Диастолическое</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.bloodPressureDiastolic || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, bloodPressureDiastolic: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="80"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Пульс покоя</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.restingPulse || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, restingPulse: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="60"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
 

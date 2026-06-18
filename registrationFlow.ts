@@ -14,6 +14,9 @@ type RegDataLike = {
   targetWeight: number;
   plan: UserProfile['plan'];
   medicalRestrictions?: string;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  restingPulse?: number;
   lossDeficit?: number;
   gainSurplus?: number;
 };
@@ -77,6 +80,11 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     familyMembers: [],
     exclusions: '',
     medicalRestrictions: deps.regData.medicalRestrictions?.trim() || '',
+    bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
+    bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
+    bloodPressureMeasuredAt: Number(deps.regData.bloodPressureSystolic || 0) > 0 && Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? new Date().toISOString() : undefined,
+    restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,
+    restingPulseMeasuredAt: Number(deps.regData.restingPulse || 0) > 0 ? new Date().toISOString() : undefined,
     lossDeficit: Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT),
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
     riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,
