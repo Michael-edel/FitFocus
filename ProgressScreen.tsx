@@ -261,12 +261,7 @@ export default function ProgressScreen({
 
   const [compareFromKey, setCompareFromKey] = useState('');
   const [compareToKey, setCompareToKey] = useState('');
-
-  React.useEffect(() => {
-    if (!progressDateKeys.length) return;
-    setCompareFromKey((current) => (current && progressDateKeys.includes(current) ? current : progressDateKeys[0]));
-    setCompareToKey((current) => (current && progressDateKeys.includes(current) ? current : progressDateKeys[progressDateKeys.length - 1]));
-  }, [progressDateKeys]);
+  const [compareMode, setCompareMode] = useState<'all' | 'matched'>('matched');
 
   const measurementByDate = useMemo(() => {
     const map = new Map<string, (typeof recentMeasurements)[number]>();
@@ -285,6 +280,18 @@ export default function ProgressScreen({
     });
     return map;
   }, [progressPhotosSorted]);
+
+  const matchedCompareKeys = useMemo(
+    () => progressDateKeys.filter((key) => measurementByDate.has(key) && photoByDate.has(key)),
+    [measurementByDate, photoByDate, progressDateKeys],
+  );
+  const compareKeys = compareMode === 'matched' && matchedCompareKeys.length >= 2 ? matchedCompareKeys : progressDateKeys;
+
+  React.useEffect(() => {
+    if (!compareKeys.length) return;
+    setCompareFromKey((current) => (current && compareKeys.includes(current) ? current : compareKeys[0]));
+    setCompareToKey((current) => (current && compareKeys.includes(current) ? current : compareKeys[compareKeys.length - 1]));
+  }, [compareKeys]);
 
   const timelineGroups = useMemo(() => {
     type TimelineItem =
@@ -381,6 +388,7 @@ export default function ProgressScreen({
   const compareWeightDelta = formatDelta(compareToMeasurement?.weight, compareFromMeasurement?.weight, 'кг');
   const compareWaistDelta = formatDelta(compareToMeasurement?.waistCm, compareFromMeasurement?.waistCm, 'см');
   const comparePulseDelta = formatDelta(compareToMeasurement?.restingPulse, compareFromMeasurement?.restingPulse, 'уд/мин');
+  const compareModeLabel = compareMode === 'matched' ? 'Только дни с фото и замерами' : 'Все доступные даты';
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
@@ -863,9 +871,33 @@ export default function ProgressScreen({
             <h2 className="mt-2 text-2xl font-black text-slate-100">До и после на выбранных точках</h2>
             <p className="mt-2 text-sm font-medium text-slate-400">Выберите две даты и сравните, что изменилось в весе, талии, пульсе и фото.</p>
           </div>
-          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-            <CalendarDays size={12} className="text-fuchsia-300" />
-            Выбранные даты
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCompareMode((current) => (current === 'matched' ? 'all' : 'matched'))}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all',
+                compareMode === 'matched'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                  : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+              )}
+            >
+              <CalendarDays size={12} className={compareMode === 'matched' ? 'text-emerald-300' : 'text-fuchsia-300'} />
+              {compareModeLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!compareKeys.length) return;
+                setCompareFromKey(compareKeys[0]);
+                setCompareToKey(compareKeys[compareKeys.length - 1]);
+              }}
+              disabled={!compareKeys.length}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:text-slate-200 hover:border-slate-700 disabled:opacity-40"
+            >
+              <TrendingUp size={12} className="text-indigo-300" />
+              Первое / последнее
+            </button>
           </div>
         </div>
 
@@ -881,7 +913,7 @@ export default function ProgressScreen({
                 onChange={(e) => setCompareFromKey(e.target.value)}
                 className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
               >
-                {progressDateKeys.map((key) => (
+                {compareKeys.map((key) => (
                   <option key={key} value={key}>{formatShortDate(key)}</option>
                 ))}
               </select>
@@ -913,7 +945,7 @@ export default function ProgressScreen({
                 onChange={(e) => setCompareToKey(e.target.value)}
                 className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
               >
-                {progressDateKeys.map((key) => (
+                {compareKeys.map((key) => (
                   <option key={key} value={key}>{formatShortDate(key)}</option>
                 ))}
               </select>
