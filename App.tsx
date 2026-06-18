@@ -59,7 +59,7 @@ import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
 import { usePaywall } from './usePaywall';
-import { setDevPlanOverride } from './money';
+import { isTestModeEnabled, setDevPlanOverride } from './money';
 import {
   applyBackupPayload,
   createBackupPayload,
@@ -1341,7 +1341,7 @@ const openEditFood = (item: FoodEntry) => {
     goal: Goal.LOSS,
     targetWeight: 65,
     dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
-    plan: 'free' as TariffPlan,
+    plan: isTestModeEnabled() ? 'family' as TariffPlan : 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
     riskAckLoss: false,

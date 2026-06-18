@@ -18,7 +18,7 @@ export function formatKzt(value: number) {
 // =========================
 const DEV_PLAN_SCOPE_PREFIX = "ff_dev_plan_override_scope_";
 
-function isTestModeEnabled() {
+export function isTestModeEnabled() {
   // Enabled in local dev automatically OR explicitly via env
   return Boolean((import.meta as any).env?.DEV) || (import.meta as any).env?.VITE_TEST_MODE === "1";
 }
@@ -45,9 +45,13 @@ export function getDevPlanOverride(userId?: string | null): TariffPlan | null {
 }
 
 export function getEffectivePlan(realPlan: TariffPlan, userId?: string | null): TariffPlan {
-  // Force maximum plan for testing (Family = max)
-  if (isTestModeEnabled() && (import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
   const override = getDevPlanOverride(userId);
+  if (isTestModeEnabled()) {
+    if ((import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
+    // In test mode, treat Family as the default max entitlement unless a per-user override exists.
+    if (override) return override;
+    return "family";
+  }
   return override ?? realPlan;
 }
 
