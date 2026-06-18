@@ -34,6 +34,7 @@ type SidebarNavigationProps = {
   onActiveTabChange: (tab: AppTabId) => void;
   aiBadge: BadgeMeta;
   retryMeta: RetryMeta;
+  syncBadge: BadgeMeta;
 };
 
 export default function SidebarNavigation({
@@ -48,6 +49,7 @@ export default function SidebarNavigation({
   onActiveTabChange,
   aiBadge,
   retryMeta,
+  syncBadge,
 }: SidebarNavigationProps) {
   const visibleTabs = React.useMemo(() => (isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin')), [isAdmin]);
   const sidebarCoreTabs = React.useMemo(() => visibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id)), [visibleTabs]);
@@ -87,7 +89,11 @@ export default function SidebarNavigation({
               <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
                 {modeBadge.text}
               </span>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-col gap-2">
+                <span title={syncBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", syncBadge.cls)}>
+                  {syncBadge.label}
+                </span>
+                <div className="flex items-center gap-2">
                 <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
                   {aiBadge.label}
                 </span>
@@ -116,6 +122,7 @@ export default function SidebarNavigation({
                     Force
                   </button>
                 )}
+              </div>
               </div>
             </div>
           </div>
