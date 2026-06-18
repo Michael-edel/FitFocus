@@ -999,6 +999,68 @@ export default function ProgressScreen({
           </div>
         </div>
 
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          {[
+            {
+              label: 'До',
+              key: compareFromKey,
+              photo: compareFromPhoto,
+              tone: 'from-indigo-500/20 to-slate-950/60',
+              border: 'border-indigo-500/20',
+              badge: 'text-indigo-200 bg-indigo-500/10',
+            },
+            {
+              label: 'После',
+              key: compareToKey,
+              photo: compareToPhoto,
+              tone: 'from-emerald-500/20 to-slate-950/60',
+              border: 'border-emerald-500/20',
+              badge: 'text-emerald-200 bg-emerald-500/10',
+            },
+          ].map((item) => (
+            <div key={`${item.label}-${item.key || 'empty'}`} className={clsx('overflow-hidden rounded-[1.5rem] border bg-slate-950/40', item.border)}>
+              <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+                <div>
+                  <div className={clsx('inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', item.badge)}>
+                    {item.label}
+                  </div>
+                  <div className="mt-2 text-sm font-black text-slate-100">{item.key ? formatShortDate(item.key) : '—'}</div>
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  {item.photo ? 'Фото найдено' : 'Фото нет'}
+                </div>
+              </div>
+              <div className="grid gap-0 md:grid-cols-[170px_1fr]">
+                <div className={clsx('relative min-h-[170px] bg-gradient-to-br', item.tone)}>
+                  {item.photo?.thumb ? (
+                    <img
+                      src={item.photo.thumb}
+                      alt={item.photo.note || `${item.label} фото`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full min-h-[170px] items-center justify-center px-4 text-center text-sm font-medium text-slate-500">
+                      Нет фото для этой даты
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col justify-between gap-4 px-4 py-4">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Подпись</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-300">
+                      {item.photo?.note ? item.photo.note : 'Фото прогресса без комментария'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <Camera size={12} className="text-fuchsia-300" />
+                    {item.photo ? formatDate(item.photo.date) : 'Ожидает фото'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-[1.4rem] border border-indigo-500/20 bg-indigo-500/10 p-4">
             <div className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Вес</div>
