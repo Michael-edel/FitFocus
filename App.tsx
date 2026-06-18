@@ -72,11 +72,16 @@ import {
 import {
   collectLocalStateItems,
   persistAllUsersSnapshot,
-  readStoredAllUsersSnapshot,
   safeRemoveItem,
   safeSetItem,
 } from './storage/hybrid';
 import { hydrateSessionFromCloud } from './sessionHydration';
+import {
+  bootstrapAuthSession,
+  createLogoutSession,
+  deleteAccountSession,
+  ensureInviteCodeIsValid,
+} from './authSession';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -1728,48 +1733,21 @@ await ensurePdfInterFont(doc);
     return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, foodHistory, foodFavorites]);
 
-  const logout = useCallback(() => {
-  // Local logout + (if present) server session logout
-  void (async () => {
-    if (googleMe?.sub) {
-      try { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); } catch {}
-    }
-  })();
+  const logout = useMemo(() => createLogoutSession({
+    googleSub: googleMe?.sub,
+    setGoogleMe,
+    setCurrentUser,
+    setProfileSyncState,
+    setLastProfileSyncAt,
+    setAuthState,
+  }), [googleMe?.sub]);
 
-  setGoogleMe(null);
-  setCurrentUser(null);
-  setProfileSyncState('idle');
-  setLastProfileSyncAt(null);
-  setAuthState('auth_choice');
-}, [googleMe?.sub]);
-
-
-const deleteAccount = useCallback(async () => {
-  if (!googleMe?.sub) return;
-  const typed = (prompt('Чтобы удалить аккаунт, введите слово DELETE (латиницей).') || '').trim().toUpperCase();
-  if (typed !== 'DELETE') return;
-
-  try {
-    const r = await fetch('/api/account/delete', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirm: 'DELETE' }),
+  const deleteAccount = useCallback(async () => {
+    await deleteAccountSession({
+      googleSub: googleMe?.sub,
+      onLogout: logout,
     });
-
-    if (!r.ok) {
-      const j = await r.json().catch(() => null);
-      alert(j?.error ? `Ошибка удаления: ${j.error}` : 'Не удалось удалить аккаунт.');
-      return;
-    }
-  } catch {
-    alert('Не удалось удалить аккаунт (network).');
-    return;
-  }
-
-  // After delete the cookie is cleared server-side; also clear UI state
-  logout();
-}, [googleMe?.sub, logout]);
+  }, [googleMe?.sub, logout]);
 
   const loginAsUser = useCallback(async (user: UserProfile) => {
     const hydrated = await hydrateSessionFromCloud(user, {
@@ -2074,64 +2052,16 @@ const deleteAccount = useCallback(async () => {
   }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
-    // 1) Пробуем серверную сессию (ff_session cookie)
-    let me: any = null;
-    try {
-      const r = await fetch('/api/me', { credentials: 'include' });
-      if (r.ok) me = await r.json();
-    } catch {}
-
-    const serverUser = me?.user || null;
-    const hasServerAccess = me?.hasAccess !== false;
-    setGoogleMe(serverUser);
-
-    if (serverUser?.sub && requireInvite && !hasServerAccess) {
-      setInviteError('Для доступа к закрытой бете нужен действующий код приглашения. Введите код и повторите вход через Google.');
-      setAuthState('auth_choice');
-      return;
-    }
-
-    // 2) Server-driven: load profile from D1 (independent of device)
-    if (serverUser?.sub) {
-      try {
-        const pr = await fetch('/api/profile', { credentials: 'include' });
-        if (pr.ok) {
-          const pj = await pr.json();
-          const profile = pj?.profile || null;
-
-          if (profile) {
-            setAllUsers([profile]);
-            void loginAsUser(profile);
-            return;
-          }
-
-          // profile missing -> go onboarding
-          setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-          setAuthState('register');
-          return;
-        }
-      } catch {}
-
-      // if profile fetch failed, still show register with name
-      setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
-      setAuthState('register');
-      return;
-    }
-
-// No server session -> restore local profiles or show profile chooser
-try {
-  const all = readStoredAllUsersSnapshot();
-  if (Array.isArray(all) && all.length > 0) {
-    setAllUsers(all);
-    if (all.length === 1) {
-      void loginAsUser(all[0]);
-      return;
-    }
-  }
-} catch {}
-
-setAuthState('auth_choice');
-  }, [loginAsUser]);
+    await bootstrapAuthSession({
+      requireInvite,
+      loginAsUser,
+      setGoogleMe,
+      setInviteError,
+      setAuthState,
+      setAllUsers,
+      setRegData,
+    });
+  }, [loginAsUser, requireInvite]);
 
   useEffect(() => {
     void bootstrapAuth();
@@ -2188,28 +2118,12 @@ setAuthState('auth_choice');
   }, []);
 
   const ensureInviteOk = useCallback(async (): Promise<boolean> => {
-    if (!requireInvite) return true;
-    const code = String(inviteCode || '').trim();
-    if (!code) {
-      setInviteError('Введите код приглашения для доступа к бете.');
-      return false;
-    }
-    setInviteChecking(true);
-    setInviteError(null);
-    try {
-      const r = await fetch(`/api/invite/validate?code=${encodeURIComponent(code)}`, { credentials: 'include' });
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.valid) {
-        setInviteError('Код приглашения недействителен или уже использован.');
-        return false;
-      }
-      return true;
-    } catch {
-      setInviteError('Не удалось проверить код приглашения. Проверьте сервер.');
-      return false;
-    } finally {
-      setInviteChecking(false);
-    }
+    return ensureInviteCodeIsValid({
+      requireInvite,
+      inviteCode,
+      setInviteError,
+      setInviteChecking,
+    });
   }, [requireInvite, inviteCode]);
 
   const startLocalRegistration = useCallback(async () => {
