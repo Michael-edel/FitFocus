@@ -2406,6 +2406,7 @@ const logWeight = useCallback(() => {
         onAiRetry={handleAiRetry}
         onMobileMoreOpenChange={setMobileMoreOpen}
         onActiveTabChange={setActiveTab}
+        onSyncNow={syncAllLocalDataNow}
         aiBadge={aiBadge}
         retryMeta={retryMeta}
         syncBadge={syncBadge}

@@ -32,6 +32,7 @@ type SidebarNavigationProps = {
   onAiRetry: (opts?: { force?: boolean }) => void;
   onMobileMoreOpenChange: (open: boolean) => void;
   onActiveTabChange: (tab: AppTabId) => void;
+  onSyncNow: () => void | Promise<void>;
   aiBadge: BadgeMeta;
   retryMeta: RetryMeta;
   syncBadge: BadgeMeta;
@@ -47,6 +48,7 @@ export default function SidebarNavigation({
   onAiRetry,
   onMobileMoreOpenChange,
   onActiveTabChange,
+  onSyncNow,
   aiBadge,
   retryMeta,
   syncBadge,
@@ -93,36 +95,44 @@ export default function SidebarNavigation({
                 <span title={syncBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", syncBadge.cls)}>
                   {syncBadge.label}
                 </span>
-                <div className="flex items-center gap-2">
-                <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
-                  {aiBadge.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void onAiRetry()}
-                  disabled={!lastAiAction || retryMeta.cooling}
-                  className={clsx(
-                    "px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95",
-                    (!lastAiAction || retryMeta.cooling) ? "border-slate-900 bg-slate-950 text-slate-600 opacity-50 cursor-not-allowed" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300"
-                  )}
-                  title={retryMeta.title}
-                >
-                  {retryMeta.label}
-                </button>
-                {lastAiAction && retryMeta.cooling && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
+                    {aiBadge.label}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      const ok = window.confirm("AI сейчас на паузе из-за квоты/лимита. Force Retry может снова вызвать ошибку quota exceeded и потратить лимиты. Продолжить?");
-                      if (ok) void onAiRetry({ force: true });
-                    }}
-                    className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200"
-                    title="Принудительно повторить последнее AI-действие, игнорируя паузу"
+                    onClick={() => void onAiRetry()}
+                    disabled={!lastAiAction || retryMeta.cooling}
+                    className={clsx(
+                      "px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95",
+                      (!lastAiAction || retryMeta.cooling) ? "border-slate-900 bg-slate-950 text-slate-600 opacity-50 cursor-not-allowed" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300"
+                    )}
+                    title={retryMeta.title}
                   >
-                    Force
+                    {retryMeta.label}
                   </button>
-                )}
-              </div>
+                  {lastAiAction && retryMeta.cooling && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = window.confirm("AI сейчас на паузе из-за квоты/лимита. Force Retry может снова вызвать ошибку quota exceeded и потратить лимиты. Продолжить?");
+                        if (ok) void onAiRetry({ force: true });
+                      }}
+                      className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200"
+                      title="Принудительно повторить последнее AI-действие, игнорируя паузу"
+                    >
+                      Force
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void onSyncNow()}
+                    className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-200"
+                    title="Синхронизировать данные с облаком прямо сейчас"
+                  >
+                    Sync now
+                  </button>
+                </div>
               </div>
             </div>
           </div>
