@@ -75,6 +75,16 @@ const providerLabel: Record<WearableProvider, string> = {
   manual: 'Ручной импорт',
 };
 
+type WearableImportPayload = {
+  provider?: WearableProvider;
+  stepsToday?: number;
+  activeMinutesToday?: number;
+  sleepHoursLastNight?: number;
+  weight?: number;
+  pulse?: number;
+  date?: string;
+};
+
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   try {
@@ -97,6 +107,62 @@ const formatDelta = (current?: number | null, prev?: number | null, unit = '') =
   if (Number.isNaN(diff)) return '—';
   const sign = diff > 0 ? '+' : '';
   return `${sign}${diff.toFixed(1)} ${unit}`.trim();
+};
+
+const parseNumber = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(',', '.').trim();
+  if (!normalized) return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+};
+
+const parseWearableJson = (text: string): WearableImportPayload | null => {
+  try {
+    const raw = JSON.parse(text);
+    if (!raw || typeof raw !== 'object') return null;
+    const obj = raw as Record<string, unknown>;
+    return {
+      provider: typeof obj.provider === 'string' ? obj.provider as WearableProvider : typeof obj.source === 'string' ? obj.source as WearableProvider : undefined,
+      stepsToday: parseNumber(obj.stepsToday ?? obj.steps ?? obj.dailySteps ?? obj.stepCount) ?? undefined,
+      activeMinutesToday: parseNumber(obj.activeMinutesToday ?? obj.activeMinutes ?? obj.moveMinutes) ?? undefined,
+      sleepHoursLastNight: parseNumber(obj.sleepHoursLastNight ?? obj.sleepHours ?? obj.sleep) ?? undefined,
+      weight: parseNumber(obj.weight ?? obj.bodyWeight) ?? undefined,
+      pulse: parseNumber(obj.pulse ?? obj.restingPulse) ?? undefined,
+      date: typeof obj.date === 'string' ? obj.date : typeof obj.recordedAt === 'string' ? obj.recordedAt : undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const parseWearableCsv = (text: string): WearableImportPayload | null => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return null;
+  const delimiter = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(delimiter).map((h) => h.trim().toLowerCase());
+  const row = lines[1]?.split(delimiter).map((c) => c.trim());
+  if (!row || !headers.length) return null;
+  const data = Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']));
+  return {
+    provider: typeof data.provider === 'string' ? data.provider as WearableProvider : typeof data.source === 'string' ? data.source as WearableProvider : undefined,
+    stepsToday: parseNumber(data.steps ?? data.stepcount ?? data.dailysteps),
+    activeMinutesToday: parseNumber(data.active_minutes ?? data.activeminutes ?? data.move_minutes),
+    sleepHoursLastNight: parseNumber(data.sleep_hours ?? data.sleephours ?? data.sleep),
+    weight: parseNumber(data.weight ?? data.bodyweight),
+    pulse: parseNumber(data.pulse ?? data.restingpulse),
+    date: typeof data.date === 'string' ? data.date : typeof data.recordedat === 'string' ? data.recordedat : undefined,
+  };
+};
+
+const parseWearableImport = (text: string): WearableImportPayload | null => {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return parseWearableJson(trimmed) || parseWearableCsv(trimmed);
 };
 
 export default function ProgressScreen({
@@ -131,6 +197,9 @@ export default function ProgressScreen({
   const [draftActiveMinutes, setDraftActiveMinutes] = useState('');
   const [draftSleepHours, setDraftSleepHours] = useState('');
   const [draftSaving, setDraftSaving] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const wearableImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const recentMeasurements = useMemo(() => {
     return [...(measurementsHistory || [])]
@@ -330,6 +399,46 @@ export default function ProgressScreen({
       });
     } finally {
       setDraftSaving(false);
+    }
+  };
+
+  const importWearableFile = async (file: File) => {
+    if (!onPatchUser || !currentUser) return;
+    setImportError(null);
+    setImportBusy(true);
+    try {
+      const text = await file.text();
+      const payload = parseWearableImport(text);
+      if (!payload) throw new Error('Не удалось распознать JSON/CSV формат');
+
+      const now = new Date().toISOString();
+      const importDate = payload.date || now;
+      const nextPatch: Partial<UserProfile> = {
+        wearableProvider: payload.provider || currentUser.wearableProvider || 'manual',
+        wearableEnabled: true,
+        wearableConnectedAt: currentUser.wearableConnectedAt || now,
+        wearableLastSyncAt: now,
+        wearableMetricsUpdatedAt: now,
+      };
+
+      if (typeof payload.stepsToday === 'number') nextPatch.wearableStepsToday = Math.round(payload.stepsToday);
+      if (typeof payload.activeMinutesToday === 'number') nextPatch.wearableActiveMinutesToday = Math.round(payload.activeMinutesToday);
+      if (typeof payload.sleepHoursLastNight === 'number') nextPatch.wearableSleepHoursLastNight = Number(payload.sleepHoursLastNight.toFixed(1));
+      if (typeof payload.weight === 'number' && Number.isFinite(payload.weight) && payload.weight > 0) {
+        nextPatch.weight = payload.weight;
+        nextPatch.weightHistory = [{ date: importDate, weight: payload.weight }, ...(currentUser.weightHistory || [])].slice(0, 120);
+      }
+      if (typeof payload.pulse === 'number' && Number.isFinite(payload.pulse) && payload.pulse > 0) {
+        nextPatch.restingPulse = Math.round(payload.pulse);
+        nextPatch.restingPulseMeasuredAt = importDate;
+      }
+
+      await onPatchUser(nextPatch);
+    } catch (err) {
+      setImportError(String((err as Error)?.message || err || 'Ошибка импорта'));
+      throw err;
+    } finally {
+      setImportBusy(false);
     }
   };
 
@@ -564,6 +673,51 @@ export default function ProgressScreen({
               <div>• Сон и восстановление</div>
               <div>• Вес из умных весов</div>
             </div>
+          </div>
+
+          <input
+            ref={wearableImportInputRef}
+            type="file"
+            accept=".json,.csv,application/json,text/csv"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.currentTarget.value = '';
+              if (!file) return;
+              try {
+                await importWearableFile(file);
+              } catch {
+                // error is already shown in state
+              }
+            }}
+          />
+
+          <div className="mt-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Импорт данных</div>
+            <div className="mt-2 text-sm text-slate-400">Загрузите JSON или CSV из часов, чтобы заполнить шаги, сон и активность без ручного ввода.</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => wearableImportInputRef.current?.click()}
+                disabled={!onPatchUser || importBusy}
+                className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
+              >
+                <Cloud className="w-4 h-4" />
+                {importBusy ? 'Импортируем…' : 'Импорт JSON/CSV'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportError(null)}
+                className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-300 font-black transition-all"
+              >
+                Очистить
+              </button>
+            </div>
+            {importError ? (
+              <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
+                {importError}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
