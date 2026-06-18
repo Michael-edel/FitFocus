@@ -2792,16 +2792,18 @@ const logWeight = useCallback(() => {
         />
       </React.Suspense>
       <React.Suspense fallback={null}>
-        <LessonViewModal
-          currentLesson={currentLesson}
-          isQuizActive={isQuizActive}
-          selectedQuizOption={selectedQuizOption}
-          onClose={closeLessonView}
-          setSelectedQuizOption={setSelectedQuizOption}
-          handleMarkLessonRead={handleMarkLessonRead}
-          handleStartLessonQuiz={handleStartLessonQuiz}
-          handleQuizSubmit={handleQuizSubmit}
-        />
+        {isLessonViewOpen && currentLesson && (
+          <LessonViewModal
+            currentLesson={currentLesson}
+            isQuizActive={isQuizActive}
+            selectedQuizOption={selectedQuizOption}
+            onClose={closeLessonView}
+            setSelectedQuizOption={setSelectedQuizOption}
+            handleMarkLessonRead={handleMarkLessonRead}
+            handleStartLessonQuiz={handleStartLessonQuiz}
+            handleQuizSubmit={handleQuizSubmit}
+          />
+        )}
       </React.Suspense>
     </div>
   );
