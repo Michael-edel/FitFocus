@@ -104,6 +104,7 @@ const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
 const RegistrationScreen = React.lazy(() => import('./RegistrationScreen'));
 const AuthChoiceScreen = React.lazy(() => import('./AuthChoiceScreen'));
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
+const PlanScreen = React.lazy(() => import('./PlanScreen'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -2606,227 +2607,45 @@ const logWeight = useCallback(() => {
             />
           </React.Suspense>
         )}
-        {activeTab === 'plan' && (<div className="space-y-6 animate-in fade-in duration-700"><header className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div className="text-left"><h2 className="text-3xl font-black text-slate-100">Ваш AI‑план</h2><p className="text-sm text-slate-400 font-semibold">Стратегия, KPI и первые шаги на неделю.</p><div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200"><ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена</div></div><button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all min-h-[44px]"><Sparkles size={16} /> Показать кратко</button></header>{!currentUser?.aiPlan && (<div className="p-6 rounded-[2rem] border border-amber-500/20 bg-amber-500/5 text-left"><div className="flex items-start gap-3"><div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-300 shrink-0"><Sparkles size={18} /></div><div><p className="text-sm font-black text-amber-100">План ещё подготавливается</p><p className="mt-1 text-sm text-amber-200/80 font-semibold">Сначала заполните профиль и дождитесь генерации AI-плана. Пока план не готов, разделы показывают безопасные заглушки вместо пустого экрана.</p></div></div></div>)}
-
-          <div className="p-4 md:p-6 rounded-[1.6rem] md:rounded-[2rem] bg-gradient-to-br from-indigo-600/15 via-slate-950 to-slate-950 border border-indigo-500/20 text-left">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-black text-indigo-300 uppercase tracking-widest">Сегодня</p>
-                <h3 className="mt-2 text-xl font-black text-white">Что важно сделать сегодня</h3>
-                <p className="mt-1 text-sm text-slate-400 font-semibold">Минимум действий, которые двигают к цели и не перегружают.</p>
-              </div>
-              <div className="shrink-0 px-3 py-2 rounded-full bg-slate-950/70 border border-slate-800 text-[11px] font-black uppercase tracking-widest text-slate-300">
-                {Object.values(planTaskDone).filter(Boolean).length}/{Math.min(3, currentUser?.aiPlan?.firstTasks?.length || 0)} выполнено
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              {(currentUser?.aiPlan?.firstTasks ?? []).slice(0, 3).map((t, i) => {
-                const key = `${i}:${t}`;
-                const done = !!planTaskDone[key];
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setPlanTaskDone(prev => ({ ...prev, [key]: !prev[key] }))}
-                    className={clsx(
-                      "min-h-[72px] w-full text-left flex items-start gap-3 p-4 rounded-[1.5rem] border transition-all active:scale-[0.99]",
-                      done
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-100"
-                        : "bg-slate-900/40 border-slate-800 text-slate-200 hover:border-indigo-500/30"
-                    )}
-                  >
-                    <span className={clsx("mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center shrink-0", done ? "border-emerald-400 bg-emerald-500/20 text-emerald-300" : "border-slate-700 text-slate-500")}>{done ? <CheckCircle2 size={16} /> : <span className="w-2.5 h-2.5 rounded-full bg-current opacity-70" />}</span>
-                    <span className="font-bold leading-relaxed">{t}</span>
-                  </button>
-                );
-              })}
-              {(!currentUser?.aiPlan?.firstTasks || currentUser.aiPlan.firstTasks.length === 0) && (
-                <div className="p-4 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 text-sm text-slate-500 font-semibold">Первые задачи появятся после генерации плана.</div>
-              )}
-            </div>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
-              <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
-              <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p><p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUser?.aiPlan?.dailyKpi?.calories ?? '—'} ккал</p><p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUser?.aiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUser?.aiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUser?.aiPlan?.dailyKpi?.carbs ?? '—'}У</p><p className="mt-3 text-sm text-slate-400 font-semibold">{currentUser?.aiPlan?.strategySummary ?? '—'}</p><p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Интенсивность: {currentUser ? (currentUser.goal === Goal.LOSS ? `дефицит ${Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)} ккал/день` : currentUser.goal === Goal.GAIN ? `профицит ${Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)} ккал/день` : 'поддержание') : '—'}</p><div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-black uppercase tracking-widest"><span className="text-indigo-300">Фокус недели: {currentUser?.aiPlan?.weeklyFocus ?? '—'}</span>{currentUser?.targetWeight ? <span className="px-3 py-1 rounded-full bg-slate-900/50 border border-slate-800 text-slate-300">Цель: {currentUser.targetWeight} кг</span> : null}</div></div><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p><div className="mt-3 grid grid-cols-1 gap-3 text-sm font-bold text-slate-200"><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.breakfast || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.lunch || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.dinner || ''} /></div><div className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={currentUser?.aiPlan?.mealTemplate?.snack || ''} /></div></div></div></div>
-
-          {planRulesExpanded && (
-            <div className="p-5 md:p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-              <div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила недели</p><button type="button" onClick={() => setPlanRulesExpanded(false)} className="text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300">Скрыть</button></div>
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                {(currentUser?.aiPlan?.rules ?? []).map((rule, idx) => (
-                  <div key={idx} className="p-4 rounded-[1.4rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold leading-relaxed">• {rule}</div>
-                ))}
-                {(!currentUser?.aiPlan?.rules || currentUser.aiPlan.rules.length === 0) && <div className="text-sm text-slate-500 font-semibold">Правила появятся после генерации плана.</div>}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button type="button" onClick={() => setPlanRulesExpanded(false)} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button>
-              </div>
-            </div>
-          )}
-
-          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left"><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div></div><ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div><div className="pt-1 flex justify-end"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: false }))} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
-            {(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
-              <React.Suspense fallback={<div className="mt-3 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка списка покупок...</div>}>
-                <ShoppingListCard
-                  weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
-                  title="Список покупок"
-                  userId={currentUser?.id}
-                  fallbackList={(() => {
-                  const items = currentUser?.aiPlan?.weeklyMenu?.shoppingListItems ?? [];
-                  if (items.length) {
-                    return items
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-                      .map((it) => `${it.name} — ${formatGramsPretty(it.grams)}`);
-                  }
-                  return currentUser?.aiPlan?.weeklyMenu?.shoppingList ?? [];
-                  })()}
-                />
-              </React.Suspense>
-            ) : null}
-          </div>
-
-
-              {/* Cloud Family (B2C) — visible переключатель "Я / Семья" */}
-              {cloudFamily?.id && (
-                <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Режим плана</p>
-                      <p className="mt-1 text-xs text-slate-500 font-semibold">
-                        Семья: <span className="text-slate-200 font-black">{cloudFamily.name || 'Семья'}</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-full p-1">
-                      <button
-                        onClick={() => setPlanScope('personal')}
-                        className={clsx(
-                          'px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all',
-                          planScope === 'personal' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                        )}
-                      >
-                        Я
-                      </button>
-                      <button
-                        onClick={() => setPlanScope('family')}
-                        className={clsx(
-                          'px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all',
-                          planScope === 'family' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                        )}
-                      >
-                        Семья
-                      </button>
-                    </div>
-                  </div>
-
-                  {planScope === 'family' && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-slate-200 font-black">Семейный список покупок (на неделю)</p>
-                        <button
-                          onClick={() => void loadFamilyShopping()}
-                          className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-200 hover:border-indigo-500/30 transition-all"
-                        >
-                          Обновить
-                        </button>
-                      </div>
-
-                      {familyShoppingLoading ? (
-                        <div className="mt-3 text-slate-400 font-bold flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Загружаю…</div>
-                      ) : familyShopping?.items?.length ? (
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                          {familyShopping.items.slice(0, 30).map((it, i) => (
-                            <label key={i} className={clsx(
-                              "p-3 rounded-[1.2rem] border flex items-center justify-between gap-3 cursor-pointer transition-all",
-                              it.checked ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through" : "bg-slate-950/40 border-slate-800 text-slate-200"
-                            )}>
-                              <span className="flex items-center gap-3 min-w-0">
-                                <input
-                                  type="checkbox"
-                                  className="accent-indigo-400 shrink-0"
-                                  checked={!!it.checked}
-                                  onChange={(e) => void toggleFamilyShoppingItem(it.name, e.target.checked)}
-                                />
-                                <span className="truncate">• {it.name}</span>
-                              </span>
-                              <span className="text-slate-400 tabular-nums shrink-0">{formatGramsPretty(it.grams)}</span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="mt-3 text-sm text-slate-500 font-semibold">
-                          Пусто. Сначала сгенерируйте семейное меню во вкладке «Семья».
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-
-
-              {(cloudFamily?.id || (paywall.plan === 'family' && allUsers.length > 1)) && (
-                <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Семейное меню на неделю</p>
-                      <p className="mt-1 text-xs text-slate-500 font-semibold">Одна готовка для всех + порции под разные калории. Исключения учитываются.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setFamilyMenuPrefsOpen(true)} disabled={!currentUser?.aiPlan || familyMenuLoading} className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-black text-[11px] uppercase tracking-widest hover:border-indigo-500/30 disabled:opacity-50">Параметры</button>
-                      <button onClick={handleGenerateFamilyWeeklyMenu} disabled={familyMenuLoading || !currentUser?.aiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{familyMenuLoading ? 'Генерирую…' : (familyMenu ? 'Обновить' : 'Сгенерировать')}</button>
-                    </div>
-                  </div>
-                  {familyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{familyMenuError}</p>)}
-                  {familyMenu ? (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {familyMenu.days.map((d, i) => (
-                        <div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
-                          <div className="text-slate-200 font-black mb-2">{d.day}</div>
-                          {([['Завтрак', d.breakfast], ['Обед', d.lunch], ['Ужин', d.dinner], ['Перекус', d.snack]] as const).map(([label, meal], j) => (
-                            <div key={j} className="mt-2 text-xs text-slate-300 font-semibold">
-                              <div><span className="text-slate-500 font-black">{label}:</span> <MealParts value={meal.base} /></div>
-                              <div className="mt-1 pl-3 space-y-0.5">
-                                {Object.entries(meal.portions || {}).map(([pid, ptxt]) => {
-                                  const person = allUsers.find(u => u.id === pid);
-                                  const nm = person?.name || (pid === currentUser.id ? 'Вы' : pid);
-                                  if (!ptxt) return null;
-                                  return <div key={pid} className="text-[11px] text-slate-400"><span className="text-slate-500 font-black">{nm}:</span> <MealParts value={String(ptxt)} /></div>;
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
-                  )}
-                  {(familyMenu?.shoppingListItems?.length || familyMenu?.shoppingList?.length) && (
-                    <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
-                      <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                        {(familyMenu?.shoppingListItems || []).length
-                          ? familyMenu!.shoppingListItems!.slice(0, 40).map((it, i) => (
-                              <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                                <span className="truncate">• {it.name}</span>
-                                <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                              </div>
-                            ))
-                          : familyMenu!.shoppingList.slice(0, 40).map((s, i) => (
-                              <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
-                            ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6"/><div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила</p><div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">{(currentUser?.aiPlan?.rules ?? []).slice(0, 6).map((r, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 text-slate-200 font-bold">• {r}</div>))}</div></div></div>)}
+        {activeTab === 'plan' && (
+          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка плана...</div>}>
+            <PlanScreen
+              currentUser={currentUser}
+              planTaskDone={planTaskDone}
+              setPlanTaskDone={setPlanTaskDone}
+              setActiveTab={setActiveTab}
+              setPlanIntroOpen={setPlanIntroOpen}
+              setPlanRulesExpanded={setPlanRulesExpanded}
+              planRulesExpanded={planRulesExpanded}
+              planWeekExpanded={planWeekExpanded}
+              setPlanWeekExpanded={setPlanWeekExpanded}
+              weeklyMenuLoading={weeklyMenuLoading}
+              handleGenerateWeeklyMenu={handleGenerateWeeklyMenu}
+              weeklyMenuError={weeklyMenuError}
+              currentUserAiPlan={currentUser?.aiPlan}
+              currentUserTargetWeight={currentUser?.targetWeight}
+              formatGramsPretty={formatGramsPretty}
+              MealParts={MealParts}
+              cloudFamily={cloudFamily}
+              planScope={planScope}
+              setPlanScope={setPlanScope}
+              familyShoppingLoading={familyShoppingLoading}
+              familyShopping={familyShopping}
+              toggleFamilyShoppingItem={toggleFamilyShoppingItem}
+              loadFamilyShopping={loadFamilyShopping}
+              familyMenuError={familyMenuError}
+              familyMenu={familyMenu}
+              familyMenuLoading={familyMenuLoading}
+              setFamilyMenuPrefsOpen={setFamilyMenuPrefsOpen}
+              handleGenerateFamilyWeeklyMenu={handleGenerateFamilyWeeklyMenu}
+              paywallPlan={paywall.plan}
+              allUsers={allUsers}
+              currentUserGoal={currentUser?.goal || Goal.MAINTAIN}
+              DEFAULT_DEFICIT={DEFAULT_DEFICIT}
+              DEFAULT_SURPLUS={DEFAULT_SURPLUS}
+            />
+          </React.Suspense>
+        )}
          {activeTab === 'nutrition' && (
            <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
              <NutritionScreen
