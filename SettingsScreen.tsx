@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
 import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound, Link2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -935,11 +936,11 @@ export default function SettingsScreen({
                     </div>
                   )}
 
-                  {bridgeSetupLink && (
-                    <div className="mt-3 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-widest text-emerald-200/80">One-tap setup</div>
+                {bridgeSetupLink && (
+                  <div className="mt-3 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-emerald-200/80">One-tap setup</div>
                           <div className="mt-1 text-slate-100 font-black">Откройте bridge одной ссылкой</div>
                           <div className="mt-2 text-sm text-emerald-100/80">
                             Эта ссылка подставит base URL и token в iPhone bridge автоматически. После копирования отправьте её на iPhone и откройте в приложении FitFocus Bridge.
@@ -950,8 +951,26 @@ export default function SettingsScreen({
                         </div>
                       </div>
 
-                      <div className="mt-3 rounded-[0.9rem] border border-emerald-500/20 bg-slate-950/50 px-3 py-2 text-xs font-mono text-emerald-100 break-all">
-                        {bridgeSetupLink}
+                      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3 items-start">
+                        <div className="rounded-[1rem] border border-emerald-500/20 bg-slate-950/60 p-4 flex items-center justify-center">
+                          <div className="rounded-[0.85rem] bg-white p-3">
+                            <QRCodeSVG
+                              value={bridgeSetupLink}
+                              size={156}
+                              level="M"
+                              includeMargin
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="rounded-[0.9rem] border border-emerald-500/20 bg-slate-950/50 px-3 py-2 text-xs font-mono text-emerald-100 break-all">
+                            {bridgeSetupLink}
+                          </div>
+                          <div className="text-xs text-emerald-100/75 leading-5">
+                            Наведите камеру iPhone на QR-код или откройте ссылку вручную. Bridge подставит URL и token автоматически.
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
