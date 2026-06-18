@@ -103,6 +103,19 @@ export default function ProgressArchiveScreen({
       : '—';
   const firstWaistLabel = typeof weightStart?.waistCm === 'number' ? `${weightStart.waistCm} см` : '—';
   const latestWaistLabel = typeof latestMeasurement?.waistCm === 'number' ? `${latestMeasurement.waistCm} см` : '—';
+  const progressSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (weightDiff !== null) {
+      parts.push(`${weightDiff > 0 ? 'прибавка' : 'минус'} ${Math.abs(weightDiff).toFixed(1)} кг`);
+    }
+    if (waistDiff !== null) {
+      parts.push(`${waistDiff > 0 ? 'талия выросла' : 'талия уменьшилась'} на ${Math.abs(waistDiff).toFixed(1)} см`);
+    }
+    if (!parts.length) {
+      parts.push('добавьте хотя бы две точки, чтобы увидеть разницу');
+    }
+    return parts.join(' · ');
+  }, [waistDiff, weightDiff]);
 
   const weightTrendData = useMemo(() => {
     return [...(weightHistory || [])]
@@ -279,6 +292,49 @@ export default function ProgressArchiveScreen({
               <div className="rounded-[1rem] border border-slate-800 bg-slate-950/50 p-3">Обновлено: {formatDate(wearableMetricsUpdatedAt)}</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2.25rem] border border-slate-800 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-indigo-950/20 p-5 md:p-6 overflow-hidden">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Главный кадр</div>
+            <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Before / after</h2>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Большая пара фото показывает результат наглядно, а не только через цифры.</p>
+          </div>
+          <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200">
+            {progressSummary}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_auto_1fr] items-stretch">
+          <HeroPhotoCard
+            title="Старт"
+            caption={archiveStartDate ? formatDate(archiveStartDate) : 'Нет даты'}
+            photo={photoStart?.thumb}
+            note={photoStart?.note || 'Первый снимок'}
+            weight={firstWeightLabel}
+            waist={firstWaistLabel}
+            badge="до"
+          />
+
+          <div className="hidden xl:flex flex-col items-center justify-center gap-3 px-2">
+            <div className="rounded-full border border-slate-700 bg-slate-950/60 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300">
+              Сравнение
+            </div>
+            <div className="h-full min-h-[220px] w-px bg-gradient-to-b from-transparent via-slate-700 to-transparent" />
+          </div>
+
+          <HeroPhotoCard
+            title="Сейчас"
+            caption={archiveEndDate ? formatDate(archiveEndDate) : 'Нет даты'}
+            photo={latestPhoto?.thumb}
+            note={latestPhoto?.note || 'Последний снимок'}
+            weight={latestWeightLabel}
+            waist={latestWaistLabel}
+            badge="после"
+            highlight
+          />
         </div>
       </section>
 
@@ -482,6 +538,67 @@ function CompareCard({
       </div>
 
       <div className="mt-3 text-sm text-slate-300">{note}</div>
+    </div>
+  );
+}
+
+function HeroPhotoCard({
+  title,
+  caption,
+  photo,
+  note,
+  weight,
+  waist,
+  badge,
+  highlight,
+}: {
+  title: string;
+  caption: string;
+  photo?: string;
+  note: string;
+  weight: string;
+  waist: string;
+  badge: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={clsx('rounded-[2rem] border overflow-hidden shadow-2xl shadow-black/20', highlight ? 'border-indigo-500/30 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/35')}>
+      <div className="relative min-h-[420px]">
+        {photo ? (
+          <img src={photo} alt={note} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-slate-500">Нет фото</div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
+        <div className="absolute inset-0 flex flex-col justify-between p-5 md:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/80">
+              {title}
+            </div>
+            <div className={clsx('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest', highlight ? 'border-indigo-300/30 bg-indigo-400/15 text-indigo-100' : 'border-white/10 bg-black/25 text-white/80')}>
+              {badge}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-300/80">{caption}</div>
+              <div className="mt-2 text-sm font-medium text-slate-100/90 max-w-[28rem]">{note}</div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 max-w-[24rem]">
+              <div className="rounded-[1rem] border border-white/10 bg-black/35 backdrop-blur-md p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-300/80">Вес</div>
+                <div className="mt-1 text-xl font-black text-white tabular-nums">{weight}</div>
+              </div>
+              <div className="rounded-[1rem] border border-white/10 bg-black/35 backdrop-blur-md p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-300/80">Талия</div>
+                <div className="mt-1 text-xl font-black text-white tabular-nums">{waist}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
