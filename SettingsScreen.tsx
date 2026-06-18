@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -117,6 +117,15 @@ const formatIsoSyncTs = (iso?: string | null) => {
     return new Date(iso).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
   } catch {
     return 'Ещё не синхронизировано';
+  }
+};
+
+const formatMobileTokenExpiry = (ts?: number | null) => {
+  if (!ts) return 'Срок не указан';
+  try {
+    return new Date(ts).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+  } catch {
+    return 'Срок не указан';
   }
 };
 
@@ -242,6 +251,11 @@ export default function SettingsScreen({
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [mobileTokenBusy, setMobileTokenBusy] = useState(false);
+  const [mobileTokenValue, setMobileTokenValue] = useState('');
+  const [mobileTokenExpiresAt, setMobileTokenExpiresAt] = useState<number | null>(null);
+  const [mobileTokenError, setMobileTokenError] = useState<string | null>(null);
+  const [mobileTokenCopiedAt, setMobileTokenCopiedAt] = useState<number | null>(null);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
@@ -271,6 +285,7 @@ export default function SettingsScreen({
   const wearableSummary = user?.wearableProvider && user.wearableEnabled !== false
     ? wearableProviderLabel[user.wearableProvider]
     : 'Не подключено';
+  const bridgeBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fitfocus.pages.dev';
 
   const syncWearableProvider = async (provider: WearableProvider) => {
     if (!user || !onPatchUser) return;
@@ -297,6 +312,49 @@ export default function SettingsScreen({
       });
     } finally {
       setWearableBusy(null);
+    }
+  };
+
+  const generateMobileToken = async () => {
+    if (!serverSession) return;
+    setMobileTokenBusy(true);
+    setMobileTokenError(null);
+    setMobileTokenCopiedAt(null);
+    try {
+      const response = await fetch('/api/mobile/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload.token !== 'string') {
+        throw new Error(payload?.error === 'UNAUTH'
+          ? 'Сначала войдите в аккаунт FitFocus.'
+          : 'Не удалось создать мобильный токен.');
+      }
+
+      setMobileTokenValue(payload.token);
+      setMobileTokenExpiresAt(typeof payload.expiresAt === 'number' ? payload.expiresAt : null);
+      try {
+        await navigator.clipboard.writeText(payload.token);
+        setMobileTokenCopiedAt(Date.now());
+      } catch {
+        // clipboard is optional
+      }
+    } catch (error) {
+      setMobileTokenError(error instanceof Error ? error.message : 'Не удалось создать мобильный токен');
+    } finally {
+      setMobileTokenBusy(false);
+    }
+  };
+
+  const copyMobileToken = async () => {
+    if (!mobileTokenValue) return;
+    try {
+      await navigator.clipboard.writeText(mobileTokenValue);
+      setMobileTokenCopiedAt(Date.now());
+    } catch {
+      setMobileTokenError('Не удалось скопировать токен');
     }
   };
 
@@ -789,6 +847,70 @@ export default function SettingsScreen({
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/35 p-4 mt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">iPhone bridge</div>
+                      <div className="mt-1 text-slate-100 font-black">Apple Health как мост для Mi Band и Apple Watch</div>
+                      <div className="mt-2 text-sm text-slate-400">
+                        Если Mi Fitness или Apple Watch уже пишут шаги, сон и пульс в Apple Health, iPhone-бридж заберёт эти данные и отправит их в FitFocus.
+                      </div>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center text-sky-300">
+                      <Smartphone className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Base URL для bridge</div>
+                      <div className="mt-2 text-slate-100 font-black break-all">{bridgeBaseUrl}</div>
+                      <div className="mt-2 text-xs text-slate-500">Скопируйте этот адрес в iPhone bridge, чтобы отправлять HealthKit-снимки прямо в текущий FitFocus-стенд.</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void generateMobileToken()}
+                      disabled={!serverSession || mobileTokenBusy}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      {mobileTokenBusy ? 'Генерируем…' : 'Сгенерировать token'}
+                    </button>
+                  </div>
+
+                  {mobileTokenError && (
+                    <div className="mt-3 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                      {mobileTokenError}
+                    </div>
+                  )}
+
+                  {mobileTokenValue && (
+                    <div className="mt-3 rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Mobile token</div>
+                          <div className="mt-2 text-sm text-slate-100 break-all font-mono">{mobileTokenValue}</div>
+                          <div className="mt-2 text-xs text-slate-500">Срок: {formatMobileTokenExpiry(mobileTokenExpiresAt)}</div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void copyMobileToken()}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-[0.85rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
+                          >
+                            <Copy className="w-4 h-4" />
+                            {mobileTokenCopiedAt ? 'Скопировано' : 'Копировать'}
+                          </button>
+                          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
+                            {mobileTokenCopiedAt ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
