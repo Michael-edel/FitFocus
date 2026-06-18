@@ -39,6 +39,7 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'tasks',
   'aiPlan',
   'weightHistory',
+  'measurementsHistory',
   'dietary',
 ]);
 

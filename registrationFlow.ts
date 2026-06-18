@@ -85,6 +85,13 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     bloodPressureMeasuredAt: Number(deps.regData.bloodPressureSystolic || 0) > 0 && Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? new Date().toISOString() : undefined,
     restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,
     restingPulseMeasuredAt: Number(deps.regData.restingPulse || 0) > 0 ? new Date().toISOString() : undefined,
+    measurementsHistory: [{
+      date: new Date().toISOString(),
+      weight: Math.max(0, deps.regData.weight || 0),
+      bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
+      bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
+      restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,
+    }],
     lossDeficit: Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT),
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
     riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,
