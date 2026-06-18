@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { ArrowLeft, Camera, CalendarDays, Cloud, Scale, Sparkles, TrendingUp, Watch } from 'lucide-react';
 import {
@@ -61,6 +61,8 @@ export default function ProgressArchiveScreen({
   onOpenSettings,
   onOpenProgress,
 }: ProgressArchiveScreenProps) {
+  const [mobileCompact, setMobileCompact] = useState(true);
+
   const measurementsSorted = useMemo(
     () =>
       [...(measurementsHistory || [])]
@@ -238,6 +240,13 @@ export default function ProgressArchiveScreen({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => setMobileCompact((value) => !value)}
+            className="inline-flex md:hidden items-center gap-2 px-4 py-3 rounded-[1rem] border border-fuchsia-500/20 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-200 font-black transition-all"
+          >
+            {mobileCompact ? 'Показать детали' : 'Скрыть детали'}
+          </button>
+          <button
+            type="button"
             onClick={onOpenProgress}
             className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
           >
@@ -297,7 +306,7 @@ export default function ProgressArchiveScreen({
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className={clsx('mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3', mobileCompact && 'hidden md:grid')}>
             {progressPhotosSorted.slice(0, 8).map((photo, index) => (
               <div key={`${photo.date}-${index}`} className="relative rounded-[1.25rem] overflow-hidden border border-slate-800 bg-slate-950">
                 <img src={photo.thumb} alt={photo.note || `Фото ${index + 1}`} className="aspect-square w-full object-cover" />
@@ -390,7 +399,7 @@ export default function ProgressArchiveScreen({
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+      <section className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6', mobileCompact && 'md:block hidden')}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">До / после</div>
@@ -451,7 +460,7 @@ export default function ProgressArchiveScreen({
         </div>
       </section>
 
-      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+      <section className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6', mobileCompact && 'md:block hidden')}>
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Тренд веса</div>
@@ -615,7 +624,7 @@ function HeroPhotoCard({
 }) {
   return (
     <div className={clsx('rounded-[2rem] border overflow-hidden shadow-2xl shadow-black/20', highlight ? 'border-indigo-500/30 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/35')}>
-      <div className="relative min-h-[420px]">
+      <div className="relative min-h-[320px] sm:min-h-[420px]">
         {photo ? (
           <img src={photo} alt={note} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
