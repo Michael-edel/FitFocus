@@ -87,6 +87,19 @@ export default function PlanScreen({
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
+  const [activeWeekDay, setActiveWeekDay] = React.useState<string>('');
+  React.useEffect(() => {
+    const nextDay = weeklyMenu?.days?.[0]?.day || '';
+    if (!nextDay) return;
+    setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d: any) => d.day === prev) ? prev : nextDay));
+  }, [weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
+
+  const weeklyMenuDay = React.useMemo(() => {
+    const days = weeklyMenu?.days ?? [];
+    if (!days.length) return null;
+    return days.find((d: any) => d.day === activeWeekDay) || days[0];
+  }, [weeklyMenu?.days, activeWeekDay]);
+
   const mealTemplateFields = [
     { key: 'breakfast', label: 'Завтрак', value: currentUserAiPlan?.mealTemplate?.breakfast || '' },
     { key: 'lunch', label: 'Обед', value: currentUserAiPlan?.mealTemplate?.lunch || '' },
@@ -94,11 +107,62 @@ export default function PlanScreen({
     { key: 'snack', label: 'Перекус', value: currentUserAiPlan?.mealTemplate?.snack || '' },
   ] as const;
 
+  const mealShareByKey = {
+    breakfast: 0.25,
+    lunch: 0.35,
+    dinner: 0.3,
+    snack: 0.1,
+  } as const;
+
+  const mealLabels = {
+    breakfast: 'Завтрак',
+    lunch: 'Обед',
+    dinner: 'Ужин',
+    snack: 'Перекус',
+  } as const;
+
   const cleanMealTemplateText = (label: string, value: string) => {
     const raw = String(value || '').trim();
     if (!raw) return '';
     const rx = new RegExp(`^${label}\\s*[:\\-–—]?\\s*`, 'i');
     return raw.replace(rx, '').trim();
+  };
+
+  const splitMealLines = (value: string) => {
+    const raw = String(value || '').trim();
+    if (!raw) return [] as { text: string; qty?: string }[];
+
+    const parts = raw
+      .split(/\n+|\s*\+\s*|\s*;\s*/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const rx = /^(.+?)(?:\s*[—–-]\s*|\s*\()?(\d+(?:[\.,]\d+)?)\s*(кг|г|гр|мл|л|шт|порц|порции|порция)?\s*\)?\s*$/i;
+
+    return parts.map((part) => {
+      const mm = part.match(rx);
+      if (!mm) return { text: part };
+      const name = (mm[1] || '').trim();
+      const num = (mm[2] || '').replace(',', '.').trim();
+      const unitRaw = (mm[3] || '').trim().toLowerCase();
+      const unit = unitRaw === 'гр' ? 'г' : unitRaw;
+      return {
+        text: name || part,
+        qty: unit ? `${num} ${unit}` : num,
+      };
+    });
+  };
+
+  const macroForMeal = (mealKey: keyof typeof mealShareByKey) => {
+    const daily = currentUserAiPlan?.dailyKpi;
+    if (!daily) return null;
+    const share = mealShareByKey[mealKey];
+    return {
+      calories: Math.max(1, Math.round(Number(daily.calories || 0) * share)),
+      protein: Math.max(1, Math.round(Number(daily.protein || 0) * share)),
+      fat: Math.max(1, Math.round(Number(daily.fat || 0) * share)),
+      carbs: Math.max(1, Math.round(Number(daily.carbs || 0) * share)),
+    };
   };
 
   return (
@@ -245,32 +309,112 @@ export default function PlanScreen({
             {Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}
           </div>
         ) : weeklyMenu ? (
-          <div className="mt-4 space-y-3">
-            {weeklyMenu.days.map((d: any, i: number) => {
-              const expanded = !!planWeekExpanded[d.day];
+          <div className="mt-4 space-y-4">
+            <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-slate-950/95 backdrop-blur border-y border-slate-800/70">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {weeklyMenu.days.map((d: any, i: number) => {
+                  const active = (weeklyMenuDay?.day || weeklyMenu.days[0]?.day) === d.day;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setActiveWeekDay(d.day)}
+                      className={clsx(
+                        'shrink-0 min-h-[42px] px-4 py-2 rounded-full border font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap',
+                        active
+                          ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.18)]'
+                          : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                      )}
+                    >
+                      {d.day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {weeklyMenuDay && (() => {
+              const d = weeklyMenuDay;
+              const summary = currentUserAiPlan?.dailyKpi;
               return (
-                <div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden">
-                  <button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left">
-                    <div>
-                      <div className="text-slate-200 font-black text-xl">{d.day}</div>
-                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div>
-                    </div>
-                    <ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} />
-                  </button>
-                  {expanded && (
-                    <div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3">
-                      <div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div>
-                      <div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div>
-                      <div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div>
-                      <div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div>
-                      <div className="pt-1 flex justify-end">
-                        <button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: false }))} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button>
+                <div className="rounded-[1.7rem] border border-slate-800 bg-gradient-to-br from-slate-900/70 via-slate-950 to-slate-950 overflow-hidden">
+                  <div className="p-4 md:p-5 border-b border-slate-800/70">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300">День недели</div>
+                        <h3 className="mt-1 text-2xl font-black text-white">{d.day}</h3>
+                        <p className="mt-2 text-sm text-slate-400 font-semibold">Быстрый обзор: один активный день, приёмы пищи разнесены по карточкам, граммовки внутри карточки, БЖУ в шапке.</p>
                       </div>
+                      {summary && (
+                        <div className="grid grid-cols-2 gap-2 min-w-[240px]">
+                          <div className="p-3 rounded-[1.1rem] bg-slate-900/60 border border-slate-800">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Итого</div>
+                            <div className="mt-1 text-xl font-black text-white tabular-nums">{summary.calories} ккал</div>
+                          </div>
+                          <div className="p-3 rounded-[1.1rem] bg-slate-900/60 border border-slate-800">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Б/Ж/У</div>
+                            <div className="mt-1 text-sm font-black text-white tabular-nums">{summary.protein}Б · {summary.fat}Ж · {summary.carbs}У</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="p-4 md:p-5 space-y-3">
+                    {([
+                      ['breakfast', d.breakfast],
+                      ['lunch', d.lunch],
+                      ['dinner', d.dinner],
+                      ['snack', d.snack],
+                    ] as const).map(([mealKey, mealText]) => {
+                      const macros = macroForMeal(mealKey);
+                      const lines = splitMealLines(cleanMealTemplateText(mealLabels[mealKey], mealText));
+                      const share = mealShareByKey[mealKey];
+
+                      return (
+                        <div key={mealKey} className="rounded-[1.35rem] border border-slate-800 bg-slate-950/60 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-slate-800/60 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-black text-white">{mealLabels[mealKey]}</span>
+                                <span className="px-2 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200">
+                                  {Math.round(share * 100)}%
+                                </span>
+                              </div>
+                              <div className="mt-1 text-[11px] font-black uppercase tracking-widest text-slate-500">Нажмите сверху на другой день, чтобы переключить карточку</div>
+                            </div>
+                            {macros && (
+                              <div className="flex flex-wrap justify-start md:justify-end gap-2">
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.calories} ккал</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.protein}Б</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.fat}Ж</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.carbs}У</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-4">
+                            <div className="grid grid-cols-1 gap-2">
+                              {lines.length > 0 ? lines.map((line, idx) => (
+                                <div key={idx} className="flex items-start justify-between gap-3 rounded-[1rem] bg-slate-900/35 border border-slate-800 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">{idx === 0 ? 'Блюдо' : 'Дополнение'}</div>
+                                    <div className="mt-1 text-sm font-semibold text-slate-100 leading-relaxed break-words">{line.text}</div>
+                                  </div>
+                                  {line.qty ? <div className="shrink-0 text-[11px] font-black uppercase tracking-widest text-slate-300 tabular-nums whitespace-nowrap">{line.qty}</div> : null}
+                                </div>
+                              )) : (
+                                <div className="rounded-[1rem] bg-slate-900/35 border border-slate-800 px-3 py-3 text-sm text-slate-500 font-semibold">Описание меню отсутствует.</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
-            })}
+            })()}
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>
