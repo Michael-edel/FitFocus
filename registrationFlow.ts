@@ -1,5 +1,6 @@
 import { calculateTDEE } from './profileMath';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
+import { buildFallbackAiPlan } from './aiPlanFallback';
 import { Goal, type UserProfile } from './types';
 
 type RegDataLike = {
@@ -91,6 +92,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     newUser = { ...newUser, aiPlan };
   } catch {
     deps.setPlanError('Не удалось создать AI-план. Используем базовый план.');
+    newUser = { ...newUser, aiPlan: buildFallbackAiPlan(newUser) };
   }
 
   try {

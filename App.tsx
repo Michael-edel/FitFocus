@@ -60,6 +60,7 @@ import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
 import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
+import { buildFallbackAiPlan } from './aiPlanFallback';
 import {
   applyBackupPayload,
   createBackupPayload,
@@ -1696,7 +1697,8 @@ await ensurePdfInterFont(doc);
       initialHabits: INITIAL_HABITS,
     });
 
-    setCurrentUser(hydrated.currentUser);
+    const nextUser = hydrated.currentUser.aiPlan ? hydrated.currentUser : { ...hydrated.currentUser, aiPlan: buildFallbackAiPlan(hydrated.currentUser) };
+    setCurrentUser(nextUser);
     if (Array.isArray(hydrated.allUsers) && hydrated.allUsers.length > 0) {
       setAllUsers(hydrated.allUsers);
     }
@@ -1710,6 +1712,9 @@ await ensurePdfInterFont(doc);
     setAuthState('app');
     setProfileSyncState('saved');
     setLastProfileSyncAt(Date.now());
+    if (!hydrated.currentUser.aiPlan) {
+      persistUser(nextUser);
+    }
   }, [resetUsageIfNewTime]);
 
 
@@ -2157,6 +2162,7 @@ const logWeight = useCallback(() => {
         persistUser({ ...currentUser, aiPlan });
       } catch (e) {
         console.error(e);
+        persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
       }
       return;
     }
@@ -2254,6 +2260,12 @@ const logWeight = useCallback(() => {
       if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.aiPlan) return;
+    persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
+  }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
 
   const closeLessonView = useCallback(() => {
     setIsQuizActive(false);
