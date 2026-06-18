@@ -16,6 +16,8 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -106,6 +108,10 @@ const toDateKey = (iso?: string | null) => {
   if (!iso) return '';
   return iso.includes('T') ? iso.slice(0, 10) : iso;
 };
+
+const toUtcDate = (dateKey: string) => new Date(`${dateKey}T00:00:00Z`);
+
+const incrementUtcDate = (date: Date) => new Date(date.getTime() + 86400000);
 
 const formatDelta = (current?: number | null, prev?: number | null, unit = '') => {
   if (typeof current !== 'number' || typeof prev !== 'number') return '—';
@@ -391,6 +397,68 @@ export default function ProgressScreen({
   const comparePulseDelta = formatDelta(compareToMeasurement?.restingPulse, compareFromMeasurement?.restingPulse, 'уд/мин');
   const compareModeLabel = compareMode === 'matched' ? 'Только дни с фото и замерами' : 'Все доступные даты';
   const canExportComparison = Boolean(compareFromKey && compareToKey);
+
+  const progressDynamicsSeries = useMemo(() => {
+    const dayBuckets = new Map<string, { measurements: number; photos: number }>();
+    recentMeasurements.forEach((item) => {
+      const key = toDateKey(item.date);
+      if (!key) return;
+      const bucket = dayBuckets.get(key) || { measurements: 0, photos: 0 };
+      bucket.measurements += 1;
+      dayBuckets.set(key, bucket);
+    });
+    progressPhotosSorted.forEach((item) => {
+      const key = toDateKey(item.date);
+      if (!key) return;
+      const bucket = dayBuckets.get(key) || { measurements: 0, photos: 0 };
+      bucket.photos += 1;
+      dayBuckets.set(key, bucket);
+    });
+
+    const keys = [...dayBuckets.keys()].sort();
+    if (!keys.length) return [];
+
+    const firstKey = keys[0];
+    const lastKey = keys[keys.length - 1];
+    const series: Array<{
+      date: string;
+      label: string;
+      measurements: number;
+      photos: number;
+      total: number;
+    }> = [];
+
+    let cursor = toUtcDate(firstKey);
+    const lastDate = toUtcDate(lastKey);
+    let cumulativeMeasurements = 0;
+    let cumulativePhotos = 0;
+
+    while (cursor <= lastDate) {
+      const key = cursor.toISOString().slice(0, 10);
+      const bucket = dayBuckets.get(key);
+      if (bucket) {
+        cumulativeMeasurements += bucket.measurements;
+        cumulativePhotos += bucket.photos;
+      }
+      series.push({
+        date: key,
+        label: formatShortDate(key),
+        measurements: cumulativeMeasurements,
+        photos: cumulativePhotos,
+        total: cumulativeMeasurements + cumulativePhotos,
+      });
+      cursor = incrementUtcDate(cursor);
+    }
+
+    return series.slice(-60);
+  }, [progressPhotosSorted, recentMeasurements]);
+
+  const progressDynamicsLastPoint = progressDynamicsSeries.length ? progressDynamicsSeries[progressDynamicsSeries.length - 1] : null;
+  const progressDynamicsFirstPoint = progressDynamicsSeries.length ? progressDynamicsSeries[0] : null;
+  const progressDynamicsDeltaPhotos =
+    progressDynamicsLastPoint && progressDynamicsFirstPoint ? progressDynamicsLastPoint.photos - progressDynamicsFirstPoint.photos : null;
+  const progressDynamicsDeltaMeasurements =
+    progressDynamicsLastPoint && progressDynamicsFirstPoint ? progressDynamicsLastPoint.measurements - progressDynamicsFirstPoint.measurements : null;
 
   const exportComparisonPdf = async () => {
     if (!currentUser || !canExportComparison) return;
@@ -1073,6 +1141,116 @@ export default function ProgressScreen({
           <div className="rounded-[1.4rem] border border-sky-500/20 bg-sky-500/10 p-4">
             <div className="text-[10px] font-black uppercase tracking-widest text-sky-200">Пульс</div>
             <div className="mt-2 text-xl font-black text-slate-100">{comparePulseDelta}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Динамика прогресса</div>
+              <h2 className="mt-2 text-2xl font-black text-slate-100">Фото и замеры по дням</h2>
+              <p className="mt-2 text-sm font-medium text-slate-400">Кумулятивный график показывает, как растёт архив фото и замеров от первого чек-ина до сегодняшнего дня.</p>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <Camera size={12} className="text-fuchsia-300" />
+              <span>{progressDynamicsSeries.length ? `${progressDynamicsSeries.length} точек` : 'Нет данных'}</span>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото всего</div>
+              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{progressDynamicsLastPoint?.photos ?? progressPhotosSorted.length ?? 0}</div>
+              <div className="mt-1 text-sm text-slate-400">
+                {progressDynamicsDeltaPhotos !== null ? `+${progressDynamicsDeltaPhotos} от старта` : 'Ожидает фото'}
+              </div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Замеры всего</div>
+              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{progressDynamicsLastPoint?.measurements ?? recentMeasurements.length ?? 0}</div>
+              <div className="mt-1 text-sm text-slate-400">
+                {progressDynamicsDeltaMeasurements !== null ? `+${progressDynamicsDeltaMeasurements} от старта` : 'Ожидает замер'}
+              </div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Совпадения</div>
+              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{matchedCompareKeys.length}</div>
+              <div className="mt-1 text-sm text-slate-400">дней с фото и замерами</div>
+            </div>
+          </div>
+
+          <div className="mt-5 h-[300px]">
+            {progressDynamicsSeries.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={progressDynamicsSeries}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fontWeight: 800, fill: '#475569' }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fontWeight: 800, fill: '#475569' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderRadius: '1.5rem',
+                      border: '1px solid #1e293b',
+                      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      color: '#f8fafc',
+                    }}
+                    labelStyle={{ color: '#64748b', marginBottom: '4px' }}
+                  />
+                  <Line type="monotone" dataKey="photos" name="Фото" stroke="#E879F9" strokeWidth={4} dot={false} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="measurements" name="Замеры" stroke="#60A5FA" strokeWidth={4} dot={false} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full rounded-[1.75rem] border border-dashed border-slate-800 bg-slate-950/30 flex items-center justify-center text-center px-6">
+                <div>
+                  <div className="text-slate-100 font-black">Пока нет фото или замеров</div>
+                  <div className="mt-2 text-sm text-slate-500">Сохраните первый замер и добавьте фото, чтобы увидеть динамику прогресса по дням.</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото и замеры</div>
+              <h2 className="mt-2 text-2xl font-black text-slate-100">Что уже записано</h2>
+              <p className="mt-2 text-sm font-medium text-slate-400">Короткая сводка помогает быстро понять, насколько заполнена история прогресса.</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-fuchsia-500/10 border border-fuchsia-500/20 flex items-center justify-center text-fuchsia-300">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Первое событие</div>
+              <div className="mt-2 text-lg font-black text-slate-100">{progressDynamicsFirstPoint ? formatShortDate(progressDynamicsFirstPoint.date) : '—'}</div>
+              <div className="mt-1 text-sm text-slate-400">начало истории прогресса</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Последнее событие</div>
+              <div className="mt-2 text-lg font-black text-slate-100">{progressDynamicsLastPoint ? formatShortDate(progressDynamicsLastPoint.date) : '—'}</div>
+              <div className="mt-1 text-sm text-slate-400">свежий чек-ин в истории</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото / замеры</div>
+              <div className="mt-2 text-lg font-black text-slate-100 tabular-nums">{`${progressPhotosSorted.length} / ${recentMeasurements.length}`}</div>
+              <div className="mt-1 text-sm text-slate-400">архив и история чек-инов</div>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="inline-flex items-center justify-center gap-2 rounded-[1rem] border border-slate-800 bg-slate-950/40 px-4 py-3 text-slate-200 font-black transition-all hover:bg-slate-900"
+            >
+              <Camera className="w-4 h-4" />
+              Добавить фото / замер
+            </button>
           </div>
         </div>
       </section>
