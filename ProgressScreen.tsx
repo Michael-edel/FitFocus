@@ -201,6 +201,7 @@ export default function ProgressScreen({
 }: ProgressScreenProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
   const [activeSection, setActiveSection] = useState<ProgressSectionId>('summary');
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>('all');
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [draftWeight, setDraftWeight] = useState('');
@@ -612,8 +613,13 @@ export default function ProgressScreen({
   const hasMeasurements = recentMeasurements.length > 0;
   const hasPhotos = progressPhotosSorted.length > 0;
   const scrollToSection = (sectionId: ProgressSectionId) => {
+    if (sectionId !== 'summary' && !mobileDetailsOpen) {
+      setMobileDetailsOpen(true);
+    }
     setActiveSection(sectionId);
-    document.getElementById(`progress-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      document.getElementById(`progress-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   useEffect(() => {
@@ -697,6 +703,77 @@ export default function ProgressScreen({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="md:hidden rounded-[2rem] border border-slate-800 bg-slate-900/50 p-4 shadow-xl shadow-black/20">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Мобильный обзор</div>
+            <h2 className="mt-2 text-xl font-black text-slate-100">Короткая сводка прогресса</h2>
+            <p className="mt-2 text-sm font-medium text-slate-400">На телефоне показываем только главное, остальное открывается по запросу.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileDetailsOpen((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-200"
+          >
+            {mobileDetailsOpen ? 'Скрыть' : 'Детали'}
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => scrollToSection('summary')}
+            className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-3 text-left"
+          >
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес</div>
+            <div className="mt-2 text-lg font-black text-slate-100 tabular-nums">{typeof currentWeight === 'number' ? `${currentWeight.toFixed(1)} кг` : '—'}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('summary')}
+            className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-3 text-left"
+          >
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото</div>
+            <div className="mt-2 text-lg font-black text-slate-100 tabular-nums">{progressPhotosSorted.length}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('summary')}
+            className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-3 text-left"
+          >
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Замеры</div>
+            <div className="mt-2 text-lg font-black text-slate-100 tabular-nums">{recentMeasurements.length}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('compare')}
+            className="rounded-[1.25rem] border border-slate-800 bg-slate-950/40 p-3 text-left"
+          >
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сравнить</div>
+            <div className="mt-2 text-lg font-black text-slate-100 tabular-nums">{compareFromKey && compareToKey ? '1↔2' : '—'}</div>
+          </button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { id: 'dynamics', label: 'График' },
+            { id: 'photos', label: 'Фото' },
+            { id: 'timeline', label: 'Лента' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id as ProgressSectionId)}
+              className="rounded-full border border-slate-800 bg-slate-950/40 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="hidden md:block">
+        <div className="sr-only">Desktop progress summary and navigation already shown above.</div>
       </section>
 
       <section id="progress-summary" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 scroll-mt-28">
@@ -790,7 +867,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section id="progress-compare" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
+      <section id="progress-compare" className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28', !mobileDetailsOpen && 'hidden md:block')}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Динамика прогресса</div>
@@ -1200,7 +1277,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section id="progress-dynamics" className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr] scroll-mt-28">
+      <section id="progress-dynamics" className={clsx('grid gap-6 xl:grid-cols-[1.25fr_0.75fr] scroll-mt-28', !mobileDetailsOpen && 'hidden md:grid')}>
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -1310,7 +1387,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section id="progress-measurements" className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] scroll-mt-28">
+      <section id="progress-measurements" className={clsx('grid gap-6 xl:grid-cols-[1.1fr_0.9fr] scroll-mt-28', !mobileDetailsOpen && 'hidden md:grid')}>
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -1404,7 +1481,7 @@ export default function ProgressScreen({
           </div>
         </div>
 
-        <div id="progress-photos" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
+        <div id="progress-photos" className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28', !mobileDetailsOpen && 'hidden md:block')}>
           <div className="flex flex-col gap-3">
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Снимки прогресса</div>
             <h2 className="text-2xl font-black text-slate-100">Визуальная история тела</h2>
@@ -1461,7 +1538,7 @@ export default function ProgressScreen({
         </div>
       </section>
 
-      <section id="progress-timeline" className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28">
+      <section id="progress-timeline" className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28', !mobileDetailsOpen && 'hidden md:block')}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Лента прогресса</div>
