@@ -60,8 +60,6 @@ import { createTask } from './coach';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
-import FoodInsightCard from './FoodInsightCard';
-import ShoppingListCard from './ShoppingListCard';
 import { usePaywall } from './usePaywall';
 import { setDevPlanOverride } from './money';
 import {
@@ -81,6 +79,8 @@ const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
 const WorkoutsScreen = React.lazy(() => import('./WorkoutsScreen'));
 const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
 const DashboardCharts = React.lazy(() => import('./charts'));
+const FoodInsightCard = React.lazy(() => import('./FoodInsightCard'));
+const ShoppingListCard = React.lazy(() => import('./ShoppingListCard'));
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -3275,7 +3275,9 @@ if (authState === 'register') return (
 {insightModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
-            <FoodInsightCard photo={insightModal.photo} name={insightModal.name} insight={insightModal.insight} isPro={paywall.canUsePro} onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(newDiary)); setInsightModal({ ...insightModal, insight: next }); }} onSaveRecipe={addFavoriteRecipe} onClose={() => setInsightModal(null)} />
+            <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
+              <FoodInsightCard photo={insightModal.photo} name={insightModal.name} insight={insightModal.insight} isPro={paywall.canUsePro} onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(newDiary)); setInsightModal({ ...insightModal, insight: next }); }} onSaveRecipe={addFavoriteRecipe} onClose={() => setInsightModal(null)} />
+            </React.Suspense>
           </div>
         </div>
       )}
@@ -3489,11 +3491,12 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
 
           <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left"><div className="flex items-center justify-between gap-3"><p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p><button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUser?.aiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (currentUser?.aiPlan?.weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button></div>{weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}{weeklyMenuLoading && !currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => (<div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800 animate-pulse"><div className="h-4 w-28 rounded bg-slate-800" /><div className="mt-3 space-y-2"><div className="h-3 rounded bg-slate-800" /><div className="h-3 rounded bg-slate-800 w-5/6" /><div className="h-3 rounded bg-slate-800 w-4/6" /></div></div>))}</div>) : currentUser?.aiPlan?.weeklyMenu ? (<div className="mt-4 space-y-3">{currentUser.aiPlan.weeklyMenu.days.map((d, i) => { const expanded = !!planWeekExpanded[d.day]; return (<div key={i} className="rounded-[1.5rem] bg-slate-900/30 border border-slate-800 overflow-hidden"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: !prev[d.day] }))} className="w-full min-h-[52px] px-4 py-4 flex items-center justify-between gap-3 text-left"><div><div className="text-slate-200 font-black text-xl">{d.day}</div><div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-1">{expanded ? 'Скрыть детали' : 'Показать меню дня'}</div></div><ChevronDown size={18} className={clsx('text-slate-400 transition-transform', expanded && 'rotate-180')} /></button>{expanded && (<div className="px-4 pb-4 text-sm text-slate-300 font-semibold space-y-3"><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Завтрак:</span> <MealParts value={d.breakfast} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Обед:</span> <MealParts value={d.lunch} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Ужин:</span> <MealParts value={d.dinner} /></div><div className="p-4 rounded-[1.2rem] bg-slate-950/50 border border-slate-800"><span className="text-slate-500 font-black">Перекус:</span> <MealParts value={d.snack} /></div><div className="pt-1 flex justify-end"><button type="button" onClick={() => setPlanWeekExpanded(prev => ({ ...prev, [d.day]: false }))} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button></div></div>)}</div>); })}</div>) : (<p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>)}
             {(currentUser?.aiPlan?.weeklyMenu?.shoppingListItems?.length || currentUser?.aiPlan?.weeklyMenu?.shoppingList?.length) ? (
-              <ShoppingListCard
-                weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
-                title="Список покупок"
-                userId={currentUser?.id}
-                fallbackList={(() => {
+              <React.Suspense fallback={<div className="mt-3 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка списка покупок...</div>}>
+                <ShoppingListCard
+                  weekStart={currentUser?.aiPlan?.weeklyMenu?.weekStart || new Date().toISOString().slice(0, 10)}
+                  title="Список покупок"
+                  userId={currentUser?.id}
+                  fallbackList={(() => {
                   const items = currentUser?.aiPlan?.weeklyMenu?.shoppingListItems ?? [];
                   if (items.length) {
                     return items
@@ -3502,8 +3505,9 @@ const txt = await generatePlateauExplanation({ name: currentUser.name, goal: cur
                       .map((it) => `${it.name} — ${formatGramsPretty(it.grams)}`);
                   }
                   return currentUser?.aiPlan?.weeklyMenu?.shoppingList ?? [];
-                })()}
-              />
+                  })()}
+                />
+              </React.Suspense>
             ) : null}
           </div>
 
