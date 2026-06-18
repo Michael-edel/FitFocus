@@ -113,12 +113,27 @@ export default function ProgressScreen({
 }: ProgressScreenProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [draftWeight, setDraftWeight] = useState('');
+  const [draftWaist, setDraftWaist] = useState('');
+  const [draftChest, setDraftChest] = useState('');
+  const [draftHips, setDraftHips] = useState('');
+  const [draftPulse, setDraftPulse] = useState('');
+  const [draftSaving, setDraftSaving] = useState(false);
 
   const recentMeasurements = useMemo(() => {
     return [...(measurementsHistory || [])]
       .filter((item) => item?.date)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [measurementsHistory]);
+
+  React.useEffect(() => {
+    const latest = recentMeasurements[recentMeasurements.length - 1] || null;
+    setDraftWeight(typeof latest?.weight === 'number' ? String(latest.weight) : typeof currentWeight === 'number' ? String(currentWeight) : '');
+    setDraftWaist(typeof latest?.waistCm === 'number' ? String(latest.waistCm) : '');
+    setDraftChest(typeof latest?.chestCm === 'number' ? String(latest.chestCm) : '');
+    setDraftHips(typeof latest?.hipsCm === 'number' ? String(latest.hipsCm) : '');
+    setDraftPulse(typeof latest?.restingPulse === 'number' ? String(latest.restingPulse) : '');
+  }, [currentWeight, recentMeasurements]);
 
   const latestMeasurement = recentMeasurements.length ? recentMeasurements[recentMeasurements.length - 1] : null;
   const previousMeasurement = recentMeasurements.length > 1 ? recentMeasurements[recentMeasurements.length - 2] : null;
@@ -177,6 +192,50 @@ export default function ProgressScreen({
       });
     } finally {
       setWearableBusy(null);
+    }
+  };
+
+  const saveManualMeasurement = async () => {
+    if (!onPatchUser || !currentUser) return;
+    const parse = (value: string) => {
+      const normalized = String(value || '').replace(',', '.').trim();
+      const next = Number(normalized);
+      return Number.isFinite(next) && next > 0 ? next : null;
+    };
+    const nextWeight = parse(draftWeight);
+    const nextWaist = parse(draftWaist);
+    const nextChest = parse(draftChest);
+    const nextHips = parse(draftHips);
+    const nextPulse = parse(draftPulse);
+    if (!nextWeight && !nextWaist && !nextChest && !nextHips && !nextPulse) return;
+    setDraftSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const historyEntry = {
+        date: now,
+        weight: nextWeight ?? undefined,
+        waistCm: nextWaist ?? undefined,
+        chestCm: nextChest ?? undefined,
+        hipsCm: nextHips ?? undefined,
+        restingPulse: nextPulse ?? undefined,
+      };
+      await onPatchUser({
+        weight: nextWeight ?? currentUser.weight,
+        weightHistory: nextWeight ? [{ date: now, weight: nextWeight }, ...(currentUser.weightHistory || [])].slice(0, 120) : currentUser.weightHistory,
+        waistCm: nextWaist ?? currentUser.waistCm,
+        chestCm: nextChest ?? currentUser.chestCm,
+        hipsCm: nextHips ?? currentUser.hipsCm,
+        restingPulse: nextPulse ?? currentUser.restingPulse,
+        bloodPressureMeasuredAt: currentUser.bloodPressureMeasuredAt,
+        bodyMeasurementsMeasuredAt: (nextWaist || nextChest || nextHips || nextPulse) ? now : currentUser.bodyMeasurementsMeasuredAt,
+        restingPulseMeasuredAt: nextPulse ? now : currentUser.restingPulseMeasuredAt,
+        measurementsHistory: [
+          historyEntry,
+          ...(currentUser.measurementsHistory || []),
+        ].slice(0, 30),
+      });
+    } finally {
+      setDraftSaving(false);
     }
   };
 
@@ -580,6 +639,67 @@ export default function ProgressScreen({
               <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{latestMeasurement?.restingPulse ? `${latestMeasurement.restingPulse} уд/мин` : '—'}</div>
               <div className="mt-1 text-sm text-slate-400">{formatDelta(latestMeasurement?.restingPulse, previousMeasurement?.restingPulse, 'уд/мин')}</div>
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Быстрый ввод</div>
+              <h2 className="mt-2 text-2xl font-black text-slate-100">Новый замер</h2>
+              <p className="mt-2 text-sm font-medium text-slate-400">Обновляет профиль и сразу добавляет запись в историю.</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-300">
+              <Scale size={18} />
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес</div>
+              <input value={draftWeight} onChange={(e) => setDraftWeight(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="90.0" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Пульс покоя</div>
+              <input value={draftPulse} onChange={(e) => setDraftPulse(e.target.value)} inputMode="numeric" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="60" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
+              <input value={draftWaist} onChange={(e) => setDraftWaist(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="см" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Грудь</div>
+              <input value={draftChest} onChange={(e) => setDraftChest(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="см" />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Бёдра</div>
+              <input value={draftHips} onChange={(e) => setDraftHips(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="см" />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void saveManualMeasurement()}
+              disabled={!onPatchUser || draftSaving}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
+            >
+              <TrendingUp className="w-4 h-4" />
+              {draftSaving ? 'Сохраняем…' : 'Сохранить замер'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraftWeight('');
+                setDraftWaist('');
+                setDraftChest('');
+                setDraftHips('');
+                setDraftPulse('');
+              }}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-300 font-black transition-all"
+            >
+              Сбросить
+            </button>
           </div>
         </div>
 
