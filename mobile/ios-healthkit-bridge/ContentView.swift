@@ -27,6 +27,9 @@ struct ContentView: View {
             .task {
                 configureBridge()
             }
+            .onOpenURL { url in
+                applySetupURL(url)
+            }
             .onChange(of: baseURLText) { _, _ in
                 configureBridge()
             }
@@ -79,6 +82,10 @@ struct ContentView: View {
                 Text("1. Open FitFocus on the web.\n2. Call `POST /api/mobile/token`.\n3. Paste the token below once. It will stay on this device.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                Text("You can also open a `fitfocusbridge://setup` link on this iPhone to fill both fields automatically.")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.green)
 
                 VStack(alignment: .leading, spacing: 10) {
                     TextField("FitFocus base URL", text: $baseURLText)
@@ -215,6 +222,32 @@ struct ContentView: View {
 
     private func configureBridge() {
         bridgeHolder.update(baseURLText: baseURLText, token: mobileToken)
+    }
+
+    private func applySetupURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "fitfocusbridge" else { return }
+        guard url.host?.lowercased() == "setup" || url.path == "/setup" || url.path.isEmpty else {
+            bridgeHolder.message = "Unsupported setup link"
+            return
+        }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let query = components?.queryItems ?? []
+        let baseValue = query.first(where: { $0.name.lowercased() == "baseurl" })?.value
+        let tokenValue = query.first(where: { $0.name.lowercased() == "token" })?.value
+
+        guard let baseValue, !baseValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            bridgeHolder.message = "Setup link missing base URL"
+            return
+        }
+        guard let tokenValue, !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            bridgeHolder.message = "Setup link missing token"
+            return
+        }
+
+        baseURLText = baseValue
+        mobileToken = tokenValue
+        bridgeHolder.message = "Imported bridge setup link"
     }
 
     private func syncNow(source: String) async {

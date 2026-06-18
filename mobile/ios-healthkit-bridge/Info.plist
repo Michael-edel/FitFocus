@@ -24,6 +24,17 @@
   <true/>
   <key>UILaunchScreen</key>
   <dict/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.fitfocus.bridge</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>fitfocusbridge</string>
+      </array>
+    </dict>
+  </array>
   <key>UIRequiredDeviceCapabilities</key>
   <array>
     <string>arm64</string>
