@@ -11,6 +11,7 @@ const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
 const ProScreen = React.lazy(() => import('./ProScreen'));
 const CourseScreen = React.lazy(() => import('./CourseScreen'));
 const ProgressScreen = React.lazy(() => import('./ProgressScreen'));
+const ProgressArchiveScreen = React.lazy(() => import('./ProgressArchiveScreen'));
 const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
 
@@ -146,7 +147,25 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             syncState={syncState}
             lastProfileSyncAt={lastProfileSyncAt}
             onSyncNow={syncAllLocalDataNow}
+            onOpenArchive={() => setActiveTab('progress-archive')}
             onOpenSettings={() => setActiveTab('settings')}
+          />
+        </React.Suspense>
+      )}
+      {activeTab === 'progress-archive' && (
+        <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка архива прогресса...</div>}>
+          <ProgressArchiveScreen
+            currentUser={currentUser}
+            weightHistory={weightHistory}
+            measurementsHistory={measurementsHistory}
+            progressPhotos={progressPhotos}
+            currentWeight={currentWeight}
+            wearableProvider={wearableProvider}
+            wearableEnabled={wearableEnabled}
+            wearableLastSyncAt={wearableLastSyncAt}
+            wearableMetricsUpdatedAt={wearableMetricsUpdatedAt}
+            onOpenSettings={() => setActiveTab('settings')}
+            onOpenProgress={() => setActiveTab('progress')}
           />
         </React.Suspense>
       )}

@@ -51,6 +51,7 @@ type ProgressScreenProps = {
   lastProfileSyncAt?: number | null;
   onSyncNow?: () => Promise<void> | void;
   onOpenSettings?: () => void;
+  onOpenArchive?: () => void;
 };
 
 type MetricKey = 'weight' | 'waistCm' | 'chestCm' | 'hipsCm' | 'restingPulse';
@@ -199,6 +200,7 @@ export default function ProgressScreen({
   lastProfileSyncAt,
   onSyncNow,
   onOpenSettings,
+  onOpenArchive,
 }: ProgressScreenProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
   const [activeSection, setActiveSection] = useState<ProgressSectionId>('summary');
@@ -684,6 +686,14 @@ export default function ProgressScreen({
           >
             <ArrowRight size={12} />
             Профиль
+          </button>
+          <button
+            type="button"
+            onClick={onOpenArchive}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-200 text-[10px] font-black uppercase tracking-widest transition-all"
+          >
+            <Camera size={12} />
+            Архив
           </button>
         </div>
       </header>
