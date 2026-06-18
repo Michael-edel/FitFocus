@@ -1120,6 +1120,9 @@ const openEditFood = (item: FoodEntry) => {
     targetWeight: 65,
     dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
     medicalRestrictions: '',
+    bloodPressureSystolic: 0,
+    bloodPressureDiastolic: 0,
+    restingPulse: 0,
     plan: isTestModeEnabled() ? 'family' as TariffPlan : 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
@@ -1852,7 +1855,19 @@ const logWeight = useCallback(() => {
       const todayHabits = currentUser.dailyHabits?.[todayKey] || {};
       const habitsDone = Object.values(todayHabits).filter(Boolean).length;
       const advice = await getCoachAdvice({
-        user: { name: currentUser.name, goal: currentUser.goal, caloriesTarget: targets.calories, proteinTarget: targets.protein, fatTarget: targets.fat, carbsTarget: targets.carbs, adaptationMultiplier: currentUser.adaptationMultiplier },
+        user: {
+          name: currentUser.name,
+          goal: currentUser.goal,
+          caloriesTarget: targets.calories,
+          proteinTarget: targets.protein,
+          fatTarget: targets.fat,
+          carbsTarget: targets.carbs,
+          adaptationMultiplier: currentUser.adaptationMultiplier,
+          bloodPressureSystolic: currentUser.bloodPressureSystolic,
+          bloodPressureDiastolic: currentUser.bloodPressureDiastolic,
+          restingPulse: currentUser.restingPulse,
+          medicalRestrictions: currentUser.medicalRestrictions,
+        },
         today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
       });
       setCoachCard(advice); incrementUsage('aiCoachCount');

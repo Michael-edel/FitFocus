@@ -167,6 +167,9 @@ export default function SettingsScreen({
   const [draftTargetWeight, setDraftTargetWeight] = useState('');
   const [draftAge, setDraftAge] = useState('');
   const [draftHeight, setDraftHeight] = useState('');
+  const [draftBloodPressureSystolic, setDraftBloodPressureSystolic] = useState('');
+  const [draftBloodPressureDiastolic, setDraftBloodPressureDiastolic] = useState('');
+  const [draftRestingPulse, setDraftRestingPulse] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
 
   const profileSummary = useMemo(() => {
@@ -175,6 +178,8 @@ export default function SettingsScreen({
       name: (user.name || '').trim() || 'Пользователь',
       email: user.email || 'Без e-mail',
       targetWeight: Number(user.targetWeight || 0),
+      bloodPressure: user.bloodPressureSystolic && user.bloodPressureDiastolic ? `${Math.round(Number(user.bloodPressureSystolic))}/${Math.round(Number(user.bloodPressureDiastolic))}` : '—',
+      restingPulse: user.restingPulse ? `${Math.round(Number(user.restingPulse))}` : '—',
     };
   }, [user]);
 
@@ -185,8 +190,11 @@ export default function SettingsScreen({
     setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
     setDraftAge(user.age ? String(user.age) : '');
     setDraftHeight(user.height ? String(user.height) : '');
+    setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
+    setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
+    setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
     setProfileDirty(false);
-  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height]);
+  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -225,6 +233,10 @@ export default function SettingsScreen({
     const parsedTargetWeight = Number(draftTargetWeight || 0);
     const parsedAge = Number(draftAge || 0);
     const parsedHeight = Number(draftHeight || 0);
+    const parsedBloodPressureSystolic = Number(draftBloodPressureSystolic || 0);
+    const parsedBloodPressureDiastolic = Number(draftBloodPressureDiastolic || 0);
+    const parsedRestingPulse = Number(draftRestingPulse || 0);
+    const bloodPressureMeasuredAt = new Date().toISOString();
 
     const patch: Partial<UserProfile> = {
       name: safeName,
@@ -232,6 +244,11 @@ export default function SettingsScreen({
       targetWeight: Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 ? parsedTargetWeight : user.targetWeight,
       age: Number.isFinite(parsedAge) && parsedAge > 0 ? Math.round(parsedAge) : user.age,
       height: Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : user.height,
+      bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : user.bloodPressureSystolic,
+      bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : user.bloodPressureDiastolic,
+      bloodPressureMeasuredAt: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 && Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? bloodPressureMeasuredAt : user.bloodPressureMeasuredAt,
+      restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : user.restingPulse,
+      restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? bloodPressureMeasuredAt : user.restingPulseMeasuredAt,
     };
 
     if (serverSession && onPatchUser) {
@@ -308,8 +325,41 @@ export default function SettingsScreen({
                         value={draftHeight}
                         onChange={(e) => { setDraftHeight(e.target.value); setProfileDirty(true); }}
                         inputMode="numeric"
+                      className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                      placeholder="см"
+                    />
+                  </label>
+                </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Давление, верхнее</div>
+                      <input
+                        value={draftBloodPressureSystolic}
+                        onChange={(e) => { setDraftBloodPressureSystolic(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
                         className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="см"
+                        placeholder="120"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Давление, нижнее</div>
+                      <input
+                        value={draftBloodPressureDiastolic}
+                        onChange={(e) => { setDraftBloodPressureDiastolic(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="80"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Пульс покоя</div>
+                      <input
+                        value={draftRestingPulse}
+                        onChange={(e) => { setDraftRestingPulse(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="60"
                       />
                     </label>
                   </div>
@@ -324,8 +374,9 @@ export default function SettingsScreen({
                     <Save className="w-4 h-4" />
                     Сохранить профиль
                   </button>
-                  <div className="text-sm text-slate-400">
+                  <div className="text-sm text-slate-400 space-y-1">
                     {profileSummary?.email}
+                    <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
                   </div>
                 </div>
               </div>

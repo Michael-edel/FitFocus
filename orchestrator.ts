@@ -27,6 +27,13 @@ const AGENTS: AIAgent[] = [
   }
 ];
 
+const formatBloodPressure = (user: UserProfile) => {
+  const systolic = Number(user.bloodPressureSystolic || 0);
+  const diastolic = Number(user.bloodPressureDiastolic || 0);
+  if (!systolic || !diastolic) return 'нет';
+  return `${Math.round(systolic)}/${Math.round(diastolic)} мм рт. ст.`;
+};
+
 export async function runCouncil(
   query: string,
   user: UserProfile,
@@ -42,6 +49,8 @@ export async function runCouncil(
     Интенсивность: ${user.goal === 'LOSS' ? `дефицит ${user.lossDeficit ?? ''} ккал/день` : user.goal === 'GAIN' ? `профицит ${user.gainSurplus ?? ''} ккал/день` : 'поддержание'}.
     Исключения/ограничения (если есть): ${user.exclusions || 'нет'}.
     Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
+    Давление: ${formatBloodPressure(user)}.
+    Пульс покоя: ${user.restingPulse ? `${Math.round(Number(user.restingPulse))} уд/мин` : 'нет'}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.
     Дневник питания (последние 10 записей): ${JSON.stringify((history.diary || []).slice(-10))}.
