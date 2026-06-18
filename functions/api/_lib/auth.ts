@@ -9,6 +9,12 @@ export function readCookie(cookieHeader: string, name: string): string | null {
   return null;
 }
 
+export function readBearerToken(authorizationHeader: string | null): string | null {
+  if (!authorizationHeader) return null;
+  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
 function b64urlToBytes(s: string): Uint8Array {
   s = s.replace(/-/g, "+").replace(/_/g, "/");
   while (s.length % 4) s += "=";
@@ -58,7 +64,9 @@ export async function requireUser(
   request: Request,
   env: { AUTH_JWT_SECRET?: string; DB?: any }
 ): Promise<SessionUser> {
-  const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
+  const token =
+    readCookie(request.headers.get("Cookie") || "", "ff_session") ||
+    readBearerToken(request.headers.get("Authorization"));
   if (!token) throw new Error("UNAUTH");
   if (!env.AUTH_JWT_SECRET) throw new Error("AUTH_CONFIG");
   const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
