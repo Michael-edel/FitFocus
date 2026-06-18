@@ -187,6 +187,7 @@ export default function ProgressScreen({
   onOpenSettings,
 }: ProgressScreenProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>('all');
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [draftWeight, setDraftWeight] = useState('');
   const [draftWaist, setDraftWaist] = useState('');
@@ -296,7 +297,9 @@ export default function ProgressScreen({
     }
 
     const groups = new Map<string, { key: string; label: string; date: number; items: TimelineItem[] }>();
-    items
+    const filteredItems = timelineFilter === 'all' ? items : items.filter((item) => item.kind === timelineFilter);
+
+    filteredItems
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .forEach((item) => {
         const dateObj = new Date(item.date);
@@ -315,7 +318,7 @@ export default function ProgressScreen({
       });
 
     return [...groups.values()].sort((a, b) => b.date - a.date).slice(0, 8);
-  }, [progressPhotosSorted, recentMeasurements, wearableActiveMinutesToday, wearableConnectedAt, wearableLastSyncAt, wearableMetricsUpdatedAt, wearableSleepHoursLastNight, wearableStepsToday]);
+  }, [progressPhotosSorted, recentMeasurements, timelineFilter, wearableActiveMinutesToday, wearableConnectedAt, wearableLastSyncAt, wearableMetricsUpdatedAt, wearableSleepHoursLastNight, wearableStepsToday]);
 
   const latestPhoto = progressPhotosSorted[0] || null;
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
@@ -884,6 +887,29 @@ export default function ProgressScreen({
             <CalendarDays size={12} className="text-indigo-300" />
             Последние события
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { id: 'all', label: 'Все' },
+            { id: 'measurement', label: 'Замеры' },
+            { id: 'photo', label: 'Фото' },
+            { id: 'wearable', label: 'Часы' },
+          ].map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setTimelineFilter(filter.id as typeof timelineFilter)}
+              className={clsx(
+                'px-3 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all',
+                timelineFilter === filter.id
+                  ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-200'
+                  : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-300 hover:border-slate-700'
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
 
         <div className="mt-5 space-y-3">
