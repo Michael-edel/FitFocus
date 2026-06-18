@@ -88,6 +88,7 @@ import {
   reloadUserFromCloud as reloadUserFromCloudService,
   syncAllLocalDataNow as syncAllLocalDataNowService,
 } from './profileSync';
+import { runRegistrationFlow } from './registrationFlow';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -2279,105 +2280,24 @@ const logWeight = useCallback(() => {
   }, [currentUser, weekly, targets, compliancePct, weightDeltaN, expectedN, adaptationIndex, refeedSuggestion, persistUser, handleGetCoachAdvice]);
 
   const handleRegister = useCallback(async () => {
-    if (allUsers.length >= 5) {
-      setPlanError('Лимит Family: максимум 5 профилей на одном устройстве.');
-      return;
-    }
-    // Risk acknowledgement for aggressive intensity (relative to TDEE)
-    try {
-      // FIX: pass adaptationMultiplier: 1.0 to satisfy PersonLike requirement.
-      const tdee = calculateTDEE({ ...regData, adaptationMultiplier: 1.0 });
-      if (isFinite(tdee)) {
-        const limit = regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
-        const val = regData.goal === Goal.LOSS ? Number((regData as any).lossDeficit ?? DEFAULT_DEFICIT) : Number((regData as any).gainSurplus ?? DEFAULT_SURPLUS);
-        const isAggressive = (regData.goal === Goal.LOSS && val > limit) || (regData.goal === Goal.GAIN && val > limit);
-        const ack = regData.goal === Goal.LOSS ? (regData as any).riskAckLoss : (regData as any).riskAckGain;
-        if (isAggressive && !ack) {
-          setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
-          return;
-        }
-      }
-    } catch {}
-    if (!regNameValid) return;
-    setPlanError(null);
-    const safeName = regData.name.trim();
-    let newUser: UserProfile = {
-      id: `user-${Date.now()}`, 
-      name: safeName.length ? safeName : 'Пользователь', 
-      email: googleMe?.email,
-      googleSub: googleMe?.sub,
-      picture: googleMe?.picture,
-      gender: regData.gender, 
-      weight: Math.max(0, regData.weight || 0), 
-      height: Math.max(0, regData.height || 0), 
-      age: Math.max(0, Math.floor(regData.age || 0)), 
-      activityLevel: regData.activityLevel, 
-      goal: regData.goal, 
-      targetWeight: regData.targetWeight, 
-      adaptationMultiplier: 1.0, 
-      familyMembers: [], 
-      exclusions: '', 
-      lossDeficit: Number(regData.lossDeficit ?? DEFAULT_DEFICIT), 
-      gainSurplus: Number(regData.gainSurplus ?? DEFAULT_SURPLUS), 
-      riskAcknowledgedLoss: !!(regData as any).riskAckLoss,
-      riskAcknowledgedGain: !!(regData as any).riskAckGain,
-      // Store as YYYY-MM-DD to keep charts/labels clean (avoid showing time parts)
-      weightHistory: [{ date: new Date().toISOString().slice(0, 10), weight: regData.weight }], 
-      tasks: [], 
-      plan: regData.plan
-    };
-    setDevPlanOverride(regData.plan, newUser.id);
-    try {
-      setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id });
-      const aiPlan = await generatePersonalPlan(newUser);
-      newUser = { ...newUser, aiPlan };
-    } catch (e) { setPlanError("Не удалось создать AI-план. Используем базовый план."); }
-    // Server-driven: persist profile to D1
-    try {
-      const r = await fetch('/api/profile', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
-      });
-      if (r.ok) {
-        const pj = await r.json();
-        if (pj?.profile) newUser = pj.profile;
-      }
-    } catch {}
-
-
-    // Closed beta: redeem invite only for authenticated Google sessions.
-    if (requireInvite && googleMe?.sub) {
-      const code = String(inviteCode || '').trim();
-      if (!code) {
-        setPlanError('Требуется код приглашения.');
-        return;
-      }
-      try {
-        const rr = await fetch('/api/invite/redeem', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-        });
-        const rj = await rr.json().catch(() => null);
-        if (!rr.ok || rj?.ok !== true) {
-          setPlanError(rj?.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
-          return;
-        }
-      } catch {
-        setPlanError('Не удалось связаться с сервером для проверки приглашения.');
-        return;
-      }
-    }
-
-
-    setAllUsers([newUser]);
-    await loginAsUser(newUser);
-    setActiveTab('plan');
-    setPlanIntroOpen(true);
-  }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode]);
+    await runRegistrationFlow({
+      regData,
+      regNameValid,
+      allUsersCount: allUsers.length,
+      requireInvite,
+      inviteCode,
+      googleMe,
+      setPlanError,
+      setLastAiAction,
+      setDevPlanOverride,
+      generatePersonalPlan,
+      loginAsUser,
+      setAllUsers,
+      setActiveTab,
+      setPlanIntroOpen,
+      fetchImpl: fetch,
+    });
+  }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
   const handleActivateWithTransition = useCallback(() => {
     if (!regNameValid || isActivatingPlan) return;
