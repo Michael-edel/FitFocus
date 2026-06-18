@@ -59,7 +59,7 @@ import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
 import { usePaywall } from './usePaywall';
-import { isTestModeEnabled, setDevPlanOverride } from './money';
+import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import {
   applyBackupPayload,
   createBackupPayload,
@@ -1267,6 +1267,18 @@ const App: React.FC = () => {
   }, [persistFavorites]);
 
   const paywall = usePaywall(currentUser?.plan || 'free');
+  const modeBadge = useMemo(() => {
+    if (isTestModeEnabled()) {
+      return {
+        text: `TEST · ${planLabel(paywall.plan)}`,
+        cls: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200',
+      };
+    }
+    return {
+      text: `PLAN · ${planLabel(paywall.plan)}`,
+      cls: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200',
+    };
+  }, [paywall.plan]);
   const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
 
   const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
@@ -2508,7 +2520,9 @@ const logWeight = useCallback(() => {
             <div className="flex flex-col">
               <span className="text-xl font-black text-slate-100 tracking-tight leading-none">FitFocus</span>
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Beta</span>
-              <span className="mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-200">Beta · полный доступ</span>
+              <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
+                {modeBadge.text}
+              </span>
               <div className="mt-2 flex items-center gap-2">
                 <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
                   {aiBadge.label}
