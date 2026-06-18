@@ -76,14 +76,14 @@ async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | 
 
 async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
   const row = await db
-    .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
+    .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(userId)
-    .first();
+    .first<{ profile_json?: string; version?: number }>();
 
   if (!row?.profile_json) return null;
   try {
     const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    return parsed && typeof parsed === 'object' ? { ...parsed, version: Number(row.version || 1) } : null;
   } catch {
     return null;
   }
@@ -101,7 +101,31 @@ function withProtectedFields(user: { sub: string; email?: string; name?: string;
     picture: profile.picture ?? user.picture,
     plan: normalizedPlan,
     planTier: normalizedPlan === "free" ? "free" : "pro",
+    version: typeof profile.version === 'number' ? profile.version : Number(profile.version || 1),
   };
+}
+
+async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: Record<string, unknown> | null; version: number }> {
+  const row = await db
+    .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
+    .bind(userId)
+    .first<{ profile_json?: string; version?: number }>();
+
+  if (!row?.profile_json) return { profile: null, version: 0 };
+  try {
+    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
+    return {
+      profile: parsed && typeof parsed === 'object' ? parsed : null,
+      version: Number(row.version || 1),
+    };
+  } catch {
+    return { profile: null, version: Number(row?.version || 0) };
+  }
+}
+
+function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>, version: number) {
+  const serverProfile = withProtectedFields(user, { ...profile, version });
+  return json({ error: 'PROFILE_CONFLICT', profile: serverProfile, version }, 409);
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -137,29 +161,35 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const patch = sanitizePatch(body);
   const stateItems = sanitizeStateItems((body as any).stateItems);
+  const baseVersion = Number((body as any).baseVersion ?? 0);
+  const currentMeta = await loadProfileMeta(db, user.sub);
+  if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
+    return conflictResponse(user as any, currentMeta.profile, currentMeta.version);
+  }
   const serverPlan = await loadActivePlan(db, user.sub);
-  const profile = withProtectedFields(user, { ...patch, plan: serverPlan });
+  const nextVersion = (currentMeta.version || 0) + 1;
+  const profile = withProtectedFields(user, { ...patch, plan: serverPlan, version: nextVersion });
 
   const t = nowMs();
   const statements = [
     db
       .prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
-          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
+        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
       )
-      .bind(user.sub, JSON.stringify(profile), t),
+      .bind(user.sub, JSON.stringify(profile), t, nextVersion),
     ...stateItems.map((it) =>
       db
         .prepare(
-          "INSERT INTO user_kv (user_id, k, v, updated_at) VALUES (?, ?, ?, ?) " +
-            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
+          "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
+            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
         )
-        .bind(user.sub, it.key, it.value, t)
+        .bind(user.sub, it.key, it.value, t, nextVersion)
     ),
   ];
   await db.batch(statements);
 
-  return json({ profile, updatedFields: Object.keys(patch), stateItems: stateItems.length, mode: 'replace' }, 200);
+  return json({ profile, updatedFields: Object.keys(patch), stateItems: stateItems.length, mode: 'replace', version: nextVersion }, 200);
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
@@ -181,28 +211,33 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const updatedFields = Object.keys(patch);
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
 
-  const current = (await loadProfile(db, user.sub)) ?? {};
+  const currentMeta = await loadProfileMeta(db, user.sub);
+  const baseVersion = Number((body as any).baseVersion ?? 0);
+  if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
+    return conflictResponse(user as any, currentMeta.profile, currentMeta.version);
+  }
   const serverPlan = await loadActivePlan(db, user.sub);
-  const profile = withProtectedFields(user, { ...current, ...patch, plan: serverPlan });
+  const nextVersion = (currentMeta.version || 0) + 1;
+  const profile = withProtectedFields(user, { ...(currentMeta.profile ?? {}), ...patch, plan: serverPlan, version: nextVersion });
 
   const t = nowMs();
   const statements = [
     db
       .prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?) " +
-          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at"
+        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
       )
-      .bind(user.sub, JSON.stringify(profile), t),
+      .bind(user.sub, JSON.stringify(profile), t, nextVersion),
     ...stateItems.map((it) =>
       db
         .prepare(
-          "INSERT INTO user_kv (user_id, k, v, updated_at) VALUES (?, ?, ?, ?) " +
-            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
+          "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
+            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
         )
-        .bind(user.sub, it.key, it.value, t)
+        .bind(user.sub, it.key, it.value, t, nextVersion)
     ),
   ];
   await db.batch(statements);
 
-  return json({ profile, updatedFields, stateItems: stateItems.length, mode: 'patch' }, 200);
+  return json({ profile, updatedFields, stateItems: stateItems.length, mode: 'patch', version: nextVersion }, 200);
 };

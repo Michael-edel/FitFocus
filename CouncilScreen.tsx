@@ -88,6 +88,10 @@ export default function CouncilScreen({
               const isUser = m.role === 'user';
               const resp = m.response;
               const score = resp?.agreementScore ?? null;
+              const votes = resp?.votes ?? [];
+              const approveCount = votes.filter((v) => v.stance === 'approve').length;
+              const adjustCount = votes.filter((v) => v.stance === 'adjust').length;
+              const rejectCount = votes.filter((v) => v.stance === 'reject').length;
               const expanded = !!expandedCouncilThoughtIds[m.id];
               return (
                 <div key={m.id} className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -125,10 +129,61 @@ export default function CouncilScreen({
                             style={{ width: `${score}%` }}
                           />
                         </div>
+                        {votes.length > 0 && (
+                          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                              Одобрено: {approveCount}
+                            </div>
+                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-300">
+                              Доработать: {adjustCount}
+                            </div>
+                            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-300">
+                              Возражения: {rejectCount}
+                            </div>
+                            <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              4 эксперта в голосовании
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     <div className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{m.text}</div>
+
+                    {!isUser && votes.length > 0 ? (
+                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {votes.map((vote) => (
+                          <div
+                            key={vote.agentId}
+                            className={clsx(
+                              'rounded-3xl border p-4',
+                              vote.stance === 'approve'
+                                ? 'border-emerald-500/20 bg-emerald-500/5'
+                                : vote.stance === 'adjust'
+                                  ? 'border-amber-500/20 bg-amber-500/5'
+                                  : 'border-rose-500/20 bg-rose-500/5'
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <p className="text-[10px] font-black uppercase text-slate-500">{vote.agentName}</p>
+                              <span
+                                className={clsx(
+                                  'text-[10px] px-2 py-1 rounded-full border font-black uppercase tracking-widest',
+                                  vote.stance === 'approve'
+                                    ? 'border-emerald-500/20 text-emerald-300'
+                                    : vote.stance === 'adjust'
+                                      ? 'border-amber-500/20 text-amber-300'
+                                      : 'border-rose-500/20 text-rose-300'
+                                )}
+                              >
+                                {vote.stance} · {vote.score}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-300">{vote.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {!isUser && resp?.thoughts?.length ? (
                       <div className="mt-4">
@@ -223,6 +278,17 @@ export default function CouncilScreen({
                         </div>
                       );
                     })}
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+                    {['Архитектор', 'Нутрициолог', 'Физиолог', 'Психолог'].map((label) => (
+                      <div
+                        key={label}
+                        className="py-2 rounded-2xl border bg-slate-950 border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400"
+                      >
+                        {label}
+                      </div>
+                    ))}
                   </div>
 
                   <div className="mt-4 flex items-center gap-2 text-slate-500 text-xs font-bold">

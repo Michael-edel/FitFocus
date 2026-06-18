@@ -199,6 +199,7 @@ export type DietaryRestrictions = {
 
 export interface UserProfile {
   id: string;
+  version?: number;
   name: string;
   gender: Gender;
   weight: number;
@@ -398,10 +399,19 @@ export interface CouncilThought {
   isReview?: boolean;
 }
 
+export interface CouncilVote {
+  agentId: AIAgentRole;
+  agentName: string;
+  stance: 'approve' | 'adjust' | 'reject';
+  score: number; // 0-100
+  reason: string;
+}
+
 export interface CouncilResponse {
   finalAnswer: string;
   decisionReason: string;
   thoughts: CouncilThought[];
+  votes?: CouncilVote[];
   agreementScore: number; // 0-100
   contradictions?: string[];
   nextSteps?: string[];

@@ -17,21 +17,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
 
   const profRow = await db
-    .prepare("SELECT profile_json, updated_at FROM user_profiles WHERE user_id = ?")
+    .prepare("SELECT profile_json, updated_at, version FROM user_profiles WHERE user_id = ?")
     .bind(user.sub)
-    .first<{ profile_json: string; updated_at: number }>();
+    .first<{ profile_json: string; updated_at: number; version: number }>();
 
   const { results } = await db
-    .prepare("SELECT k, v, updated_at FROM user_kv WHERE user_id = ?")
+    .prepare("SELECT k, v, updated_at, version FROM user_kv WHERE user_id = ?")
     .bind(user.sub)
-    .all<{ k: string; v: string; updated_at: number }>();
+    .all<{ k: string; v: string; updated_at: number; version: number }>();
 
   const payload = {
     generated_at: new Date().toISOString(),
     user,
     profile: profRow?.profile_json ? safeParse(profRow.profile_json) : null,
     profile_updated_at: profRow?.updated_at ?? null,
-    kv: (results || []).map((r) => ({ key: r.k, value: r.v, updated_at: r.updated_at })),
+    profile_version: profRow?.version ?? null,
+    kv: (results || []).map((r) => ({ key: r.k, value: r.v, updated_at: r.updated_at, version: r.version })),
   };
 
   const date = new Date().toISOString().slice(0, 10);

@@ -21,11 +21,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const db = requireDB(env);
   const { results } = await db
-    .prepare("SELECT k, v FROM user_kv WHERE user_id = ? AND k LIKE ?")
+    .prepare("SELECT k, v, version, updated_at FROM user_kv WHERE user_id = ? AND k LIKE ?")
     .bind(user.sub, prefix + "%")
     .all();
 
-  const items = (results || []).map((r) => ({ key: r.k, value: r.v }));
+  const items = (results || []).map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
   return json({ items }, 200);
 };
 
@@ -55,8 +55,8 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     if (!it?.key) continue;
     await db
       .prepare(
-        "INSERT INTO user_kv (user_id, k, v, updated_at) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at"
+        "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, 1) " +
+          "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = COALESCE(user_kv.version, 0) + 1"
       )
       .bind(user.sub, it.key, String(it.value ?? ""), t)
       .run();

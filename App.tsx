@@ -62,15 +62,6 @@ import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import {
-  applyBackupPayload,
-  createBackupPayload,
-  downloadJson,
-  getSavedBackupHandle,
-  chooseAndSaveBackupHandle,
-  supportsFileSystemAccessApi,
-  writeBackupToHandle,
-} from './backup';
-import {
   collectLocalStateItems,
   persistAllUsersSnapshot,
   safeRemoveItem,
@@ -92,6 +83,21 @@ import {
 import { type RegistrationData } from './RegistrationScreen';
 import { runRegistrationFlow } from './registrationFlow';
 import { useCouncilChat } from './useCouncilChat';
+import { useBackupAutosave } from './useBackupAutosave';
+import { useDeleteUserProfile } from './useDeleteUserProfile';
+import { useFamilyCloud } from './useFamilyCloud';
+import { useFoodSelection } from './useFoodSelection';
+import { useFamilyMenu } from './useFamilyMenu';
+import SidebarNavigation from './SidebarNavigation';
+import AppWorkspace from './AppWorkspace';
+import {
+  AppTabId,
+  mobilePrimaryTabIds,
+  sidebarCoreTabIds,
+  sidebarFeatureTabIds,
+  sidebarTabs,
+  sidebarUtilityTabIds,
+} from './navigation';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -669,21 +675,6 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
 const App: React.FC = () => {
 
-  // --- Cloud Family (B2C) state ---
-  const [cloudFamily, setCloudFamily] = useState<any | null>(null);
-  const [cloudFamilyMembers, setCloudFamilyMembers] = useState<any[]>([]);
-  const [cloudFamilyLoading, setCloudFamilyLoading] = useState(false);
-  const [cloudFamilyError, setCloudFamilyError] = useState<string | null>(null);
-
-  const [familyInviteCode, setFamilyInviteCode] = useState<string>('');
-  const [familyJoinCode, setFamilyJoinCode] = useState<string>('');
-  const [familyNameDraft, setFamilyNameDraft] = useState<string>('Моя семья');
-
-  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
-  const [familyShopping, setFamilyShopping] = useState<{ week_start: string; items: {name:string; grams:number; checked?: boolean}[] } | null>(null);
-  const [familyShoppingLoading, setFamilyShoppingLoading] = useState(false);
-  const [cloudFamilyMenu, setCloudFamilyMenu] = useState<FamilyWeeklyMenu | null>(null);
-
   const weekStartISO = useCallback((d = new Date()) => {
     const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     const day = date.getUTCDay();
@@ -750,140 +741,6 @@ const App: React.FC = () => {
     );
   };
 
-  const loadCloudFamily = useCallback(async () => {
-    try {
-      setCloudFamilyLoading(true);
-      setCloudFamilyError(null);
-      const week = weekStartISO();
-      const [familyRes, menuRes] = await Promise.all([
-        fetch('/api/family', { credentials: 'include' }),
-        fetch(`/api/family/menu?week=${encodeURIComponent(week)}`, { credentials: 'include' }),
-      ]);
-      const data = await familyRes.json().catch(() => ({}));
-      if (!familyRes.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось загрузить семью');
-      setCloudFamily(data.family || null);
-      setCloudFamilyMembers(Array.isArray(data.members) ? data.members : []);
-      const menuData = await menuRes.json().catch(() => ({}));
-      const serverMenu = menuData?.shared?.menu && typeof menuData.shared.menu === 'object' ? menuData.shared.menu : null;
-      const looksLikeFamilyWeeklyMenu =
-        !!serverMenu &&
-        typeof serverMenu === 'object' &&
-        Array.isArray((serverMenu as any).days) &&
-        typeof (serverMenu as any).prefs === 'object' &&
-        Array.isArray((serverMenu as any).shoppingList) &&
-        (serverMenu as any).days.every((day: any) =>
-          day &&
-          typeof day === 'object' &&
-          ['breakfast', 'lunch', 'dinner', 'snack'].every((mealKey) => {
-            const meal = day[mealKey];
-            return meal && typeof meal === 'object' && typeof meal.base === 'string' && typeof meal.portions === 'object';
-          })
-        );
-      setCloudFamilyMenu(looksLikeFamilyWeeklyMenu ? (serverMenu as FamilyWeeklyMenu) : null);
-      // Auto switch scope if user is in a family
-      if (data.family && planScope !== 'family') {
-        // keep user's choice, but first time default to family for visibility
-        setPlanScope('family');
-      }
-    } catch (e: any) {
-      setCloudFamilyError(e?.message || 'Ошибка');
-      setCloudFamily(null);
-      setCloudFamilyMembers([]);
-      setCloudFamilyMenu(null);
-    } finally {
-      setCloudFamilyLoading(false);
-    }
-  }, [planScope]);
-
-  const loadFamilyShopping = useCallback(async () => {
-    if (!cloudFamily?.id) return;
-    try {
-      setFamilyShoppingLoading(true);
-      const week = weekStartISO();
-      const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(week)}&family_id=${encodeURIComponent(cloudFamily.id)}`, { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Не удалось загрузить список покупок семьи');
-      setFamilyShopping({ week_start: data.week_start, items: data.items || [] });
-    } catch (e) {
-      setFamilyShopping(null);
-    } finally {
-      setFamilyShoppingLoading(false);
-    }
-  }, [cloudFamily?.id, weekStartISO]);
-
-  const toggleFamilyShoppingItem = useCallback(async (ingredientName: string, checked: boolean) => {
-    if (!cloudFamily?.id) return;
-    const week = weekStartISO();
-    setFamilyShopping((prev) => prev ? ({
-      ...prev,
-      items: prev.items.map((it) => it.name === ingredientName ? { ...it, checked } : it),
-    }) : prev);
-    try {
-      const res = await fetch('/api/shopping/check', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          week_start: week,
-          ingredient_name: ingredientName,
-          checked,
-          family_id: cloudFamily.id,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить список покупок');
-    } catch (e) {
-      setFamilyShopping((prev) => prev ? ({
-        ...prev,
-        items: prev.items.map((it) => it.name === ingredientName ? { ...it, checked: !checked } : it),
-      }) : prev);
-      throw e;
-    }
-  }, [cloudFamily?.id, weekStartISO]);
-
-  const createFamilyCloud = useCallback(async () => {
-    const name = (familyNameDraft || 'Моя семья').trim().slice(0, 60);
-    const res = await fetch('/api/family', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать семью');
-    await loadCloudFamily();
-  }, [familyNameDraft, loadCloudFamily]);
-
-  const makeInviteCode = useCallback(async () => {
-    const res = await fetch('/api/family/invite', { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать приглашение');
-    setFamilyInviteCode(String(data.code || ''));
-    return String(data.code || '');
-  }, []);
-
-  const joinFamilyCloud = useCallback(async () => {
-    const code = (familyJoinCode || '').trim();
-    if (!code) return;
-    const res = await fetch('/api/family/join', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось присоединиться');
-    setFamilyJoinCode('');
-    await loadCloudFamily();
-  }, [familyJoinCode, loadCloudFamily]);
-
-  const updateMyFamilyGoal = useCallback(async (goal: 'LOSS' | 'MAINTAIN') => {
-    const res = await fetch('/api/family/member', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить цель');
-    await loadCloudFamily();
-  }, [loadCloudFamily]);
-
-  const generateFamilyMenuNow = useCallback(async () => {
-    if (!cloudFamily?.id) return;
-    const week = weekStartISO();
-    const res = await fetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось сгенерировать семейное меню');
-    await loadFamilyShopping();
-    await loadCloudFamily();
-  }, [cloudFamily?.id, weekStartISO, loadFamilyShopping, loadCloudFamily]);
-
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
     if (t === 'lunch') return 'Обед';
@@ -922,11 +779,69 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
+  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+
+  const {
+    cloudFamily,
+    cloudFamilyMembers,
+    cloudFamilyLoading,
+    cloudFamilyMenu,
+    cloudFamilyError,
+    familyInviteCode,
+    familyJoinCode,
+    familyNameDraft,
+    familyShopping,
+    familyShoppingLoading,
+    loadCloudFamily,
+    loadFamilyShopping,
+    makeInviteCode,
+    createFamilyCloud,
+    joinFamilyCloud,
+    setCloudFamilyError,
+    setFamilyJoinCode,
+    setFamilyNameDraft,
+    toggleFamilyShoppingItem,
+    updateMyFamilyGoal,
+    generateFamilyMenuNow,
+    setFamilyShopping,
+    setFamilyShoppingLoading,
+    setCloudFamilyMenu,
+    setCloudFamilyMembers,
+  } = useFamilyCloud({
+    currentUser,
+    planScope,
+    setPlanScope,
+    weekStartISO,
+  });
+
+  const {
+    familyMenu,
+    familyMenuError,
+    familyMenuLoading,
+    familyMenuPrefs,
+    familyMenuPrefsOpen,
+    handleGenerateFamilyWeeklyMenu,
+    setFamilyMenuError,
+    setFamilyMenuPrefs,
+    setFamilyMenuPrefsOpen,
+  } = useFamilyMenu({
+    allUsers,
+    cloudFamily,
+    cloudFamilyMenu,
+    currentUser,
+    generateFamilyWeeklyMenu,
+    loadCloudFamily,
+    loadFamilyShopping,
+    setAllUsers,
+    setCloudFamilyMenu,
+    setCurrentUser,
+    weekStartISO,
+  });
 
   useEffect(() => {
     setAiStorageScope(currentUser?.id ?? null);
@@ -956,159 +871,33 @@ const App: React.FC = () => {
   // - keep normal localStorage flow (fast)
   // - allow export/import JSON to переносить данные между браузерами
   // - optional auto-save to a user-selected JSON file (Chromium)
-  const backupHandleRef = useRef<any>(null);
-  const [autosaveEnabled, setAutosaveEnabled] = useState(false);
+  const {
+    autosaveEnabled,
+    onConnectAutosave,
+    onExportBackup,
+    onImportBackup,
+    setAutosaveEnabled,
+  } = useBackupAutosave();
 
-  useEffect(() => {
-    // restore previously выбранный файл для автосейва (если браузер поддерживает)
-    (async () => {
-      try {
-        const h = await getSavedBackupHandle();
-        if (h) {
-          backupHandleRef.current = h;
-          setAutosaveEnabled(true);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!autosaveEnabled) return;
-    const tick = async () => {
-      const handle = backupHandleRef.current;
-      if (!handle) return;
-      const payload = createBackupPayload();
-      const jsonText = JSON.stringify(payload);
-      await writeBackupToHandle(handle, jsonText);
-    };
-    // every 20s is enough for local testing; avoids wiring into every setItem.
-    const id = window.setInterval(tick, 20000);
-    return () => window.clearInterval(id);
-  }, [autosaveEnabled]);
-
-  const onExportBackup = useCallback(() => {
-    const payload = createBackupPayload();
-    const jsonText = JSON.stringify(payload, null, 2);
-    downloadJson('fitfocus-backup.json', jsonText);
-  }, []);
-
-  const onImportBackup = useCallback(async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!parsed || parsed.version !== 1 || typeof parsed.localStorage !== 'object') {
-        alert('Файл не похож на резервную копию FitFocus.');
-        return;
-      }
-      applyBackupPayload(parsed);
-      // reload to re-read all cached state from localStorage
-      window.location.reload();
-    } catch {
-      alert('Не удалось прочитать JSON.');
-    }
-  }, []);
-
-  const onConnectAutosave = useCallback(async () => {
-    if (!supportsFileSystemAccessApi()) {
-      alert('Автосейв в файл поддерживается только в Chrome/Edge (File System Access API). Используйте Экспорт JSON.');
-      return false;
-    }
-    const h = await chooseAndSaveBackupHandle();
-    if (!h) return false;
-    backupHandleRef.current = h;
-    setAutosaveEnabled(true);
-    // write immediately
-    const payload = createBackupPayload();
-    await writeBackupToHandle(h, JSON.stringify(payload, null, 2));
-    return true;
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    // 1) load prefs from saved menu
-    const saved = currentUser.aiPlan?.familyWeeklyMenu?.prefs;
-    // 2) or from localStorage
-    let ls: any = null;
-    const newPrefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
-    try {
-      ls = JSON.parse(localStorage.getItem(newPrefsKey) || 'null');
-      if (ls) {
-        safeSetItem(newPrefsKey, JSON.stringify(ls));
-      }
-    } catch {}
-    const fromStore = ls && typeof ls === 'object' ? ls : null;
-    const baseInclude = (saved?.includeIds?.length ? saved.includeIds : (fromStore?.includeIds?.length ? fromStore.includeIds : []));
-    const includeIds = baseInclude.length ? baseInclude : allUsers.map(u => u.id);
-    setFamilyMenuPrefs(prev => ({
-      ...prev,
-      includeIds,
-      cookingMode: (saved?.cookingMode || fromStore?.cookingMode || prev.cookingMode) as any,
-      budgetPerWeek: String(saved?.budgetPerWeek ?? fromStore?.budgetPerWeek ?? prev.budgetPerWeek ?? ''),
-      currency: String(saved?.currency ?? fromStore?.currency ?? prev.currency ?? 'KZT'),
-    }));
-  }, [currentUser?.id, allUsers]);
-
-  const persistFamilyMenuPrefs = useCallback((prefs: { includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }) => {
-    if (!currentUser) return;
-    try {
-      safeSetItem(`fitfocus_data_${currentUser.id}_family_menu_prefs`, JSON.stringify({
-        includeIds: prefs.includeIds,
-        cookingMode: prefs.cookingMode,
-        budgetPerWeek: prefs.budgetPerWeek ? Number(prefs.budgetPerWeek) : undefined,
-        currency: prefs.currency
-      }));
-    } catch {}
-  }, [currentUser]);
-
-  const deleteUserProfile = useCallback((userId: string) => {
-    // 1) Удаляем все данные пользователя из localStorage
-    const prefix = `fitfocus_data_${userId}_`;
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) safeRemoveItem(k);
-    }
-
-    // 2) Удаляем из списка профилей
-    setAllUsers(prev => {
-      const next = prev.filter(u => u.id !== userId);
-      persistAllUsersSnapshot(currentUser?.id, next);
-      return next;
-    });
-
-    // 3) Если удалили "последнего" или текущего — сбрасываем
-    if (currentUser?.id === userId) {
-      setCurrentUser(null);
-      setAuthState('auth_choice');
-    }
-  }, [currentUser]);
+  const deleteUserProfile = useDeleteUserProfile({
+    currentUserId: currentUser?.id,
+    setAllUsers,
+    setAuthState,
+    setCurrentUser,
+  });
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTabId>('dashboard');
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  const sidebarTabs = [
-    { id: 'dashboard', icon: Activity, label: 'Обзор' },
-    { id: 'council', icon: MessageSquareText, label: 'AI Совет' },
-    { id: 'plan', icon: Sparkles, label: 'План' },
-    { id: 'nutrition', icon: Utensils, label: 'Питание' },
-    { id: 'recipes', icon: ChefHat, label: 'Рецепты' },
-    { id: 'workouts', icon: Dumbbell, label: 'Зал' },
-    { id: 'course', icon: BookOpen, label: 'Курс' },
-    { id: 'family', icon: Users, label: 'Семья' },
-    ...(isAdmin ? [{ id: 'admin', icon: ShieldCheck, label: 'Админ' }] : []),
-    { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' },
-    { id: 'settings', icon: Settings, label: 'Настройки' }
-  ] as const;
-  const sidebarCoreTabs = sidebarTabs.filter(tab => ['dashboard', 'council', 'plan', 'nutrition'].includes(tab.id));
-  const sidebarFeatureTabs = sidebarTabs.filter(tab => ['recipes', 'workouts', 'course', 'family', 'admin'].includes(tab.id));
-  const sidebarUtilityTabs = sidebarTabs.filter(tab => ['pro', 'settings'].includes(tab.id));
-  const mobilePrimaryTabIds = ['dashboard', 'council', 'plan', 'nutrition'] as const;
-  const mobilePrimaryTabs = sidebarTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id as any));
-  const mobileMoreTabs = sidebarTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id as any));
+  const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
+  const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
+  const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
+  const sidebarUtilityTabs = sidebarVisibleTabs.filter(tab => sidebarUtilityTabIds.includes(tab.id));
+  const mobilePrimaryTabs = sidebarVisibleTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id));
+  const mobileMoreTabs = sidebarVisibleTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id));
 
 
   // Load Cloud Family context when opening Family / Plan (so users can see family mode immediately)
@@ -1306,34 +1095,6 @@ const App: React.FC = () => {
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-const [selectedFoodIds, setSelectedFoodIds] = useState<Set<string>>(new Set());
-
-const toggleFoodSelected = (id: string) => {
-  setSelectedFoodIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  });
-};
-
-const clearFoodSelection = () => setSelectedFoodIds(new Set());
-
-const bulkUpdateMealType = (mealType: MealType) => {
-  if (!selectedFoodIds.size) return;
-  setFoodDiary((prev) =>
-    prev.map((x) => (selectedFoodIds.has(x.id) ? { ...x, mealType } : x))
-  );
-  clearFoodSelection();
-};
-
-const bulkRemoveSelectedFoods = () => {
-  if (!selectedFoodIds.size) return;
-  const ids = Array.from(selectedFoodIds);
-  ids.forEach((id) => deleteFoodEntry(id));
-  clearFoodSelection();
-};
-
 const openEditFood = (item: FoodEntry) => {
   setEditFoodModal({
     id: item.id,
@@ -1407,93 +1168,6 @@ const openEditFood = (item: FoodEntry) => {
     });
     setPlanWeekExpanded(next);
   }, [currentUser?.aiPlan?.weeklyMenu?.weekStart, currentUser?.aiPlan?.weeklyMenu?.days?.length]);
-  const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
-  const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
-  const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
-
-  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<{ includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek: string; currency: string }>({
-    includeIds: [],
-    cookingMode: 'all_meals',
-    budgetPerWeek: '',
-    currency: 'KZT'
-  });
-
-  const familyMenu = cloudFamilyMenu ?? currentUser?.aiPlan?.familyWeeklyMenu ?? null;
-
-
-  const handleGenerateFamilyWeeklyMenu = useCallback(async () => {
-    if (!currentUser?.aiPlan) return;
-    setFamilyMenuError(null);
-    // обязательные вопросы перед генерацией
-    const includeIds = (familyMenuPrefs.includeIds?.length ? familyMenuPrefs.includeIds : allUsers.map(u => u.id));
-    if (!includeIds.length) {
-      setFamilyMenuPrefsOpen(true);
-      return;
-    }
-    if (!familyMenuPrefs.cookingMode) {
-      setFamilyMenuPrefsOpen(true);
-      return;
-    }
-
-    setFamilyMenuLoading(true);
-    try {
-      const prefs = {
-        includeIds,
-        cookingMode: familyMenuPrefs.cookingMode,
-        budgetPerWeek: familyMenuPrefs.budgetPerWeek ? Number(familyMenuPrefs.budgetPerWeek) : undefined,
-        currency: familyMenuPrefs.currency || 'KZT'
-      } as any;
-
-      persistFamilyMenuPrefs(familyMenuPrefs);
-
-      const familyWeeklyMenu = await generateFamilyWeeklyMenu(currentUser, allUsers, prefs);
-      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, familyWeeklyMenu } };
-      setCurrentUser(updatedUser);
-      setAllUsers(prev => {
-        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
-        persistAllUsersSnapshot(updatedUser.id, next);
-        return next;
-      });
-
-      if (cloudFamily?.id) {
-        const week = weekStartISO();
-        const menuRes = await fetch('/api/family/menu', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            weekStart: week,
-            menu: familyWeeklyMenu,
-          }),
-        });
-        const menuData = await menuRes.json().catch(() => ({}));
-        if (!menuRes.ok) throw new Error(menuData?.error?.message || menuData?.error || 'Не удалось сохранить семейное меню на сервере');
-        setCloudFamilyMenu(familyWeeklyMenu);
-      }
-
-      if (cloudFamily?.id && Array.isArray(familyWeeklyMenu.shoppingListItems) && familyWeeklyMenu.shoppingListItems.length) {
-        const week = weekStartISO();
-        const res = await fetch('/api/weekly_menu/items', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            week_start: week,
-            family_id: cloudFamily.id,
-            items: familyWeeklyMenu.shoppingListItems,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось синхронизировать семейный список покупок');
-        await loadFamilyShopping();
-      }
-      await loadCloudFamily();
-    } catch (e: any) {
-      setFamilyMenuError(e?.message || 'Не удалось сгенерировать семейное меню на неделю.');
-    } finally {
-      setFamilyMenuLoading(false);
-    }
-  }, [currentUser, allUsers, familyMenuPrefs, persistFamilyMenuPrefs, cloudFamily?.id, weekStartISO, loadFamilyShopping]);
   const [planError, setPlanError] = useState<string | null>(null);
 
   // Cinematic AI activation steps
@@ -1954,6 +1628,13 @@ await ensurePdfInterFont(doc);
     });
   }, [currentUser]);
 
+  const {
+    selectedFoodIds,
+    toggleFoodSelected,
+    bulkUpdateMealType,
+    bulkRemoveSelectedFoods,
+  } = useFoodSelection(setFoodDiary, deleteFoodEntry);
+
   const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
     if (!currentUser) return;
     const updatedUser = toggleHabit(currentUser, habitKey);
@@ -2357,6 +2038,173 @@ const logWeight = useCallback(() => {
     return { cooling, label, title };
   }, [aiStatus, lastAiAction]);
 
+  const workspaceProps = {
+    meta: {
+      activeTab,
+      isAdmin,
+      currentUser,
+      paywall,
+      setActiveTab,
+      googleMe,
+      logout,
+      deleteAccount,
+      persistUser,
+      patchProfileInCloud,
+      onExportBackup,
+      onImportBackup,
+      onConnectAutosave,
+      autosaveEnabled,
+      profileSyncState,
+      lastProfileSyncAt,
+      syncAllLocalDataNow,
+      reloadUserFromCloud,
+      aiBadge,
+      retryMeta,
+    },
+    dashboard: {
+      dailyStats,
+      targets,
+      weightHistory: currentUser?.weightHistory || [],
+      dailyHabits: currentUser?.dailyHabits,
+      weightTrend,
+      currentWeight: currentUser?.weight,
+      handleToggleHabit,
+      exportShortPdf,
+      exportDetailedPdf,
+      pdfIncludeMealLog,
+      setPdfIncludeMealLog,
+      newWeight,
+      setNewWeight,
+      logWeight,
+      plateau: !!plateau,
+      adaptationIndex,
+      adaptationStatus,
+      compliancePct,
+      deltaDays,
+      weightDeltaN,
+      refeedSuggestion,
+      refeedDate,
+      scheduleRefeedTomorrow,
+      expectedN,
+      adaptLoading,
+      setAdaptLoading,
+      setLastAiAction,
+      generatePlateauExplanation,
+      adaptNote,
+      setAdaptNote,
+      adaptExpanded,
+      setAdaptExpanded,
+      adaptRead,
+      setAdaptRead,
+      weekly,
+      weeklyReports,
+      exportWeeklyPDF,
+    },
+    plan: {
+      planTaskDone,
+      setPlanTaskDone,
+      setPlanIntroOpen,
+      setPlanRulesExpanded,
+      planRulesExpanded,
+      planWeekExpanded,
+      setPlanWeekExpanded,
+      weeklyMenuLoading,
+      handleGenerateWeeklyMenu,
+      weeklyMenuError,
+      currentUserAiPlan: currentUser?.aiPlan,
+      currentUserTargetWeight: currentUser?.targetWeight,
+      formatGramsPretty,
+      MealParts,
+      cloudFamily,
+      planScope,
+      setPlanScope,
+      familyShoppingLoading,
+      familyShopping,
+      toggleFamilyShoppingItem,
+      loadFamilyShopping,
+      familyMenuError,
+      familyMenu,
+      familyMenuLoading,
+      setFamilyMenuPrefsOpen,
+      handleGenerateFamilyWeeklyMenu,
+      paywallPlan: paywall.plan,
+      allUsers,
+      currentUserGoal: currentUser?.goal || Goal.MAINTAIN,
+      DEFAULT_DEFICIT,
+      DEFAULT_SURPLUS,
+    },
+    nutrition: {
+      cameraOpen,
+      setCameraOpen,
+      handlePhotoUpload,
+      processPhotoFiles,
+      remainingScans: checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0,
+      searchQuery,
+      setSearchQuery,
+      showSearchResults,
+      setShowSearchResults,
+      searchResults,
+      addFoodToDiary,
+      foodDiary,
+      selectedFoodIds,
+      toggleFoodSelected,
+      bulkUpdateMealType,
+      bulkRemoveSelectedFoods,
+      deleteFoodEntry,
+      deleteFoodPhoto,
+      openInsight: (item: any) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! }),
+      openEditFood,
+      formatTime,
+      mealTypeLabel,
+      MacroBarComponent: MacroBar,
+      FoodDiaryGroupedComponent: FoodDiaryGrouped,
+    },
+    family: {
+      cloudFamilyMembers,
+      cloudFamilyLoading,
+      cloudFamilyError,
+      setCloudFamilyError,
+      familyInviteCode,
+      familyJoinCode,
+      familyNameDraft,
+      setFamilyJoinCode,
+      setFamilyNameDraft,
+      loadCloudFamily,
+      createFamilyCloud,
+      joinFamilyCloud,
+      makeInviteCode,
+      generateFamilyMenuNow,
+      updateMyFamilyGoal,
+    },
+    council: {
+      councilInput,
+      setCouncilInput,
+      councilLoading,
+      councilStage,
+      councilMessages,
+      expandedCouncilThoughtIds,
+      setExpandedCouncilThoughtIds,
+      councilScrollRef,
+      handleCouncilSubmit,
+      clearCouncilHistory,
+    },
+    content: {
+      courseLibrary,
+      lessons,
+      setCurrentLesson,
+      setIsLessonViewOpen,
+      settings,
+      setSettings,
+      favoriteRecipes,
+      addFavoriteRecipe,
+      removeFavoriteRecipe,
+      clearFavoriteRecipes,
+      closeLessonView,
+      handleMarkLessonRead,
+      handleStartLessonQuiz,
+    },
+  };
+
   if (authState === 'loading') return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   if (authState === 'auth_choice') return (
@@ -2518,334 +2366,23 @@ const logWeight = useCallback(() => {
         </div>
       )}
 
-      {mobileMoreOpen && (
-        <div className="fixed inset-0 z-[120] md:hidden">
-          <button type="button" aria-label="Закрыть меню" onClick={() => setMobileMoreOpen(false)} className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
-          <div className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2">
-            <div className="px-2 pt-1 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Ещё разделы</div>
-            {mobileMoreTabs.map((tab) => (
-              <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id as any); setMobileMoreOpen(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
-                <tab.icon size={20} className={tab.id === 'pro' && activeTab !== tab.id ? 'text-amber-500' : ''} />
-                <span className="font-black">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/92 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-visible md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
-        <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
-          <div className="flex items-center gap-3">
-            <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
-              <div className="absolute inset-0 rounded-[1.1rem] overflow-hidden pointer-events-none"><div className="absolute inset-[-200%] bg-[conic-gradient(from_0deg,transparent_85%,#818cf8_98%,transparent_100%)] animate-spin" style={{ animationDuration: '3s' }} /></div>
-              <div className="absolute inset-[1.5px] bg-slate-900 rounded-[1rem] z-0" />
-              <div className="relative w-[40px] h-[40px] bg-indigo-600 rounded-[0.8rem] flex items-center justify-center text-white font-black text-lg shadow-xl animate-pulse z-10 border border-indigo-400/20">FF</div>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-black text-slate-100 tracking-tight leading-none">FitFocus</span>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Beta</span>
-              <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
-                {modeBadge.text}
-              </span>
-              <div className="mt-2 flex items-center gap-2">
-                <span title={aiBadge.title} className={clsx("inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest", aiBadge.cls)}>
-                  {aiBadge.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void handleAiRetry()}
-                  disabled={!lastAiAction || retryMeta.cooling}
-                  className={clsx(
-                    "px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95",
-                    (!lastAiAction || retryMeta.cooling) ? "border-slate-900 bg-slate-950 text-slate-600 opacity-50 cursor-not-allowed" : "border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300"
-                  )}
-                  title={retryMeta.title}
-                >
-                  {retryMeta.label}
-                </button>
-                {lastAiAction && retryMeta.cooling && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const ok = window.confirm("AI сейчас на паузе из-за квоты/лимита. Force Retry может снова вызвать ошибку quota exceeded и потратить лимиты. Продолжить?");
-                      if (ok) void handleAiRetry({ force: true });
-                    }}
-                    className="px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200"
-                    title="Принудительно повторить последнее AI-действие, игнорируя паузу"
-                  >
-                    Force
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        {mobilePrimaryTabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id as any)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><tab.icon size={20} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} /><span className="text-[10px] leading-tight text-center font-bold">{tab.label}</span></button>
-        ))}
-        <button type="button" onClick={() => setMobileMoreOpen(true)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}><MoreHorizontal size={20} /><span className="text-[10px] leading-tight text-center font-bold">Ещё</span></button>
-        <div className="hidden md:block w-full px-2 space-y-3">
-          <div>
-            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Основное</div>
-            {sidebarCoreTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
-              >
-                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
-                <span className="text-base font-bold">{tab.label}</span>
-              </button>
-            ))}
-          </div>
+      <SidebarNavigation
+        activeTab={activeTab}
+        isAdmin={isAdmin}
+        lastAiAction={lastAiAction}
+        logout={logout}
+        mobileMoreOpen={mobileMoreOpen}
+        modeBadge={modeBadge}
+        onAiRetry={handleAiRetry}
+        onMobileMoreOpenChange={setMobileMoreOpen}
+        onActiveTabChange={setActiveTab}
+        aiBadge={aiBadge}
+        retryMeta={retryMeta}
+      />
 
-          <div className="pt-2 border-t border-slate-800/70">
-            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Разделы</div>
-            {sidebarFeatureTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
-              >
-                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
-                <span className="text-base font-bold">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/70">
-            <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Сервис</div>
-            {sidebarUtilityTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
-              >
-                <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
-                <span className="text-base font-bold">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5"><X size={20} /> <span className="font-bold">Выйти</span></button>
-      </nav>
-      <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
-        {activeTab === 'dashboard' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка dashboard...</div>}>
-            <DashboardScreen
-              currentUser={currentUser}
-              paywallPlan={paywall.plan}
-              canUsePro={paywall.canUsePro}
-              dailyStats={dailyStats}
-              targets={targets}
-              weightHistory={currentUser?.weightHistory || []}
-              dailyHabits={currentUser?.dailyHabits}
-              weightTrend={weightTrend}
-              currentWeight={currentUser?.weight}
-              handleToggleHabit={handleToggleHabit}
-              exportShortPdf={exportShortPdf}
-              exportDetailedPdf={exportDetailedPdf}
-              pdfIncludeMealLog={pdfIncludeMealLog}
-              setPdfIncludeMealLog={setPdfIncludeMealLog}
-              newWeight={newWeight}
-              setNewWeight={setNewWeight}
-              logWeight={logWeight}
-              plateau={!!plateau}
-              adaptationIndex={adaptationIndex}
-              adaptationStatus={adaptationStatus}
-              compliancePct={compliancePct}
-              deltaDays={deltaDays}
-              weightDeltaN={weightDeltaN}
-              refeedSuggestion={refeedSuggestion as any}
-              refeedDate={refeedDate}
-              scheduleRefeedTomorrow={scheduleRefeedTomorrow}
-              expectedN={expectedN}
-              adaptLoading={adaptLoading}
-              setAdaptLoading={setAdaptLoading}
-              setLastAiAction={setLastAiAction}
-              generatePlateauExplanation={generatePlateauExplanation}
-              adaptNote={adaptNote}
-              setAdaptNote={setAdaptNote}
-              adaptExpanded={adaptExpanded}
-              setAdaptExpanded={setAdaptExpanded}
-              adaptRead={adaptRead}
-              setAdaptRead={setAdaptRead}
-              weekly={weekly}
-              weeklyReports={weeklyReports}
-              exportWeeklyPDF={exportWeeklyPDF}
-            />
-          </React.Suspense>
-        )}
-        {activeTab === 'plan' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка плана...</div>}>
-            <PlanScreen
-              currentUser={currentUser}
-              planTaskDone={planTaskDone}
-              setPlanTaskDone={setPlanTaskDone}
-              setActiveTab={setActiveTab}
-              setPlanIntroOpen={setPlanIntroOpen}
-              setPlanRulesExpanded={setPlanRulesExpanded}
-              planRulesExpanded={planRulesExpanded}
-              planWeekExpanded={planWeekExpanded}
-              setPlanWeekExpanded={setPlanWeekExpanded}
-              weeklyMenuLoading={weeklyMenuLoading}
-              handleGenerateWeeklyMenu={handleGenerateWeeklyMenu}
-              weeklyMenuError={weeklyMenuError}
-              currentUserAiPlan={currentUser?.aiPlan}
-              currentUserTargetWeight={currentUser?.targetWeight}
-              formatGramsPretty={formatGramsPretty}
-              MealParts={MealParts}
-              cloudFamily={cloudFamily}
-              planScope={planScope}
-              setPlanScope={setPlanScope}
-              familyShoppingLoading={familyShoppingLoading}
-              familyShopping={familyShopping}
-              toggleFamilyShoppingItem={toggleFamilyShoppingItem}
-              loadFamilyShopping={loadFamilyShopping}
-              familyMenuError={familyMenuError}
-              familyMenu={familyMenu}
-              familyMenuLoading={familyMenuLoading}
-              setFamilyMenuPrefsOpen={setFamilyMenuPrefsOpen}
-              handleGenerateFamilyWeeklyMenu={handleGenerateFamilyWeeklyMenu}
-              paywallPlan={paywall.plan}
-              allUsers={allUsers}
-              currentUserGoal={currentUser?.goal || Goal.MAINTAIN}
-              DEFAULT_DEFICIT={DEFAULT_DEFICIT}
-              DEFAULT_SURPLUS={DEFAULT_SURPLUS}
-            />
-          </React.Suspense>
-        )}
-         {activeTab === 'nutrition' && (
-           <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
-             <NutritionScreen
-               cameraOpen={cameraOpen}
-               setCameraOpen={setCameraOpen}
-               handlePhotoUpload={handlePhotoUpload}
-               processPhotoFiles={processPhotoFiles}
-               remainingScans={checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0}
-               searchQuery={searchQuery}
-               setSearchQuery={setSearchQuery}
-               showSearchResults={showSearchResults}
-               setShowSearchResults={setShowSearchResults}
-               searchResults={searchResults}
-               addFoodToDiary={addFoodToDiary}
-               foodDiary={foodDiary}
-               selectedFoodIds={selectedFoodIds}
-               toggleFoodSelected={toggleFoodSelected}
-               bulkUpdateMealType={bulkUpdateMealType}
-               bulkRemoveSelectedFoods={bulkRemoveSelectedFoods}
-               deleteFoodEntry={deleteFoodEntry}
-               deleteFoodPhoto={deleteFoodPhoto}
-               openInsight={(item) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! })}
-               openEditFood={openEditFood}
-               formatTime={formatTime}
-               mealTypeLabel={mealTypeLabel}
-               dailyStats={dailyStats}
-               targets={targets}
-               MacroBarComponent={MacroBar}
-               FoodDiaryGroupedComponent={FoodDiaryGrouped}
-             />
-           </React.Suspense>
-         )}
-        {activeTab === 'recipes' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
-            <RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />
-          </React.Suspense>
-        )}
-        {activeTab === 'workouts' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка тренировок...</div>}>
-            <WorkoutsScreen />
-          </React.Suspense>
-        )}
-        {activeTab === 'family' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка семьи...</div>}>
-            <FamilyScreen
-              cloudFamily={cloudFamily}
-              cloudFamilyMembers={cloudFamilyMembers}
-              cloudFamilyLoading={cloudFamilyLoading}
-              cloudFamilyError={cloudFamilyError}
-              setCloudFamilyError={setCloudFamilyError}
-              familyInviteCode={familyInviteCode}
-              familyJoinCode={familyJoinCode}
-              familyNameDraft={familyNameDraft}
-              setFamilyJoinCode={setFamilyJoinCode}
-              setFamilyNameDraft={setFamilyNameDraft}
-              loadCloudFamily={loadCloudFamily}
-              createFamilyCloud={createFamilyCloud}
-              joinFamilyCloud={joinFamilyCloud}
-              makeInviteCode={makeInviteCode}
-              generateFamilyMenuNow={generateFamilyMenuNow}
-              updateMyFamilyGoal={updateMyFamilyGoal}
-              loadFamilyShopping={loadFamilyShopping}
-              familyShoppingLoading={familyShoppingLoading}
-              familyShopping={familyShopping}
-              toggleFamilyShoppingItem={toggleFamilyShoppingItem}
-              formatGramsPretty={formatGramsPretty}
-            />
-          </React.Suspense>
-        )}
-        {activeTab === 'council' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка AI Совета...</div>}>
-            <CouncilScreen
-              councilInput={councilInput}
-              setCouncilInput={setCouncilInput}
-              councilLoading={councilLoading}
-              councilStage={councilStage}
-              councilMessages={councilMessages}
-              expandedCouncilThoughtIds={expandedCouncilThoughtIds}
-              setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}
-              councilScrollRef={councilScrollRef}
-              handleCouncilSubmit={handleCouncilSubmit}
-              onClearHistory={clearCouncilHistory}
-            />
-          </React.Suspense>
-        )}
-
-        {activeTab === 'pro' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка Pro...</div>}>
-            <ProScreen openPaywall={paywall.openPaywall} />
-          </React.Suspense>
-        )}
-        {activeTab === 'course' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка курса...</div>}>
-            <CourseScreen
-              currentUser={currentUser}
-              courseLibrary={courseLibrary}
-              lessons={lessons}
-              setCurrentLesson={setCurrentLesson}
-              setIsLessonViewOpen={setIsLessonViewOpen}
-            />
-          </React.Suspense>
-        )}
-        
-        {activeTab === 'admin' && isAdmin && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
-            <AdminScreen />
-          </React.Suspense>
-        )}
-
-{activeTab === 'settings' && (
-          <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
-            <SettingsScreen
-              settings={settings}
-              onChange={setSettings}
-              serverSession={!!googleMe?.sub}
-              onServerLogout={logout}
-              onDeleteAccount={deleteAccount}
-              user={currentUser}
-              onChangeUser={(u) => u && persistUser(u)}
-              onPatchUser={(patch) => void patchProfileInCloud(patch)}
-              onExportBackup={onExportBackup}
-              onImportBackup={onImportBackup}
-              onConnectAutosave={onConnectAutosave}
-              autosaveEnabled={autosaveEnabled}
-              syncState={profileSyncState}
-              lastProfileSyncAt={lastProfileSyncAt}
-              onSyncNow={syncAllLocalDataNow}
-              onReloadFromCloud={reloadUserFromCloud}
-            />
-          </React.Suspense>
-        )}
-      </main>
+      <AppWorkspace
+        workspaceProps={workspaceProps}
+      />
       {/* Family menu pre-questions */}
       {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
