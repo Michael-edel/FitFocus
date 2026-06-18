@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
-import { Activity, BookOpen, ChefHat, Crown, Dumbbell, MessageSquareText, Settings, ShieldCheck, Sparkles, Utensils, Users } from 'lucide-react';
+import { Activity, BookOpen, ChefHat, Crown, Dumbbell, MessageSquareText, Settings, ShieldCheck, Sparkles, TrendingUp, Utensils, Users } from 'lucide-react';
 
-export const sidebarTabIds = ['dashboard', 'council', 'plan', 'nutrition', 'recipes', 'workouts', 'course', 'family', 'pro', 'settings', 'admin'] as const;
+export const sidebarTabIds = ['dashboard', 'council', 'plan', 'nutrition', 'progress', 'recipes', 'workouts', 'course', 'family', 'pro', 'settings', 'admin'] as const;
 
 export type AppTabId = typeof sidebarTabIds[number];
 
@@ -17,6 +17,7 @@ export const sidebarTabs: SidebarTab[] = [
   { id: 'council', icon: MessageSquareText, label: 'AI Совет' },
   { id: 'plan', icon: Sparkles, label: 'План' },
   { id: 'nutrition', icon: Utensils, label: 'Питание' },
+  { id: 'progress', icon: TrendingUp, label: 'Прогресс' },
   { id: 'recipes', icon: ChefHat, label: 'Рецепты' },
   { id: 'workouts', icon: Dumbbell, label: 'Зал' },
   { id: 'course', icon: BookOpen, label: 'Курс' },
@@ -27,6 +28,6 @@ export const sidebarTabs: SidebarTab[] = [
 ];
 
 export const sidebarCoreTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];
-export const sidebarFeatureTabIds: AppTabId[] = ['recipes', 'workouts', 'course', 'family', 'admin'];
+export const sidebarFeatureTabIds: AppTabId[] = ['progress', 'recipes', 'workouts', 'course', 'family', 'admin'];
 export const sidebarUtilityTabIds: AppTabId[] = ['pro', 'settings'];
 export const mobilePrimaryTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];

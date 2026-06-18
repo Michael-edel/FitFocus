@@ -21,6 +21,7 @@ export type AppTheme = 'dark' | 'light' | 'violet' | 'calm' | 'premium';
 export type AppLanguage = 'ru';
 
 export type TariffPlan = 'free' | 'pro' | 'family';
+export type WearableProvider = 'apple_health' | 'google_fit' | 'fitbit' | 'garmin' | 'manual';
 
 export type AppSettings = {
   theme: AppTheme;
@@ -284,6 +285,14 @@ export interface UserProfile {
   googleSub?: string;
   /** аватар из Google */
   picture?: string;
+  /** выбранный источник синка со смарт-часами */
+  wearableProvider?: WearableProvider;
+  /** включена ли интеграция с носимым устройством */
+  wearableEnabled?: boolean;
+  /** когда пользователь впервые подключил источник */
+  wearableConnectedAt?: string;
+  /** когда данные с носимого устройства синхронизировались последний раз */
+  wearableLastSyncAt?: string;
 }
 
 export interface NutritionIntake {

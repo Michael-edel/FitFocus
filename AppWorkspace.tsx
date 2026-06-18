@@ -10,6 +10,7 @@ const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
 const ProScreen = React.lazy(() => import('./ProScreen'));
 const CourseScreen = React.lazy(() => import('./CourseScreen'));
+const ProgressScreen = React.lazy(() => import('./ProgressScreen'));
 const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
 
@@ -18,7 +19,7 @@ type AppWorkspaceProps = {
 };
 
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
-  const { meta, dashboard, plan, nutrition, family, council, content } = workspaceProps;
+  const { meta, dashboard, plan, nutrition, progress, family, council, content } = workspaceProps;
 
   const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, aiBadge, retryMeta } = meta;
 
@@ -29,6 +30,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cameraOpen, setCameraOpen, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent } = nutrition;
 
   const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
+  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, onPatchUser, syncState } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
@@ -117,6 +119,27 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             currentUserGoal={currentUserGoal}
             DEFAULT_DEFICIT={DEFAULT_DEFICIT}
             DEFAULT_SURPLUS={DEFAULT_SURPLUS}
+          />
+        </React.Suspense>
+      )}
+      {activeTab === 'progress' && (
+        <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка прогресса...</div>}>
+          <ProgressScreen
+            currentUser={currentUser}
+            weightHistory={weightHistory}
+            measurementsHistory={measurementsHistory}
+            progressPhotos={progressPhotos}
+            currentWeight={currentWeight}
+            targetWeight={currentUser?.targetWeight ?? null}
+            wearableProvider={wearableProvider}
+            wearableEnabled={wearableEnabled}
+            wearableConnectedAt={wearableConnectedAt}
+            wearableLastSyncAt={wearableLastSyncAt}
+            onPatchUser={onPatchUser}
+            syncState={syncState}
+            lastProfileSyncAt={lastProfileSyncAt}
+            onSyncNow={syncAllLocalDataNow}
+            onOpenSettings={() => setActiveTab('settings')}
           />
         </React.Suspense>
       )}
