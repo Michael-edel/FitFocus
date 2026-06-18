@@ -122,11 +122,11 @@ function buildPortionsForMember(shared: any, kcalPerDay: number) {
 }
 
 function formatMealPortion(ingredients: { name: string; grams: number }[], kcal: number): string {
-  const totalGrams = ingredients.reduce((sum, it) => sum + Number(it.grams || 0), 0);
   const parts = ingredients
     .map((it) => `${it.name} ${Math.max(1, Math.round(Number(it.grams || 0)))}г`)
     .join(" + ");
-  return `всего ~${Math.max(1, Math.round(totalGrams))}г: ${parts} (≈${Math.max(1, Math.round(kcal))} ккал)`;
+  // Не дублируем общий вес: в UI он воспринимается как отдельная граммовка справа.
+  return `${parts} (≈${Math.max(1, Math.round(kcal))} ккал)`;
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
