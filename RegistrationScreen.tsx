@@ -39,6 +39,9 @@ export type RegistrationData = {
   bloodPressureSystolic: number;
   bloodPressureDiastolic: number;
   restingPulse: number;
+  waistCm: number;
+  chestCm: number;
+  hipsCm: number;
   plan: TariffPlan;
   lossDeficit?: number;
   gainSurplus?: number;
@@ -512,6 +515,50 @@ export default function RegistrationScreen({
                             value={regData.restingPulse || ''}
                             onChange={(e) => setRegData(prev => ({ ...prev, restingPulse: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
                             placeholder="60"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Обхваты тела</label>
+                    <div className="p-4 rounded-[1.5rem] bg-slate-950 border border-slate-800 space-y-3">
+                      <div className="text-xs text-slate-400 font-semibold">
+                        Базовые замеры помогут отслеживать композицию тела, а не только вес.
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Талия</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.waistCm || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, waistCm: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="80"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Грудь</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.chestCm || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, chestCm: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="95"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Бедра</div>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={regData.hipsCm || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, hipsCm: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                            placeholder="100"
                             className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
                           />
                         </label>

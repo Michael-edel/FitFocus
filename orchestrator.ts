@@ -51,6 +51,11 @@ export async function runCouncil(
     Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
     Давление: ${formatBloodPressure(user)}.
     Пульс покоя: ${user.restingPulse ? `${Math.round(Number(user.restingPulse))} уд/мин` : 'нет'}.
+    Обхваты тела: ${[
+      user.waistCm ? `талия ${Math.round(Number(user.waistCm))} см` : null,
+      user.chestCm ? `грудь ${Math.round(Number(user.chestCm))} см` : null,
+      user.hipsCm ? `бедра ${Math.round(Number(user.hipsCm))} см` : null,
+    ].filter(Boolean).join(', ') || 'нет'}.
     Последний замер: ${JSON.stringify((user.measurementsHistory || []).slice(0, 1))}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.

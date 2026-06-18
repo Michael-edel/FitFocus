@@ -200,6 +200,9 @@ export type DietaryRestrictions = {
 export type HealthMeasurement = {
   date: string;
   weight?: number;
+  waistCm?: number;
+  chestCm?: number;
+  hipsCm?: number;
   bloodPressureSystolic?: number;
   bloodPressureDiastolic?: number;
   restingPulse?: number;
@@ -229,6 +232,10 @@ export interface UserProfile {
   bloodPressureSystolic?: number;
   bloodPressureDiastolic?: number;
   bloodPressureMeasuredAt?: string;
+  waistCm?: number;
+  chestCm?: number;
+  hipsCm?: number;
+  bodyMeasurementsMeasuredAt?: string;
   /** пульс в состоянии покоя */
   restingPulse?: number;
   restingPulseMeasuredAt?: string;
