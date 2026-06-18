@@ -4,13 +4,14 @@ import { X } from 'lucide-react';
 type PlanIntroModalProps = {
   currentUser: any;
   planError: string | null;
+  open: boolean;
   onClose: () => void;
   onOpenPlan: () => void;
   onOpenNutrition: () => void;
 };
 
-export default function PlanIntroModal({ currentUser, planError, onClose, onOpenPlan, onOpenNutrition }: PlanIntroModalProps) {
-  if (!currentUser?.aiPlan) return null;
+export default function PlanIntroModal({ currentUser, planError, open, onClose, onOpenPlan, onOpenNutrition }: PlanIntroModalProps) {
+  if (!open || !currentUser?.aiPlan) return null;
 
   return (
     <div className="fixed inset-0 z-[2000] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4">
