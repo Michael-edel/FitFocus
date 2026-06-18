@@ -56,6 +56,7 @@ export async function runCouncil(
       user.chestCm ? `грудь ${Math.round(Number(user.chestCm))} см` : null,
       user.hipsCm ? `бедра ${Math.round(Number(user.hipsCm))} см` : null,
     ].filter(Boolean).join(', ') || 'нет'}.
+    Фото прогресса: ${Array.isArray(user.progressPhotos) ? `${user.progressPhotos.length} шт.` : 'нет'}.
     Последний замер: ${JSON.stringify((user.measurementsHistory || []).slice(0, 1))}.
     История веса (последние 14 записей): ${JSON.stringify((user.weightHistory || []).slice(-14))}.
     Привычки: ${JSON.stringify((history.habits || []).slice(-12))}.

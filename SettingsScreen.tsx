@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { AppLanguage, AppSettings, AppTheme, UserProfile } from './types';
+import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload } from 'lucide-react';
 import { calculateTDEE } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
@@ -95,6 +95,45 @@ const formatSyncTs = (ts?: number | null) => {
   }
 };
 
+async function loadImageElement(file: File): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = url;
+    });
+    return img;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function compressProgressPhoto(file: File): Promise<{ photo: string; thumb: string }> {
+  const img = await loadImageElement(file);
+  const srcW = img.naturalWidth || img.width || 1;
+  const srcH = img.naturalHeight || img.height || 1;
+
+  const render = (maxSide: number, quality: number) => {
+    const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
+    const w = Math.max(1, Math.round(srcW * scale));
+    const h = Math.max(1, Math.round(srcH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No canvas context');
+    ctx.drawImage(img, 0, 0, srcW, srcH, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', quality);
+  };
+
+  return {
+    photo: render(1024, 0.78),
+    thumb: render(240, 0.8),
+  };
+}
+
 const Toggle: React.FC<{
   label: string;
   description?: string;
@@ -173,12 +212,19 @@ export default function SettingsScreen({
   const [draftWaistCm, setDraftWaistCm] = useState('');
   const [draftChestCm, setDraftChestCm] = useState('');
   const [draftHipsCm, setDraftHipsCm] = useState('');
+  const [progressPhotoNote, setProgressPhotoNote] = useState('');
+  const [progressPhotoBusy, setProgressPhotoBusy] = useState(false);
+  const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
+  const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
     const list = user?.measurementsHistory || [];
     return list.length ? list[0] : null;
   }, [user?.measurementsHistory]);
+
+  const progressPhotos = user?.progressPhotos || [];
+  const latestProgressPhoto = progressPhotos[0] || null;
 
   const profileSummary = useMemo(() => {
     if (!user) return null;
@@ -302,6 +348,47 @@ export default function SettingsScreen({
       onChangeUser({ ...user, ...patch });
     }
     setProfileDirty(false);
+  };
+
+  const saveProgressPhotos = async (nextPhotos: ProgressPhoto[]) => {
+    if (!user) return;
+    const patch: Partial<UserProfile> = { progressPhotos: nextPhotos.slice(0, 12) };
+    if (serverSession && onPatchUser) {
+      await onPatchUser(patch);
+    } else if (onChangeUser) {
+      onChangeUser({ ...user, ...patch });
+    }
+  };
+
+  const addProgressPhoto = async (file: File) => {
+    if (!user) return;
+    setProgressPhotoBusy(true);
+    setProgressPhotoError(null);
+    try {
+      const { photo, thumb } = await compressProgressPhoto(file);
+      const next: ProgressPhoto[] = [
+        {
+          date: new Date().toISOString(),
+          photo,
+          thumb,
+          note: progressPhotoNote.trim() || undefined,
+        },
+        ...(user.progressPhotos || []),
+      ].slice(0, 12);
+      await saveProgressPhotos(next);
+      setProgressPhotoNote('');
+      if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
+    } catch (e: any) {
+      setProgressPhotoError(e?.message || 'Не удалось добавить фото');
+    } finally {
+      setProgressPhotoBusy(false);
+    }
+  };
+
+  const removeProgressPhoto = async (index: number) => {
+    if (!user) return;
+    const next = (user.progressPhotos || []).filter((_, i) => i !== index);
+    await saveProgressPhotos(next);
   };
 
   const syncDescription = syncStateLabel(syncState);
@@ -468,6 +555,97 @@ export default function SettingsScreen({
                     <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
                     <div className="text-slate-500 text-xs">Обхваты: {profileSummary?.bodyMeasurements}</div>
                   </div>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Фото прогресса</div>
+                    <div className="text-slate-100 font-black">История визуальных замеров</div>
+                    <div className="text-slate-500 text-sm mt-2">Загружайте фото с телефона или камеры. Мы храним миниатюры, чтобы не забивать память.</div>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center border bg-indigo-500/10 border-indigo-500/30 text-indigo-300">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <input
+                  ref={progressPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void addProgressPhoto(file);
+                  }}
+                />
+
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3">
+                  <input
+                    value={progressPhotoNote}
+                    onChange={(e) => setProgressPhotoNote(e.target.value)}
+                    className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                    placeholder="Подпись к фото: например, месяц 1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => progressPhotoInputRef.current?.click()}
+                    disabled={progressPhotoBusy}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {progressPhotoBusy ? 'Загрузка…' : 'Добавить фото'}
+                  </button>
+                </div>
+
+                {progressPhotoError && (
+                  <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
+                    {progressPhotoError}
+                  </div>
+                )}
+
+                {latestProgressPhoto && (
+                  <div className="mt-4 rounded-[1rem] border border-slate-800 bg-slate-950/50 p-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Последнее фото</div>
+                    <div className="mt-2 grid grid-cols-[72px_minmax(0,1fr)] gap-3 items-center">
+                      <img src={latestProgressPhoto.thumb} alt="Последнее фото прогресса" className="w-[72px] h-[72px] rounded-[1rem] object-cover border border-slate-800" />
+                      <div className="min-w-0">
+                        <div className="text-slate-100 font-black truncate">{latestProgressPhoto.note || 'Без подписи'}</div>
+                        <div className="text-slate-500 text-xs mt-1">{new Date(latestProgressPhoto.date).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Галерея ({progressPhotos.length})</div>
+                  {progressPhotos.length ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {progressPhotos.slice(0, 8).map((photo, index) => (
+                        <div key={`${photo.date}-${index}`} className="relative group rounded-[1rem] overflow-hidden border border-slate-800 bg-slate-950">
+                          <img src={photo.thumb} alt={photo.note || `Фото прогресса ${index + 1}`} className="w-full aspect-square object-cover" />
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                            <div className="text-[10px] font-black text-white truncate">{photo.note || 'Фото прогресса'}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void removeProgressPhoto(index)}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all w-8 h-8 rounded-full bg-black/70 border border-white/10 text-white flex items-center justify-center"
+                            aria-label="Удалить фото"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[1rem] border border-dashed border-slate-800 bg-slate-950/30 px-4 py-6 text-slate-500 text-sm">
+                      Пока нет фото прогресса. Добавьте первое, чтобы начать визуальный архив.
+                    </div>
+                  )}
                 </div>
               </div>
 

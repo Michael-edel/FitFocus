@@ -107,6 +107,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,
     riskAcknowledgedGain: !!(deps.regData as any).riskAckGain,
     weightHistory: [{ date: new Date().toISOString().slice(0, 10), weight: deps.regData.weight }],
+    progressPhotos: [],
     tasks: [],
     plan: deps.regData.plan,
   } as UserProfile;
