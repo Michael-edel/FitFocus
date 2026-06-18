@@ -1176,7 +1176,7 @@ const openEditFood = (item: FoodEntry) => {
     { title: 'AI анализирует профиль…', subtitle: 'Считываем параметры и контекст цели', icon: Brain },
     { title: 'Считаем метаболизм и KPI…', subtitle: 'BMR, TDEE и дневные макросы', icon: Activity },
     { title: 'Готовим персональную стратегию…', subtitle: 'Подбираем режим и прогноз на 4 недели', icon: Sparkles },
-    { title: 'Защищаем ваши данные…', subtitle: 'Offline-first: всё остаётся на устройстве', icon: ShieldCheck },
+    { title: 'Сохраняем и синхронизируем данные…', subtitle: 'Сначала локально, затем в облако', icon: ShieldCheck },
   ]), []);
   const ACTIVATION_STEP_MS = Math.round(ACTIVATION_TOTAL_MS / ACTIVATION_STEPS.length);
 

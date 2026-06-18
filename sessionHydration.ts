@@ -1,6 +1,7 @@
 import { createTask } from './coach';
 import { type FoodItem, type FavoriteRecipe, type UserHabit, type UserProfile } from './types';
 import type { WeeklyStoredReport } from './weeklyAutoEngine';
+import { rememberRemoteStateVersion } from './storage/hybrid';
 
 type HydratedSession = {
   currentUser: UserProfile;
@@ -46,6 +47,9 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
           kv[it.key] = it.value;
           try {
             localStorage.setItem(it.key, it.value);
+            if (typeof it.version === 'number') {
+              rememberRemoteStateVersion(it.key, it.version);
+            }
           } catch {}
         }
       }
