@@ -21,6 +21,10 @@ function withFetch(fetchImpl?: typeof fetch) {
   return fetchImpl ?? fetch;
 }
 
+function isAccessDeniedStatus(status: number) {
+  return status === 401 || status === 403;
+}
+
 async function handleProfileConflict(
   response: Response,
   deps: ProfileSyncDeps,
@@ -48,6 +52,10 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (isAccessDeniedStatus(r.status)) {
+      deps.setProfileSyncState('idle');
+      return;
+    }
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
@@ -104,6 +112,10 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
     });
+    if (isAccessDeniedStatus(r.status)) {
+      deps.setProfileSyncState('idle');
+      return;
+    }
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
@@ -151,6 +163,10 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
   const fetchFn = withFetch(deps.fetchImpl);
   try {
     const pr = await fetchFn('/api/profile', { credentials: 'include' });
+    if (isAccessDeniedStatus(pr.status)) {
+      deps.setProfileSyncState('idle');
+      return;
+    }
     if (!pr.ok) throw new Error('PROFILE_LOAD_FAILED');
     const pj = await pr.json();
     const profile = pj?.profile as UserProfile | null;
