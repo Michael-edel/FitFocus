@@ -70,6 +70,13 @@ import {
   supportsFileSystemAccessApi,
   writeBackupToHandle,
 } from './backup';
+import {
+  collectLocalStateItems,
+  persistAllUsersSnapshot,
+  readStoredAllUsersSnapshot,
+  safeRemoveItem,
+  safeSetItem,
+} from './storage/hybrid';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
@@ -187,85 +194,6 @@ type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
 
 const MAX_DIARY_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 500;
-
-/**
- * Безопасное сохранение в localStorage с обработкой переполнения
- */
-const safeSetItem = (key: string, value: string) => {
-  try {
-    localStorage.setItem(key, value);
-    enqueueRemoteKVWrite(key, value);
-  } catch (e) {
-    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-      console.warn('LocalStorage quota exceeded. Consider clearing old data.');
-    } else {
-      console.warn('LocalStorage write failed:', e);
-    }
-  }
-};
-
-const safeRemoveItem = (key: string) => {
-  try {
-    localStorage.removeItem(key);
-    enqueueRemoteKVDelete(key);
-  } catch {
-    // ignore
-  }
-};
-
-// --- Server-driven persistence (D1 remote) ---
-// We keep localStorage as a fast cache, but D1 is the source-of-truth.
-// Any key under fitfocus_data_* is mirrored to /api/state.
-type KVItem = { key: string; value: string };
-const __kvQueue: KVItem[] = [];
-const __kvDeleteQueue: string[] = [];
-let __kvTimer: number | null = null;
-let __kvDeleteTimer: number | null = null;
-
-function enqueueRemoteKVWrite(key: string, value: string) {
-  if (!key.startsWith('fitfocus_') && !key.startsWith('ff_')) return;
-  __kvQueue.push({ key, value });
-
-  if (__kvTimer != null) return;
-  __kvTimer = window.setTimeout(async () => {
-    __kvTimer = null;
-    const batch = __kvQueue.splice(0, __kvQueue.length);
-    if (!batch.length) return;
-    try {
-      await fetch('/api/state', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: batch }),
-      });
-    } catch {
-      // ignore network errors; will retry on next write
-    }
-  }, 400);
-}
-
-function enqueueRemoteKVDelete(key: string) {
-  if (!key.startsWith('fitfocus_') && !key.startsWith('ff_')) return;
-  __kvDeleteQueue.push(key);
-
-  if (__kvDeleteTimer != null) return;
-  __kvDeleteTimer = window.setTimeout(async () => {
-    __kvDeleteTimer = null;
-    const batch = __kvDeleteQueue.splice(0, __kvDeleteQueue.length);
-    if (!batch.length) return;
-    try {
-      await Promise.all(batch.map((k) =>
-        fetch(`/api/state?key=${encodeURIComponent(k)}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        })
-      ));
-    } catch {
-      // ignore network errors; deletes will eventually be cleaned up by resync
-    }
-  }, 400);
-}
-
 
 // Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
 const evictLargeLocalStorage = () => {
@@ -1910,55 +1838,6 @@ const deleteAccount = useCallback(async () => {
 
 
   const suppressNextFullProfileSyncRef = useRef(false);
-
-  const collectLocalStateItems = useCallback((userId: string) => {
-    const prefixes = [
-      `fitfocus_data_${userId}_`,
-      `ff_gemini_cooldown_until`,
-      `ff_ai_last_status_v1`,
-      `ff_ai_last_action_v1`,
-      `ff_ai_feature_lastcall_v1:`,
-    ];
-    const items: { key: string; value: string }[] = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const k = localStorage.key(i);
-      if (!k) continue;
-      if (!prefixes.some((prefix) => k.startsWith(prefix))) continue;
-      const v = localStorage.getItem(k);
-      if (typeof v === 'string') items.push({ key: k, value: v });
-    }
-    return items;
-  }, []);
-
-  function allUsersStorageKey(userId?: string | null) {
-    return `fitfocus_data_${userId || 'unknown'}_all_users`;
-  }
-
-  function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: UserProfile[]) {
-    if (!ownerUserId) return;
-    safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(next));
-  }
-
-  function readStoredAllUsersSnapshot(): UserProfile[] | null {
-    const candidates: string[] = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const k = localStorage.key(i);
-      if (!k || !k.startsWith('fitfocus_data_') || !k.endsWith('_all_users')) continue;
-      if (!candidates.includes(k)) candidates.push(k);
-    }
-    let best: UserProfile[] | null = null;
-    for (const key of candidates) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          if (!best || parsed.length > best.length) best = parsed as UserProfile[];
-        }
-      } catch {}
-    }
-    return best;
-  }
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     setProfileSyncState('saving');
