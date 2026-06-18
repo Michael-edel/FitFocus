@@ -749,7 +749,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  */
 export async function getCoachAdvice(data: any): Promise<any> {
   const response = await callAiProxy('gemini-2.5-flash', 
-    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке и восстановлению. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
+    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, обхваты, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке и восстановлению. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
       responseMimeType: "application/json",
@@ -879,7 +879,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     );
   };
 
-  const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\nЕсли у пользователя указаны давление, пульс, история замеров или медицинские ограничения, учитывай их при выборе нагрузки, темпа прогрессии, соли и восстановительных рекомендаций.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
+  const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\nЕсли у пользователя указаны давление, пульс, обхваты, история замеров или медицинские ограничения, учитывай их при выборе нагрузки, темпа прогрессии, соли и восстановительных рекомендаций.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
 
   const repairPrompt = (badJson: any) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
 

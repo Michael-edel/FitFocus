@@ -17,6 +17,9 @@ type RegDataLike = {
   bloodPressureSystolic?: number;
   bloodPressureDiastolic?: number;
   restingPulse?: number;
+  waistCm?: number;
+  chestCm?: number;
+  hipsCm?: number;
   lossDeficit?: number;
   gainSurplus?: number;
 };
@@ -83,11 +86,18 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
     bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
     bloodPressureMeasuredAt: Number(deps.regData.bloodPressureSystolic || 0) > 0 && Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? new Date().toISOString() : undefined,
+    waistCm: Number(deps.regData.waistCm || 0) > 0 ? Math.floor(Number(deps.regData.waistCm)) : undefined,
+    chestCm: Number(deps.regData.chestCm || 0) > 0 ? Math.floor(Number(deps.regData.chestCm)) : undefined,
+    hipsCm: Number(deps.regData.hipsCm || 0) > 0 ? Math.floor(Number(deps.regData.hipsCm)) : undefined,
+    bodyMeasurementsMeasuredAt: Number(deps.regData.waistCm || 0) > 0 || Number(deps.regData.chestCm || 0) > 0 || Number(deps.regData.hipsCm || 0) > 0 ? new Date().toISOString() : undefined,
     restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,
     restingPulseMeasuredAt: Number(deps.regData.restingPulse || 0) > 0 ? new Date().toISOString() : undefined,
     measurementsHistory: [{
       date: new Date().toISOString(),
       weight: Math.max(0, deps.regData.weight || 0),
+      waistCm: Number(deps.regData.waistCm || 0) > 0 ? Math.floor(Number(deps.regData.waistCm)) : undefined,
+      chestCm: Number(deps.regData.chestCm || 0) > 0 ? Math.floor(Number(deps.regData.chestCm)) : undefined,
+      hipsCm: Number(deps.regData.hipsCm || 0) > 0 ? Math.floor(Number(deps.regData.hipsCm)) : undefined,
       bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
       bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
       restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,

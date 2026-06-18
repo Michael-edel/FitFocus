@@ -170,6 +170,9 @@ export default function SettingsScreen({
   const [draftBloodPressureSystolic, setDraftBloodPressureSystolic] = useState('');
   const [draftBloodPressureDiastolic, setDraftBloodPressureDiastolic] = useState('');
   const [draftRestingPulse, setDraftRestingPulse] = useState('');
+  const [draftWaistCm, setDraftWaistCm] = useState('');
+  const [draftChestCm, setDraftChestCm] = useState('');
+  const [draftHipsCm, setDraftHipsCm] = useState('');
   const [profileDirty, setProfileDirty] = useState(false);
 
   const latestMeasurement = useMemo(() => {
@@ -185,6 +188,11 @@ export default function SettingsScreen({
       targetWeight: Number(user.targetWeight || 0),
       bloodPressure: user.bloodPressureSystolic && user.bloodPressureDiastolic ? `${Math.round(Number(user.bloodPressureSystolic))}/${Math.round(Number(user.bloodPressureDiastolic))}` : '—',
       restingPulse: user.restingPulse ? `${Math.round(Number(user.restingPulse))}` : '—',
+      bodyMeasurements: [
+        user.waistCm ? `талия ${Math.round(Number(user.waistCm))} см` : null,
+        user.chestCm ? `грудь ${Math.round(Number(user.chestCm))} см` : null,
+        user.hipsCm ? `бедра ${Math.round(Number(user.hipsCm))} см` : null,
+      ].filter(Boolean).join(' · ') || '—',
     };
   }, [user]);
 
@@ -198,8 +206,11 @@ export default function SettingsScreen({
     setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
     setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
     setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
+    setDraftWaistCm(user.waistCm ? String(user.waistCm) : '');
+    setDraftChestCm(user.chestCm ? String(user.chestCm) : '');
+    setDraftHipsCm(user.hipsCm ? String(user.hipsCm) : '');
     setProfileDirty(false);
-  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse]);
+  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.waistCm, user?.chestCm, user?.hipsCm]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -241,11 +252,17 @@ export default function SettingsScreen({
     const parsedBloodPressureSystolic = Number(draftBloodPressureSystolic || 0);
     const parsedBloodPressureDiastolic = Number(draftBloodPressureDiastolic || 0);
     const parsedRestingPulse = Number(draftRestingPulse || 0);
+    const parsedWaistCm = Number(draftWaistCm || 0);
+    const parsedChestCm = Number(draftChestCm || 0);
+    const parsedHipsCm = Number(draftHipsCm || 0);
     const bloodPressureMeasuredAt = new Date().toISOString();
     const hasMeasurement =
       (Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0) ||
       (Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0) ||
-      (Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0);
+      (Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0) ||
+      (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) ||
+      (Number.isFinite(parsedChestCm) && parsedChestCm > 0) ||
+      (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0);
 
     const patch: Partial<UserProfile> = {
       name: safeName,
@@ -256,6 +273,10 @@ export default function SettingsScreen({
       bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : user.bloodPressureSystolic,
       bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : user.bloodPressureDiastolic,
       bloodPressureMeasuredAt: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 && Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? bloodPressureMeasuredAt : user.bloodPressureMeasuredAt,
+      waistCm: Number.isFinite(parsedWaistCm) && parsedWaistCm > 0 ? Math.round(parsedWaistCm) : user.waistCm,
+      chestCm: Number.isFinite(parsedChestCm) && parsedChestCm > 0 ? Math.round(parsedChestCm) : user.chestCm,
+      hipsCm: Number.isFinite(parsedHipsCm) && parsedHipsCm > 0 ? Math.round(parsedHipsCm) : user.hipsCm,
+      bodyMeasurementsMeasuredAt: (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) || (Number.isFinite(parsedChestCm) && parsedChestCm > 0) || (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0) ? bloodPressureMeasuredAt : user.bodyMeasurementsMeasuredAt,
       restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : user.restingPulse,
       restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? bloodPressureMeasuredAt : user.restingPulseMeasuredAt,
     };
@@ -267,6 +288,9 @@ export default function SettingsScreen({
         weight: user.weight,
         bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : undefined,
         bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : undefined,
+        waistCm: Number.isFinite(parsedWaistCm) && parsedWaistCm > 0 ? Math.round(parsedWaistCm) : undefined,
+        chestCm: Number.isFinite(parsedChestCm) && parsedChestCm > 0 ? Math.round(parsedChestCm) : undefined,
+        hipsCm: Number.isFinite(parsedHipsCm) && parsedHipsCm > 0 ? Math.round(parsedHipsCm) : undefined,
         restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : undefined,
       };
       patch.measurementsHistory = [entry, ...history].slice(0, 30);
@@ -395,6 +419,39 @@ export default function SettingsScreen({
                       />
                     </label>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Талия</div>
+                      <input
+                        value={draftWaistCm}
+                        onChange={(e) => { setDraftWaistCm(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="см"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Грудь</div>
+                      <input
+                        value={draftChestCm}
+                        onChange={(e) => { setDraftChestCm(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="см"
+                      />
+                    </label>
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Бедра</div>
+                      <input
+                        value={draftHipsCm}
+                        onChange={(e) => { setDraftHipsCm(e.target.value); setProfileDirty(true); }}
+                        inputMode="numeric"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="см"
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -409,6 +466,7 @@ export default function SettingsScreen({
                   <div className="text-sm text-slate-400 space-y-1">
                     {profileSummary?.email}
                     <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
+                    <div className="text-slate-500 text-xs">Обхваты: {profileSummary?.bodyMeasurements}</div>
                   </div>
                 </div>
               </div>
