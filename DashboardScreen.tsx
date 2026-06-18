@@ -158,6 +158,15 @@ export default function DashboardScreen({
   const wearableDetail = currentUser?.wearableEnabled
     ? `Обновлено ${formatShortDateTime(currentUser?.wearableMetricsUpdatedAt)}`
     : 'Подключите Apple Health, Google Fit или другой источник.';
+  const wearableStepsLabel = typeof currentUser?.wearableStepsToday === 'number'
+    ? currentUser.wearableStepsToday.toLocaleString('ru-RU')
+    : '—';
+  const wearableMinutesLabel = typeof currentUser?.wearableActiveMinutesToday === 'number'
+    ? `${currentUser.wearableActiveMinutesToday} мин`
+    : '—';
+  const wearableSleepLabel = typeof currentUser?.wearableSleepHoursLastNight === 'number'
+    ? `${currentUser.wearableSleepHoursLastNight.toFixed(1)} ч`
+    : '—';
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -255,6 +264,20 @@ export default function DashboardScreen({
             </div>
             <div className="mt-3 text-lg font-black text-slate-100">{wearableState}</div>
             <div className="mt-1 text-xs text-slate-500">{wearableDetail}</div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Шаги</div>
+                <div className="mt-1 text-sm font-black text-slate-100 tabular-nums">{wearableStepsLabel}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Активность</div>
+                <div className="mt-1 text-sm font-black text-slate-100 tabular-nums">{wearableMinutesLabel}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Сон</div>
+                <div className="mt-1 text-sm font-black text-slate-100 tabular-nums">{wearableSleepLabel}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
