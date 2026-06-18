@@ -817,6 +817,12 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 
   const normalizePlan = (p: any): AIPlan => {
     const plan: any = p && typeof p === 'object' ? p : {};
+    const stripMealPrefix = (value: string, label: string) => {
+      const raw = String(value || '').trim();
+      if (!raw) return raw;
+      const rx = new RegExp(`^${label}\\s*[:\\-–—]?\\s*`, 'i');
+      return raw.replace(rx, '').trim();
+    };
     const out: any = {
       title: clamp(String(plan.title || 'Ваш AI‑план'), LIMITS.title),
       strategySummary: clamp(String(plan.strategySummary || ''), LIMITS.strategySummary),
@@ -842,10 +848,14 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     if (!isNonEmptyStr(out.weeklyFocus)) out.weeklyFocus = 'Стабильный режим: питание, шаги, силовые 2–3 раза.';
     if (out.rules.length === 0) out.rules = ['Белок в каждом приёме пищи.', 'Вода 2–2.5 л/день.', 'Овощи на половину тарелки в обед/ужин.'];
     if (out.firstTasks.length === 0) out.firstTasks = ['Купить кухонные весы.', 'Запланировать 3 дня питания.', 'Сделать 2 короткие тренировки на неделе.'];
-    if (!isNonEmptyStr(out.mealTemplate.snack)) out.mealTemplate.snack = 'Перекус: творог/йогурт + ягоды или фрукт + 20–30 г орехов.';
-    if (!isNonEmptyStr(out.mealTemplate.breakfast)) out.mealTemplate.breakfast = 'Завтрак: каша/йогурт + фрукты + 1–2 яйца/творог.';
-    if (!isNonEmptyStr(out.mealTemplate.lunch)) out.mealTemplate.lunch = 'Обед: белок + гарнир + овощи (например, курица + рис/гречка + салат).';
-    if (!isNonEmptyStr(out.mealTemplate.dinner)) out.mealTemplate.dinner = 'Ужин: белок + овощи (рыба/мясо/творог + овощи).';
+    out.mealTemplate.breakfast = stripMealPrefix(out.mealTemplate.breakfast, 'Завтрак');
+    out.mealTemplate.lunch = stripMealPrefix(out.mealTemplate.lunch, 'Обед');
+    out.mealTemplate.dinner = stripMealPrefix(out.mealTemplate.dinner, 'Ужин');
+    out.mealTemplate.snack = stripMealPrefix(out.mealTemplate.snack, 'Перекус');
+    if (!isNonEmptyStr(out.mealTemplate.snack)) out.mealTemplate.snack = 'Творог/йогурт + ягоды или фрукт + 20–30 г орехов.';
+    if (!isNonEmptyStr(out.mealTemplate.breakfast)) out.mealTemplate.breakfast = 'Каша/йогурт + фрукты + 1–2 яйца/творог.';
+    if (!isNonEmptyStr(out.mealTemplate.lunch)) out.mealTemplate.lunch = 'Белок + гарнир + овощи (например, курица + рис/гречка + салат).';
+    if (!isNonEmptyStr(out.mealTemplate.dinner)) out.mealTemplate.dinner = 'Белок + овощи (рыба/мясо/творог + овощи).';
     return out as AIPlan;
   };
 
