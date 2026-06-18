@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowRight,
   Camera,
+  CalendarDays,
   Cloud,
   RefreshCcw,
   Scale,
@@ -174,6 +175,78 @@ export default function ProgressScreen({
   const progressPhotosSorted = useMemo(() => {
     return [...(progressPhotos || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [progressPhotos]);
+
+  const timelineGroups = useMemo(() => {
+    type TimelineItem =
+      | { kind: 'measurement'; date: string; title: string; detail: string; tone: string }
+      | { kind: 'photo'; date: string; title: string; detail: string; tone: string; thumb?: string }
+      | { kind: 'wearable'; date: string; title: string; detail: string; tone: string };
+
+    const items: TimelineItem[] = [];
+
+    recentMeasurements.forEach((item) => {
+      const parts = [
+        typeof item.weight === 'number' ? `${item.weight.toFixed(1)} кг` : null,
+        typeof item.waistCm === 'number' ? `талия ${item.waistCm} см` : null,
+        typeof item.restingPulse === 'number' ? `пульс ${item.restingPulse}` : null,
+      ].filter(Boolean) as string[];
+      items.push({
+        kind: 'measurement',
+        date: item.date,
+        title: 'Замер',
+        detail: parts.length ? parts.join(' · ') : 'Обновлён профиль тела',
+        tone: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
+      });
+    });
+
+    progressPhotosSorted.forEach((photo) => {
+      items.push({
+        kind: 'photo',
+        date: photo.date,
+        title: 'Фото',
+        detail: photo.note || 'Фото прогресса',
+        tone: 'bg-fuchsia-500/10 text-fuchsia-200 border-fuchsia-500/20',
+        thumb: photo.thumb,
+      });
+    });
+
+    if (wearableMetricsUpdatedAt || wearableLastSyncAt || wearableConnectedAt) {
+      const wearableDate = wearableMetricsUpdatedAt || wearableLastSyncAt || wearableConnectedAt || new Date().toISOString();
+      const details = [
+        typeof wearableStepsToday === 'number' ? `${wearableStepsToday.toLocaleString('ru-RU')} шагов` : null,
+        typeof wearableActiveMinutesToday === 'number' ? `${wearableActiveMinutesToday} мин` : null,
+        typeof wearableSleepHoursLastNight === 'number' ? `${wearableSleepHoursLastNight.toFixed(1)} ч сна` : null,
+      ].filter(Boolean) as string[];
+      items.push({
+        kind: 'wearable',
+        date: wearableDate,
+        title: 'Часы',
+        detail: details.length ? details.join(' · ') : 'Источник подключён, данные ждут обновления',
+        tone: 'bg-sky-500/10 text-sky-200 border-sky-500/20',
+      });
+    }
+
+    const groups = new Map<string, { key: string; label: string; date: number; items: TimelineItem[] }>();
+    items
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .forEach((item) => {
+        const dateObj = new Date(item.date);
+        const key = Number.isNaN(dateObj.getTime()) ? item.date.slice(0, 10) : dateObj.toISOString().slice(0, 10);
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            label: Number.isNaN(dateObj.getTime())
+              ? item.date
+              : dateObj.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' }),
+            date: Number.isNaN(dateObj.getTime()) ? 0 : dateObj.getTime(),
+            items: [],
+          });
+        }
+        groups.get(key)!.items.push(item);
+      });
+
+    return [...groups.values()].sort((a, b) => b.date - a.date).slice(0, 8);
+  }, [progressPhotosSorted, recentMeasurements, wearableActiveMinutesToday, wearableConnectedAt, wearableLastSyncAt, wearableMetricsUpdatedAt, wearableSleepHoursLastNight, wearableStepsToday]);
 
   const latestPhoto = progressPhotosSorted[0] || null;
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
@@ -643,6 +716,65 @@ export default function ProgressScreen({
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Лента прогресса</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-100">Фото, замеры и часы по датам</h2>
+            <p className="mt-2 text-sm font-medium text-slate-400">Одна хронология вместо разрозненных блоков: так проще увидеть, что именно менялось в конкретный день.</p>
+          </div>
+          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <CalendarDays size={12} className="text-indigo-300" />
+            Последние события
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {timelineGroups.length ? (
+            timelineGroups.map((group) => (
+              <div key={group.key} className="rounded-[1.5rem] border border-slate-800 bg-slate-950/35 p-4 md:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Дата</div>
+                    <div className="text-slate-100 font-black text-lg">{group.label}</div>
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 tabular-nums">{group.items.length} событий</div>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {group.items.map((item, index) => (
+                    <div key={`${group.key}-${item.kind}-${index}`} className={clsx('rounded-[1.25rem] border px-4 py-4', item.tone)}>
+                      <div className="flex items-start gap-3">
+                        {item.kind === 'photo' && item.thumb ? (
+                          <img src={item.thumb} alt={item.detail} className="w-14 h-14 rounded-[1rem] object-cover border border-white/10 shrink-0" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-[1rem] bg-slate-950/50 border border-white/10 flex items-center justify-center shrink-0">
+                            {item.kind === 'measurement' ? <Scale size={18} /> : item.kind === 'wearable' ? <Watch size={18} /> : <Camera size={18} />}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="text-[10px] font-black uppercase tracking-widest">{item.title}</div>
+                            <div className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border border-white/10 bg-black/10 text-slate-200/90">
+                              {item.kind === 'measurement' ? 'замер' : item.kind === 'wearable' ? 'часы' : 'фото'}
+                            </div>
+                          </div>
+                          <div className="mt-1 text-sm font-semibold text-slate-100 break-words">{item.detail}</div>
+                          <div className="mt-2 text-[11px] text-slate-300">{formatDate(item.date)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-800 bg-slate-950/30 px-4 py-8 text-slate-500 text-sm">
+              Пока нет истории прогресса. Добавьте первый замер, фото или wearable-событие, чтобы тут появилась лента.
+            </div>
+          )}
         </div>
       </section>
 
