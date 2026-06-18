@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import clsx from 'clsx';
-import { ArrowLeft, Camera, CalendarDays, Scale, Sparkles, TrendingUp, Watch } from 'lucide-react';
+import { ArrowLeft, Camera, CalendarDays, Cloud, Scale, Sparkles, TrendingUp, Watch } from 'lucide-react';
 import {
   CartesianGrid,
   Line,
@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { downloadProgressArchivePdf } from './pdf';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type ProgressArchiveScreenProps = {
@@ -117,6 +118,49 @@ export default function ProgressArchiveScreen({
     return parts.join(' · ');
   }, [waistDiff, weightDiff]);
 
+  const exportArchivePdf = async () => {
+    if (!currentUser) return;
+    await downloadProgressArchivePdf({
+      userName: currentUser.name || 'Пользователь',
+      generatedAt: new Date().toLocaleString('ru-RU'),
+      startLabel: archiveStartDate ? formatDate(archiveStartDate) : '—',
+      endLabel: archiveEndDate ? formatDate(archiveEndDate) : '—',
+      startDate: archiveStartDate,
+      endDate: archiveEndDate,
+      spanDays: archiveSpanDays,
+      startWeight: weightStart?.weight ?? null,
+      endWeight: latestMeasurement?.weight ?? currentWeight ?? null,
+      startWaist: weightStart?.waistCm ?? null,
+      endWaist: latestMeasurement?.waistCm ?? null,
+      startPhoto: photoStart?.thumb ?? null,
+      endPhoto: latestPhoto?.thumb ?? null,
+      startNote: photoStart?.note ?? null,
+      endNote: latestPhoto?.note ?? null,
+      totalPhotos: progressPhotosSorted.length,
+      totalMeasurements: measurementsSorted.length,
+      wearableLabel: wearableProvider && wearableEnabled !== false ? providerLabel(wearableProvider) : 'Ручной ввод',
+      wearableLastSyncAt,
+      wearableMetricsUpdatedAt,
+      summary: progressSummary,
+      timelineItems: archiveTimeline.slice(0, 8),
+    });
+  };
+
+  const providerLabel = (provider: WearableProvider) => {
+    switch (provider) {
+      case 'apple_health':
+        return 'Apple Health';
+      case 'google_fit':
+        return 'Google Fit';
+      case 'fitbit':
+        return 'Fitbit';
+      case 'garmin':
+        return 'Garmin';
+      default:
+        return 'Ручной импорт';
+    }
+  };
+
   const weightTrendData = useMemo(() => {
     return [...(weightHistory || [])]
       .filter((item) => item?.date && typeof item.weight === 'number')
@@ -207,6 +251,14 @@ export default function ProgressArchiveScreen({
           >
             <Camera className="w-4 h-4" />
             Добавить фото
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportArchivePdf()}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
+          >
+            <Cloud className="w-4 h-4" />
+            Экспорт PDF
           </button>
         </div>
       </div>
