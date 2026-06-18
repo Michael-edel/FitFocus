@@ -332,6 +332,9 @@ export default function PlanScreen({
                 })}
               </div>
             </div>
+            <div className="px-1 text-[11px] font-black uppercase tracking-widest text-slate-500">
+              Выберите день выше, чтобы переключить карточку. В каждом приёме показана доля от дневного рациона и краткое резюме по БЖУ.
+            </div>
 
             {weeklyMenuDay && (() => {
               const d = weeklyMenuDay;
@@ -378,17 +381,16 @@ export default function PlanScreen({
                               <div className="flex items-center gap-2">
                                 <span className="text-base font-black text-white">{mealLabels[mealKey]}</span>
                                 <span className="px-2 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-200">
-                                  {Math.round(share * 100)}%
+                                  Доля дня {Math.round(share * 100)}%
                                 </span>
                               </div>
-                              <div className="mt-1 text-[11px] font-black uppercase tracking-widest text-slate-500">Нажмите сверху на другой день, чтобы переключить карточку</div>
                             </div>
                             {macros && (
                               <div className="flex flex-wrap justify-start md:justify-end gap-2">
-                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.calories} ккал</span>
-                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.protein}Б</span>
-                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.fat}Ж</span>
-                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">{macros.carbs}У</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">Ккал {macros.calories}</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">Б {macros.protein}</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">Ж {macros.fat}</span>
+                                <span className="px-2.5 py-1 rounded-full bg-slate-900/70 border border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-300 tabular-nums">У {macros.carbs}</span>
                               </div>
                             )}
                           </div>
@@ -396,9 +398,17 @@ export default function PlanScreen({
                           <div className="p-4">
                             <div className="grid grid-cols-1 gap-2">
                               {lines.length > 0 ? lines.map((line, idx) => (
-                                <div key={idx} className="flex items-start justify-between gap-3 rounded-[1rem] bg-slate-900/35 border border-slate-800 px-3 py-2">
+                                <div
+                                  key={idx}
+                                  className={clsx(
+                                    'flex items-start justify-between gap-3 rounded-[1rem] border px-3 py-2',
+                                    idx === 0
+                                      ? 'bg-emerald-500/6 border-emerald-500/20'
+                                      : 'bg-amber-500/6 border-amber-500/20'
+                                  )}
+                                >
                                   <div className="min-w-0">
-                                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">{idx === 0 ? 'Блюдо' : 'Дополнение'}</div>
+                                    <div className={clsx('text-[11px] font-black uppercase tracking-widest', idx === 0 ? 'text-emerald-300' : 'text-amber-300')}>{idx === 0 ? 'Блюдо' : 'Дополнение'}</div>
                                     <div className="mt-1 text-sm font-semibold text-slate-100 leading-relaxed break-words">{line.text}</div>
                                   </div>
                                   {line.qty ? <div className="shrink-0 text-[11px] font-black uppercase tracking-widest text-slate-300 tabular-nums whitespace-nowrap">{line.qty}</div> : null}
