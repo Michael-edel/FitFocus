@@ -77,6 +77,32 @@ export default function ProgressArchiveScreen({
   const previousMeasurement = measurementsSorted.length > 1 ? measurementsSorted[1] : null;
   const latestPhoto = progressPhotosSorted[0] || null;
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
+  const startMeasurement = measurementsSorted[measurementsSorted.length - 1] || latestMeasurement;
+  const startPhoto = progressPhotosSorted[progressPhotosSorted.length - 1] || latestPhoto;
+  const archiveStartDate = startMeasurement?.date || startPhoto?.date || null;
+  const archiveEndDate = latestMeasurement?.date || latestPhoto?.date || null;
+  const archiveSpanDays =
+    archiveStartDate && archiveEndDate
+      ? Math.max(0, Math.round((new Date(archiveEndDate).getTime() - new Date(archiveStartDate).getTime()) / 86400000))
+      : null;
+  const weightStart = startMeasurement;
+  const photoStart = startPhoto;
+  const weightDiff =
+    latestMeasurement && weightStart && typeof latestMeasurement.weight === 'number' && typeof weightStart.weight === 'number'
+      ? latestMeasurement.weight - weightStart.weight
+      : null;
+  const waistDiff =
+    latestMeasurement && weightStart && typeof latestMeasurement.waistCm === 'number' && typeof weightStart.waistCm === 'number'
+      ? latestMeasurement.waistCm - weightStart.waistCm
+      : null;
+  const firstWeightLabel = typeof weightStart?.weight === 'number' ? `${weightStart.weight.toFixed(1)} кг` : '—';
+  const latestWeightLabel = typeof latestMeasurement?.weight === 'number'
+    ? `${latestMeasurement.weight.toFixed(1)} кг`
+    : typeof currentWeight === 'number'
+      ? `${currentWeight.toFixed(1)} кг`
+      : '—';
+  const firstWaistLabel = typeof weightStart?.waistCm === 'number' ? `${weightStart.waistCm} см` : '—';
+  const latestWaistLabel = typeof latestMeasurement?.waistCm === 'number' ? `${latestMeasurement.waistCm} см` : '—';
 
   const weightTrendData = useMemo(() => {
     return [...(weightHistory || [])]
@@ -257,6 +283,67 @@ export default function ProgressArchiveScreen({
       </section>
 
       <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">До / после</div>
+            <h2 className="mt-2 text-2xl font-black text-slate-100">Сравнение прогресса</h2>
+            <p className="mt-2 text-sm text-slate-400">Быстрый ответ на вопрос, что изменилось между первой и последней точкой.</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-300">
+            <TrendingUp size={18} />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Metric
+            label="Период"
+            value={archiveSpanDays !== null ? `${archiveSpanDays} дн.` : '—'}
+            delta={archiveStartDate && archiveEndDate ? `${formatDate(archiveStartDate)} → ${formatDate(archiveEndDate)}` : 'Нужны две точки'}
+          />
+          <Metric
+            label="Вес"
+            value={weightDiff !== null ? `${weightDiff > 0 ? '+' : ''}${weightDiff.toFixed(1)} кг` : '—'}
+            delta={`${firstWeightLabel} → ${latestWeightLabel}`}
+          />
+          <Metric
+            label="Талия"
+            value={waistDiff !== null ? `${waistDiff > 0 ? '+' : ''}${waistDiff.toFixed(1)} см` : '—'}
+            delta={`${firstWaistLabel} → ${latestWaistLabel}`}
+          />
+          <Metric
+            label="Фото"
+            value={progressPhotosSorted.length ? `${progressPhotosSorted.length} шт.` : '—'}
+            delta={photoStart && latestPhoto ? `${formatDate(photoStart.date)} → ${formatDate(latestPhoto.date)}` : 'Пока нет пары фото'}
+          />
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto_1fr] items-stretch">
+          <CompareCard
+            title="Старт"
+            caption={archiveStartDate ? formatDate(archiveStartDate) : 'Нет даты'}
+            weight={firstWeightLabel}
+            waist={firstWaistLabel}
+            photo={photoStart?.thumb}
+            note={photoStart?.note || 'Первый снимок'}
+          />
+          <div className="hidden lg:flex items-center justify-center">
+            <div className="rounded-full border border-slate-800 bg-slate-950/50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Сравнение
+            </div>
+          </div>
+          <CompareCard
+            title="Сейчас"
+            caption={archiveEndDate ? formatDate(archiveEndDate) : 'Нет даты'}
+            weight={latestWeightLabel}
+            waist={latestWaistLabel}
+            photo={latestPhoto?.thumb}
+            note={latestPhoto?.note || 'Последний снимок'}
+            highlight
+          />
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Тренд веса</div>
@@ -342,6 +429,59 @@ function Metric({ label, value, delta }: { label: string; value: string; delta: 
       <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{value}</div>
       <div className="mt-1 text-sm text-slate-400">{delta}</div>
+    </div>
+  );
+}
+
+function CompareCard({
+  title,
+  caption,
+  weight,
+  waist,
+  photo,
+  note,
+  highlight,
+}: {
+  title: string;
+  caption: string;
+  weight: string;
+  waist: string;
+  photo?: string;
+  note: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={clsx('rounded-[1.6rem] border p-4 md:p-5', highlight ? 'border-indigo-500/30 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/35')}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</div>
+          <div className="mt-1 text-sm text-slate-400">{caption}</div>
+        </div>
+        <div className={clsx('text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border', highlight ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200' : 'border-slate-800 bg-slate-900 text-slate-500')}>
+          {highlight ? 'последняя точка' : 'старт'}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-[1rem] border border-slate-800 bg-slate-950/45 p-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес</div>
+          <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{weight}</div>
+        </div>
+        <div className="rounded-[1rem] border border-slate-800 bg-slate-950/45 p-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
+          <div className="mt-1 text-lg font-black text-slate-100 tabular-nums">{waist}</div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[1.2rem] overflow-hidden border border-slate-800 bg-slate-950">
+        {photo ? (
+          <img src={photo} alt={note} className="aspect-[4/3] w-full object-cover" />
+        ) : (
+          <div className="aspect-[4/3] flex items-center justify-center text-slate-500 text-sm">Нет фото</div>
+        )}
+      </div>
+
+      <div className="mt-3 text-sm text-slate-300">{note}</div>
     </div>
   );
 }
