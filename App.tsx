@@ -2038,6 +2038,36 @@ const logWeight = useCallback(() => {
     return { cooling, label, title };
   }, [aiStatus, lastAiAction]);
 
+  const syncBadge = useMemo(() => {
+    const lastSync = lastProfileSyncAt ? new Date(lastProfileSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+    if (profileSyncState === 'saving') {
+      return {
+        label: 'Cloud: saving',
+        cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
+        title: `Синхронизация с облаком… Последний успешный синк: ${lastSync}`,
+      };
+    }
+    if (profileSyncState === 'saved') {
+      return {
+        label: 'Cloud: saved',
+        cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
+        title: `Синхронизировано с облаком. Последний синк: ${lastSync}`,
+      };
+    }
+    if (profileSyncState === 'error') {
+      return {
+        label: 'Cloud: error',
+        cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
+        title: `Ошибка синхронизации. Последний успешный синк: ${lastSync}`,
+      };
+    }
+    return {
+      label: 'Cloud: idle',
+      cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
+      title: `Синхронизация готова. Последний синк: ${lastSync}`,
+    };
+  }, [lastProfileSyncAt, profileSyncState]);
+
   const workspaceProps = {
     meta: {
       activeTab,
@@ -2378,6 +2408,7 @@ const logWeight = useCallback(() => {
         onActiveTabChange={setActiveTab}
         aiBadge={aiBadge}
         retryMeta={retryMeta}
+        syncBadge={syncBadge}
       />
 
       <AppWorkspace
