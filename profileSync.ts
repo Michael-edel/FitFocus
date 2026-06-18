@@ -40,6 +40,14 @@ async function handleProfileConflict(
   return serverProfile;
 }
 
+function buildRetryProfile(localProfile: UserProfile, serverProfile: UserProfile): UserProfile {
+  return {
+    ...serverProfile,
+    ...localProfile,
+    version: serverProfile.version ?? localProfile.version ?? 0,
+  };
+}
+
 export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   const fetchFn = withFetch(deps.fetchImpl);
   deps.setProfileSyncState('saving');
@@ -59,11 +67,12 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
+        const retryProfile = buildRetryProfile(profile, serverProfile);
         const retry = await fetchFn('/api/profile', {
           method: 'PUT',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...profile, baseVersion: serverProfile.version ?? 0, stateItems }),
+          body: JSON.stringify({ ...retryProfile, baseVersion: serverProfile.version ?? 0, stateItems }),
         });
         const retryPayload = await retry.json().catch(() => null);
         if (retry.ok && retryPayload?.profile) {
@@ -119,11 +128,12 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
+        const retryProfile = buildRetryProfile(nextUser, serverProfile);
         const retry = await fetchFn('/api/profile', {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...patch, baseVersion: serverProfile.version ?? 0, stateItems }),
+          body: JSON.stringify({ ...retryProfile, ...patch, baseVersion: serverProfile.version ?? 0, stateItems }),
         });
         const retryPayload = await retry.json().catch(() => null);
         if (retry.ok && retryPayload?.profile) {
