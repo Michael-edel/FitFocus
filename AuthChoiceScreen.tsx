@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 
 type GoogleSignInButtonProps = {
   onAuthed: () => void;
@@ -17,6 +17,7 @@ type AuthChoiceScreenProps = {
   requireInvite: boolean;
   inviteChecking: boolean;
   bootstrapAuth: () => void;
+  onOpenVersionInfo: () => void;
   GoogleSignInButton: React.ComponentType<GoogleSignInButtonProps>;
 };
 
@@ -28,11 +29,20 @@ export default function AuthChoiceScreen({
   requireInvite,
   inviteChecking,
   bootstrapAuth,
+  onOpenVersionInfo,
   GoogleSignInButton,
 }: AuthChoiceScreenProps) {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
-      <div className="max-w-md w-full space-y-8 text-center">
+      <div className="max-w-md w-full space-y-8 text-center relative">
+        <button
+          type="button"
+          onClick={onOpenVersionInfo}
+          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 transition-colors hover:bg-slate-800/90 hover:text-slate-200"
+        >
+          <Sparkles size={12} className="text-indigo-400" />
+          Что нового
+        </button>
         <div className="flex justify-center">
           <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-indigo-950/50">
             FF
@@ -79,6 +89,14 @@ export default function AuthChoiceScreen({
           <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
             <GoogleSignInButton onAuthed={() => void bootstrapAuth()} inviteCode={inviteCode} width={220} size="medium" text="continue_with" />
           </div>
+          <button
+            type="button"
+            onClick={onOpenVersionInfo}
+            className="inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-200"
+          >
+            <ArrowRight size={12} className="text-indigo-400" />
+            Версия и изменения
+          </button>
         </div>
       </div>
     </div>

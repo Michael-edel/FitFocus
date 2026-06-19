@@ -93,6 +93,7 @@ import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
+import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
   mobilePrimaryTabIds,
@@ -1465,6 +1466,7 @@ const openEditFood = (item: FoodEntry) => {
   const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
   const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
   const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
+  const [versionInfoOpen, setVersionInfoOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -2865,6 +2867,7 @@ const logWeight = useCallback(() => {
 
   if (authState === 'auth_choice') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>
+      <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       <AuthChoiceScreen
         inviteCode={inviteCode}
         setInviteCode={setInviteCode}
@@ -2873,6 +2876,7 @@ const logWeight = useCallback(() => {
         requireInvite={requireInvite}
         inviteChecking={inviteChecking}
         bootstrapAuth={bootstrapAuth}
+        onOpenVersionInfo={() => setVersionInfoOpen(true)}
         GoogleSignInButton={GoogleSignInButton}
       />
     </React.Suspense>
@@ -2880,6 +2884,7 @@ const logWeight = useCallback(() => {
 
   if (authState === 'register') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>
+      <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       <RegistrationScreen
         regData={regData}
         setRegData={setRegData}
@@ -2890,12 +2895,14 @@ const logWeight = useCallback(() => {
         activationSteps={ACTIVATION_STEPS}
         activationTotalMs={ACTIVATION_TOTAL_MS}
         handleActivateWithTransition={handleActivateWithTransition}
+        onOpenVersionInfo={() => setVersionInfoOpen(true)}
       />
     </React.Suspense>
   );
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
+      <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />

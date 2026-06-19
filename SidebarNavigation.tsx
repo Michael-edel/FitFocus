@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { LogOut, MoreHorizontal, X } from 'lucide-react';
-import { APP_VERSION_LABEL } from './releaseNotes';
+import { APP_VERSION_LABEL } from './versioning';
 import {
   AppTabId,
   mobilePrimaryTabIds,

@@ -60,6 +60,7 @@ type RegistrationScreenProps = {
   activationSteps: ActivationStep[];
   activationTotalMs: number;
   handleActivateWithTransition: () => void;
+  onOpenVersionInfo: () => void;
 };
 
 export default function RegistrationScreen({
@@ -72,6 +73,7 @@ export default function RegistrationScreen({
   activationSteps,
   activationTotalMs,
   handleActivateWithTransition,
+  onOpenVersionInfo,
 }: RegistrationScreenProps) {
   const regBMI = useMemo(() => {
     const h = Number(regData.height) || 0;
@@ -205,6 +207,14 @@ export default function RegistrationScreen({
         <div className="relative w-full md:max-w-4xl bg-slate-900/90 rounded-t-[2.75rem] md:rounded-[3rem] p-6 md:p-10 shadow-2xl space-y-6 border border-slate-800/70 backdrop-blur-xl max-h-[95vh] overflow-y-auto overflow-x-hidden scrollbar-hide">
           <div className="flex justify-center -mt-2 md:hidden mb-4"><div className="w-12 h-1.5 rounded-full bg-slate-700/70" /></div>
           <div className="text-center space-y-3">
+            <button
+              type="button"
+              onClick={onOpenVersionInfo}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 transition-colors hover:bg-slate-800/90 hover:text-slate-200"
+            >
+              <Sparkles size={12} className="text-indigo-400" />
+              Что нового
+            </button>
             <div className="relative inline-flex w-14 h-14 mx-auto items-center justify-center">
               <div className="absolute inset-0 rounded-[1.25rem] overflow-hidden pointer-events-none"><div className="absolute inset-[-200%] bg-[conic-gradient(from_0deg,transparent_85%,#818cf8_98%,transparent_100%)] animate-spin" style={{ animationDuration: '3s' }} /></div>
               <div className="absolute inset-[2px] bg-slate-900 rounded-[1.1rem] z-0" />

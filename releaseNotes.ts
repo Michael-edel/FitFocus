@@ -1,3 +1,5 @@
+import { APP_VERSION_LABEL } from './versioning';
+
 export type ReleaseNoteGroup = {
   title: string;
   items: string[];
@@ -11,8 +13,6 @@ export type ReleaseNote = {
   groups: ReleaseNoteGroup[];
   isCurrent?: boolean;
 };
-
-export const APP_VERSION_LABEL = "v2.4.0 Beta";
 
 export const releaseNotes: ReleaseNote[] = [
   {

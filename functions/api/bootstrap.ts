@@ -6,6 +6,7 @@ import { requireUser, json } from "./_lib/auth";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { migrateLegacyAccountByEmail, withProtectedFields } from "./_lib/legacy_sync";
+import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATION_VERSION } from "../../versioning";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -45,7 +46,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const features = await loadFeatures(env);
 
-  return json({ schema_version: 3, user, profile, roles: user.roles, features, items }, 200);
+  return json({
+    schema_version: API_SCHEMA_VERSION,
+    app_version: APP_VERSION_LABEL,
+    data_schema_version: DATA_SCHEMA_VERSION,
+    db_migration_version: DB_MIGRATION_VERSION,
+    user,
+    profile,
+    roles: user.roles,
+    features,
+    items,
+  }, 200);
 };
 
 function safeParse(s: string) {
