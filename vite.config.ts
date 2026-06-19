@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => {
     envPrefix: 'VITE_',
 
     define: {
+      __FITFOCUS_BUILD_ID__: JSON.stringify(new Date().toISOString()),
       __VITE_GOOGLE_CLIENT_ID_LOCAL__: JSON.stringify(
         env.VITE_GOOGLE_CLIENT_ID_LOCAL || ''
       ),
