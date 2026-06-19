@@ -57,7 +57,15 @@ function scoreStoredProfile(profile: UserProfile, serverUser: ServerUser | null 
 
 function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null | undefined): UserProfile | null {
   if (!Array.isArray(all) || !all.length) return null;
-  return [...all].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
+  const targeted = serverUser?.sub || serverUser?.email
+    ? all.filter((profile) => {
+        if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) return true;
+        if (serverUser?.email && profile.email && profile.email.toLowerCase() === serverUser.email.toLowerCase()) return true;
+        return false;
+      })
+    : all;
+  if (!targeted.length) return null;
+  return [...targeted].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
 }
 
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {

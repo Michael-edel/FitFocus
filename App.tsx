@@ -65,7 +65,7 @@ import {
   collectLocalStateItems,
   persistAllUsersSnapshot,
   normalizeUserProfiles,
-  readStoredAllUsersSnapshot,
+  readStoredAllUsersSnapshotForUser,
   renameLocalStoragePrefix,
   safeRemoveItem,
   safeSetItem,
@@ -1726,7 +1726,7 @@ await ensurePdfInterFont(doc);
         `fitfocus_data_${user.id}_`,
         `fitfocus_data_${authUser.sub}_`,
       );
-      persistAllUsersSnapshot(authUser.sub, (readStoredAllUsersSnapshot<UserProfile>() || []).map((profile) =>
+      persistAllUsersSnapshot(authUser.sub, (readStoredAllUsersSnapshotForUser<UserProfile>(user.id) || [user]).map((profile) =>
         profile.id === user.id
           ? {
               ...profile,
