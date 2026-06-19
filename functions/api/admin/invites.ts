@@ -47,7 +47,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const body = (await request.json().catch(() => null)) as any;
     const note = String(body?.note || "").trim();
     const maxUses = Number.isFinite(body?.max_uses) ? Math.max(1, Math.min(1000, Number(body.max_uses))) : 1;
-    const expiresAt = body?.expires_at ? Number(body.expires_at) : null;
+    const maxExpiryMs = nowMs() + 30 * 24 * 60 * 60 * 1000;
+    const requestedExpiresAt = body?.expires_at ? Number(body.expires_at) : null;
+    const expiresAt = Number.isFinite(requestedExpiresAt) && requestedExpiresAt > 0
+      ? Math.min(requestedExpiresAt, maxExpiryMs)
+      : null;
 
     const code = randomCode(10);
     const createdAt = nowMs();
@@ -60,7 +64,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .bind(code, createdAt, user.sub, note, maxUses, expiresAt)
       .run();
 
-    await logAdminEvent(db, { adminUserId: user.sub, action: "invite_create", targetUserId: null, meta: { code, max_uses: maxUses, note, expires_at: expiresAt } });
+    await logAdminEvent(db, { adminUserId: user.sub, action: "invite_create", targetUserId: null, meta: { code, max_uses: maxUses, note, expires_at: expiresAt, expiry_cap_days: 30 } });
 
     return json({ ok: true, code }, 200);
   } catch (e: any) {

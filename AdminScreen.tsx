@@ -77,6 +77,17 @@ type SessionRow = {
   remaining_seconds?: number;
 };
 
+type InviteRow = {
+  code: string;
+  created_at: number;
+  created_by?: string | null;
+  note?: string | null;
+  max_uses: number;
+  uses: number;
+  expires_at?: number | null;
+  revoked: number;
+};
+
 type UserDetail = {
   user: {
     id: string;
@@ -114,6 +125,8 @@ type UserDetail = {
     last_ai_ts: number | null;
   };
 };
+
+type SubscriptionPlan = "free" | "pro" | "family";
 
 function asBool(v: any) { return v === true || v === 1 || v === "1"; }
 
@@ -168,11 +181,19 @@ export default function AdminScreen() {
   const [adminEventTo, setAdminEventTo] = useState<string>("");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserDetail | null>(null);
+  const [subscriptionPlanDraft, setSubscriptionPlanDraft] = useState<SubscriptionPlan>("free");
 
   const [roles, setRoles] = useState<string[]>([]);
   const [newRole, setNewRole] = useState("pro");
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [inviteDraftCount, setInviteDraftCount] = useState(10);
+  const [inviteDraftNote, setInviteDraftNote] = useState("Тестер");
+  const [inviteDraftMaxUses, setInviteDraftMaxUses] = useState(1);
+  const [inviteDraftExpiresAt, setInviteDraftExpiresAt] = useState("");
+  const [inviteActionMsg, setInviteActionMsg] = useState<string | null>(null);
+  const [createdInviteCodes, setCreatedInviteCodes] = useState<string[]>([]);
 
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [aiLogLimit, setAiLogLimit] = useState(50);
@@ -213,6 +234,16 @@ export default function AdminScreen() {
     } catch {}
   };
 
+  const loadInvites = async () => {
+    try {
+      const r = await fetch("/api/admin/invites?limit=100", { credentials: "include" });
+      if (r.ok) {
+        const j = await r.json();
+        setInvites(Array.isArray(j?.invites) ? j.invites : []);
+      }
+    } catch {}
+  };
+
   const exportAdminEventsCsv = () => {
     const qs = new URLSearchParams();
     qs.set('limit', '500');
@@ -228,29 +259,35 @@ export default function AdminScreen() {
   const loadAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const [s, f, a, c, st] = await Promise.all([
+      const [s, f, a, c, st, i] = await Promise.all([
         fetch("/api/admin/stats", { credentials: "include" }),
         fetch("/api/admin/feature_flags", { credentials: "include" }),
         fetch("/api/admin/admins", { credentials: "include" }),
         fetch("/api/admin/ai-cost", { credentials: "include" }),
         fetch("/api/admin/settings", { credentials: "include" }),
+        fetch("/api/admin/invites?limit=100", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
       if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
       if (!f.ok) throw new Error("Нет доступа к /api/admin/feature_flags (нужна роль admin)");
       if (!c.ok) throw new Error("Нет доступа к /api/admin/ai-cost (нужна роль admin)");
       if (!st.ok) throw new Error("Нет доступа к /api/admin/settings (нужна роль admin)");
+      if (!i.ok) throw new Error("Нет доступа к /api/admin/invites (нужна роль admin)");
       const sj = await s.json();
       const fj = await f.json();
       const aj = await a.json();
       const cj = await c.json();
       const stj = await st.json();
+      const ij = await i.json();
       setStats(sj?.stats || null);
       setAiCost(cj || null);
       setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
       setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
       setSettings(Array.isArray(stj?.settings) ? stj.settings : []);
+      setInvites(Array.isArray(ij?.invites) ? ij.invites : []);
       setSettingsDirty({});
+      setInviteActionMsg(null);
+      setCreatedInviteCodes([]);
       await loadAdminEvents();
       setFlagsDirty({});
     } catch (e: any) {
@@ -289,8 +326,30 @@ export default function AdminScreen() {
       setSelectedUserDetail(rj as UserDetail);
       setRoles(Array.isArray(rj?.roles) ? rj.roles : []);
       setSessions(Array.isArray(rj?.sessions) ? rj.sessions : []);
+      setSubscriptionPlanDraft((rj?.subscription?.plan === "pro" || rj?.subscription?.plan === "family" ? rj.subscription.plan : "free") as SubscriptionPlan);
     } catch (e: any) {
       setErr(e?.message || "Ошибка загрузки пользователя");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSubscriptionPlan = async () => {
+    if (!selectedUserId) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/admin/subscription", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedUserId, plan: subscriptionPlanDraft }),
+      });
+      if (!r.ok) throw new Error("Не удалось сменить тариф");
+      await loadUserDetails(selectedUserId);
+      await loadAll();
+    } catch (e: any) {
+      setErr(e?.message || "Ошибка смены тарифа");
     } finally {
       setLoading(false);
     }
@@ -405,6 +464,74 @@ export default function AdminScreen() {
       setErr(e?.message || "Ошибка logout_all");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createInvitesBatch = async () => {
+    const count = Math.max(1, Math.min(50, Math.floor(Number(inviteDraftCount) || 1)));
+    const maxUses = Math.max(1, Math.min(1000, Math.floor(Number(inviteDraftMaxUses) || 1)));
+    const note = inviteDraftNote.trim();
+    const expiresAt = inviteDraftExpiresAt ? new Date(inviteDraftExpiresAt).getTime() : null;
+    setLoading(true);
+    setErr(null);
+    setInviteActionMsg(null);
+    setCreatedInviteCodes([]);
+    try {
+      const codes: string[] = [];
+      for (let idx = 0; idx < count; idx += 1) {
+        const r = await fetch("/api/admin/invites", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            note: count > 1 ? `${note} #${idx + 1}` : note,
+            max_uses: maxUses,
+            expires_at: Number.isFinite(expiresAt as number) ? expiresAt : null,
+          }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j?.code) {
+          throw new Error(j?.error?.code || "Не удалось создать invite");
+        }
+        codes.push(String(j.code));
+      }
+      setCreatedInviteCodes(codes);
+      setInviteActionMsg(`Создано ${codes.length} invite-кодов для тестировщиков.`);
+      await loadInvites();
+    } catch (e: any) {
+      setErr(e?.message || "Ошибка создания invite-кодов");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const revokeInvite = async (code: string, revoked: boolean) => {
+    setLoading(true);
+    setErr(null);
+    setInviteActionMsg(null);
+    try {
+      const r = await fetch("/api/admin/invites", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, revoked }),
+      });
+      if (!r.ok) throw new Error("Не удалось изменить статус invite");
+      setInviteActionMsg(`${revoked ? "Отозван" : "Восстановлен"} код ${code}.`);
+      await loadInvites();
+    } catch (e: any) {
+      setErr(e?.message || "Ошибка invite-кода");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyInviteCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setInviteActionMsg(`Код ${code} скопирован.`);
+    } catch {
+      setErr("Не удалось скопировать invite-код");
     }
   };
 
@@ -692,7 +819,172 @@ export default function AdminScreen() {
         </div>
       </div>
 
-{/* Feature flags */}
+      {/* Invite testers */}
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100">Тестировщики / нагрузочные invite-коды</h2>
+            <div className="text-slate-300 font-semibold mt-1">
+              Сгенерируйте пачку кодов для закрытой beta и нагрузочного теста. Каждый Google-аккаунт = отдельный cloud-профиль, тарифы не ограничиваем.
+            </div>
+          </div>
+          <button
+            onClick={loadInvites}
+            className="px-4 py-2 rounded-2xl bg-slate-800/70 border border-slate-700 text-slate-100 font-black hover:bg-slate-700/70 inline-flex items-center gap-2"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            Обновить
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+          <label className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800 block">
+            <div className="text-slate-200 font-black">Кодов для генерации</div>
+            <div className="text-slate-400 font-semibold text-sm mt-1">Например, 10 тестировщиков = 10 кодов для одновременной проверки нагрузки</div>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={inviteDraftCount}
+              onChange={(e) => setInviteDraftCount(Number(e.target.value))}
+              className="mt-3 w-full px-4 py-2 rounded-2xl bg-slate-900/60 border border-slate-700 text-slate-100 font-bold"
+            />
+          </label>
+
+          <label className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800 block">
+            <div className="text-slate-200 font-black">Подпись / tester note</div>
+            <div className="text-slate-400 font-semibold text-sm mt-1">Можно писать имя, email или роль тестировщика</div>
+            <input
+              value={inviteDraftNote}
+              onChange={(e) => setInviteDraftNote(e.target.value)}
+              className="mt-3 w-full px-4 py-2 rounded-2xl bg-slate-900/60 border border-slate-700 text-slate-100 font-bold"
+              placeholder="Тестировщик 1"
+            />
+          </label>
+
+          <label className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800 block">
+            <div className="text-slate-200 font-black">Макс. использований</div>
+            <div className="text-slate-400 font-semibold text-sm mt-1">Для личного теста обычно 1</div>
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              value={inviteDraftMaxUses}
+              onChange={(e) => setInviteDraftMaxUses(Number(e.target.value))}
+              className="mt-3 w-full px-4 py-2 rounded-2xl bg-slate-900/60 border border-slate-700 text-slate-100 font-bold"
+            />
+          </label>
+
+          <label className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800 block">
+            <div className="text-slate-200 font-black">Срок действия</div>
+            <div className="text-slate-400 font-semibold text-sm mt-1">Необязательно. Максимум 30 дней.</div>
+            <input
+              type="datetime-local"
+              value={inviteDraftExpiresAt}
+              onChange={(e) => setInviteDraftExpiresAt(e.target.value)}
+              className="mt-3 w-full px-4 py-2 rounded-2xl bg-slate-900/60 border border-slate-700 text-slate-100 font-bold"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={createInvitesBatch}
+            className="px-4 py-2 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-100 font-black hover:bg-indigo-500/20 inline-flex items-center gap-2"
+          >
+            <KeyRound className="w-4 h-4" />
+            Создать коды
+          </button>
+          <div className="text-slate-400 font-semibold self-center">
+            Выдайте каждому тестировщику отдельный код и попросите входить только через Google.
+          </div>
+        </div>
+
+        {inviteActionMsg && (
+          <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-100 font-semibold">
+            {inviteActionMsg}
+          </div>
+        )}
+
+        {createdInviteCodes.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+            <div className="text-slate-200 font-black mb-2">Созданные коды</div>
+            <div className="flex flex-wrap gap-2">
+              {createdInviteCodes.map((code) => (
+                <button
+                  key={code}
+                  onClick={() => void copyInviteCode(code)}
+                  className="px-3 py-2 rounded-full bg-slate-800 text-slate-100 font-mono text-sm border border-slate-700 hover:bg-slate-700"
+                  title="Копировать код"
+                >
+                  {code}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 overflow-auto rounded-2xl border border-slate-800">
+          <table className="min-w-[920px] w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr className="text-slate-300">
+                <th className="text-left p-3 font-black">code</th>
+                <th className="text-left p-3 font-black">note</th>
+                <th className="text-left p-3 font-black">uses</th>
+                <th className="text-left p-3 font-black">expires</th>
+                <th className="text-left p-3 font-black">status</th>
+                <th className="text-left p-3 font-black">actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invites.map((invite) => {
+                const fullUses = `${invite.uses}/${invite.max_uses}`;
+                const expired = !!invite.expires_at && toMs(invite.expires_at) !== null && (toMs(invite.expires_at) || 0) < Date.now();
+                const isRevoked = Number(invite.revoked) === 1;
+                return (
+                  <tr key={invite.code} className="border-t border-slate-800 text-slate-200">
+                    <td className="p-3 font-mono font-bold">{invite.code}</td>
+                    <td className="p-3">
+                      <div className="font-black text-slate-100">{invite.note || '—'}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">by {invite.created_by || '—'}</div>
+                    </td>
+                    <td className="p-3 font-bold">{fullUses}</td>
+                    <td className="p-3 font-semibold text-slate-400">{formatTimestamp(invite.expires_at)}</td>
+                    <td className="p-3">
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black border ${isRevoked ? 'border-rose-500/30 bg-rose-500/10 text-rose-100' : expired ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`}>
+                        {isRevoked ? 'revoked' : expired ? 'expired' : 'active'}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => void copyInviteCode(invite.code)}
+                          className="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black"
+                        >
+                          Копировать
+                        </button>
+                        <button
+                          onClick={() => void revokeInvite(invite.code, !isRevoked)}
+                          className={`px-3 py-2 rounded-2xl font-black ${isRevoked ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-100 border border-emerald-500/30' : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-100 border border-rose-500/30'}`}
+                        >
+                          {isRevoked ? 'Вернуть' : 'Отозвать'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!invites.length && (
+                <tr className="border-t border-slate-800">
+                  <td className="p-3 text-slate-400 font-semibold" colSpan={6}>Invite-коды пока не созданы.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Feature flags */}
       <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
@@ -965,38 +1257,65 @@ export default function AdminScreen() {
             )}
 
             {selectedUserDetail && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-slate-500 font-bold">Роли:</span>
-                  {selectedUserDetail.roles.length > 0 ? (
-                    selectedUserDetail.roles.map((r) => (
-                      <span key={r} className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-200 font-bold text-xs">
-                        {r}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-slate-500 font-semibold">нет</span>
-                  )}
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
-                    <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">AI за 7 дней</div>
-                    <div className="mt-1 text-slate-100 font-black">{selectedUserDetail.summary.ai_calls_7d} вызовов</div>
-                    <div className="text-slate-500 font-semibold text-xs mt-1">
-                      ${selectedUserDetail.summary.ai_cost_7d.toFixed(4)} · {selectedUserDetail.summary.ai_tokens_7d} токенов
+              <>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-slate-500 font-bold">Роли:</span>
+                    {selectedUserDetail.roles.length > 0 ? (
+                      selectedUserDetail.roles.map((r) => (
+                        <span key={r} className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-200 font-bold text-xs">
+                          {r}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-slate-500 font-semibold">нет</span>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                      <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">AI за 7 дней</div>
+                      <div className="mt-1 text-slate-100 font-black">{selectedUserDetail.summary.ai_calls_7d} вызовов</div>
+                      <div className="text-slate-500 font-semibold text-xs mt-1">
+                        ${selectedUserDetail.summary.ai_cost_7d.toFixed(4)} · {selectedUserDetail.summary.ai_tokens_7d} токенов
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                      <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Состояние</div>
+                      <div className="mt-1 text-slate-100 font-black">
+                        {selectedUserDetail.user.is_active ? "Активен" : "Неактивен"}
+                      </div>
+                      <div className="text-slate-500 font-semibold text-xs mt-1">
+                        ошибок {selectedUserDetail.summary.ai_errors_7d} · fallback {selectedUserDetail.summary.ai_fallback_7d}
+                      </div>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
-                    <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Состояние</div>
-                    <div className="mt-1 text-slate-100 font-black">
-                      {selectedUserDetail.user.is_active ? "Активен" : "Неактивен"}
-                    </div>
-                    <div className="text-slate-500 font-semibold text-xs mt-1">
-                      ошибок {selectedUserDetail.summary.ai_errors_7d} · fallback {selectedUserDetail.summary.ai_fallback_7d}
-                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 mt-3">
+                  <div className="text-slate-100 font-black mb-2">Тариф без оплаты</div>
+                  <div className="text-slate-500 font-semibold text-sm mb-3">
+                    Ручное переключение для теста нагрузки и проверки SaaS-потока.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["free", "pro", "family"] as SubscriptionPlan[]).map((plan) => (
+                      <button
+                        key={plan}
+                        onClick={() => setSubscriptionPlanDraft(plan)}
+                        className={`px-4 py-2 rounded-2xl font-black border ${subscriptionPlanDraft === plan ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-100" : "bg-slate-800/50 border-slate-700 text-slate-200 hover:bg-slate-800"}`}
+                      >
+                        {plan}
+                      </button>
+                    ))}
+                    <button
+                      disabled={!selectedUserId || loading}
+                      onClick={() => void saveSubscriptionPlan()}
+                      className="px-4 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-100 font-black border border-emerald-500/30"
+                    >
+                      Применить
+                    </button>
                   </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
