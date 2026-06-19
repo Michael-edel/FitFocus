@@ -28,7 +28,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
 
   const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS } = plan;
 
-  const { cameraOpen, setCameraOpen, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent } = nutrition;
+  const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent } = nutrition;
 
   const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
   const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
@@ -174,6 +174,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <NutritionScreen
             cameraOpen={cameraOpen}
             setCameraOpen={setCameraOpen}
+            cameraFacing={cameraFacing}
+            setCameraFacing={setCameraFacing}
             handlePhotoUpload={handlePhotoUpload}
             processPhotoFiles={processPhotoFiles}
             remainingScans={remainingScans}
