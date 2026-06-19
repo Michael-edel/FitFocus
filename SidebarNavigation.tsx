@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { LogOut, MoreHorizontal, X } from 'lucide-react';
+import { APP_VERSION_LABEL } from './releaseNotes';
 import {
   AppTabId,
   mobilePrimaryTabIds,
@@ -67,6 +68,14 @@ export default function SidebarNavigation({
           <button type="button" aria-label="Закрыть меню" onClick={() => onMobileMoreOpenChange(false)} className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
           <div className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2">
             <div className="px-2 pt-1 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Ещё разделы</div>
+            <button
+              type="button"
+              onClick={() => { onMobileMoreOpenChange(false); onActiveTabChange('updates'); }}
+              className="w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center justify-between gap-3 text-left transition-all bg-indigo-500/10 text-indigo-200 border border-indigo-500/20"
+            >
+              <span className="font-black">Что нового</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{APP_VERSION_LABEL}</span>
+            </button>
             {mobileMoreTabs.map((tab) => (
               <button key={tab.id} type="button" onClick={() => { onActiveTabChange(tab.id); onMobileMoreOpenChange(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
                 <tab.icon size={20} className={tab.id === 'pro' && activeTab !== tab.id ? 'text-amber-500' : ''} />
@@ -100,7 +109,14 @@ export default function SidebarNavigation({
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-black text-slate-100 tracking-tight leading-none">FitFocus</span>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">v2.4.0 Beta</span>
+              <button
+                type="button"
+                onClick={() => onActiveTabChange('updates')}
+                className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1 text-left hover:text-indigo-300 transition-colors"
+                title="Открыть изменения версии"
+              >
+                {APP_VERSION_LABEL}
+              </button>
               <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
                 {modeBadge.text}
               </span>
