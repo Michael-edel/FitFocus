@@ -9,6 +9,25 @@ import { clearAiCache } from './geminiService';
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
+type SettingsUiState = {
+  draftName: string;
+  draftGoal: Goal;
+  draftTargetWeight: string;
+  draftAge: string;
+  draftHeight: string;
+  draftBloodPressureSystolic: string;
+  draftBloodPressureDiastolic: string;
+  draftRestingPulse: string;
+  draftWaistCm: string;
+  draftChestCm: string;
+  draftHipsCm: string;
+  progressPhotoNote: string;
+  ackLoss: boolean;
+  ackGain: boolean;
+};
+
+const SETTINGS_UI_STORAGE_KEY = 'fitfocus.settings.ui.v1';
+
 type Props = {
   serverSession?: boolean;
   onServerLogout?: () => Promise<void> | void;
@@ -267,6 +286,11 @@ export default function SettingsScreen({
 
   const progressPhotos = user?.progressPhotos || [];
   const latestProgressPhoto = progressPhotos[0] || null;
+  const settingsUiStorageKey = useMemo(
+    () => `${SETTINGS_UI_STORAGE_KEY}:${user?.id ?? 'anon'}`,
+    [user?.id],
+  );
+  const settingsUiSkipSaveRef = React.useRef(false);
 
   const profileSummary = useMemo(() => {
     if (!user) return null;
@@ -384,6 +408,74 @@ export default function SettingsScreen({
 
   useEffect(() => {
     if (!user) return;
+    settingsUiSkipSaveRef.current = true;
+    try {
+      const raw = localStorage.getItem(settingsUiStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<SettingsUiState>;
+        const fallbackName = user.name || '';
+        const fallbackGoal = user.goal || Goal.MAINTAIN;
+        const fallbackTargetWeight = user.targetWeight ? String(user.targetWeight) : '';
+        const fallbackAge = user.age ? String(user.age) : '';
+        const fallbackHeight = user.height ? String(user.height) : '';
+        const fallbackSystolic = user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '';
+        const fallbackDiastolic = user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '';
+        const fallbackPulse = user.restingPulse ? String(user.restingPulse) : '';
+        const fallbackWaist = user.waistCm ? String(user.waistCm) : '';
+        const fallbackChest = user.chestCm ? String(user.chestCm) : '';
+        const fallbackHips = user.hipsCm ? String(user.hipsCm) : '';
+
+        const nextDraftName = typeof parsed.draftName === 'string' ? parsed.draftName : fallbackName;
+        const nextDraftGoal = parsed.draftGoal === Goal.LOSS || parsed.draftGoal === Goal.GAIN || parsed.draftGoal === Goal.MAINTAIN
+          ? parsed.draftGoal
+          : fallbackGoal;
+        const nextDraftTargetWeight = typeof parsed.draftTargetWeight === 'string' ? parsed.draftTargetWeight : fallbackTargetWeight;
+        const nextDraftAge = typeof parsed.draftAge === 'string' ? parsed.draftAge : fallbackAge;
+        const nextDraftHeight = typeof parsed.draftHeight === 'string' ? parsed.draftHeight : fallbackHeight;
+        const nextDraftBloodPressureSystolic = typeof parsed.draftBloodPressureSystolic === 'string' ? parsed.draftBloodPressureSystolic : fallbackSystolic;
+        const nextDraftBloodPressureDiastolic = typeof parsed.draftBloodPressureDiastolic === 'string' ? parsed.draftBloodPressureDiastolic : fallbackDiastolic;
+        const nextDraftRestingPulse = typeof parsed.draftRestingPulse === 'string' ? parsed.draftRestingPulse : fallbackPulse;
+        const nextDraftWaistCm = typeof parsed.draftWaistCm === 'string' ? parsed.draftWaistCm : fallbackWaist;
+        const nextDraftChestCm = typeof parsed.draftChestCm === 'string' ? parsed.draftChestCm : fallbackChest;
+        const nextDraftHipsCm = typeof parsed.draftHipsCm === 'string' ? parsed.draftHipsCm : fallbackHips;
+        const nextProgressPhotoNote = typeof parsed.progressPhotoNote === 'string' ? parsed.progressPhotoNote : '';
+        const nextAckLoss = typeof parsed.ackLoss === 'boolean' ? parsed.ackLoss : !!user.riskAcknowledgedLoss;
+        const nextAckGain = typeof parsed.ackGain === 'boolean' ? parsed.ackGain : !!user.riskAcknowledgedGain;
+
+        setDraftName(nextDraftName);
+        setDraftGoal(nextDraftGoal);
+        setDraftTargetWeight(nextDraftTargetWeight);
+        setDraftAge(nextDraftAge);
+        setDraftHeight(nextDraftHeight);
+        setDraftBloodPressureSystolic(nextDraftBloodPressureSystolic);
+        setDraftBloodPressureDiastolic(nextDraftBloodPressureDiastolic);
+        setDraftRestingPulse(nextDraftRestingPulse);
+        setDraftWaistCm(nextDraftWaistCm);
+        setDraftChestCm(nextDraftChestCm);
+        setDraftHipsCm(nextDraftHipsCm);
+        setProgressPhotoNote(nextProgressPhotoNote);
+        setAckLoss(nextAckLoss);
+        setAckGain(nextAckGain);
+        setProfileDirty(
+          nextDraftName !== fallbackName ||
+          nextDraftGoal !== fallbackGoal ||
+          nextDraftTargetWeight !== fallbackTargetWeight ||
+          nextDraftAge !== fallbackAge ||
+          nextDraftHeight !== fallbackHeight ||
+          nextDraftBloodPressureSystolic !== fallbackSystolic ||
+          nextDraftBloodPressureDiastolic !== fallbackDiastolic ||
+          nextDraftRestingPulse !== fallbackPulse ||
+          nextDraftWaistCm !== fallbackWaist ||
+          nextDraftChestCm !== fallbackChest ||
+          nextDraftHipsCm !== fallbackHips ||
+          nextProgressPhotoNote !== '',
+        );
+        return;
+      }
+    } catch {
+      // fall through to user snapshot
+    }
+
     setDraftName(user.name || '');
     setDraftGoal(user.goal || Goal.MAINTAIN);
     setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
@@ -395,8 +487,11 @@ export default function SettingsScreen({
     setDraftWaistCm(user.waistCm ? String(user.waistCm) : '');
     setDraftChestCm(user.chestCm ? String(user.chestCm) : '');
     setDraftHipsCm(user.hipsCm ? String(user.hipsCm) : '');
+    setProgressPhotoNote('');
+    setAckLoss(!!user.riskAcknowledgedLoss);
+    setAckGain(!!user.riskAcknowledgedGain);
     setProfileDirty(false);
-  }, [user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.waistCm, user?.chestCm, user?.hipsCm]);
+  }, [settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -408,10 +503,51 @@ export default function SettingsScreen({
   };
 
   useEffect(() => {
-    setAckLoss(!!user?.riskAcknowledgedLoss);
-    setAckGain(!!user?.riskAcknowledgedGain);
     setCacheCleared(false);
   }, [user?.id]);
+
+  useEffect(() => {
+    if (settingsUiSkipSaveRef.current) {
+      settingsUiSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(settingsUiStorageKey, JSON.stringify({
+        draftName,
+        draftGoal,
+        draftTargetWeight,
+        draftAge,
+        draftHeight,
+        draftBloodPressureSystolic,
+        draftBloodPressureDiastolic,
+        draftRestingPulse,
+        draftWaistCm,
+        draftChestCm,
+        draftHipsCm,
+        progressPhotoNote,
+        ackLoss,
+        ackGain,
+      }));
+    } catch {
+      // Ignore storage failures and keep the form usable.
+    }
+  }, [
+    ackGain,
+    ackLoss,
+    draftAge,
+    draftBloodPressureDiastolic,
+    draftBloodPressureSystolic,
+    draftChestCm,
+    draftGoal,
+    draftHeight,
+    draftHipsCm,
+    draftName,
+    draftRestingPulse,
+    draftTargetWeight,
+    draftWaistCm,
+    progressPhotoNote,
+    settingsUiStorageKey,
+  ]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
   const gainTooAggressive = user?.goal === Goal.GAIN && tdee && gainSur > AGGRESSIVE_SURPLUS;
