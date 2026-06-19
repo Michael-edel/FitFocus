@@ -64,6 +64,7 @@ import { buildFallbackAiPlan } from './aiPlanFallback';
 import {
   collectLocalStateItems,
   persistAllUsersSnapshot,
+  normalizeUserProfiles,
   readStoredAllUsersSnapshot,
   renameLocalStoragePrefix,
   safeRemoveItem,
@@ -793,6 +794,7 @@ const App: React.FC = () => {
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
   const {
     cloudFamily,
@@ -1515,10 +1517,23 @@ const openEditFood = (item: FoodEntry) => {
     setAllUsers(prev => {
       const found = prev.some(u => u.id === updated.id);
       const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
-      persistAllUsersSnapshot(updated.id, next);
-      return next;
+      const normalized = normalizeUserProfiles(next);
+      persistAllUsersSnapshot(updated.id, normalized);
+      return normalized;
     });
   }, [googleMe?.sub, persistAllUsersSnapshot]);
+
+  useEffect(() => {
+    if (normalizedAllUsers.length !== allUsers.length) {
+      setAllUsers(normalizedAllUsers);
+      return;
+    }
+    const allKeys = allUsers.map((u) => `${u.googleSub || ''}|${u.email || ''}|${u.id || ''}`);
+    const normalizedKeys = normalizedAllUsers.map((u) => `${u.googleSub || ''}|${u.email || ''}|${u.id || ''}`);
+    if (allKeys.join('||') !== normalizedKeys.join('||')) {
+      setAllUsers(normalizedAllUsers);
+    }
+  }, [allUsers, normalizedAllUsers]);
 
   // ---- Weekly menus (personal + family) ----
   const handleGenerateWeeklyMenu = useCallback(async () => {
@@ -2393,7 +2408,7 @@ const logWeight = useCallback(() => {
     await runRegistrationFlow({
       regData,
       regNameValid,
-      allUsersCount: allUsers.length,
+      allUsersCount: normalizedAllUsers.length,
       requireInvite,
       inviteCode,
       googleMe,
@@ -2407,7 +2422,7 @@ const logWeight = useCallback(() => {
       setPlanIntroOpen,
       fetchImpl: fetch,
     });
-  }, [regData, loginAsUser, regNameValid, allUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
+  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
   const handleActivateWithTransition = useCallback(() => {
     if (!regNameValid || isActivatingPlan) return;
@@ -2757,7 +2772,7 @@ const logWeight = useCallback(() => {
   if (authState === 'auth_choice') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>
       <AuthChoiceScreen
-        allUsers={allUsers}
+        allUsers={normalizedAllUsers}
         inviteCode={inviteCode}
         setInviteCode={setInviteCode}
         inviteError={inviteError}

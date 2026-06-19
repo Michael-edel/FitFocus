@@ -1,5 +1,5 @@
 import type { UserProfile } from './types';
-import { applyRemoteStateItems, readStoredAllUsersSnapshot } from './storage/hybrid';
+import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 
@@ -87,7 +87,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         applyRemoteStateItems(pj?.items);
         const profile = pj?.profile || null;
         if (profile) {
-          params.setAllUsers([profile]);
+          params.setAllUsers(normalizeUserProfiles([profile]));
           void params.loginAsUser(profile, serverUser);
           return;
         }
@@ -102,8 +102,9 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     try {
       const all = readStoredAllUsersSnapshot<UserProfile>();
       if (Array.isArray(all) && all.length > 0) {
-        params.setAllUsers(all);
-        const localProfile = pickBestStoredProfile(all, serverUser);
+        const normalized = normalizeUserProfiles(all);
+        params.setAllUsers(normalized);
+        const localProfile = pickBestStoredProfile(normalized, serverUser);
         if (localProfile) {
           void params.loginAsUser(localProfile, serverUser);
           return;
@@ -119,9 +120,10 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   try {
     const all = readStoredAllUsersSnapshot<UserProfile>();
     if (Array.isArray(all) && all.length > 0) {
-      params.setAllUsers(all);
-      if (all.length === 1) {
-        void params.loginAsUser(all[0]);
+      const normalized = normalizeUserProfiles(all);
+      params.setAllUsers(normalized);
+      if (normalized.length === 1) {
+        void params.loginAsUser(normalized[0]);
         return;
       }
     }

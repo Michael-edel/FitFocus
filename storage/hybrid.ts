@@ -1,6 +1,21 @@
 import { STORAGE_KEYS } from "./keys";
 
 type KVItem = { key: string; value: string; baseVersion?: number };
+type ProfileLike = {
+  id: string;
+  googleSub?: string;
+  email?: string;
+  name?: string;
+  version?: number;
+  aiPlan?: unknown;
+  weightHistory?: unknown[];
+  measurementsHistory?: unknown[];
+  progressPhotos?: unknown[];
+  tasks?: unknown[];
+  dailyHabits?: unknown;
+  usage?: unknown;
+  plan?: unknown;
+};
 
 const REMOTE_STATE_PREFIXES = [
   STORAGE_KEYS.dataPrefix,
@@ -177,7 +192,7 @@ export function renameLocalStoragePrefix(oldPrefix: string, newPrefix: string) {
 
 export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: unknown[]) {
   if (!ownerUserId) return;
-  safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(next));
+  safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(normalizeUserProfiles(next as ProfileLike[])));
 }
 
 export function readStoredAllUsersSnapshot<T = unknown>(): T[] | null {
@@ -195,11 +210,60 @@ export function readStoredAllUsersSnapshot<T = unknown>(): T[] | null {
       if (!raw) continue;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        if (!best || parsed.length > best.length) best = parsed as T[];
+        const normalized = normalizeUserProfiles(parsed as ProfileLike[]);
+        if (!best || normalized.length > best.length) best = normalized as T[];
       }
     } catch {}
   }
   return best;
+}
+
+function scoreProfile(profile: ProfileLike): number {
+  let score = 0;
+  if (profile.version && Number.isFinite(Number(profile.version))) {
+    score += Math.min(100, Number(profile.version) * 5);
+  }
+  if (profile.googleSub) score += 1000;
+  if (profile.email) score += 500;
+  if (profile.aiPlan) score += 20;
+  score += Math.min(30, (profile.weightHistory?.length || 0) * 3);
+  score += Math.min(30, (profile.measurementsHistory?.length || 0) * 3);
+  score += Math.min(20, (profile.progressPhotos?.length || 0) * 2);
+  score += Math.min(10, (profile.tasks?.length || 0));
+  score += Math.min(10, (profile.dailyHabits && typeof profile.dailyHabits === 'object') ? 3 : 0);
+  score += Math.min(10, (profile.usage && typeof profile.usage === 'object') ? 3 : 0);
+  if (profile.plan) score += 10;
+  if (profile.name) score += 5;
+  return score;
+}
+
+function identityKey(profile: ProfileLike): string {
+  const googleSub = String(profile.googleSub || '').trim();
+  if (googleSub) return `g:${googleSub.toLowerCase()}`;
+  const email = String(profile.email || '').trim().toLowerCase();
+  if (email) return `e:${email}`;
+  return `i:${String(profile.id || '').trim()}`;
+}
+
+export function normalizeUserProfiles<T extends ProfileLike>(profiles: T[]): T[] {
+  if (!Array.isArray(profiles) || !profiles.length) return Array.isArray(profiles) ? profiles : [];
+  const entries = new Map<string, { profile: T; score: number; index: number }>();
+  profiles.forEach((profile, index) => {
+    if (!profile || typeof profile !== 'object') return;
+    const key = identityKey(profile);
+    const score = scoreProfile(profile);
+    const existing = entries.get(key);
+    if (!existing) {
+      entries.set(key, { profile, score, index });
+      return;
+    }
+    if (score > existing.score) {
+      entries.set(key, { profile, score, index: existing.index });
+    }
+  });
+  return [...entries.values()]
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.profile);
 }
 
 export function collectLocalStateItems(userId: string): KVItem[] {
