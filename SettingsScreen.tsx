@@ -46,6 +46,7 @@ type Props = {
   lastProfileSyncAt?: number | null;
   onSyncNow?: () => Promise<void> | void;
   onReloadFromCloud?: () => Promise<void> | void;
+  onResetUiState?: () => void;
 };
 
 const Card: React.FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
@@ -243,6 +244,7 @@ export default function SettingsScreen({
   lastProfileSyncAt,
   onSyncNow,
   onReloadFromCloud,
+  onResetUiState,
 }: Props) {
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
@@ -291,6 +293,40 @@ export default function SettingsScreen({
     [user?.id],
   );
   const settingsUiSkipSaveRef = React.useRef(false);
+  const resetUiState = () => {
+    if (!user?.id) return;
+    const keysToClear = [
+      `fitfocus.settings.ui.v1:${user.id}`,
+      `fitfocus.plan.ui.v1:${user.id}`,
+      `fitfocus.plan.active-day.v1:${user.id}`,
+      `fitfocus.progress.ui.v1:${user.id}`,
+      `fitfocus.progress-archive.sections.v1:${user.id}`,
+      `fitfocus.dashboard.new-weight.v1:${user.id}`,
+    ];
+    try {
+      keysToClear.forEach((key) => localStorage.removeItem(key));
+    } catch {
+      // ignore
+    }
+    onResetUiState?.();
+
+    settingsUiSkipSaveRef.current = true;
+    setDraftName(user.name || '');
+    setDraftGoal(user.goal || Goal.MAINTAIN);
+    setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
+    setDraftAge(user.age ? String(user.age) : '');
+    setDraftHeight(user.height ? String(user.height) : '');
+    setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
+    setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
+    setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
+    setDraftWaistCm(user.waistCm ? String(user.waistCm) : '');
+    setDraftChestCm(user.chestCm ? String(user.chestCm) : '');
+    setDraftHipsCm(user.hipsCm ? String(user.hipsCm) : '');
+    setProgressPhotoNote('');
+    setAckLoss(!!user.riskAcknowledgedLoss);
+    setAckGain(!!user.riskAcknowledgedGain);
+    setProfileDirty(false);
+  };
 
   const profileSummary = useMemo(() => {
     if (!user) return null;
@@ -956,6 +992,24 @@ export default function SettingsScreen({
                     <div className="text-slate-100 font-black">Перезагрузить из облака</div>
                     <div className="text-slate-400 text-sm mt-1">Подтянуть актуальные данные профиля с сервера и обновить это устройство.</div>
                   </button>
+                </div>
+
+                <div className="mt-3 rounded-[1.25rem] border border-amber-500/20 bg-amber-500/5 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-amber-200">Сбросить вид</div>
+                      <div className="mt-1 text-slate-100 font-black">Очистить только пользовательские экраны и черновики</div>
+                      <div className="mt-1 text-slate-400 text-sm">Профиль, облако и история останутся без изменений.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={resetUiState}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-[1rem] border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-100 font-black transition-all"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Сбросить UI
+                    </button>
+                  </div>
                 </div>
               </div>
 
