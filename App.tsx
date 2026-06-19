@@ -1436,6 +1436,7 @@ const openEditFood = (item: FoodEntry) => {
     bloodPressureSystolic: 0,
     bloodPressureDiastolic: 0,
     restingPulse: 0,
+    bloodGlucoseMmolL: 0,
     waistCm: 0,
     chestCm: 0,
     hipsCm: 0,

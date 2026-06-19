@@ -9,6 +9,7 @@ export type WearableSyncSnapshot = {
   sleepHoursLastNight?: number;
   weight?: number;
   pulse?: number;
+  bloodGlucoseMmolL?: number;
   sourceDevice?: string;
   sourceAppVersion?: string;
   timezone?: string;
@@ -26,6 +27,7 @@ export const wearableSyncExamplePayload: WearableSyncSnapshot = {
   sleepHoursLastNight: 7.2,
   pulse: 61,
   weight: 82.4,
+  bloodGlucoseMmolL: 5.4,
   sourceDevice: 'iPhone 17 Pro Max',
   sourceAppVersion: '1.0.0',
   timezone: 'Asia/Yekaterinburg',
@@ -59,6 +61,7 @@ export function normalizeWearableSyncSnapshot(input: unknown): WearableSyncSnaps
     sleepHoursLastNight: parseWearableNumber(obj.sleepHoursLastNight ?? obj.sleepHours ?? obj.sleep),
     weight: parseWearableNumber(obj.weight ?? obj.bodyWeight),
     pulse: parseWearableNumber(obj.pulse ?? obj.restingPulse),
+    bloodGlucoseMmolL: parseWearableNumber(obj.bloodGlucoseMmolL ?? obj.glucose ?? obj.sugar ?? obj.bloodGlucose),
     sourceDevice: typeof obj.sourceDevice === 'string' && obj.sourceDevice.trim() ? obj.sourceDevice.trim() : undefined,
     sourceAppVersion: typeof obj.sourceAppVersion === 'string' && obj.sourceAppVersion.trim() ? obj.sourceAppVersion.trim() : undefined,
     timezone: typeof obj.timezone === 'string' && obj.timezone.trim() ? obj.timezone.trim() : undefined,
@@ -70,11 +73,11 @@ export function normalizeWearableSyncSnapshot(input: unknown): WearableSyncSnaps
     typeof snapshot.activeMinutesToday !== 'number' &&
     typeof snapshot.sleepHoursLastNight !== 'number' &&
     typeof snapshot.weight !== 'number' &&
-    typeof snapshot.pulse !== 'number'
+    typeof snapshot.pulse !== 'number' &&
+    typeof snapshot.bloodGlucoseMmolL !== 'number'
   ) {
     return null;
   }
 
   return snapshot;
 }
-

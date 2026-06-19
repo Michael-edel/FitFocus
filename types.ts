@@ -201,6 +201,7 @@ export type DietaryRestrictions = {
 export type HealthMeasurement = {
   date: string;
   weight?: number;
+  bloodGlucoseMmolL?: number;
   waistCm?: number;
   chestCm?: number;
   hipsCm?: number;
@@ -245,6 +246,9 @@ export interface UserProfile {
   chestCm?: number;
   hipsCm?: number;
   bodyMeasurementsMeasuredAt?: string;
+  /** сахар крови натощак или текущий замер */
+  bloodGlucoseMmolL?: number;
+  bloodGlucoseMeasuredAt?: string;
   /** пульс в состоянии покоя */
   restingPulse?: number;
   restingPulseMeasuredAt?: string;

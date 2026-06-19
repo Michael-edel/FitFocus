@@ -338,6 +338,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - Непереносимость/избегать: ${(user.dietary?.intolerances || []).join(', ') || 'нет'}
 - Не ем совсем: ${(user.dietary?.excludedFoods || []).join(', ') || (user.exclusions || 'нет')}
 - Строгость: ${user.dietary?.severity || 'strict'}.
+Если указан сахар крови, учитывай его только как дополнительный контекст для питания и не добавляй в расчёт ккал/БЖУ.
 
 Требования:
 - Верни СТРОГО валидный JSON по schema (без текста, без markdown).
@@ -749,7 +750,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  */
 export async function getCoachAdvice(data: any): Promise<any> {
   const response = await callAiProxy('gemini-2.5-flash', 
-    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке и восстановлению. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
+    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
       responseMimeType: "application/json",

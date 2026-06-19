@@ -54,7 +54,7 @@ type ProgressScreenProps = {
   onOpenArchive?: () => void;
 };
 
-type MetricKey = 'weight' | 'waistCm' | 'chestCm' | 'hipsCm' | 'restingPulse';
+type MetricKey = 'weight' | 'waistCm' | 'chestCm' | 'hipsCm' | 'restingPulse' | 'bloodGlucoseMmolL';
 type ProgressSectionId = 'summary' | 'compare' | 'dynamics' | 'measurements' | 'photos' | 'timeline';
 
 type ProgressUiState = {
@@ -75,6 +75,7 @@ const metricMeta: Record<MetricKey, { label: string; unit: string; color: string
   chestCm: { label: 'Грудь', unit: 'см', color: '#F59E0B' },
   hipsCm: { label: 'Бёдра', unit: 'см', color: '#F472B6' },
   restingPulse: { label: 'Пульс', unit: 'уд/мин', color: '#38BDF8' },
+  bloodGlucoseMmolL: { label: 'Сахар', unit: 'ммоль/л', color: '#FB7185' },
 };
 
 const wearableOptions: Array<{ value: WearableProvider; label: string; note: string }> = [
@@ -100,6 +101,7 @@ type WearableImportPayload = {
   sleepHoursLastNight?: number;
   weight?: number;
   pulse?: number;
+  bloodGlucoseMmolL?: number;
   date?: string;
 };
 
@@ -157,6 +159,7 @@ const parseWearableJson = (text: string): WearableImportPayload | null => {
       sleepHoursLastNight: obj.sleepHoursLastNight,
       weight: obj.weight,
       pulse: obj.pulse,
+      bloodGlucoseMmolL: obj.bloodGlucoseMmolL,
       date: obj.date || obj.metricsUpdatedAt,
     };
   } catch {
@@ -182,6 +185,7 @@ const parseWearableCsv = (text: string): WearableImportPayload | null => {
     sleepHoursLastNight: parseNumber(data.sleep_hours ?? data.sleephours ?? data.sleep),
     weight: parseNumber(data.weight ?? data.bodyweight),
     pulse: parseNumber(data.pulse ?? data.restingpulse),
+    bloodGlucoseMmolL: parseNumber(data.blood_glucose ?? data.glucose ?? data.sugar ?? data.bloodglucose ?? data.blood_glucose_mmol_l ?? data.glucose_mmol_l),
     date: typeof data.date === 'string' ? data.date : typeof data.recordedat === 'string' ? data.recordedat : undefined,
   };
 };
@@ -226,6 +230,7 @@ export default function ProgressScreen({
   const [draftChest, setDraftChest] = useState('');
   const [draftHips, setDraftHips] = useState('');
   const [draftPulse, setDraftPulse] = useState('');
+  const [draftBloodGlucose, setDraftBloodGlucose] = useState('');
   const [draftSteps, setDraftSteps] = useState('');
   const [draftActiveMinutes, setDraftActiveMinutes] = useState('');
   const [draftSleepHours, setDraftSleepHours] = useState('');
@@ -248,6 +253,13 @@ export default function ProgressScreen({
     setDraftChest(typeof latest?.chestCm === 'number' ? String(latest.chestCm) : '');
     setDraftHips(typeof latest?.hipsCm === 'number' ? String(latest.hipsCm) : '');
     setDraftPulse(typeof latest?.restingPulse === 'number' ? String(latest.restingPulse) : '');
+    setDraftBloodGlucose(
+      typeof latest?.bloodGlucoseMmolL === 'number'
+        ? String(latest.bloodGlucoseMmolL)
+        : typeof currentUser?.bloodGlucoseMmolL === 'number'
+          ? String(currentUser.bloodGlucoseMmolL)
+          : '',
+    );
     setDraftSteps(typeof wearableStepsToday === 'number' ? String(wearableStepsToday) : '');
     setDraftActiveMinutes(typeof wearableActiveMinutesToday === 'number' ? String(wearableActiveMinutesToday) : '');
     setDraftSleepHours(typeof wearableSleepHoursLastNight === 'number' ? String(wearableSleepHoursLastNight) : '');
@@ -331,7 +343,8 @@ export default function ProgressScreen({
         parsed.selectedMetric === 'waistCm' ||
         parsed.selectedMetric === 'chestCm' ||
         parsed.selectedMetric === 'hipsCm' ||
-        parsed.selectedMetric === 'restingPulse'
+        parsed.selectedMetric === 'restingPulse' ||
+        parsed.selectedMetric === 'bloodGlucoseMmolL'
           ? parsed.selectedMetric
           : 'weight',
       );
@@ -399,6 +412,7 @@ export default function ProgressScreen({
         typeof item.weight === 'number' ? `${item.weight.toFixed(1)} кг` : null,
         typeof item.waistCm === 'number' ? `талия ${item.waistCm} см` : null,
         typeof item.restingPulse === 'number' ? `пульс ${item.restingPulse}` : null,
+        typeof item.bloodGlucoseMmolL === 'number' ? `сахар ${item.bloodGlucoseMmolL.toFixed(1)} ммоль/л` : null,
       ].filter(Boolean) as string[];
       items.push({
         kind: 'measurement',
@@ -619,33 +633,37 @@ export default function ProgressScreen({
     const nextChest = parse(draftChest);
     const nextHips = parse(draftHips);
     const nextPulse = parse(draftPulse);
+    const nextBloodGlucose = parse(draftBloodGlucose);
     const nextSteps = parse(draftSteps);
     const nextActiveMinutes = parse(draftActiveMinutes);
     const nextSleepHours = parse(draftSleepHours);
-    if (!nextWeight && !nextWaist && !nextChest && !nextHips && !nextPulse && !nextSteps && !nextActiveMinutes && !nextSleepHours) return;
+    if (!nextWeight && !nextWaist && !nextChest && !nextHips && !nextPulse && !nextBloodGlucose && !nextSteps && !nextActiveMinutes && !nextSleepHours) return;
     setDraftSaving(true);
     try {
       const now = new Date().toISOString();
-      const historyEntry = {
-        date: now,
-        weight: nextWeight ?? undefined,
-        waistCm: nextWaist ?? undefined,
-        chestCm: nextChest ?? undefined,
-        hipsCm: nextHips ?? undefined,
-        restingPulse: nextPulse ?? undefined,
-      };
+    const historyEntry = {
+      date: now,
+      weight: nextWeight ?? undefined,
+      waistCm: nextWaist ?? undefined,
+      chestCm: nextChest ?? undefined,
+      hipsCm: nextHips ?? undefined,
+      restingPulse: nextPulse ?? undefined,
+      bloodGlucoseMmolL: nextBloodGlucose ?? undefined,
+    };
       await onPatchUser({
-        weight: nextWeight ?? currentUser.weight,
-        weightHistory: nextWeight ? [{ date: now, weight: nextWeight }, ...(currentUser.weightHistory || [])].slice(0, 120) : currentUser.weightHistory,
-        waistCm: nextWaist ?? currentUser.waistCm,
-        chestCm: nextChest ?? currentUser.chestCm,
-        hipsCm: nextHips ?? currentUser.hipsCm,
-        restingPulse: nextPulse ?? currentUser.restingPulse,
-        wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
-        wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
-        wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
+      weight: nextWeight ?? currentUser.weight,
+      weightHistory: nextWeight ? [{ date: now, weight: nextWeight }, ...(currentUser.weightHistory || [])].slice(0, 120) : currentUser.weightHistory,
+      waistCm: nextWaist ?? currentUser.waistCm,
+      chestCm: nextChest ?? currentUser.chestCm,
+      hipsCm: nextHips ?? currentUser.hipsCm,
+      restingPulse: nextPulse ?? currentUser.restingPulse,
+      bloodGlucoseMmolL: nextBloodGlucose ?? currentUser.bloodGlucoseMmolL,
+      wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
+      wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
+      wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
         bloodPressureMeasuredAt: currentUser.bloodPressureMeasuredAt,
         bodyMeasurementsMeasuredAt: (nextWaist || nextChest || nextHips || nextPulse) ? now : currentUser.bodyMeasurementsMeasuredAt,
+        bloodGlucoseMeasuredAt: nextBloodGlucose ? now : currentUser.bloodGlucoseMeasuredAt,
         wearableMetricsUpdatedAt: (nextSteps || nextActiveMinutes || nextSleepHours) ? now : currentUser.wearableMetricsUpdatedAt,
         restingPulseMeasuredAt: nextPulse ? now : currentUser.restingPulseMeasuredAt,
         measurementsHistory: [
@@ -686,6 +704,10 @@ export default function ProgressScreen({
       if (typeof payload.pulse === 'number' && Number.isFinite(payload.pulse) && payload.pulse > 0) {
         nextPatch.restingPulse = Math.round(payload.pulse);
         nextPatch.restingPulseMeasuredAt = importDate;
+      }
+      if (typeof payload.bloodGlucoseMmolL === 'number' && Number.isFinite(payload.bloodGlucoseMmolL) && payload.bloodGlucoseMmolL > 0) {
+        nextPatch.bloodGlucoseMmolL = Number(payload.bloodGlucoseMmolL.toFixed(1));
+        nextPatch.bloodGlucoseMeasuredAt = importDate;
       }
 
       await onPatchUser(nextPatch);
@@ -1179,7 +1201,7 @@ export default function ProgressScreen({
                 value={wearablePasteDraft}
                 onChange={(e) => setWearablePasteDraft(e.target.value)}
                 rows={5}
-                placeholder={`Вставьте JSON/CSV сюда, например:\n{"provider":"google_fit","stepsToday":8400,"activeMinutesToday":42,"sleepHoursLastNight":7.4}\nили\nprovider,stepsToday,activeMinutesToday,sleepHoursLastNight\nfitbit,8400,42,7.4`}
+                placeholder={`Вставьте JSON/CSV сюда, например:\n{"provider":"google_fit","stepsToday":8400,"activeMinutesToday":42,"sleepHoursLastNight":7.4,"bloodGlucoseMmolL":5.4}\nили\nprovider,stepsToday,activeMinutesToday,sleepHoursLastNight,bloodGlucoseMmolL\nfitbit,8400,42,7.4,5.4`}
                 className="w-full rounded-[1rem] border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/40"
               />
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1754,7 +1776,7 @@ export default function ProgressScreen({
               <Sparkles size={18} />
             </div>
           </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
               <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{latestMeasurement?.waistCm ? `${latestMeasurement.waistCm} см` : '—'}</div>
@@ -1774,6 +1796,11 @@ export default function ProgressScreen({
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Пульс</div>
               <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{latestMeasurement?.restingPulse ? `${latestMeasurement.restingPulse} уд/мин` : '—'}</div>
               <div className="mt-1 text-sm text-slate-400">{formatDelta(latestMeasurement?.restingPulse, previousMeasurement?.restingPulse, 'уд/мин')}</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сахар</div>
+              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{typeof latestMeasurement?.bloodGlucoseMmolL === 'number' ? `${Number(latestMeasurement.bloodGlucoseMmolL).toFixed(1)} ммоль/л` : '—'}</div>
+              <div className="mt-1 text-sm text-slate-400">{formatDelta(latestMeasurement?.bloodGlucoseMmolL, previousMeasurement?.bloodGlucoseMmolL, 'ммоль/л')}</div>
             </div>
           </div>
         </div>
@@ -1798,6 +1825,10 @@ export default function ProgressScreen({
             <label className="space-y-2">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Пульс покоя</div>
               <input value={draftPulse} onChange={(e) => setDraftPulse(e.target.value)} inputMode="numeric" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="60" />
+            </label>
+            <label className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сахар крови</div>
+              <input value={draftBloodGlucose} onChange={(e) => setDraftBloodGlucose(e.target.value)} inputMode="decimal" step="0.1" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="5.4" />
             </label>
             <label className="space-y-2">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Талия</div>
@@ -1843,6 +1874,7 @@ export default function ProgressScreen({
                 setDraftChest('');
                 setDraftHips('');
                 setDraftPulse('');
+                setDraftBloodGlucose('');
               }}
               className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-300 font-black transition-all"
             >
