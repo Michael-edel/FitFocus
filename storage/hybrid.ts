@@ -147,6 +147,34 @@ export function allUsersStorageKey(userId?: string | null) {
   return `${STORAGE_KEYS.dataPrefix}${userId || 'unknown'}_all_users`;
 }
 
+export function renameLocalStoragePrefix(oldPrefix: string, newPrefix: string) {
+  if (!oldPrefix || !newPrefix || oldPrefix === newPrefix) return;
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(oldPrefix)) {
+      keys.push(key);
+    }
+  }
+  for (const key of keys) {
+    const nextKey = newPrefix + key.slice(oldPrefix.length);
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) {
+        localStorage.setItem(nextKey, value);
+      }
+      const version = localStorage.getItem(`${key}__ffv`);
+      if (version !== null) {
+        localStorage.setItem(`${nextKey}__ffv`, version);
+        localStorage.removeItem(`${key}__ffv`);
+      }
+      localStorage.removeItem(key);
+    } catch {
+      // Best-effort migration only.
+    }
+  }
+}
+
 export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: unknown[]) {
   if (!ownerUserId) return;
   safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(next));

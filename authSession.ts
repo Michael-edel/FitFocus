@@ -39,6 +39,25 @@ type DeleteAccountParams = {
   onLogout: () => void | Promise<void>;
 };
 
+function scoreStoredProfile(profile: UserProfile, serverUser: { sub?: string; email?: string } | null | undefined): number {
+  let score = 0;
+  if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) score += 1000;
+  if (serverUser?.email && profile.email && profile.email.toLowerCase() === serverUser.email.toLowerCase()) score += 500;
+  if (profile.googleSub) score += 100;
+  if (profile.email) score += 25;
+  if (profile.aiPlan) score += 15;
+  score += Math.min(30, (profile.weightHistory?.length || 0) * 3);
+  score += Math.min(30, (profile.measurementsHistory?.length || 0) * 3);
+  score += Math.min(10, (profile.tasks?.length || 0));
+  score += Math.min(10, (profile.courseProgress?.completedLessonIds?.length || 0));
+  return score;
+}
+
+function pickBestStoredProfile(all: UserProfile[], serverUser: { sub?: string; email?: string } | null | undefined): UserProfile | null {
+  if (!Array.isArray(all) || !all.length) return null;
+  return [...all].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
+}
+
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
 
@@ -81,7 +100,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       const all = readStoredAllUsersSnapshot<UserProfile>();
       if (Array.isArray(all) && all.length > 0) {
         params.setAllUsers(all);
-        const localProfile = all[0];
+        const localProfile = pickBestStoredProfile(all, serverUser);
         if (localProfile) {
           void params.loginAsUser(localProfile);
           return;
