@@ -9,6 +9,8 @@ type SearchResult = { name: string; calories: number };
 type NutritionScreenProps = {
   cameraOpen: boolean;
   setCameraOpen: (open: boolean) => void;
+  cameraFacing: 'user' | 'environment';
+  setCameraFacing: React.Dispatch<React.SetStateAction<'user' | 'environment'>>;
   handlePhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   processPhotoFiles: (files: File[]) => Promise<void>;
   remainingScans: number;
@@ -38,6 +40,8 @@ type NutritionScreenProps = {
 export default function NutritionScreen({
   cameraOpen,
   setCameraOpen,
+  cameraFacing,
+  setCameraFacing,
   handlePhotoUpload,
   processPhotoFiles,
   searchQuery,
@@ -88,7 +92,7 @@ export default function NutritionScreen({
       </header>
 
       <React.Suspense fallback={null}>
-        <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} />
+        <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} facing={cameraFacing} onFacingChange={setCameraFacing} />
       </React.Suspense>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">

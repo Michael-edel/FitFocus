@@ -943,6 +943,39 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const cameraFacingStorageKey = useMemo(
+    () => `fitfocus.nutrition.camera-facing.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const cameraFacingSkipSaveRef = useRef(false);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>(() => {
+    try {
+      return (localStorage.getItem(cameraFacingStorageKey) as 'user' | 'environment' | null) || 'environment';
+    } catch {
+      return 'environment';
+    }
+  });
+  useEffect(() => {
+    try {
+      cameraFacingSkipSaveRef.current = true;
+      const saved = localStorage.getItem(cameraFacingStorageKey);
+      setCameraFacing(saved === 'user' ? 'user' : 'environment');
+    } catch {
+      cameraFacingSkipSaveRef.current = true;
+      setCameraFacing('environment');
+    }
+  }, [cameraFacingStorageKey]);
+  useEffect(() => {
+    if (cameraFacingSkipSaveRef.current) {
+      cameraFacingSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(cameraFacingStorageKey, cameraFacing);
+    } catch {
+      // ignore storage issues
+    }
+  }, [cameraFacing, cameraFacingStorageKey]);
   const dashboardWeightStorageKey = useMemo(
     () => `fitfocus.dashboard.new-weight.v1:${currentUser?.id ?? 'anon'}`,
     [currentUser?.id],
@@ -1022,6 +1055,7 @@ const App: React.FC = () => {
           `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
           `fitfocus.dashboard.mobile-more-open.v1:${userId}`,
           `fitfocus.nutrition.search.v1:${userId}`,
+          `fitfocus.nutrition.camera-facing.v1:${userId}`,
         ].forEach((key) => localStorage.removeItem(key));
       }
     } catch {
@@ -1030,9 +1064,11 @@ const App: React.FC = () => {
 
     dashboardWeightSkipSaveRef.current = true;
     mobileMoreSkipSaveRef.current = true;
+    cameraFacingSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
     setMobileMoreOpen(false);
+    setCameraFacing('environment');
     setIsScanning(false);
     setCameraOpen(false);
     setIsLessonViewOpen(false);
@@ -2532,6 +2568,8 @@ const logWeight = useCallback(() => {
     nutrition: {
       cameraOpen,
       setCameraOpen,
+      cameraFacing,
+      setCameraFacing,
       handlePhotoUpload,
       processPhotoFiles,
       remainingScans: checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0,

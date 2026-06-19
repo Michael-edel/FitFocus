@@ -15,12 +15,13 @@ type Props = {
   onCaptured: (file: File) => void | Promise<void>;
   /** If true, shows PRO-only controls like torch/flash (when supported by device). */
   pro?: boolean;
+  facing: CameraFacing;
+  onFacingChange: (next: CameraFacing) => void;
 };
 
-export default function CameraCapture({ open, onClose, onCaptured, pro }: Props) {
+export default function CameraCapture({ open, onClose, onCaptured, pro, facing, onFacingChange }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [facing, setFacing] = useState<CameraFacing>("environment");
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -135,7 +136,7 @@ export default function CameraCapture({ open, onClose, onCaptured, pro }: Props)
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className="rounded-xl bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
-                onClick={() => setFacing((v) => (v === "environment" ? "user" : "environment"))}
+                onClick={() => onFacingChange(facing === "environment" ? "user" : "environment")}
                 disabled={starting}
               >
                 Переключить камеру
