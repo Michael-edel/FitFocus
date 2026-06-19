@@ -592,6 +592,15 @@ export default function ProgressScreen({
   const wearableConnectedLabel = formatDate(wearableConnectedAt || currentUser?.wearableConnectedAt);
   const wearableSyncLabel = formatDate(wearableLastSyncAt || currentUser?.wearableLastSyncAt);
   const wearableMetricsLabel = formatDate(wearableMetricsUpdatedAt || currentUser?.wearableMetricsUpdatedAt);
+  const glucoseSourceLabel = typeof latestMeasurement?.bloodGlucoseMmolL === 'number'
+    ? 'Дневник замеров / ручной ввод'
+    : 'Не введён, в формулах не участвует';
+  const stepsSourceLabel = wearableIsConnected
+    ? `${wearableSummary} · мост активен`
+    : 'Ручной ввод или импорт из файла';
+  const sleepSourceLabel = wearableIsConnected
+    ? `${wearableSummary} · мост активен`
+    : 'Ручной ввод или импорт из файла';
   const cloudStateLabel = syncState === 'saving' ? 'Сохраняем в облако…' : syncState === 'saved' ? 'Синхронизировано' : syncState === 'error' ? 'Ошибка синхронизации' : 'Готово к синку';
 
   const applyWearableProvider = async (provider: WearableProvider) => {
@@ -1805,6 +1814,7 @@ export default function ProgressScreen({
               <div className="mt-1 text-[11px] font-black uppercase tracking-widest text-slate-500">
                 {typeof latestMeasurement?.bloodGlucoseMmolL === 'number' ? `Состояние: ${getBloodGlucoseGuidance(latestMeasurement.bloodGlucoseMmolL)}` : 'Сахар не указан'}
               </div>
+              <div className="mt-2 text-[11px] text-slate-500">Источник: {glucoseSourceLabel}</div>
             </div>
           </div>
         </div>
@@ -1858,6 +1868,21 @@ export default function ProgressScreen({
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сон прошлой ночи</div>
               <input value={draftSleepHours} onChange={(e) => setDraftSleepHours(e.target.value)} inputMode="decimal" className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold" placeholder="7.5" />
             </label>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[1.15rem] border border-slate-800 bg-slate-950/40 px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сахар</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{glucoseSourceLabel}</div>
+            </div>
+            <div className="rounded-[1.15rem] border border-slate-800 bg-slate-950/40 px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Шаги</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{stepsSourceLabel}</div>
+            </div>
+            <div className="rounded-[1.15rem] border border-slate-800 bg-slate-950/40 px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сон</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{sleepSourceLabel}</div>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
