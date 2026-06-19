@@ -1,4 +1,5 @@
 import { AIAgent, AIAgentRole, CouncilResponse, UserProfile, FoodItem, UserHabit, CouncilVote } from './types';
+import { getBloodGlucoseGuidance } from './profileMath';
 
 const AGENTS: AIAgent[] = [
   {
@@ -40,6 +41,8 @@ const formatBloodGlucose = (user: UserProfile) => {
   return `${glucose.toFixed(1)} ммоль/л`;
 };
 
+const bloodGlucoseStatus = (user: UserProfile) => getBloodGlucoseGuidance(user.bloodGlucoseMmolL);
+
 export async function runCouncil(
   query: string,
   user: UserProfile,
@@ -57,6 +60,14 @@ export async function runCouncil(
     Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
     Давление: ${formatBloodPressure(user)}.
     Сахар крови: ${formatBloodGlucose(user)}.
+    Статус сахара: ${bloodGlucoseStatus(user)}.
+    Правило по сахару: ${bloodGlucoseStatus(user) === 'повышен'
+      ? 'сокращай быстрые углеводы, избегай сладких напитков и делай углеводы более равномерными по приёмам пищи; не трогай калории, трогай состав'
+      : bloodGlucoseStatus(user) === 'низкий'
+        ? 'не советуй агрессивный дефицит, длинные голодные окна и пропуск приёмов пищи; при повторяемых низких значениях советуй обсудить это с врачом'
+        : bloodGlucoseStatus(user) === 'норма'
+          ? 'учитывай как нейтральный контекст без ограничений'
+          : 'значение не указано, не строить на этом отдельные ограничения'}.
     Пульс покоя: ${user.restingPulse ? `${Math.round(Number(user.restingPulse))} уд/мин` : 'нет'}.
     Обхваты тела: ${[
       user.waistCm ? `талия ${Math.round(Number(user.waistCm))} см` : null,
