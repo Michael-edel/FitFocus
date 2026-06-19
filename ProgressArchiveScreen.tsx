@@ -27,6 +27,8 @@ type ProgressArchiveScreenProps = {
   onOpenProgress?: () => void;
 };
 
+type ArchiveSectionKey = 'gallery' | 'compare' | 'trend' | 'timeline';
+
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   try {
@@ -61,7 +63,16 @@ export default function ProgressArchiveScreen({
   onOpenSettings,
   onOpenProgress,
 }: ProgressArchiveScreenProps) {
-  const [mobileCompact, setMobileCompact] = useState(true);
+  const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>({
+    gallery: false,
+    compare: false,
+    trend: false,
+    timeline: false,
+  });
+
+  const toggleSection = (section: ArchiveSectionKey) => {
+    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  };
 
   const measurementsSorted = useMemo(
     () =>
@@ -240,13 +251,6 @@ export default function ProgressArchiveScreen({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setMobileCompact((value) => !value)}
-            className="inline-flex md:hidden items-center gap-2 px-4 py-3 rounded-[1rem] border border-fuchsia-500/20 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-200 font-black transition-all"
-          >
-            {mobileCompact ? 'Показать детали' : 'Скрыть детали'}
-          </button>
-          <button
-            type="button"
             onClick={onOpenProgress}
             className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
           >
@@ -285,6 +289,20 @@ export default function ProgressArchiveScreen({
             </div>
           </div>
 
+          <div className="mt-4 md:hidden flex items-center justify-between gap-3 rounded-[1.2rem] border border-slate-800 bg-slate-950/30 px-4 py-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ещё фото</div>
+              <div className="mt-1 text-sm font-black text-slate-100">{progressPhotosSorted.length ? `${progressPhotosSorted.length} снимков` : 'Нет дополнительных снимков'}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => toggleSection('gallery')}
+              className="inline-flex items-center gap-2 rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-fuchsia-200"
+            >
+              {openSections.gallery ? 'Скрыть' : 'Показать'}
+            </button>
+          </div>
+
           {latestPhoto && firstPhoto ? (
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[{ item: firstPhoto, label: 'Первое фото' }, { item: latestPhoto, label: 'Последнее фото' }].map(({ item, label }) => (
@@ -306,7 +324,7 @@ export default function ProgressArchiveScreen({
             </div>
           )}
 
-          <div className={clsx('mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3', mobileCompact && 'hidden md:grid')}>
+          <div className={clsx('mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3', !openSections.gallery && 'hidden md:grid')}>
             {progressPhotosSorted.slice(0, 8).map((photo, index) => (
               <div key={`${photo.date}-${index}`} className="relative rounded-[1.25rem] overflow-hidden border border-slate-800 bg-slate-950">
                 <img src={photo.thumb} alt={photo.note || `Фото ${index + 1}`} className="aspect-square w-full object-cover" />
@@ -399,7 +417,7 @@ export default function ProgressArchiveScreen({
         </div>
       </section>
 
-      <section className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6', mobileCompact && 'md:block hidden')}>
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">До / после</div>
@@ -434,7 +452,21 @@ export default function ProgressArchiveScreen({
           />
         </div>
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto_1fr] items-stretch">
+        <div className="mt-4 md:hidden flex items-center justify-between gap-3 rounded-[1.2rem] border border-slate-800 bg-slate-950/30 px-4 py-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Карточки сравнения</div>
+            <div className="mt-1 text-sm font-black text-slate-100">Откройте старт и текущий кадр отдельно</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleSection('compare')}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
+          >
+            {openSections.compare ? 'Скрыть' : 'Показать'}
+          </button>
+        </div>
+
+        <div className={clsx('mt-5 grid gap-3 lg:grid-cols-[1fr_auto_1fr] items-stretch', !openSections.compare && 'hidden md:grid')}>
           <CompareCard
             title="Старт"
             caption={archiveStartDate ? formatDate(archiveStartDate) : 'Нет даты'}
@@ -460,7 +492,7 @@ export default function ProgressArchiveScreen({
         </div>
       </section>
 
-      <section className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6', mobileCompact && 'md:block hidden')}>
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Тренд веса</div>
@@ -473,7 +505,21 @@ export default function ProgressArchiveScreen({
           </div>
         </div>
 
-        <div className="mt-5 h-[280px]">
+        <div className="mt-4 md:hidden flex items-center justify-between gap-3 rounded-[1.2rem] border border-slate-800 bg-slate-950/30 px-4 py-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">График</div>
+            <div className="mt-1 text-sm font-black text-slate-100">Тренд веса раскрывается по нажатию</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleSection('trend')}
+            className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-200"
+          >
+            {openSections.trend ? 'Скрыть' : 'Показать'}
+          </button>
+        </div>
+
+        <div className={clsx('mt-5 h-[280px]', !openSections.trend && 'hidden md:block')}>
           {weightTrendData.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weightTrendData}>
@@ -508,7 +554,21 @@ export default function ProgressArchiveScreen({
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 md:hidden flex items-center justify-between gap-3 rounded-[1.2rem] border border-slate-800 bg-slate-950/30 px-4 py-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Лента</div>
+            <div className="mt-1 text-sm font-black text-slate-100">События можно открыть отдельным списком</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleSection('timeline')}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200"
+          >
+            {openSections.timeline ? 'Скрыть' : 'Показать'}
+          </button>
+        </div>
+
+        <div className={clsx('mt-5 space-y-3', !openSections.timeline && 'hidden md:block')}>
           {archiveTimeline.length ? (
             archiveTimeline.map((item, index) => (
               <div key={`${item.kind}-${item.date}-${index}`} className={clsx('rounded-[1.3rem] border px-4 py-4', item.kind === 'photo' ? 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-100' : item.kind === 'wearable' ? 'border-sky-500/20 bg-sky-500/10 text-sky-100' : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-100')}>
