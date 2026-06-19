@@ -206,7 +206,14 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
     const params = new URLSearchParams();
     if (inviteCode) params.set("invite", inviteCode);
     params.set("redirect", window.location.origin);
-    window.location.href = `/api/auth/google/start?${params.toString()}`;
+    const authUrl = `/api/auth/google/start?${params.toString()}`;
+    try {
+      // Use a top-level navigation so OAuth does not get trapped inside an iframe/frame.
+      // That avoids Google's cross-origin redirect being blocked by the browser.
+      window.top?.location.assign(authUrl);
+    } catch {
+      window.location.assign(authUrl);
+    }
   }, [inviteCode]);
 
   return (
@@ -2095,13 +2102,15 @@ await ensurePdfInterFont(doc);
     let continueAfterGoogle = false;
     try {
       continueAfterGoogle = sessionStorage.getItem(GOOGLE_AUTH_PENDING_STORAGE_KEY) === '1';
-      sessionStorage.removeItem(GOOGLE_AUTH_PENDING_STORAGE_KEY);
     } catch {}
 
     try {
       const authParam = new URLSearchParams(window.location.search).get('auth');
       if (authParam === 'google') {
         continueAfterGoogle = true;
+        try {
+          sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
+        } catch {}
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('auth');
         window.history.replaceState({}, '', cleanUrl.toString());

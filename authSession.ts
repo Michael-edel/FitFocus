@@ -81,10 +81,14 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
   let me: any = await readMe();
   if (!me?.user?.sub && params.continueAfterGoogle) {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    } catch {}
-    me = await readMe();
+    const delays = [150, 250, 400, 600, 900];
+    for (const delay of delays) {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } catch {}
+      me = await readMe();
+      if (me?.user?.sub) break;
+    }
   }
 
   const serverUser: ServerUser | null = me?.user || null;
