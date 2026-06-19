@@ -69,53 +69,6 @@ type ProgressUiState = {
 
 const PROGRESS_UI_STORAGE_KEY = 'fitfocus.progress.ui.v1';
 
-const readProgressUiState = (): ProgressUiState => {
-  const fallback: ProgressUiState = {
-    selectedMetric: 'weight',
-    activeSection: 'summary',
-    mobileDetailsOpen: false,
-    timelineFilter: 'all',
-    compareFromKey: '',
-    compareToKey: '',
-    compareMode: 'matched',
-  };
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const raw = window.localStorage.getItem(PROGRESS_UI_STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<ProgressUiState>;
-    return {
-      selectedMetric:
-        parsed.selectedMetric === 'weight' ||
-        parsed.selectedMetric === 'waistCm' ||
-        parsed.selectedMetric === 'chestCm' ||
-        parsed.selectedMetric === 'hipsCm' ||
-        parsed.selectedMetric === 'restingPulse'
-          ? parsed.selectedMetric
-          : 'weight',
-      activeSection:
-        parsed.activeSection === 'summary' ||
-        parsed.activeSection === 'compare' ||
-        parsed.activeSection === 'dynamics' ||
-        parsed.activeSection === 'measurements' ||
-        parsed.activeSection === 'photos' ||
-        parsed.activeSection === 'timeline'
-          ? parsed.activeSection
-          : 'summary',
-      mobileDetailsOpen: typeof parsed.mobileDetailsOpen === 'boolean' ? parsed.mobileDetailsOpen : false,
-      timelineFilter:
-        parsed.timelineFilter === 'measurement' || parsed.timelineFilter === 'photo' || parsed.timelineFilter === 'wearable'
-          ? parsed.timelineFilter
-          : 'all',
-      compareFromKey: typeof parsed.compareFromKey === 'string' ? parsed.compareFromKey : '',
-      compareToKey: typeof parsed.compareToKey === 'string' ? parsed.compareToKey : '',
-      compareMode: parsed.compareMode === 'all' ? 'all' : 'matched',
-    };
-  } catch {
-    return fallback;
-  }
-};
-
 const metricMeta: Record<MetricKey, { label: string; unit: string; color: string }> = {
   weight: { label: 'Вес', unit: 'кг', color: '#818CF8' },
   waistCm: { label: 'Талия', unit: 'см', color: '#34D399' },
@@ -261,11 +214,12 @@ export default function ProgressScreen({
   onOpenSettings,
   onOpenArchive,
 }: ProgressScreenProps) {
-  const initialUiState = useMemo(() => readProgressUiState(), []);
-  const [selectedMetric, setSelectedMetric] = useState<MetricKey>(initialUiState.selectedMetric);
-  const [activeSection, setActiveSection] = useState<ProgressSectionId>(initialUiState.activeSection);
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(initialUiState.mobileDetailsOpen);
-  const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>(initialUiState.timelineFilter);
+  const storageKey = useMemo(() => `${PROGRESS_UI_STORAGE_KEY}:${currentUser?.id ?? 'anon'}`, [currentUser?.id]);
+  const uiSkipSaveRef = React.useRef(false);
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
+  const [activeSection, setActiveSection] = useState<ProgressSectionId>('summary');
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>('all');
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [draftWeight, setDraftWeight] = useState('');
   const [draftWaist, setDraftWaist] = useState('');
@@ -332,9 +286,9 @@ export default function ProgressScreen({
     return [...keys].filter(Boolean).sort();
   }, [progressPhotosSorted, recentMeasurements]);
 
-  const [compareFromKey, setCompareFromKey] = useState(initialUiState.compareFromKey);
-  const [compareToKey, setCompareToKey] = useState(initialUiState.compareToKey);
-  const [compareMode, setCompareMode] = useState<'all' | 'matched'>(initialUiState.compareMode);
+  const [compareFromKey, setCompareFromKey] = useState('');
+  const [compareToKey, setCompareToKey] = useState('');
+  const [compareMode, setCompareMode] = useState<'all' | 'matched'>('matched');
 
   const measurementByDate = useMemo(() => {
     const map = new Map<string, (typeof recentMeasurements)[number]>();
@@ -368,22 +322,69 @@ export default function ProgressScreen({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(
-        PROGRESS_UI_STORAGE_KEY,
-        JSON.stringify({
-          selectedMetric,
-          activeSection,
-          mobileDetailsOpen,
-          timelineFilter,
-          compareFromKey,
-          compareToKey,
-          compareMode,
-        }),
+      uiSkipSaveRef.current = true;
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<ProgressUiState>;
+      setSelectedMetric(
+        parsed.selectedMetric === 'weight' ||
+        parsed.selectedMetric === 'waistCm' ||
+        parsed.selectedMetric === 'chestCm' ||
+        parsed.selectedMetric === 'hipsCm' ||
+        parsed.selectedMetric === 'restingPulse'
+          ? parsed.selectedMetric
+          : 'weight',
       );
+      setActiveSection(
+        parsed.activeSection === 'summary' ||
+        parsed.activeSection === 'compare' ||
+        parsed.activeSection === 'dynamics' ||
+        parsed.activeSection === 'measurements' ||
+        parsed.activeSection === 'photos' ||
+        parsed.activeSection === 'timeline'
+          ? parsed.activeSection
+          : 'summary',
+      );
+      setMobileDetailsOpen(typeof parsed.mobileDetailsOpen === 'boolean' ? parsed.mobileDetailsOpen : false);
+      setTimelineFilter(
+        parsed.timelineFilter === 'measurement' || parsed.timelineFilter === 'photo' || parsed.timelineFilter === 'wearable'
+          ? parsed.timelineFilter
+          : 'all',
+      );
+      setCompareFromKey(typeof parsed.compareFromKey === 'string' ? parsed.compareFromKey : '');
+      setCompareToKey(typeof parsed.compareToKey === 'string' ? parsed.compareToKey : '');
+      setCompareMode(parsed.compareMode === 'all' ? 'all' : 'matched');
+    } catch {
+      uiSkipSaveRef.current = true;
+      setSelectedMetric('weight');
+      setActiveSection('summary');
+      setMobileDetailsOpen(false);
+      setTimelineFilter('all');
+      setCompareFromKey('');
+      setCompareToKey('');
+      setCompareMode('matched');
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (uiSkipSaveRef.current) {
+      uiSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify({
+        selectedMetric,
+        activeSection,
+        mobileDetailsOpen,
+        timelineFilter,
+        compareFromKey,
+        compareToKey,
+        compareMode,
+      }));
     } catch {
       // Ignore storage failures and keep the screen usable.
     }
-  }, [activeSection, compareFromKey, compareMode, compareToKey, mobileDetailsOpen, selectedMetric, timelineFilter]);
+  }, [activeSection, compareFromKey, compareMode, compareToKey, mobileDetailsOpen, selectedMetric, storageKey, timelineFilter]);
 
   const timelineGroups = useMemo(() => {
     type TimelineItem =
