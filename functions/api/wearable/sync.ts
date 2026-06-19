@@ -70,6 +70,24 @@ function pushWeightHistory(profile: Record<string, unknown>, weight: number, dat
   return [{ date, weight }, ...history].slice(0, 120);
 }
 
+function pushMeasurementHistory(
+  profile: Record<string, unknown>,
+  entry: {
+    date: string;
+    weight?: number;
+    restingPulse?: number;
+    bloodGlucoseMmolL?: number;
+  },
+) {
+  const history = Array.isArray(profile.measurementsHistory) ? [...profile.measurementsHistory] : [];
+  return [{
+    date: entry.date,
+    ...(typeof entry.weight === "number" ? { weight: entry.weight } : {}),
+    ...(typeof entry.restingPulse === "number" ? { restingPulse: entry.restingPulse } : {}),
+    ...(typeof entry.bloodGlucoseMmolL === "number" ? { bloodGlucoseMmolL: Number(entry.bloodGlucoseMmolL.toFixed(1)) } : {}),
+  }, ...history].slice(0, 30);
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -120,7 +138,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ...(typeof payload.activeMinutesToday === "number" ? { wearableActiveMinutesToday: Math.round(payload.activeMinutesToday) } : {}),
     ...(typeof payload.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: Number(payload.sleepHoursLastNight.toFixed(1)) } : {}),
     ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: Math.round(payload.pulse), restingPulseMeasuredAt: timestamp } : {}),
+    ...(typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0 ? { bloodGlucoseMmolL: Number(payload.bloodGlucoseMmolL.toFixed(1)), bloodGlucoseMeasuredAt: timestamp } : {}),
     ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight, weightHistory: pushWeightHistory(currentProfile, payload.weight, timestamp) } : {}),
+    ...((typeof payload.weight === "number" && payload.weight > 0) || (typeof payload.pulse === "number" && payload.pulse > 0) || (typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0)
+      ? {
+          measurementsHistory: pushMeasurementHistory(currentProfile, {
+            date: timestamp,
+            ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight } : {}),
+            ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: Math.round(payload.pulse) } : {}),
+            ...(typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0 ? { bloodGlucoseMmolL: payload.bloodGlucoseMmolL } : {}),
+          }),
+        }
+      : {}),
   });
 
   await db
@@ -139,6 +168,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         ...(typeof payload.activeMinutesToday === "number" ? { wearableActiveMinutesToday: true } : {}),
         ...(typeof payload.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: true } : {}),
         ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: true } : {}),
+        ...(typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0 ? { bloodGlucoseMmolL: true } : {}),
         ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: true } : {}),
       }),
       source: payload.provider || "manual",

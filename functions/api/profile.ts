@@ -29,6 +29,8 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'bloodPressureSystolic',
   'bloodPressureDiastolic',
   'bloodPressureMeasuredAt',
+  'bloodGlucoseMmolL',
+  'bloodGlucoseMeasuredAt',
   'waistCm',
   'chestCm',
   'hipsCm',

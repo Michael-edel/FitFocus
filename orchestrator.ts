@@ -34,6 +34,12 @@ const formatBloodPressure = (user: UserProfile) => {
   return `${Math.round(systolic)}/${Math.round(diastolic)} мм рт. ст.`;
 };
 
+const formatBloodGlucose = (user: UserProfile) => {
+  const glucose = Number(user.bloodGlucoseMmolL || 0);
+  if (!glucose) return 'нет';
+  return `${glucose.toFixed(1)} ммоль/л`;
+};
+
 export async function runCouncil(
   query: string,
   user: UserProfile,
@@ -50,6 +56,7 @@ export async function runCouncil(
     Исключения/ограничения (если есть): ${user.exclusions || 'нет'}.
     Медицинские ограничения (если есть): ${user.medicalRestrictions || 'нет'}.
     Давление: ${formatBloodPressure(user)}.
+    Сахар крови: ${formatBloodGlucose(user)}.
     Пульс покоя: ${user.restingPulse ? `${Math.round(Number(user.restingPulse))} уд/мин` : 'нет'}.
     Обхваты тела: ${[
       user.waistCm ? `талия ${Math.round(Number(user.waistCm))} см` : null,

@@ -39,6 +39,7 @@ export type RegistrationData = {
   bloodPressureSystolic: number;
   bloodPressureDiastolic: number;
   restingPulse: number;
+  bloodGlucoseMmolL: number;
   waistCm: number;
   chestCm: number;
   hipsCm: number;
@@ -515,6 +516,18 @@ export default function RegistrationScreen({
                             value={regData.restingPulse || ''}
                             onChange={(e) => setRegData(prev => ({ ...prev, restingPulse: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
                             placeholder="60"
+                            className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Сахар крови</div>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            value={regData.bloodGlucoseMmolL || ''}
+                            onChange={(e) => setRegData(prev => ({ ...prev, bloodGlucoseMmolL: Math.max(0, Number(e.target.value) || 0) }))}
+                            placeholder="5.4"
                             className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none transition-all font-bold text-white placeholder:text-slate-600 text-sm"
                           />
                         </label>

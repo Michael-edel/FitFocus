@@ -18,6 +18,7 @@ type SettingsUiState = {
   draftBloodPressureSystolic: string;
   draftBloodPressureDiastolic: string;
   draftRestingPulse: string;
+  draftBloodGlucoseMmolL: string;
   draftWaistCm: string;
   draftChestCm: string;
   draftHipsCm: string;
@@ -265,6 +266,7 @@ export default function SettingsScreen({
   const [draftBloodPressureSystolic, setDraftBloodPressureSystolic] = useState('');
   const [draftBloodPressureDiastolic, setDraftBloodPressureDiastolic] = useState('');
   const [draftRestingPulse, setDraftRestingPulse] = useState('');
+  const [draftBloodGlucoseMmolL, setDraftBloodGlucoseMmolL] = useState('');
   const [draftWaistCm, setDraftWaistCm] = useState('');
   const [draftChestCm, setDraftChestCm] = useState('');
   const [draftHipsCm, setDraftHipsCm] = useState('');
@@ -321,6 +323,7 @@ export default function SettingsScreen({
     setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
     setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
     setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
+    setDraftBloodGlucoseMmolL(user.bloodGlucoseMmolL ? String(user.bloodGlucoseMmolL) : '');
     setDraftWaistCm(user.waistCm ? String(user.waistCm) : '');
     setDraftChestCm(user.chestCm ? String(user.chestCm) : '');
     setDraftHipsCm(user.hipsCm ? String(user.hipsCm) : '');
@@ -338,6 +341,7 @@ export default function SettingsScreen({
       targetWeight: Number(user.targetWeight || 0),
       bloodPressure: user.bloodPressureSystolic && user.bloodPressureDiastolic ? `${Math.round(Number(user.bloodPressureSystolic))}/${Math.round(Number(user.bloodPressureDiastolic))}` : '—',
       restingPulse: user.restingPulse ? `${Math.round(Number(user.restingPulse))}` : '—',
+      bloodGlucose: user.bloodGlucoseMmolL ? `${Number(user.bloodGlucoseMmolL).toFixed(1)} ммоль/л` : '—',
       bodyMeasurements: [
         user.waistCm ? `талия ${Math.round(Number(user.waistCm))} см` : null,
         user.chestCm ? `грудь ${Math.round(Number(user.chestCm))} см` : null,
@@ -459,6 +463,7 @@ export default function SettingsScreen({
         const fallbackSystolic = user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '';
         const fallbackDiastolic = user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '';
         const fallbackPulse = user.restingPulse ? String(user.restingPulse) : '';
+        const fallbackGlucose = user.bloodGlucoseMmolL ? String(user.bloodGlucoseMmolL) : '';
         const fallbackWaist = user.waistCm ? String(user.waistCm) : '';
         const fallbackChest = user.chestCm ? String(user.chestCm) : '';
         const fallbackHips = user.hipsCm ? String(user.hipsCm) : '';
@@ -473,6 +478,7 @@ export default function SettingsScreen({
         const nextDraftBloodPressureSystolic = typeof parsed.draftBloodPressureSystolic === 'string' ? parsed.draftBloodPressureSystolic : fallbackSystolic;
         const nextDraftBloodPressureDiastolic = typeof parsed.draftBloodPressureDiastolic === 'string' ? parsed.draftBloodPressureDiastolic : fallbackDiastolic;
         const nextDraftRestingPulse = typeof parsed.draftRestingPulse === 'string' ? parsed.draftRestingPulse : fallbackPulse;
+        const nextDraftBloodGlucoseMmolL = typeof parsed.draftBloodGlucoseMmolL === 'string' ? parsed.draftBloodGlucoseMmolL : fallbackGlucose;
         const nextDraftWaistCm = typeof parsed.draftWaistCm === 'string' ? parsed.draftWaistCm : fallbackWaist;
         const nextDraftChestCm = typeof parsed.draftChestCm === 'string' ? parsed.draftChestCm : fallbackChest;
         const nextDraftHipsCm = typeof parsed.draftHipsCm === 'string' ? parsed.draftHipsCm : fallbackHips;
@@ -488,6 +494,7 @@ export default function SettingsScreen({
         setDraftBloodPressureSystolic(nextDraftBloodPressureSystolic);
         setDraftBloodPressureDiastolic(nextDraftBloodPressureDiastolic);
         setDraftRestingPulse(nextDraftRestingPulse);
+        setDraftBloodGlucoseMmolL(nextDraftBloodGlucoseMmolL);
         setDraftWaistCm(nextDraftWaistCm);
         setDraftChestCm(nextDraftChestCm);
         setDraftHipsCm(nextDraftHipsCm);
@@ -503,6 +510,7 @@ export default function SettingsScreen({
           nextDraftBloodPressureSystolic !== fallbackSystolic ||
           nextDraftBloodPressureDiastolic !== fallbackDiastolic ||
           nextDraftRestingPulse !== fallbackPulse ||
+          nextDraftBloodGlucoseMmolL !== fallbackGlucose ||
           nextDraftWaistCm !== fallbackWaist ||
           nextDraftChestCm !== fallbackChest ||
           nextDraftHipsCm !== fallbackHips ||
@@ -522,6 +530,7 @@ export default function SettingsScreen({
     setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
     setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
     setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
+    setDraftBloodGlucoseMmolL(user.bloodGlucoseMmolL ? String(user.bloodGlucoseMmolL) : '');
     setDraftWaistCm(user.waistCm ? String(user.waistCm) : '');
     setDraftChestCm(user.chestCm ? String(user.chestCm) : '');
     setDraftHipsCm(user.hipsCm ? String(user.hipsCm) : '');
@@ -529,7 +538,7 @@ export default function SettingsScreen({
     setAckLoss(!!user.riskAcknowledgedLoss);
     setAckGain(!!user.riskAcknowledgedGain);
     setProfileDirty(false);
-  }, [settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
+  }, [settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -559,6 +568,7 @@ export default function SettingsScreen({
         draftBloodPressureSystolic,
         draftBloodPressureDiastolic,
         draftRestingPulse,
+        draftBloodGlucoseMmolL,
         draftWaistCm,
         draftChestCm,
         draftHipsCm,
@@ -575,6 +585,7 @@ export default function SettingsScreen({
     draftAge,
     draftBloodPressureDiastolic,
     draftBloodPressureSystolic,
+    draftBloodGlucoseMmolL,
     draftChestCm,
     draftGoal,
     draftHeight,
@@ -618,14 +629,16 @@ export default function SettingsScreen({
     const parsedBloodPressureSystolic = Number(draftBloodPressureSystolic || 0);
     const parsedBloodPressureDiastolic = Number(draftBloodPressureDiastolic || 0);
     const parsedRestingPulse = Number(draftRestingPulse || 0);
+    const parsedBloodGlucoseMmolL = Number(draftBloodGlucoseMmolL || 0);
     const parsedWaistCm = Number(draftWaistCm || 0);
     const parsedChestCm = Number(draftChestCm || 0);
     const parsedHipsCm = Number(draftHipsCm || 0);
-    const bloodPressureMeasuredAt = new Date().toISOString();
+    const measurementTimestamp = new Date().toISOString();
     const hasMeasurement =
       (Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0) ||
       (Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0) ||
       (Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0) ||
+      (Number.isFinite(parsedBloodGlucoseMmolL) && parsedBloodGlucoseMmolL > 0) ||
       (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) ||
       (Number.isFinite(parsedChestCm) && parsedChestCm > 0) ||
       (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0);
@@ -638,22 +651,25 @@ export default function SettingsScreen({
       height: Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : user.height,
       bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : user.bloodPressureSystolic,
       bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : user.bloodPressureDiastolic,
-      bloodPressureMeasuredAt: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 && Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? bloodPressureMeasuredAt : user.bloodPressureMeasuredAt,
+      bloodPressureMeasuredAt: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 && Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? measurementTimestamp : user.bloodPressureMeasuredAt,
+      bloodGlucoseMmolL: Number.isFinite(parsedBloodGlucoseMmolL) && parsedBloodGlucoseMmolL > 0 ? Number(parsedBloodGlucoseMmolL.toFixed(1)) : undefined,
+      bloodGlucoseMeasuredAt: Number.isFinite(parsedBloodGlucoseMmolL) && parsedBloodGlucoseMmolL > 0 ? measurementTimestamp : undefined,
       waistCm: Number.isFinite(parsedWaistCm) && parsedWaistCm > 0 ? Math.round(parsedWaistCm) : user.waistCm,
       chestCm: Number.isFinite(parsedChestCm) && parsedChestCm > 0 ? Math.round(parsedChestCm) : user.chestCm,
       hipsCm: Number.isFinite(parsedHipsCm) && parsedHipsCm > 0 ? Math.round(parsedHipsCm) : user.hipsCm,
-      bodyMeasurementsMeasuredAt: (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) || (Number.isFinite(parsedChestCm) && parsedChestCm > 0) || (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0) ? bloodPressureMeasuredAt : user.bodyMeasurementsMeasuredAt,
+      bodyMeasurementsMeasuredAt: (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) || (Number.isFinite(parsedChestCm) && parsedChestCm > 0) || (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0) ? measurementTimestamp : user.bodyMeasurementsMeasuredAt,
       restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : user.restingPulse,
-      restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? bloodPressureMeasuredAt : user.restingPulseMeasuredAt,
+      restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? measurementTimestamp : user.restingPulseMeasuredAt,
     };
 
     if (hasMeasurement) {
       const history = user.measurementsHistory || [];
       const entry = {
-        date: bloodPressureMeasuredAt,
+        date: measurementTimestamp,
         weight: user.weight,
         bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : undefined,
         bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : undefined,
+        bloodGlucoseMmolL: Number.isFinite(parsedBloodGlucoseMmolL) && parsedBloodGlucoseMmolL > 0 ? Number(parsedBloodGlucoseMmolL.toFixed(1)) : undefined,
         waistCm: Number.isFinite(parsedWaistCm) && parsedWaistCm > 0 ? Math.round(parsedWaistCm) : undefined,
         chestCm: Number.isFinite(parsedChestCm) && parsedChestCm > 0 ? Math.round(parsedChestCm) : undefined,
         hipsCm: Number.isFinite(parsedHipsCm) && parsedHipsCm > 0 ? Math.round(parsedHipsCm) : undefined,
@@ -734,6 +750,7 @@ export default function SettingsScreen({
                         ? `${latestMeasurement.bloodPressureSystolic}/${latestMeasurement.bloodPressureDiastolic} мм рт. ст.`
                         : 'Давление не указано'}
                       {latestMeasurement.restingPulse ? ` · Пульс ${latestMeasurement.restingPulse} уд/мин` : ''}
+                      {latestMeasurement.bloodGlucoseMmolL ? ` · Сахар ${Number(latestMeasurement.bloodGlucoseMmolL).toFixed(1)} ммоль/л` : ''}
                     </div>
                   </div>
                 )}
@@ -827,6 +844,23 @@ export default function SettingsScreen({
                     </label>
                   </div>
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="space-y-1 min-w-0">
+                      <div className="text-sm text-slate-400 font-semibold">Сахар крови</div>
+                      <input
+                        value={draftBloodGlucoseMmolL}
+                        onChange={(e) => { setDraftBloodGlucoseMmolL(e.target.value); setProfileDirty(true); }}
+                        inputMode="decimal"
+                        step="0.1"
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="5.4 ммоль/л"
+                      />
+                    </label>
+                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-400 flex items-center">
+                      Если значение не введено, сахар не используется в формулах и попадает только в дневник замеров.
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <label className="space-y-1 min-w-0">
                       <div className="text-sm text-slate-400 font-semibold">Талия</div>
@@ -873,6 +907,7 @@ export default function SettingsScreen({
                   <div className="text-sm text-slate-400 space-y-1">
                     {profileSummary?.email}
                     <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
+                    <div className="text-slate-500 text-xs">Сахар: {profileSummary?.bloodGlucose}</div>
                     <div className="text-slate-500 text-xs">Обхваты: {profileSummary?.bodyMeasurements}</div>
                   </div>
                 </div>

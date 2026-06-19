@@ -17,6 +17,7 @@ type RegDataLike = {
   bloodPressureSystolic?: number;
   bloodPressureDiastolic?: number;
   restingPulse?: number;
+  bloodGlucoseMmolL?: number;
   waistCm?: number;
   chestCm?: number;
   hipsCm?: number;
@@ -91,6 +92,8 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
     bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
     bloodPressureMeasuredAt: Number(deps.regData.bloodPressureSystolic || 0) > 0 && Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? new Date().toISOString() : undefined,
+    bloodGlucoseMmolL: Number(deps.regData.bloodGlucoseMmolL || 0) > 0 ? Number(Number(deps.regData.bloodGlucoseMmolL).toFixed(1)) : undefined,
+    bloodGlucoseMeasuredAt: Number(deps.regData.bloodGlucoseMmolL || 0) > 0 ? new Date().toISOString() : undefined,
     waistCm: Number(deps.regData.waistCm || 0) > 0 ? Math.floor(Number(deps.regData.waistCm)) : undefined,
     chestCm: Number(deps.regData.chestCm || 0) > 0 ? Math.floor(Number(deps.regData.chestCm)) : undefined,
     hipsCm: Number(deps.regData.hipsCm || 0) > 0 ? Math.floor(Number(deps.regData.hipsCm)) : undefined,
@@ -106,6 +109,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       bloodPressureSystolic: Number(deps.regData.bloodPressureSystolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureSystolic)) : undefined,
       bloodPressureDiastolic: Number(deps.regData.bloodPressureDiastolic || 0) > 0 ? Math.floor(Number(deps.regData.bloodPressureDiastolic)) : undefined,
       restingPulse: Number(deps.regData.restingPulse || 0) > 0 ? Math.floor(Number(deps.regData.restingPulse)) : undefined,
+      bloodGlucoseMmolL: Number(deps.regData.bloodGlucoseMmolL || 0) > 0 ? Number(Number(deps.regData.bloodGlucoseMmolL).toFixed(1)) : undefined,
     }],
     lossDeficit: Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT),
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
