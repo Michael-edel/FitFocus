@@ -213,7 +213,12 @@ const handlePick = async (file?: File) => {
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-2xl rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
         <div className="p-5 flex items-center justify-between border-b border-slate-800">
-          <div className="text-slate-100 font-black text-lg">Новый рецепт</div>
+          <div>
+            <div className="text-slate-100 font-black text-lg">Новый рецепт</div>
+            <div className="text-slate-500 text-xs mt-1">
+              Карточка блюда из фото. Проверьте название, порции и ингредиенты перед сохранением.
+            </div>
+          </div>
           <button onClick={() => setDraft(null)} className="p-2 rounded-full border border-slate-800 hover:border-slate-600 text-slate-300">
             <X className="w-4 h-4" />
           </button>
@@ -297,7 +302,13 @@ const handlePick = async (file?: File) => {
       <div className="flex items-start justify-between gap-6 mb-8 text-left">
         <div>
           <div className="text-3xl font-black text-slate-100">Рецепты</div>
-          <div className="text-slate-400 mt-2">Здесь сохраняются понравившиеся рецепты из AI-разбора блюд.</div>
+          <div className="text-slate-400 mt-2 max-w-2xl">
+            Личная библиотека блюд из фото. Здесь сохраняются рецепты, которые FitFocus распознал из ваших снимков,
+            чтобы потом быстро повторить блюдо, отредактировать состав или найти его по поиску.
+          </div>
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-[11px] font-black tracking-widest uppercase text-indigo-200">
+            AI-разбор блюд
+          </div>
         </div>
         
 <div className="flex items-center gap-3">
@@ -361,9 +372,10 @@ const handlePick = async (file?: File) => {
           <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-200 flex items-center justify-center mb-4">
             <Heart className="w-7 h-7" />
           </div>
-          <div className="text-slate-100 font-black text-xl">Пока нет сохранённых рецептов</div>
+          <div className="text-slate-100 font-black text-xl">Пока нет сохранённых блюд</div>
           <div className="text-slate-400 mt-2">
-            Откройте разбор блюда и нажмите <span className="text-rose-200 font-bold">«Сохранить рецепт»</span>.
+            Сфотографируйте блюдо, проверьте распознанный состав и нажмите{' '}
+            <span className="text-rose-200 font-bold">«Сохранить рецепт»</span>, чтобы добавить его в личную библиотеку.
           </div>
         </div>
       ) : (
@@ -438,6 +450,9 @@ const handlePick = async (file?: File) => {
 
               <div className="mt-5 text-slate-500 text-xs">
                 Сохранено: {new Date(r.createdAt).toLocaleString()}
+              </div>
+              <div className="mt-4 rounded-[1.25rem] border border-indigo-500/15 bg-indigo-500/5 px-4 py-3 text-slate-300 text-sm">
+                Это блюдо можно снова открыть, отредактировать и использовать как основу для похожих рецептов.
               </div>
                   </>
                 );
