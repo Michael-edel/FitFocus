@@ -2098,6 +2098,16 @@ await ensurePdfInterFont(doc);
       sessionStorage.removeItem(GOOGLE_AUTH_PENDING_STORAGE_KEY);
     } catch {}
 
+    try {
+      const authParam = new URLSearchParams(window.location.search).get('auth');
+      if (authParam === 'google') {
+        continueAfterGoogle = true;
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('auth');
+        window.history.replaceState({}, '', cleanUrl.toString());
+      }
+    } catch {}
+
     await bootstrapAuthSession({
       requireInvite,
       loginAsUser,
@@ -2811,8 +2821,21 @@ const logWeight = useCallback(() => {
             currentPlan={paywall.plan}
             userId={currentUser?.id}
             isAdmin={isAdmin}
-            onSelect={(p) => {
+            onSelect={async (p) => {
               if (!currentUser) return;
+              if (isAdmin && !isTestModeEnabled()) {
+                const r = await fetch('/api/admin/subscription', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: currentUser.id, plan: p }),
+                });
+                const j = await r.json().catch(() => null);
+                if (!r.ok) {
+                  alert(j?.error ? `Не удалось поменять тариф: ${j.error}` : 'Не удалось поменять тариф.');
+                  return;
+                }
+              }
               persistUser({
                 ...currentUser,
                 plan: p,
