@@ -918,7 +918,20 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [newWeight, setNewWeight] = useState<string>('');
+  const [newWeight, setNewWeight] = useState<string>(() => {
+    try {
+      return localStorage.getItem('fitfocus.dashboard.new-weight.v1') || '';
+    } catch {
+      return '';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('fitfocus.dashboard.new-weight.v1', newWeight);
+    } catch {
+      // Ignore storage quota or privacy errors.
+    }
+  }, [newWeight]);
   
   const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
