@@ -1171,12 +1171,48 @@ const openEditFood = (item: FoodEntry) => {
   const activationTimerRef = useRef<number | null>(null);
   const activationIntervalRef = useRef<number | null>(null);
 
+  const planUiStorageKey = useMemo(
+    () => `fitfocus.plan.ui.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const planUiSkipSaveRef = useRef(false);
   const [planIntroOpen, setPlanIntroOpen] = useState(false);
   const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
   const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
   const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
   const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
   const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
+
+  useEffect(() => {
+    try {
+      planUiSkipSaveRef.current = true;
+      const raw = localStorage.getItem(planUiStorageKey);
+      if (!raw) {
+        setPlanIntroOpen(false);
+        setPlanRulesExpanded(false);
+        setPlanScope('personal');
+        setFamilyMenuPrefsOpen(false);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<{
+        planIntroOpen: boolean;
+        planRulesExpanded: boolean;
+        planScope: 'personal' | 'family';
+        familyMenuPrefsOpen: boolean;
+        planWeekExpanded: Record<string, boolean>;
+      }>;
+      setPlanIntroOpen(!!parsed.planIntroOpen);
+      setPlanRulesExpanded(!!parsed.planRulesExpanded);
+      setPlanScope(parsed.planScope === 'family' ? 'family' : 'personal');
+      setFamilyMenuPrefsOpen(!!parsed.familyMenuPrefsOpen);
+    } catch {
+      planUiSkipSaveRef.current = true;
+      setPlanIntroOpen(false);
+      setPlanRulesExpanded(false);
+      setPlanScope('personal');
+      setFamilyMenuPrefsOpen(false);
+    }
+  }, [planUiStorageKey]);
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -1203,10 +1239,52 @@ const openEditFood = (item: FoodEntry) => {
   useEffect(() => {
     const next: Record<string, boolean> = {};
     (currentUser?.aiPlan?.weeklyMenu?.days ?? []).forEach((day, idx) => {
-      next[day.day] = idx < 2;
+      next[day.day] = typeof planWeekExpanded[day.day] === 'boolean' ? planWeekExpanded[day.day] : idx < 2;
     });
     setPlanWeekExpanded(next);
   }, [currentUser?.aiPlan?.weeklyMenu?.weekStart, currentUser?.aiPlan?.weeklyMenu?.days?.length]);
+
+  useEffect(() => {
+    try {
+      planUiSkipSaveRef.current = true;
+      const raw = localStorage.getItem(planUiStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<{
+        planWeekExpanded: Record<string, boolean>;
+      }>;
+      const storedWeek = parsed.planWeekExpanded && typeof parsed.planWeekExpanded === 'object' ? parsed.planWeekExpanded : {};
+      const days = currentUser?.aiPlan?.weeklyMenu?.days ?? [];
+      if (!days.length) {
+        setPlanWeekExpanded(storedWeek);
+        return;
+      }
+      const next: Record<string, boolean> = {};
+      days.forEach((day, idx) => {
+        next[day.day] = typeof storedWeek[day.day] === 'boolean' ? storedWeek[day.day] : idx < 2;
+      });
+      setPlanWeekExpanded(next);
+    } catch {
+      planUiSkipSaveRef.current = true;
+    }
+  }, [currentUser?.aiPlan?.weeklyMenu?.days?.length, currentUser?.aiPlan?.weeklyMenu?.weekStart, planUiStorageKey]);
+
+  useEffect(() => {
+    if (planUiSkipSaveRef.current) {
+      planUiSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(planUiStorageKey, JSON.stringify({
+        planIntroOpen,
+        planRulesExpanded,
+        planScope,
+        familyMenuPrefsOpen,
+        planWeekExpanded,
+      }));
+    } catch {
+      // no-op
+    }
+  }, [familyMenuPrefsOpen, planIntroOpen, planRulesExpanded, planScope, planUiStorageKey, planWeekExpanded]);
   const [planError, setPlanError] = useState<string | null>(null);
 
   // Cinematic AI activation steps

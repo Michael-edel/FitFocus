@@ -87,12 +87,42 @@ export default function PlanScreen({
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
+  const activeWeekDayStorageKey = React.useMemo(
+    () => `fitfocus.plan.active-day.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const activeWeekDaySkipSaveRef = React.useRef(false);
   const [activeWeekDay, setActiveWeekDay] = React.useState<string>('');
+
+  React.useEffect(() => {
+    try {
+      activeWeekDaySkipSaveRef.current = true;
+      setActiveWeekDay(localStorage.getItem(activeWeekDayStorageKey) || '');
+    } catch {
+      activeWeekDaySkipSaveRef.current = true;
+      setActiveWeekDay('');
+    }
+  }, [activeWeekDayStorageKey]);
+
   React.useEffect(() => {
     const nextDay = weeklyMenu?.days?.[0]?.day || '';
     if (!nextDay) return;
     setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d: any) => d.day === prev) ? prev : nextDay));
   }, [weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
+
+  React.useEffect(() => {
+    if (activeWeekDaySkipSaveRef.current) {
+      activeWeekDaySkipSaveRef.current = false;
+      return;
+    }
+    try {
+      if (activeWeekDay) {
+        localStorage.setItem(activeWeekDayStorageKey, activeWeekDay);
+      }
+    } catch {
+      // no-op
+    }
+  }, [activeWeekDay, activeWeekDayStorageKey]);
 
   const weeklyMenuDay = React.useMemo(() => {
     const days = weeklyMenu?.days ?? [];
