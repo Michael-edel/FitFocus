@@ -994,6 +994,7 @@ const App: React.FC = () => {
           `fitfocus.progress.ui.v1:${userId}`,
           `fitfocus.progress-archive.sections.v1:${userId}`,
           `fitfocus.settings.ui.v1:${userId}`,
+          `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
         ].forEach((key) => localStorage.removeItem(key));
       }
     } catch {
@@ -1002,6 +1003,7 @@ const App: React.FC = () => {
 
     dashboardWeightSkipSaveRef.current = true;
     setNewWeight('');
+    setPdfIncludeMealLog(false);
     setMobileMoreOpen(false);
     setIsScanning(false);
     setCameraOpen(false);
@@ -1143,7 +1145,38 @@ const App: React.FC = () => {
       cls: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200',
     };
   }, [paywall.plan, requireInvite]);
-  const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
+  const pdfMealLogStorageKey = useMemo(
+    () => `fitfocus.dashboard.pdf-include-meal-log.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const pdfMealLogSkipSaveRef = useRef(false);
+  const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(pdfMealLogStorageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      pdfMealLogSkipSaveRef.current = true;
+      setPdfIncludeMealLog(localStorage.getItem(pdfMealLogStorageKey) === '1');
+    } catch {
+      pdfMealLogSkipSaveRef.current = true;
+      setPdfIncludeMealLog(false);
+    }
+  }, [pdfMealLogStorageKey]);
+  useEffect(() => {
+    if (pdfMealLogSkipSaveRef.current) {
+      pdfMealLogSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(pdfMealLogStorageKey, pdfIncludeMealLog ? '1' : '0');
+    } catch {
+      // Ignore storage quota or privacy errors.
+    }
+  }, [pdfIncludeMealLog, pdfMealLogStorageKey]);
 
   const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
   const [coachLoading, setCoachLoading] = useState(false);
