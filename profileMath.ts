@@ -47,3 +47,32 @@ export function calculateDailyTargets(person: PersonLike): NutritionIntake {
     carbs: Math.round((calories * ratios.carbs) / 4),
   };
 }
+
+export type BloodGlucoseStatus = 'low' | 'normal' | 'high' | 'unknown';
+
+export function getBloodGlucoseStatus(value?: number | null): BloodGlucoseStatus {
+  const glucose = Number(value);
+  if (!Number.isFinite(glucose) || glucose <= 0) return 'unknown';
+  if (glucose < 4.0) return 'low';
+  if (glucose <= 6.0) return 'normal';
+  return 'high';
+}
+
+export function formatBloodGlucose(value?: number | null): string {
+  const glucose = Number(value);
+  if (!Number.isFinite(glucose) || glucose <= 0) return '—';
+  return `${glucose.toFixed(1)} ммоль/л`;
+}
+
+export function getBloodGlucoseGuidance(value?: number | null): string {
+  switch (getBloodGlucoseStatus(value)) {
+    case 'low':
+      return 'низкий';
+    case 'normal':
+      return 'норма';
+    case 'high':
+      return 'повышен';
+    default:
+      return 'не указан';
+  }
+}

@@ -2,7 +2,7 @@ import type { Type } from "@google/genai";
 import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodItem, UserHabit, WeeklyMenu, FamilyWeeklyMenu, FamilyMenuPrefs, FamilyWeeklyMenuDay } from "./types";
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
-import { calculateDailyTargets } from "./profileMath";
+import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -332,6 +332,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
   const prompt = `Составь простое меню на 7 дней для пользователя.
 Пользователь: ${user.name}, пол: ${user.gender}, возраст: ${user.age}, рост: ${user.height} см, вес: ${user.weight} кг, цель: ${user.goal}.
 Дневные KPI: ${plan.dailyKpi.calories} ккал, Б ${plan.dailyKpi.protein} г, Ж ${plan.dailyKpi.fat} г, У ${plan.dailyKpi.carbs} г.
+Сахар крови: ${user.bloodGlucoseMmolL ? `${Number(user.bloodGlucoseMmolL).toFixed(1)} ммоль/л (${getBloodGlucoseGuidance(user.bloodGlucoseMmolL)})` : 'не указан'}.
 Ограничения (если есть):
 - Медицинские ограничения: ${user.medicalRestrictions || 'нет'}
 - Аллергены (строго): ${(user.dietary?.allergens || []).join(', ') || 'нет'}
@@ -345,6 +346,9 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - 7 дней в массиве days, порядок: Понедельник..Воскресенье.
 - Блюда должны быть простые, из доступных продуктов, повторы допустимы.
 - Порции в описании коротко (пример: "курица 150г + гречка 80г + салат").
+- Если сахар повышен, делай углеводы более равномерными, убирай сладкие напитки и десерты, делай акцент на белок/клетчатку.
+- Если сахар низкий, не предлагай жёсткий дефицит, длинные голодные окна и пропуск завтрака.
+- Если сахар в норме или не указан, меню строится по обычным KPI без дополнительных ограничений.
 - shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.
 - shoppingListItems: агрегированный список покупок с весом в граммах на неделю. Формат: [{name, grams}]. Названия строго на русском.`;
 
@@ -750,7 +754,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
  */
 export async function getCoachAdvice(data: any): Promise<any> {
   const response = await callAiProxy('gemini-2.5-flash', 
-    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
+    `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Сахар крови трактуй так: низкий = не давать агрессивный дефицит и долгие голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка/клетчатки и равномерное распределение углеводов; не меняй калорийную цель, меняй состав и ритм питания. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
       responseMimeType: "application/json",
@@ -880,7 +884,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     );
   };
 
-  const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\nЕсли у пользователя указаны давление, пульс, обхваты, фото прогресса, история замеров или медицинские ограничения, учитывай их при выборе нагрузки, темпа прогрессии, соли и восстановительных рекомендаций.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
+  const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\nЕсли у пользователя указаны давление, пульс, сахар крови, обхваты, фото прогресса, история замеров или медицинские ограничения, учитывай их при выборе нагрузки, темпа прогрессии, соли и восстановительных рекомендаций.\nСахар крови трактуй так: низкий = не давать агрессивный дефицит и длинные голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка и клетчатки, равномернее распределяй углеводы по дню; не меняй ккал-цель, меняй состав и ритм питания.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
 
   const repairPrompt = (badJson: any) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
 

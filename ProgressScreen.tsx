@@ -27,6 +27,7 @@ import {
 import { WeightTrendChart } from './charts';
 import { downloadProgressComparisonPdf } from './pdf';
 import { normalizeWearableSyncSnapshot } from './wearableSync';
+import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
@@ -1799,8 +1800,11 @@ export default function ProgressScreen({
             </div>
             <div className="rounded-[1.4rem] border border-slate-800 bg-slate-950/40 p-4">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Сахар</div>
-              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{typeof latestMeasurement?.bloodGlucoseMmolL === 'number' ? `${Number(latestMeasurement.bloodGlucoseMmolL).toFixed(1)} ммоль/л` : '—'}</div>
+              <div className="mt-2 text-2xl font-black text-slate-100 tabular-nums">{typeof latestMeasurement?.bloodGlucoseMmolL === 'number' ? formatBloodGlucose(latestMeasurement.bloodGlucoseMmolL) : '—'}</div>
               <div className="mt-1 text-sm text-slate-400">{formatDelta(latestMeasurement?.bloodGlucoseMmolL, previousMeasurement?.bloodGlucoseMmolL, 'ммоль/л')}</div>
+              <div className="mt-1 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                {typeof latestMeasurement?.bloodGlucoseMmolL === 'number' ? `Состояние: ${getBloodGlucoseGuidance(latestMeasurement.bloodGlucoseMmolL)}` : 'Сахар не указан'}
+              </div>
             </div>
           </div>
         </div>
