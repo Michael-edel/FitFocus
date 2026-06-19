@@ -214,7 +214,7 @@ const handlePick = async (file?: File) => {
       <div className="w-full max-w-2xl rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
         <div className="p-5 flex items-center justify-between border-b border-slate-800">
           <div>
-            <div className="text-slate-100 font-black text-lg">Новый рецепт</div>
+            <div className="text-slate-100 font-black text-lg">Новое блюдо</div>
             <div className="text-slate-500 text-xs mt-1">
               Карточка блюда из фото. Проверьте название, порции и ингредиенты перед сохранением.
             </div>
@@ -301,7 +301,7 @@ const handlePick = async (file?: File) => {
 
       <div className="flex items-start justify-between gap-6 mb-8 text-left">
         <div>
-          <div className="text-3xl font-black text-slate-100">Рецепты</div>
+          <div className="text-3xl font-black text-slate-100">Мои блюда</div>
           <div className="text-slate-400 mt-2 max-w-2xl">
             Личная библиотека блюд из фото. Здесь сохраняются рецепты, которые FitFocus распознал из ваших снимков,
             чтобы потом быстро повторить блюдо, отредактировать состав или найти его по поиску.
@@ -330,7 +330,7 @@ const handlePick = async (file?: File) => {
   <button
     onClick={() => cameraInputRef.current?.click()}
     className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
-    title="Снять фото блюда и распознать рецепт"
+            title="Снять фото блюда и распознать"
   >
     {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
     Снять фото
@@ -338,7 +338,7 @@ const handlePick = async (file?: File) => {
   <button
     onClick={() => fileInputRef.current?.click()}
     className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
-    title="Загрузить фото блюда и распознать рецепт"
+    title="Загрузить фото блюда и распознать"
   >
     {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
     Загрузить фото
@@ -375,7 +375,7 @@ const handlePick = async (file?: File) => {
           <div className="text-slate-100 font-black text-xl">Пока нет сохранённых блюд</div>
           <div className="text-slate-400 mt-2">
             Сфотографируйте блюдо, проверьте распознанный состав и нажмите{' '}
-            <span className="text-rose-200 font-bold">«Сохранить рецепт»</span>, чтобы добавить его в личную библиотеку.
+            <span className="text-rose-200 font-bold">«Сохранить блюдо»</span>, чтобы добавить его в личную библиотеку.
           </div>
         </div>
       ) : (
