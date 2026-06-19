@@ -1002,28 +1002,6 @@ export default function SettingsScreen({
                   </button>
                 </div>
 
-                <div className="mt-3 rounded-[1.25rem] border border-amber-500/20 bg-amber-500/5 p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <div className="text-[10px] font-black uppercase tracking-widest text-amber-200">Сбросить вид</div>
-                      <div className="mt-1 text-slate-100 font-black">Очистить только пользовательские экраны и черновики</div>
-                      <div className="mt-1 text-slate-400 text-sm">Профиль, облако и история останутся без изменений.</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={resetUiState}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-[1rem] border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-100 font-black transition-all"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Сбросить UI
-                    </button>
-                  </div>
-                </div>
-                {uiResetAt && (
-                  <div className="mt-3 text-emerald-200 text-sm font-bold">
-                    UI сброшен. Все экраны вернулись к стандартному виду.
-                  </div>
-                )}
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
@@ -1477,37 +1455,50 @@ export default function SettingsScreen({
           </Card>
         )}
 
-        <Card title="AI и кэш" icon={<span className="font-black">AI</span>}>
-          <div className="space-y-3 text-left">
+        <Card title="Сервис" icon={<RefreshCw className="w-4 h-4" />}>
+          <div className="space-y-4 text-left">
             <div className="text-slate-400 text-sm font-semibold">
-              Если Gemini временно недоступен или квота исчерпана, приложение использует кэш и локальные подсказки.
+              Здесь собраны действия обслуживания: AI-кэш, UI-состояние и резервные копии.
+              {autosaveEnabled ? (
+                <span className="text-emerald-200 font-bold"> Автосейв включён.</span>
+              ) : (
+                <span className="text-slate-500"> Автосейв не включён.</span>
+              )}
             </div>
 
-            <button
-              onClick={onClearAiCache}
-              className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left"
-            >
-              <div className="text-slate-100 font-black">Сбросить AI-кэш</div>
-              <div className="text-slate-400 text-sm mt-1">Очистит кэш ответов, статусы и паузу Gemini.</div>
-            </button>
+            <div className="grid gap-3 md:grid-cols-2">
+              <button
+                onClick={onClearAiCache}
+                className="w-full p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30 hover:border-indigo-500/30 transition-all text-left"
+              >
+                <div className="text-slate-100 font-black">Сбросить AI-кэш</div>
+                <div className="text-slate-400 text-sm mt-1">Очистит кэш ответов, статусы и паузу Gemini.</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={resetUiState}
+                className="w-full p-4 rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all text-left"
+              >
+                <div className="text-amber-100 font-black">Сбросить UI</div>
+                <div className="text-amber-200/80 text-sm mt-1">Вернёт экраны к стандартному виду без удаления профиля.</div>
+              </button>
+            </div>
 
             {cacheCleared && (
               <div className="text-emerald-200 text-sm font-bold">
                 Кэш сброшен.
               </div>
             )}
-          </div>
-        </Card>
 
-        <Card title="Резервная копия (JSON)" icon={<span className="font-black">⤓</span>}>
-          <div className="space-y-3 text-left">
-            <div className="text-slate-400 text-sm font-semibold">
+            {uiResetAt && (
+              <div className="text-emerald-200 text-sm font-bold">
+                UI сброшен. Все экраны вернулись к стандартному виду.
+              </div>
+            )}
+
+            <div className="text-slate-400 text-sm font-semibold pt-2 border-t border-slate-800/70">
               Для тестов и переноса между браузерами экспортируйте/импортируйте данные в JSON.
-              {autosaveEnabled ? (
-                <span className="text-emerald-200 font-bold"> Автосейв включён.</span>
-              ) : (
-                <span className="text-slate-500"> Автосейв не включён.</span>
-              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
