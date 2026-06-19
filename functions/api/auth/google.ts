@@ -1,4 +1,4 @@
-import { json, replaceActiveSessionsForDevice } from "../_lib/auth";
+import { json, replaceActiveSessionsForUser } from "../_lib/auth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -114,19 +114,18 @@ if (adminEmails.length && user.email && adminEmails.includes(String(user.email).
   await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
 }
 // Create server-tracked session (enterprise layer)
-const ua = request.headers.get("user-agent") || "";
 const ip =
   request.headers.get("cf-connecting-ip") ||
   request.headers.get("x-forwarded-for") ||
   request.headers.get("x-real-ip") ||
   "";
 
-await replaceActiveSessionsForDevice(env.DB, user.sub, ua, now);
+await replaceActiveSessionsForUser(env.DB, user.sub, now);
 
 await env.DB.prepare(
   "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
 )
-  .bind(sid, user.sub, now, expiresAt, ua.slice(0, 500), String(ip).slice(0, 100))
+  .bind(sid, user.sub, now, expiresAt, request.headers.get("user-agent")?.slice(0, 500) || "", String(ip).slice(0, 100))
   .run();
 
 
