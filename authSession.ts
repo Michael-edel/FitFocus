@@ -125,18 +125,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     return;
   }
 
-  try {
-    const all = readStoredAllUsersSnapshot<UserProfile>();
-    if (Array.isArray(all) && all.length > 0) {
-      const normalized = normalizeUserProfiles(all);
-      params.setAllUsers(normalized);
-      if (normalized.length === 1) {
-        void params.loginAsUser(normalized[0]);
-        return;
-      }
-    }
-  } catch {}
-
+  params.setAllUsers([]);
   params.setAuthState('auth_choice');
 }
 
