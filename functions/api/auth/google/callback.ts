@@ -238,7 +238,7 @@ export const onRequestGet: PagesFunction<{
       "Set-Cookie",
       cookieSerialize("ff_session", sessionJwt, { httpOnly: true, secure: isHttps, sameSite: "Lax", path: "/", maxAge: ttl })
     );
-    headers.set("Location", redirectAfter);
+    headers.set("Location", `${redirectAfter}/?auth=google`);
     return new Response(null, { status: 302, headers });
   } catch (e: any) {
     return json({ error: "Server error", details: String(e?.message || e) }, 500);

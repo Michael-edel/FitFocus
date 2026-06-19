@@ -14,7 +14,7 @@ export default function PlansScreen({
   currentPlan?: TariffPlan;
   userId?: string | null;
   isAdmin?: boolean;
-  onSelect: (p: TariffPlan) => void;
+  onSelect: (p: TariffPlan) => void | Promise<void>;
   onCheckoutPlan: (p: Exclude<TariffPlan, 'free'>) => Promise<string | null>;
   onClose: () => void;
 }) {
@@ -129,12 +129,12 @@ export default function PlansScreen({
               </div>
 
               <button 
-                onClick={() => {
+                onClick={async () => {
                   if (p.id === 'free') {
-                    onSelect('free');
+                    await onSelect('free');
                     onClose();
                   } else if (isAdmin) {
-                    onSelect(p.id);
+                    await onSelect(p.id);
                     onClose();
                   } else {
                     setCheckoutPlan(p.id);

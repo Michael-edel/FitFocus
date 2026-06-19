@@ -71,11 +71,21 @@ function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
 
-  let me: any = null;
-  try {
-    const r = await fetchFn('/api/me', { credentials: 'include' });
-    if (r.ok) me = await r.json();
-  } catch {}
+  const readMe = async () => {
+    try {
+      const r = await fetchFn('/api/me', { credentials: 'include', cache: 'no-store' });
+      if (r.ok) return await r.json();
+    } catch {}
+    return null;
+  };
+
+  let me: any = await readMe();
+  if (!me?.user?.sub && params.continueAfterGoogle) {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    } catch {}
+    me = await readMe();
+  }
 
   const serverUser: ServerUser | null = me?.user || null;
   const hasServerAccess = me?.hasAccess !== false;
