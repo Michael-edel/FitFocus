@@ -918,20 +918,38 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const dashboardWeightStorageKey = useMemo(
+    () => `fitfocus.dashboard.new-weight.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const dashboardWeightSkipSaveRef = useRef(false);
   const [newWeight, setNewWeight] = useState<string>(() => {
     try {
-      return localStorage.getItem('fitfocus.dashboard.new-weight.v1') || '';
+      return localStorage.getItem(dashboardWeightStorageKey) || '';
     } catch {
       return '';
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem('fitfocus.dashboard.new-weight.v1', newWeight);
+      dashboardWeightSkipSaveRef.current = true;
+      setNewWeight(localStorage.getItem(dashboardWeightStorageKey) || '');
+    } catch {
+      dashboardWeightSkipSaveRef.current = true;
+      setNewWeight('');
+    }
+  }, [dashboardWeightStorageKey]);
+  useEffect(() => {
+    if (dashboardWeightSkipSaveRef.current) {
+      dashboardWeightSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(dashboardWeightStorageKey, newWeight);
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [newWeight]);
+  }, [dashboardWeightStorageKey, newWeight]);
   
   const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);

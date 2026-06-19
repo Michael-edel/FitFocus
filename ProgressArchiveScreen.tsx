@@ -38,23 +38,6 @@ const defaultOpenSections = (): Record<ArchiveSectionKey, boolean> => ({
   timeline: false,
 });
 
-const readOpenSections = (): Record<ArchiveSectionKey, boolean> => {
-  if (typeof window === 'undefined') return defaultOpenSections();
-  try {
-    const raw = window.localStorage.getItem(ARCHIVE_SECTIONS_STORAGE_KEY);
-    if (!raw) return defaultOpenSections();
-    const parsed = JSON.parse(raw) as Partial<Record<ArchiveSectionKey, boolean>>;
-    return {
-      gallery: typeof parsed.gallery === 'boolean' ? parsed.gallery : false,
-      compare: typeof parsed.compare === 'boolean' ? parsed.compare : false,
-      trend: typeof parsed.trend === 'boolean' ? parsed.trend : false,
-      timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : false,
-    };
-  } catch {
-    return defaultOpenSections();
-  }
-};
-
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
   try {
@@ -89,19 +72,49 @@ export default function ProgressArchiveScreen({
   onOpenSettings,
   onOpenProgress,
 }: ProgressArchiveScreenProps) {
-  const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>(readOpenSections);
+  const storageKey = useMemo(
+    () => `${ARCHIVE_SECTIONS_STORAGE_KEY}:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const archiveSkipSaveRef = React.useRef(false);
+  const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>(defaultOpenSections);
+
+  useEffect(() => {
+    try {
+      archiveSkipSaveRef.current = true;
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setOpenSections(defaultOpenSections());
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<Record<ArchiveSectionKey, boolean>>;
+      setOpenSections({
+        gallery: typeof parsed.gallery === 'boolean' ? parsed.gallery : false,
+        compare: typeof parsed.compare === 'boolean' ? parsed.compare : false,
+        trend: typeof parsed.trend === 'boolean' ? parsed.trend : false,
+        timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : false,
+      });
+    } catch {
+      archiveSkipSaveRef.current = true;
+      setOpenSections(defaultOpenSections());
+    }
+  }, [storageKey]);
 
   const toggleSection = (section: ArchiveSectionKey) => {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
   };
 
   useEffect(() => {
+    if (archiveSkipSaveRef.current) {
+      archiveSkipSaveRef.current = false;
+      return;
+    }
     try {
-      window.localStorage.setItem(ARCHIVE_SECTIONS_STORAGE_KEY, JSON.stringify(openSections));
+      window.localStorage.setItem(storageKey, JSON.stringify(openSections));
     } catch {
       // Ignore storage failures and keep the archive usable.
     }
-  }, [openSections]);
+  }, [openSections, storageKey]);
 
   const measurementsSorted = useMemo(
     () =>
