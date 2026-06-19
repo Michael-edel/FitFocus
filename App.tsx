@@ -1009,6 +1009,19 @@ const App: React.FC = () => {
     }
   }, [dashboardWeightStorageKey, newWeight]);
   
+  type CourseUiState = {
+    lessonId: string | null;
+    isLessonViewOpen: boolean;
+    isQuizActive: boolean;
+    selectedQuizOptionId: string | null;
+  };
+
+  const courseUiStorageKey = useMemo(
+    () => (currentUser?.id ? `fitfocus.course.ui.v1:${currentUser.id}` : null),
+    [currentUser?.id],
+  );
+  const courseUiHydratedKeyRef = useRef<string | null>(null);
+
   const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
@@ -1047,6 +1060,7 @@ const App: React.FC = () => {
       if (userId) {
         [
           `fitfocus.dashboard.new-weight.v1:${userId}`,
+          `fitfocus.course.ui.v1:${userId}`,
           `fitfocus.plan.ui.v1:${userId}`,
           `fitfocus.plan.active-day.v1:${userId}`,
           `fitfocus.progress.ui.v1:${userId}`,
@@ -1071,6 +1085,7 @@ const App: React.FC = () => {
     setCameraFacing('environment');
     setIsScanning(false);
     setCameraOpen(false);
+    setCurrentLesson(null);
     setIsLessonViewOpen(false);
     setIsQuizActive(false);
     setSelectedQuizOption(null);
@@ -2059,10 +2074,55 @@ await ensurePdfInterFont(doc);
 
   useEffect(() => {
     if (!currentUser || !courseLibrary) return;
+    if (!courseUiStorageKey) return;
+
+    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) {
+      let savedCourseUi: CourseUiState | null = null;
+      try {
+        const raw = localStorage.getItem(courseUiStorageKey);
+        if (raw) {
+          savedCourseUi = JSON.parse(raw) as CourseUiState;
+        }
+      } catch {
+        savedCourseUi = null;
+      }
+
+      const savedLesson = savedCourseUi?.lessonId ? courseLibrary.find((lesson) => lesson.id === savedCourseUi.lessonId) || null : null;
+      const nextLesson = savedLesson || pickLessonForToday(currentUser, courseLibrary);
+      if (nextLesson) {
+        setCurrentLesson(nextLesson);
+      }
+      setIsLessonViewOpen(Boolean(savedCourseUi?.isLessonViewOpen));
+      setIsQuizActive(Boolean(savedCourseUi?.isQuizActive));
+      if (nextLesson?.quiz && savedCourseUi?.selectedQuizOptionId) {
+        setSelectedQuizOption(nextLesson.quiz.options.find((option) => option.id === savedCourseUi.selectedQuizOptionId) || null);
+      } else {
+        setSelectedQuizOption(null);
+      }
+      courseUiHydratedKeyRef.current = courseUiStorageKey;
+      return;
+    }
+
     if (currentLesson) return;
     const nextLesson = pickLessonForToday(currentUser, courseLibrary);
     if (nextLesson) setCurrentLesson(nextLesson);
-  }, [currentUser, courseLibrary, currentLesson]);
+  }, [currentUser, courseLibrary, currentLesson, courseUiStorageKey]);
+
+  useEffect(() => {
+    if (!courseUiStorageKey) return;
+    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) return;
+    const payload: CourseUiState = {
+      lessonId: currentLesson?.id || null,
+      isLessonViewOpen,
+      isQuizActive,
+      selectedQuizOptionId: selectedQuizOption?.id || null,
+    };
+    try {
+      localStorage.setItem(courseUiStorageKey, JSON.stringify(payload));
+    } catch {
+      // Ignore storage quota or privacy errors.
+    }
+  }, [courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
 
   useEffect(() => {
     if (!googleMe?.sub || !currentUser) return;
@@ -2327,7 +2387,6 @@ const logWeight = useCallback(() => {
     setIsQuizActive(false);
     setIsLessonViewOpen(false);
     setSelectedQuizOption(null);
-    setCurrentLesson(null);
   }, []);
 
   const handleMarkLessonRead = useCallback(() => {
