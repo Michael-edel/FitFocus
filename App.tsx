@@ -983,6 +983,45 @@ const App: React.FC = () => {
     } catch {}
   }, [currentUser?.id]);
 
+  const resetUiState = useCallback(() => {
+    const userId = currentUser?.id;
+    try {
+      if (userId) {
+        [
+          `fitfocus.dashboard.new-weight.v1:${userId}`,
+          `fitfocus.plan.ui.v1:${userId}`,
+          `fitfocus.plan.active-day.v1:${userId}`,
+          `fitfocus.progress.ui.v1:${userId}`,
+          `fitfocus.progress-archive.sections.v1:${userId}`,
+          `fitfocus.settings.ui.v1:${userId}`,
+        ].forEach((key) => localStorage.removeItem(key));
+      }
+    } catch {
+      // ignore
+    }
+
+    dashboardWeightSkipSaveRef.current = true;
+    setNewWeight('');
+    setMobileMoreOpen(false);
+    setIsScanning(false);
+    setCameraOpen(false);
+    setIsLessonViewOpen(false);
+    setIsQuizActive(false);
+    setSelectedQuizOption(null);
+    setAdaptExpanded(false);
+    setAdaptRead(false);
+    setPlanIntroOpen(false);
+    setPlanRulesExpanded(false);
+    setPlanWeekExpanded({});
+    setPlanTaskDone({});
+    setPlanScope('personal');
+    setFamilyMenuPrefsOpen(false);
+    setSearchQuery('');
+    setShowSearchResults(false);
+    setInsightModal(null);
+    setEditFoodModal(null);
+  }, [currentUser?.id, setPlanScope, setFamilyMenuPrefsOpen]);
+
   useEffect(() => {
     if (!currentUser) return;
     const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
@@ -2295,6 +2334,7 @@ const logWeight = useCallback(() => {
       lastProfileSyncAt,
       syncAllLocalDataNow,
       reloadUserFromCloud,
+      resetUiState,
       aiBadge,
       retryMeta,
     },
