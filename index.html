@@ -3,42 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!--
-      CSP: блокируем неожиданные сторонние скрипты (например, инъекции расширениями/плагинами),
-      но оставляем то, что реально нужно этому проекту (Tailwind CDN + esm.sh importmap).
-      Это убирает Cloudflare Access/Perplexity редиректы и похожие сюрпризы в консоли.
-    -->
-    <!--
-      DEV NOTE: Strict CSP inside index.html breaks Vite dev (HMR websocket + React refresh)
-      and may cause blank screens / "Failed to fetch" while the dev server is up.
-      Keep CSP for production via server headers at deploy time.
-    -->
     <title>FitFocus</title>
     <meta name="theme-color" content="#020617" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>FF</text></svg>">
     <link rel="manifest" href="/manifest.webmanifest">
 
-    <!-- Tailwind CDN (AI Studio needs this because it doesn't run PostCSS build) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            borderRadius: { 
-              xl: '1rem', 
-              '2xl': '1.25rem',
-              '3xl': '2rem',
-              '4xl': '2.5rem',
-              '5xl': '3rem'
-            },
-            colors: { slate: { 950: '#020617' } }
-          }
-        }
-      }
-    </script>
-
 <script type="importmap">
 {
   "imports": {
