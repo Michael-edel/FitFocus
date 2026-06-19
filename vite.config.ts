@@ -59,6 +59,12 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: { enabled: false },
+        workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          navigateFallbackDenylist: [/^\/api\//],
+        },
 
         manifest: {
           name: 'FitFocus',
