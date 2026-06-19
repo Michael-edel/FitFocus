@@ -64,6 +64,8 @@ import { buildFallbackAiPlan } from './aiPlanFallback';
 import {
   collectLocalStateItems,
   persistAllUsersSnapshot,
+  readStoredAllUsersSnapshot,
+  renameLocalStoragePrefix,
   safeRemoveItem,
   safeSetItem,
 } from './storage/hybrid';
@@ -1691,12 +1693,46 @@ await ensurePdfInterFont(doc);
   }, [googleMe?.sub, logout]);
 
   const loginAsUser = useCallback(async (user: UserProfile) => {
-    const hydrated = await hydrateSessionFromCloud(user, {
+    const normalizedUser = googleMe?.sub && user.id !== googleMe.sub
+      ? {
+          ...user,
+          id: googleMe.sub,
+          googleSub: googleMe.sub,
+          email: googleMe.email ?? user.email,
+        }
+      : user;
+
+    if (googleMe?.sub && user.id !== googleMe.sub) {
+      renameLocalStoragePrefix(
+        `fitfocus_data_${user.id}_`,
+        `fitfocus_data_${googleMe.sub}_`,
+      );
+      persistAllUsersSnapshot(googleMe.sub, (readStoredAllUsersSnapshot<UserProfile>() || []).map((profile) =>
+        profile.id === user.id
+          ? {
+              ...profile,
+              id: googleMe.sub,
+              googleSub: googleMe.sub,
+              email: googleMe.email ?? profile.email,
+            }
+          : profile
+      ));
+    }
+
+    const hydrated = await hydrateSessionFromCloud(normalizedUser, {
       resetUsageIfNewTime,
       initialHabits: INITIAL_HABITS,
     });
 
-    const nextUser = hydrated.currentUser.aiPlan ? hydrated.currentUser : { ...hydrated.currentUser, aiPlan: buildFallbackAiPlan(hydrated.currentUser) };
+    const nextUserBase = googleMe?.sub && hydrated.currentUser.id !== googleMe.sub
+      ? {
+          ...hydrated.currentUser,
+          id: googleMe.sub,
+          googleSub: googleMe.sub,
+          email: googleMe.email ?? hydrated.currentUser.email,
+        }
+      : hydrated.currentUser;
+    const nextUser = nextUserBase.aiPlan ? nextUserBase : { ...nextUserBase, aiPlan: buildFallbackAiPlan(nextUserBase) };
     setCurrentUser(nextUser);
     if (Array.isArray(hydrated.allUsers) && hydrated.allUsers.length > 0) {
       setAllUsers(hydrated.allUsers);
