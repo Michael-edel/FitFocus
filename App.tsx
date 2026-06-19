@@ -892,7 +892,32 @@ const App: React.FC = () => {
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<AppTabId>('dashboard');
+  const mobileMoreStorageKey = useMemo(
+    () => `fitfocus.dashboard.mobile-more-open.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const mobileMoreSkipSaveRef = useRef(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  useEffect(() => {
+    try {
+      mobileMoreSkipSaveRef.current = true;
+      setMobileMoreOpen(localStorage.getItem(mobileMoreStorageKey) === '1');
+    } catch {
+      mobileMoreSkipSaveRef.current = true;
+      setMobileMoreOpen(false);
+    }
+  }, [mobileMoreStorageKey]);
+  useEffect(() => {
+    if (mobileMoreSkipSaveRef.current) {
+      mobileMoreSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(mobileMoreStorageKey, mobileMoreOpen ? '1' : '0');
+    } catch {
+      // ignore storage issues
+    }
+  }, [mobileMoreOpen, mobileMoreStorageKey]);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
   const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
@@ -995,6 +1020,7 @@ const App: React.FC = () => {
           `fitfocus.progress-archive.sections.v1:${userId}`,
           `fitfocus.settings.ui.v1:${userId}`,
           `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
+          `fitfocus.dashboard.mobile-more-open.v1:${userId}`,
         ].forEach((key) => localStorage.removeItem(key));
       }
     } catch {
@@ -1002,6 +1028,7 @@ const App: React.FC = () => {
     }
 
     dashboardWeightSkipSaveRef.current = true;
+    mobileMoreSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
     setMobileMoreOpen(false);
