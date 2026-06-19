@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
-import { Activity, BookOpen, Camera, ChefHat, Crown, Dumbbell, History, LifeBuoy, MessageSquareText, Settings, ShieldCheck, Sparkles, TrendingUp, Utensils, Users } from 'lucide-react';
+import { Activity, BookOpen, Camera, ChefHat, Crown, Dumbbell, History, LifeBuoy, MessageSquareText, Settings, ShieldCheck, Sparkles, TrendingUp, Utensils, Users, BookMarked } from 'lucide-react';
 
-export const sidebarTabIds = ['dashboard', 'council', 'plan', 'nutrition', 'progress', 'progress-archive', 'recipes', 'workouts', 'course', 'family', 'support', 'updates', 'pro', 'settings', 'admin'] as const;
+export const sidebarTabIds = ['dashboard', 'council', 'plan', 'nutrition', 'progress', 'progress-archive', 'recipes', 'workouts', 'course', 'family', 'support', 'guide', 'updates', 'pro', 'settings', 'admin'] as const;
 
 export type AppTabId = typeof sidebarTabIds[number];
 
@@ -24,6 +24,7 @@ export const sidebarTabs: SidebarTab[] = [
   { id: 'course', icon: BookOpen, label: 'Курс' },
   { id: 'family', icon: Users, label: 'Семья' },
   { id: 'support', icon: LifeBuoy, label: 'Поддержка' },
+  { id: 'guide', icon: BookMarked, label: 'Инструкция' },
   { id: 'updates', icon: History, label: 'Что нового' },
   { id: 'admin', icon: ShieldCheck, label: 'Админ' },
   { id: 'pro', icon: Crown, label: 'Тарифы', color: 'text-amber-500' },
@@ -31,6 +32,6 @@ export const sidebarTabs: SidebarTab[] = [
 ];
 
 export const sidebarCoreTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];
-export const sidebarFeatureTabIds: AppTabId[] = ['progress', 'progress-archive', 'recipes', 'workouts', 'course', 'family', 'support', 'updates', 'admin'];
+export const sidebarFeatureTabIds: AppTabId[] = ['progress', 'progress-archive', 'recipes', 'workouts', 'course', 'family', 'support', 'guide', 'updates', 'admin'];
 export const sidebarUtilityTabIds: AppTabId[] = ['pro', 'settings'];
 export const mobilePrimaryTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];
