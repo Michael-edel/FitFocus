@@ -273,6 +273,7 @@ export default function SettingsScreen({
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [uiResetAt, setUiResetAt] = useState<number | null>(null);
   const [mobileTokenBusy, setMobileTokenBusy] = useState(false);
   const [mobileTokenValue, setMobileTokenValue] = useState('');
   const [mobileTokenExpiresAt, setMobileTokenExpiresAt] = useState<number | null>(null);
@@ -309,6 +310,7 @@ export default function SettingsScreen({
       // ignore
     }
     onResetUiState?.();
+    setUiResetAt(Date.now());
 
     settingsUiSkipSaveRef.current = true;
     setDraftName(user.name || '');
@@ -584,6 +586,12 @@ export default function SettingsScreen({
     progressPhotoNote,
     settingsUiStorageKey,
   ]);
+
+  useEffect(() => {
+    if (!uiResetAt) return;
+    const id = window.setTimeout(() => setUiResetAt(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [uiResetAt]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
   const gainTooAggressive = user?.goal === Goal.GAIN && tdee && gainSur > AGGRESSIVE_SURPLUS;
@@ -1011,6 +1019,11 @@ export default function SettingsScreen({
                     </button>
                   </div>
                 </div>
+                {uiResetAt && (
+                  <div className="mt-3 text-emerald-200 text-sm font-bold">
+                    UI сброшен. Все экраны вернулись к стандартному виду.
+                  </div>
+                )}
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
