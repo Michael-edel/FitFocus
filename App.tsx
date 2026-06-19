@@ -2115,6 +2115,12 @@ await ensurePdfInterFont(doc);
   }, [bootstrapAuth]);
 
   useEffect(() => {
+    if (authState !== 'register') return;
+    if (googleMe?.sub) return;
+    setAuthState('auth_choice');
+  }, [authState, googleMe?.sub]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('billing') !== 'success') return;
     if (!currentUser) return;
@@ -2236,15 +2242,6 @@ await ensurePdfInterFont(doc);
       setInviteChecking,
     });
   }, [requireInvite, inviteCode]);
-
-  const startLocalRegistration = useCallback(async () => {
-    const ok = await ensureInviteOk();
-    if (!ok) return;
-    setAuthState('register');
-  }, [ensureInviteOk]);
-
-
-
 
   const processPhotoFiles = useCallback(async (files: File[]) => {
     if (!files.length || !currentUser) return;
@@ -2772,16 +2769,12 @@ const logWeight = useCallback(() => {
   if (authState === 'auth_choice') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>
       <AuthChoiceScreen
-        allUsers={normalizedAllUsers}
         inviteCode={inviteCode}
         setInviteCode={setInviteCode}
         inviteError={inviteError}
         setInviteError={setInviteError}
         requireInvite={requireInvite}
         inviteChecking={inviteChecking}
-        startLocalRegistration={startLocalRegistration}
-        deleteUserProfile={deleteUserProfile}
-        loginAsUser={loginAsUser}
         bootstrapAuth={bootstrapAuth}
         GoogleSignInButton={GoogleSignInButton}
       />

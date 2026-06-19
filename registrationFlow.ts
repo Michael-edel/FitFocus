@@ -43,6 +43,11 @@ type RegisterFlowDeps = {
 };
 
 export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void> {
+  if (!deps.googleMe?.sub) {
+    deps.setPlanError('Для создания cloud-профиля нужен вход через Google.');
+    return;
+  }
+
   if (deps.allUsersCount >= 5) {
     deps.setPlanError('Лимит Family: максимум 5 профилей на одном устройстве.');
     return;
@@ -148,29 +153,27 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     }
   }
 
-  if (deps.googleMe?.sub) {
-    try {
-      const fetchFn = deps.fetchImpl ?? fetch;
-      const r = await fetchFn('/api/profile', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
-      });
-      const pj = await r.json().catch(() => null);
-      if (!r.ok) {
-        deps.setPlanError(
-          pj?.error === 'ACCESS_REQUIRED'
-            ? 'Сервер не разрешил облачное сохранение. Проверьте beta-доступ и повторите вход через Google.'
-            : 'Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.',
-        );
-        return;
-      }
-      if (pj?.profile) newUser = pj.profile;
-    } catch {
-      deps.setPlanError('Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.');
+  try {
+    const fetchFn = deps.fetchImpl ?? fetch;
+    const r = await fetchFn('/api/profile', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    });
+    const pj = await r.json().catch(() => null);
+    if (!r.ok) {
+      deps.setPlanError(
+        pj?.error === 'ACCESS_REQUIRED'
+          ? 'Сервер не разрешил облачное сохранение. Проверьте beta-доступ и повторите вход через Google.'
+          : 'Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.',
+      );
       return;
     }
+    if (pj?.profile) newUser = pj.profile;
+  } catch {
+    deps.setPlanError('Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.');
+    return;
   }
 
   deps.setAllUsers([newUser]);
