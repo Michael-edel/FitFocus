@@ -119,6 +119,22 @@ export async function requireUser(
   };
 }
 
+export async function replaceActiveSessionsForDevice(
+  db: D1Database,
+  userId: string,
+  userAgent: string,
+  nowSeconds: number,
+): Promise<void> {
+  const normalizedAgent = String(userAgent || "").slice(0, 500);
+  if (!db || !userId || !normalizedAgent) return;
+  await db
+    .prepare(
+      "UPDATE sessions SET revoked = 1 WHERE user_id = ? AND revoked = 0 AND expires_at > ? AND user_agent = ?"
+    )
+    .bind(userId, nowSeconds, normalizedAgent)
+    .run();
+}
+
 export function json(data: any, status = 200, headers?: Headers, schemaVersion: number = API_SCHEMA_VERSION) {
   const h = headers ? new Headers(headers) : new Headers();
   h.set("Content-Type", "application/json; charset=utf-8");
