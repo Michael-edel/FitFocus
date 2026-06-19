@@ -123,20 +123,6 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     newUser = { ...newUser, aiPlan: buildFallbackAiPlan(newUser) };
   }
 
-  try {
-    const fetchFn = deps.fetchImpl ?? fetch;
-    const r = await fetchFn('/api/profile', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser),
-    });
-    if (r.ok) {
-      const pj = await r.json();
-      if (pj?.profile) newUser = pj.profile;
-    }
-  } catch {}
-
   if (deps.requireInvite && deps.googleMe?.sub) {
     const code = String(deps.inviteCode || '').trim();
     if (!code) {
@@ -158,6 +144,31 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       }
     } catch {
       deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
+      return;
+    }
+  }
+
+  if (deps.googleMe?.sub) {
+    try {
+      const fetchFn = deps.fetchImpl ?? fetch;
+      const r = await fetchFn('/api/profile', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      const pj = await r.json().catch(() => null);
+      if (!r.ok) {
+        deps.setPlanError(
+          pj?.error === 'ACCESS_REQUIRED'
+            ? 'Сервер не разрешил облачное сохранение. Проверьте beta-доступ и повторите вход через Google.'
+            : 'Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.',
+        );
+        return;
+      }
+      if (pj?.profile) newUser = pj.profile;
+    } catch {
+      deps.setPlanError('Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.');
       return;
     }
   }

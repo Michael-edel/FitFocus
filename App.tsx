@@ -790,7 +790,7 @@ const App: React.FC = () => {
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
 
   const [googleMe, setGoogleMe] = useState<
-  null | { sub?: string; email?: string }
+  null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
 
@@ -1692,28 +1692,33 @@ await ensurePdfInterFont(doc);
     });
   }, [googleMe?.sub, logout]);
 
-  const loginAsUser = useCallback(async (user: UserProfile) => {
-    const normalizedUser = googleMe?.sub && user.id !== googleMe.sub
+  const loginAsUser = useCallback(async (
+    user: UserProfile,
+    authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
+  ) => {
+    const normalizedUser = authUser?.sub && user.id !== authUser.sub
       ? {
           ...user,
-          id: googleMe.sub,
-          googleSub: googleMe.sub,
-          email: googleMe.email ?? user.email,
+          id: authUser.sub,
+          googleSub: authUser.sub,
+          email: authUser.email ?? user.email,
+          picture: authUser.picture ?? user.picture,
         }
       : user;
 
-    if (googleMe?.sub && user.id !== googleMe.sub) {
+    if (authUser?.sub && user.id !== authUser.sub) {
       renameLocalStoragePrefix(
         `fitfocus_data_${user.id}_`,
-        `fitfocus_data_${googleMe.sub}_`,
+        `fitfocus_data_${authUser.sub}_`,
       );
-      persistAllUsersSnapshot(googleMe.sub, (readStoredAllUsersSnapshot<UserProfile>() || []).map((profile) =>
+      persistAllUsersSnapshot(authUser.sub, (readStoredAllUsersSnapshot<UserProfile>() || []).map((profile) =>
         profile.id === user.id
           ? {
               ...profile,
-              id: googleMe.sub,
-              googleSub: googleMe.sub,
-              email: googleMe.email ?? profile.email,
+              id: authUser.sub,
+              googleSub: authUser.sub,
+              email: authUser.email ?? profile.email,
+              picture: authUser.picture ?? profile.picture,
             }
           : profile
       ));
@@ -1724,12 +1729,13 @@ await ensurePdfInterFont(doc);
       initialHabits: INITIAL_HABITS,
     });
 
-    const nextUserBase = googleMe?.sub && hydrated.currentUser.id !== googleMe.sub
+    const nextUserBase = authUser?.sub && hydrated.currentUser.id !== authUser.sub
       ? {
           ...hydrated.currentUser,
-          id: googleMe.sub,
-          googleSub: googleMe.sub,
-          email: googleMe.email ?? hydrated.currentUser.email,
+          id: authUser.sub,
+          googleSub: authUser.sub,
+          email: authUser.email ?? hydrated.currentUser.email,
+          picture: authUser.picture ?? hydrated.currentUser.picture,
         }
       : hydrated.currentUser;
     const nextUser = nextUserBase.aiPlan ? nextUserBase : { ...nextUserBase, aiPlan: buildFallbackAiPlan(nextUserBase) };
@@ -1750,7 +1756,7 @@ await ensurePdfInterFont(doc);
     if (!hydrated.currentUser.aiPlan) {
       persistUser(nextUser);
     }
-  }, [resetUsageIfNewTime]);
+  }, [googleMe?.sub, googleMe?.email, googleMe?.picture, resetUsageIfNewTime]);
 
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
