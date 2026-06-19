@@ -17,6 +17,7 @@ type AuthStateSetters = {
 type BootstrapAuthParams = AuthStateSetters & {
   requireInvite: boolean;
   loginAsUser: (user: UserProfile) => Promise<void>;
+  continueAfterGoogle?: boolean;
   fetchImpl?: typeof fetch;
 };
 
@@ -70,6 +71,11 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         }
       }
     } catch {}
+
+    if (!params.continueAfterGoogle) {
+      params.setAuthState('auth_choice');
+      return;
+    }
 
     try {
       const all = readStoredAllUsersSnapshot<UserProfile>();

@@ -120,6 +120,8 @@ const PlanIntroModal = React.lazy(() => import('./PlanIntroModal'));
 const LessonViewModal = React.lazy(() => import('./LessonViewModal'));
 const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
+const GOOGLE_AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-google.v1';
+
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
 declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
@@ -195,6 +197,9 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
 
   const handleClick = React.useCallback(() => {
     setErr(null);
+    try {
+      sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
+    } catch {}
     const params = new URLSearchParams();
     if (inviteCode) params.set("invite", inviteCode);
     params.set("redirect", window.location.origin);
@@ -2030,6 +2035,12 @@ await ensurePdfInterFont(doc);
   }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
+    let continueAfterGoogle = false;
+    try {
+      continueAfterGoogle = sessionStorage.getItem(GOOGLE_AUTH_PENDING_STORAGE_KEY) === '1';
+      sessionStorage.removeItem(GOOGLE_AUTH_PENDING_STORAGE_KEY);
+    } catch {}
+
     await bootstrapAuthSession({
       requireInvite,
       loginAsUser,
@@ -2038,6 +2049,7 @@ await ensurePdfInterFont(doc);
       setAuthState,
       setAllUsers,
       setRegData,
+      continueAfterGoogle,
     });
   }, [loginAsUser, requireInvite]);
 
