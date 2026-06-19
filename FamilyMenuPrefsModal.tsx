@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { FamilyMenuPrefs, UserProfile } from './types';
+import { useModalDismissGestures } from './useModalDismissGestures';
 
 type FamilyMenuPrefsModalProps = {
   allUsers: UserProfile[];
@@ -17,9 +18,10 @@ export default function FamilyMenuPrefsModal({
   onClose,
   onGenerate,
 }: FamilyMenuPrefsModalProps) {
+  const dismissGestures = useModalDismissGestures(onClose);
   return (
     <div className="fixed inset-0 z-[2100] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4">
-      <div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left">
+      <div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left touch-pan-y" {...dismissGestures}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Семейное меню</p>

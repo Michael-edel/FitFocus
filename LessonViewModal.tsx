@@ -1,6 +1,7 @@
 import React from 'react';
 import { Award, ChevronLeft } from 'lucide-react';
 import { CourseLesson, LessonQuizOption } from './types';
+import { useModalDismissGestures } from './useModalDismissGestures';
 
 type LessonViewModalProps = {
   currentLesson: CourseLesson | null;
@@ -23,11 +24,12 @@ export default function LessonViewModal({
   handleStartLessonQuiz,
   handleQuizSubmit,
 }: LessonViewModalProps) {
+  const dismissGestures = useModalDismissGestures(onClose);
   if (!currentLesson) return null;
 
   return (
     <div className="fixed inset-0 z-[2400] bg-slate-950/92 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-[3rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/70 flex flex-col">
+      <div className="w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-[3rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black/70 flex flex-col touch-pan-y" {...dismissGestures}>
         <div className="px-5 md:px-8 py-4 border-b border-white/10 flex items-center justify-between gap-4 bg-slate-950/95">
           <button
             onClick={onClose}

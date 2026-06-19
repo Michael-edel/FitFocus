@@ -7,6 +7,7 @@ import {
   stopCamera,
   type CameraFacing,
 } from "../../services/camera";
+import { useModalDismissGestures } from "../../useModalDismissGestures";
 
 type Props = {
   open: boolean;
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export default function CameraCapture({ open, onClose, onCaptured, pro, facing, onFacingChange }: Props) {
+  const dismissGestures = useModalDismissGestures(onClose);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [starting, setStarting] = useState(false);
@@ -99,7 +101,7 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-[680px] rounded-2xl bg-[#0b1220] shadow-2xl">
+      <div className="w-full max-w-[680px] rounded-2xl bg-[#0b1220] shadow-2xl touch-pan-y" {...dismissGestures}>
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="text-sm font-semibold text-white">Камера</div>
           <button

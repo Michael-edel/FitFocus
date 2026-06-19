@@ -1,5 +1,6 @@
 import React from 'react';
 import { Award, ChevronLeft } from 'lucide-react';
+import { useModalDismissGestures } from '../useModalDismissGestures';
 
 type LessonModalProps = {
   lesson: any;
@@ -20,11 +21,12 @@ export default function LessonModal({
   onQuizSubmit,
   onMarkRead,
 }: LessonModalProps) {
+  const dismissGestures = useModalDismissGestures(onClose);
   if (!lesson) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-950 z-[200] overflow-y-auto animate-in slide-in-from-right duration-500">
-      <div className="max-w-3xl mx-auto px-6 py-12 pb-32 space-y-12">
+      <div className="max-w-3xl mx-auto px-6 py-12 pb-32 space-y-12 touch-pan-y" {...dismissGestures}>
         {!isQuizActive ? (
           <>
             <button

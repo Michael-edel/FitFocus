@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { useModalDismissGestures } from '../useModalDismissGestures';
 
 type PlanIntroModalProps = {
   plan: any;
@@ -16,11 +17,15 @@ export default function PlanIntroModal({
   onOpenPlan,
   onStartDiary,
 }: PlanIntroModalProps) {
+  const dismissGestures = useModalDismissGestures(onClose);
   if (!plan) return null;
 
   return (
     <div className="fixed inset-0 z-[2000] bg-slate-950/70 backdrop-blur-xl grid place-items-center p-4">
-      <div className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left">
+      <div
+        className="w-full max-w-2xl rounded-[2.5rem] border border-slate-800 bg-slate-950/90 shadow-2xl shadow-black/60 p-6 text-left touch-pan-y"
+        {...dismissGestures}
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Ваш AI‑план готов</p>
