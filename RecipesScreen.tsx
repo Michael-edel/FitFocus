@@ -82,11 +82,119 @@ const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
   };
 };
 
+type RecipeEditorState = {
+  id: string;
+  title: string;
+  createdAt: string;
+  photo?: string;
+  sourceFoodName?: string;
+  calories: string;
+  protein: string;
+  fat: string;
+  carbs: string;
+  servings: string;
+  timeMinutes: string;
+  ingredientsText: string;
+  stepsText: string;
+  allergensText: string;
+  intolerancesText: string;
+};
+
+const normalizeCsvText = (value: string) =>
+  value
+    .split(/[\n,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const parseIngredientLine = (line: string) => {
+  const text = line.trim();
+  if (!text) return null;
+  const separators = ['—', '-', ':'];
+  for (const separator of separators) {
+    const parts = text.split(separator).map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return { name: parts[0], amount: parts.slice(1).join(` ${separator} `) };
+    }
+  }
+  return { name: text };
+};
+
+const parseStepLine = (line: string, index: number) => {
+  const text = line.trim().replace(/^\d+[\).\s-]*/, '').trim();
+  return text ? { n: index + 1, text } : null;
+};
+
+const recipeToEditor = (item: FavoriteRecipe): RecipeEditorState => {
+  const recipe = normalizeRecipe(item);
+  const legacy = item as unknown as {
+    calories?: unknown;
+    protein?: unknown;
+    fat?: unknown;
+    carbs?: unknown;
+  };
+  return {
+    id: item.id,
+    title: item.title || recipe.title || 'Рецепт',
+    createdAt: item.createdAt || new Date().toISOString(),
+    photo: item.photo,
+    sourceFoodName: item.sourceFoodName,
+    calories: Number(legacy.calories ?? 0) > 0 ? String(Number(legacy.calories)) : '',
+    protein: Number(legacy.protein ?? 0) > 0 ? String(Number(legacy.protein)) : '',
+    fat: Number(legacy.fat ?? 0) > 0 ? String(Number(legacy.fat)) : '',
+    carbs: Number(legacy.carbs ?? 0) > 0 ? String(Number(legacy.carbs)) : '',
+    servings: recipe.servings ? String(recipe.servings) : '',
+    timeMinutes: recipe.timeMinutes ? String(recipe.timeMinutes) : '',
+    ingredientsText: recipe.ingredients
+      .map((ingredient) => (ingredient.amount ? `${ingredient.name} — ${ingredient.amount}` : ingredient.name))
+      .join('\n'),
+    stepsText: recipe.steps
+      .map((step) => `${step.n}. ${step.text}`)
+      .join('\n'),
+    allergensText: Array.isArray(item.allergens) ? item.allergens.join(', ') : '',
+    intolerancesText: Array.isArray(item.intolerances) ? item.intolerances.join(', ') : '',
+  };
+};
+
+const editorToFavoriteRecipe = (editor: RecipeEditorState): FavoriteRecipe => {
+  const ingredients = editor.ingredientsText
+    .split('\n')
+    .map(parseIngredientLine)
+    .filter(Boolean) as Array<{ name: string; amount?: string }>;
+  const steps = editor.stepsText
+    .split('\n')
+    .map(parseStepLine)
+    .filter(Boolean) as Recipe['steps'];
+  const recipe: Recipe = {
+    title: editor.title.trim() || 'Рецепт',
+    servings: editor.servings.trim() ? Number(editor.servings) || undefined : undefined,
+    timeMinutes: editor.timeMinutes.trim() ? Number(editor.timeMinutes) || undefined : undefined,
+    ingredients,
+    steps,
+    tips: [],
+  };
+
+  return {
+    id: editor.id,
+    title: editor.title.trim() || 'Рецепт',
+    createdAt: editor.createdAt || new Date().toISOString(),
+    photo: editor.photo?.trim() || undefined,
+    sourceFoodName: editor.sourceFoodName?.trim() || undefined,
+    allergens: normalizeCsvText(editor.allergensText),
+    intolerances: normalizeCsvText(editor.intolerancesText),
+    recipe,
+    ...(editor.calories.trim() ? { calories: Number(editor.calories) || 0 } : {}),
+    ...(editor.protein.trim() ? { protein: Number(editor.protein) || 0 } : {}),
+    ...(editor.fat.trim() ? { fat: Number(editor.fat) || 0 } : {}),
+    ...(editor.carbs.trim() ? { carbs: Number(editor.carbs) || 0 } : {}),
+  } as FavoriteRecipe;
+};
+
 export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Props) {
   const [q, setQ] = useState('');
 
 const [isAnalyzing, setIsAnalyzing] = useState(false);
 const [draft, setDraft] = useState<FavoriteRecipe | null>(null);
+const [editor, setEditor] = useState<RecipeEditorState | null>(null);
 const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -299,12 +407,186 @@ const handlePick = async (file?: File) => {
     </div>
   )}
 
+  {editor && (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="p-5 flex items-start justify-between gap-4 border-b border-slate-800">
+          <div className="min-w-0">
+            <div className="text-slate-100 font-black text-lg">Рецепт</div>
+            <div className="text-slate-500 text-xs mt-1">
+              Рецепт можно открыть и без фото, кода или граммовок. Если поле не распознано, заполните его вручную.
+            </div>
+          </div>
+          <button onClick={() => setEditor(null)} className="p-2 rounded-full border border-slate-800 hover:border-slate-600 text-slate-300 shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto space-y-5">
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[1.5rem] border border-slate-800 bg-slate-900/40 p-4">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото блюда</div>
+              <div className="mt-3 rounded-[1.25rem] border border-dashed border-slate-700 bg-slate-950/40 min-h-48 overflow-hidden flex items-center justify-center">
+                {editor.photo ? (
+                  <img src={editor.photo} alt={editor.title} className="w-full h-full max-h-72 object-cover" />
+                ) : (
+                  <div className="px-6 py-10 text-center">
+                    <div className="mx-auto mb-3 w-12 h-12 rounded-2xl bg-slate-900 text-slate-400 flex items-center justify-center border border-slate-800">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                    <div className="text-slate-200 font-black">Фото не обязательно</div>
+                    <div className="text-slate-500 text-sm mt-1">
+                      Рецепт откроется и без снимка. Фото можно добавить позже.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Название</label>
+                <input
+                  value={editor.title}
+                  onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+                  className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Источник блюда</label>
+                <input
+                  value={editor.sourceFoodName || ''}
+                  onChange={(e) => setEditor({ ...editor, sourceFoodName: e.target.value })}
+                  placeholder="Например: Рагу из мяса с картофелем и морковью"
+                  className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { k: 'calories', label: 'Ккал' },
+                  { k: 'protein', label: 'Белки' },
+                  { k: 'fat', label: 'Жиры' },
+                  { k: 'carbs', label: 'Углеводы' },
+                ].map((item) => (
+                  <div key={item.k} className="flex items-center justify-between p-3 bg-slate-900/20 rounded-[1.25rem] border border-slate-800">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{item.label}</span>
+                    <input
+                      type="number"
+                      className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-sm"
+                      value={editor[item.k as keyof RecipeEditorState] as string}
+                      onChange={(e) => setEditor({ ...editor, [item.k]: e.target.value })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Порций</label>
+                  <input
+                    value={editor.servings}
+                    onChange={(e) => setEditor({ ...editor, servings: e.target.value })}
+                    inputMode="numeric"
+                    className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+                    placeholder="1"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Время, мин</label>
+                  <input
+                    value={editor.timeMinutes}
+                    onChange={(e) => setEditor({ ...editor, timeMinutes: e.target.value })}
+                    inputMode="numeric"
+                    className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ингредиенты</label>
+              <textarea
+                value={editor.ingredientsText}
+                onChange={(e) => setEditor({ ...editor, ingredientsText: e.target.value })}
+                placeholder={"картофель — 200 г\nморковь — 80 г\nсвинина — 150 г"}
+                rows={8}
+                className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-semibold text-white placeholder:text-slate-600 text-sm resize-y"
+              />
+              <div className="text-xs text-slate-500">
+                Пишите ингредиенты по строкам. Граммовка необязательна, но если её нет, рецепт всё равно сохранится.
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Шаги</label>
+              <textarea
+                value={editor.stepsText}
+                onChange={(e) => setEditor({ ...editor, stepsText: e.target.value })}
+                placeholder={"1. Нарежьте овощи.\n2. Обжарьте мясо.\n3. Тушите до готовности."}
+                rows={8}
+                className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-semibold text-white placeholder:text-slate-600 text-sm resize-y"
+              />
+              <div className="text-xs text-slate-500">
+                Если шагов нет, карточка всё равно откроется. Можно дописать позже или оставить только состав.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Аллергены / запреты</label>
+              <input
+                value={editor.allergensText}
+                onChange={(e) => setEditor({ ...editor, allergensText: e.target.value })}
+                placeholder="например: орехи, лактоза"
+                className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Непереносимость / исключения</label>
+              <input
+                value={editor.intolerancesText}
+                onChange={(e) => setEditor({ ...editor, intolerancesText: e.target.value })}
+                placeholder="например: лук, чеснок"
+                className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <button
+              onClick={() => setEditor(null)}
+              className="px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-200 font-black text-xs"
+            >
+              Закрыть
+            </button>
+            <button
+              onClick={() => {
+                const updated = editorToFavoriteRecipe(editor);
+                onRemove(editor.id);
+                onAdd(updated);
+                setEditor(null);
+              }}
+              className="px-4 py-2 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Сохранить изменения
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
       <div className="flex items-start justify-between gap-6 mb-8 text-left">
         <div>
           <div className="text-3xl font-black text-slate-100">Мои блюда</div>
           <div className="text-slate-400 mt-2 max-w-2xl">
             Личная библиотека блюд из фото. Здесь сохраняются рецепты, которые FitFocus распознал из ваших снимков,
             чтобы потом быстро повторить блюдо, отредактировать состав или найти его по поиску.
+          </div>
+          <div className="mt-2 text-slate-500 text-sm max-w-2xl">
+            Рецепт можно открыть даже без фото, кода распознавания или граммовки. Если часть полей не подтянулась, они редактируются вручную.
           </div>
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-[11px] font-black tracking-widest uppercase text-indigo-200">
             AI-разбор блюд
@@ -381,7 +663,19 @@ const handlePick = async (file?: File) => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filtered.map((r) => (
-            <div key={r.id} className="bg-slate-900/40 border border-slate-800 rounded-[2rem] p-6 text-left flex flex-col">
+            <div
+              key={r.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setEditor(recipeToEditor(r))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setEditor(recipeToEditor(r));
+                }
+              }}
+              className="bg-slate-900/40 border border-slate-800 rounded-[2rem] p-6 text-left flex flex-col cursor-pointer transition-all hover:border-indigo-500/30 hover:bg-slate-900/55 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            >
               {(() => {
                 const recipe = normalizeRecipe(r);
                 return (
@@ -390,9 +684,13 @@ const handlePick = async (file?: File) => {
                 <div className="min-w-0">
                   <div className="text-slate-100 font-black text-lg truncate">{r.title}</div>
                   {r.sourceFoodName && <div className="text-slate-500 text-sm mt-1">Из блюда: {r.sourceFoodName}</div>}
+                  <div className="mt-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Нажмите, чтобы открыть и отредактировать</div>
                 </div>
                 <button
-                  onClick={() => onRemove(r.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(r.id);
+                  }}
                   className="w-10 h-10 rounded-2xl bg-slate-950/40 border border-slate-800 hover:border-rose-500/30 hover:bg-rose-500/10 text-slate-200 transition-all flex items-center justify-center"
                   title="Удалить"
                 >
@@ -415,37 +713,49 @@ const handlePick = async (file?: File) => {
 
               <div className="mt-5">
                 <div className="text-slate-200 font-bold mb-2">Ингредиенты</div>
-                <ul className="text-slate-400 text-sm space-y-1">
-                  {recipe.ingredients.slice(0, 6).map((ing, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-indigo-300">•</span>
-                      <span className="flex-1 flex items-start justify-between gap-4">
-                        <span className="min-w-0">{ing.name}</span>
-                        {ing.amount ? <span className="text-slate-500 whitespace-nowrap">{ing.amount}</span> : null}
-                      </span>
-                    </li>
-                  ))}
-                  {recipe.ingredients.length > 6 && (
-                    <li className="text-slate-500">…и ещё {recipe.ingredients.length - 6}</li>
-                  )}
-                </ul>
+                {recipe.ingredients.length > 0 ? (
+                  <ul className="text-slate-400 text-sm space-y-1">
+                    {recipe.ingredients.slice(0, 6).map((ing, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-indigo-300">•</span>
+                        <span className="flex-1 flex items-start justify-between gap-4">
+                          <span className="min-w-0">{ing.name}</span>
+                          {ing.amount ? <span className="text-slate-500 whitespace-nowrap">{ing.amount}</span> : null}
+                        </span>
+                      </li>
+                    ))}
+                    {recipe.ingredients.length > 6 && (
+                      <li className="text-slate-500">…и ещё {recipe.ingredients.length - 6}</li>
+                    )}
+                  </ul>
+                ) : (
+                  <div className="rounded-[1.15rem] border border-dashed border-slate-800 bg-slate-950/30 px-4 py-3 text-sm text-slate-500">
+                    Ингредиенты не распознаны. Откройте карточку и добавьте их вручную.
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 flex-1">
                 <div className="text-slate-200 font-bold mb-2">Шаги</div>
-                <ol className="text-slate-400 text-sm space-y-2">
-                  {recipe.steps.slice(0, 3).map((s, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-200 flex items-center justify-center text-xs font-black shrink-0">
-                        {s.n ?? idx + 1}
-                      </span>
-                      <span className="flex-1">{s.text}</span>
-                    </li>
-                  ))}
-                  {recipe.steps.length > 3 && (
-                    <li className="text-slate-500">…ещё {recipe.steps.length - 3} шага</li>
-                  )}
-                </ol>
+                {recipe.steps.length > 0 ? (
+                  <ol className="text-slate-400 text-sm space-y-2">
+                    {recipe.steps.slice(0, 3).map((s, idx) => (
+                      <li key={idx} className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-200 flex items-center justify-center text-xs font-black shrink-0">
+                          {s.n ?? idx + 1}
+                        </span>
+                        <span className="flex-1">{s.text}</span>
+                      </li>
+                    ))}
+                    {recipe.steps.length > 3 && (
+                      <li className="text-slate-500">…ещё {recipe.steps.length - 3} шага</li>
+                    )}
+                  </ol>
+                ) : (
+                  <div className="rounded-[1.15rem] border border-dashed border-slate-800 bg-slate-950/30 px-4 py-3 text-sm text-slate-500">
+                    Шаги ещё не распознаны. Откройте карточку, чтобы добавить инструкцию.
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 text-slate-500 text-xs">
