@@ -69,6 +69,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const topUsers7d = await db
     .prepare(
       `SELECT user_id,
+              (SELECT email FROM users u WHERE u.id = ai_events.user_id LIMIT 1) as email,
+              (SELECT created_at FROM users u WHERE u.id = ai_events.user_id LIMIT 1) as user_created_at,
+              COALESCE((SELECT plan FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') ORDER BY s.updated_at DESC LIMIT 1), 'free') as plan,
+              COALESCE((SELECT status FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') ORDER BY s.updated_at DESC LIMIT 1), 'inactive') as subscription_status,
               SUM(COALESCE(estimated_cost_usd,0)) as cost_usd,
               SUM(COALESCE(total_tokens,0)) as tokens,
               COUNT(*) as calls
@@ -107,6 +111,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     },
     top_users_7d: (topUsers7d?.results || []).map((r: any) => ({
       user_id: String(r.user_id),
+      email: r.email ? String(r.email) : undefined,
+      user_created_at: r.user_created_at ? Number(r.user_created_at) : undefined,
+      plan: String(r.plan || 'free'),
+      subscription_status: String(r.subscription_status || 'inactive'),
       cost_usd: Number(r.cost_usd || 0),
       tokens: Number(r.tokens || 0),
       calls: Number(r.calls || 0),

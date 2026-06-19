@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo } from "lucide-react";
 
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
 type SettingRow = { key: string; value: string };
@@ -50,16 +50,101 @@ type AiCost = {
     fallback_calls: number;
     fallback_pct: number;
   };
-  top_users_7d: { user_id: string; cost_usd: number; tokens: number; calls: number }[];
+  top_users_7d: {
+    user_id: string;
+    email?: string;
+    user_created_at?: number;
+    plan?: string;
+    subscription_status?: string;
+    cost_usd: number;
+    tokens: number;
+    calls: number;
+  }[];
 };
 
 type UserRow = { id: string; email?: string; created_at?: number };
 
 type AiLog = { id: string; user_id: string; ts: number; feature: string; status: number; latency_ms: number; safe_mode: number; error?: string | null };
 
-type SessionRow = { id: string; created_at: number; expires_at: number; revoked: number; user_agent?: string; ip?: string };
+type SessionRow = {
+  id: string;
+  created_at: number;
+  expires_at: number;
+  revoked: number;
+  user_agent?: string;
+  ip?: string;
+  ttl_seconds?: number;
+  remaining_seconds?: number;
+};
+
+type UserDetail = {
+  user: {
+    id: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+    created_at?: number;
+    updated_at?: number;
+    deleted_at?: string | null;
+    deletion_scheduled_at?: string | null;
+    is_active?: number;
+  };
+  roles: string[];
+  subscription: null | {
+    plan?: string;
+    status?: string;
+    current_period_end?: number | null;
+    updated_at?: number | null;
+    stripe_customer_id?: string | null;
+    stripe_subscription_id?: string | null;
+  };
+  sessions: (SessionRow & { ttl_seconds: number; remaining_seconds: number })[];
+  summary: {
+    total_sessions: number;
+    active_sessions: number;
+    revoked_sessions: number;
+    expired_sessions: number;
+    session_ttl_seconds: number;
+    session_ttl_days: number;
+    ai_calls_7d: number;
+    ai_tokens_7d: number;
+    ai_cost_7d: number;
+    ai_errors_7d: number;
+    ai_fallback_7d: number;
+    last_ai_ts: number | null;
+  };
+};
 
 function asBool(v: any) { return v === true || v === 1 || v === "1"; }
+
+function toMs(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n > 1e12 ? n : n * 1000;
+}
+
+function formatTimestamp(value: unknown) {
+  const ms = toMs(value);
+  if (!ms) return "—";
+  return new Intl.DateTimeFormat("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+function formatDuration(seconds: number) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (s === 0) return "0 мин";
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const mins = Math.max(0, Math.ceil((s % 3600) / 60));
+  if (days > 0) return `${days} дн. ${hours} ч`;
+  if (hours > 0) return `${hours} ч ${mins} мин`;
+  return `${mins} мин`;
+}
 
 export default function AdminScreen() {
   const [loading, setLoading] = useState(false);
@@ -82,6 +167,7 @@ export default function AdminScreen() {
   const [adminEventFrom, setAdminEventFrom] = useState<string>("");
   const [adminEventTo, setAdminEventTo] = useState<string>("");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedUserDetail, setSelectedUserDetail] = useState<UserDetail | null>(null);
 
   const [roles, setRoles] = useState<string[]>([]);
   const [newRole, setNewRole] = useState("pro");
@@ -93,9 +179,10 @@ export default function AdminScreen() {
   const [aiLogFeature, setAiLogFeature] = useState<string>("");
 
   const selectedUserLabel = useMemo(() => {
-    const u = users.find(x => x.id === selectedUserId);
-    return u ? (u.email || u.id) : selectedUserId;
-  }, [users, selectedUserId]);
+    const u = users.find((x) => x.id === selectedUserId);
+    const c = aiCost?.top_users_7d.find((x) => x.user_id === selectedUserId);
+    return selectedUserDetail?.user?.email || selectedUserDetail?.user?.name || u?.email || c?.email || u?.id || selectedUserId;
+  }, [aiCost, selectedUserDetail, users, selectedUserId]);
 
   const loadAiLogs = async () => {
     try {
@@ -192,17 +279,16 @@ export default function AdminScreen() {
   const loadUserDetails = async (userId: string) => {
     if (!userId) return;
     setLoading(true); setErr(null);
+    setSelectedUserDetail(null);
+    setRoles([]);
+    setSessions([]);
     try {
-      const [rr, sr] = await Promise.all([
-        fetch(`/api/admin/user_roles?user_id=${encodeURIComponent(userId)}`, { credentials: "include" }),
-        fetch(`/api/admin/sessions?user_id=${encodeURIComponent(userId)}`, { credentials: "include" }),
-      ]);
-      if (!rr.ok) throw new Error("Нет доступа к ролям пользователя");
-      if (!sr.ok) throw new Error("Нет доступа к сессиям пользователя");
+      const rr = await fetch(`/api/admin/user_detail?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
+      if (!rr.ok) throw new Error("Нет доступа к карточке пользователя");
       const rj = await rr.json();
-      const sj = await sr.json();
+      setSelectedUserDetail(rj as UserDetail);
       setRoles(Array.isArray(rj?.roles) ? rj.roles : []);
-      setSessions(Array.isArray(sj?.sessions) ? sj.sessions : []);
+      setSessions(Array.isArray(rj?.sessions) ? rj.sessions : []);
     } catch (e: any) {
       setErr(e?.message || "Ошибка загрузки пользователя");
     } finally {
@@ -446,12 +532,14 @@ export default function AdminScreen() {
         </div>
 
         <div className="mt-6">
-          <div className="text-slate-200 font-black mb-2">Top 10 пользователей по стоимости (7 дней)</div>
+          <div className="text-slate-200 font-black mb-1">Top 10 пользователей по стоимости (7 дней)</div>
+          <div className="text-slate-500 font-semibold text-sm mb-2">Кликните по строке, чтобы открыть карточку пользователя, план, роли и срок жизни сессий.</div>
           <div className="overflow-auto rounded-2xl border border-slate-800">
-            <table className="min-w-[720px] w-full text-sm">
+            <table className="min-w-[860px] w-full text-sm">
               <thead className="bg-slate-900/70">
                 <tr className="text-slate-300">
-                  <th className="text-left p-3 font-black">user_id</th>
+                  <th className="text-left p-3 font-black">пользователь</th>
+                  <th className="text-left p-3 font-black">план</th>
                   <th className="text-left p-3 font-black">cost</th>
                   <th className="text-left p-3 font-black">tokens</th>
                   <th className="text-left p-3 font-black">calls</th>
@@ -459,8 +547,25 @@ export default function AdminScreen() {
               </thead>
               <tbody>
                 {(aiCost?.top_users_7d || []).map((r) => (
-                  <tr key={r.user_id} className="border-t border-slate-800 text-slate-200">
-                    <td className="p-3 font-mono text-xs">{r.user_id}</td>
+                  <tr
+                    key={r.user_id}
+                    onClick={() => { setSelectedUserId(r.user_id); void loadUserDetails(r.user_id); }}
+                    className={`border-t border-slate-800 text-slate-200 transition cursor-pointer hover:bg-slate-900/50 ${selectedUserId === r.user_id ? "bg-indigo-500/10" : ""}`}
+                    title="Открыть карточку пользователя"
+                  >
+                    <td className="p-3">
+                      <div className="flex items-center gap-2 font-black text-slate-100">
+                        <span>{r.email || r.user_id}</span>
+                        <ChevronRight size={14} className="text-slate-500" />
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-500">{r.user_id}</div>
+                    </td>
+                    <td className="p-3">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-black text-indigo-100">
+                        {r.plan || "free"}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500">{r.subscription_status || "inactive"}</div>
+                    </td>
                     <td className="p-3 font-black">{`$${(r.cost_usd || 0).toFixed(4)}`}</td>
                     <td className="p-3 font-bold">{r.tokens}</td>
                     <td className="p-3 font-bold">{r.calls}</td>
@@ -468,7 +573,7 @@ export default function AdminScreen() {
                 ))}
                 {(!aiCost?.top_users_7d || aiCost.top_users_7d.length === 0) && (
                   <tr className="border-t border-slate-800">
-                    <td className="p-3 text-slate-400 font-semibold" colSpan={4}>Пока нет данных.</td>
+                    <td className="p-3 text-slate-400 font-semibold" colSpan={5}>Пока нет данных.</td>
                   </tr>
                 )}
               </tbody>
@@ -627,7 +732,7 @@ export default function AdminScreen() {
                   <button
                     disabled={!hasChanges || loading}
                     onClick={() => saveFlag(flag.key)}
-                    className={`px-4 py-2 rounded-2xl font-black \${hasChanges ? "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200" : "bg-slate-800 text-slate-500"}`}
+                    className={`px-4 py-2 rounded-2xl font-black ${hasChanges ? "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200" : "bg-slate-800 text-slate-500"}`}
                   >
                     Сохранить
                   </button>
@@ -797,8 +902,110 @@ export default function AdminScreen() {
 
         <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 space-y-6">
           <div>
-            <h2 className="text-xl font-black text-slate-100">Роли и доступ</h2>
-            <p className="text-slate-400 font-medium">Выбран: <span className="text-slate-200 font-black">{selectedUserLabel || "—"}</span></p>
+            <h2 className="text-xl font-black text-slate-100">Детали пользователя</h2>
+            <p className="text-slate-400 font-medium">
+              Выбран: <span className="text-slate-200 font-black">{selectedUserLabel || "—"}</span>
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-slate-100 font-black text-lg">
+                  {selectedUserDetail?.user?.name || selectedUserLabel || "Пользователь не выбран"}
+                </div>
+                <div className="text-slate-500 font-semibold text-sm break-all">
+                  {selectedUserDetail?.user?.email || selectedUserId || "Нажмите на пользователя слева или в таблице выше."}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-100 text-xs font-black uppercase tracking-wider">
+                  {selectedUserDetail?.subscription?.plan || "free"}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-bold">
+                  {selectedUserDetail?.subscription?.status || "inactive"}
+                </span>
+                {selectedUserDetail?.subscription?.current_period_end ? (
+                  <span className="text-xs text-slate-500 font-semibold">
+                    до {formatTimestamp(selectedUserDetail.subscription.current_period_end)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {selectedUserDetail ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">user_id</div>
+                  <div className="mt-1 text-slate-100 font-mono text-xs break-all">{selectedUserDetail.user.id}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Создан</div>
+                  <div className="mt-1 text-slate-100 font-black text-sm">{formatTimestamp(selectedUserDetail.user.created_at)}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сессии</div>
+                  <div className="mt-1 text-slate-100 font-black text-sm">
+                    {selectedUserDetail.summary.active_sessions}/{selectedUserDetail.summary.total_sessions}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">живые / всего</div>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Лимит сессии</div>
+                  <div className="mt-1 text-slate-100 font-black text-sm">
+                    {selectedUserDetail.summary.session_ttl_days} дн.
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">авто-истечение</div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-4 text-slate-500 font-semibold text-sm">
+                Нажмите на строку в таблице сверху, чтобы увидеть email, роли, план, срок жизни сессий и AI-активность.
+              </div>
+            )}
+
+            {selectedUserDetail && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-slate-500 font-bold">Роли:</span>
+                  {selectedUserDetail.roles.length > 0 ? (
+                    selectedUserDetail.roles.map((r) => (
+                      <span key={r} className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-200 font-bold text-xs">
+                        {r}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-500 font-semibold">нет</span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">AI за 7 дней</div>
+                    <div className="mt-1 text-slate-100 font-black">{selectedUserDetail.summary.ai_calls_7d} вызовов</div>
+                    <div className="text-slate-500 font-semibold text-xs mt-1">
+                      ${selectedUserDetail.summary.ai_cost_7d.toFixed(4)} · {selectedUserDetail.summary.ai_tokens_7d} токенов
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Состояние</div>
+                    <div className="mt-1 text-slate-100 font-black">
+                      {selectedUserDetail.user.is_active ? "Активен" : "Неактивен"}
+                    </div>
+                    <div className="text-slate-500 font-semibold text-xs mt-1">
+                      ошибок {selectedUserDetail.summary.ai_errors_7d} · fallback {selectedUserDetail.summary.ai_fallback_7d}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
+            <div className="text-slate-100 font-black mb-2 flex items-center gap-2">
+              <BadgeInfo size={18} className="text-indigo-300" />
+              Роли и доступ
+            </div>
+            <p className="text-slate-400 font-medium">Редактируйте доступ выбранного пользователя ниже.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -836,14 +1043,23 @@ export default function AdminScreen() {
 
           <div className="rounded-2xl bg-slate-950/40 border border-slate-800 p-4">
             <div className="text-slate-100 font-black mb-2">Сессии пользователя</div>
+            <div className="text-slate-500 font-semibold text-sm mb-3">
+              Сессии привязаны к выбранному пользователю и автоматически истекают через {selectedUserDetail?.summary.session_ttl_days || 30} дн.
+            </div>
             <div className="space-y-2 max-h-[220px] overflow-auto pr-1">
               {sessions.map((s) => (
                 <div key={s.id} className="p-3 rounded-2xl bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-slate-200 font-bold text-sm truncate">{s.id}</div>
                     <div className="text-slate-500 font-semibold text-xs">
-                      created: {new Date((s.created_at || 0) * 1000).toLocaleString()} · expires: {new Date((s.expires_at || 0) * 1000).toLocaleString()}
+                      created: {formatTimestamp(s.created_at)} · expires: {formatTimestamp(s.expires_at)}
                     </div>
+                    <div className="text-slate-600 font-semibold text-xs flex items-center gap-2 mt-0.5">
+                      <Clock3 size={12} />
+                      {s.revoked ? "отозвана" : `живёт ${formatDuration(s.ttl_seconds || Math.max(0, (s.expires_at || 0) - (s.created_at || 0)))}`}
+                      {s.revoked === 0 && (s.remaining_seconds ?? 0) > 0 ? ` · осталось ${formatDuration(s.remaining_seconds)}` : ""}
+                    </div>
+                    {s.ip && <div className="text-slate-600 font-semibold text-xs">IP: {s.ip}</div>}
                     {s.user_agent && <div className="text-slate-600 font-semibold text-xs truncate">{s.user_agent}</div>}
                   </div>
                   <button
