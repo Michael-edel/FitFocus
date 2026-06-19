@@ -68,20 +68,58 @@ function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null
   return [...targeted].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
 }
 
+async function unregisterAuthServiceWorkers(): Promise<void> {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  } catch {
+    // Auth recovery must keep going even when the browser blocks SW management.
+  }
+}
+
+function authRecoveryReloadKey() {
+  return 'fitfocus.auth.google-recovery-reloaded.v1';
+}
+
+function hasReloadedForAuthRecovery(): boolean {
+  try {
+    return sessionStorage.getItem(authRecoveryReloadKey()) === '1';
+  } catch {
+    return true;
+  }
+}
+
+function markReloadedForAuthRecovery(): void {
+  try {
+    sessionStorage.setItem(authRecoveryReloadKey(), '1');
+  } catch {}
+}
+
+function clearAuthRecoveryReloadMarker(): void {
+  try {
+    sessionStorage.removeItem(authRecoveryReloadKey());
+  } catch {}
+}
+
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
 
   const readMe = async () => {
     try {
-      const r = await fetchFn('/api/me', { credentials: 'include', cache: 'no-store' });
+      const r = await fetchFn(`/api/me?t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
       if (r.ok) return await r.json();
     } catch {}
     return null;
   };
 
+  if (params.continueAfterGoogle) {
+    await unregisterAuthServiceWorkers();
+  }
+
   let me: any = await readMe();
   if (!me?.user?.sub && params.continueAfterGoogle) {
-    const delays = [150, 250, 400, 600, 900];
+    const delays = [150, 250, 400, 600, 900, 1200, 1600, 2200];
     for (const delay of delays) {
       try {
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -102,6 +140,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   }
 
   if (serverUser?.sub) {
+    clearAuthRecoveryReloadMarker();
     try {
       const pr = await fetchFn('/api/bootstrap', { credentials: 'include' });
       const pj = await pr.json().catch(() => null);
@@ -110,7 +149,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         const profile = pj?.profile || null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));
-          void params.loginAsUser(profile, serverUser);
+          await params.loginAsUser(profile, serverUser);
           return;
         }
       }
@@ -128,7 +167,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         params.setAllUsers(normalized);
         const localProfile = pickBestStoredProfile(normalized, serverUser);
         if (localProfile) {
-          void params.loginAsUser(localProfile, serverUser);
+          await params.loginAsUser(localProfile, serverUser);
           return;
         }
       }
@@ -136,6 +175,12 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
     params.setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
     params.setAuthState('register');
+    return;
+  }
+
+  if (params.continueAfterGoogle && !hasReloadedForAuthRecovery()) {
+    markReloadedForAuthRecovery();
+    window.location.replace(window.location.href);
     return;
   }
 
