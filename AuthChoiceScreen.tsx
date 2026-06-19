@@ -52,8 +52,15 @@ export default function AuthChoiceScreen({
           </div>
 
           <div className="space-y-2 text-left">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Код приглашения (beta)</label>
+            <label
+              htmlFor="invite-code"
+              className="text-[10px] font-black uppercase tracking-widest text-slate-500"
+            >
+              Код приглашения (beta)
+            </label>
             <input
+              id="invite-code"
+              name="inviteCode"
               value={inviteCode}
               onChange={(e) => {
                 const v = e.target.value;

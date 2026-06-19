@@ -198,34 +198,32 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
   // To work for *all* clients with no browser tweaking, we use a backend-driven OAuth2 redirect flow.
   const [err, setErr] = React.useState<string | null>(null);
 
+  const authUrl = React.useMemo(() => {
+    const params = new URLSearchParams();
+    if (inviteCode) params.set("invite", inviteCode);
+    params.set("redirect", window.location.origin);
+    return `/api/auth/google/start?${params.toString()}`;
+  }, [inviteCode]);
+
   const handleClick = React.useCallback(() => {
     setErr(null);
     try {
       sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
     } catch {}
-    const params = new URLSearchParams();
-    if (inviteCode) params.set("invite", inviteCode);
-    params.set("redirect", window.location.origin);
-    const authUrl = `/api/auth/google/start?${params.toString()}`;
-    try {
-      // Use a top-level navigation so OAuth does not get trapped inside an iframe/frame.
-      // That avoids Google's cross-origin redirect being blocked by the browser.
-      window.top?.location.assign(authUrl);
-    } catch {
-      window.location.assign(authUrl);
-    }
-  }, [inviteCode]);
+  }, []);
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <button
-        type="button"
+      <a
+        href={authUrl}
+        target="_top"
+        rel="noreferrer"
         onClick={handleClick}
         className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
       >
         <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
         <span>Google профиль</span>
-      </button>
+      </a>
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
