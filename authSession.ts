@@ -1,5 +1,7 @@
 import type { UserProfile } from './types';
-import { readStoredAllUsersSnapshot } from './storage/hybrid';
+import { applyRemoteStateItems, readStoredAllUsersSnapshot } from './storage/hybrid';
+
+type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 
 type AuthStateSetters = {
   setGoogleMe: (user: any) => void;
@@ -16,7 +18,7 @@ type AuthStateSetters = {
 
 type BootstrapAuthParams = AuthStateSetters & {
   requireInvite: boolean;
-  loginAsUser: (user: UserProfile) => Promise<void>;
+  loginAsUser: (user: UserProfile, authUser?: ServerUser | null) => Promise<void>;
   continueAfterGoogle?: boolean;
   fetchImpl?: typeof fetch;
 };
@@ -39,7 +41,7 @@ type DeleteAccountParams = {
   onLogout: () => void | Promise<void>;
 };
 
-function scoreStoredProfile(profile: UserProfile, serverUser: { sub?: string; email?: string } | null | undefined): number {
+function scoreStoredProfile(profile: UserProfile, serverUser: ServerUser | null | undefined): number {
   let score = 0;
   if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) score += 1000;
   if (serverUser?.email && profile.email && profile.email.toLowerCase() === serverUser.email.toLowerCase()) score += 500;
@@ -53,7 +55,7 @@ function scoreStoredProfile(profile: UserProfile, serverUser: { sub?: string; em
   return score;
 }
 
-function pickBestStoredProfile(all: UserProfile[], serverUser: { sub?: string; email?: string } | null | undefined): UserProfile | null {
+function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null | undefined): UserProfile | null {
   if (!Array.isArray(all) || !all.length) return null;
   return [...all].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
 }
@@ -67,7 +69,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     if (r.ok) me = await r.json();
   } catch {}
 
-  const serverUser = me?.user || null;
+  const serverUser: ServerUser | null = me?.user || null;
   const hasServerAccess = me?.hasAccess !== false;
   params.setGoogleMe(serverUser);
 
@@ -79,13 +81,14 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
   if (serverUser?.sub) {
     try {
-      const pr = await fetchFn('/api/profile', { credentials: 'include' });
+      const pr = await fetchFn('/api/bootstrap', { credentials: 'include' });
+      const pj = await pr.json().catch(() => null);
       if (pr.ok) {
-        const pj = await pr.json();
+        applyRemoteStateItems(pj?.items);
         const profile = pj?.profile || null;
         if (profile) {
           params.setAllUsers([profile]);
-          void params.loginAsUser(profile);
+          void params.loginAsUser(profile, serverUser);
           return;
         }
       }
@@ -102,7 +105,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         params.setAllUsers(all);
         const localProfile = pickBestStoredProfile(all, serverUser);
         if (localProfile) {
-          void params.loginAsUser(localProfile);
+          void params.loginAsUser(localProfile, serverUser);
           return;
         }
       }

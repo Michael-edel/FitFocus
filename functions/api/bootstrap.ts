@@ -5,7 +5,7 @@
 import { requireUser, json } from "./_lib/auth";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
-import { migrateLegacyAccountByEmail } from "./_lib/legacy_sync";
+import { migrateLegacyAccountByEmail, withProtectedFields } from "./_lib/legacy_sync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -21,22 +21,27 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
 
   const profRow = await db
-    .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ?")
+    .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(user.sub)
-    .first<{ profile_json: string }>();
+    .first<{ profile_json: string; version?: number }>();
 
   let profile = profRow?.profile_json ? safeParse(profRow.profile_json) : null;
   if (!profile) {
     profile = await migrateLegacyAccountByEmail(db, user as any);
+  } else {
+    profile = withProtectedFields(user as any, {
+      ...profile,
+      version: Number(profRow?.version || profile.version || 1),
+    });
   }
 
   // Load KV only for this user's fitfocus_data prefix
   const prefix = `fitfocus_data_${user.sub}_`;
   const { results } = await db
-    .prepare("SELECT k, v FROM user_kv WHERE user_id = ? AND k LIKE ?")
+    .prepare("SELECT k, v, version, updated_at FROM user_kv WHERE user_id = ? AND k LIKE ?")
     .bind(user.sub, prefix + "%")
-    .all<{ k: string; v: string }>();
-  const items = (results || []).map((r) => ({ key: r.k, value: r.v }));
+    .all<{ k: string; v: string; version?: number; updated_at?: number }>();
+  const items = (results || []).map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
 
   const features = await loadFeatures(env);
 

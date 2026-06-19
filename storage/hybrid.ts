@@ -227,3 +227,21 @@ export function collectLocalStateItems(userId: string): KVItem[] {
 export function rememberRemoteStateVersion(key: string, version?: number) {
   setStoredVersion(key, version);
 }
+
+export function applyRemoteStateItems(input: unknown) {
+  if (!Array.isArray(input)) return;
+  for (const item of input) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const key = typeof (item as any).key === 'string' ? (item as any).key : '';
+    const value = typeof (item as any).value === 'string' ? (item as any).value : null;
+    if (!key || value === null) continue;
+    try {
+      localStorage.setItem(key, value);
+      if (typeof (item as any).version === 'number') {
+        setStoredVersion(key, (item as any).version);
+      }
+    } catch {
+      // Best-effort hydration only.
+    }
+  }
+}
