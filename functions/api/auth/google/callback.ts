@@ -1,4 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
+import { replaceActiveSessionsForDevice } from "../../_lib/auth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -219,6 +220,7 @@ export const onRequestGet: PagesFunction<{
     const expiresAt = now + ttl;
     const ua = request.headers.get("user-agent") || "";
     const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "";
+    await replaceActiveSessionsForDevice(env.DB, user.sub, ua, now);
     await env.DB.prepare(
       "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
     )

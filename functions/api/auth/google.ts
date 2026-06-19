@@ -1,4 +1,4 @@
-import { json } from "../_lib/auth";
+import { json, replaceActiveSessionsForDevice } from "../_lib/auth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -120,6 +120,8 @@ const ip =
   request.headers.get("x-forwarded-for") ||
   request.headers.get("x-real-ip") ||
   "";
+
+await replaceActiveSessionsForDevice(env.DB, user.sub, ua, now);
 
 await env.DB.prepare(
   "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
