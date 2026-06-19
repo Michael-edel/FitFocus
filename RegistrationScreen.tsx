@@ -132,7 +132,18 @@ export default function RegistrationScreen({
 
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
-  const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0);
+  const regAnthroError = useMemo(() => {
+    const weight = Number(regData.weight) || 0;
+    const height = Number(regData.height) || 0;
+    if (weight > 0 && (weight < 25 || weight > 350)) return 'Вес должен быть в диапазоне 25–350 кг.';
+    if (height > 0 && (height < 120 || height > 230)) return 'Рост должен быть в диапазоне 120–230 см.';
+    if (weight > 0 && height > 0) {
+      const bmi = weight / Math.pow(height / 100, 2);
+      if (bmi < 12 || bmi > 60) return 'Проверьте сочетание веса и роста: оно выглядит нереалистично.';
+    }
+    return null;
+  }, [regData.weight, regData.height]);
+  const regStep1Valid = (Number(regData.weight) > 0) && (Number(regData.height) > 0) && (Number(regData.age) > 0) && !regAnthroError;
 
   return (
     <div className="min-h-screen bg-slate-950 relative overflow-hidden text-left">
@@ -213,8 +224,8 @@ export default function RegistrationScreen({
             {onboardingStep === 1 ? (
               <div className="space-y-4 md:col-span-2 max-w-md mx-auto w-full">
                 <div className="grid grid-cols-1 gap-2">
-                  <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Вес (кг)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.weight} onChange={e => setRegData({...regData, weight: Math.max(0, Number(e.target.value) || 0)})} /></div>
-                  <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                  <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Вес (кг)</label><input type="number" min={25} max={350} inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.weight} onChange={e => setRegData({...regData, weight: Math.max(0, Number(e.target.value) || 0)})} /></div>
+                  <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</label><input type="number" min={120} max={230} inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.height} onChange={e => setRegData({...regData, height: Math.max(0, Number(e.target.value) || 0)})} /></div>
                   <div className="flex items-center justify-between p-4 bg-slate-950 rounded-[1.25rem] border border-slate-800"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</label><input type="number" inputMode="numeric" className="w-20 bg-transparent text-right font-black text-white tabular-nums outline-none text-base" value={regData.age} onChange={e => setRegData({...regData, age: Math.max(0, Math.floor(Number(e.target.value) || 0))})} /></div>
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
@@ -606,6 +617,11 @@ export default function RegistrationScreen({
             )}
           </div>
           <div className="pt-4 space-y-3">
+            {regAnthroError && onboardingStep === 1 && (
+              <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 font-semibold">
+                {regAnthroError}
+              </div>
+            )}
             {onboardingStep === 1 ? (
               <button type="button" onClick={() => setOnboardingStep(2)} disabled={!regStep1Valid} className={clsx('w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50', regStep1Valid ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40' : 'bg-slate-800 text-slate-600')}>Рассчитать мой план</button>
             ) : (

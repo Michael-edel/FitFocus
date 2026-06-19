@@ -46,6 +46,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const body = (await request.json().catch(() => null)) as any;
     const note = String(body?.note || "").trim();
+    const count = Math.max(1, Math.min(50, Number.isFinite(body?.count) ? Math.floor(Number(body.count)) : 1));
     const maxUses = Number.isFinite(body?.max_uses) ? Math.max(1, Math.min(1000, Number(body.max_uses))) : 1;
     const maxExpiryMs = nowMs() + 30 * 24 * 60 * 60 * 1000;
     const requestedExpiresAt = body?.expires_at ? Number(body.expires_at) : null;
@@ -53,20 +54,32 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       ? Math.min(requestedExpiresAt, maxExpiryMs)
       : null;
 
-    const code = randomCode(10);
     const createdAt = nowMs();
+    const codes: string[] = [];
 
-    await db
-      .prepare(
-        `INSERT INTO invite_codes (code, created_at, created_by, note, max_uses, uses, expires_at, revoked)
-         VALUES (?, ?, ?, ?, ?, 0, ?, 0)`
-      )
-      .bind(code, createdAt, user.sub, note, maxUses, expiresAt)
-      .run();
+    for (let idx = 0; idx < count; idx += 1) {
+      const code = randomCode(10);
+      const rowNote = count > 1 ? `${note || "invite"} #${idx + 1}` : note;
 
-    await logAdminEvent(db, { adminUserId: user.sub, action: "invite_create", targetUserId: null, meta: { code, max_uses: maxUses, note, expires_at: expiresAt, expiry_cap_days: 30 } });
+      await db
+        .prepare(
+          `INSERT INTO invite_codes (code, created_at, created_by, note, max_uses, uses, expires_at, revoked)
+           VALUES (?, ?, ?, ?, ?, 0, ?, 0)`
+        )
+        .bind(code, createdAt, user.sub, rowNote, maxUses, expiresAt)
+        .run();
 
-    return json({ ok: true, code }, 200);
+      codes.push(code);
+    }
+
+    await logAdminEvent(db, {
+      adminUserId: user.sub,
+      action: "invite_create",
+      targetUserId: null,
+      meta: { codes, count, max_uses: maxUses, note, expires_at: expiresAt, expiry_cap_days: 30 },
+    });
+
+    return json({ ok: true, code: codes[0], codes }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);

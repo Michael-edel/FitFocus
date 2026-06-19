@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { MoreHorizontal, X } from 'lucide-react';
+import { LogOut, MoreHorizontal, X } from 'lucide-react';
 import {
   AppTabId,
   mobilePrimaryTabIds,
@@ -73,6 +73,19 @@ export default function SidebarNavigation({
                 <span className="font-black">{tab.label}</span>
               </button>
             ))}
+            <div className="pt-2 border-t border-slate-800/70 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onMobileMoreOpenChange(false);
+                  logout();
+                }}
+                className="w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all bg-rose-500/10 text-rose-200 border border-rose-500/20"
+              >
+                <LogOut size={20} />
+                <span className="font-black">Выйти</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

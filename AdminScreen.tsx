@@ -194,6 +194,7 @@ export default function AdminScreen() {
   const [inviteDraftExpiresAt, setInviteDraftExpiresAt] = useState("");
   const [inviteActionMsg, setInviteActionMsg] = useState<string | null>(null);
   const [createdInviteCodes, setCreatedInviteCodes] = useState<string[]>([]);
+  const [inviteCreating, setInviteCreating] = useState(false);
 
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [aiLogLimit, setAiLogLimit] = useState(50);
@@ -473,27 +474,26 @@ export default function AdminScreen() {
     const note = inviteDraftNote.trim();
     const expiresAt = inviteDraftExpiresAt ? new Date(inviteDraftExpiresAt).getTime() : null;
     setLoading(true);
+    setInviteCreating(true);
     setErr(null);
     setInviteActionMsg(null);
     setCreatedInviteCodes([]);
     try {
-      const codes: string[] = [];
-      for (let idx = 0; idx < count; idx += 1) {
-        const r = await fetch("/api/admin/invites", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            note: count > 1 ? `${note} #${idx + 1}` : note,
-            max_uses: maxUses,
-            expires_at: Number.isFinite(expiresAt as number) ? expiresAt : null,
-          }),
-        });
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j?.code) {
-          throw new Error(j?.error?.code || "Не удалось создать invite");
-        }
-        codes.push(String(j.code));
+      const r = await fetch("/api/admin/invites", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          count,
+          note: note || "Тестер",
+          max_uses: maxUses,
+          expires_at: Number.isFinite(expiresAt as number) ? expiresAt : null,
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      const codes = Array.isArray(j?.codes) ? j.codes.map((code: unknown) => String(code)).filter(Boolean) : [];
+      if (!r.ok || !codes.length) {
+        throw new Error(j?.error?.code || j?.error?.message || "Не удалось создать invite");
       }
       setCreatedInviteCodes(codes);
       setInviteActionMsg(`Создано ${codes.length} invite-кодов для тестировщиков.`);
@@ -502,6 +502,7 @@ export default function AdminScreen() {
       setErr(e?.message || "Ошибка создания invite-кодов");
     } finally {
       setLoading(false);
+      setInviteCreating(false);
     }
   };
 
@@ -889,11 +890,13 @@ export default function AdminScreen() {
 
         <div className="mt-4 flex flex-wrap gap-3">
           <button
+            type="button"
             onClick={createInvitesBatch}
+            disabled={inviteCreating}
             className="px-4 py-2 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-100 font-black hover:bg-indigo-500/20 inline-flex items-center gap-2"
           >
             <KeyRound className="w-4 h-4" />
-            Создать коды
+            {inviteCreating ? "Создаём…" : "Создать коды"}
           </button>
           <div className="text-slate-400 font-semibold self-center">
             Выдайте каждому тестировщику отдельный код и попросите входить только через Google.
