@@ -159,13 +159,15 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
 export function createLogoutSession(params: LogoutParams) {
   return async () => {
     const fetchFn = params.fetchImpl ?? fetch;
-    void (async () => {
-      if (params.googleSub) {
-        try {
-          await fetchFn('/api/logout', { method: 'POST', credentials: 'include' });
-        } catch {}
-      }
-    })();
+    if (params.googleSub) {
+      try {
+        await fetchFn('/api/logout', { method: 'POST', credentials: 'include', cache: 'no-store' });
+      } catch {}
+    }
+
+    try {
+      sessionStorage.removeItem('fitfocus.auth.pending-google.v1');
+    } catch {}
 
     params.setGoogleMe(null);
     params.setCurrentUser?.(null);
