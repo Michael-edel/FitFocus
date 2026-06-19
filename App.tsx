@@ -1201,6 +1201,74 @@ const App: React.FC = () => {
       return;
     }
     const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
+    const normalizeFavoriteRecipe = (item: any): FavoriteRecipe | null => {
+      if (!item || typeof item !== 'object') return null;
+      const rawRecipe = item.recipe && typeof item.recipe === 'object' ? item.recipe : null;
+      const ingredientsSource = Array.isArray(rawRecipe?.ingredients)
+        ? rawRecipe.ingredients
+        : Array.isArray(item.ingredients)
+          ? item.ingredients
+          : [];
+      const stepsSource = Array.isArray(rawRecipe?.steps)
+        ? rawRecipe.steps
+        : Array.isArray(item.steps)
+          ? item.steps
+          : [];
+      const ingredients = ingredientsSource
+        .map((ing: any) => {
+          if (typeof ing === 'string') {
+            const name = ing.trim();
+            return name ? { name } : null;
+          }
+          if (!ing || typeof ing !== 'object') return null;
+          const name = String(ing.name || ing.title || '').trim();
+          if (!name) return null;
+          const amount = ing.amount ?? ing.grams ?? ing.value;
+          return {
+            name,
+            ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
+          };
+        })
+        .filter(Boolean);
+      const steps = stepsSource
+        .map((step: any, idx: number) => {
+          if (typeof step === 'string') {
+            const text = step.trim();
+            return text ? { n: idx + 1, text } : null;
+          }
+          if (!step || typeof step !== 'object') return null;
+          const text = String(step.text || step.step || '').trim();
+          if (!text) return null;
+          const n = Number(step.n || idx + 1);
+          const timeMin = step.timeMin ?? step.time_minutes;
+          return {
+            n: Number.isFinite(n) && n > 0 ? n : idx + 1,
+            text,
+            ...(timeMin === undefined || timeMin === null || timeMin === ''
+              ? {}
+              : { timeMin: Number(timeMin) || undefined }),
+          };
+        })
+        .filter(Boolean);
+      const recipe = {
+        title: String(rawRecipe?.title || item.title || 'Рецепт'),
+        servings: Number(rawRecipe?.servings ?? item.servings ?? 0) || undefined,
+        timeMinutes: Number(rawRecipe?.timeMinutes ?? item.timeMinutes ?? 0) || undefined,
+        ingredients,
+        steps,
+        tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
+      };
+      return {
+        id: String(item.id || globalThis.crypto?.randomUUID?.() || Date.now().toString()),
+        title: String(item.title || recipe.title),
+        createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date(item.createdAt || Date.now()).toISOString(),
+        photo: typeof item.photo === 'string' ? item.photo : undefined,
+        allergens: Array.isArray(item.allergens) ? item.allergens.map(String).filter(Boolean) : undefined,
+        intolerances: Array.isArray(item.intolerances) ? item.intolerances.map(String).filter(Boolean) : undefined,
+        sourceFoodName: typeof item.sourceFoodName === 'string' ? item.sourceFoodName : undefined,
+        recipe,
+      };
+    };
     try {
       const raw = localStorage.getItem(key);
       if (!raw) {
@@ -1208,8 +1276,9 @@ const App: React.FC = () => {
         return;
       }
       const parsed = JSON.parse(raw);
-      setFavoriteRecipes(Array.isArray(parsed) ? parsed : []);
-      safeSetItem(key, JSON.stringify(Array.isArray(parsed) ? parsed : []));
+      const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(Boolean) as FavoriteRecipe[] : [];
+      setFavoriteRecipes(normalized);
+      safeSetItem(key, JSON.stringify(normalized));
     } catch {
       setFavoriteRecipes([]);
     }

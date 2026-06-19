@@ -3,12 +3,83 @@ import type { FavoriteRecipe } from './types';
 import clsx from 'clsx';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { Heart, Search, Trash2, Clock3, Users, Camera, Upload, Loader2, X, CheckCircle2 } from 'lucide-react';
+import type { Recipe } from './types';
 
 type Props = {
   recipes: FavoriteRecipe[];
   onAdd: (recipe: FavoriteRecipe) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
+};
+
+const toRecipeIngredient = (value: unknown): { name: string; amount?: string } | null => {
+  if (typeof value === 'string') {
+    const name = value.trim();
+    return name ? { name } : null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  const item = value as { name?: unknown; amount?: unknown; grams?: unknown };
+  const name = String(item.name || '').trim();
+  if (!name) return null;
+  const amount = item.amount ?? item.grams;
+  return {
+    name,
+    amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
+  };
+};
+
+const toRecipeStep = (value: unknown, index: number) => {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text ? ({ n: index + 1, text } as const) : null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  const step = value as { n?: unknown; text?: unknown; timeMin?: unknown };
+  const text = String(step.text || '').trim();
+  if (!text) return null;
+  const n = Number(step.n || index + 1);
+  const timeMin = step.timeMin === undefined || step.timeMin === null || step.timeMin === ''
+    ? undefined
+    : Number(step.timeMin);
+  return {
+    n: Number.isFinite(n) && n > 0 ? n : index + 1,
+    text,
+    ...(Number.isFinite(timeMin as number) && (timeMin as number) > 0 ? { timeMin: Number(timeMin) } : {}),
+  };
+};
+
+const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
+  const rawRecipe = item.recipe as Partial<Recipe> | undefined;
+  const legacy = item as unknown as {
+    calories?: unknown;
+    protein?: unknown;
+    fat?: unknown;
+    carbs?: unknown;
+    ingredients?: unknown;
+    steps?: unknown;
+    servings?: unknown;
+    timeMinutes?: unknown;
+  };
+
+  const ingredientsSource = Array.isArray(legacy.ingredients)
+    ? legacy.ingredients
+    : Array.isArray(rawRecipe?.ingredients)
+      ? rawRecipe?.ingredients
+      : [];
+  const stepsSource = Array.isArray(legacy.steps)
+    ? legacy.steps
+    : Array.isArray(rawRecipe?.steps)
+      ? rawRecipe?.steps
+      : [];
+
+  return {
+    title: String(rawRecipe?.title || item.title || 'Рецепт'),
+    servings: Number(legacy.servings ?? rawRecipe?.servings ?? 0) || undefined,
+    timeMinutes: Number(legacy.timeMinutes ?? rawRecipe?.timeMinutes ?? 0) || undefined,
+    ingredients: ingredientsSource.map(toRecipeIngredient).filter(Boolean) as Array<{ name: string; amount?: string }>,
+    steps: stepsSource.map(toRecipeStep).filter(Boolean) as Recipe['steps'],
+    tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
+  };
 };
 
 export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Props) {
@@ -40,22 +111,80 @@ const handlePick = async (file?: File) => {
     const ai = await analyzeFoodPhotoEnhanced(b64);
 
     const title = (ai?.name || 'Рецепт').toString().slice(0, 80);
-    const recipe: FavoriteRecipe = {
+    const ingredients = Array.isArray(ai?.ingredients)
+      ? ai.ingredients
+          .map((it: any) => {
+            if (typeof it === 'string') return it.trim();
+            if (!it || typeof it !== 'object') return '';
+            return String(it.name || it.title || '').trim();
+          })
+          .filter(Boolean)
+      : [];
+    const steps = Array.isArray(ai?.steps)
+      ? ai.steps
+          .map((it: any) => {
+            if (typeof it === 'string') return it.trim();
+            if (!it || typeof it !== 'object') return '';
+            return String(it.text || it.step || '').trim();
+          })
+          .filter(Boolean)
+      : [];
+    const recipe = {
       id: (globalThis.crypto?.randomUUID?.() || String(Date.now())),
       title,
+      createdAt: new Date().toISOString(),
       sourceFoodName: ai?.name || '',
+      allergens: Array.isArray(ai?.allergens) ? ai.allergens.map(String) : undefined,
+      intolerances: Array.isArray(ai?.intolerances) ? ai.intolerances.map(String) : undefined,
       calories: Number(ai?.calories || 0),
       protein: Number(ai?.protein || 0),
       fat: Number(ai?.fat || 0),
       carbs: Number(ai?.carbs || 0),
-      ingredients: Array.isArray(ai?.ingredients) ? ai.ingredients.map(String) : [],
-      steps: Array.isArray(ai?.steps) ? ai.steps.map(String) : [],
-      servings: Number(ai?.servings || 1),
-      timeMinutes: Number(ai?.timeMinutes || ai?.time_minutes || 0),
-      createdAt: Date.now(),
-      allergens: Array.isArray(ai?.allergens) ? ai.allergens.map(String) : undefined,
-      intolerances: Array.isArray(ai?.intolerances) ? ai.intolerances.map(String) : undefined,
-    } as any;
+      ingredients,
+      steps,
+      servings: Number(ai?.servings || 1) || 1,
+      timeMinutes: Number(ai?.timeMinutes || ai?.time_minutes || 0) || 0,
+      recipe: {
+        title,
+        servings: Number(ai?.servings || 1) || 1,
+        timeMinutes: Number(ai?.timeMinutes || ai?.time_minutes || 0) || undefined,
+        ingredients: Array.isArray(ai?.ingredients)
+          ? ai.ingredients
+              .map((it: any) => {
+                if (typeof it === 'string') return { name: it.trim() };
+                if (!it || typeof it !== 'object') return null;
+                const name = String(it.name || it.title || '').trim();
+                if (!name) return null;
+                const amount = it.amount ?? it.grams ?? it.value;
+                return {
+                  name,
+                  ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
+                };
+              })
+              .filter(Boolean)
+          : [],
+        steps: Array.isArray(ai?.steps)
+          ? ai.steps
+              .map((it: any, idx: number) => {
+                if (typeof it === 'string') return { n: idx + 1, text: it.trim() };
+                if (!it || typeof it !== 'object') return null;
+                const text = String(it.text || it.step || '').trim();
+                if (!text) return null;
+                const n = Number(it.n || idx + 1);
+                const timeMin = it.timeMin ?? it.time_minutes;
+                return {
+                  n: Number.isFinite(n) && n > 0 ? n : idx + 1,
+                  text,
+                  ...(timeMin === undefined || timeMin === null || timeMin === ''
+                    ? {}
+                    : { timeMin: Number(timeMin) || undefined }),
+                };
+              })
+              .filter(Boolean)
+          : [],
+        tips: Array.isArray(ai?.tips) ? ai.tips.map(String).filter(Boolean) : [],
+      },
+    } as any as FavoriteRecipe;
 
     setDraft(recipe);
   } catch (e: any) {
@@ -147,7 +276,11 @@ const handlePick = async (file?: File) => {
             </button>
             <button
               onClick={() => {
-                onAdd({ ...(draft as any), createdAt: Date.now() } as any);
+                onAdd({
+                  ...(draft as FavoriteRecipe),
+                  createdAt: new Date().toISOString(),
+                  recipe: normalizeRecipe(draft as FavoriteRecipe),
+                });
                 setDraft(null);
               }}
               className="px-4 py-2 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center gap-2"
@@ -237,6 +370,10 @@ const handlePick = async (file?: File) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filtered.map((r) => (
             <div key={r.id} className="bg-slate-900/40 border border-slate-800 rounded-[2rem] p-6 text-left flex flex-col">
+              {(() => {
+                const recipe = normalizeRecipe(r);
+                return (
+                  <>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-slate-100 font-black text-lg truncate">{r.title}</div>
@@ -252,14 +389,14 @@ const handlePick = async (file?: File) => {
               </div>
 
               <div className="mt-4 flex items-center gap-4 text-slate-400 text-sm">
-                {typeof r.recipe.timeMinutes === 'number' && (
+                {typeof recipe.timeMinutes === 'number' && (
                   <div className="inline-flex items-center gap-2">
-                    <Clock3 className="w-4 h-4" /> {r.recipe.timeMinutes} мин
+                    <Clock3 className="w-4 h-4" /> {recipe.timeMinutes} мин
                   </div>
                 )}
-                {typeof r.recipe.servings === 'number' && (
+                {typeof recipe.servings === 'number' && (
                   <div className="inline-flex items-center gap-2">
-                    <Users className="w-4 h-4" /> {r.recipe.servings} порц.
+                    <Users className="w-4 h-4" /> {recipe.servings} порц.
                   </div>
                 )}
               </div>
@@ -267,7 +404,7 @@ const handlePick = async (file?: File) => {
               <div className="mt-5">
                 <div className="text-slate-200 font-bold mb-2">Ингредиенты</div>
                 <ul className="text-slate-400 text-sm space-y-1">
-                  {r.recipe.ingredients.slice(0, 6).map((ing, idx) => (
+                  {recipe.ingredients.slice(0, 6).map((ing, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="text-indigo-300">•</span>
                       <span className="flex-1 flex items-start justify-between gap-4">
@@ -276,8 +413,8 @@ const handlePick = async (file?: File) => {
                       </span>
                     </li>
                   ))}
-                  {r.recipe.ingredients.length > 6 && (
-                    <li className="text-slate-500">…и ещё {r.recipe.ingredients.length - 6}</li>
+                  {recipe.ingredients.length > 6 && (
+                    <li className="text-slate-500">…и ещё {recipe.ingredients.length - 6}</li>
                   )}
                 </ul>
               </div>
@@ -285,7 +422,7 @@ const handlePick = async (file?: File) => {
               <div className="mt-5 flex-1">
                 <div className="text-slate-200 font-bold mb-2">Шаги</div>
                 <ol className="text-slate-400 text-sm space-y-2">
-                  {r.recipe.steps.slice(0, 3).map((s, idx) => (
+                  {recipe.steps.slice(0, 3).map((s, idx) => (
                     <li key={idx} className="flex items-start gap-3">
                       <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-200 flex items-center justify-center text-xs font-black shrink-0">
                         {s.n ?? idx + 1}
@@ -293,8 +430,8 @@ const handlePick = async (file?: File) => {
                       <span className="flex-1">{s.text}</span>
                     </li>
                   ))}
-                  {r.recipe.steps.length > 3 && (
-                    <li className="text-slate-500">…ещё {r.recipe.steps.length - 3} шага</li>
+                  {recipe.steps.length > 3 && (
+                    <li className="text-slate-500">…ещё {recipe.steps.length - 3} шага</li>
                   )}
                 </ol>
               </div>
@@ -302,6 +439,9 @@ const handlePick = async (file?: File) => {
               <div className="mt-5 text-slate-500 text-xs">
                 Сохранено: {new Date(r.createdAt).toLocaleString()}
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
