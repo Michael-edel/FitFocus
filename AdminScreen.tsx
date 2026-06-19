@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo } from "lucide-react";
+import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip } from "lucide-react";
 
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
 type SettingRow = { key: string; value: string };
@@ -86,6 +86,37 @@ type InviteRow = {
   uses: number;
   expires_at?: number | null;
   revoked: number;
+};
+
+type SupportAttachment = {
+  name: string;
+  mime: string;
+  size: number;
+  kind: "photo" | "video" | "voice" | "file";
+  data_url: string;
+};
+
+type SupportTicketRow = {
+  id: string;
+  user_id: string;
+  user_email?: string;
+  user_name?: string;
+  created_at: number;
+  updated_at: number;
+  category: string;
+  section?: string | null;
+  subject?: string | null;
+  message: string;
+  steps_json?: string | null;
+  device?: string | null;
+  browser?: string | null;
+  contact?: string | null;
+  app_version?: string | null;
+  status: string;
+  priority: string;
+  attachment_count: number;
+  attachments?: SupportAttachment[];
+  admin_note?: string | null;
 };
 
 type UserDetail = {
@@ -196,6 +227,10 @@ export default function AdminScreen() {
   const [createdInviteCodes, setCreatedInviteCodes] = useState<string[]>([]);
   const [inviteCreating, setInviteCreating] = useState(false);
 
+  const [supportTickets, setSupportTickets] = useState<SupportTicketRow[]>([]);
+  const [supportTicketsLimit, setSupportTicketsLimit] = useState(20);
+  const [selectedSupportTicket, setSelectedSupportTicket] = useState<SupportTicketRow | null>(null);
+
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [aiLogLimit, setAiLogLimit] = useState(50);
   const [aiLogFeature, setAiLogFeature] = useState<string>("");
@@ -245,6 +280,36 @@ export default function AdminScreen() {
     } catch {}
   };
 
+  const parseSupportSteps = (value: unknown) => {
+    if (!value) return [] as string[];
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed) ? parsed.map((step) => String(step)).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const loadSupportTickets = async () => {
+    try {
+      const limit = Math.max(1, Math.min(100, Number(supportTicketsLimit) || 20));
+      const r = await fetch(`/api/support/feedback?limit=${limit}`, { credentials: "include" });
+      if (!r.ok) return;
+      const j = await r.json();
+      setSupportTickets(Array.isArray(j?.tickets) ? j.tickets : []);
+    } catch {}
+  };
+
+  const loadSupportTicketDetail = async (ticketId: string) => {
+    if (!ticketId) return;
+    try {
+      const r = await fetch(`/api/support/feedback?id=${encodeURIComponent(ticketId)}`, { credentials: "include" });
+      if (!r.ok) return;
+      const j = await r.json();
+      setSelectedSupportTicket(j?.ticket ? j.ticket : null);
+    } catch {}
+  };
+
   const exportAdminEventsCsv = () => {
     const qs = new URLSearchParams();
     qs.set('limit', '500');
@@ -289,6 +354,7 @@ export default function AdminScreen() {
       setSettingsDirty({});
       setInviteActionMsg(null);
       setCreatedInviteCodes([]);
+      await loadSupportTickets();
       await loadAdminEvents();
       setFlagsDirty({});
     } catch (e: any) {
@@ -985,6 +1051,182 @@ export default function AdminScreen() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Support feedback */}
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6 mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100 flex items-center gap-2">
+              <LifeBuoy className="text-cyan-400" />
+              Обратная связь
+            </h2>
+            <div className="text-slate-300 font-semibold mt-1">
+              Обращения из формы поддержки с голосом, фото и видео.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={supportTicketsLimit}
+              onChange={(e) => setSupportTicketsLimit(Math.max(1, Math.min(100, Number(e.target.value || 20))))}
+              className="w-24 px-3 py-2 rounded-2xl bg-slate-950/40 border border-slate-800 text-slate-100 font-semibold"
+            />
+            <button
+              onClick={async () => { await loadSupportTickets(); }}
+              className="px-4 py-2 rounded-2xl bg-slate-800/70 border border-slate-700 text-slate-100 font-black hover:bg-slate-700/70 inline-flex items-center gap-2"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Обновить
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-auto rounded-2xl border border-slate-800">
+          <table className="min-w-[980px] w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr className="text-slate-300">
+                <th className="text-left p-3 font-black">created</th>
+                <th className="text-left p-3 font-black">user</th>
+                <th className="text-left p-3 font-black">category</th>
+                <th className="text-left p-3 font-black">section</th>
+                <th className="text-left p-3 font-black">status</th>
+                <th className="text-left p-3 font-black">attachments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {supportTickets.map((ticket) => {
+                const isSelected = selectedSupportTicket?.id === ticket.id;
+                return (
+                  <tr
+                    key={ticket.id}
+                    onClick={async () => {
+                      setSelectedSupportTicket(ticket);
+                      await loadSupportTicketDetail(ticket.id);
+                    }}
+                    className={`border-t border-slate-800 text-slate-200 transition cursor-pointer hover:bg-slate-900/50 ${isSelected ? "bg-cyan-500/10" : ""}`}
+                  >
+                    <td className="p-3 font-semibold text-slate-400">{formatTimestamp(ticket.created_at)}</td>
+                    <td className="p-3">
+                      <div className="font-black text-slate-100">{ticket.user_email || ticket.user_name || ticket.user_id}</div>
+                      <div className="font-mono text-[11px] text-slate-500">{ticket.user_id}</div>
+                    </td>
+                    <td className="p-3">
+                      <div className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-black text-cyan-100">
+                        {ticket.category}
+                      </div>
+                    </td>
+                    <td className="p-3 font-semibold text-slate-300">{ticket.section || "—"}</td>
+                    <td className="p-3">
+                      <div className="inline-flex rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-black text-slate-200">
+                        {ticket.status}
+                      </div>
+                    </td>
+                    <td className="p-3 font-bold">{ticket.attachment_count}</td>
+                  </tr>
+                );
+              })}
+              {!supportTickets.length && (
+                <tr className="border-t border-slate-800">
+                  <td className="p-3 text-slate-400 font-semibold" colSpan={6}>Пока нет обращений.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {selectedSupportTicket && (
+          <div className="mt-4 rounded-3xl bg-slate-950/40 border border-slate-800 p-5 grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-5">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-slate-400 font-bold text-xs uppercase tracking-[0.24em]">Детали обращения</div>
+                  <div className="text-2xl font-black text-slate-100 mt-1">{selectedSupportTicket.subject || "Без темы"}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-slate-400 font-semibold text-sm">{formatTimestamp(selectedSupportTicket.created_at)}</div>
+                  <div className="text-slate-500 font-semibold text-sm">{selectedSupportTicket.app_version || "app version —"}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Клиент</div>
+                  <div className="mt-1 text-slate-100 font-bold">{selectedSupportTicket.user_email || selectedSupportTicket.user_name || selectedSupportTicket.user_id}</div>
+                  <div className="font-mono text-[11px] text-slate-500 break-all">{selectedSupportTicket.user_id}</div>
+                  <div className="mt-2 text-slate-400 font-semibold">Контакт: {selectedSupportTicket.contact || "—"}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Устройство</div>
+                  <div className="mt-1 text-slate-100 font-bold">{selectedSupportTicket.device || "—"}</div>
+                  <div className="text-slate-400 font-semibold">Браузер: {selectedSupportTicket.browser || "—"}</div>
+                  <div className="text-slate-400 font-semibold">Раздел: {selectedSupportTicket.section || "—"}</div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Описание</div>
+                <div className="mt-2 whitespace-pre-wrap leading-7 text-slate-100 font-medium">{selectedSupportTicket.message}</div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Шаги</div>
+                <div className="mt-2 space-y-2 text-slate-100 font-medium">
+                  {parseSupportSteps(selectedSupportTicket.steps_json).length
+                    ? parseSupportSteps(selectedSupportTicket.steps_json).map((step, index) => (
+                      <div key={index} className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
+                        {index + 1}. {step}
+                      </div>
+                    ))
+                    : <div className="text-slate-500">Не указаны</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Вложения</div>
+                <div className="mt-3 space-y-3">
+                  {(selectedSupportTicket.attachments || []).map((attachment, index) => (
+                    <div key={`${attachment.name}-${index}`} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                      <div className="flex items-center gap-2 font-black text-slate-100">
+                        {attachment.kind === "photo" && <ImageUp className="h-4 w-4 text-cyan-300" />}
+                        {attachment.kind === "video" && <Video className="h-4 w-4 text-violet-300" />}
+                        {attachment.kind === "voice" && <Mic className="h-4 w-4 text-emerald-300" />}
+                        {attachment.kind === "file" && <Paperclip className="h-4 w-4 text-slate-300" />}
+                        <span className="truncate">{attachment.name}</span>
+                      </div>
+                      <div className="mt-1 text-slate-500 text-sm font-semibold">{attachment.mime} · {attachment.size} bytes</div>
+                      {attachment.kind === "photo" && (
+                        <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />
+                      )}
+                      {attachment.kind === "video" && (
+                        <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />
+                      )}
+                      {attachment.kind === "voice" && (
+                        <audio className="mt-2 w-full" controls src={attachment.data_url} />
+                      )}
+                    </div>
+                  ))}
+                  {(!selectedSupportTicket.attachments || selectedSupportTicket.attachments.length === 0) && (
+                    <div className="text-slate-500 font-semibold">Вложений нет.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Статус</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1 text-xs font-black text-slate-200">{selectedSupportTicket.status}</div>
+                  <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1 text-xs font-black text-slate-200">{selectedSupportTicket.priority}</div>
+                  <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1 text-xs font-black text-slate-200">{selectedSupportTicket.category}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Feature flags */}

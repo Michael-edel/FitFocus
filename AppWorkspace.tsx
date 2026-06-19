@@ -14,6 +14,7 @@ const ProgressScreen = React.lazy(() => import('./ProgressScreen'));
 const ProgressArchiveScreen = React.lazy(() => import('./ProgressArchiveScreen'));
 const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
+const SupportScreen = React.lazy(() => import('./SupportScreen'));
 
 type AppWorkspaceProps = {
   workspaceProps: any;
@@ -275,6 +276,11 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'admin' && isAdmin && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
           <AdminScreen />
+        </React.Suspense>
+      )}
+      {activeTab === 'support' && (
+        <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка поддержки...</div>}>
+          <SupportScreen currentUser={currentUser} />
         </React.Suspense>
       )}
       {activeTab === 'settings' && (
