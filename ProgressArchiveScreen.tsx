@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { ArrowLeft, Camera, CalendarDays, Cloud, Scale, Sparkles, TrendingUp, Watch } from 'lucide-react';
 import {
@@ -28,6 +28,32 @@ type ProgressArchiveScreenProps = {
 };
 
 type ArchiveSectionKey = 'gallery' | 'compare' | 'trend' | 'timeline';
+
+const ARCHIVE_SECTIONS_STORAGE_KEY = 'fitfocus.progress-archive.sections.v1';
+
+const defaultOpenSections = (): Record<ArchiveSectionKey, boolean> => ({
+  gallery: false,
+  compare: false,
+  trend: false,
+  timeline: false,
+});
+
+const readOpenSections = (): Record<ArchiveSectionKey, boolean> => {
+  if (typeof window === 'undefined') return defaultOpenSections();
+  try {
+    const raw = window.localStorage.getItem(ARCHIVE_SECTIONS_STORAGE_KEY);
+    if (!raw) return defaultOpenSections();
+    const parsed = JSON.parse(raw) as Partial<Record<ArchiveSectionKey, boolean>>;
+    return {
+      gallery: typeof parsed.gallery === 'boolean' ? parsed.gallery : false,
+      compare: typeof parsed.compare === 'boolean' ? parsed.compare : false,
+      trend: typeof parsed.trend === 'boolean' ? parsed.trend : false,
+      timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : false,
+    };
+  } catch {
+    return defaultOpenSections();
+  }
+};
 
 const formatDate = (iso?: string | null) => {
   if (!iso) return '—';
@@ -63,16 +89,19 @@ export default function ProgressArchiveScreen({
   onOpenSettings,
   onOpenProgress,
 }: ProgressArchiveScreenProps) {
-  const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>({
-    gallery: false,
-    compare: false,
-    trend: false,
-    timeline: false,
-  });
+  const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>(readOpenSections);
 
   const toggleSection = (section: ArchiveSectionKey) => {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
   };
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ARCHIVE_SECTIONS_STORAGE_KEY, JSON.stringify(openSections));
+    } catch {
+      // Ignore storage failures and keep the archive usable.
+    }
+  }, [openSections]);
 
   const measurementsSorted = useMemo(
     () =>
