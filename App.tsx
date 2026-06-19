@@ -205,12 +205,22 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
     return `/api/auth/google/start?${params.toString()}`;
   }, [inviteCode]);
 
-  const handleClick = React.useCallback(() => {
+  const handleClick = React.useCallback(async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
     setErr(null);
     try {
       sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
     } catch {}
-  }, []);
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      }
+    } catch {
+      // Auth must continue even when the browser blocks service worker management.
+    }
+    window.location.assign(authUrl);
+  }, [authUrl]);
 
   return (
     <div className="flex flex-col items-center gap-2">
