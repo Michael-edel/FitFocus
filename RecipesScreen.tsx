@@ -578,53 +578,47 @@ const handlePick = async (file?: File) => {
     </div>
   )}
 
-      <div className="flex items-start justify-between gap-6 mb-8 text-left">
-        <div>
+      <div className="mb-8 text-left">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
           <div className="text-3xl font-black text-slate-100">Мои блюда</div>
-          <div className="text-slate-400 mt-2 max-w-2xl">
-            Личная библиотека блюд из фото. Здесь сохраняются рецепты, которые FitFocus распознал из ваших снимков,
-            чтобы потом быстро повторить блюдо, отредактировать состав или найти его по поиску.
-          </div>
-          <div className="mt-2 text-slate-500 text-sm max-w-2xl">
-            Рецепт можно открыть даже без фото, кода распознавания или граммовки. Если часть полей не подтянулась, они редактируются вручную.
-          </div>
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-[11px] font-black tracking-widest uppercase text-indigo-200">
             AI-разбор блюд
           </div>
-        </div>
-        
-<div className="flex items-center gap-3">
-  <input
-    ref={cameraInputRef}
-    type="file"
-    accept="image/*"
-    capture="environment"
-    className="hidden"
-    onChange={(e) => handlePick(e.target.files?.[0])}
-  />
-  <input
-    ref={fileInputRef}
-    type="file"
-    accept="image/*"
-    className="hidden"
-    onChange={(e) => handlePick(e.target.files?.[0])}
-  />
-  <button
-    onClick={() => cameraInputRef.current?.click()}
-    className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
-            title="Снять фото блюда и распознать"
-  >
-    {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-    Снять фото
-  </button>
-  <button
-    onClick={() => fileInputRef.current?.click()}
-    className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
-    title="Загрузить фото блюда и распознать"
-  >
-    {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-    Загрузить фото
-  </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 md:justify-end">
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => handlePick(e.target.files?.[0])}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handlePick(e.target.files?.[0])}
+            />
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
+              title="Снять фото блюда и распознать"
+            >
+              {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+              Снять фото
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className={clsx("px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-100 font-black text-xs flex items-center gap-2 hover:border-indigo-500/40", isAnalyzing && "opacity-60 pointer-events-none")}
+              title="Загрузить фото блюда и распознать"
+            >
+              {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              Загрузить фото
+            </button>
 
           {recipes.length > 0 && (
             <button
@@ -634,6 +628,17 @@ const handlePick = async (file?: File) => {
               <Trash2 className="w-4 h-4" /> Очистить
             </button>
           )}
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2 max-w-2xl">
+          <div className="text-slate-400">
+            Личная библиотека блюд из фото. Здесь сохраняются рецепты, которые FitFocus распознал из ваших снимков,
+            чтобы потом быстро повторить блюдо, отредактировать состав или найти его по поиску.
+          </div>
+          <div className="text-slate-500 text-sm">
+            Рецепт можно открыть даже без фото, кода распознавания или граммовки. Если часть полей не подтянулась, они редактируются вручную.
+          </div>
         </div>
       </div>
 
