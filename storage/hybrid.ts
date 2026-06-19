@@ -195,6 +195,19 @@ export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, 
   safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(normalizeUserProfiles(next as ProfileLike[])));
 }
 
+export function readStoredAllUsersSnapshotForUser<T = unknown>(ownerUserId: string | null | undefined): T[] | null {
+  if (!ownerUserId) return null;
+  try {
+    const raw = localStorage.getItem(allUsersStorageKey(ownerUserId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    return normalizeUserProfiles(parsed as ProfileLike[]) as T[];
+  } catch {
+    return null;
+  }
+}
+
 export function readStoredAllUsersSnapshot<T = unknown>(): T[] | null {
   const candidates: string[] = [];
   for (let i = 0; i < localStorage.length; i += 1) {

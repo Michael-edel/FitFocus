@@ -72,6 +72,9 @@ export default function AuthChoiceScreen({
                     <img src="/google-g.svg" alt="Google" title="Профиль Google" className="w-4 h-4 opacity-90" />
                   ) : null}
                 </div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-0.5">
+                  {user.googleSub ? (user.email || 'Google account') : 'Локальный профиль'}
+                </p>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-widest tabular-nums">
                   {user.weight} кг · {user.plan || 'Free'}
                 </p>
