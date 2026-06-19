@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { CheckCircle2, Clock3, ShieldCheck, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { CheckCircle2, Clock3, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { APP_VERSION_LABEL, versioningLayers, versioningRules } from './versioning';
 import { releaseNotes } from './releaseNotes';
 
@@ -9,6 +9,11 @@ type VersionInfoModalProps = {
 };
 
 export default function VersionInfoModal({ open, onClose }: VersionInfoModalProps) {
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const touchLastX = useRef<number | null>(null);
+  const touchLastY = useRef<number | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -21,6 +26,39 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
   if (!open) return null;
 
   const current = releaseNotes.find((item) => item.isCurrent) ?? releaseNotes[0];
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    touchLastX.current = touch.clientX;
+    touchLastY.current = touch.clientY;
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current == null) return;
+    touchLastX.current = event.touches[0]?.clientX ?? touchLastX.current;
+    touchLastY.current = event.touches[0]?.clientY ?? touchLastY.current;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current == null || touchLastX.current == null || touchStartY.current == null || touchLastY.current == null) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      touchLastX.current = null;
+      touchLastY.current = null;
+      return;
+    }
+
+    const deltaX = touchLastX.current - touchStartX.current;
+    const deltaY = Math.abs(touchLastY.current - touchStartY.current);
+    const isHorizontalSwipe = Math.abs(deltaX) > 70 && deltaY < 120;
+    if (isHorizontalSwipe) onClose();
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchLastX.current = null;
+    touchLastY.current = null;
+  };
 
   return (
     <div className="fixed inset-0 z-[2200] bg-black/70 backdrop-blur-xl flex items-center justify-center p-4">
@@ -31,7 +69,12 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
         onClick={onClose}
       />
 
-      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl shadow-black/50">
+      <div
+        className="relative z-10 w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl shadow-black/50 touch-pan-y"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="sticky top-0 z-10 border-b border-slate-800/80 bg-slate-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -45,9 +88,10 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-slate-800"
             >
-              Закрыть
+              <X size={14} />
+              Выход
             </button>
           </div>
         </div>
