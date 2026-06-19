@@ -5,6 +5,7 @@
 import { requireUser, json } from "./_lib/auth";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
+import { migrateLegacyAccountByEmail } from "./_lib/legacy_sync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -24,7 +25,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub)
     .first<{ profile_json: string }>();
 
-  const profile = profRow?.profile_json ? safeParse(profRow.profile_json) : null;
+  let profile = profRow?.profile_json ? safeParse(profRow.profile_json) : null;
+  if (!profile) {
+    profile = await migrateLegacyAccountByEmail(db, user as any);
+  }
 
   // Load KV only for this user's fitfocus_data prefix
   const prefix = `fitfocus_data_${user.sub}_`;
