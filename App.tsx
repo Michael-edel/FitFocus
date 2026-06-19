@@ -1021,6 +1021,7 @@ const App: React.FC = () => {
           `fitfocus.settings.ui.v1:${userId}`,
           `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
           `fitfocus.dashboard.mobile-more-open.v1:${userId}`,
+          `fitfocus.nutrition.search.v1:${userId}`,
         ].forEach((key) => localStorage.removeItem(key));
       }
     } catch {
@@ -1224,7 +1225,47 @@ const App: React.FC = () => {
   } = useCouncilChat({ currentUser, foodDiary, habits });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
+  const nutritionSearchStorageKey = useMemo(
+    () => `fitfocus.nutrition.search.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const nutritionSearchSkipSaveRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  useEffect(() => {
+    try {
+      nutritionSearchSkipSaveRef.current = true;
+      const raw = localStorage.getItem(nutritionSearchStorageKey);
+      if (!raw) {
+        setSearchQuery('');
+        setShowSearchResults(false);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as { query?: string; open?: boolean };
+        setSearchQuery(typeof parsed.query === 'string' ? parsed.query : '');
+        setShowSearchResults(!!parsed.open);
+      } catch {
+        setSearchQuery(raw);
+        setShowSearchResults(false);
+      }
+    } catch {
+      nutritionSearchSkipSaveRef.current = true;
+      setSearchQuery('');
+      setShowSearchResults(false);
+    }
+  }, [nutritionSearchStorageKey]);
+  useEffect(() => {
+    if (nutritionSearchSkipSaveRef.current) {
+      nutritionSearchSkipSaveRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(nutritionSearchStorageKey, JSON.stringify({ query: searchQuery, open: showSearchResults }));
+    } catch {
+      // ignore storage issues
+    }
+  }, [nutritionSearchStorageKey, searchQuery, showSearchResults]);
 
 const openEditFood = (item: FoodEntry) => {
   setEditFoodModal({
@@ -1237,8 +1278,6 @@ const openEditFood = (item: FoodEntry) => {
     mealType: item.mealType,
   });
 };
-  const [showSearchResults, setShowSearchResults] = useState(false);
-
   const [regData, setRegData] = useState<RegistrationData>({
     name: '',
     gender: Gender.MALE,
