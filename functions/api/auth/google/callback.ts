@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { replaceActiveSessionsForDevice } from "../../_lib/auth";
+import { replaceActiveSessionsForUser } from "../../_lib/auth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -218,13 +218,12 @@ export const onRequestGet: PagesFunction<{
     const sid = crypto.randomUUID();
     const ttl = 60 * 60 * 24 * 30; // 30d
     const expiresAt = now + ttl;
-    const ua = request.headers.get("user-agent") || "";
     const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "";
-    await replaceActiveSessionsForDevice(env.DB, user.sub, ua, now);
+    await replaceActiveSessionsForUser(env.DB, user.sub, now);
     await env.DB.prepare(
       "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
     )
-      .bind(sid, user.sub, now, expiresAt, ua.slice(0, 500), String(ip).slice(0, 100))
+      .bind(sid, user.sub, now, expiresAt, request.headers.get("user-agent")?.slice(0, 500) || "", String(ip).slice(0, 100))
       .run();
 
     const sessionJwt = await signSessionJwt(

@@ -119,19 +119,17 @@ export async function requireUser(
   };
 }
 
-export async function replaceActiveSessionsForDevice(
+export async function replaceActiveSessionsForUser(
   db: D1Database,
   userId: string,
-  userAgent: string,
   nowSeconds: number,
 ): Promise<void> {
-  const normalizedAgent = String(userAgent || "").slice(0, 500);
-  if (!db || !userId || !normalizedAgent) return;
+  if (!db || !userId) return;
   await db
     .prepare(
-      "UPDATE sessions SET revoked = 1 WHERE user_id = ? AND revoked = 0 AND expires_at > ? AND user_agent = ?"
+      "UPDATE sessions SET revoked = 1 WHERE user_id = ? AND revoked = 0 AND expires_at > ?"
     )
-    .bind(userId, nowSeconds, normalizedAgent)
+    .bind(userId, nowSeconds)
     .run();
 }
 

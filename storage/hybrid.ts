@@ -216,19 +216,19 @@ export function readStoredAllUsersSnapshot<T = unknown>(): T[] | null {
     if (!candidates.includes(k)) candidates.push(k);
   }
 
-  let best: T[] | null = null;
+  const combined: ProfileLike[] = [];
   for (const key of candidates) {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const normalized = normalizeUserProfiles(parsed as ProfileLike[]);
-        if (!best || normalized.length > best.length) best = normalized as T[];
+        combined.push(...normalizeUserProfiles(parsed as ProfileLike[]));
       }
     } catch {}
   }
-  return best;
+  const normalized = normalizeUserProfiles(combined);
+  return normalized.length > 0 ? (normalized as T[]) : null;
 }
 
 function scoreProfile(profile: ProfileLike): number {
