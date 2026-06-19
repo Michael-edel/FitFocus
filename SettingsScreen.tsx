@@ -8,6 +8,13 @@ import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
 
+const MIN_HEIGHT_CM = 120;
+const MAX_HEIGHT_CM = 230;
+const MIN_WEIGHT_KG = 25;
+const MAX_WEIGHT_KG = 350;
+const MIN_BMI = 12;
+const MAX_BMI = 60;
+
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type SettingsUiState = {
@@ -256,6 +263,7 @@ export default function SettingsScreen({
   const [ackGain, setAckGain] = useState(false);
   const [cacheClearedTs, setCacheClearedTs] = useState<number | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [profileValidationError, setProfileValidationError] = useState<string | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -642,6 +650,22 @@ export default function SettingsScreen({
     const parsedChestCm = Number(draftChestCm || 0);
     const parsedHipsCm = Number(draftHipsCm || 0);
     const measurementTimestamp = new Date().toISOString();
+    if (Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 && (parsedTargetWeight < MIN_WEIGHT_KG || parsedTargetWeight > MAX_WEIGHT_KG)) {
+      setProfileValidationError(`Желаемый вес должен быть в диапазоне ${MIN_WEIGHT_KG}–${MAX_WEIGHT_KG} кг.`);
+      return;
+    }
+    if (Number.isFinite(parsedHeight) && parsedHeight > 0 && (parsedHeight < MIN_HEIGHT_CM || parsedHeight > MAX_HEIGHT_CM)) {
+      setProfileValidationError(`Рост должен быть в диапазоне ${MIN_HEIGHT_CM}–${MAX_HEIGHT_CM} см.`);
+      return;
+    }
+    if (Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 && Number.isFinite(parsedHeight) && parsedHeight > 0) {
+      const bmi = parsedTargetWeight / Math.pow(parsedHeight / 100, 2);
+      if (bmi < MIN_BMI || bmi > MAX_BMI) {
+        setProfileValidationError('Проверьте сочетание желаемого веса и роста: оно выглядит нереалистично.');
+        return;
+      }
+    }
+
     const hasMeasurement =
       (Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0) ||
       (Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0) ||
@@ -691,6 +715,7 @@ export default function SettingsScreen({
     } else if (onChangeUser) {
       onChangeUser({ ...user, ...patch });
     }
+    setProfileValidationError(null);
     setProfileDirty(false);
   };
 
@@ -750,6 +775,22 @@ export default function SettingsScreen({
             <div className="space-y-4 text-left">
               <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
                 <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Профиль</div>
+                <div className="mb-3 rounded-[1.1rem] border border-slate-800 bg-slate-950/45 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-slate-100 font-black">Выйти из аккаунта</div>
+                      <div className="text-slate-400 text-xs mt-1">Завершить текущую сессию и вернуться на экран входа.</div>
+                    </div>
+                    <button
+                      onClick={() => void onServerLogout?.()}
+                      className="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-[1rem] border border-slate-800 bg-slate-950/60 text-slate-300 hover:text-rose-300 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all disabled:opacity-50"
+                      disabled={!onServerLogout}
+                      aria-label="Выйти из аккаунта"
+                    >
+                      <LogOut className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
                 {latestMeasurement && (
                   <div className="mb-3 rounded-[1rem] border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
                     <div className="font-black text-slate-200 uppercase tracking-widest text-[10px]">Последний замер</div>
@@ -791,8 +832,11 @@ export default function SettingsScreen({
                       <div className="text-sm text-slate-400 font-semibold">Желаемый вес</div>
                       <input
                         value={draftTargetWeight}
-                        onChange={(e) => { setDraftTargetWeight(e.target.value); setProfileDirty(true); }}
+                        onChange={(e) => { setDraftTargetWeight(e.target.value); setProfileDirty(true); setProfileValidationError(null); }}
                         inputMode="decimal"
+                        min={MIN_WEIGHT_KG}
+                        max={MAX_WEIGHT_KG}
+                        step="0.1"
                         className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
                         placeholder="кг"
                       />
@@ -811,13 +855,15 @@ export default function SettingsScreen({
                       <div className="text-sm text-slate-400 font-semibold">Рост</div>
                       <input
                         value={draftHeight}
-                        onChange={(e) => { setDraftHeight(e.target.value); setProfileDirty(true); }}
+                        onChange={(e) => { setDraftHeight(e.target.value); setProfileDirty(true); setProfileValidationError(null); }}
                         inputMode="numeric"
-                      className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                      placeholder="см"
-                    />
-                  </label>
-                </div>
+                        min={MIN_HEIGHT_CM}
+                        max={MAX_HEIGHT_CM}
+                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
+                        placeholder="см"
+                      />
+                    </label>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <label className="space-y-1 min-w-0">
@@ -912,6 +958,11 @@ export default function SettingsScreen({
                     <Save className="w-4 h-4" />
                     Сохранить профиль
                   </button>
+                  {profileValidationError && (
+                    <div className="w-full rounded-[1rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 font-semibold">
+                      {profileValidationError}
+                    </div>
+                  )}
                   <div className="text-sm text-slate-400 space-y-1">
                     {profileSummary?.email}
                     <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
