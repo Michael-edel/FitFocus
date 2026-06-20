@@ -12,6 +12,11 @@ type Props = {
   onClear: () => void;
 };
 
+type DraftRecipe = FavoriteRecipe & {
+  ingredients?: Array<{ name: string; amount?: string }>;
+  steps?: Array<{ n: number; text: string; timeMin?: number }>;
+};
+
 const toRecipeIngredient = (value: unknown): { name: string; amount?: string } | null => {
   const parseText = (input: string) => {
     const text = input.trim();
@@ -101,6 +106,16 @@ const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
     tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
   };
 };
+
+const ingredientsToText = (ingredients: Array<{ name: string; amount?: string }> | undefined) =>
+  (ingredients || [])
+    .map((ingredient) => (ingredient.amount ? `${ingredient.name} — ${ingredient.amount}` : ingredient.name))
+    .join('\n');
+
+const stepsToText = (steps: Array<{ n: number; text: string; timeMin?: number }> | undefined) =>
+  (steps || [])
+    .map((step) => `${step.n}. ${step.text}${step.timeMin ? ` (${step.timeMin} мин)` : ''}`)
+    .join('\n');
 
 type RecipeEditorState = {
   id: string;
@@ -213,10 +228,11 @@ export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Pro
   const [q, setQ] = useState('');
 
 const [isAnalyzing, setIsAnalyzing] = useState(false);
-const [draft, setDraft] = useState<FavoriteRecipe | null>(null);
+const [draft, setDraft] = useState<DraftRecipe | null>(null);
 const [editor, setEditor] = useState<RecipeEditorState | null>(null);
 const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
+const editorPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
 const fileToBase64 = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -392,7 +408,7 @@ const handlePick = async (file?: File) => {
           : [],
         tips: Array.isArray(ai?.tips) ? ai.tips.map(String).filter(Boolean) : [],
       },
-    } as any as FavoriteRecipe;
+    } as any as DraftRecipe;
 
     setDraft(recipe);
   } catch (e: any) {
@@ -432,6 +448,18 @@ const handlePick = async (file?: File) => {
           </button>
         </div>
         <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Фото', value: draft.photo ? 'Сохранено' : 'Не добавлено' },
+              { label: 'Граммовка', value: (Array.isArray((draft as any).ingredients) && (draft as any).ingredients.some((ing: any) => !!ing?.amount)) ? 'Есть' : 'Нужно заполнить' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-[1.25rem] border border-slate-800 bg-slate-900/20 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</div>
+                <div className="mt-1 text-sm font-black text-slate-100">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Название</label>
             <input
@@ -461,13 +489,57 @@ const handlePick = async (file?: File) => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ингредиенты (через запятую)</label>
-            <input
-              value={(draft.ingredients || []).join(", ")}
-              onChange={(e) => setDraft({ ...draft, ingredients: e.target.value.split(",").map(s => s.trim()).filter(Boolean) } as any)}
-              placeholder="например: курица, рис, салат"
-              className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Ингредиенты</label>
+            <textarea
+              value={ingredientsToText((draft.ingredients || draft.recipe?.ingredients || []) as Array<{ name: string; amount?: string }>)}
+              onChange={(e) => {
+                const nextIngredients = e.target.value
+                  .split('\n')
+                  .map(parseIngredientLine)
+                  .filter(Boolean) as Array<{ name: string; amount?: string }>;
+                setDraft({
+                  ...draft,
+                  ingredients: nextIngredients,
+                  recipe: {
+                    ...draft.recipe,
+                    ingredients: nextIngredients,
+                  },
+                } as DraftRecipe);
+              }}
+              placeholder={"картофель — 200 г\nморковь — 80 г\nсвинина — 150 г"}
+              rows={5}
+              className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm resize-y"
             />
+            <div className="text-xs text-slate-500">
+              Пишите каждую строку отдельно. Если есть граммы, указывайте их сразу, например: <span className="text-slate-300">картофель — 200 г</span>.
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Шаги</label>
+            <textarea
+              value={stepsToText((draft.recipe?.steps || []) as Array<{ n: number; text: string; timeMin?: number }>)}
+              onChange={(e) => {
+                const nextSteps = e.target.value
+                  .split('\n')
+                  .map(parseStepLine)
+                  .filter(Boolean) as Array<{ n: number; text: string; timeMin?: number }>;
+                setDraft({
+                  ...draft,
+                  steps: nextSteps,
+                  recipe: {
+                    ...draft.recipe,
+                    steps: nextSteps,
+                  },
+                } as DraftRecipe);
+              }}
+              placeholder={"1. Нарежьте овощи.\n2. Обжарьте мясо.\n3. Тушите до готовности."}
+              rows={5}
+              className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-semibold text-white placeholder:text-slate-600 text-sm resize-y"
+            />
+            <div className="text-xs text-slate-500">
+              Шаги можно оставить пустыми, но если AI их распознал, они сохранятся и будут видны в карточке.
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -524,8 +596,39 @@ const handlePick = async (file?: File) => {
         <div className="p-5 overflow-y-auto space-y-5">
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-[1.5rem] border border-slate-800 bg-slate-900/40 p-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото блюда</div>
-              <div className="mt-3 rounded-[1.25rem] border border-dashed border-slate-700 bg-slate-950/40 min-h-48 overflow-hidden flex items-center justify-center">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Фото блюда</div>
+                <button
+                  type="button"
+                  onClick={() => editorPhotoInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-full border border-slate-800 bg-slate-950 text-[11px] font-black text-slate-200 hover:border-indigo-500/30"
+                >
+                  {editor.photo ? 'Заменить фото' : 'Добавить фото'}
+                </button>
+              </div>
+              <input
+                ref={editorPhotoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const photo = await fileToCompressedDataUrl(file);
+                    setEditor((prev) => (prev ? { ...prev, photo } : prev));
+                  } catch {
+                    alert('Не удалось загрузить фото');
+                  } finally {
+                    if (editorPhotoInputRef.current) editorPhotoInputRef.current.value = '';
+                  }
+                }}
+              />
+              <div
+                className="mt-3 rounded-[1.25rem] border border-dashed border-slate-700 bg-slate-950/40 min-h-48 overflow-hidden flex items-center justify-center cursor-pointer"
+                onClick={() => editorPhotoInputRef.current?.click()}
+              >
                 {editor.photo ? (
                   <img src={editor.photo} alt={editor.title} className="w-full h-full max-h-72 object-cover" />
                 ) : (
@@ -535,7 +638,7 @@ const handlePick = async (file?: File) => {
                     </div>
                     <div className="text-slate-200 font-black">Фото не обязательно</div>
                     <div className="text-slate-500 text-sm mt-1">
-                      Рецепт откроется и без снимка. Фото можно добавить позже.
+                      Рецепт откроется и без снимка. Нажмите сюда, чтобы добавить или заменить фото.
                     </div>
                   </div>
                 )}
@@ -785,6 +888,11 @@ const handlePick = async (file?: File) => {
                 const recipe = normalizeRecipe(r);
                 return (
                   <>
+              {r.photo ? (
+                <div className="mb-4 overflow-hidden rounded-[1.4rem] border border-slate-800 bg-slate-950">
+                  <img src={r.photo} alt={r.title} className="aspect-[16/9] w-full object-cover" />
+                </div>
+              ) : null}
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="text-slate-100 font-black text-lg truncate">{r.title}</div>
