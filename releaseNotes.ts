@@ -30,6 +30,11 @@ function localizeCommitSubject(subject: string): string {
     'Fix account deletion D1 cleanup': 'Исправлена очистка D1 при удалении аккаунта',
     'Fix day grouping and shopping list rendering': 'Исправлены группировка по дням и корзина закупа',
     'Compact pro screen on mobile': 'Уплотнён экран Pro на мобильных',
+    'Default nutrition diary to today': 'Дневник питания теперь открывается на сегодняшнем дне',
+    'Remove duplicate profile helpers': 'Удалены дублирующиеся вспомогательные функции профиля',
+    'Deduplicate profiles by email first': 'Профили сначала объединяются по email',
+    'Localize version labels and release notes': 'Подписи версий и релиз-ноты переведены на русский',
+    'Store support attachments in R2': 'Вложения обращений вынесены в R2',
   };
 
   if (exactMatches[s]) {
@@ -68,10 +73,18 @@ const currentBuildReleaseNote: ReleaseNote = {
   label: 'main',
   date: new Date(BUILD_SOURCE.builtAt).toLocaleDateString('ru-RU'),
   summary: BUILD_SOURCE.branch === 'main'
-    ? 'Сборка main обновляется автоматически при каждом push. Ниже показаны изменения текущей версии, номер сборки и служебные данные.'
+    ? 'Сборка main обновляется автоматически при каждом push. Версия приложения меняется только при новом релизе, а ниже показаны номер сборки, SHA и изменения текущей версии.'
     : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
   isCurrent: true,
   groups: [
+    {
+      title: 'Как читать номера',
+      items: [
+        `Версия приложения: ${APP_VERSION_STRING} — меняется только при релизе.`,
+        `Сборка ветки main: №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha} — обновляется на каждый push.`,
+        'API, данные и миграции версионируются отдельно, чтобы не ломать совместимость.',
+      ],
+    },
     {
       title: 'Что изменилось',
       items: [
