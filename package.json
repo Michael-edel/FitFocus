@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "node scripts/generate-build-info.mjs",
     "build": "vite build",
+    "prebuild": "node scripts/generate-build-info.mjs",
+    "pretypecheck": "node scripts/generate-build-info.mjs",
+    "generate:build-info": "node scripts/generate-build-info.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "migrate:local": "node -e \"console.log('Migrations run in browser on startup via storage/migrations.ts')\""

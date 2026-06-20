@@ -83,7 +83,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                 Что нового
               </div>
               <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{APP_VERSION_LABEL}</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения и схема изменений, которую видит и пользователь, и команда.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения, автоматическая сборка main и схема изменений, которую видит и пользователь, и команда.</p>
             </div>
             <button
               type="button"

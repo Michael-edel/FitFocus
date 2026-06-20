@@ -30,6 +30,7 @@ dist-ssr
 fitfocus.zip
 ui.zip
 *.zip
+build-info.generated.ts
 
 
 functions/api/debug/
