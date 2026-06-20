@@ -61,6 +61,16 @@ export default function SidebarNavigation({
   const sidebarUtilityTabs = React.useMemo(() => visibleTabs.filter(tab => sidebarUtilityTabIds.includes(tab.id)), [visibleTabs]);
   const mobilePrimaryTabs = React.useMemo(() => visibleTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
   const mobileMoreTabs = React.useMemo(() => visibleTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
+  const mobileQuickTabs = React.useMemo(() => {
+    const preferredOrder: AppTabId[] = ['progress', 'pro', 'guide', 'support'];
+    return preferredOrder
+      .map((id) => visibleTabs.find((tab) => tab.id === id))
+      .filter((tab): tab is (typeof visibleTabs)[number] => Boolean(tab));
+  }, [visibleTabs]);
+  const mobileMoreListTabs = React.useMemo(
+    () => mobileMoreTabs.filter((tab) => !mobileQuickTabs.some((quickTab) => quickTab.id === tab.id)),
+    [mobileMoreTabs, mobileQuickTabs],
+  );
   const dismissGestures = useModalDismissGestures(() => onMobileMoreOpenChange(false));
 
   return (
@@ -75,6 +85,31 @@ export default function SidebarNavigation({
             onTouchEnd={dismissGestures.onTouchEnd}
           >
             <div className="px-2 pt-1 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Ещё разделы</div>
+            <div className="grid grid-cols-2 gap-2">
+              {mobileQuickTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    onActiveTabChange(tab.id);
+                    onMobileMoreOpenChange(false);
+                  }}
+                  className={`min-h-[64px] px-3 rounded-[1.3rem] flex flex-col items-start justify-center gap-1 text-left transition-all border ${
+                    activeTab === tab.id
+                      ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                      : tab.id === 'pro'
+                        ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                        : 'bg-slate-900 text-slate-200 border-slate-800'
+                  }`}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{tab.id === 'pro' ? 'Сервис' : tab.id === 'progress' ? 'Прогресс' : tab.id === 'guide' ? 'Инструкция' : tab.id === 'support' ? 'Поддержка' : 'Версия'}</span>
+                  <span className="flex items-center gap-2 font-black">
+                    <tab.icon size={18} className={tab.id === 'pro' ? 'text-amber-500' : ''} />
+                    {tab.label}
+                  </span>
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => { onMobileMoreOpenChange(false); onActiveTabChange('updates'); }}
@@ -83,7 +118,7 @@ export default function SidebarNavigation({
               <span className="font-black">Что нового</span>
               <span className="text-[10px] font-black uppercase tracking-widest">{APP_VERSION_LABEL}</span>
             </button>
-            {mobileMoreTabs.map((tab) => (
+            {mobileMoreListTabs.map((tab) => (
               <button key={tab.id} type="button" onClick={() => { onActiveTabChange(tab.id); onMobileMoreOpenChange(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
                 <tab.icon size={20} className={tab.id === 'pro' && activeTab !== tab.id ? 'text-amber-500' : ''} />
                 <span className="font-black">{tab.label}</span>
