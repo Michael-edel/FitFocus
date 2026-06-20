@@ -18,8 +18,9 @@ export const APP_VERSION: AppVersion = {
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
+export const BUILD_SHORT_LABEL = `Сборка №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_VERSION_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • Сборка ${BUILD_VERSION_LABEL}`;
+export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • ${BUILD_SHORT_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
@@ -51,7 +52,7 @@ export const versioningLayers = [
   },
   {
     title: "Сборка main",
-    value: BUILD_COMBINED_LABEL,
+    value: BUILD_SHORT_LABEL,
     note: "Автоматически обновляется на каждый push в main.",
   },
   {

@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { LogOut, MoreHorizontal, X } from 'lucide-react';
-import { APP_VERSION_LABEL } from './versioning';
+import { BUILD_SHORT_LABEL } from './versioning';
 import { useModalDismissGestures } from './useModalDismissGestures';
 import {
   AppTabId,
@@ -116,7 +116,7 @@ export default function SidebarNavigation({
               className="w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center justify-between gap-3 text-left transition-all bg-indigo-500/10 text-indigo-200 border border-indigo-500/20"
             >
               <span className="font-black">Что нового</span>
-              <span className="text-[10px] font-black uppercase tracking-widest">{APP_VERSION_LABEL}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{BUILD_SHORT_LABEL}</span>
             </button>
             {mobileMoreListTabs.map((tab) => (
               <button key={tab.id} type="button" onClick={() => { onActiveTabChange(tab.id); onMobileMoreOpenChange(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
@@ -157,7 +157,7 @@ export default function SidebarNavigation({
                 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1 text-left hover:text-indigo-300 transition-colors"
                 title="Открыть изменения версии"
               >
-                {APP_VERSION_LABEL}
+                {BUILD_SHORT_LABEL}
               </button>
               <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
                 {modeBadge.text}
