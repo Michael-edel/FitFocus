@@ -22,8 +22,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const rows = await db
       .prepare(
-        `SELECT code, created_at, created_by, note, max_uses, uses, expires_at, revoked
-         FROM invite_codes
+        `SELECT ic.code, ic.created_at, ic.created_by, ic.note, ic.max_uses, ic.uses, ic.expires_at, ic.revoked,
+                COALESCE(r.redemption_count, 0) AS redemption_count,
+                r.last_redeemed_at
+         FROM invite_codes ic
+         LEFT JOIN (
+           SELECT code, COUNT(*) AS redemption_count, MAX(redeemed_at) AS last_redeemed_at
+           FROM invite_redemptions
+           GROUP BY code
+         ) r ON r.code = ic.code
          ORDER BY created_at DESC
          LIMIT ?`
       )
