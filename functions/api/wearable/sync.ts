@@ -5,6 +5,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
+import { withProtectedFields } from "../_lib/legacy_sync";
 import { normalizeWearableSyncSnapshot } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
@@ -39,25 +40,6 @@ async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profil
   } catch {
     return { profile: null, version: Number(row?.version || 0) };
   }
-}
-
-function withProtectedFields(
-  user: { sub: string; email?: string; name?: string; picture?: string },
-  profile: Record<string, unknown>,
-) {
-  const plan = String(profile.plan || "free");
-  const normalizedPlan = plan === "pro" || plan === "family" ? plan : "free";
-  return {
-    ...profile,
-    id: user.sub,
-    googleSub: user.sub,
-    email: user.email,
-    name: typeof profile.name === "string" && profile.name.trim().length ? profile.name : (user.name ?? "Пользователь"),
-    picture: profile.picture ?? user.picture,
-    plan: normalizedPlan,
-    planTier: normalizedPlan === "free" ? "free" : "pro",
-    version: typeof profile.version === "number" ? profile.version : Number(profile.version || 1),
-  };
 }
 
 function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>, version: number) {
