@@ -98,10 +98,7 @@ if (requireInvite) {
     return json({ error: "INVITE_INVALID" }, 403);
   }
 
-  // record redemption (best-effort)
-  await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS invite_redemptions (code TEXT, user_id TEXT, redeemed_at INTEGER NOT NULL, PRIMARY KEY(code, user_id))"
-  ).run();
+  // record redemption using the migration-backed table
   await env.DB.prepare(
     "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
   )

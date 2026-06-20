@@ -18,11 +18,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const nowSec = Math.floor(nowMs() / 1000);
 
-    // Ensure table exists (best-effort; harmless if already created)
-    await db.prepare(
-      "CREATE TABLE IF NOT EXISTS invite_redemptions (code TEXT NOT NULL, user_id TEXT NOT NULL, redeemed_at INTEGER NOT NULL, PRIMARY KEY(code, user_id))"
-    ).run();
-
     // 1) Try insert redemption first (idempotent).
     const ins = await db
       .prepare("INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)")

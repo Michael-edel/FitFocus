@@ -3,51 +3,10 @@ export const API_SCHEMA_VERSION = 3;
 
 export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
 
-let schemaEnsurePromise: Promise<void> | null = null;
-
 export async function ensureAuthSchema(db: D1Database): Promise<void> {
-  if (schemaEnsurePromise) return schemaEnsurePromise;
-  schemaEnsurePromise = (async () => {
-    const tables = [
-      {
-        name: "users",
-        columns: new Map([
-          ["name", "ALTER TABLE users ADD COLUMN name TEXT"],
-          ["picture", "ALTER TABLE users ADD COLUMN picture TEXT"],
-          ["updated_at", "ALTER TABLE users ADD COLUMN updated_at INTEGER"],
-          ["deleted_at", "ALTER TABLE users ADD COLUMN deleted_at TEXT"],
-          ["deletion_scheduled_at", "ALTER TABLE users ADD COLUMN deletion_scheduled_at TEXT"],
-          ["is_active", "ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1"],
-        ]),
-      },
-      {
-        name: "user_profiles",
-        columns: new Map([
-          ["version", "ALTER TABLE user_profiles ADD COLUMN version INTEGER NOT NULL DEFAULT 1"],
-        ]),
-      },
-      {
-        name: "user_kv",
-        columns: new Map([
-          ["version", "ALTER TABLE user_kv ADD COLUMN version INTEGER NOT NULL DEFAULT 1"],
-        ]),
-      },
-    ];
-
-    for (const table of tables) {
-      const columns = await db.prepare(`PRAGMA table_info(${table.name})`).all<any>();
-      const existing = new Set((columns.results || []).map((row: any) => String(row.name)));
-      for (const [column, sql] of table.columns) {
-        if (!existing.has(column)) {
-          await db.prepare(sql).run();
-        }
-      }
-    }
-  })().catch((err) => {
-    schemaEnsurePromise = null;
-    throw err;
-  });
-  return schemaEnsurePromise;
+  void db;
+  // Schema is now driven by migrations + db/schema.sql.
+  // Keep this hook for compatibility with callers, but do not mutate schema at runtime.
 }
 
 export function readCookie(cookieHeader: string, name: string): string | null {

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { APP_VERSION_LABEL, versioningLayers, versioningRules } from './versioning';
-import { releaseNotes } from './releaseNotes';
+import { formatReleaseTitle, releaseNotes } from './releaseNotes';
 
 type VersionInfoModalProps = {
   open: boolean;
@@ -91,7 +91,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
               className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-slate-800"
             >
               <X size={14} />
-              Выход
+              Закрыть
             </button>
           </div>
         </div>
@@ -141,11 +141,12 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
             <div className="mt-3 rounded-[1.25rem] border border-indigo-500/20 bg-indigo-500/8 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-indigo-500/20 bg-indigo-500/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-indigo-200">
-                  v{current.version} {current.label}
+                  {current.isCurrent ? APP_VERSION_LABEL : `v${current.version} ${current.label}`}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">{current.date}</span>
               </div>
-              <p className="mt-3 text-sm font-semibold text-slate-300 leading-relaxed">{current.summary}</p>
+              <h3 className="mt-3 text-lg font-black text-white">{formatReleaseTitle(current)}</h3>
+              <p className="mt-2 text-sm font-semibold text-slate-300 leading-relaxed">{current.summary}</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {current.groups.map((group) => (
                   <div key={group.title} className="rounded-[1.1rem] border border-slate-800 bg-slate-950/50 p-4">
