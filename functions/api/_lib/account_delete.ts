@@ -100,8 +100,6 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM shopping_checked WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM family_invites WHERE created_by_user_id = ? OR used_by_user_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM weekly_menu_portions WHERE user_id = ?").bind(userId),
-    db.prepare("DELETE FROM food_records WHERE user_id = ?").bind(userId),
-    db.prepare("DELETE FROM weights WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   );
 
