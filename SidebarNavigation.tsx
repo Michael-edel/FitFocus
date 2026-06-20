@@ -62,7 +62,7 @@ export default function SidebarNavigation({
   const mobilePrimaryTabs = React.useMemo(() => visibleTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
   const mobileMoreTabs = React.useMemo(() => visibleTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
   const mobileQuickTabs = React.useMemo(() => {
-    const preferredOrder: AppTabId[] = ['progress', 'pro', 'guide', 'support'];
+    const preferredOrder: AppTabId[] = ['pro', 'guide', 'support'];
     return preferredOrder
       .map((id) => visibleTabs.find((tab) => tab.id === id))
       .filter((tab): tab is (typeof visibleTabs)[number] => Boolean(tab));
@@ -210,15 +210,15 @@ export default function SidebarNavigation({
         </div>
 
         {mobilePrimaryTabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => onActiveTabChange(tab.id)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
+          <button key={tab.id} type="button" onClick={() => onActiveTabChange(tab.id)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
             <tab.icon size={20} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
-            <span className="text-[10px] leading-tight text-center font-bold">{tab.label}</span>
+            <span className="text-[9px] leading-tight text-center font-bold whitespace-nowrap">{tab.label}</span>
           </button>
         ))}
 
-        <button type="button" onClick={() => onMobileMoreOpenChange(true)} className={`md:hidden flex shrink-0 flex-col items-center justify-center gap-1 px-2 py-2 rounded-[1.2rem] transition-all min-w-[68px] max-w-[68px] ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
+        <button type="button" onClick={() => onMobileMoreOpenChange(true)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
           <MoreHorizontal size={20} />
-          <span className="text-[10px] leading-tight text-center font-bold">Ещё</span>
+          <span className="text-[9px] leading-tight text-center font-bold whitespace-nowrap">Ещё</span>
         </button>
 
         <div className="hidden md:block w-full px-2 space-y-3">

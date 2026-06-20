@@ -34,4 +34,4 @@ export const sidebarTabs: SidebarTab[] = [
 export const sidebarCoreTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];
 export const sidebarFeatureTabIds: AppTabId[] = ['progress', 'progress-archive', 'recipes', 'workouts', 'course', 'family', 'support', 'guide', 'updates', 'admin'];
 export const sidebarUtilityTabIds: AppTabId[] = ['pro', 'settings'];
-export const mobilePrimaryTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition'];
+export const mobilePrimaryTabIds: AppTabId[] = ['dashboard', 'council', 'plan', 'nutrition', 'progress'];
