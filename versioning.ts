@@ -18,9 +18,10 @@ export const APP_VERSION: AppVersion = {
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const BUILD_SHORT_LABEL = `Сборка №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_VERSION_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • ${BUILD_SHORT_LABEL}`;
+export const APP_VERSION_UI_LABEL = `Версия приложения ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
+export const BUILD_SHORT_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_VERSION_LABEL = `ветки main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • Сборка ветки main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
@@ -46,14 +47,14 @@ export const versioningRules = [
 
 export const versioningLayers = [
   {
-    title: "Приложение",
-    value: APP_VERSION_LABEL,
-    note: "UI и пользовательские сценарии.",
+    title: "Версия приложения",
+    value: APP_VERSION_UI_LABEL,
+    note: "UI и пользовательские сценарии. Меняется только при новом релизе.",
   },
   {
     title: "Сборка main",
     value: BUILD_SHORT_LABEL,
-    note: "Автоматически обновляется на каждый push в main.",
+    note: "Автоматически обновляется на каждый push в main, чтобы тестеры видели свежую сборку.",
   },
   {
     title: "Схема API",

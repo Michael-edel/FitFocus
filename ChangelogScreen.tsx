@@ -13,7 +13,7 @@ export default function ChangelogScreen() {
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-slate-100">Изменения по версиям</h1>
         <p className="max-w-3xl text-slate-400 font-medium leading-7">
-          Здесь собраны текущая и предыдущие версии FitFocus. Текущая сборка обновляется автоматически при push в main, а списки сгруппированы по задачам, чтобы было проще понять, что уже сделано и что входит в конкретную сборку.
+          Здесь собраны текущая и предыдущие версии FitFocus. Версия приложения меняется только при новом релизе, а номер сборки main растёт на каждый push. Списки сгруппированы по задачам, чтобы было проще понять, что уже сделано и что входит в конкретную сборку.
         </p>
       </div>
 
@@ -24,7 +24,7 @@ export default function ChangelogScreen() {
               <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
               <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведем версии в FitFocus</h2>
               <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
-                Одна версия отвечает за приложение, отдельно живут версии API, данных и миграций. Так проще понимать, что именно изменилось и где может быть конфликт.
+                Одна версия отвечает за приложение, отдельно живут версии API, данных и миграций. Так проще понимать, что именно изменилось, какая сборка стоит на устройстве и где может быть конфликт.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-indigo-100">

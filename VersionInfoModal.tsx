@@ -83,7 +83,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                 Что нового
               </div>
               <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{BUILD_COMBINED_LABEL}</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения, номер сборки main и схема изменений, которую видит и пользователь, и команда.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения меняется только при релизе, а номер сборки main растёт на каждый push. Ниже видны и пользовательские изменения, и служебные схемы.</p>
             </div>
             <button
               type="button"
