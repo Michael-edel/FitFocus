@@ -12,6 +12,21 @@ function toNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseProfile(profileJson: unknown): Record<string, unknown> {
+  if (!profileJson) return {};
+  try {
+    const parsed = JSON.parse(String(profileJson));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function asNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -34,6 +49,32 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .first<any>();
 
   if (!userRow) return json({ error: "NOT_FOUND", message: "user not found" }, 404);
+
+  const profileRow = await db
+    .prepare("SELECT profile_json, updated_at, version FROM user_profiles WHERE user_id = ? LIMIT 1")
+    .bind(userId)
+    .first<any>();
+  const profile = parseProfile(profileRow?.profile_json);
+  const measurementsHistory = Array.isArray(profile.measurementsHistory) ? profile.measurementsHistory : [];
+  const progressPhotos = Array.isArray(profile.progressPhotos) ? profile.progressPhotos : [];
+  const familyMembers = Array.isArray(profile.familyMembers) ? profile.familyMembers : [];
+
+  const familyRow = await db
+    .prepare(
+      `SELECT f.id as family_id, f.name as family_name, f.owner_user_id, f.created_at as family_created_at,
+              m.role as member_role, m.status as member_status, m.created_at as member_created_at, m.updated_at as member_updated_at,
+              (
+                SELECT COUNT(*) FROM family_members fm
+                WHERE fm.family_id = f.id AND fm.status = 'active'
+              ) as active_members
+       FROM family_members m
+       JOIN families f ON f.id = m.family_id
+       WHERE m.user_id = ? AND m.status = 'active'
+       ORDER BY f.created_at DESC
+       LIMIT 1`
+    )
+    .bind(userId)
+    .first<any>();
 
   const rolesRow = await db
     .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")
@@ -124,6 +165,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     last_ai_ts: aiRow?.last_ts ? Number(aiRow.last_ts) : null,
   };
 
+  const wearableEnabled = profile.wearableEnabled === true || profile.wearableEnabled === 1 || profile.wearableEnabled === "1";
+  const hasGlucose = asNumber(profile.bloodGlucoseMmolL) !== null;
+  const hasMeasurements =
+    measurementsHistory.length > 0 ||
+    asNumber(profile.weight) !== null ||
+    asNumber(profile.restingPulse) !== null ||
+    hasGlucose ||
+    asNumber(profile.bloodPressureSystolic) !== null ||
+    asNumber(profile.bloodPressureDiastolic) !== null;
+  const familyCount = familyMembers.length;
+
   return json({
     user: {
       id: String(userRow.id),
@@ -136,7 +188,56 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       deletion_scheduled_at: userRow.deletion_scheduled_at ? String(userRow.deletion_scheduled_at) : null,
       is_active: Number(userRow.is_active ?? 1),
     },
+    profile: {
+      version: profileRow?.version ? Number(profileRow.version) : null,
+      updated_at: profileRow?.updated_at ? Number(profileRow.updated_at) : null,
+      name: typeof profile.name === "string" ? String(profile.name) : "",
+      weight: asNumber(profile.weight),
+      height: asNumber(profile.height),
+      age: asNumber(profile.age),
+      target_weight: asNumber(profile.targetWeight),
+      goal: typeof profile.goal === "string" ? String(profile.goal) : "",
+      activity_level: asNumber(profile.activityLevel),
+      medical_restrictions: typeof profile.medicalRestrictions === "string" ? String(profile.medicalRestrictions) : "",
+      family_exclusions: typeof profile.familyExclusions === "string" ? String(profile.familyExclusions) : "",
+      blood_pressure_systolic: asNumber(profile.bloodPressureSystolic),
+      blood_pressure_diastolic: asNumber(profile.bloodPressureDiastolic),
+      blood_pressure_measured_at: profile.bloodPressureMeasuredAt ? String(profile.bloodPressureMeasuredAt) : null,
+      waist_cm: asNumber(profile.waistCm),
+      chest_cm: asNumber(profile.chestCm),
+      hips_cm: asNumber(profile.hipsCm),
+      body_measurements_measured_at: profile.bodyMeasurementsMeasuredAt ? String(profile.bodyMeasurementsMeasuredAt) : null,
+      blood_glucose_mmol_l: asNumber(profile.bloodGlucoseMmolL),
+      blood_glucose_measured_at: profile.bloodGlucoseMeasuredAt ? String(profile.bloodGlucoseMeasuredAt) : null,
+      resting_pulse: asNumber(profile.restingPulse),
+      resting_pulse_measured_at: profile.restingPulseMeasuredAt ? String(profile.restingPulseMeasuredAt) : null,
+      wearable_provider: typeof profile.wearableProvider === "string" ? String(profile.wearableProvider) : "",
+      wearable_enabled: wearableEnabled,
+      wearable_connected_at: profile.wearableConnectedAt ? String(profile.wearableConnectedAt) : null,
+      wearable_last_sync_at: profile.wearableLastSyncAt ? String(profile.wearableLastSyncAt) : null,
+      wearable_metrics_updated_at: profile.wearableMetricsUpdatedAt ? String(profile.wearableMetricsUpdatedAt) : null,
+      wearable_steps_today: asNumber(profile.wearableStepsToday),
+      wearable_active_minutes_today: asNumber(profile.wearableActiveMinutesToday),
+      wearable_sleep_hours_last_night: asNumber(profile.wearableSleepHoursLastNight),
+      measurements_count: measurementsHistory.length,
+      progress_photos_count: progressPhotos.length,
+      family_members_count: familyCount,
+      has_measurements: hasMeasurements,
+      has_glucose: hasGlucose,
+      weight_history_count: Array.isArray(profile.weightHistory) ? profile.weightHistory.length : 0,
+    },
     roles: (rolesRow?.results || []).map((row: any) => String(row.role)),
+    family: familyRow ? {
+      family_id: String(familyRow.family_id),
+      family_name: String(familyRow.family_name || "Семья"),
+      owner_user_id: String(familyRow.owner_user_id),
+      member_role: String(familyRow.member_role || ""),
+      member_status: String(familyRow.member_status || ""),
+      family_created_at: familyRow.family_created_at ? Number(familyRow.family_created_at) : null,
+      member_created_at: familyRow.member_created_at ? Number(familyRow.member_created_at) : null,
+      member_updated_at: familyRow.member_updated_at ? Number(familyRow.member_updated_at) : null,
+      active_members: Number(familyRow.active_members || 0),
+    } : null,
     subscription: subscriptionRow
       ? {
           plan: String(subscriptionRow.plan || "free"),

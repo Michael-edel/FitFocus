@@ -19,6 +19,14 @@ type Stats = {
     active_sessions: number;
     pro_active: number;
     family_active: number;
+    deleted_users: number;
+    inactive_users: number;
+    family_members_active: number;
+    profiles_with_measurements: number;
+    profiles_with_glucose: number;
+    profiles_with_wearable: number;
+    profiles_with_progress_photos: number;
+    profiles_with_family_members: number;
   };
   today: {
     day: string;
@@ -65,7 +73,53 @@ type AiCost = {
   }[];
 };
 
-type UserRow = { id: string; email?: string; created_at?: number };
+type UserRow = {
+  id: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  created_at?: number;
+  deleted_at?: string | null;
+  deletion_scheduled_at?: string | null;
+  is_active?: number;
+  subscription_plan?: string;
+  subscription_status?: string;
+  profile_version?: number | null;
+  profile_updated_at?: number | null;
+  has_profile?: boolean;
+  has_measurements?: boolean;
+  measurements_count?: number;
+  progress_photos_count?: number;
+  family_members_count?: number;
+  blood_glucose_mmol_l?: number | null;
+  blood_glucose_measured_at?: string | null;
+  weight?: number | null;
+  target_weight?: number | null;
+  height?: number | null;
+  age?: number | null;
+  goal?: string;
+  medical_restrictions?: string;
+  family_exclusions?: string;
+  blood_pressure_systolic?: number | null;
+  blood_pressure_diastolic?: number | null;
+  blood_pressure_measured_at?: string | null;
+  waist_cm?: number | null;
+  chest_cm?: number | null;
+  hips_cm?: number | null;
+  body_measurements_measured_at?: string | null;
+  resting_pulse?: number | null;
+  resting_pulse_measured_at?: string | null;
+  wearable_enabled?: boolean;
+  wearable_provider?: string;
+  wearable_connected_at?: string | null;
+  wearable_last_sync_at?: string | null;
+  wearable_metrics_updated_at?: string | null;
+  wearable_steps_today?: number | null;
+  wearable_active_minutes_today?: number | null;
+  wearable_sleep_hours_last_night?: number | null;
+  wearable_has_data?: boolean;
+  glucose_has_data?: boolean;
+};
 
 type AiLog = { id: string; user_id: string; ts: number; feature: string; status: number; latency_ms: number; safe_mode: number; error?: string | null };
 
@@ -134,7 +188,56 @@ type UserDetail = {
     deletion_scheduled_at?: string | null;
     is_active?: number;
   };
+  profile: {
+    version?: number | null;
+    updated_at?: number | null;
+    name?: string;
+    weight?: number | null;
+    height?: number | null;
+    age?: number | null;
+    target_weight?: number | null;
+    goal?: string;
+    activity_level?: number | null;
+    medical_restrictions?: string;
+    family_exclusions?: string;
+    blood_pressure_systolic?: number | null;
+    blood_pressure_diastolic?: number | null;
+    blood_pressure_measured_at?: string | null;
+    waist_cm?: number | null;
+    chest_cm?: number | null;
+    hips_cm?: number | null;
+    body_measurements_measured_at?: string | null;
+    blood_glucose_mmol_l?: number | null;
+    blood_glucose_measured_at?: string | null;
+    resting_pulse?: number | null;
+    resting_pulse_measured_at?: string | null;
+    wearable_provider?: string;
+    wearable_enabled?: boolean;
+    wearable_connected_at?: string | null;
+    wearable_last_sync_at?: string | null;
+    wearable_metrics_updated_at?: string | null;
+    wearable_steps_today?: number | null;
+    wearable_active_minutes_today?: number | null;
+    wearable_sleep_hours_last_night?: number | null;
+    measurements_count?: number;
+    progress_photos_count?: number;
+    family_members_count?: number;
+    has_measurements?: boolean;
+    has_glucose?: boolean;
+    weight_history_count?: number;
+  };
   roles: string[];
+  family: null | {
+    family_id: string;
+    family_name: string;
+    owner_user_id: string;
+    member_role: string;
+    member_status: string;
+    family_created_at?: number | null;
+    member_created_at?: number | null;
+    member_updated_at?: number | null;
+    active_members: number;
+  };
   subscription: null | {
     plan?: string;
     status?: string;
@@ -206,6 +309,13 @@ export default function AdminScreen() {
   const [settingsDirty, setSettingsDirty] = useState<Record<string, string>>({});
 
   const [userQuery, setUserQuery] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
+  const [userPlanFilter, setUserPlanFilter] = useState("all");
+  const [wearableFilter, setWearableFilter] = useState("all");
+  const [glucoseFilter, setGlucoseFilter] = useState("all");
+  const [measurementFilter, setMeasurementFilter] = useState("all");
+  const [userListLimit, setUserListLimit] = useState(50);
+  const [usersTotal, setUsersTotal] = useState(0);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [admins, setAdmins] = useState<UserRow[]>([]);
   const [adminEvents, setAdminEvents] = useState<any[]>([]);
@@ -241,7 +351,7 @@ export default function AdminScreen() {
   const selectedUserLabel = useMemo(() => {
     const u = users.find((x) => x.id === selectedUserId);
     const c = aiCost?.top_users_7d.find((x) => x.user_id === selectedUserId);
-    return selectedUserDetail?.user?.email || selectedUserDetail?.user?.name || u?.email || c?.email || u?.id || selectedUserId;
+    return selectedUserDetail?.profile?.name || selectedUserDetail?.user?.name || selectedUserDetail?.user?.email || u?.name || u?.email || c?.email || u?.id || selectedUserId;
   }, [aiCost, selectedUserDetail, users, selectedUserId]);
 
   const loadAiLogs = async () => {
@@ -357,6 +467,7 @@ export default function AdminScreen() {
       setSettingsDirty({});
       setInviteActionMsg(null);
       setCreatedInviteCodes([]);
+      await loadUsers({ silent: true });
       await loadSupportTickets();
       await loadAdminEvents();
       setFlagsDirty({});
@@ -369,17 +480,32 @@ export default function AdminScreen() {
 
   useEffect(() => { void loadAll(); }, []);
 
-  const searchUsers = async () => {
-    setLoading(true); setErr(null);
+  const loadUsers = async (options?: { silent?: boolean }) => {
+    const silent = Boolean(options?.silent);
+    if (!silent) {
+      setLoading(true);
+    }
+    setErr(null);
     try {
-      const r = await fetch(`/api/admin/users?query=${encodeURIComponent(userQuery.trim())}`, { credentials: "include" });
-      if (!r.ok) throw new Error("Поиск пользователей недоступен (нужна роль admin)");
+      const qs = new URLSearchParams();
+      if (userQuery.trim()) qs.set("query", userQuery.trim());
+      qs.set("status", userStatusFilter);
+      qs.set("plan", userPlanFilter);
+      qs.set("wearable", wearableFilter);
+      qs.set("glucose", glucoseFilter);
+      qs.set("measurements", measurementFilter);
+      qs.set("limit", String(userListLimit));
+      const r = await fetch(`/api/admin/users?${qs.toString()}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Список пользователей недоступен (нужна роль admin)");
       const j = await r.json();
       setUsers(Array.isArray(j?.users) ? j.users : []);
+      setUsersTotal(Number(j?.total || 0));
     } catch (e: any) {
-      setErr(e?.message || "Ошибка поиска");
+      setErr(e?.message || "Ошибка загрузки пользователей");
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -663,6 +789,39 @@ export default function AdminScreen() {
           </div>
           <div className="text-3xl font-black text-slate-100 mt-2">{stats?.today?.ai_calls ?? "—"}</div>
           <div className="text-slate-500 font-semibold mt-1">вызовов</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">Удалённые</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.deleted_users ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">в soft-delete</div>
+        </div>
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">Неактивные</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.inactive_users ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">без удаления</div>
+        </div>
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">Профили с замерами</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.profiles_with_measurements ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">вес / давление / пульс</div>
+        </div>
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">С сахаром</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.profiles_with_glucose ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">blood glucose</div>
+        </div>
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">Wearable</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.profiles_with_wearable ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">подключённые устройства</div>
+        </div>
+        <div className="rounded-3xl p-5 bg-slate-900/60 border border-slate-800">
+          <div className="text-slate-400 font-bold">Family-участники</div>
+          <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.family_members_active ?? "—"}</div>
+          <div className="text-slate-500 font-semibold mt-1">активные связи семьи</div>
         </div>
       </div>
 
@@ -1410,7 +1569,46 @@ export default function AdminScreen() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6">
           <h2 className="text-xl font-black text-slate-100 mb-2">Пользователи</h2>
-          <p className="text-slate-400 font-medium mb-4">Найди пользователя по email или id, назначь роли.</p>
+          <div className="text-slate-500 font-semibold text-sm mb-2">Найдено: {usersTotal}</div>
+          <p className="text-slate-400 font-medium mb-4">Список пользователей, фильтры и быстрый вход в карточку профиля.</p>
+
+          <div className="grid grid-cols-2 xl:grid-cols-6 gap-2 mb-4">
+            <select value={userStatusFilter} onChange={(e) => setUserStatusFilter(e.target.value)} className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold">
+              <option value="all">Все статусы</option>
+              <option value="active">Активные</option>
+              <option value="inactive">Неактивные</option>
+              <option value="deleted">Удалённые</option>
+            </select>
+            <select value={userPlanFilter} onChange={(e) => setUserPlanFilter(e.target.value)} className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold">
+              <option value="all">Все тарифы</option>
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="family">Family</option>
+            </select>
+            <select value={wearableFilter} onChange={(e) => setWearableFilter(e.target.value)} className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold">
+              <option value="all">Wearable: все</option>
+              <option value="connected">Подключён</option>
+              <option value="disconnected">Не подключён</option>
+            </select>
+            <select value={glucoseFilter} onChange={(e) => setGlucoseFilter(e.target.value)} className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold">
+              <option value="all">Сахар: все</option>
+              <option value="yes">Есть</option>
+              <option value="no">Нет</option>
+            </select>
+            <select value={measurementFilter} onChange={(e) => setMeasurementFilter(e.target.value)} className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold">
+              <option value="all">Замеры: все</option>
+              <option value="yes">Есть</option>
+              <option value="no">Нет</option>
+            </select>
+            <input
+              type="number"
+              min={10}
+              max={200}
+              value={userListLimit}
+              onChange={(e) => setUserListLimit(Math.max(10, Math.min(200, Number(e.target.value || 50))))}
+              className="px-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold"
+            />
+          </div>
 
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 relative">
@@ -1422,8 +1620,8 @@ export default function AdminScreen() {
                 className="w-full pl-10 pr-3 py-2 rounded-2xl bg-slate-950/50 border border-slate-800 text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               />
             </div>
-            <button onClick={searchUsers} className="px-4 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold">
-              Найти
+            <button onClick={() => void loadUsers()} className="px-4 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold">
+              Обновить список
             </button>
           </div>
 
@@ -1434,11 +1632,29 @@ export default function AdminScreen() {
                 onClick={() => { setSelectedUserId(u.id); void loadUserDetails(u.id); }}
                 className={`w-full text-left p-3 rounded-2xl border ${selectedUserId === u.id ? "border-indigo-500/40 bg-indigo-500/10" : "border-slate-800 bg-slate-950/40 hover:bg-slate-900/40"}`}
               >
-                <div className="text-slate-100 font-black text-sm">{u.email || u.id}</div>
-                <div className="text-slate-500 font-semibold text-xs">{u.id}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-slate-100 font-black text-sm truncate">{u.name || u.email || u.id}</div>
+                    <div className="text-slate-500 font-semibold text-xs truncate">{u.email || u.id}</div>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-200 text-[11px] font-black uppercase">{u.subscription_plan || "free"}</span>
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase ${u.deleted_at ? "bg-rose-500/10 text-rose-200" : u.is_active ? "bg-emerald-500/10 text-emerald-200" : "bg-amber-500/10 text-amber-200"}`}>
+                      {u.deleted_at ? "deleted" : u.is_active ? "active" : "inactive"}
+                    </span>
+                    {u.wearable_enabled ? <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-200 text-[11px] font-black uppercase">wearable</span> : null}
+                    {u.glucose_has_data ? <span className="px-2.5 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-200 text-[11px] font-black uppercase">glucose</span> : null}
+                  </div>
+                </div>
+                <div className="mt-2 text-slate-500 font-semibold text-xs flex flex-wrap gap-x-3 gap-y-1">
+                  <span>{u.id}</span>
+                  <span>замеры: {u.measurements_count || 0}</span>
+                  <span>фото: {u.progress_photos_count || 0}</span>
+                  <span>семья: {u.family_members_count || 0}</span>
+                </div>
               </button>
             ))}
-            {users.length === 0 && <div className="text-slate-500 font-semibold">Пока пусто. Сделай поиск.</div>}
+            {users.length === 0 && <div className="text-slate-500 font-semibold">Пока нет данных. Нажмите «Обновить список».</div>}
           </div>
         </div>
 
@@ -1503,6 +1719,116 @@ export default function AdminScreen() {
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-4 text-slate-500 font-semibold text-sm">
                 Нажмите на строку в таблице сверху, чтобы увидеть email, роли, план, срок жизни сессий и AI-активность.
+              </div>
+            )}
+
+            {selectedUserDetail && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                  <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Профиль</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Вес / цель</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.weight ?? "—"} кг</div>
+                      <div className="text-slate-500 font-semibold text-xs">цель: {selectedUserDetail.profile.target_weight ?? "—"} кг</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Рост / возраст</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.height ?? "—"} см</div>
+                      <div className="text-slate-500 font-semibold text-xs">возраст: {selectedUserDetail.profile.age ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Цель</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.goal || "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">версия профиля: {selectedUserDetail.profile.version ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Замеры</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.measurements_count ?? 0}</div>
+                      <div className="text-slate-500 font-semibold text-xs">фото: {selectedUserDetail.profile.progress_photos_count ?? 0}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                  <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Здоровье</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Давление</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.blood_pressure_systolic ?? "—"} / {selectedUserDetail.profile.blood_pressure_diastolic ?? "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">{selectedUserDetail.profile.blood_pressure_measured_at ? formatTimestamp(selectedUserDetail.profile.blood_pressure_measured_at) : "не измерялось"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Сахар</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.blood_glucose_mmol_l ?? "—"} ммоль/л</div>
+                      <div className="text-slate-500 font-semibold text-xs">{selectedUserDetail.profile.blood_glucose_measured_at ? formatTimestamp(selectedUserDetail.profile.blood_glucose_measured_at) : "не измерялось"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Пульс / сон</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.resting_pulse ?? "—"} уд/мин</div>
+                      <div className="text-slate-500 font-semibold text-xs">сон: {selectedUserDetail.profile.wearable_sleep_hours_last_night ?? "—"} ч</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Обхваты</div>
+                      <div className="text-slate-100 font-black">
+                        Т/Г/Б: {selectedUserDetail.profile.waist_cm ?? "—"} / {selectedUserDetail.profile.chest_cm ?? "—"} / {selectedUserDetail.profile.hips_cm ?? "—"}
+                      </div>
+                      <div className="text-slate-500 font-semibold text-xs">измерения: {selectedUserDetail.profile.body_measurements_measured_at ? formatTimestamp(selectedUserDetail.profile.body_measurements_measured_at) : "—"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                  <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Wearable</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Источник</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.wearable_provider || "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">{selectedUserDetail.profile.wearable_enabled ? "подключён" : "не подключён"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Последний sync</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.wearable_last_sync_at ? formatTimestamp(selectedUserDetail.profile.wearable_last_sync_at) : "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">обновлён: {selectedUserDetail.profile.wearable_metrics_updated_at ? formatTimestamp(selectedUserDetail.profile.wearable_metrics_updated_at) : "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Шаги</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.wearable_steps_today ?? "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">минуты: {selectedUserDetail.profile.wearable_active_minutes_today ?? "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Подключение</div>
+                      <div className="text-slate-100 font-black">{selectedUserDetail.profile.wearable_connected_at ? formatTimestamp(selectedUserDetail.profile.wearable_connected_at) : "—"}</div>
+                      <div className="text-slate-500 font-semibold text-xs">sync: {selectedUserDetail.profile.wearable_last_sync_at ? "есть" : "нет"}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                  <div className="text-slate-500 font-black text-[11px] uppercase tracking-[0.2em]">Семья и исключения</div>
+                  <div className="mt-2 space-y-2 text-sm">
+                    <div className="text-slate-100 font-black">
+                      {selectedUserDetail.family ? selectedUserDetail.family.family_name : "Нет активной семьи"}
+                    </div>
+                    {selectedUserDetail.family ? (
+                      <div className="text-slate-500 font-semibold text-xs">
+                        role: {selectedUserDetail.family.member_role} · active members: {selectedUserDetail.family.active_members}
+                      </div>
+                    ) : null}
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Ограничения</div>
+                      <div className="text-slate-100 font-medium whitespace-pre-wrap">
+                        {selectedUserDetail.profile.medical_restrictions || "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 font-bold text-[11px] uppercase">Семейные исключения</div>
+                      <div className="text-slate-100 font-medium whitespace-pre-wrap">
+                        {selectedUserDetail.profile.family_exclusions || "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
