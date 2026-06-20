@@ -46,12 +46,7 @@ export function getDevPlanOverride(userId?: string | null): TariffPlan | null {
 
 export function getEffectivePlan(realPlan: TariffPlan, userId?: string | null): TariffPlan {
   const override = getDevPlanOverride(userId);
-  if (isTestModeEnabled()) {
-    if ((import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
-    // In test mode, treat Family as the default max entitlement unless a per-user override exists.
-    if (override) return override;
-    return "family";
-  }
+  if ((import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
   return override ?? realPlan;
 }
 

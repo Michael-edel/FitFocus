@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react";
 import { TariffPlan } from "./types";
-import { isTestModeEnabled } from "./money";
 import { getEffectivePlan } from "./money";
 
 export function usePaywall(currentPlan: TariffPlan, betaFullAccess = false) {
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
 
-  // In beta/full-access mode, always expose Family entitlement.
-  // Otherwise respect dev overrides and the persisted plan.
+  // Entitlement comes from the persisted plan or an explicit dev override.
+  // We do not auto-upgrade to Family just because the app is running in test mode.
   const plan = useMemo(() => {
-    if (betaFullAccess || isTestModeEnabled()) return "family";
+    if (betaFullAccess) return "family";
     return getEffectivePlan(currentPlan);
   }, [betaFullAccess, currentPlan]);
 

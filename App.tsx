@@ -1632,7 +1632,7 @@ const openEditFood = (item: FoodEntry) => {
     waistCm: 0,
     chestCm: 0,
     hipsCm: 0,
-    plan: isTestModeEnabled() ? 'family' as TariffPlan : 'free' as TariffPlan,
+    plan: 'free' as TariffPlan,
     lossDeficit: DEFAULT_DEFICIT,
     gainSurplus: DEFAULT_SURPLUS,
     riskAckLoss: false,
