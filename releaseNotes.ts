@@ -1,4 +1,4 @@
-import { APP_VERSION_LABEL, APP_VERSION_STRING, BUILD_VERSION_LABEL } from './versioning';
+import { APP_VERSION_STRING, BUILD_VERSION_LABEL } from './versioning';
 import { BUILD_SOURCE } from './build-info.generated';
 
 export type ReleaseNoteGroup = {
@@ -19,8 +19,24 @@ function localizeCommitSubject(subject: string): string {
   const s = subject.trim();
   if (!s) return 'Коммит без описания';
 
+  const exactMatches: Record<string, string> = {
+    'Add automatic main build versioning': 'Добавлено автоматическое версионирование main-сборки',
+    'Add admin route guard check': 'Добавлена проверка admin для /api/admin/*',
+    'Fix AI identity key and migration version': 'Исправлены ключ идентификации AI и версия миграции',
+    'Remove test-mode plan bypass': 'Убран обход тарифа в тестовом режиме',
+    'Preserve recipe ingredient amounts': 'Сохранены граммовки ингредиентов в рецептах',
+    'Localize changelog build labels': 'Подписи сборки и changelog переведены на русский',
+    'Add day-aware nutrition diary stats': 'Дневник питания стал учитывать выбранный день',
+    'Fix account deletion D1 cleanup': 'Исправлена очистка D1 при удалении аккаунта',
+    'Fix day grouping and shopping list rendering': 'Исправлены группировка по дням и корзина закупа',
+    'Compact pro screen on mobile': 'Уплотнён экран Pro на мобильных',
+  };
+
+  if (exactMatches[s]) {
+    return exactMatches[s];
+  }
+
   const normalized = s
-    .replace(/^Add\s+automatic\s+main\s+build\s+versioning$/i, 'Добавлено автоматическое версионирование сборки main')
     .replace(/^Add\s+/i, 'Добавлено: ')
     .replace(/^Fix\s+/i, 'Исправлено: ')
     .replace(/^Update\s+/i, 'Обновлено: ')

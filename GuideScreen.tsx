@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BookMarked, CheckCircle2, Cloud, Footprints, HelpCircle, Smartphone, Sparkles, Star, ShieldCheck, Utensils, Video, Watch, MessageSquareText, ChevronRight } from 'lucide-react';
-import { APP_VERSION_LABEL } from './versioning';
+import { BUILD_COMBINED_LABEL } from './versioning';
 
 type GuideMode = 'user' | 'tester';
 
@@ -144,9 +144,9 @@ export default function GuideScreen() {
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5">
-          <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Версия приложения</div>
-          <div className="mt-2 text-2xl font-black text-slate-100">{APP_VERSION_LABEL}</div>
-          <div className="mt-2 text-slate-400 font-medium leading-7">Инструкции обновляются вместе с интерфейсом и changelog.</div>
+          <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Текущая сборка</div>
+          <div className="mt-2 text-2xl font-black text-slate-100">{BUILD_COMBINED_LABEL}</div>
+          <div className="mt-2 text-slate-400 font-medium leading-7">Эта версия обновляется вместе с интерфейсом и changelog, поэтому инструкция всегда совпадает с текущей сборкой.</div>
         </div>
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5">
           <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Главное правило</div>

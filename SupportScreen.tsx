@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircle2, ImageUp, LifeBuoy, Loader2, Mic, Paperclip, Send, Square, Trash2, Video } from 'lucide-react';
 import type { UserProfile } from './types';
-import { APP_VERSION_LABEL } from './versioning';
+import { BUILD_SHORT_LABEL } from './versioning';
 
 type AttachmentDraft = {
   file: File;
@@ -281,7 +281,7 @@ export default function SupportScreen({ currentUser }: Props) {
       form.set('device', device.trim());
       form.set('browser', browser.trim());
       form.set('contact', contact.trim());
-      form.set('app_version', APP_VERSION_LABEL);
+      form.set('app_version', BUILD_SHORT_LABEL);
       fileList.forEach((item) => {
         form.append('attachments', item.file, item.file.name);
       });
