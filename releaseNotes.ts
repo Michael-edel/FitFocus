@@ -1,8 +1,9 @@
-import { APP_VERSION_LABEL } from './versioning';
+import { APP_VERSION_LABEL, APP_VERSION_STRING } from './versioning';
+import { BUILD_SOURCE } from './build-info.generated';
 
 export type ReleaseNoteGroup = {
   title: string;
-  items: string[];
+  items: readonly string[];
 };
 
 export type ReleaseNote = {
@@ -10,17 +11,43 @@ export type ReleaseNote = {
   label: string;
   date: string;
   summary: string;
-  groups: ReleaseNoteGroup[];
+  groups: readonly ReleaseNoteGroup[];
   isCurrent?: boolean;
 };
 
+const currentBuildReleaseNote: ReleaseNote = {
+  version: APP_VERSION_STRING,
+  label: `${APP_VERSION_LABEL} • main`,
+  date: new Date(BUILD_SOURCE.builtAt).toLocaleDateString('ru-RU'),
+  summary: BUILD_SOURCE.branch === 'main'
+    ? 'Автоматическая сборка из main. Ниже показаны последние изменения, которые попали в текущую версию.'
+    : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
+  isCurrent: true,
+  groups: [
+    {
+      title: 'Последние изменения',
+      items: BUILD_SOURCE.recentCommits.length
+        ? BUILD_SOURCE.recentCommits
+        : ['История коммитов недоступна в этой сборке.'],
+    },
+    {
+      title: 'Сборка',
+      items: [
+        `Ветка: ${BUILD_SOURCE.branch}`,
+        `Коммит: ${BUILD_SOURCE.shortSha}`,
+        `Коммитов в репозитории: ${BUILD_SOURCE.commitCount}`,
+      ],
+    },
+  ],
+};
+
 export const releaseNotes: ReleaseNote[] = [
+  currentBuildReleaseNote,
   {
     version: "2.4.0",
     label: "Beta",
     date: "19.06.2026",
     summary: "Добавили форму поддержки с голосом, вложениями и списком обращений в админке.",
-    isCurrent: true,
     groups: [
       {
         title: "Новое",
