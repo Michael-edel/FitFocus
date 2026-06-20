@@ -560,17 +560,28 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
       .sort((a, b) => (a.dayKey < b.dayKey ? 1 : -1));
   }, [items, mealTypeLabel]);
 
+  const todayKey = localDayKey(new Date()) || '';
+  const preferredDayKey = activeDayKey?.trim() || todayKey;
+
   const resolvedActiveDayKey = React.useMemo(() => {
-    if (!groups.length) return '';
-    if (activeDayKey && groups.some((group) => group.dayKey === activeDayKey)) return activeDayKey;
-    return groups[0]?.dayKey || '';
-  }, [activeDayKey, groups]);
+    if (preferredDayKey) return preferredDayKey;
+    if (groups.length) return groups[0]?.dayKey || '';
+    return '';
+  }, [groups, preferredDayKey]);
 
   const visibleGroups = React.useMemo(() => {
-    if (!resolvedActiveDayKey) return groups;
-    const activeGroup = groups.find((group) => group.dayKey === resolvedActiveDayKey);
-    return activeGroup ? [activeGroup] : groups;
-  }, [groups, resolvedActiveDayKey]);
+    if (!preferredDayKey) return groups;
+    const activeGroup = groups.find((group) => group.dayKey === preferredDayKey);
+    if (activeGroup) return [activeGroup];
+    return [{
+      dayKey: preferredDayKey,
+      dayLabel: formatLocalDayLabel(preferredDayKey),
+      calories: 0,
+      photos: 0,
+      totalItems: 0,
+      meals: [],
+    }];
+  }, [groups, preferredDayKey]);
 
   return (
     <div className="space-y-6">
@@ -628,7 +639,14 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
           </div>
 
           <div className="p-3 md:p-6 space-y-4 md:space-y-5">
-            {dayGroup.meals.map((g) => (
+            {dayGroup.meals.length === 0 ? (
+              <div className="rounded-[1.8rem] md:rounded-[2.5rem] border border-dashed border-slate-700 bg-slate-950/60 px-5 py-10 md:px-8 md:py-12 text-center">
+                <p className="text-lg md:text-xl font-black text-slate-100">За этот день ещё нет записей</p>
+                <p className="mt-2 text-sm md:text-base font-medium text-slate-500">
+                  Добавьте фото еды или сохраните приём пищи, чтобы дневник и КБЖУ обновились именно в этом дне.
+                </p>
+              </div>
+            ) : dayGroup.meals.map((g) => (
               <div key={g.mt} className="rounded-[1.8rem] md:rounded-[2.5rem] border border-slate-800 bg-slate-900/70 shadow-xl overflow-hidden">
                 <div className="px-4 py-3 md:px-5 md:py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div className="flex items-baseline gap-3">
@@ -1071,8 +1089,7 @@ const App: React.FC = () => {
   const resolvedDiaryDayKey = useMemo(() => {
     const todayKey = localDayKey(new Date()) || '';
     if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
-    if (todayKey && diaryDayKeys.includes(todayKey)) return todayKey;
-    return diaryDayKeys[0] || todayKey || '';
+    return todayKey || diaryDayKeys[0] || '';
   }, [diaryDayKeys, selectedDiaryDayKey]);
   const selectedDiaryStats = useMemo(() => {
     if (!resolvedDiaryDayKey) {
