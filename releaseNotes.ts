@@ -1,4 +1,4 @@
-import { APP_VERSION_LABEL, APP_VERSION_STRING } from './versioning';
+import { APP_VERSION_LABEL, APP_VERSION_STRING, BUILD_VERSION_LABEL } from './versioning';
 import { BUILD_SOURCE } from './build-info.generated';
 
 export type ReleaseNoteGroup = {
@@ -42,7 +42,7 @@ function localizeCommitSubject(subject: string): string {
 
 function formatReleaseTitle(release: ReleaseNote): string {
   if (release.isCurrent) {
-    return `Текущая сборка ${APP_VERSION_LABEL}`;
+    return `Текущая сборка ${BUILD_VERSION_LABEL}`;
   }
   return `Версия ${release.version} ${release.label}`;
 }
@@ -52,14 +52,14 @@ const currentBuildReleaseNote: ReleaseNote = {
   label: 'main',
   date: new Date(BUILD_SOURCE.builtAt).toLocaleDateString('ru-RU'),
   summary: BUILD_SOURCE.branch === 'main'
-    ? 'Сборка main обновляется автоматически при каждом push. Ниже показаны изменения текущей версии и служебные данные сборки.'
+    ? 'Сборка main обновляется автоматически при каждом push. Ниже показаны изменения текущей версии, номер сборки и служебные данные.'
     : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
   isCurrent: true,
   groups: [
     {
       title: 'Что изменилось',
       items: [
-        'Автосборка main теперь создаёт версию без ручных действий.',
+        'Автосборка main теперь создаёт новый номер сборки без ручных действий.',
         'Экран «Что нового» показывает текущую сборку, SHA и историю изменений на русском.',
         'Группировка по версиям помогает тестерам и команде быстрее понимать, что вошло именно в эту сборку.',
       ],
@@ -74,6 +74,7 @@ const currentBuildReleaseNote: ReleaseNote = {
       title: 'Сборка',
       items: [
         `Ветка: ${BUILD_SOURCE.branch}`,
+        `Номер сборки: ${BUILD_SOURCE.commitCount}`,
         `Коммит: ${BUILD_SOURCE.shortSha}`,
         `Всего коммитов в репозитории: ${BUILD_SOURCE.commitCount}`,
       ],

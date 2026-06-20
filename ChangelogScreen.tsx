@@ -1,7 +1,7 @@
 import React from 'react';
 import { BadgeInfo, CalendarDays, CheckCircle2, History, Sparkles } from 'lucide-react';
 import { formatReleaseTitle, releaseNotes } from './releaseNotes';
-import { APP_VERSION_LABEL, versioningLayers, versioningRules } from './versioning';
+import { BUILD_COMBINED_LABEL, versioningLayers, versioningRules } from './versioning';
 
 export default function ChangelogScreen() {
   return (
@@ -29,7 +29,7 @@ export default function ChangelogScreen() {
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-indigo-100">
               <Sparkles className="h-3.5 w-3.5" />
-              {APP_VERSION_LABEL}
+              {BUILD_COMBINED_LABEL}
             </div>
           </div>
 
@@ -70,7 +70,7 @@ export default function ChangelogScreen() {
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-slate-200">
                     <Sparkles className="h-3.5 w-3.5 text-indigo-300" />
-                    {APP_VERSION_LABEL}
+                    {release.isCurrent ? BUILD_COMBINED_LABEL : `v${release.version} ${release.label}`}
                   </div>
                   {release.isCurrent && (
                     <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-emerald-100">

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { APP_VERSION_LABEL, versioningLayers, versioningRules } from './versioning';
+import { BUILD_COMBINED_LABEL, versioningLayers, versioningRules } from './versioning';
 import { formatReleaseTitle, releaseNotes } from './releaseNotes';
 
 type VersionInfoModalProps = {
@@ -82,8 +82,8 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                 <Sparkles size={12} className="text-indigo-400" />
                 Что нового
               </div>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{APP_VERSION_LABEL}</h2>
-              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения, автоматическая сборка main и схема изменений, которую видит и пользователь, и команда.</p>
+              <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{BUILD_COMBINED_LABEL}</h2>
+              <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения, номер сборки main и схема изменений, которую видит и пользователь, и команда.</p>
             </div>
             <button
               type="button"
@@ -141,7 +141,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
             <div className="mt-3 rounded-[1.25rem] border border-indigo-500/20 bg-indigo-500/8 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-indigo-500/20 bg-indigo-500/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-indigo-200">
-                  {current.isCurrent ? APP_VERSION_LABEL : `v${current.version} ${current.label}`}
+                  {current.isCurrent ? BUILD_COMBINED_LABEL : `v${current.version} ${current.label}`}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">{current.date}</span>
               </div>

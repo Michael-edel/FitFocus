@@ -18,8 +18,8 @@ export const APP_VERSION: AppVersion = {
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const BUILD_VERSION_LABEL = `main @ ${BUILD_SOURCE.shortSha}`;
-export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • ${BUILD_VERSION_LABEL}`;
+export const BUILD_VERSION_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • Сборка ${BUILD_VERSION_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
@@ -55,17 +55,17 @@ export const versioningLayers = [
     note: "Автоматически обновляется на каждый push в main.",
   },
   {
-    title: "API schema",
+    title: "Схема API",
     value: `v${API_SCHEMA_VERSION}`,
     note: "Контракт ответа /api и совместимость клиентов.",
   },
   {
-    title: "Data schema",
+    title: "Схема данных",
     value: `v${DATA_SCHEMA_VERSION}`,
     note: "Версии профиля и локальных сущностей пользователя.",
   },
   {
-    title: "DB migration",
+    title: "Миграция БД",
     value: DB_MIGRATION_VERSION,
     note: "Текущая опорная миграция для схемы БД.",
   },
