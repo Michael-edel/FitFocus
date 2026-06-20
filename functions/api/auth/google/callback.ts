@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { replaceActiveSessionsForUser } from "../../_lib/auth";
+import { ensureAuthSchema, replaceActiveSessionsForUser } from "../../_lib/auth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -138,6 +138,7 @@ export const onRequestGet: PagesFunction<{
 
     // Upsert user
     const now = Math.floor(Date.now() / 1000);
+    await ensureAuthSchema(env.DB);
     await env.DB.prepare(
       `INSERT INTO users (id, email, name, picture, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)

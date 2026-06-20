@@ -1,4 +1,4 @@
-import { json, replaceActiveSessionsForUser } from "../_lib/auth";
+import { ensureAuthSchema, json, replaceActiveSessionsForUser } from "../_lib/auth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -48,30 +48,32 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     };
 
     const now = Math.floor(Date.now() / 1000);
-if (!env.DB) return json({ error: "Server missing DB binding" }, 500);
+    if (!env.DB) return json({ error: "Server missing DB binding" }, 500);
+    await ensureAuthSchema(env.DB);
 
-const sid = crypto.randomUUID();
-const ttl = 60 * 60 * 24 * 30; // 30 days
-const expiresAt = now + ttl;
+    const sid = crypto.randomUUID();
+    const ttl = 60 * 60 * 24 * 30; // 30 days
+    const expiresAt = now + ttl;
 
-// Upsert user (minimal) so we have a record for exports/admin later.
-await env.DB.prepare(
-  "INSERT INTO users (id, email, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET email=excluded.email"
-)
-  .bind(user.sub, user.email, Date.now())
-  .run();
+    // Upsert user with profile metadata so admin / profile views stay in sync.
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, name, picture, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture, updated_at=excluded.updated_at"
+    )
+      .bind(user.sub, user.email, user.name, user.picture, now, now)
+      .run();
 
-// Restore soft-deleted accounts when the same Google user logs in during the grace window.
-await env.DB.prepare(
-  `UPDATE users
-   SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
-   WHERE id = ?
-     AND deleted_at IS NOT NULL
-     AND deletion_scheduled_at IS NOT NULL
-     AND deletion_scheduled_at > datetime('now')`
-)
-  .bind(now, user.sub)
-  .run();
+    // Restore soft-deleted accounts when the same Google user logs in during the grace window.
+    await env.DB.prepare(
+      `UPDATE users
+       SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
+       WHERE id = ?
+         AND deleted_at IS NOT NULL
+         AND deletion_scheduled_at IS NOT NULL
+         AND deletion_scheduled_at > datetime('now')`
+    )
+      .bind(now, user.sub)
+      .run();
 
 // Closed beta (invite codes)
 const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
