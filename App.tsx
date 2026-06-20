@@ -1056,8 +1056,10 @@ const App: React.FC = () => {
   const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState<string>('');
   useEffect(() => {
     try {
+      const todayKey = localDayKey(new Date()) || '';
+      const savedKey = localStorage.getItem(selectedDiaryDayStorageKey) || '';
       selectedDiaryDaySkipSaveRef.current = true;
-      setSelectedDiaryDayKey(localStorage.getItem(selectedDiaryDayStorageKey) || '');
+      setSelectedDiaryDayKey(savedKey === todayKey ? savedKey : '');
     } catch {
       selectedDiaryDaySkipSaveRef.current = true;
       setSelectedDiaryDayKey('');
@@ -1089,7 +1091,7 @@ const App: React.FC = () => {
   const resolvedDiaryDayKey = useMemo(() => {
     const todayKey = localDayKey(new Date()) || '';
     if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
-    return todayKey || diaryDayKeys[0] || '';
+    return todayKey;
   }, [diaryDayKeys, selectedDiaryDayKey]);
   const selectedDiaryStats = useMemo(() => {
     if (!resolvedDiaryDayKey) {
