@@ -2,9 +2,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { FoodItem, UserHabit, UserProfile } from '../types';
 import { Gender, Goal } from '../types';
+import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 import { ensurePdfInterFont } from './font';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle } from './theme';
-import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, weekRangeISO } from './metrics';
+import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, resolveBloodGlucose, weekRangeISO } from './metrics';
 
 type Targets = { calories: number; protein: number; fat: number; carbs: number };
 
@@ -25,6 +26,7 @@ export async function downloadShortHealthReportPdf(opts: {
   const bmiCat = bmiCategory(bmi);
   const progress = Math.round(calcGoalProgressPct(user));
   const compl = habitCompliance(habits);
+  const bloodGlucose = resolveBloodGlucose(user);
 
   const generatedAt = new Date().toLocaleString();
 
@@ -79,6 +81,7 @@ export async function downloadShortHealthReportPdf(opts: {
       ['Целевой вес', `${user.targetWeight} кг`],
       ['ИМТ', `${bmi.toFixed(1)} • ${bmiCat}`],
       ['Прогресс к цели', `${progress}%`],
+      ...(bloodGlucose ? [['Сахар крови', `${formatBloodGlucose(bloodGlucose.value)} • ${getBloodGlucoseGuidance(bloodGlucose.value)}${bloodGlucose.measuredAt ? ` • ${bloodGlucose.measuredAt}` : ''}`]] : []),
       ['Средняя калорийность (по дням с данными)', `${Math.round(agg.avgLogged.cal)} ккал/день (${agg.loggedDays}/7 дней)`],
       ['Средний белок (по дням с данными)', `${Math.round(agg.avgLogged.p)} г/день (${agg.loggedDays}/7 дней)`],
       ['Комплаенс привычек (сегодня)', `${compl.pct}% (${compl.done}/${compl.total})`],

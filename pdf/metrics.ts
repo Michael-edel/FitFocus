@@ -68,3 +68,27 @@ export function habitCompliance(habits: UserHabit[]) {
   const done = habits.filter(h => (h.current ?? 0) > 0).length;
   return { done, total, pct: Math.round((done / total) * 100) };
 }
+
+export function resolveBloodGlucose(user: UserProfile) {
+  const measurement = [...(user.measurementsHistory || [])]
+    .filter((item) => typeof item?.bloodGlucoseMmolL === 'number' && Number.isFinite(item.bloodGlucoseMmolL) && item.bloodGlucoseMmolL > 0)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  if (measurement) {
+    return {
+      value: measurement.bloodGlucoseMmolL as number,
+      measuredAt: measurement.date || null,
+      sourceLabel: 'последний замер',
+    };
+  }
+
+  if (typeof user.bloodGlucoseMmolL === 'number' && Number.isFinite(user.bloodGlucoseMmolL) && user.bloodGlucoseMmolL > 0) {
+    return {
+      value: user.bloodGlucoseMmolL,
+      measuredAt: user.bloodGlucoseMeasuredAt || null,
+      sourceLabel: 'профиль',
+    };
+  }
+
+  return null;
+}
