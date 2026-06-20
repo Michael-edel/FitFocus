@@ -16,6 +16,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { requireRole(user, "admin"); } catch { return json({ ok: false, error: "FORBIDDEN" }, 403); }
 
   const db = requireDB(env);
+  await requireAdminRequest(user, request, db);
 
   // Optional body.limit
   let limit = 50;
