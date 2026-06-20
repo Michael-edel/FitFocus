@@ -959,7 +959,7 @@ export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
   const response = await callAiProxy('gemini-2.5-flash', {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
-      { text: 'Напиши пошаговый рецепт этого блюда. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк).' }
+      { text: 'Напиши пошаговый рецепт этого блюда на русском. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк). Для каждого ингредиента указывай amount как короткую измеримую строку: например "200 г", "1 шт.", "150 мл", "1 ст. л.". Если точный вес по фото неизвестен, дай реалистичную оценку, но не оставляй amount пустым без необходимости.' }
     ]
   }, 'recipe', {
     responseMimeType: "application/json",
