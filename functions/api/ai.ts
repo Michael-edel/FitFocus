@@ -93,6 +93,13 @@ function estimateCostUsd(inputTokens: number, outputTokens: number, inputPerMill
   return (inputTokens / 1_000_000) * inputPerMillion + (outputTokens / 1_000_000) * outputPerMillion;
 }
 
+function getSettingNumberOrDefault(settings: Record<string, string>, key: string, fallback: number) {
+  const raw = getSetting(settings, key, "");
+  if (raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function getCookie(req: Request, name: string) {
   const c = req.headers.get("Cookie") || "";
   const m = c.match(new RegExp("(^|;\\s*)" + name.replace(/[-[\]{}()*+?.,\\^$|#\\s]/g, "\\$&") + "=([^;]*)"));
@@ -320,8 +327,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const maxCallsPerUserDay = Math.max(0, Math.floor(getSettingNumber(settings, "ai_max_calls_per_user_day", 0)));
   const maxCostPerUserDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_per_user_day_usd", 0));
   const maxCostTotalDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_total_day_usd", 0));
-  const inputCostPerMillion = Math.max(0, getSettingNumber(settings, "ai_cost_input_per_1m_usd", 0));
-  const outputCostPerMillion = Math.max(0, getSettingNumber(settings, "ai_cost_output_per_1m_usd", 0));
+  const inputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_input_per_1m_usd", 0.30));
+  const outputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_output_per_1m_usd", 2.50));
 
   // UTC day start (ms)
   const now = Date.now();
