@@ -135,6 +135,19 @@ export default function ProgressArchiveScreen({
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
   const startMeasurement = measurementsSorted[measurementsSorted.length - 1] || latestMeasurement;
   const startPhoto = progressPhotosSorted[progressPhotosSorted.length - 1] || latestPhoto;
+  const archiveBloodGlucose = typeof latestMeasurement?.bloodGlucoseMmolL === 'number' && Number.isFinite(latestMeasurement.bloodGlucoseMmolL) && latestMeasurement.bloodGlucoseMmolL > 0
+    ? latestMeasurement.bloodGlucoseMmolL
+    : typeof currentUser?.bloodGlucoseMmolL === 'number' && Number.isFinite(currentUser.bloodGlucoseMmolL) && currentUser.bloodGlucoseMmolL > 0
+      ? currentUser.bloodGlucoseMmolL
+      : null;
+  const archiveBloodGlucoseMeasuredAt = typeof latestMeasurement?.bloodGlucoseMmolL === 'number' && Number.isFinite(latestMeasurement.bloodGlucoseMmolL) && latestMeasurement.bloodGlucoseMmolL > 0
+    ? latestMeasurement.date
+    : currentUser?.bloodGlucoseMeasuredAt || null;
+  const archiveBloodGlucoseSourceLabel = typeof latestMeasurement?.bloodGlucoseMmolL === 'number' && Number.isFinite(latestMeasurement.bloodGlucoseMmolL) && latestMeasurement.bloodGlucoseMmolL > 0
+    ? 'последний замер'
+    : typeof currentUser?.bloodGlucoseMmolL === 'number' && Number.isFinite(currentUser.bloodGlucoseMmolL) && currentUser.bloodGlucoseMmolL > 0
+      ? 'профиль'
+      : null;
   const archiveStartDate = startMeasurement?.date || startPhoto?.date || null;
   const archiveEndDate = latestMeasurement?.date || latestPhoto?.date || null;
   const archiveSpanDays =
@@ -191,6 +204,9 @@ export default function ProgressArchiveScreen({
       endPhoto: latestPhoto?.thumb ?? null,
       startNote: photoStart?.note ?? null,
       endNote: latestPhoto?.note ?? null,
+      bloodGlucoseMmolL: archiveBloodGlucose,
+      bloodGlucoseMeasuredAt: archiveBloodGlucoseMeasuredAt,
+      bloodGlucoseSourceLabel: archiveBloodGlucoseSourceLabel,
       totalPhotos: progressPhotosSorted.length,
       totalMeasurements: measurementsSorted.length,
       wearableLabel: wearableProvider && wearableEnabled !== false ? providerLabel(wearableProvider) : 'Ручной ввод',

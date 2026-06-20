@@ -2,9 +2,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { FoodItem, UserHabit, UserProfile } from '../types';
 import { Gender, Goal } from '../types';
+import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 import { ensurePdfInterFont } from './font';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle, pdfHeader, pdfPaintBackground } from './theme';
-import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, weekRangeISO } from './metrics';
+import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, resolveBloodGlucose, weekRangeISO } from './metrics';
 
 type Targets = { calories: number; protein: number; fat: number; carbs: number };
 
@@ -61,6 +62,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   const agg = aggregateWeek(foodDiary, startISO, endISO);
   const progressPct = Math.round(calcGoalProgressPct(user));
   const compl = habitCompliance(habits);
+  const bloodGlucose = resolveBloodGlucose(user);
   const generatedAt = new Date().toLocaleString();
 
   pdfH1(doc, 'FitFocus — Отчёт о результатах и эффективности стратегии', label);
@@ -240,11 +242,15 @@ export async function downloadDetailedHealthReportPdf(opts: {
   // Clinical Details Card
   const bmi = calcBmi(user.weight, user.height);
   const bmiCat = bmiCategory(bmi);
-  pdfCard(doc, 14, 38, 182, 22);
+  const clinicalCardH = bloodGlucose ? 30 : 22;
+  pdfCard(doc, 14, 38, 182, clinicalCardH);
   pdfSectionTitle(doc, 'Клинические параметры', 18, 46);
   doc.setFontSize(10);
   doc.setTextColor(...PDF_COLORS.muted);
   doc.text(`ИМТ: ${bmi.toFixed(1)} (${bmiCat}) • Вес: ${user.weight} кг • Возраст: ${user.age}`, 18, 52);
+  if (bloodGlucose) {
+    doc.text(`Сахар: ${formatBloodGlucose(bloodGlucose.value)} • ${getBloodGlucoseGuidance(bloodGlucose.value)}${bloodGlucose.measuredAt ? ` • ${bloodGlucose.measuredAt}` : ''}`, 18, 58);
+  }
   doc.setTextColor(...PDF_COLORS.ink);
 
   // Nutrition Table

@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ensurePdfInterFont } from './font';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle } from './theme';
+import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 
 type TimelineKind = 'measurement' | 'photo' | 'wearable';
 
@@ -28,6 +29,9 @@ type ProgressArchivePdfInput = {
   endPhoto?: string | null;
   startNote?: string | null;
   endNote?: string | null;
+  bloodGlucoseMmolL?: number | null;
+  bloodGlucoseMeasuredAt?: string | null;
+  bloodGlucoseSourceLabel?: string | null;
   totalPhotos: number;
   totalMeasurements: number;
   wearableLabel: string;
@@ -81,6 +85,12 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   const endWeight = typeof input.endWeight === 'number' ? input.endWeight : null;
   const startWaist = typeof input.startWaist === 'number' ? input.startWaist : null;
   const endWaist = typeof input.endWaist === 'number' ? input.endWaist : null;
+  const bloodGlucose = typeof input.bloodGlucoseMmolL === 'number' && Number.isFinite(input.bloodGlucoseMmolL) && input.bloodGlucoseMmolL > 0
+    ? input.bloodGlucoseMmolL
+    : null;
+  const bloodGlucoseLabel = bloodGlucose !== null
+    ? `${formatBloodGlucose(bloodGlucose)} • ${getBloodGlucoseGuidance(bloodGlucose)}${input.bloodGlucoseMeasuredAt ? ` • ${input.bloodGlucoseMeasuredAt}` : ''}${input.bloodGlucoseSourceLabel ? ` • ${input.bloodGlucoseSourceLabel}` : ''}`
+    : null;
 
   pdfH1(doc, 'FitFocus — Архив прогресса', input.userName);
   doc.setFont('Inter', 'normal');
@@ -89,13 +99,16 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   doc.text('Фото, замеры, веса и wearable-история в одном PDF', 14, 36);
   doc.setTextColor(...PDF_COLORS.ink);
 
-  pdfCard(doc, 14, 42, 182, 24);
+  pdfCard(doc, 14, 42, 182, bloodGlucoseLabel ? 28 : 24);
   pdfSectionTitle(doc, 'Сводка', 18, 50);
   doc.setFont('Inter', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...PDF_COLORS.muted);
   doc.text(`Период: ${input.startLabel} → ${input.endLabel}`, 18, 57);
   doc.text(`Фото: ${input.totalPhotos} • Замеры: ${input.totalMeasurements} • Wearable: ${input.wearableLabel}`, 18, 62);
+  if (bloodGlucoseLabel) {
+    doc.text(`Сахар: ${bloodGlucoseLabel}`, 18, 67, { maxWidth: 174 } as any);
+  }
   doc.setTextColor(...PDF_COLORS.ink);
 
   const metricY = 72;
@@ -155,6 +168,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
     body: [
       ['Вес', formatDelta(startWeight, endWeight, 'кг')],
       ['Талия', formatDelta(startWaist, endWaist, 'см')],
+      ['Сахар', bloodGlucoseLabel || '—'],
       ['Фото', input.startPhoto || input.endPhoto ? 'Есть визуальная история' : 'Нет фото для сравнения'],
       ['Wearable', input.wearableLabel],
     ],
@@ -169,6 +183,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
     [
       input.wearableLastSyncAt ? `Последний sync часов: ${input.wearableLastSyncAt}` : null,
       input.wearableMetricsUpdatedAt ? `Метрики обновлены: ${input.wearableMetricsUpdatedAt}` : null,
+      bloodGlucoseLabel ? `Сахар: ${bloodGlucoseLabel}` : null,
       input.startNote || input.endNote ? `Подписи фото: ${[input.startNote, input.endNote].filter(Boolean).join(' / ')}` : null,
     ].filter(Boolean).join(' • ') || 'Нет дополнительных данных',
     18,
