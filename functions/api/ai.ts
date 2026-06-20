@@ -464,9 +464,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const { feature: _drop, ...payload } = body ?? {};
   const payloadToSend: any = (payload && typeof payload === "object") ? payload : {};
 
+  if ("config" in payloadToSend && !("generationConfig" in payloadToSend)) {
+    payloadToSend.generationConfig = payloadToSend.config;
+  }
   if ("config" in payloadToSend) {
-    if (!("generationConfig" in payloadToSend)) {
-      payloadToSend.generationConfig = payloadToSend.config;
+    delete payloadToSend.config;
+  }
 
   if (safeMode) {
     payloadToSend.generationConfig = payloadToSend.generationConfig || {};
@@ -474,10 +477,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     if (payloadToSend.generationConfig.maxOutputTokens == null) payloadToSend.generationConfig.maxOutputTokens = 900;
     if (payloadToSend.generationConfig.temperature == null) payloadToSend.generationConfig.temperature = 0.4;
     // Encourage JSON-only outputs
-    if (payloadToSend.generationConfig.responseMimeType == null) payloadToSend.generationConfig.responseMimeType = 'application/json';
-  }
-    }
-    delete payloadToSend.config;
+    if (payloadToSend.generationConfig.responseMimeType == null) payloadToSend.generationConfig.responseMimeType = "application/json";
   }
 
   if ("contents" in payloadToSend) {
