@@ -29,7 +29,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
 
   const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, setAdaptLoading, setLastAiAction, generatePlateauExplanation, adaptNote, setAdaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF } = dashboard;
 
-  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS } = plan;
+  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS, ShoppingListCardComponent } = plan;
 
   const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent } = nutrition;
 
@@ -126,6 +126,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             currentUserGoal={currentUserGoal}
             DEFAULT_DEFICIT={DEFAULT_DEFICIT}
             DEFAULT_SURPLUS={DEFAULT_SURPLUS}
+            ShoppingListCardComponent={ShoppingListCardComponent}
           />
         </React.Suspense>
       )}
