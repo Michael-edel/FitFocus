@@ -2,60 +2,15 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import {
+  attachmentResponseUrl,
+  fileToAttachment,
+  parseAttachmentsJson,
+  type SupportAttachmentBucket,
+  type SupportAttachmentRecord,
+} from "../_lib/support_attachments";
 
-type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
-
-type AttachmentRow = {
-  name: string;
-  mime: string;
-  size: number;
-  kind: string;
-  data_url: string;
-};
-
-function kindFromMime(mime: string) {
-  if (mime.startsWith("image/")) return "photo";
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "voice";
-  return "file";
-}
-
-function bytesToBase64(bytes: Uint8Array) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function fileToAttachment(file: File): Promise<AttachmentRow> {
-  const maxBytes = 2 * 1024 * 1024;
-  if (file.size > maxBytes) {
-    throw new Error(`FILE_TOO_LARGE:${file.name}`);
-  }
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const base64 = bytesToBase64(bytes);
-  const mime = file.type || "application/octet-stream";
-  return {
-    name: file.name || "attachment",
-    mime,
-    size: file.size,
-    kind: kindFromMime(mime),
-    data_url: `data:${mime};base64,${base64}`,
-  };
-}
-
-function parseAttachmentsJson(value: unknown): AttachmentRow[] {
-  if (!value) return [];
-  try {
-    const arr = JSON.parse(String(value));
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
+type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -85,10 +40,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const files = form.getAll("attachments").filter((entry): entry is File => entry instanceof File && entry.size > 0);
   if (files.length > 3) return json({ error: "BAD_REQUEST", message: "Too many attachments" }, 400);
 
-  const attachments: AttachmentRow[] = [];
+  const ticketId = uuid();
+  const attachments: SupportAttachmentRecord[] = [];
   try {
-    for (const file of files) {
-      attachments.push(await fileToAttachment(file));
+    for (const [index, file] of files.entries()) {
+      attachments.push(await fileToAttachment(file, { bucket: env.SUPPORT_ATTACHMENTS, ticketId, index }));
     }
   } catch (e: any) {
     const msg = String(e?.message || "");
@@ -98,7 +54,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
   }
 
-  const ticketId = uuid();
   const now = Date.now();
   await db.prepare(
     `INSERT INTO support_feedback (
@@ -155,11 +110,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 1`
     ).bind(id).first<any>();
     if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+    const attachments = parseAttachmentsJson(row.attachments_json).map((attachment, index) => ({
+      ...attachment,
+      data_url: attachment.data_url || attachmentResponseUrl(row.id, index),
+    }));
     return json({
       ticket: {
         ...row,
         attachment_count: Number(row.attachment_count || 0),
-        attachments: parseAttachmentsJson(row.attachments_json),
+        attachments,
       },
     });
   }
