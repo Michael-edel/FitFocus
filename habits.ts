@@ -9,7 +9,7 @@ export const defaultHabits = {
 };
 
 export function getTodayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('en-CA');
 }
 
 export function toggleHabit(profile: UserProfile, habit: keyof typeof defaultHabits): UserProfile {
