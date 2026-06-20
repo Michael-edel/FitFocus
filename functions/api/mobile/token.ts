@@ -12,14 +12,21 @@ async function signSessionJwt(payload: any, secret: string, ttlSeconds: number):
   const now = Math.floor(Date.now() / 1000);
   const full = { ...payload, iat: now, exp: now + ttlSeconds };
   const enc = new TextEncoder();
-  const b64 = (obj: any) => btoa(String.fromCharCode(...new Uint8Array(enc.encode(JSON.stringify(obj)))))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  const h = b64(header);
-  const p = b64(full);
+  const b64 = (input: string | Uint8Array | ArrayBuffer) => {
+    const bytes =
+      typeof input === "string"
+        ? enc.encode(input)
+        : input instanceof Uint8Array
+          ? input
+          : new Uint8Array(input);
+    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  };
+  const h = b64(JSON.stringify(header));
+  const p = b64(JSON.stringify(full));
   const data = `${h}.${p}`;
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
-  const s = b64(Array.from(new Uint8Array(sig)).reduce((acc, byte) => acc + String.fromCharCode(byte), ""));
+  const s = b64(new Uint8Array(sig));
   return `${data}.${s}`;
 }
 
