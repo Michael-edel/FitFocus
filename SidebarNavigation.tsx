@@ -2,6 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { LogOut, MoreHorizontal, X } from 'lucide-react';
 import { APP_VERSION_LABEL } from './versioning';
+import { useModalDismissGestures } from './useModalDismissGestures';
 import {
   AppTabId,
   mobilePrimaryTabIds,
@@ -60,13 +61,19 @@ export default function SidebarNavigation({
   const sidebarUtilityTabs = React.useMemo(() => visibleTabs.filter(tab => sidebarUtilityTabIds.includes(tab.id)), [visibleTabs]);
   const mobilePrimaryTabs = React.useMemo(() => visibleTabs.filter(tab => mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
   const mobileMoreTabs = React.useMemo(() => visibleTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id)), [visibleTabs]);
+  const dismissGestures = useModalDismissGestures(() => onMobileMoreOpenChange(false));
 
   return (
     <>
       {mobileMoreOpen && (
         <div className="fixed inset-0 z-[120] md:hidden">
           <button type="button" aria-label="Закрыть меню" onClick={() => onMobileMoreOpenChange(false)} className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
-          <div className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2">
+          <div
+            className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2 touch-pan-y"
+            onTouchStart={dismissGestures.onTouchStart}
+            onTouchMove={dismissGestures.onTouchMove}
+            onTouchEnd={dismissGestures.onTouchEnd}
+          >
             <div className="px-2 pt-1 pb-2 text-[11px] font-black uppercase tracking-widest text-slate-500">Ещё разделы</div>
             <button
               type="button"
