@@ -143,6 +143,8 @@ type InviteRow = {
   uses: number;
   expires_at?: number | null;
   revoked: number;
+  redemption_count?: number;
+  last_redeemed_at?: number | null;
 };
 
 type SupportAttachment = {
@@ -1174,18 +1176,31 @@ export default function AdminScreen() {
                 const fullUses = `${invite.uses}/${invite.max_uses}`;
                 const expired = !!invite.expires_at && toMs(invite.expires_at) !== null && (toMs(invite.expires_at) || 0) < Date.now();
                 const isRevoked = Number(invite.revoked) === 1;
+                const redemptionCount = Math.max(0, Math.floor(Number(invite.redemption_count) || 0));
+                const isUsed = redemptionCount > 0;
+                const isConsumed = Number(invite.uses) >= Number(invite.max_uses);
                 return (
-                  <tr key={invite.code} className="border-t border-slate-800 text-slate-200">
-                    <td className="p-3 font-mono font-bold">{invite.code}</td>
+                  <tr
+                    key={invite.code}
+                    className={`border-t border-slate-800 text-slate-200 ${isUsed && !isRevoked && !expired ? 'bg-amber-500/5' : ''} ${isConsumed ? 'opacity-80' : ''}`}
+                  >
+                    <td className={`p-3 font-mono font-bold ${isConsumed ? 'line-through decoration-amber-400/80' : ''} ${isUsed && !isConsumed ? 'text-amber-100' : ''}`}>
+                      {invite.code}
+                    </td>
                     <td className="p-3">
                       <div className="font-black text-slate-100">{invite.note || '—'}</div>
                       <div className="text-[11px] text-slate-500 font-mono">by {invite.created_by || '—'}</div>
+                      {isUsed && (
+                        <div className="mt-1 text-[11px] font-black text-amber-200">
+                          Использован клиентом {redemptionCount} раз{invite.last_redeemed_at ? ` • ${formatTimestamp(invite.last_redeemed_at)}` : ''}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3 font-bold">{fullUses}</td>
                     <td className="p-3 font-semibold text-slate-400">{formatTimestamp(invite.expires_at)}</td>
                     <td className="p-3">
-                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black border ${isRevoked ? 'border-rose-500/30 bg-rose-500/10 text-rose-100' : expired ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`}>
-                        {isRevoked ? 'revoked' : expired ? 'expired' : 'active'}
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black border ${isRevoked ? 'border-rose-500/30 bg-rose-500/10 text-rose-100' : expired ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : isConsumed ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-100' : isUsed ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`}>
+                        {isRevoked ? 'revoked' : expired ? 'expired' : isConsumed ? 'consumed' : isUsed ? 'used' : 'active'}
                       </div>
                     </td>
                     <td className="p-3">
