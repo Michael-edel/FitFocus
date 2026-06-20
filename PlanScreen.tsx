@@ -346,7 +346,7 @@ export default function PlanScreen({
 
       {weeklyMenu && ShoppingListCardComponent && (
         <React.Suspense fallback={<div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-slate-500 font-semibold">Загрузка корзины закупа...</div>}>
-          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+          <div id="shopping-list" className="scroll-mt-24 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Корзина закупа</p>
@@ -367,7 +367,20 @@ export default function PlanScreen({
       <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p>
-          <button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUserAiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {weeklyMenu && (
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById('shopping-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="min-h-[44px] px-4 py-2 rounded-full bg-slate-900 border border-slate-700 text-slate-200 font-black text-[11px] uppercase tracking-widest hover:border-indigo-500/30 hover:text-indigo-100 transition-all"
+              >
+                Корзина закупа
+              </button>
+            )}
+            <button onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUserAiPlan} className="min-h-[44px] px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{weeklyMenuLoading ? 'Генерирую…' : (weeklyMenu ? 'Обновить' : 'Сгенерировать')}</button>
+          </div>
         </div>
         {weeklyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{weeklyMenuError}</p>)}
         {weeklyMenuLoading && !weeklyMenu ? (
