@@ -23,7 +23,7 @@ export const BUILD_COMBINED_LABEL = `${APP_VERSION_LABEL} • Сборка ${BUI
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
-export const DB_MIGRATION_VERSION = "0011_sync_versions.sql";
+export const DB_MIGRATION_VERSION = "0012_support_feedback.sql";
 
 export const versioningRules = [
   {
