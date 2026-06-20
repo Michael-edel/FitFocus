@@ -483,6 +483,8 @@ type FoodDiaryGroupedProps = {
   openEdit: (item: FoodEntry) => void;
   formatTime: (t: number) => string;
   mealTypeLabel: (m: MealType) => string;
+  activeDayKey?: string;
+  onDayChange?: (dayKey: string) => void;
 };
 
 const localDayKey = (value?: string | number | Date | null) => {
@@ -516,6 +518,8 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
   openEdit,
   formatTime,
   mealTypeLabel,
+  activeDayKey,
+  onDayChange,
 }) => {
   const [mobileActionsFor, setMobileActionsFor] = React.useState<string | null>(null);
   const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -556,9 +560,44 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
       .sort((a, b) => (a.dayKey < b.dayKey ? 1 : -1));
   }, [items, mealTypeLabel]);
 
+  const resolvedActiveDayKey = React.useMemo(() => {
+    if (!groups.length) return '';
+    if (activeDayKey && groups.some((group) => group.dayKey === activeDayKey)) return activeDayKey;
+    return groups[0]?.dayKey || '';
+  }, [activeDayKey, groups]);
+
+  const visibleGroups = React.useMemo(() => {
+    if (!resolvedActiveDayKey) return groups;
+    const activeGroup = groups.find((group) => group.dayKey === resolvedActiveDayKey);
+    return activeGroup ? [activeGroup] : groups;
+  }, [groups, resolvedActiveDayKey]);
+
   return (
     <div className="space-y-6">
-      {groups.map((dayGroup) => (
+      {groups.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {groups.map((dayGroup) => {
+            const isActive = dayGroup.dayKey === resolvedActiveDayKey;
+            return (
+              <button
+                key={dayGroup.dayKey}
+                type="button"
+                onClick={() => onDayChange?.(dayGroup.dayKey)}
+                className={clsx(
+                  'shrink-0 min-h-[42px] px-4 py-2 rounded-full border font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap',
+                  isActive
+                    ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-100 shadow-[0_0_0_1px_rgba(129,140,248,0.18)]'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                )}
+              >
+                {dayGroup.dayLabel}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {visibleGroups.map((dayGroup) => (
         <div key={dayGroup.dayKey} className="rounded-[2rem] md:rounded-[3rem] border border-slate-800 bg-slate-900/60 shadow-xl overflow-hidden">
           <div className="px-5 py-5 md:px-8 md:py-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-baseline gap-3 flex-wrap">
@@ -991,6 +1030,62 @@ const App: React.FC = () => {
   });
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
+  const selectedDiaryDayStorageKey = useMemo(
+    () => `fitfocus.nutrition.selected-day.v1:${currentUser?.id ?? 'anon'}`,
+    [currentUser?.id],
+  );
+  const selectedDiaryDaySkipSaveRef = useRef(false);
+  const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState<string>('');
+  useEffect(() => {
+    try {
+      selectedDiaryDaySkipSaveRef.current = true;
+      setSelectedDiaryDayKey(localStorage.getItem(selectedDiaryDayStorageKey) || '');
+    } catch {
+      selectedDiaryDaySkipSaveRef.current = true;
+      setSelectedDiaryDayKey('');
+    }
+  }, [selectedDiaryDayStorageKey]);
+  useEffect(() => {
+    if (selectedDiaryDaySkipSaveRef.current) {
+      selectedDiaryDaySkipSaveRef.current = false;
+      return;
+    }
+    try {
+      if (selectedDiaryDayKey) {
+        localStorage.setItem(selectedDiaryDayStorageKey, selectedDiaryDayKey);
+      } else {
+        localStorage.removeItem(selectedDiaryDayStorageKey);
+      }
+    } catch {
+      // ignore storage issues
+    }
+  }, [selectedDiaryDayKey, selectedDiaryDayStorageKey]);
+  const diaryDayKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of foodDiary) {
+      const key = localDayKey(item.timestamp);
+      if (key) keys.add(key);
+    }
+    return Array.from(keys).sort((a, b) => (a < b ? 1 : -1));
+  }, [foodDiary]);
+  const resolvedDiaryDayKey = useMemo(() => {
+    const todayKey = localDayKey(new Date()) || '';
+    if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
+    if (todayKey && diaryDayKeys.includes(todayKey)) return todayKey;
+    return diaryDayKeys[0] || todayKey || '';
+  }, [diaryDayKeys, selectedDiaryDayKey]);
+  const selectedDiaryStats = useMemo(() => {
+    if (!resolvedDiaryDayKey) {
+      return { calories: 0, protein: 0, fat: 0, carbs: 0 };
+    }
+    const dayEntries = foodDiary.filter((item) => localDayKey(item.timestamp) === resolvedDiaryDayKey);
+    return dayEntries.reduce((acc, item) => ({
+      calories: acc.calories + (item.calories || 0),
+      protein: acc.protein + (item.protein || 0),
+      fat: acc.fat + (item.fat || 0),
+      carbs: acc.carbs + (item.carbs || 0),
+    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
+  }, [foodDiary, resolvedDiaryDayKey]);
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | { id: string; name: string; mealType: MealType; timestamp: string }>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
@@ -2208,6 +2303,8 @@ await ensurePdfInterFont(doc);
       const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
       const nextStorage = [entryForStorage, ...prevArr.map(stripForStorage)].slice(0, MAX_DIARY_ITEMS);
       safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
+      const nextDayKey = localDayKey(ts);
+      if (nextDayKey) setSelectedDiaryDayKey(nextDayKey);
       return nextState;
     });
     const historyItem = { ...item };
@@ -2913,6 +3010,10 @@ const logWeight = useCallback(() => {
       openEditFood,
       formatTime,
       mealTypeLabel,
+      activeDiaryDayKey: resolvedDiaryDayKey,
+      activeDiaryDayLabel: resolvedDiaryDayKey ? formatLocalDayLabel(resolvedDiaryDayKey) : 'Сегодня',
+      selectedDiaryStats,
+      onDiaryDayChange: setSelectedDiaryDayKey,
       MacroBarComponent: MacroBar,
       FoodDiaryGroupedComponent: FoodDiaryGrouped,
     },

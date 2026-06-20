@@ -32,6 +32,9 @@ type NutritionScreenProps = {
   formatTime: (tsIso: string) => string;
   mealTypeLabel: (mealType: MealType) => string;
   dailyStats: { calories: number; protein: number; fat: number; carbs: number };
+  activeDiaryDayKey?: string;
+  activeDiaryDayLabel?: string;
+  onDiaryDayChange?: (dayKey: string) => void;
   targets: { calories: number; protein: number; fat: number; carbs: number };
   MacroBarComponent: React.ComponentType<any>;
   FoodDiaryGroupedComponent: React.ComponentType<any>;
@@ -62,6 +65,9 @@ export default function NutritionScreen({
   formatTime,
   mealTypeLabel,
   dailyStats,
+  activeDiaryDayKey,
+  activeDiaryDayLabel,
+  onDiaryDayChange,
   targets,
   remainingScans,
   MacroBarComponent,
@@ -147,6 +153,8 @@ export default function NutritionScreen({
                 openEdit={openEditFood}
                 formatTime={formatTime}
                 mealTypeLabel={mealTypeLabel}
+                activeDayKey={activeDiaryDayKey}
+                onDayChange={onDiaryDayChange}
               />
             )}
           </div>
@@ -154,6 +162,9 @@ export default function NutritionScreen({
 
         <div className="bg-slate-900 p-10 rounded-[3rem] shadow-xl border border-slate-800 sticky top-10 h-fit space-y-10">
           <h3 className="text-2xl font-black text-slate-100 text-left">Баланс КБЖУ</h3>
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">
+            {activeDiaryDayLabel ? `Показан день: ${activeDiaryDayLabel}` : 'Показан день: сегодня'}
+          </p>
           <div className="space-y-8">
             <MacroBarComponent label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" />
             <MacroBarComponent label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" />

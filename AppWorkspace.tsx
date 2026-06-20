@@ -200,7 +200,9 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             openEditFood={openEditFood}
             formatTime={formatTime}
             mealTypeLabel={mealTypeLabel}
-            dailyStats={dailyStats}
+            dailyStats={nutrition.selectedDiaryStats ?? dailyStats}
+            activeDiaryDayKey={nutrition.activeDiaryDayKey}
+            activeDiaryDayLabel={nutrition.activeDiaryDayLabel}
             targets={targets}
             MacroBarComponent={MacroBarComponent}
             FoodDiaryGroupedComponent={FoodDiaryGroupedComponent}
