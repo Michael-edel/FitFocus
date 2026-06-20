@@ -13,9 +13,23 @@ type Props = {
 };
 
 const toRecipeIngredient = (value: unknown): { name: string; amount?: string } | null => {
+  const parseText = (input: string) => {
+    const text = input.trim();
+    if (!text) return null;
+    const separators = ['—', '–', '-', ':'];
+    for (const separator of separators) {
+      const idx = text.indexOf(separator);
+      if (idx > 0) {
+        const name = text.slice(0, idx).trim();
+        const amount = text.slice(idx + separator.length).trim();
+        if (name && amount) return { name, amount };
+      }
+    }
+    return { name: text };
+  };
+
   if (typeof value === 'string') {
-    const name = value.trim();
-    return name ? { name } : null;
+    return parseText(value);
   }
   if (!value || typeof value !== 'object') return null;
   const item = value as { name?: unknown; amount?: unknown; grams?: unknown };
@@ -26,6 +40,16 @@ const toRecipeIngredient = (value: unknown): { name: string; amount?: string } |
     name,
     amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
   };
+};
+
+const ingredientHasAmount = (value: unknown) => !!toRecipeIngredient(value)?.amount;
+
+const pickIngredientSource = (primary: unknown, fallback: unknown) => {
+  const primaryArr = Array.isArray(primary) ? primary : [];
+  const fallbackArr = Array.isArray(fallback) ? fallback : [];
+  if (primaryArr.some(ingredientHasAmount)) return primaryArr;
+  if (fallbackArr.some(ingredientHasAmount)) return fallbackArr;
+  return primaryArr.length ? primaryArr : fallbackArr;
 };
 
 const toRecipeStep = (value: unknown, index: number) => {
@@ -61,15 +85,11 @@ const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
     timeMinutes?: unknown;
   };
 
-  const ingredientsSource = Array.isArray(legacy.ingredients)
-    ? legacy.ingredients
-    : Array.isArray(rawRecipe?.ingredients)
-      ? rawRecipe?.ingredients
-      : [];
-  const stepsSource = Array.isArray(legacy.steps)
-    ? legacy.steps
-    : Array.isArray(rawRecipe?.steps)
-      ? rawRecipe?.steps
+  const ingredientsSource = pickIngredientSource(legacy.ingredients, rawRecipe?.ingredients);
+  const stepsSource = Array.isArray(rawRecipe?.steps)
+    ? rawRecipe?.steps
+    : Array.isArray(legacy.steps)
+      ? legacy.steps
       : [];
 
   return {
@@ -211,11 +231,78 @@ const fileToBase64 = (file: File) =>
     r.readAsDataURL(file);
   });
 
+const fileToCompressedDataUrl = async (file: File) => {
+  const maxSide = 768;
+  const quality = 0.72;
+  const lowerName = (file?.name || '').toLowerCase();
+  const isHeic = (file?.type || '').includes('heic') || (file?.type || '').includes('heif') || lowerName.endsWith('.heic') || lowerName.endsWith('.heif');
+  if (isHeic) {
+    try {
+      await createImageBitmap(file);
+    } catch {
+      return `data:${file.type || 'image/jpeg'};base64,${await fileToBase64(file)}`;
+    }
+  }
+
+  const loadImage = () =>
+    new Promise<HTMLImageElement>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Не удалось загрузить фото'));
+      };
+      img.src = url;
+    });
+
+  let w = 0;
+  let h = 0;
+  const srcCanvas = document.createElement('canvas');
+  const srcCtx = srcCanvas.getContext('2d');
+  if (!srcCtx) throw new Error('Не удалось подготовить фото');
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    w = bitmap.width;
+    h = bitmap.height;
+    srcCanvas.width = w;
+    srcCanvas.height = h;
+    srcCtx.drawImage(bitmap, 0, 0);
+    // @ts-ignore
+    bitmap.close?.();
+  } catch {
+    const img = await loadImage();
+    w = img.naturalWidth || img.width;
+    h = img.naturalHeight || img.height;
+    srcCanvas.width = w;
+    srcCanvas.height = h;
+    srcCtx.drawImage(img, 0, 0);
+  }
+
+  const scale = Math.min(1, maxSide / Math.max(w, h));
+  const outW = Math.max(1, Math.round(w * scale));
+  const outH = Math.max(1, Math.round(h * scale));
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = outW;
+  outCanvas.height = outH;
+  const outCtx = outCanvas.getContext('2d');
+  if (!outCtx) throw new Error('Не удалось подготовить фото');
+  outCtx.drawImage(srcCanvas, 0, 0, w, h, 0, 0, outW, outH);
+  return outCanvas.toDataURL('image/jpeg', quality);
+};
+
 const handlePick = async (file?: File) => {
   if (!file) return;
   setIsAnalyzing(true);
   try {
-    const b64 = await fileToBase64(file);
+    const [b64, photo] = await Promise.all([
+      fileToBase64(file),
+      fileToCompressedDataUrl(file),
+    ]);
     const ai = await analyzeFoodPhotoEnhanced(b64);
 
     const title = (ai?.name || 'Рецепт').toString().slice(0, 80);
@@ -241,6 +328,7 @@ const handlePick = async (file?: File) => {
       id: (globalThis.crypto?.randomUUID?.() || String(Date.now())),
       title,
       createdAt: new Date().toISOString(),
+      photo,
       sourceFoodName: ai?.name || '',
       allergens: Array.isArray(ai?.allergens) ? ai.allergens.map(String) : undefined,
       intolerances: Array.isArray(ai?.intolerances) ? ai.intolerances.map(String) : undefined,

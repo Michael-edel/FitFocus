@@ -1205,31 +1205,49 @@ const App: React.FC = () => {
     const normalizeFavoriteRecipe = (item: any): FavoriteRecipe | null => {
       if (!item || typeof item !== 'object') return null;
       const rawRecipe = item.recipe && typeof item.recipe === 'object' ? item.recipe : null;
-      const ingredientsSource = Array.isArray(rawRecipe?.ingredients)
-        ? rawRecipe.ingredients
-        : Array.isArray(item.ingredients)
-          ? item.ingredients
-          : [];
+      const toIngredient = (value: unknown): { name: string; amount?: string } | null => {
+        if (typeof value === 'string') {
+          const text = value.trim();
+          if (!text) return null;
+          const separators = ['—', '–', '-', ':'];
+          for (const separator of separators) {
+            const idx = text.indexOf(separator);
+            if (idx > 0) {
+              const name = text.slice(0, idx).trim();
+              const amount = text.slice(idx + separator.length).trim();
+              if (name && amount) return { name, amount };
+            }
+          }
+          return { name: text };
+        }
+        if (!value || typeof value !== 'object') return null;
+        const ing = value as { name?: unknown; title?: unknown; amount?: unknown; grams?: unknown; value?: unknown };
+        const name = String(ing.name || ing.title || '').trim();
+        if (!name) return null;
+        const amount = ing.amount ?? ing.grams ?? ing.value;
+        return {
+          name,
+          amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
+        };
+      };
+
+      const ingredientHasAmount = (value: unknown) => !!toIngredient(value)?.amount;
+      const pickIngredientSource = (primary: unknown, fallback: unknown) => {
+        const primaryArr = Array.isArray(primary) ? primary : [];
+        const fallbackArr = Array.isArray(fallback) ? fallback : [];
+        if (primaryArr.some(ingredientHasAmount)) return primaryArr;
+        if (fallbackArr.some(ingredientHasAmount)) return fallbackArr;
+        return primaryArr.length ? primaryArr : fallbackArr;
+      };
+
+      const ingredientsSource = pickIngredientSource(item.ingredients, rawRecipe?.ingredients);
       const stepsSource = Array.isArray(rawRecipe?.steps)
         ? rawRecipe.steps
         : Array.isArray(item.steps)
           ? item.steps
           : [];
       const ingredients = ingredientsSource
-        .map((ing: any) => {
-          if (typeof ing === 'string') {
-            const name = ing.trim();
-            return name ? { name } : null;
-          }
-          if (!ing || typeof ing !== 'object') return null;
-          const name = String(ing.name || ing.title || '').trim();
-          if (!name) return null;
-          const amount = ing.amount ?? ing.grams ?? ing.value;
-          return {
-            name,
-            ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
-          };
-        })
+        .map(toIngredient)
         .filter(Boolean);
       const steps = stepsSource
         .map((step: any, idx: number) => {
