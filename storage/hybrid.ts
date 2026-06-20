@@ -251,10 +251,10 @@ function scoreProfile(profile: ProfileLike): number {
 }
 
 function identityKey(profile: ProfileLike): string {
-  const googleSub = String(profile.googleSub || '').trim();
-  if (googleSub) return `g:${googleSub.toLowerCase()}`;
   const email = String(profile.email || '').trim().toLowerCase();
   if (email) return `e:${email}`;
+  const googleSub = String(profile.googleSub || '').trim();
+  if (googleSub) return `g:${googleSub.toLowerCase()}`;
   return `i:${String(profile.id || '').trim()}`;
 }
 
