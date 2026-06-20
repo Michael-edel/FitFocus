@@ -309,9 +309,18 @@ const handlePick = async (file?: File) => {
     const ingredients = Array.isArray(ai?.ingredients)
       ? ai.ingredients
           .map((it: any) => {
-            if (typeof it === 'string') return it.trim();
-            if (!it || typeof it !== 'object') return '';
-            return String(it.name || it.title || '').trim();
+            if (typeof it === 'string') {
+              const value = it.trim();
+              return value ? { name: value } : null;
+            }
+            if (!it || typeof it !== 'object') return null;
+            const name = String(it.name || it.title || '').trim();
+            if (!name) return null;
+            const amount = it.amount ?? it.grams ?? it.value;
+            return {
+              name,
+              ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
+            };
           })
           .filter(Boolean)
       : [];
@@ -347,7 +356,10 @@ const handlePick = async (file?: File) => {
         ingredients: Array.isArray(ai?.ingredients)
           ? ai.ingredients
               .map((it: any) => {
-                if (typeof it === 'string') return { name: it.trim() };
+                if (typeof it === 'string') {
+                  const value = it.trim();
+                  return value ? { name: value } : null;
+                }
                 if (!it || typeof it !== 'object') return null;
                 const name = String(it.name || it.title || '').trim();
                 if (!name) return null;

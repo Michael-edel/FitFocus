@@ -714,7 +714,16 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
           protein: { type: "NUMBER" },
           fat: { type: "NUMBER" },
           carbs: { type: "NUMBER" },
-          ingredients: { type: "ARRAY", items: { type: "STRING" } },
+          ingredients: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING" },
+                amount: { type: "STRING" },
+              },
+            },
+          },
           notes: { type: "ARRAY", items: { type: "STRING" } },
           portionGrams: { type: "NUMBER" },
           modelConfidence: { type: "NUMBER" }
@@ -727,6 +736,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
 Обязательно:
 - Оцени примерный вес порции (portionGrams) в граммах
 - Раздели крем/соусы по типу, если применимо
+- Для каждого ингредиента укажи примерную граммовку или меру (amount)
 - Если не уверен, укажи это в notes
 - Дай modelConfidence от 0 до 1
 Верни строго JSON по схеме.`;
