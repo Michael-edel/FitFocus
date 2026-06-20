@@ -66,10 +66,10 @@ export default function SidebarNavigation({
   return (
     <>
       {mobileMoreOpen && (
-        <div className="fixed inset-0 z-[120] md:hidden">
+        <div className="fixed inset-0 z-[120] md:hidden flex items-end justify-center p-3">
           <button type="button" aria-label="Закрыть меню" onClick={() => onMobileMoreOpenChange(false)} className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
           <div
-            className="absolute inset-x-3 bottom-24 rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2 touch-pan-y"
+            className="relative w-full max-w-md rounded-[2rem] border border-slate-800 bg-slate-950/95 shadow-2xl p-3 space-y-2 touch-pan-y max-h-[calc(100dvh-1.5rem)] overflow-y-auto overscroll-contain"
             onTouchStart={dismissGestures.onTouchStart}
             onTouchMove={dismissGestures.onTouchMove}
             onTouchEnd={dismissGestures.onTouchEnd}
