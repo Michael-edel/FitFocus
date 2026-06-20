@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip } from "lucide-react";
 
+const DEFAULT_AI_INPUT_COST_PER_1M = "0.30";
+const DEFAULT_AI_OUTPUT_COST_PER_1M = "2.50";
+
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
 type SettingRow = { key: string; value: string };
 
@@ -858,12 +861,14 @@ export default function AdminScreen() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           {[
+            { key: "ai_cost_input_per_1m_usd", label: "Input price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_INPUT_COST_PER_1M },
+            { key: "ai_cost_output_per_1m_usd", label: "Output price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_OUTPUT_COST_PER_1M },
             { key: "ai_max_calls_per_user_day", label: "Calls / user / day", hint: "0 = без лимита" },
             { key: "ai_max_cost_per_user_day_usd", label: "Cost / user / day ($)", hint: "0 = без лимита" },
             { key: "ai_max_cost_total_day_usd", label: "Total cost / day ($)", hint: "0 = без лимита" },
             { key: "ai_on_limit_action", label: "On limit action", hint: "fallback или block" },
           ].map((s) => {
-            const current = settingsDirty[s.key] ?? getSettingValue(settings, s.key, "");
+            const current = settingsDirty[s.key] ?? getSettingValue(settings, s.key, (s as any).defaultValue ?? "");
             return (
               <div key={s.key} className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
                 <div className="text-slate-200 font-black">{s.label}</div>
