@@ -1091,7 +1091,8 @@ const App: React.FC = () => {
   const resolvedDiaryDayKey = useMemo(() => {
     const todayKey = localDayKey(new Date()) || '';
     if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
-    return todayKey;
+    if (diaryDayKeys.includes(todayKey)) return todayKey;
+    return diaryDayKeys[0] || todayKey;
   }, [diaryDayKeys, selectedDiaryDayKey]);
   const selectedDiaryStats = useMemo(() => {
     if (!resolvedDiaryDayKey) {
@@ -2273,7 +2274,7 @@ await ensurePdfInterFont(doc);
     if (!currentUser) return;
     const d = new Date(); d.setDate(d.getDate() + 1);
     const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const value = d.toISOString().slice(0, 10);
+    const value = localDayKey(d);
     safeSetItem(key, value);
     setRefeedDate(value);
   }, [currentUser]);
