@@ -42,6 +42,21 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ c: number }>()
     .catch(() => ({ c: 0 } as any));
 
+  const deletedUsers = await db
+    .prepare("SELECT COUNT(*) as c FROM users WHERE deleted_at IS NOT NULL")
+    .first<{ c: number }>()
+    .catch(() => ({ c: 0 } as any));
+
+  const inactiveUsers = await db
+    .prepare("SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL AND is_active = 0")
+    .first<{ c: number }>()
+    .catch(() => ({ c: 0 } as any));
+
+  const familyMembersActive = await db
+    .prepare("SELECT COUNT(*) as c FROM family_members WHERE status = 'active'")
+    .first<{ c: number }>()
+    .catch(() => ({ c: 0 } as any));
+
   // usage_daily is optional; if not present, return 0
   let aiCalls = 0;
   let mealsLogged = 0;
@@ -78,6 +93,37 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     aiAvgLatency = Math.round(Number(agg?.avg_latency || 0));
   } catch {}
 
+  let profilesWithMeasurements = 0;
+  let profilesWithGlucose = 0;
+  let profilesWithWearable = 0;
+  let profilesWithProgressPhotos = 0;
+  let profilesWithFamilyMembers = 0;
+  try {
+    const profileAgg = await db.prepare(
+      `SELECT
+         COUNT(*) as total_profiles,
+         SUM(CASE
+               WHEN COALESCE(CASE WHEN json_valid(profile_json) THEN json_array_length(json_extract(profile_json, '$.measurementsHistory')) END, 0) > 0
+                 OR CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.weight') END IS NOT NULL
+                 OR CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.restingPulse') END IS NOT NULL
+                 OR CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.bloodGlucoseMmolL') END IS NOT NULL
+                 OR CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.bloodPressureSystolic') END IS NOT NULL
+                 OR CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.bloodPressureDiastolic') END IS NOT NULL
+               THEN 1 ELSE 0 END) as with_measurements,
+         SUM(CASE WHEN CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.bloodGlucoseMmolL') END IS NOT NULL THEN 1 ELSE 0 END) as with_glucose,
+         SUM(CASE WHEN COALESCE(CAST(CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.wearableEnabled') END AS INTEGER), 0) = 1 THEN 1 ELSE 0 END) as with_wearable,
+         SUM(CASE WHEN COALESCE(CASE WHEN json_valid(profile_json) THEN json_array_length(json_extract(profile_json, '$.progressPhotos')) END, 0) > 0 THEN 1 ELSE 0 END) as with_progress_photos,
+         SUM(CASE WHEN COALESCE(CASE WHEN json_valid(profile_json) THEN json_array_length(json_extract(profile_json, '$.familyMembers')) END, 0) > 0 THEN 1 ELSE 0 END) as with_family_members
+       FROM user_profiles`
+    ).first<any>();
+
+    profilesWithMeasurements = Number(profileAgg?.with_measurements || 0);
+    profilesWithGlucose = Number(profileAgg?.with_glucose || 0);
+    profilesWithWearable = Number(profileAgg?.with_wearable || 0);
+    profilesWithProgressPhotos = Number(profileAgg?.with_progress_photos || 0);
+    profilesWithFamilyMembers = Number(profileAgg?.with_family_members || 0);
+  } catch {}
+
   return json({
     stats: {
       totals: {
@@ -85,6 +131,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         active_sessions: Number(activeSessions?.c || 0),
         pro_active: Number(proActive?.c || 0),
         family_active: Number(familyActive?.c || 0),
+        deleted_users: Number(deletedUsers?.c || 0),
+        inactive_users: Number(inactiveUsers?.c || 0),
+        family_members_active: Number(familyMembersActive?.c || 0),
+        profiles_with_measurements: profilesWithMeasurements,
+        profiles_with_glucose: profilesWithGlucose,
+        profiles_with_wearable: profilesWithWearable,
+        profiles_with_progress_photos: profilesWithProgressPhotos,
+        profiles_with_family_members: profilesWithFamilyMembers,
       },
       today: {
         day,
