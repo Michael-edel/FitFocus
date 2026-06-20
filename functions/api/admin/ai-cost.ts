@@ -11,29 +11,11 @@ function startOfUtcDayMs(d = new Date()) {
   return x.getTime();
 }
 
-async function ensureAiCostColumns(db: D1Database) {
-  const columns = await db.prepare("PRAGMA table_info(ai_events)").all<any>();
-  const existing = new Set((columns.results || []).map((row: any) => String(row.name)));
-  const required: Array<[string, string]> = [
-    ["model", "ALTER TABLE ai_events ADD COLUMN model TEXT"],
-    ["input_tokens", "ALTER TABLE ai_events ADD COLUMN input_tokens INTEGER"],
-    ["output_tokens", "ALTER TABLE ai_events ADD COLUMN output_tokens INTEGER"],
-    ["total_tokens", "ALTER TABLE ai_events ADD COLUMN total_tokens INTEGER"],
-    ["estimated_cost_usd", "ALTER TABLE ai_events ADD COLUMN estimated_cost_usd REAL"],
-    ["is_fallback", "ALTER TABLE ai_events ADD COLUMN is_fallback INTEGER DEFAULT 0"],
-  ];
-
-  for (const [name, sql] of required) {
-    if (!existing.has(name)) await db.prepare(sql).run();
-  }
-}
-
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // Validate session + ensure RBAC admin (reads from user_roles)
   await requireAdminRequest(request, env);
 
   const db = requireDB(env);
-  await ensureAiCostColumns(db);
   const now = Date.now();
   const dayStart = startOfUtcDayMs(new Date(now));
   const sevenDaysAgo = dayStart - 7 * 86400000;

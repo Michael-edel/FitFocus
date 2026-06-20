@@ -13,31 +13,6 @@ type AttachmentRow = {
   data_url: string;
 };
 
-function ensureSupportTable(db: D1Database) {
-  return db.prepare(`
-    CREATE TABLE IF NOT EXISTS support_feedback (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      category TEXT NOT NULL,
-      section TEXT,
-      subject TEXT,
-      message TEXT NOT NULL,
-      steps_json TEXT,
-      device TEXT,
-      browser TEXT,
-      contact TEXT,
-      app_version TEXT,
-      status TEXT NOT NULL DEFAULT 'new',
-      priority TEXT NOT NULL DEFAULT 'normal',
-      attachment_count INTEGER NOT NULL DEFAULT 0,
-      attachments_json TEXT,
-      admin_note TEXT
-    )
-  `).run();
-}
-
 function kindFromMime(mime: string) {
   if (mime.startsWith("image/")) return "photo";
   if (mime.startsWith("video/")) return "video";
@@ -91,7 +66,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  await ensureSupportTable(db);
 
   const form = await request.formData().catch(() => null);
   if (!form) return json({ error: "BAD_REQUEST", message: "form data required" }, 400);
@@ -167,7 +141,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
-  await ensureSupportTable(db);
 
   const url = new URL(request.url);
   const id = String(url.searchParams.get("id") || "").trim();

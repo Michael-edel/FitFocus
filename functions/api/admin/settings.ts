@@ -8,15 +8,6 @@ import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
-async function ensureFeatureSettingsTable(db: D1Database) {
-  await db.prepare(`
-    CREATE TABLE IF NOT EXISTS feature_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )
-  `).run();
-}
-
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -24,7 +15,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
-  await ensureFeatureSettingsTable(db);
 
   const { results } = await db.prepare("SELECT key, value FROM feature_settings ORDER BY key").all();
   return json({ settings: results || [] });
@@ -37,7 +27,6 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
-  await ensureFeatureSettingsTable(db);
 
   const body = (await request.json().catch(() => null)) as any;
   const key = String(body?.key || "").trim();

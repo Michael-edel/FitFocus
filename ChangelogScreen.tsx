@@ -1,6 +1,6 @@
 import React from 'react';
 import { BadgeInfo, CalendarDays, CheckCircle2, History, Sparkles } from 'lucide-react';
-import { releaseNotes } from './releaseNotes';
+import { formatReleaseTitle, releaseNotes } from './releaseNotes';
 import { APP_VERSION_LABEL, versioningLayers, versioningRules } from './versioning';
 
 export default function ChangelogScreen() {
@@ -79,9 +79,7 @@ export default function ChangelogScreen() {
                     </div>
                   )}
                 </div>
-                <h2 className="text-2xl md:text-3xl font-black text-slate-100">
-                  {`Версия ${release.version} ${release.label}`}
-                </h2>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-100">{formatReleaseTitle(release)}</h2>
                 <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-400">
                   <span className="inline-flex items-center gap-2">
                     <CalendarDays className="h-4 w-4" />

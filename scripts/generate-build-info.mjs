@@ -15,12 +15,16 @@ function git(args) {
 }
 
 function pickBranch() {
-  return (
+  const branch = (
     git(["rev-parse", "--abbrev-ref", "HEAD"]) ||
     process.env.GITHUB_REF_NAME ||
     process.env.CF_PAGES_BRANCH ||
     "unknown"
   );
+  if (branch === "HEAD") {
+    return process.env.GITHUB_REF_NAME || process.env.CF_PAGES_BRANCH || "main";
+  }
+  return branch;
 }
 
 function pickSha() {

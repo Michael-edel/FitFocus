@@ -15,19 +15,59 @@ export type ReleaseNote = {
   isCurrent?: boolean;
 };
 
+function localizeCommitSubject(subject: string): string {
+  const s = subject.trim();
+  if (!s) return 'Коммит без описания';
+
+  const normalized = s
+    .replace(/^Add\s+automatic\s+main\s+build\s+versioning$/i, 'Добавлено автоматическое версионирование сборки main')
+    .replace(/^Add\s+/i, 'Добавлено: ')
+    .replace(/^Fix\s+/i, 'Исправлено: ')
+    .replace(/^Update\s+/i, 'Обновлено: ')
+    .replace(/^Improve\s+/i, 'Улучшено: ')
+    .replace(/^Remove\s+/i, 'Удалено: ')
+    .replace(/^Refactor\s+/i, 'Рефакторинг: ')
+    .replace(/\bautomatic\b/gi, 'автоматическое')
+    .replace(/\bautomatically\b/gi, 'автоматически')
+    .replace(/\bbuild\b/gi, 'сборки')
+    .replace(/\bversioning\b/gi, 'версионирование')
+    .replace(/\bversion\b/gi, 'версия')
+    .replace(/\bmain\b/gi, 'main');
+
+  if (normalized === s) {
+    return `Коммит: ${s}`;
+  }
+  return normalized;
+}
+
+function formatReleaseTitle(release: ReleaseNote): string {
+  if (release.isCurrent) {
+    return `Текущая сборка ${APP_VERSION_LABEL}`;
+  }
+  return `Версия ${release.version} ${release.label}`;
+}
+
 const currentBuildReleaseNote: ReleaseNote = {
   version: APP_VERSION_STRING,
-  label: `${APP_VERSION_LABEL} • main`,
+  label: 'main',
   date: new Date(BUILD_SOURCE.builtAt).toLocaleDateString('ru-RU'),
   summary: BUILD_SOURCE.branch === 'main'
-    ? 'Автоматическая сборка из main. Ниже показаны последние изменения, которые попали в текущую версию.'
+    ? 'Сборка main обновляется автоматически при каждом push. Ниже показаны изменения текущей версии и служебные данные сборки.'
     : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
   isCurrent: true,
   groups: [
     {
-      title: 'Последние изменения',
+      title: 'Что изменилось',
+      items: [
+        'Автосборка main теперь создаёт версию без ручных действий.',
+        'Экран «Что нового» показывает текущую сборку, SHA и историю изменений на русском.',
+        'Группировка по версиям помогает тестерам и команде быстрее понимать, что вошло именно в эту сборку.',
+      ],
+    },
+    {
+      title: 'Последние коммиты',
       items: BUILD_SOURCE.recentCommits.length
-        ? BUILD_SOURCE.recentCommits
+        ? BUILD_SOURCE.recentCommits.map((commit) => localizeCommitSubject(commit))
         : ['История коммитов недоступна в этой сборке.'],
     },
     {
@@ -35,7 +75,7 @@ const currentBuildReleaseNote: ReleaseNote = {
       items: [
         `Ветка: ${BUILD_SOURCE.branch}`,
         `Коммит: ${BUILD_SOURCE.shortSha}`,
-        `Коммитов в репозитории: ${BUILD_SOURCE.commitCount}`,
+        `Всего коммитов в репозитории: ${BUILD_SOURCE.commitCount}`,
       ],
     },
   ],
@@ -113,3 +153,5 @@ export const releaseNotes: ReleaseNote[] = [
     ],
   },
 ];
+
+export { formatReleaseTitle };
