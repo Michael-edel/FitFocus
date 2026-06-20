@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, X, Crown, Users, Zap } from 'lucide-react';
 import { formatKzt, planLabel, setDevPlanOverride, getDevPlanOverride } from './money';
 import { TariffPlan } from './types';
+import { useModalDismissGestures } from './useModalDismissGestures';
 
 export default function PlansScreen({ 
   currentPlan, 
@@ -26,6 +27,14 @@ export default function PlansScreen({
   const [checkoutPlan, setCheckoutPlan] = useState<null | 'pro' | 'family'>(null);
   const devEnabled = (import.meta as any).env?.DEV || (import.meta as any).env?.VITE_TEST_MODE === "1";
   const currentOverride = devEnabled ? getDevPlanOverride(userId) : null;
+  const dismissGestures = useModalDismissGestures(() => {
+    if (checkoutPlan) {
+      setCheckoutPlan(null);
+      return;
+    }
+    onClose();
+  });
+  const checkoutDismissGestures = useModalDismissGestures(() => setCheckoutPlan(null));
 
   const openPay = (url: string) => {
     try {
@@ -65,8 +74,8 @@ export default function PlansScreen({
   ];
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl z-[400] overflow-y-auto flex items-start justify-center p-4 py-12 md:py-24 ff-plans">
-      <div className="max-w-5xl w-full">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl z-[400] overflow-hidden flex items-end justify-center p-3 md:items-start md:overflow-y-auto md:p-4 md:py-24 ff-plans">
+      <div className="w-full max-w-5xl max-h-[calc(100dvh-1.5rem)] md:max-h-none overflow-y-auto overscroll-contain touch-pan-y" {...dismissGestures}>
         <div className="ff-plans__topbar mb-12">
           <div className="space-y-1 text-left">
             <h2 className="text-4xl font-black text-white ff-plans__title">Тарифы</h2>
@@ -207,13 +216,13 @@ export default function PlansScreen({
 
       {/* Checkout sheet */}
       {checkoutPlan ? (
-        <div className="fixed inset-0 z-[450] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[450] flex items-end justify-center p-3 md:items-center md:p-4" role="dialog" aria-modal="true">
           <button
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
             onClick={() => setCheckoutPlan(null)}
             aria-label="Закрыть оплату"
           />
-          <div className="relative ff-plans__sheet z-[460]">
+          <div className="relative ff-plans__sheet z-[460] touch-pan-y max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain" {...checkoutDismissGestures}>
             <div className="ff-plans__sheetHead">
               <div className="ff-plans__sheetTitle">Оплата</div>
               <button className="ff-plans__sheetX" onClick={() => setCheckoutPlan(null)} aria-label="Закрыть">
