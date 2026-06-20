@@ -11,6 +11,12 @@ import {
 import { Goal } from './types';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
+type ShoppingListCardComponent = React.ComponentType<{
+  weekStart: string;
+  title?: string;
+  fallbackList?: string[];
+  userId?: string | null;
+}>;
 
 type PlanScreenProps = {
   currentUser: any;
@@ -46,6 +52,7 @@ type PlanScreenProps = {
   currentUserGoal: Goal | string;
   DEFAULT_DEFICIT: number;
   DEFAULT_SURPLUS: number;
+  ShoppingListCardComponent?: ShoppingListCardComponent;
 };
 
 export default function PlanScreen({
@@ -82,11 +89,20 @@ export default function PlanScreen({
   currentUserGoal,
   DEFAULT_DEFICIT,
   DEFAULT_SURPLUS,
+  ShoppingListCardComponent,
 }: PlanScreenProps) {
+  const getWeekStartISO = React.useCallback((date: Date) => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() - day + 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
   const tasks = currentUserAiPlan?.firstTasks ?? [];
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
+  const shoppingWeekStart = weeklyMenu?.weekStart || getWeekStartISO(new Date());
   const activeWeekDayStorageKey = React.useMemo(
     () => `fitfocus.plan.active-day.v1:${currentUser?.id ?? 'anon'}`,
     [currentUser?.id],
@@ -326,6 +342,26 @@ export default function PlanScreen({
             <button type="button" onClick={() => setPlanRulesExpanded(false)} className="text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-500/30 hover:text-indigo-200 transition-all">Свернуть</button>
           </div>
         </div>
+      )}
+
+      {weeklyMenu && ShoppingListCardComponent && (
+        <React.Suspense fallback={<div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-slate-500 font-semibold">Загрузка корзины закупа...</div>}>
+          <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Корзина закупа</p>
+                <p className="mt-1 text-xs text-slate-500 font-semibold">Показывает список покупок после генерации меню и позволяет экспортировать его в CSV.</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <ShoppingListCardComponent
+                weekStart={shoppingWeekStart}
+                title="Список покупок"
+                userId={currentUser?.id ?? null}
+              />
+            </div>
+          </div>
+        </React.Suspense>
       )}
 
       <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
