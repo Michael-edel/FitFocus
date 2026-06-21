@@ -57,13 +57,19 @@ export default defineConfig(({ mode }) => {
       react(),
 
       VitePWA({
+        strategies: 'injectManifest',
         registerType: 'autoUpdate',
+        srcDir: '.',
+        filename: 'sw.ts',
         devOptions: { enabled: false },
+        injectManifest: {
+          injectionPoint: '',
+          globPatterns: ['**/*.{js,css,html,ico,svg,png,webmanifest,woff2}'],
+        },
         workbox: {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          navigateFallbackDenylist: [/^\/api\//],
         },
 
         manifest: {
