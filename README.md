@@ -9,6 +9,7 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 *   **AI Coach**: Ежедневные персональные советы и задачи на основе текущего прогресса.
 *   **Weekly Intelligence (WIS)**: Еженедельные отчеты с анализом адаптации и прогнозом веса.
 *   **Hybrid Storage**: быстрый локальный кэш в `localStorage` + серверный источник правды в Cloudflare D1 для Google-профилей, сессий, beta invite, family/shopping данных и синхронизируемого состояния.
+*   **Push notifications**: Web Push для напоминаний, тестов уведомлений и будущих пользовательских сценариев.
 *   **Premium PDF Engine**: Генерация детальных медицинских отчетов с поддержкой кириллицы.
 
 ## Технологический стек
@@ -23,7 +24,7 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 ## Быстрый старт
 
 1.  Установите зависимости: `npm install`
-2.  Настройте `GEMINI_API_KEY` в файле `.env.local`.
+2.  Настройте `GEMINI_API_KEY` и `VITE_PUSH_VAPID_PUBLIC_KEY` в файле `.env.local`.
 3.  Запустите сервер разработки: `npm run dev`
 
 ## Git workflow
@@ -88,6 +89,10 @@ Production deploy ожидает Cloudflare Pages + D1:
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
    - `GEMINI_API_KEY`
+   - `PUSH_VAPID_PUBLIC_KEY`
+   - `PUSH_VAPID_PRIVATE_KEY`
+   - `PUSH_VAPID_SUBJECT`
+   - `VITE_PUSH_VAPID_PUBLIC_KEY`
    - `REQUIRE_INVITE` (`1` для закрытой beta)
    - `STRIPE_SECRET_KEY`
    - `STRIPE_WEBHOOK_SECRET`
@@ -103,3 +108,4 @@ Production deploy ожидает Cloudflare Pages + D1:
 *   **Beta access control**: закрытая beta управляется `REQUIRE_INVITE`, `invite_codes` и `invite_redemptions`.
 *   **Защита ключей**: В Production-среде доступ к Gemini осуществляется через прокси с ограничением по IP и хешированием.
 *   **Offline-first**: Основной функционал доступен без интернета благодаря Service Worker.
+*   **Push delivery**: уведомления работают только после разрешения в браузере и на устройствах, где включена PWA/Web Push поддержка.

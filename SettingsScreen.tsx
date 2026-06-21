@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound, Link2 } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { calculateTDEE } from './profileMath';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
@@ -291,6 +291,14 @@ export default function SettingsScreen({
   const [mobileTokenError, setMobileTokenError] = useState<string | null>(null);
   const [mobileTokenCopiedAt, setMobileTokenCopiedAt] = useState<number | null>(null);
   const [bridgeSetupCopiedAt, setBridgeSetupCopiedAt] = useState<number | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
+  const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushNotice, setPushNotice] = useState<string | null>(null);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
@@ -458,6 +466,209 @@ export default function SettingsScreen({
     }
   };
 
+  const getPushDeviceLabel = () => {
+    if (typeof navigator === 'undefined') return 'Устройство';
+    const ua = navigator.userAgent || '';
+    if (/iPhone/i.test(ua)) return 'iPhone';
+    if (/iPad/i.test(ua)) return 'iPad';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Windows/i.test(ua)) return 'Windows';
+    if (/Macintosh/i.test(ua)) return 'Mac';
+    if (/Linux/i.test(ua)) return 'Linux';
+    return 'Браузер';
+  };
+
+  const isPushSupported = () =>
+    typeof window !== 'undefined' &&
+    'Notification' in window &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window;
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
+  const refreshPushStatus = async () => {
+    if (!serverSession) return;
+    const supported = isPushSupported();
+    setPushSupported(supported);
+    setPushPermission(supported ? Notification.permission : 'unsupported');
+
+    if (!supported) {
+      setPushSubscribed(false);
+      setPushSubscriptionCount(0);
+      setPushDeviceCount(0);
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      setPushSubscribed(Boolean(subscription));
+    } catch {
+      setPushSubscribed(false);
+    }
+
+    try {
+      const response = await fetch('/api/push/status');
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) throw new Error('status');
+      setPushSubscriptionCount(Number(payload.count || 0));
+      setPushDeviceCount(Array.isArray(payload.subscriptions) ? payload.subscriptions.length : Number(payload.count || 0));
+    } catch {
+      setPushSubscriptionCount(0);
+      setPushDeviceCount(0);
+    }
+  };
+
+  const subscribeToPush = async () => {
+    if (!serverSession) {
+      setPushError('Сначала войдите в аккаунт.');
+      return;
+    }
+    if (!isPushSupported()) {
+      setPushError('Этот браузер не поддерживает push-уведомления.');
+      return;
+    }
+    const publicKey = (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '';
+    if (!publicKey) {
+      setPushError('Не задан VITE_PUSH_VAPID_PUBLIC_KEY.');
+      return;
+    }
+
+    setPushBusy(true);
+    setPushError(null);
+    setPushNotice(null);
+
+    try {
+      const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
+      setPushPermission(permission);
+      if (permission !== 'granted') {
+        throw new Error('Разрешите уведомления в браузере.');
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      const response = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subscription.toJSON(),
+          deviceLabel: getPushDeviceLabel(),
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'Не удалось сохранить push-подписку.');
+      }
+
+      setPushSubscribed(true);
+      setPushNotice(`Уведомления включены на устройстве ${payload?.deviceLabel || getPushDeviceLabel()}.`);
+      await refreshPushStatus();
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : 'Не удалось включить push-уведомления.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const unsubscribeFromPush = async () => {
+    if (!serverSession) return;
+    if (!isPushSupported()) {
+      setPushError('Этот браузер не поддерживает push-уведомления.');
+      return;
+    }
+
+    setPushBusy(true);
+    setPushError(null);
+    setPushNotice(null);
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        setPushSubscribed(false);
+        setPushNotice('Подписка на этом устройстве уже отключена.');
+        await refreshPushStatus();
+        return;
+      }
+
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          subscription: subscription.toJSON(),
+        }),
+      });
+
+      await subscription.unsubscribe();
+      setPushSubscribed(false);
+      setPushNotice('Уведомления на этом устройстве отключены.');
+      await refreshPushStatus();
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : 'Не удалось отключить push-уведомления.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const sendTestPush = async () => {
+    if (!serverSession) {
+      setPushError('Сначала войдите в аккаунт.');
+      return;
+    }
+    if (!isPushSupported()) {
+      setPushError('Этот браузер не поддерживает push-уведомления.');
+      return;
+    }
+
+    setPushBusy(true);
+    setPushError(null);
+    setPushNotice(null);
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      const response = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: subscription?.endpoint || undefined,
+          title: 'FitFocus',
+          body: 'Тест push-уведомления: подписка активна.',
+          url: '/',
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'Не удалось отправить тестовое уведомление.');
+      }
+      setPushNotice(`Тест отправлен: ${payload?.sent || 0} уведомлений.`);
+      await refreshPushStatus();
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : 'Не удалось отправить push-тест.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     settingsUiSkipSaveRef.current = true;
@@ -616,6 +827,18 @@ export default function SettingsScreen({
     const id = window.setTimeout(() => setUiResetAt(null), 3000);
     return () => window.clearTimeout(id);
   }, [uiResetAt]);
+
+  useEffect(() => {
+    if (!serverSession) {
+      setPushSupported(false);
+      setPushPermission('unsupported');
+      setPushSubscribed(false);
+      setPushDeviceCount(0);
+      setPushSubscriptionCount(0);
+      return;
+    }
+    void refreshPushStatus();
+  }, [serverSession, user?.id]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
   const gainTooAggressive = user?.goal === Goal.GAIN && tdee && gainSur > AGGRESSIVE_SURPLUS;
@@ -1096,6 +1319,102 @@ export default function SettingsScreen({
                   </button>
                 </div>
 
+              </div>
+
+              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Push-уведомления</div>
+                    <div className="text-slate-100 font-black">
+                      {pushPermission === 'granted'
+                        ? 'Разрешение выдано'
+                        : pushPermission === 'denied'
+                          ? 'Уведомления заблокированы'
+                          : pushSupported
+                            ? 'Можно включить уведомления'
+                            : 'Этот браузер не поддерживает push'}
+                    </div>
+                    <div className="text-slate-500 text-sm mt-2">
+                      Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.
+                    </div>
+                  </div>
+                  <div className={["w-11 h-11 rounded-2xl flex items-center justify-center border",
+                    pushPermission === 'denied'
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                      : pushSubscribed
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                  ].join(' ')}>
+                    <Bell className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                  <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Разрешение</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm">{pushPermission}</div>
+                  </div>
+                  <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Устройства</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm tabular-nums">{pushDeviceCount}</div>
+                  </div>
+                  <div className="rounded-[1.1rem] border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Подписок</div>
+                    <div className="mt-2 text-slate-100 font-black text-sm tabular-nums">{pushSubscriptionCount}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 mt-4">
+                  <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Это устройство</div>
+                    <div className="mt-2 text-slate-100 font-black">{getPushDeviceLabel()}</div>
+                    <div className="mt-2 text-xs text-slate-500 leading-5">
+                      Для iPhone push-уведомления работают в установленном приложении FitFocus. На Android они работают в браузере и в PWA-режиме.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 min-w-[220px]">
+                    <button
+                      type="button"
+                      onClick={() => void subscribeToPush()}
+                      disabled={pushBusy || !pushSupported || pushPermission === 'denied' || !serverSession}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
+                    >
+                      <Bell className="w-4 h-4" />
+                      {pushBusy ? 'Обновляем…' : pushSubscribed ? 'Переподключить push' : 'Включить push'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void sendTestPush()}
+                      disabled={pushBusy || !pushSupported || !serverSession}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:border-indigo-500/30 text-slate-100 font-black transition-all disabled:opacity-50"
+                    >
+                      <Send className="w-4 h-4" />
+                      Отправить тест
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void unsubscribeFromPush()}
+                      disabled={pushBusy || !pushSupported || !pushSubscribed || !serverSession}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:border-rose-500/30 text-slate-200 font-black transition-all disabled:opacity-50"
+                    >
+                      <BellOff className="w-4 h-4" />
+                      Отключить на этом устройстве
+                    </button>
+                  </div>
+                </div>
+
+                {pushNotice && (
+                  <div className="mt-3 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                    {pushNotice}
+                  </div>
+                )}
+
+                {pushError && (
+                  <div className="mt-3 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {pushError}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
