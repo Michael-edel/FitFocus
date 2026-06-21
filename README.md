@@ -25,7 +25,8 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 
 1.  Установите зависимости: `npm install`
 2.  Настройте `GEMINI_API_KEY` и `VITE_PUSH_VAPID_PUBLIC_KEY` в файле `.env.local`.
-3.  Запустите сервер разработки: `npm run dev`
+3.  Если нужен свой push-ключ, сгенерируйте его командой `npx web-push generate-vapid-keys --json` и вставьте значения в `.env.local` и `.dev.vars`.
+4.  Запустите сервер разработки: `npm run dev`
 
 ## Git workflow
 
