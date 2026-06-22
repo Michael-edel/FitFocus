@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
@@ -31,7 +32,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     const norm = updates
       .map((u: any) => ({
-        ingredient_name: String(u.ingredient_name || u.ingredient || "").trim(),
+        ingredient_name: normalizeShoppingIngredient(u.ingredient_name || u.ingredient, 1).name,
         checked: Boolean(u.checked),
       }))
       .filter((u: any) => u.ingredient_name)

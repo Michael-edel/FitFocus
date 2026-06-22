@@ -4,7 +4,7 @@
 
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
-import { softDeleteAccount, ensureNotLastAdmin } from "../_lib/account_delete";
+import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, softDeleteAccount } from "../_lib/account_delete";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -22,6 +22,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     await ensureNotLastAdmin(db, user.sub);
+    const ownsActiveFamily = await checkIfOwnerOfActiveFamily(db, user.sub);
+    if (ownsActiveFamily) {
+      return json({
+        ok: false,
+        error: "FAMILY_OWNER_DELETE_BLOCKED",
+        message: "Сначала передайте владельца семьи другому участнику или удалите семейный профиль.",
+      }, 409);
+    }
     await softDeleteAccount(db, user.sub);
 
     // Log event (non-AI, but reuse ai_events for audit)

@@ -4,6 +4,7 @@
 import { json, requireUser } from "../../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../../_lib/db";
 import { requireFamilyOwner } from "../../_lib/family_access";
+import { aggregateShoppingRows, normalizeShoppingIngredient } from "../../_lib/ingredients";
 import { requireFamilyPlan } from "../../_lib/plans";
 import { calculateDailyTargets } from "../../../../domain/profileMath";
 import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
@@ -327,11 +328,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .run();
 
       for (const it of computed.totals) {
+        const normalized = normalizeShoppingIngredient(it.name, it.grams);
+        if (!normalized.name || normalized.grams <= 0) continue;
         await db
           .prepare(
             "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
           )
-          .bind(uuid(), String(m.user_id), fam.id, weekStart, String(it.name), Math.round(Number(it.grams)), now)
+          .bind(uuid(), String(m.user_id), fam.id, weekStart, normalized.name, normalized.grams, now)
           .run();
       }
     }
@@ -343,18 +346,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       snack: 0.10,
     };
 
-    const shoppingListItems = Object.entries(
-      membersList.reduce((acc: Record<string, number>, m: any) => {
+    const shoppingListRows = membersList.flatMap((m: any) => {
         const computed = portionsByUser[String(m.user_id)];
-        for (const item of computed?.totals || []) {
-          acc[item.name] = (acc[item.name] || 0) + Number(item.grams || 0);
-        }
-        return acc;
-      }, {})
-    )
-      .map(([name, grams]) => ({ name, grams: Math.round(Number(grams || 0)) }))
-      .filter((it) => it.name && it.grams > 0)
-      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+        return (computed?.totals || []).map((item) => ({ name: item.name, grams: item.grams }));
+      });
+    const shoppingListItems = aggregateShoppingRows(shoppingListRows).map((it) => ({
+      name: it.name,
+      grams: Math.round(Number(it.grams || 0)),
+    }));
 
     const familyWeeklyMenu = {
       prefs: {

@@ -2,6 +2,7 @@
 // GET: CSV export of aggregated shopping list for a week (per user)
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
+import { aggregateShoppingRows } from "../_lib/ingredients";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -30,17 +31,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const rows = await db.prepare(
-      `SELECT ingredient_name as name, SUM(grams) as grams
+      `SELECT ingredient_name as name, grams
        FROM weekly_menu_items
        WHERE user_id = ? AND week_start = ? AND family_id IS NULL
-       GROUP BY ingredient_name
        ORDER BY ingredient_name`
     ).bind(user.sub, week).all<any>();
 
-    const items = (rows?.results || []).map((r: any) => ({
-      name: String(r.name || "").trim(),
-      grams: Math.max(0, Math.round(Number(r.grams || 0))),
-    })).filter((it: any) => it.name && it.grams > 0);
+    const items = aggregateShoppingRows(rows?.results || []);
 
     const lines = ["Продукт,Количество"];
     for (const it of items) {

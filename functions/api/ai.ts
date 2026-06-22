@@ -3,6 +3,7 @@ import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
+import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 
 
 /**
@@ -203,23 +204,6 @@ async function resolveIdentityKey(request: Request, env: Env) {
 }
 
 
-async function enforceDailyLimit(db: any, userId: string, feature: string, limit: number): Promise<void> {
-  if (!db) return;
-  const d = new Date();
-  const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
-  const row = await db.prepare("SELECT count FROM usage_daily WHERE user_id = ? AND day = ? AND feature = ?")
-    .bind(userId, day, feature).first();
-  const current = Number(row?.count || 0);
-  if (current >= limit) {
-    const err: any = new Error("DAILY_LIMIT");
-    err.code = "DAILY_LIMIT";
-    throw err;
-  }
-  await db.prepare(
-    "INSERT INTO usage_daily (user_id, day, feature, count) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, day, feature) DO UPDATE SET count = count + 1"
-  ).bind(userId, day, feature).run();
-}
-
 async function logAiEvent(env: any, args: {
   userId: string;
   feature: string;
@@ -395,54 +379,42 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
   const db = requireDB(env as any);
   const activePlan = await loadActivePlan(db, String(user.sub));
-
-  // Safe mode: apply conservative limits and settings (toggled via feature_flags.ai_safe_mode)
-  if (safeMode) {
-    const dailyLimit = activePlan === "free" ? 50 : 200;
-    try { await enforceDailyLimit((env as any).DB, String(user.sub), `ai_${feature}`, dailyLimit); }
-    catch (e: any) {
-      await logAiEvent(env as any, { userId: String(user.sub), feature, status: 429, latencyMs: Date.now()-startedAt, safeMode: true, requestJson: body, error: 'DAILY_LIMIT' });
-      return jsonV({ error: 'DAILY_LIMIT', limit: dailyLimit }, 429);
-    }
-  }
   const kv = env.FITFOCUS_KV;
   const identity = String(user?.sub || "");
 
-  if (kv) {
-    const cooldownKey = `rl:cd:4s:${identity}:${feature}`;
-    const seen = await kv.get(cooldownKey);
-    if (seen) {
-      await logUsage(env, { identity, feature, status: 429, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return jsonResponse({ error: { message: "Rate limit exceeded (cooldown)" } }, 429);
-    }
-    await kv.put(cooldownKey, "1", { expirationTtl: 4 });
-
-    const burstKey = `rl:burst:10m:${identity}:${feature}`;
-    const current = Number(await kv.get(burstKey) || "0");
-    if (current >= 20) {
-      await logUsage(env, { identity, feature, status: 429, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      return jsonResponse({ error: { message: "Rate limit exceeded (burst)" } }, 429);
-    }
-    await kv.put(burstKey, String(current + 1), { expirationTtl: 60 * 10 });
-
-    const day = new Date().toISOString().slice(0, 10);
-    const quotaKey = `quota:${day}:${identity}:${feature}`;
-    const usedToday = Number(await kv.get(quotaKey) || "0");
-    const planLimit = dailyAiLimitForPlan(activePlan, env);
-
-    if (planLimit !== null && usedToday >= planLimit) {
-      await logUsage(env, { identity, feature, status: 402, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+  // Strict backend controls: D1 is the source of truth for AI cooldown, burst and daily quota.
+  // KV remains only for non-critical dedup/cache telemetry below.
+  try {
+    await enforceAiRateControls({
+      db,
+      userId: identity,
+      feature,
+      plan: activePlan,
+      planDailyLimit: dailyAiLimitForPlan(activePlan, env),
+      safeDailyLimit: safeMode ? (activePlan === "free" ? 50 : 200) : null,
+    });
+  } catch (err: any) {
+    if (err instanceof AiLimitError || err?.name === "AiLimitError") {
+      const status = Number(err.status || 429);
+      await logUsage(env, { identity, feature, status, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+      await logAiEvent(env as any, {
+        userId: identity,
+        feature,
+        status,
+        latencyMs: Date.now() - startedAt,
+        safeMode,
+        requestJson: body,
+        error: err.code || "AI_LIMIT",
+      });
       return jsonResponse({
         error: {
-          code: "PAYWALL",
-          message: activePlan === "free"
-            ? `Free лимит AI достигнут: ${planLimit}/день. Перейдите на Pro или Family для расширенного доступа.`
-            : `Лимит AI для тарифа ${activePlan} достигнут: ${planLimit}/день.`,
-          meta: { feature, plan: activePlan, limitPerDay: planLimit }
-        }
-      }, 402, { "X-FF-Quota": "EXCEEDED" });
+          code: err.code || "AI_LIMIT",
+          message: err.message || "Достигнут лимит AI.",
+          meta: err.meta || { feature, plan: activePlan },
+        },
+      }, status, err.kind === "daily" ? { "X-FF-Quota": "EXCEEDED" } : {});
     }
-    await kv.put(quotaKey, String(usedToday + 1), { expirationTtl: 60 * 60 * 24 * 2 });
+    throw err;
   }
 
   const bodyHash = await sha256Hex(bodyText || "{}");

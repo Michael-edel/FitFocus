@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
@@ -19,7 +20,7 @@ async function handle(request: Request, env: Env) {
 
   const body: any = await request.json().catch(() => ({}));
   const week_start = String(body.week_start || "").slice(0, 10);
-  const ingredient_name = String(body.ingredient_name || body.ingredient || "").trim();
+  const ingredient_name = normalizeShoppingIngredient(body.ingredient_name || body.ingredient, 1).name;
   const checked = Boolean(body.checked);
   const family_id = body.family_id ? String(body.family_id) : null;
 
