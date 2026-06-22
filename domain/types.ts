@@ -238,6 +238,8 @@ export interface UserProfile {
   /** тариф: free/pro/family */
   plan?: TariffPlan;
   aiPlan?: AIPlan;
+  onboardingVersion?: number;
+  profileDetailsCompleted?: boolean;
 }
 
 export interface NutritionIntake {

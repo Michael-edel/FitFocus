@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
-import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Save, Camera, Upload, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send } from 'lucide-react';
+import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send, Camera, Upload } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { calculateTDEE } from './profileMath';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
+import ProfileDetailsSection from './components/ProfileDetailsSection';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -23,6 +24,11 @@ type SettingsUiState = {
   draftTargetWeight: string;
   draftAge: string;
   draftHeight: string;
+  draftAllergensText: string;
+  draftIntolerancesText: string;
+  draftExcludedFoodsText: string;
+  draftDietarySeverity: 'strict' | 'avoid';
+  draftMedicalRestrictions: string;
   draftBloodPressureSystolic: string;
   draftBloodPressureDiastolic: string;
   draftRestingPulse: string;
@@ -118,6 +124,13 @@ const wearableProviderLabel: Record<WearableProvider, string> = {
   garmin: 'Garmin',
   manual: 'Ручной импорт',
 };
+
+const normalizeCommaList = (value: string) => value
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
+  .filter((item, index, arr) => arr.indexOf(item) === index)
+  .slice(0, 30);
 
 const syncStateLabel = (state: SyncState | undefined) => {
   switch (state) {
@@ -272,6 +285,11 @@ export default function SettingsScreen({
   const [draftTargetWeight, setDraftTargetWeight] = useState('');
   const [draftAge, setDraftAge] = useState('');
   const [draftHeight, setDraftHeight] = useState('');
+  const [draftAllergensText, setDraftAllergensText] = useState('');
+  const [draftIntolerancesText, setDraftIntolerancesText] = useState('');
+  const [draftExcludedFoodsText, setDraftExcludedFoodsText] = useState('');
+  const [draftDietarySeverity, setDraftDietarySeverity] = useState<'strict' | 'avoid'>('strict');
+  const [draftMedicalRestrictions, setDraftMedicalRestrictions] = useState('');
   const [draftBloodPressureSystolic, setDraftBloodPressureSystolic] = useState('');
   const [draftBloodPressureDiastolic, setDraftBloodPressureDiastolic] = useState('');
   const [draftRestingPulse, setDraftRestingPulse] = useState('');
@@ -337,6 +355,11 @@ export default function SettingsScreen({
     setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
     setDraftAge(user.age ? String(user.age) : '');
     setDraftHeight(user.height ? String(user.height) : '');
+    setDraftAllergensText((user.dietary?.allergens || []).join(', '));
+    setDraftIntolerancesText((user.dietary?.intolerances || []).join(', '));
+    setDraftExcludedFoodsText((user.dietary?.excludedFoods || []).join(', '));
+    setDraftDietarySeverity(user.dietary?.severity || 'strict');
+    setDraftMedicalRestrictions(user.medicalRestrictions || '');
     setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
     setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
     setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
@@ -681,6 +704,11 @@ export default function SettingsScreen({
         const fallbackTargetWeight = user.targetWeight ? String(user.targetWeight) : '';
         const fallbackAge = user.age ? String(user.age) : '';
         const fallbackHeight = user.height ? String(user.height) : '';
+        const fallbackAllergensText = (user.dietary?.allergens || []).join(', ');
+        const fallbackIntolerancesText = (user.dietary?.intolerances || []).join(', ');
+        const fallbackExcludedFoodsText = (user.dietary?.excludedFoods || []).join(', ');
+        const fallbackDietarySeverity = user.dietary?.severity || 'strict';
+        const fallbackMedicalRestrictions = user.medicalRestrictions || '';
         const fallbackSystolic = user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '';
         const fallbackDiastolic = user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '';
         const fallbackPulse = user.restingPulse ? String(user.restingPulse) : '';
@@ -697,6 +725,11 @@ export default function SettingsScreen({
         const nextDraftTargetWeight = typeof parsed.draftTargetWeight === 'string' ? parsed.draftTargetWeight : fallbackTargetWeight;
         const nextDraftAge = typeof parsed.draftAge === 'string' ? parsed.draftAge : fallbackAge;
         const nextDraftHeight = typeof parsed.draftHeight === 'string' ? parsed.draftHeight : fallbackHeight;
+        const nextDraftAllergensText = typeof parsed.draftAllergensText === 'string' ? parsed.draftAllergensText : fallbackAllergensText;
+        const nextDraftIntolerancesText = typeof parsed.draftIntolerancesText === 'string' ? parsed.draftIntolerancesText : fallbackIntolerancesText;
+        const nextDraftExcludedFoodsText = typeof parsed.draftExcludedFoodsText === 'string' ? parsed.draftExcludedFoodsText : fallbackExcludedFoodsText;
+        const nextDraftDietarySeverity = parsed.draftDietarySeverity === 'avoid' ? 'avoid' : fallbackDietarySeverity;
+        const nextDraftMedicalRestrictions = typeof parsed.draftMedicalRestrictions === 'string' ? parsed.draftMedicalRestrictions : fallbackMedicalRestrictions;
         const nextDraftBloodPressureSystolic = typeof parsed.draftBloodPressureSystolic === 'string' ? parsed.draftBloodPressureSystolic : fallbackSystolic;
         const nextDraftBloodPressureDiastolic = typeof parsed.draftBloodPressureDiastolic === 'string' ? parsed.draftBloodPressureDiastolic : fallbackDiastolic;
         const nextDraftRestingPulse = typeof parsed.draftRestingPulse === 'string' ? parsed.draftRestingPulse : fallbackPulse;
@@ -715,6 +748,11 @@ export default function SettingsScreen({
         setDraftTargetWeight(nextDraftTargetWeight);
         setDraftAge(nextDraftAge);
         setDraftHeight(nextDraftHeight);
+        setDraftAllergensText(nextDraftAllergensText);
+        setDraftIntolerancesText(nextDraftIntolerancesText);
+        setDraftExcludedFoodsText(nextDraftExcludedFoodsText);
+        setDraftDietarySeverity(nextDraftDietarySeverity);
+        setDraftMedicalRestrictions(nextDraftMedicalRestrictions);
         setDraftBloodPressureSystolic(nextDraftBloodPressureSystolic);
         setDraftBloodPressureDiastolic(nextDraftBloodPressureDiastolic);
         setDraftRestingPulse(nextDraftRestingPulse);
@@ -731,6 +769,11 @@ export default function SettingsScreen({
           nextDraftTargetWeight !== fallbackTargetWeight ||
           nextDraftAge !== fallbackAge ||
           nextDraftHeight !== fallbackHeight ||
+          nextDraftAllergensText !== fallbackAllergensText ||
+          nextDraftIntolerancesText !== fallbackIntolerancesText ||
+          nextDraftExcludedFoodsText !== fallbackExcludedFoodsText ||
+          nextDraftDietarySeverity !== fallbackDietarySeverity ||
+          nextDraftMedicalRestrictions !== fallbackMedicalRestrictions ||
           nextDraftBloodPressureSystolic !== fallbackSystolic ||
           nextDraftBloodPressureDiastolic !== fallbackDiastolic ||
           nextDraftRestingPulse !== fallbackPulse ||
@@ -751,6 +794,11 @@ export default function SettingsScreen({
     setDraftTargetWeight(user.targetWeight ? String(user.targetWeight) : '');
     setDraftAge(user.age ? String(user.age) : '');
     setDraftHeight(user.height ? String(user.height) : '');
+    setDraftAllergensText((user.dietary?.allergens || []).join(', '));
+    setDraftIntolerancesText((user.dietary?.intolerances || []).join(', '));
+    setDraftExcludedFoodsText((user.dietary?.excludedFoods || []).join(', '));
+    setDraftDietarySeverity(user.dietary?.severity || 'strict');
+    setDraftMedicalRestrictions(user.medicalRestrictions || '');
     setDraftBloodPressureSystolic(user.bloodPressureSystolic ? String(user.bloodPressureSystolic) : '');
     setDraftBloodPressureDiastolic(user.bloodPressureDiastolic ? String(user.bloodPressureDiastolic) : '');
     setDraftRestingPulse(user.restingPulse ? String(user.restingPulse) : '');
@@ -789,6 +837,11 @@ export default function SettingsScreen({
         draftTargetWeight,
         draftAge,
         draftHeight,
+        draftAllergensText,
+        draftIntolerancesText,
+        draftExcludedFoodsText,
+        draftDietarySeverity,
+        draftMedicalRestrictions,
         draftBloodPressureSystolic,
         draftBloodPressureDiastolic,
         draftRestingPulse,
@@ -807,14 +860,19 @@ export default function SettingsScreen({
     ackGain,
     ackLoss,
     draftAge,
+    draftAllergensText,
     draftBloodPressureDiastolic,
     draftBloodPressureSystolic,
     draftBloodGlucoseMmolL,
+    draftDietarySeverity,
     draftChestCm,
+    draftExcludedFoodsText,
     draftGoal,
     draftHeight,
     draftHipsCm,
+    draftIntolerancesText,
     draftName,
+    draftMedicalRestrictions,
     draftRestingPulse,
     draftTargetWeight,
     draftWaistCm,
@@ -869,6 +927,13 @@ export default function SettingsScreen({
     const nextBloodGlucoseMmolL = Number.isFinite(parsedBloodGlucoseMmolL) && parsedBloodGlucoseMmolL > 0
       ? Number(parsedBloodGlucoseMmolL.toFixed(1))
       : null;
+    const nextDietary = {
+      allergens: normalizeCommaList(draftAllergensText),
+      intolerances: normalizeCommaList(draftIntolerancesText),
+      excludedFoods: normalizeCommaList(draftExcludedFoodsText),
+      severity: draftDietarySeverity,
+      notes: user.dietary?.notes || '',
+    };
     const parsedWaistCm = Number(draftWaistCm || 0);
     const parsedChestCm = Number(draftChestCm || 0);
     const parsedHipsCm = Number(draftHipsCm || 0);
@@ -915,6 +980,9 @@ export default function SettingsScreen({
       bodyMeasurementsMeasuredAt: (Number.isFinite(parsedWaistCm) && parsedWaistCm > 0) || (Number.isFinite(parsedChestCm) && parsedChestCm > 0) || (Number.isFinite(parsedHipsCm) && parsedHipsCm > 0) ? measurementTimestamp : user.bodyMeasurementsMeasuredAt,
       restingPulse: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? Math.round(parsedRestingPulse) : user.restingPulse,
       restingPulseMeasuredAt: Number.isFinite(parsedRestingPulse) && parsedRestingPulse > 0 ? measurementTimestamp : user.restingPulseMeasuredAt,
+      medicalRestrictions: draftMedicalRestrictions.trim(),
+      dietary: nextDietary,
+      profileDetailsCompleted: true,
     };
 
     if (hasMeasurement) {
@@ -1088,114 +1156,38 @@ export default function SettingsScreen({
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Давление, верхнее</div>
-                      <input
-                        value={draftBloodPressureSystolic}
-                        onChange={(e) => { setDraftBloodPressureSystolic(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="120"
-                      />
-                    </label>
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Давление, нижнее</div>
-                      <input
-                        value={draftBloodPressureDiastolic}
-                        onChange={(e) => { setDraftBloodPressureDiastolic(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="80"
-                      />
-                    </label>
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Пульс покоя</div>
-                      <input
-                        value={draftRestingPulse}
-                        onChange={(e) => { setDraftRestingPulse(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="60"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Сахар крови</div>
-                      <input
-                        value={draftBloodGlucoseMmolL}
-                        onChange={(e) => { setDraftBloodGlucoseMmolL(e.target.value); setProfileDirty(true); }}
-                        inputMode="decimal"
-                        step="0.1"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="5.4 ммоль/л"
-                      />
-                    </label>
-                    <div className="rounded-[1rem] border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-400 flex items-center">
-                      Если значение не введено, сахар не используется в формулах и попадает только в дневник замеров.
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Талия</div>
-                      <input
-                        value={draftWaistCm}
-                        onChange={(e) => { setDraftWaistCm(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="см"
-                      />
-                    </label>
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Грудь</div>
-                      <input
-                        value={draftChestCm}
-                        onChange={(e) => { setDraftChestCm(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="см"
-                      />
-                    </label>
-                    <label className="space-y-1 min-w-0">
-                      <div className="text-sm text-slate-400 font-semibold">Бедра</div>
-                      <input
-                        value={draftHipsCm}
-                        onChange={(e) => { setDraftHipsCm(e.target.value); setProfileDirty(true); }}
-                        inputMode="numeric"
-                        className="w-full px-4 py-3 rounded-[1rem] bg-slate-950/60 border border-slate-700 text-slate-100 font-bold"
-                        placeholder="см"
-                      />
-                    </label>
-                  </div>
+                  <ProfileDetailsSection
+                    draftAllergensText={draftAllergensText}
+                    draftIntolerancesText={draftIntolerancesText}
+                    draftExcludedFoodsText={draftExcludedFoodsText}
+                    draftDietarySeverity={draftDietarySeverity}
+                    draftMedicalRestrictions={draftMedicalRestrictions}
+                    draftBloodPressureSystolic={draftBloodPressureSystolic}
+                    draftBloodPressureDiastolic={draftBloodPressureDiastolic}
+                    draftRestingPulse={draftRestingPulse}
+                    draftBloodGlucoseMmolL={draftBloodGlucoseMmolL}
+                    draftWaistCm={draftWaistCm}
+                    draftChestCm={draftChestCm}
+                    draftHipsCm={draftHipsCm}
+                    profileDirty={profileDirty}
+                    profileValidationError={profileValidationError}
+                    profileSummary={profileSummary}
+                    onProfileSave={saveProfileDraft}
+                    onAllergensChange={(value) => { setDraftAllergensText(value); setProfileDirty(true); }}
+                    onIntolerancesChange={(value) => { setDraftIntolerancesText(value); setProfileDirty(true); }}
+                    onExcludedFoodsChange={(value) => { setDraftExcludedFoodsText(value); setProfileDirty(true); }}
+                    onDietarySeverityChange={(value) => { setDraftDietarySeverity(value); setProfileDirty(true); }}
+                    onMedicalRestrictionsChange={(value) => { setDraftMedicalRestrictions(value); setProfileDirty(true); }}
+                    onBloodPressureSystolicChange={(value) => { setDraftBloodPressureSystolic(value); setProfileDirty(true); }}
+                    onBloodPressureDiastolicChange={(value) => { setDraftBloodPressureDiastolic(value); setProfileDirty(true); }}
+                    onRestingPulseChange={(value) => { setDraftRestingPulse(value); setProfileDirty(true); }}
+                    onBloodGlucoseChange={(value) => { setDraftBloodGlucoseMmolL(value); setProfileDirty(true); }}
+                    onWaistChange={(value) => { setDraftWaistCm(value); setProfileDirty(true); }}
+                    onChestChange={(value) => { setDraftChestCm(value); setProfileDirty(true); }}
+                    onHipsChange={(value) => { setDraftHipsCm(value); setProfileDirty(true); }}
+                  />
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={saveProfileDraft}
-                    className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
-                    disabled={!profileDirty}
-                  >
-                    <Save className="w-4 h-4" />
-                    Сохранить профиль
-                  </button>
-                  {profileValidationError && (
-                    <div className="w-full rounded-[1rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 font-semibold">
-                      {profileValidationError}
-                    </div>
-                  )}
-                  <div className="text-sm text-slate-400 space-y-1">
-                    {profileSummary?.email}
-                    <div className="text-slate-500 text-xs">Давление: {profileSummary?.bloodPressure} · Пульс: {profileSummary?.restingPulse} уд/мин</div>
-                    <div className="text-slate-500 text-xs">Сахар: {profileSummary?.bloodGlucose} · {profileSummary?.bloodGlucoseStatus}</div>
-                    <div className="text-slate-500 text-xs">Обхваты: {profileSummary?.bodyMeasurements}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/30 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Фото прогресса</div>
