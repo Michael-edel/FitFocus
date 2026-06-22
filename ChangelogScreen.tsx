@@ -13,20 +13,20 @@ export default function ChangelogScreen() {
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-slate-100">Изменения по версиям</h1>
         <p className="max-w-3xl text-slate-400 font-medium leading-7">
-          Здесь собраны текущая и предыдущие версии FitFocus. Версия приложения меняется только при новом релизе, а номер сборки main растёт на каждый push. Списки сгруппированы по задачам, чтобы было проще понять, что уже сделано и что входит в конкретную сборку.
+          Здесь собраны текущая и предыдущие версии FitFocus. Релизная версия продукта меняется только при новом выпуске, а сборка main обновляется автоматически на каждый push. Так проще отличить долгоживущий релиз от свежего деплоя и понять, что именно вошло в конкретную сборку.
         </p>
       </div>
 
       <div className="space-y-6">
         <section className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-6 md:p-7">
           <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
-              <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведем версии в FitFocus</h2>
-              <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
-                Одна версия отвечает за приложение, отдельно живут версии API, данных и миграций. Так проще понимать, что именно изменилось, какая сборка стоит на устройстве и где может быть конфликт.
-              </p>
-            </div>
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
+                <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведем версии в FitFocus</h2>
+                <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
+                Одна версия отвечает за релиз приложения, отдельно живут версии сборки, API, данных и миграций. Так проще понимать, что именно изменилось, какая сборка стоит на устройстве и где может возникнуть конфликт при синхронизации.
+                </p>
+              </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-indigo-100">
               <Sparkles className="h-3.5 w-3.5" />
               {BUILD_COMBINED_LABEL}
