@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
-import { Goal, type UserProfile } from './types';
+import { Goal, type FoodItem, type UserProfile } from './types';
+import FoodStreakCard from './components/FoodStreakCard';
 
 const DashboardCharts = React.lazy(() => import('./charts'));
 
@@ -49,6 +50,7 @@ type DashboardScreenProps = {
   targets: any;
   weightHistory: UserProfile['weightHistory'];
   dailyHabits: UserProfile['dailyHabits'];
+  foodDiary: FoodItem[];
   weightTrend: number;
   currentWeight?: number;
   handleToggleHabit: (habitKey: string) => void;
@@ -112,6 +114,7 @@ export default function DashboardScreen({
   targets,
   weightHistory,
   dailyHabits,
+  foodDiary,
   weightTrend,
   currentWeight,
   handleToggleHabit,
@@ -236,7 +239,7 @@ export default function DashboardScreen({
             <ArrowRight size={16} />
           </button>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Вес сейчас</div>
@@ -283,6 +286,7 @@ export default function DashboardScreen({
               </div>
             </div>
           </div>
+          <FoodStreakCard userId={currentUser?.id} foodDiary={foodDiary || []} />
         </div>
       </section>
 

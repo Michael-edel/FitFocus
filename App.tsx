@@ -2957,6 +2957,7 @@ const logWeight = useCallback(() => {
     dashboard: {
       dailyStats,
       targets,
+      foodDiary,
       weightHistory: currentUser?.weightHistory || [],
       dailyHabits: currentUser?.dailyHabits,
       weightTrend,
