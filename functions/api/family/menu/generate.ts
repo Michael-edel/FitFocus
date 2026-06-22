@@ -4,6 +4,7 @@
 import { json, requireUser } from "../../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../../_lib/db";
 import { requireFamilyOwner } from "../../_lib/family_access";
+import { requireFamilyPlan } from "../../_lib/plans";
 import { calculateDailyTargets } from "../../../../domain/profileMath";
 import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
 
@@ -29,7 +30,12 @@ type ItemKey =
   | "buckwheat"
   | "cottage_cheese"
   | "berries"
-  | "nuts";
+  | "nuts"
+  | "plant_yogurt"
+  | "tofu"
+  | "turkey"
+  | "quinoa"
+  | "seeds";
 
 const BASE_DAY_KCAL = 2000;
 
@@ -48,7 +54,119 @@ const ITEM_META: Record<ItemKey, { name: string; grams: number }> = {
   cottage_cheese: { name: "Творог", grams: 200 },
   berries: { name: "Ягоды", grams: 120 },
   nuts: { name: "Орехи", grams: 30 },
+  plant_yogurt: { name: "Растительный йогурт", grams: 200 },
+  tofu: { name: "Тофу", grams: 130 },
+  turkey: { name: "Индейка", grams: 180 },
+  quinoa: { name: "Киноа", grams: 70 },
+  seeds: { name: "Семена тыквы", grams: 25 },
 };
+
+const ITEM_TERMS: Record<ItemKey, string[]> = {
+  oatmeal: ["овсян", "глютен"],
+  greek_yogurt: ["йогурт", "молоч", "молок", "лактоз"],
+  banana: ["банан"],
+  egg: ["яйц"],
+  chicken_breast: ["куриц", "птиц"],
+  rice: ["рис"],
+  salad_mix: ["салат", "овощ"],
+  olive_oil: ["масло", "олив"],
+  buckwheat: ["греч"],
+  cottage_cheese: ["творог", "молоч", "молок", "лактоз"],
+  berries: ["ягод"],
+  nuts: ["орех", "арахис", "миндаль", "фундук"],
+  plant_yogurt: ["йогурт растительный"],
+  tofu: ["тофу", "соя"],
+  turkey: ["индей"],
+  quinoa: ["киноа"],
+  seeds: ["семен", "тыкв"],
+};
+
+const SUBSTITUTES: Record<ItemKey, ItemKey[]> = {
+  oatmeal: ["buckwheat", "quinoa"],
+  greek_yogurt: ["plant_yogurt", "berries"],
+  banana: ["berries"],
+  egg: ["tofu", "cottage_cheese"],
+  chicken_breast: ["turkey", "egg"],
+  rice: ["buckwheat", "quinoa"],
+  salad_mix: ["berries"],
+  olive_oil: ["seeds"],
+  buckwheat: ["quinoa", "rice"],
+  cottage_cheese: ["plant_yogurt", "tofu"],
+  berries: ["banana"],
+  nuts: ["seeds", "berries"],
+  plant_yogurt: ["berries"],
+  tofu: ["turkey"],
+  turkey: ["chicken_breast"],
+  quinoa: ["buckwheat"],
+  seeds: ["berries"],
+};
+
+type MemberRestrictions = {
+  allergens: string[];
+  intolerances: string[];
+  excludedFoods: string[];
+  severity: "soft" | "strict";
+  notes: string;
+};
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/ё/g, "е").trim();
+}
+
+function splitTextList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === "string") return value.split(/[,;\n]/);
+  return [];
+}
+
+function parseRestrictions(value: unknown): MemberRestrictions {
+  let raw: any = value;
+  if (typeof value === "string") {
+    try {
+      raw = JSON.parse(value);
+    } catch {
+      raw = { notes: value };
+    }
+  }
+  if (!raw || typeof raw !== "object") {
+    raw = {};
+  }
+  const clean = (v: unknown) => splitTextList(v).map((x) => normalizeText(x)).filter(Boolean).slice(0, 20);
+  return {
+    allergens: clean(raw.allergens),
+    intolerances: clean(raw.intolerances),
+    excludedFoods: clean(raw.excludedFoods || raw.exclusions || raw.forbidden),
+    severity: String(raw.severity || "").toLowerCase() === "soft" ? "soft" : "strict",
+    notes: String(raw.notes || "").slice(0, 300),
+  };
+}
+
+function restrictionTerms(r: MemberRestrictions): string[] {
+  const fromNotes = r.notes
+    ? normalizeText(r.notes)
+        .split(/[,;\n]/)
+        .map((x) => x.trim())
+        .filter((x) => x.length >= 3)
+    : [];
+  return [...r.allergens, ...r.intolerances, ...r.excludedFoods, ...fromNotes]
+    .map(normalizeText)
+    .filter((x) => x.length >= 3);
+}
+
+function isRestrictedItem(key: ItemKey, r: MemberRestrictions): boolean {
+  if (r.severity !== "strict") return false;
+  const terms = restrictionTerms(r);
+  if (!terms.length) return false;
+
+  const labels = [ITEM_META[key]?.name || "", ...(ITEM_TERMS[key] || [])].map(normalizeText);
+  return terms.some((term) => labels.some((label) => label.includes(term) || term.includes(label)));
+}
+
+function resolveItemKey(key: ItemKey, r: MemberRestrictions): ItemKey {
+  if (!isRestrictedItem(key, r)) return key;
+  const candidates = SUBSTITUTES[key] || [];
+  return candidates.find((candidate) => !isRestrictedItem(candidate, r)) || key;
+}
 
 function buildDeterministicSharedMenu() {
   const days = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
@@ -96,18 +214,23 @@ function memberTargetKcal(member: any): number {
   return goal === Goal.LOSS ? 1700 : 2000;
 }
 
-function buildPortionsForMember(shared: any, kcalPerDay: number) {
+function buildPortionsForMember(shared: any, kcalPerDay: number, restrictions: MemberRestrictions = parseRestrictions(null)) {
   const k = Math.max(0.6, Math.min(1.8, kcalPerDay / BASE_DAY_KCAL));
   const totals: Record<string, number> = {};
+  const replacements: Record<string, string> = {};
   const portions = shared.days.map((d: any) => {
     const outDay: any = { name: d.name, meals: {} };
     for (const mealKey of ["breakfast","lunch","dinner","snack"]) {
       const m = d[mealKey];
       const ing = (m.items as ItemKey[]).map((key) => {
-        const meta = ITEM_META[key];
+        const resolvedKey = resolveItemKey(key, restrictions);
+        if (resolvedKey !== key) {
+          replacements[ITEM_META[key].name] = ITEM_META[resolvedKey].name;
+        }
+        const meta = ITEM_META[resolvedKey];
         const grams = Math.max(1, Math.round(meta.grams * k));
         totals[meta.name] = (totals[meta.name] || 0) + grams;
-        return { key, name: meta.name, grams };
+        return { key: resolvedKey, originalKey: key, name: meta.name, grams };
       });
       outDay.meals[mealKey] = { title: m.title, ingredients: ing };
     }
@@ -119,7 +242,7 @@ function buildPortionsForMember(shared: any, kcalPerDay: number) {
     .map(([name, grams]) => ({ name, grams }))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
-  return { portions, totals: totalsArr, kcalPerDay };
+  return { portions, totals: totalsArr, kcalPerDay, replacements };
 }
 
 function formatMealPortion(ingredients: { name: string; grams: number }[], kcal: number): string {
@@ -141,6 +264,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const weekStart = week ? week : weekStartISO(new Date());
 
     const fam = await requireFamilyOwner(db, user.sub);
+    await requireFamilyPlan(db, user.sub);
 
     const now = Math.floor(nowMs() / 1000);
     const shared = buildDeterministicSharedMenu();
@@ -169,6 +293,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const members = await db
       .prepare(
         `SELECT user_id, goal, sex, age, height_cm, weight_kg, activity
+                , restrictions_json
          FROM family_members
          WHERE family_id = ? AND status = 'active' AND is_active = 1`
       )
@@ -180,7 +305,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     for (const m of membersList) {
       const kcal = memberTargetKcal(m);
-      const computed = buildPortionsForMember(shared, kcal);
+      const restrictions = parseRestrictions(m.restrictions_json);
+      const computed = buildPortionsForMember(shared, kcal, restrictions);
       portionsByUser[String(m.user_id)] = computed;
 
       // Upsert portions
@@ -236,6 +362,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         cookingMode: "all_meals" as const,
         budgetPerWeek: undefined,
         currency: "KZT",
+        replacementsByUser: Object.fromEntries(
+          Object.entries(portionsByUser).map(([userId, computed]) => [userId, computed.replacements || {}])
+        ),
       },
       weekStart,
       days: shared.days.map((day: any, dayIdx: number) => {
@@ -276,6 +405,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

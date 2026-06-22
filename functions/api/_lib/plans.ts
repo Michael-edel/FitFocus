@@ -47,6 +47,12 @@ export async function loadActivePlanByEmail(db: D1Database, email: string): Prom
   }
 }
 
+export async function requireFamilyPlan(db: D1Database, userId: string): Promise<ActivePlan> {
+  const plan = await loadActivePlan(db, userId);
+  if (plan !== "family") throw new Error("PLAN_REQUIRED_FAMILY");
+  return plan;
+}
+
 export function dailyAiLimitForPlan(
   plan: ActivePlan,
   env: {

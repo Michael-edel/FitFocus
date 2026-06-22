@@ -3,6 +3,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, randomCode, nowMs, toApiError } from "../_lib/db";
 import { requireFamilyOwner } from "../_lib/family_access";
+import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -13,6 +14,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await ensureUserRow(db, user);
 
     const fam = await requireFamilyOwner(db, user.sub);
+    await requireFamilyPlan(db, user.sub);
 
     const body = await request.json().catch(() => ({}));
     const ttlHours = Number(body?.ttlHours || 72);
@@ -37,6 +39,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ code, expiresAt: expires }, 201);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

@@ -164,6 +164,8 @@ export function errRu(code: string): { code: string; message: string } {
     LIMIT: "Лимит достигнут. Попробуйте позже.",
     BAD_REQUEST: "Некорректный запрос.",
     INVITE_INVALID: "Неверный или просроченный код приглашения.",
+    PLAN_REQUIRED_FAMILY: "Для семейного режима нужен активный тариф Family.",
+    FAMILY_PLAN_INACTIVE: "Семейный доступ владельца не активен. Попросите владельца проверить тариф Family.",
     FAMILY_LIMIT: "В семейном режиме максимум 5 человек.",
     FORBIDDEN: "Недостаточно прав.",
   };
