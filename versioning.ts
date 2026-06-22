@@ -19,9 +19,9 @@ export const APP_VERSION: AppVersion = {
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
 export const APP_VERSION_UI_LABEL = `Версия приложения ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const BUILD_SHORT_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_VERSION_LABEL = `ветки main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • Сборка ветки main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_SHORT_LABEL = `main • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_VERSION_LABEL = `сборка main • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
@@ -49,26 +49,26 @@ export const versioningLayers = [
   {
     title: "Версия приложения",
     value: APP_VERSION_UI_LABEL,
-    note: "UI и пользовательские сценарии. Меняется только при новом релизе.",
+    note: "Это номер релиза продукта. Он меняется отдельно от сборки и только тогда, когда мы осознанно повышаем версию приложения.",
   },
   {
     title: "Сборка main",
     value: BUILD_SHORT_LABEL,
-    note: "Автоматически обновляется на каждый push в main, чтобы тестеры видели свежую сборку.",
+    note: "Это номер конкретной сборки на main. Он обновляется на каждый push и помогает понять, какая версия кода стоит на устройстве прямо сейчас.",
   },
   {
     title: "Схема API",
     value: `v${API_SCHEMA_VERSION}`,
-    note: "Контракт ответа /api и совместимость клиентов.",
+    note: "Контракт ответа /api и совместимость клиентов. Меняется только при изменении формата данных или сценариев.",
   },
   {
     title: "Схема данных",
     value: `v${DATA_SCHEMA_VERSION}`,
-    note: "Версии профиля и локальных сущностей пользователя.",
+    note: "Версии профиля и локальных сущностей пользователя. Нужна, чтобы хранение и синхронизация оставались совместимыми.",
   },
   {
     title: "Миграция БД",
     value: DB_MIGRATION_VERSION,
-    note: "Текущая опорная миграция для схемы БД.",
+    note: "Текущая опорная миграция для схемы БД. По ней видно, на какой структуре базы должна работать текущая сборка.",
   },
 ] as const;
