@@ -18,7 +18,7 @@ export const APP_VERSION: AppVersion = {
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const APP_VERSION_UI_LABEL = `Версия приложения ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
+export const APP_VERSION_UI_LABEL = `Релиз продукта ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
 export const BUILD_SHORT_LABEL = `main • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_VERSION_LABEL = `сборка main • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
@@ -47,14 +47,14 @@ export const versioningRules = [
 
 export const versioningLayers = [
   {
-    title: "Версия приложения",
+    title: "Релиз продукта",
     value: APP_VERSION_UI_LABEL,
-    note: "Это номер релиза продукта. Он меняется отдельно от сборки и только тогда, когда мы осознанно повышаем версию приложения.",
+    note: "Это номер пользовательского релиза. Он меняется только тогда, когда мы сознательно выпускаем новую публичную версию продукта.",
   },
   {
     title: "Сборка main",
     value: BUILD_SHORT_LABEL,
-    note: "Это номер конкретной сборки на main. Он обновляется на каждый push и помогает понять, какая версия кода стоит на устройстве прямо сейчас.",
+    note: "Это идентификатор конкретной сборки на main. Он обновляется на каждый push и помогает понять, какой код стоит на устройстве прямо сейчас.",
   },
   {
     title: "Схема API",
