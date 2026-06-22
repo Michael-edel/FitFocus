@@ -53,6 +53,8 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'measurementsHistory',
   'progressPhotos',
   'dietary',
+  'onboardingVersion',
+  'profileDetailsCompleted',
 ]);
 
 function sanitizePatch(input: unknown): Record<string, unknown> {

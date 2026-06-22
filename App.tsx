@@ -1680,6 +1680,14 @@ const openEditFood = (item: FoodEntry) => {
     riskAckGain: false
   });
 
+  useEffect(() => {
+    if (authState !== 'register') return;
+    if (regData.name.trim()) return;
+    const fallbackName = googleMe?.name?.trim() || googleMe?.email?.split('@')[0]?.trim() || 'Пользователь';
+    if (!fallbackName) return;
+    setRegData((prev) => (prev.name.trim() ? prev : { ...prev, name: fallbackName }));
+  }, [authState, googleMe?.email, googleMe?.name, regData.name]);
+
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
   const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);

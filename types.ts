@@ -255,6 +255,8 @@ export interface UserProfile {
   /** общие семейные исключения (аллергены/запреты, влияет на общую готовку) */
   familyExclusions?: string;
   dietary?: DietaryRestrictions;
+  onboardingVersion?: number;
+  profileDetailsCompleted?: boolean;
   /** пользовательский дефицит для похудения (ккал/день) */
   lossDeficit?: number;
   /** пользовательский профицит для набора (ккал/день) */

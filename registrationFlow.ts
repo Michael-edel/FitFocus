@@ -25,6 +25,14 @@ type RegDataLike = {
   gainSurplus?: number;
 };
 
+function deriveTargetWeight(weight: number, goal: UserProfile['goal']): number {
+  const baseWeight = Number.isFinite(weight) && weight > 0 ? weight : 0;
+  if (!baseWeight) return 0;
+  if (goal === Goal.LOSS) return Number(Math.max(40, baseWeight * 0.9).toFixed(1));
+  if (goal === Goal.GAIN) return Number(Math.max(baseWeight + 1, baseWeight * 1.05).toFixed(1));
+  return Number(baseWeight.toFixed(1));
+}
+
 type RegisterFlowDeps = {
   regData: RegDataLike;
   regNameValid: boolean;
@@ -84,7 +92,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     age: Math.max(0, Math.floor(deps.regData.age || 0)),
     activityLevel: deps.regData.activityLevel,
     goal: deps.regData.goal,
-    targetWeight: deps.regData.targetWeight,
+    targetWeight: deriveTargetWeight(deps.regData.weight, deps.regData.goal),
     adaptationMultiplier: 1.0,
     familyMembers: [],
     exclusions: '',
@@ -119,6 +127,8 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     progressPhotos: [],
     tasks: [],
     plan: deps.regData.plan,
+    onboardingVersion: 2,
+    profileDetailsCompleted: false,
   } as UserProfile;
 
   deps.setDevPlanOverride(deps.regData.plan, newUser.id);
