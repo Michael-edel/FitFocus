@@ -50,7 +50,7 @@ FitFocus — это прогрессивное веб-приложение (PWA)
 
 Авто-пуш по умолчанию выключен. Это сохраняет защиту `main`, но позволяет включать автоматическую отправку только когда она нужна.
 
-## Локальная разработка (backend + Google OAuth)
+## Локальная разработка (backend + OAuth)
 
 Проект использует Cloudflare Pages Functions (Wrangler) и локальную D1 базу.
 
@@ -78,6 +78,24 @@ npm run dev
 В проде добавьте URI вида:
 `https://<ваш-домен>/api/auth/google/callback`
 
+4) Apple Sign In (для local и prod):
+
+Apple Sign In использует отдельный Services ID и callback:
+
+`http://localhost:8788/api/auth/apple/callback`
+
+`https://<ваш-домен>/api/auth/apple/callback`
+
+Для Apple в Cloudflare Pages/Workers добавьте:
+
+- `APPLE_CLIENT_ID`
+- `APPLE_TEAM_ID`
+- `APPLE_KEY_ID`
+- `APPLE_PRIVATE_KEY`
+- `APPLE_CLIENT_SECRET` (опционально, если хотите передавать уже готовый client secret)
+
+> Apple Sign In требует HTTPS и настроенный Services ID в Apple Developer. Для локального теста обычно нужен публичный HTTPS origin или туннель, иначе callback может не пройти.
+
 ## Cloudflare deploy
 
 Production deploy ожидает Cloudflare Pages + D1:
@@ -89,6 +107,11 @@ Production deploy ожидает Cloudflare Pages + D1:
    - `AUTH_JWT_SECRET`
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
+   - `APPLE_CLIENT_ID`
+   - `APPLE_TEAM_ID`
+   - `APPLE_KEY_ID`
+   - `APPLE_PRIVATE_KEY`
+   - `APPLE_CLIENT_SECRET` (опционально)
    - `GEMINI_API_KEY`
    - `PUSH_VAPID_PUBLIC_KEY`
    - `PUSH_VAPID_PRIVATE_KEY`
@@ -101,6 +124,8 @@ Production deploy ожидает Cloudflare Pages + D1:
    - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
 5. В Google Cloud Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/google/callback`.
+6. В Apple Developer Console добавить redirect URI:
+   `https://<ваш-домен>/api/auth/apple/callback`.
 
 ## Безопасность и Приватность
 

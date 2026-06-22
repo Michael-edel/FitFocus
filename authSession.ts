@@ -19,7 +19,7 @@ type AuthStateSetters = {
 type BootstrapAuthParams = AuthStateSetters & {
   requireInvite: boolean;
   loginAsUser: (user: UserProfile, authUser?: ServerUser | null) => Promise<void>;
-  continueAfterGoogle?: boolean;
+  continueAfterOAuth?: boolean;
   fetchImpl?: typeof fetch;
 };
 
@@ -79,7 +79,7 @@ async function unregisterAuthServiceWorkers(): Promise<void> {
 }
 
 function authRecoveryReloadKey() {
-  return 'fitfocus.auth.google-recovery-reloaded.v1';
+  return 'fitfocus.auth.oauth-recovery-reloaded.v1';
 }
 
 function hasReloadedForAuthRecovery(): boolean {
@@ -113,12 +113,12 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     return null;
   };
 
-  if (params.continueAfterGoogle) {
+  if (params.continueAfterOAuth) {
     await unregisterAuthServiceWorkers();
   }
 
   let me: any = await readMe();
-  if (!me?.user?.sub && params.continueAfterGoogle) {
+  if (!me?.user?.sub && params.continueAfterOAuth) {
     const delays = [150, 250, 400, 600, 900, 1200, 1600, 2200];
     for (const delay of delays) {
       try {
@@ -134,7 +134,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   params.setGoogleMe(serverUser);
 
   if (serverUser?.sub && params.requireInvite && !hasServerAccess) {
-    params.setInviteError('Для доступа к закрытой бете нужен действующий код приглашения. Введите код и повторите вход через Google.');
+    params.setInviteError('Для доступа к закрытой бете нужен действующий код приглашения. Введите код и повторите вход через Google или Apple.');
     params.setAuthState('auth_choice');
     return;
   }
@@ -155,7 +155,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       }
     } catch {}
 
-    if (!params.continueAfterGoogle) {
+    if (!params.continueAfterOAuth) {
       params.setAuthState('auth_choice');
       return;
     }
@@ -178,7 +178,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     return;
   }
 
-  if (params.continueAfterGoogle && !hasReloadedForAuthRecovery()) {
+  if (params.continueAfterOAuth && !hasReloadedForAuthRecovery()) {
     markReloadedForAuthRecovery();
     window.location.replace(window.location.href);
     return;
@@ -225,7 +225,7 @@ export function createLogoutSession(params: LogoutParams) {
     }
 
     try {
-      sessionStorage.removeItem('fitfocus.auth.pending-google.v1');
+      sessionStorage.removeItem('fitfocus.auth.pending-oauth.v1');
     } catch {}
 
     params.setGoogleMe(null);

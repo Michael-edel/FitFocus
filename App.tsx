@@ -43,7 +43,8 @@ import {
   Send,
   MessageCircle,
   ChevronDown,
-  History
+  History,
+  Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
@@ -124,7 +125,7 @@ const PlanIntroModal = React.lazy(() => import('./PlanIntroModal'));
 const LessonViewModal = React.lazy(() => import('./LessonViewModal'));
 const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
-const GOOGLE_AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-google.v1';
+const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
 // Compile-time fallbacks injected by Vite (see vite.config.ts)
 declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
@@ -132,7 +133,7 @@ declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
 
 
 
-// --- Google Sign-In (GIS) helper (client-side only) ---
+// --- OAuth Sign-In helper (client-side only) ---
 declare global {
   interface Window {
     google?: any;
@@ -191,10 +192,22 @@ function loadGoogleIdentityScript(): Promise<void> {
   });
 }
 
-function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?: string; width?: number; size?: "large" | "medium" | "small"; text?: "signin_with" | "continue_with" }) {
+type OAuthProvider = 'google' | 'apple';
+
+function OAuthSignInButton({
+  inviteCode,
+  provider,
+}: {
+  onAuthed: () => void;
+  inviteCode?: string;
+  provider: OAuthProvider;
+  width?: number;
+  size?: "large" | "medium" | "small";
+  text?: "signin_with" | "continue_with";
+}) {
   // Why this approach:
-  // Google Identity Services now relies on FedCM in Chromium and is not supported/reliable in all browsers.
-  // Some users will have FedCM disabled by corporate policies, flags, privacy extensions, etc.
+  // Browser-native OAuth sign-in flows differ across providers and browsers.
+  // Some providers or browser configs can block embedded identity flows.
   // That produces "identity-credentials-get" errors and lost sign-ins.
   // To work for *all* clients with no browser tweaking, we use a backend-driven OAuth2 redirect flow.
   const [err, setErr] = React.useState<string | null>(null);
@@ -203,14 +216,14 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
     const params = new URLSearchParams();
     if (inviteCode) params.set("invite", inviteCode);
     params.set("redirect", window.location.origin);
-    return `/api/auth/google/start?${params.toString()}`;
-  }, [inviteCode]);
+    return `/api/auth/${provider}/start?${params.toString()}`;
+  }, [inviteCode, provider]);
 
   const handleClick = React.useCallback(async (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     setErr(null);
     try {
-      sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
+      sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
     } catch {}
     try {
       if ('serviceWorker' in navigator) {
@@ -232,15 +245,19 @@ function GoogleSignInButton({ inviteCode }: { onAuthed: () => void; inviteCode?:
         onClick={handleClick}
         className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
       >
-        <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
-        <span>Google профиль</span>
+        {provider === 'google' ? (
+          <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
+        ) : (
+          <Apple size={16} className="text-white" />
+        )}
+        <span>{provider === 'google' ? 'Google профиль' : 'Apple профиль'}</span>
       </a>
 
       {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
     </div>
   );
 }
-// --- end Google Sign-In helper ---
+// --- end OAuth Sign-In helper ---
 
 
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
@@ -2400,17 +2417,17 @@ await ensurePdfInterFont(doc);
   }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
-    let continueAfterGoogle = false;
+    let continueAfterOAuth = false;
     try {
-      continueAfterGoogle = sessionStorage.getItem(GOOGLE_AUTH_PENDING_STORAGE_KEY) === '1';
+      continueAfterOAuth = sessionStorage.getItem(AUTH_PENDING_STORAGE_KEY) === '1';
     } catch {}
 
     try {
       const authParam = new URLSearchParams(window.location.search).get('auth');
-      if (authParam === 'google') {
-        continueAfterGoogle = true;
+      if (authParam === 'google' || authParam === 'apple') {
+        continueAfterOAuth = true;
         try {
-          sessionStorage.setItem(GOOGLE_AUTH_PENDING_STORAGE_KEY, '1');
+          sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
         } catch {}
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('auth');
@@ -2426,7 +2443,7 @@ await ensurePdfInterFont(doc);
       setAuthState,
       setAllUsers,
       setRegData,
-      continueAfterGoogle,
+      continueAfterOAuth,
     });
   }, [loginAsUser, requireInvite]);
 
@@ -3103,7 +3120,7 @@ const logWeight = useCallback(() => {
         inviteChecking={inviteChecking}
         bootstrapAuth={bootstrapAuth}
         onOpenVersionInfo={() => setVersionInfoOpen(true)}
-        GoogleSignInButton={GoogleSignInButton}
+        OAuthSignInButton={OAuthSignInButton}
       />
     </React.Suspense>
   );
