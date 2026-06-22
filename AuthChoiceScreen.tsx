@@ -43,8 +43,8 @@ const introCards: IntroCard[] = [
     icon: Utensils,
   },
   {
-    title: 'Google и Apple',
-    text: 'Один Google или Apple account = один cloud profile. Данные не смешиваются между устройствами.',
+    title: 'Google-вход',
+    text: 'Один Google account = один cloud profile. Данные не смешиваются между устройствами.',
     badge: 'Синк',
     icon: Watch,
   },
@@ -116,7 +116,7 @@ export default function AuthChoiceScreen({
               Только cloud-профиль
             </div>
             <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-              Локальная регистрация отключена. Новый аккаунт создаётся только через Google или Apple, чтобы данные
+              Локальная регистрация отключена. Новый аккаунт создаётся только через Google, чтобы данные
               синхронизировались между устройствами и не обходили подписку.
             </p>
           </div>
@@ -146,27 +146,15 @@ export default function AuthChoiceScreen({
             {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 items-stretch justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
-            <div className="flex justify-center">
-              <OAuthSignInButton
-                provider="google"
-                onAuthed={() => void bootstrapAuth()}
-                inviteCode={inviteCode}
-                width={220}
-                size="medium"
-                text="continue_with"
-              />
-            </div>
-            <div className="flex justify-center">
-              <OAuthSignInButton
-                provider="apple"
-                onAuthed={() => void bootstrapAuth()}
-                inviteCode={inviteCode}
-                width={220}
-                size="medium"
-                text="continue_with"
-              />
-            </div>
+          <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
+            <OAuthSignInButton
+              provider="google"
+              onAuthed={() => void bootstrapAuth()}
+              inviteCode={inviteCode}
+              width={220}
+              size="medium"
+              text="continue_with"
+            />
           </div>
           <button
             type="button"
