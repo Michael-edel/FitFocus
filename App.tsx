@@ -59,6 +59,7 @@ import { addWeight, weightDelta } from './weight';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
+import { trackWisShareEvent } from './analytics/wisShare';
 import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
@@ -94,6 +95,7 @@ import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
+import ShareWisCard from './components/ShareWisCard';
 import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
@@ -1951,6 +1953,102 @@ await ensurePdfInterFont(doc);
     doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
   };
 
+  type WisShareState = 'idle' | 'busy' | 'success' | 'error';
+  const wisShareCardRef = useRef<HTMLDivElement | null>(null);
+  const wisShareResetTimerRef = useRef<number | null>(null);
+  const [wisShareState, setWisShareState] = useState<WisShareState>('idle');
+  const [wisShareMessage, setWisShareMessage] = useState<string | null>(null);
+
+  const setWisShareNotice = useCallback((state: WisShareState, message: string | null) => {
+    setWisShareState(state);
+    setWisShareMessage(message);
+    if (wisShareResetTimerRef.current) {
+      window.clearTimeout(wisShareResetTimerRef.current);
+      wisShareResetTimerRef.current = null;
+    }
+    if (state !== 'busy' && message) {
+      wisShareResetTimerRef.current = window.setTimeout(() => {
+        setWisShareState('idle');
+        setWisShareMessage(null);
+      }, 3500);
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (wisShareResetTimerRef.current) {
+      window.clearTimeout(wisShareResetTimerRef.current);
+    }
+  }, []);
+
+  const handleShareWisCard = useCallback(async () => {
+    if (!currentUser || !weekly) return;
+    const card = wisShareCardRef.current;
+    if (!card) {
+      setWisShareNotice('error', 'Не удалось подготовить карточку WIS. Попробуйте ещё раз.');
+      trackWisShareEvent('wis_share_failed', { reason: 'share_card_missing', wis: weekly.wis });
+      return;
+    }
+
+    setWisShareNotice('busy', 'Готовим PNG-карточку WIS...');
+    trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
+
+    try {
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default;
+      if ((document as any).fonts?.ready) {
+        await (document as any).fonts.ready;
+      }
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      const canvas = await html2canvas(card, {
+        useCORS: true,
+        scale: 1,
+        backgroundColor: null,
+      });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) {
+        throw new Error('canvas_to_blob_failed');
+      }
+
+      const file = new File([blob], `FitFocus_WIS_${weekly.wis}.png`, { type: 'image/png' });
+      const canShareFiles =
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] });
+
+      if (canShareFiles) {
+        await navigator.share({
+          files: [file],
+          title: 'FitFocus WIS',
+          text: 'Моя недельная WIS-карточка FitFocus',
+        });
+        setWisShareNotice('success', 'Карточка готова и передана в системное меню отправки.');
+        trackWisShareEvent('wis_share_success', { method: 'share_sheet', wis: weekly.wis });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `FitFocus_WIS_${weekly.wis}.png`;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setWisShareNotice('success', 'Системная отправка недоступна — PNG скачан на устройство.');
+      trackWisShareEvent('wis_share_success', { method: 'download', wis: weekly.wis });
+    } catch (error) {
+      const reason = String((error as any)?.message || error || 'unknown_error');
+      setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
+      trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
+    }
+  }, [currentUser, weekly, setWisShareNotice]);
+
   // Оптимизированный запуск AI генерации еженедельных отчетов
   const aiReportGenerationRef = useRef<string | null>(null);
   useEffect(() => {
@@ -2993,6 +3091,9 @@ const logWeight = useCallback(() => {
       weekly,
       weeklyReports,
       exportWeeklyPDF,
+      onShareWisCard: handleShareWisCard,
+      shareWisState: wisShareState,
+      shareWisMessage: wisShareMessage,
     },
     progress: {
       weightHistory: currentUser?.weightHistory || [],
@@ -3320,6 +3421,19 @@ const logWeight = useCallback(() => {
       <AppWorkspace
         workspaceProps={workspaceProps}
       />
+      {activeTab === 'dashboard' && currentUser && weekly && (
+        <ShareWisCard
+          ref={wisShareCardRef}
+          weekly={weekly}
+          goalLabel={
+            currentUser.goal === Goal.LOSS
+              ? 'Фокус: снижение веса'
+              : currentUser.goal === Goal.GAIN
+                ? 'Фокус: набор веса'
+                : 'Фокус: поддержание формы'
+          }
+        />
+      )}
       {/* Family menu pre-questions */}
       {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
