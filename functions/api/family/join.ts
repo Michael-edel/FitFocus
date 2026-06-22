@@ -2,6 +2,7 @@
 // POST: join a family by invite code
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
+import { getActiveFamilyForUser } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -16,14 +17,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!code) throw new Error("BAD_REQUEST");
 
     // already in a family?
-    const existing = await db
-      .prepare(
-        `SELECT f.id FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active' LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
+    const existing = await getActiveFamilyForUser(db, user.sub);
     if (existing) return json({ ok: true, familyId: existing.id, alreadyMember: true }, 200);
 
     const inv = await db
@@ -37,9 +31,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const now = Math.floor(nowMs() / 1000);
     if (!inv || inv.used_by_user_id || now > inv.expires_at) throw new Error("INVITE_INVALID");
 
+    const activeFamily = await db
+      .prepare("SELECT id FROM families WHERE id = ? AND is_active = 1 LIMIT 1")
+      .bind(inv.family_id)
+      .first<any>();
+    if (!activeFamily) throw new Error("INVITE_INVALID");
+
     // enforce max 5 active members
     const cnt = await db
-      .prepare("SELECT COUNT(*) as c FROM family_members WHERE family_id = ? AND status = 'active'")
+      .prepare("SELECT COUNT(*) as c FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1")
       .bind(inv.family_id)
       .first<any>();
     if ((cnt?.c || 0) >= 5) throw new Error("FAMILY_LIMIT");

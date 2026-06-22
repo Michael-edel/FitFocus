@@ -4,6 +4,7 @@
 // - family scope: aggregated for the whole family (family_id provided) if user is an active member
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
+import { requireFamilyMember } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -27,17 +28,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       const famId = String(family_id);
       const sharedUserId = `family:${famId}`;
 
-      // Ensure current user is in this family (active)
-      const mem = await db
-        .prepare(
-          `SELECT 1 AS ok
-           FROM family_members
-           WHERE family_id = ? AND user_id = ? AND status = 'active'
-           LIMIT 1`
-        )
-        .bind(famId, user.sub)
-        .first<any>();
-      if (!mem) return json({ error: "FORBIDDEN" }, 403);
+      await requireFamilyMember(db, famId, user.sub);
 
       const rows = await db
         .prepare(

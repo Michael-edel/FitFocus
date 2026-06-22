@@ -3,6 +3,7 @@
 // Body: { week_start: 'YYYY-MM-DD', ingredient_name: string, checked: boolean, family_id?: string }
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
+import { requireFamilyMember } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -23,6 +24,7 @@ async function handle(request: Request, env: Env) {
 
   if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
   if (!ingredient_name) return json({ error: "BAD_INGREDIENT" }, 400);
+  if (family_id) await requireFamilyMember(db, family_id, user.sub);
 
   const updated_at = nowMs();
   const val = checked ? 1 : 0;

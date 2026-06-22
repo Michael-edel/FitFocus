@@ -3,6 +3,7 @@
 // POST: saves the family's weekly menu as the server source of truth
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
+import { requireActiveFamilyForUser, requireFamilyOwner } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -25,16 +26,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
 
-    const fam = await db
-      .prepare(
-        `SELECT f.id
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
+    const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
     if (!fam) return json({ weekStart, shared: null, portions: null }, 200);
 
     const shared = await db
@@ -73,18 +65,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!menu || typeof menu !== "object") return json({ error: "BAD_MENU" }, 400);
     if (!Array.isArray(menu.days) || !menu.days.length) return json({ error: "BAD_MENU_DAYS" }, 400);
 
-    const fam = await db
-      .prepare(
-        `SELECT f.id, f.owner_user_id
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
-    if (!fam) return json({ error: "NOT_IN_FAMILY" }, 403);
-    if (fam.owner_user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);
+    const fam = await requireFamilyOwner(db, user.sub);
 
     const now = Math.floor(Date.now() / 1000);
     const menuId = crypto.randomUUID();
