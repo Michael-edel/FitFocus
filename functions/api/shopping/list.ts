@@ -5,6 +5,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -28,7 +29,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       const famId = String(family_id);
       const sharedUserId = `family:${famId}`;
 
-      await requireFamilyMember(db, famId, user.sub);
+      const fam = await requireFamilyMember(db, famId, user.sub);
+      await requireFamilyPlan(db, fam.owner_user_id);
 
       const rows = await db
         .prepare(
@@ -98,6 +100,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ week_start: week, items, total_grams: totalGrams });
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
