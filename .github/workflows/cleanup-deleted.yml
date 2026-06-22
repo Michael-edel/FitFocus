@@ -1,0 +1,34 @@
+name: Cleanup deleted accounts
+
+on:
+  schedule:
+    - cron: "10 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Call protected cleanup endpoint
+        env:
+          CLEANUP_URL: ${{ vars.FITFOCUS_CLEANUP_URL }}
+          CLEANUP_SECRET: ${{ secrets.FITFOCUS_CLEANUP_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLEANUP_SECRET:-}" ]; then
+            echo "Missing repository secret FITFOCUS_CLEANUP_SECRET"
+            exit 1
+          fi
+
+          URL="${CLEANUP_URL:-https://fitfocus.pages.dev/api/internal/cleanup_deleted}"
+          curl --fail --show-error --silent \
+            --request POST "$URL" \
+            --header "Authorization: Bearer ${CLEANUP_SECRET}" \
+            --header "Content-Type: application/json" \
+            --data '{"limit":200}'

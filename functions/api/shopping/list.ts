@@ -5,6 +5,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { aggregateShoppingRows, ingredientKey } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
@@ -36,33 +37,34 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         .prepare(
           `SELECT
              w.ingredient_name as name,
-             SUM(w.grams) as grams,
-             COALESCE(MAX(sc_shared.checked), MAX(sc_user.checked), 0) as checked
+             w.grams as grams
            FROM weekly_menu_items w
-           LEFT JOIN shopping_checked sc_shared
-             ON sc_shared.user_id = ?
-            AND sc_shared.week_start = ?
-            AND sc_shared.family_id = ?
-            AND sc_shared.ingredient_name = w.ingredient_name
-           LEFT JOIN shopping_checked sc_user
-             ON sc_user.user_id = ?
-            AND sc_user.week_start = ?
-            AND sc_user.family_id = ?
-            AND sc_user.ingredient_name = w.ingredient_name
            WHERE w.week_start = ? AND w.family_id = ?
-           GROUP BY w.ingredient_name
            ORDER BY w.ingredient_name`
         )
-        .bind(sharedUserId, week, famId, user.sub, week, famId, week, famId)
+        .bind(week, famId)
         .all<any>();
 
-      const items = (rows?.results || [])
-        .map((r: any) => ({
-          name: String(r.name || "").trim(),
-          grams: Math.max(0, Math.round(Number(r.grams || 0))),
-          checked: Boolean(r.checked),
-        }))
-        .filter((it: any) => it.name && it.grams > 0);
+      const checkedRows = await db
+        .prepare(
+          `SELECT ingredient_name as name, checked
+           FROM shopping_checked
+           WHERE week_start = ? AND family_id = ? AND user_id IN (?, ?)`
+        )
+        .bind(week, famId, sharedUserId, user.sub)
+        .all<any>();
+
+      const checkedByKey = new Map<string, boolean>();
+      for (const row of checkedRows?.results || []) {
+        const key = ingredientKey(String(row.name || ""));
+        if (key) checkedByKey.set(key, Boolean(row.checked) || Boolean(checkedByKey.get(key)));
+      }
+
+      const items = aggregateShoppingRows((rows?.results || []).map((row: any) => ({
+        name: row.name,
+        grams: row.grams,
+        checked: checkedByKey.get(ingredientKey(String(row.name || ""))) || false,
+      })));
 
       const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
       return json({ week_start: week, family_id: famId, items, total_grams: totalGrams });
@@ -73,28 +75,34 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .prepare(
         `SELECT
            w.ingredient_name as name,
-           SUM(w.grams) as grams,
-           COALESCE(MAX(sc.checked), 0) as checked
+           w.grams as grams
          FROM weekly_menu_items w
-         LEFT JOIN shopping_checked sc
-           ON sc.user_id = ?
-          AND sc.week_start = ?
-          AND sc.family_id IS NULL
-          AND sc.ingredient_name = w.ingredient_name
          WHERE w.user_id = ? AND w.week_start = ? AND w.family_id IS NULL
-         GROUP BY w.ingredient_name
          ORDER BY w.ingredient_name`
       )
-      .bind(user.sub, week, user.sub, week)
+      .bind(user.sub, week)
       .all<any>();
 
-    const items = (rows?.results || [])
-      .map((r: any) => ({
-        name: String(r.name || "").trim(),
-        grams: Math.max(0, Math.round(Number(r.grams || 0))),
-        checked: Boolean(r.checked),
-      }))
-      .filter((it: any) => it.name && it.grams > 0);
+    const checkedRows = await db
+      .prepare(
+        `SELECT ingredient_name as name, checked
+         FROM shopping_checked
+         WHERE user_id = ? AND week_start = ? AND family_id IS NULL`
+      )
+      .bind(user.sub, week)
+      .all<any>();
+
+    const checkedByKey = new Map<string, boolean>();
+    for (const row of checkedRows?.results || []) {
+      const key = ingredientKey(String(row.name || ""));
+      if (key) checkedByKey.set(key, Boolean(row.checked) || Boolean(checkedByKey.get(key)));
+    }
+
+    const items = aggregateShoppingRows((rows?.results || []).map((row: any) => ({
+      name: row.name,
+      grams: row.grams,
+      checked: checkedByKey.get(ingredientKey(String(row.name || ""))) || false,
+    })));
 
     const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
     return json({ week_start: week, items, total_grams: totalGrams });

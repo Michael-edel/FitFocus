@@ -5,8 +5,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { hardDeleteAccount } from "../_lib/account_delete";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { cleanupDeletedAccounts } from "../_lib/account_cleanup";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -25,21 +24,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (body?.limit) limit = Math.min(200, Math.max(1, Number(body.limit)));
   } catch {}
 
-  const rows = await db.prepare(
-    "SELECT id FROM users WHERE deletion_scheduled_at IS NOT NULL AND deletion_scheduled_at <= datetime('now') LIMIT ?"
-  ).bind(limit).all<{ id: string }>();
-
-  const ids = (rows.results || []).map(r => String(r.id)).filter(Boolean);
-  let deleted = 0;
-
-  for (const id of ids) {
-    try {
-      await hardDeleteAccount(db, id);
-      deleted++;
-    } catch {}
-  }
-
-  await logAdminEvent(db, { adminUserId: user.sub, action: 'cleanup_deleted', meta: { found: ids.length, deleted, limit } });
-
-  return json({ ok: true, found: ids.length, deleted }, 200);
+  const result = await cleanupDeletedAccounts(db, { limit, actorUserId: user.sub, logAction: "cleanup_deleted" });
+  return json(result, 200);
 };

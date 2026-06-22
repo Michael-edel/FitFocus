@@ -859,11 +859,11 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 const App: React.FC = () => {
 
   const weekStartISO = useCallback((d = new Date()) => {
-    const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    const day = date.getUTCDay();
+    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = date.getDay();
     const diff = (day === 0 ? -6 : 1 - day); // Monday start
-    date.setUTCDate(date.getUTCDate() + diff);
-    return date.toISOString().slice(0, 10);
+    date.setDate(date.getDate() + diff);
+    return localDayKey(date);
   }, []);
 
   const formatGramsPretty = useCallback((grams: number) => {
@@ -2251,9 +2251,12 @@ await ensurePdfInterFont(doc);
     const now = Date.now();
     const last7 = foodDiary.filter(f => (now - new Date(f.timestamp).getTime()) <= 7 * 86400000);
     if (!last7.length) return 0;
-    const dayKey = (iso?: string) => (iso ?? "").slice(0, 10);
     const sums: Record<string, number> = {};
-    for (const f of last7) sums[dayKey(f.timestamp)] = (sums[dayKey(f.timestamp)] ?? 0) + (f.calories ?? 0);
+    for (const f of last7) {
+      const key = localDayKey(f.timestamp);
+      if (!key) continue;
+      sums[key] = (sums[key] ?? 0) + (f.calories ?? 0);
+    }
     const days = Object.keys(sums);
     const okDays = days.filter(d => sums[d] <= (targets.calories || 1) * 1.1).length;
     const dietScore = okDays / Math.max(1, days.length);
@@ -2832,7 +2835,7 @@ const logWeight = useCallback(() => {
   }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
 
   const todayTask = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDayKey(new Date());
     return currentUser?.tasks?.find(t => t.date === today);
   }, [currentUser]);
 

@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
@@ -30,10 +31,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const norm = items
-      .map((it: any) => ({
-        name: String(it?.name || "").trim(),
-        grams: Math.max(0, Math.round(Number(it?.grams || 0))),
-      }))
+      .map((it: any) => normalizeShoppingIngredient(it?.name, it?.grams))
       .filter((it: any) => it.name && it.grams > 0)
       .slice(0, 500);
 
