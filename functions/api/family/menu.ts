@@ -29,6 +29,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
     if (!fam) return json({ weekStart, shared: null, portions: null }, 200);
+    await requireFamilyPlan(db, fam.owner_user_id);
 
     const shared = await db
       .prepare("SELECT id, family_id, week_start, menu_json, created_at FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1")
@@ -49,7 +50,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     });
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
 

@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
+import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -24,7 +25,10 @@ async function handle(request: Request, env: Env) {
 
   if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
   if (!ingredient_name) return json({ error: "BAD_INGREDIENT" }, 400);
-  if (family_id) await requireFamilyMember(db, family_id, user.sub);
+  if (family_id) {
+    const fam = await requireFamilyMember(db, family_id, user.sub);
+    await requireFamilyPlan(db, fam.owner_user_id);
+  }
 
   const updated_at = nowMs();
   const val = checked ? 1 : 0;
@@ -49,7 +53,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     return await handle(request, env);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
 
@@ -58,6 +62,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return await handle(request, env);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
