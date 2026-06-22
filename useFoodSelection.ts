@@ -1,7 +1,11 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { FoodItem, MealType } from './types';
 
-export function useFoodSelection(setFoodDiary: Dispatch<SetStateAction<FoodItem[]>>, deleteFoodEntry: (id: string) => void) {
+export function useFoodSelection(
+  setFoodDiary: Dispatch<SetStateAction<FoodItem[]>>,
+  deleteFoodEntry: (id: string) => void,
+  persistFoodDiary?: (nextDiary: FoodItem[]) => void,
+) {
   const [selectedFoodIds, setSelectedFoodIds] = useState<Set<string>>(new Set<string>());
 
   const toggleFoodSelected = useCallback((id: string) => {
@@ -17,9 +21,13 @@ export function useFoodSelection(setFoodDiary: Dispatch<SetStateAction<FoodItem[
 
   const bulkUpdateMealType = useCallback((mealType: MealType) => {
     if (!selectedFoodIds.size) return;
-    setFoodDiary(prev => prev.map(x => (selectedFoodIds.has(x.id) ? { ...x, mealType } : x)));
+    setFoodDiary(prev => {
+      const next = prev.map(x => (selectedFoodIds.has(x.id) ? { ...x, mealType } : x));
+      persistFoodDiary?.(next);
+      return next;
+    });
     clearFoodSelection();
-  }, [clearFoodSelection, selectedFoodIds, setFoodDiary]);
+  }, [clearFoodSelection, persistFoodDiary, selectedFoodIds, setFoodDiary]);
 
   const bulkRemoveSelectedFoods = useCallback(() => {
     if (!selectedFoodIds.size) return;

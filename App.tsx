@@ -267,6 +267,13 @@ type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
 const MAX_DIARY_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 500;
 
+const sanitizeFoodEntryForStorage = <T extends Partial<FoodItem>>(entry: T): T => {
+  const out: any = { ...entry };
+  if (typeof out.photo === 'string') delete out.photo;
+  if (typeof out.photoThumb === 'string' && out.photoThumb.length > 120_000) delete out.photoThumb;
+  return out;
+};
+
 // Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
 const evictLargeLocalStorage = () => {
   try {
@@ -1644,11 +1651,8 @@ const openEditFood = (item: FoodEntry) => {
   setEditFoodModal({
     id: item.id,
     name: item.name,
-    calories: item.calories,
-    protein: item.protein,
-    fat: item.fat,
-    carbs: item.carbs,
-    mealType: item.mealType,
+    mealType: item.mealType || inferMealType(item.timestamp),
+    timestamp: item.timestamp || new Date().toISOString(),
   });
 };
   const [regData, setRegData] = useState<RegistrationData>({
@@ -2320,25 +2324,25 @@ await ensurePdfInterFont(doc);
     persistUser({ ...currentUser, usage: nextUsage });
   }, [currentUser, persistUser]);
 
+  const persistFoodDiary = useCallback((nextDiary: FoodItem[]) => {
+    if (!currentUser) return;
+    const nextStorage = (nextDiary || []).map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS);
+    safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
+  }, [currentUser?.id]);
+
   const addFoodToDiary = useCallback((item: FastLogItem) => {
     if (!currentUser) return;
     const ts = (item as any).timestamp ?? new Date().toISOString();
     // Keep photo in UI state (so user sees it immediately), but strip it from persisted localStorage payload to avoid quota issues.
     const entryForState: any = { ...item, id: Date.now().toString(), timestamp: ts, mealType: (item as any).mealType ?? inferMealType(ts) };
-    const stripForStorage = (e: any) => {
-      const out: any = { ...e };
-      if (typeof out.photo === 'string') delete out.photo;
-      if (typeof out.photoThumb === 'string' && out.photoThumb.length > 120_000) delete out.photoThumb;
-      return out;
-    };
-    const entryForStorage = stripForStorage(entryForState);
+    const entryForStorage = sanitizeFoodEntryForStorage(entryForState);
 
     // Use functional update so rapid consecutive adds (e.g. multiple scans)
     // don't overwrite previous entries because of stale closures.
     setFoodDiary((prev) => {
       const prevArr = prev || [];
       const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
-      const nextStorage = [entryForStorage, ...prevArr.map(stripForStorage)].slice(0, MAX_DIARY_ITEMS);
+      const nextStorage = [entryForStorage, ...prevArr.map(sanitizeFoodEntryForStorage)].slice(0, MAX_DIARY_ITEMS);
       safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
       const nextDayKey = localDayKey(ts);
       if (nextDayKey) setSelectedDiaryDayKey(nextDayKey);
@@ -2354,10 +2358,14 @@ await ensurePdfInterFont(doc);
   }, [foodHistory, currentUser]);
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!currentUser) return;
-    const next = foodDiary.map(it => (it.id === id ? { ...it, ...patch } : it));
-    setFoodDiary(next);
-    safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(next));
-  }, [foodDiary, currentUser]);
+    setFoodDiary((prev) => {
+      const next = (prev || []).map(it => (it.id === id ? { ...it, ...patch } : it));
+      persistFoodDiary(next);
+      const updated = next.find((it) => it.id === id);
+      if (updated?.timestamp) setSelectedDiaryDayKey(localDayKey(updated.timestamp));
+      return next;
+    });
+  }, [currentUser, persistFoodDiary]);
 
   const deleteFoodPhoto = useCallback((id: string) => {
     updateFoodEntry(id, { photo: undefined, photoThumb: undefined });
@@ -2367,10 +2375,10 @@ await ensurePdfInterFont(doc);
     if (!currentUser) return;
     setFoodDiary((prev) => {
       const next = (prev || []).filter(it => it.id !== id);
-      safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(next));
+      persistFoodDiary(next);
       return next;
     });
-  }, [currentUser]);
+  }, [currentUser, persistFoodDiary]);
 
   const {
     selectedFoodIds,
@@ -2378,7 +2386,7 @@ await ensurePdfInterFont(doc);
     clearFoodSelection,
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
-  } = useFoodSelection(setFoodDiary, deleteFoodEntry);
+  } = useFoodSelection(setFoodDiary, deleteFoodEntry, persistFoodDiary);
 
   const handleDiaryDayChange = useCallback((dayKey: string) => {
     clearFoodSelection();
@@ -3275,7 +3283,7 @@ const logWeight = useCallback(() => {
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
             <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
-              <FoodInsightCard photo={insightModal.photo} name={insightModal.name} insight={insightModal.insight} isPro={paywall.canUsePro} onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(newDiary)); setInsightModal({ ...insightModal, insight: next }); }} onSaveRecipe={addFavoriteRecipe} onClose={() => setInsightModal(null)} />
+              <FoodInsightCard photo={insightModal.photo} name={insightModal.name} insight={insightModal.insight} isPro={paywall.canUsePro} onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); persistFoodDiary(newDiary); setInsightModal({ ...insightModal, insight: next }); }} onSaveRecipe={addFavoriteRecipe} onClose={() => setInsightModal(null)} />
             </React.Suspense>
           </div>
         </div>
