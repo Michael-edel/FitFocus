@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Cloud, Footprints, ShieldCheck, Sparkles, TrendingUp, Utensils, Watch } from 'lucide-react';
+import { Apple, ArrowRight, Cloud, Footprints, ShieldCheck, Sparkles, TrendingUp, Utensils, Watch } from 'lucide-react';
 
 type OAuthSignInButtonProps = {
   onAuthed: () => void;
@@ -155,6 +155,12 @@ export default function AuthChoiceScreen({
               size="medium"
               text="continue_with"
             />
+          </div>
+          <div className="flex items-center justify-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+              <Apple size={12} className="text-slate-500" />
+              Apple скоро
+            </div>
           </div>
           <button
             type="button"
