@@ -344,26 +344,6 @@ export default function PlanScreen({
         </div>
       )}
 
-      {weeklyMenu && ShoppingListCardComponent && (
-        <React.Suspense fallback={<div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-slate-500 font-semibold">Загрузка корзины закупа...</div>}>
-          <div id="shopping-list" className="scroll-mt-24 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Корзина закупа</p>
-                <p className="mt-1 text-xs text-slate-500 font-semibold">Показывает список покупок после генерации меню и позволяет экспортировать его в CSV.</p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <ShoppingListCardComponent
-                weekStart={shoppingWeekStart}
-                title="Список покупок"
-                userId={currentUser?.id ?? null}
-              />
-            </div>
-          </div>
-        </React.Suspense>
-      )}
-
       <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Меню на неделю</p>
@@ -522,6 +502,31 @@ export default function PlanScreen({
           <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить меню на 7 дней и список покупок.</p>
         )}
       </div>
+
+      {weeklyMenu && ShoppingListCardComponent && (
+        <React.Suspense fallback={<div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-slate-500 font-semibold">Загрузка корзины закупа...</div>}>
+          <div id="shopping-list" className="scroll-mt-24 mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Корзина закупа</p>
+                <p className="mt-1 text-xs text-slate-500 font-semibold">Список строится по сгенерированному меню выше. Граммовки суммируются за неделю и экспортируются в CSV.</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <ShoppingListCardComponent
+                weekStart={shoppingWeekStart}
+                title="Список покупок"
+                fallbackList={
+                  Array.isArray(weeklyMenu.shoppingListItems) && weeklyMenu.shoppingListItems.length
+                    ? weeklyMenu.shoppingListItems.map((it: any) => `${it.name} — ${formatGramsPretty(Number(it.grams || 0))}`)
+                    : weeklyMenu.shoppingList
+                }
+                userId={currentUser?.id ?? null}
+              />
+            </div>
+          </div>
+        </React.Suspense>
+      )}
 
       {(cloudFamily?.id || (paywallPlan === 'family' && allUsers.length > 1)) && (
         <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
