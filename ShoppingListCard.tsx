@@ -23,6 +23,52 @@ type ShoppingItem = {
   display_qty: string;
 };
 
+function formatShoppingQty(grams: number) {
+  const rounded = Math.max(0, Math.round(Number(grams || 0)));
+  if (!rounded) return "кол-во уточнить";
+  if (rounded >= 1000) {
+    const kg = Math.round((rounded / 1000) * 10) / 10;
+    return `${String(kg).replace(".", ",")} кг`;
+  }
+  return `${rounded} г`;
+}
+
+function categorizeItem(name: string): Category {
+  const n = name.toLowerCase();
+  if (/(огур|помид|томат|капуст|морков|лук|перец|баклаж|кабач|цуккини|брокколи|шпинат|салат|зелень|укроп|петруш|овощ|фасоль|гриб)/i.test(n)) {
+    return "vegetables";
+  }
+  if (/(яблок|банан|апельсин|ягод|фрукт|груш|киви|лимон|авокад)/i.test(n)) {
+    return "fruits";
+  }
+  if (/(творог|йогурт|кефир|молок|сыр|сметан)/i.test(n)) {
+    return "dairy";
+  }
+  if (/(куриц|индейк|говядин|свинин|рыб|треск|минтай|яйц|тунец|лосос|мяс|филе)/i.test(n)) {
+    return "protein";
+  }
+  if (/(греч|рис|овсян|хлоп|макарон|паста|картоф|хлеб|круп|булгур|киноа)/i.test(n)) {
+    return "carbs";
+  }
+  if (/(масло|орех|миндаль|семен|чиа|соус)/i.test(n)) {
+    return "fat";
+  }
+  return "other";
+}
+
+function normalizeShoppingItem(raw: any): ShoppingItem | null {
+  const name = String(raw?.name || raw?.ingredient_name || "").trim();
+  if (!name) return null;
+  const grams = Math.max(0, Math.round(Number(raw?.grams || 0)));
+  return {
+    name,
+    grams,
+    category: (raw?.category as Category) || categorizeItem(name),
+    checked: Boolean(raw?.checked),
+    display_qty: String(raw?.display_qty || raw?.displayQty || "").trim() || formatShoppingQty(grams),
+  };
+}
+
 function groupItems(items: ShoppingItem[]) {
   const groups = new Map<Category, ShoppingItem[]>();
   for (const cat of CATEGORY_ORDER) groups.set(cat, []);
@@ -79,7 +125,7 @@ export default function ShoppingListCard({
     const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(weekStart)}`, { credentials: "include" });
     if (!res.ok) throw new Error(`shopping_list_http_${res.status}`);
     const data = await res.json();
-    setItems(Array.isArray(data?.items) ? data.items : []);
+    setItems((Array.isArray(data?.items) ? data.items : []).map(normalizeShoppingItem).filter(Boolean) as ShoppingItem[]);
   }, [weekStart]);
 
   useEffect(() => {
