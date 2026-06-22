@@ -1,9 +1,10 @@
 // /api/family
 // GET: returns current user's family (if any) and members (active)
 // POST: create a new family (owner) and add creator as member
-import { json, requireUser, errRu } from "../_lib/auth";
+import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { getActiveFamilyForUser } from "../_lib/family_access";
+import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -23,6 +24,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const members = await db
       .prepare(
         `SELECT user_id, role, status, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at
+                , restrictions_json
          FROM family_members
          WHERE family_id = ? AND status = 'active' AND is_active = 1
          ORDER BY role DESC, created_at ASC`
@@ -45,6 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const body = await request.json().catch(() => ({}));
     const name = (body?.name || "Моя семья").toString().slice(0, 60);
+    await requireFamilyPlan(db, user.sub);
 
     // If user already in a family, return it
     const existingAccess = await getActiveFamilyForUser(db, user.sub);
@@ -73,6 +76,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ family: { id: familyId, name, owner_user_id: user.sub, created_at: ts } }, 201);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireActiveFamilyForUser, requireFamilyOwner } from "../_lib/family_access";
+import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -66,6 +67,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!Array.isArray(menu.days) || !menu.days.length) return json({ error: "BAD_MENU_DAYS" }, 400);
 
     const fam = await requireFamilyOwner(db, user.sub);
+    await requireFamilyPlan(db, user.sub);
 
     const now = Math.floor(Date.now() / 1000);
     const menuId = crypto.randomUUID();
@@ -83,6 +85,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: true, weekStart, menuId }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

@@ -3,6 +3,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { getActiveFamilyForUser } from "../_lib/family_access";
+import { loadActivePlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -32,10 +33,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!inv || inv.used_by_user_id || now > inv.expires_at) throw new Error("INVITE_INVALID");
 
     const activeFamily = await db
-      .prepare("SELECT id FROM families WHERE id = ? AND is_active = 1 LIMIT 1")
+      .prepare("SELECT id, owner_user_id FROM families WHERE id = ? AND is_active = 1 LIMIT 1")
       .bind(inv.family_id)
       .first<any>();
     if (!activeFamily) throw new Error("INVITE_INVALID");
+
+    const ownerPlan = await loadActivePlan(db, String(activeFamily.owner_user_id || ""));
+    if (ownerPlan !== "family") throw new Error("FAMILY_PLAN_INACTIVE");
 
     // enforce max 5 active members
     const cnt = await db
@@ -56,6 +60,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: true, familyId: inv.family_id }, 200);
   } catch (e: any) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
   }
 };
