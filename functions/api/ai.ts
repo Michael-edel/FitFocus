@@ -2,6 +2,7 @@ import { requireUser, json as jsonV } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./_lib/features";
 import { requireDB } from "./_lib/db";
+import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 
 
 /**
@@ -19,6 +20,8 @@ export interface Env {
   FITFOCUS_KV?: any;
   IP_HASH_SALT?: string;
   FREE_AI_DAILY_LIMIT?: string;
+  PRO_AI_DAILY_LIMIT?: string;
+  FAMILY_AI_DAILY_LIMIT?: string;
   AUTH_JWT_SECRET?: string;
 }
 
@@ -308,6 +311,11 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let user: any;
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   try { await requireBetaAccess(env as any, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
+    return jsonResponse({ error: { message: "Payload too large" } }, 413);
+  }
+
   let bodyText = "";
   let body: any = null;
   try {
@@ -385,16 +393,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
-
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
-    return jsonResponse({ error: { message: "Payload too large" } }, 413);
-  }
+  const db = requireDB(env as any);
+  const activePlan = await loadActivePlan(db, String(user.sub));
 
   // Safe mode: apply conservative limits and settings (toggled via feature_flags.ai_safe_mode)
   if (safeMode) {
-    const isPro = Array.isArray(user?.roles) && user.roles.includes('pro');
-    const dailyLimit = isPro ? 200 : 50;
+    const dailyLimit = activePlan === "free" ? 50 : 200;
     try { await enforceDailyLimit((env as any).DB, String(user.sub), `ai_${feature}`, dailyLimit); }
     catch (e: any) {
       await logAiEvent(env as any, { userId: String(user.sub), feature, status: 429, latencyMs: Date.now()-startedAt, safeMode: true, requestJson: body, error: 'DAILY_LIMIT' });
@@ -424,15 +428,17 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     const day = new Date().toISOString().slice(0, 10);
     const quotaKey = `quota:${day}:${identity}:${feature}`;
     const usedToday = Number(await kv.get(quotaKey) || "0");
-    const freeLimit = Number(env.FREE_AI_DAILY_LIMIT || "3");
+    const planLimit = dailyAiLimitForPlan(activePlan, env);
 
-    if (usedToday >= freeLimit) {
+    if (planLimit !== null && usedToday >= planLimit) {
       await logUsage(env, { identity, feature, status: 402, latency: Date.now() - startedAt, bytesIn: bodyText.length });
       return jsonResponse({
         error: {
           code: "PAYWALL",
-          message: `Guest free limit reached: ${freeLimit}/day. Upgrade to Pro for unlimited AI.`,
-          meta: { feature, limitPerDay: freeLimit }
+          message: activePlan === "free"
+            ? `Free лимит AI достигнут: ${planLimit}/день. Перейдите на Pro или Family для расширенного доступа.`
+            : `Лимит AI для тарифа ${activePlan} достигнут: ${planLimit}/день.`,
+          meta: { feature, plan: activePlan, limitPerDay: planLimit }
         }
       }, 402, { "X-FF-Quota": "EXCEEDED" });
     }
@@ -440,7 +446,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const bodyHash = await sha256Hex(bodyText || "{}");
-  const dedupKey = `dedup:60s:${feature}:${bodyHash}`;
+  const dedupKey = `dedup:60s:${identity}:${feature}:${bodyHash}`;
 
   if (kv) {
     const cached = await kv.get(dedupKey, { type: "json" }) as any | null;
