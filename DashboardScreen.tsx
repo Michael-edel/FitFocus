@@ -12,6 +12,7 @@ import {
   RefreshCcw,
   Scale,
   ShieldCheck,
+  Share2,
   TrendingUp,
 } from 'lucide-react';
 import { Goal, type FoodItem, type UserProfile } from './types';
@@ -92,6 +93,9 @@ type DashboardScreenProps = {
   weekly: WeeklyAnalytics | null;
   weeklyReports: WeeklyAnalytics[];
   exportWeeklyPDF: (report: WeeklyAnalytics) => void;
+  onShareWisCard: () => void;
+  shareWisState: 'idle' | 'busy' | 'success' | 'error';
+  shareWisMessage: string | null;
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
   onOpenProgress: () => void;
@@ -148,6 +152,9 @@ export default function DashboardScreen({
   weekly,
   weeklyReports,
   exportWeeklyPDF,
+  onShareWisCard,
+  shareWisState,
+  shareWisMessage,
   measurementsHistory,
   progressPhotos,
   onOpenProgress,
@@ -451,8 +458,31 @@ export default function DashboardScreen({
                 <div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden border border-white/10"><div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${weekly.wis}%` }} /></div>
               </div>
             </div>
-            <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div>
+            <div className="flex flex-col items-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={onShareWisCard}
+                disabled={shareWisState === 'busy'}
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Share2 size={14} />
+                {shareWisState === 'busy' ? 'Подготовка...' : 'Поделиться'}
+              </button>
+              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0"><BrainCircuit size={28} /></div>
+            </div>
           </div>
+          {shareWisMessage && (
+            <div className={clsx(
+              'rounded-2xl border px-4 py-3 text-sm font-semibold',
+              shareWisState === 'busy'
+                ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-100'
+                : shareWisState === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+                  : 'border-rose-500/20 bg-rose-500/10 text-rose-100',
+            )}>
+              {shareWisMessage}
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 7 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta7 > 0 ? '+' : ''}{weekly.weightDelta7.toFixed(1)} кг</p></div>
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"><p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">Δ 30 дней</p><p className="text-sm font-black tabular-nums text-white">{weekly.weightDelta30 > 0 ? '+' : ''}{weekly.weightDelta30.toFixed(1)} кг</p></div>
