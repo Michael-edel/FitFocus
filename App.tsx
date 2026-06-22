@@ -2358,9 +2358,15 @@ await ensurePdfInterFont(doc);
   const {
     selectedFoodIds,
     toggleFoodSelected,
+    clearFoodSelection,
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
   } = useFoodSelection(setFoodDiary, deleteFoodEntry);
+
+  const handleDiaryDayChange = useCallback((dayKey: string) => {
+    clearFoodSelection();
+    setSelectedDiaryDayKey(dayKey);
+  }, [clearFoodSelection]);
 
   const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
     if (!currentUser) return;
@@ -3033,7 +3039,7 @@ const logWeight = useCallback(() => {
       activeDiaryDayKey: resolvedDiaryDayKey,
       activeDiaryDayLabel: resolvedDiaryDayKey ? formatLocalDayLabel(resolvedDiaryDayKey) : 'Сегодня',
       selectedDiaryStats,
-      onDiaryDayChange: setSelectedDiaryDayKey,
+      onDiaryDayChange: handleDiaryDayChange,
       MacroBarComponent: MacroBar,
       FoodDiaryGroupedComponent: FoodDiaryGrouped,
     },
