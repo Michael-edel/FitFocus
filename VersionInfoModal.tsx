@@ -83,7 +83,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                 Что нового
               </div>
               <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{BUILD_COMBINED_LABEL}</h2>
-               <p className="mt-1 text-sm font-semibold text-slate-400">Версия приложения меняется только при релизе. Автоматически обновляется именно сборка main, поэтому по SHA и номеру сборки видно, что именно установлено сейчас. Ниже показаны пользовательские изменения, служебные схемы и правила версионирования.</p>
+               <p className="mt-1 text-sm font-semibold text-slate-400">В хороших продуктах релиз и build разделены: релиз обновляется только при выпуске новой версии, а сборка main меняется на каждый push. Поэтому здесь отдельно видно и номер релиза, и SHA свежей сборки, и служебные схемы, которые помогают не ломать совместимость.</p>
             </div>
             <button
               type="button"
