@@ -2,6 +2,7 @@
 // POST: creates an invite code for current family (owner only)
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, randomCode, nowMs, toApiError } from "../_lib/db";
+import { requireFamilyOwner } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -11,18 +12,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    const fam = await db
-      .prepare(
-        `SELECT f.id, f.owner_user_id
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
-    if (!fam) throw new Error("NOT_FOUND");
-    if (fam.owner_user_id !== user.sub) throw new Error("FORBIDDEN");
+    const fam = await requireFamilyOwner(db, user.sub);
 
     const body = await request.json().catch(() => ({}));
     const ttlHours = Number(body?.ttlHours || 72);

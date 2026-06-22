@@ -3,6 +3,7 @@
 // POST: create a new family (owner) and add creator as member
 import { json, requireUser, errRu } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
+import { getActiveFamilyForUser } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -12,16 +13,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    const fam = await db
-      .prepare(
-        `SELECT f.id, f.name, f.owner_user_id, f.created_at
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
+    const access = await getActiveFamilyForUser(db, user.sub);
+    const fam = access
+      ? await db.prepare("SELECT id, name, owner_user_id, created_at FROM families WHERE id = ? LIMIT 1").bind(access.id).first<any>()
+      : null;
 
     if (!fam) return json({ family: null, members: [] }, 200);
 
@@ -29,7 +24,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .prepare(
         `SELECT user_id, role, status, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at
          FROM family_members
-         WHERE family_id = ? AND status = 'active'
+         WHERE family_id = ? AND status = 'active' AND is_active = 1
          ORDER BY role DESC, created_at ASC`
       )
       .bind(fam.id)
@@ -52,16 +47,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const name = (body?.name || "Моя семья").toString().slice(0, 60);
 
     // If user already in a family, return it
-    const existing = await db
-      .prepare(
-        `SELECT f.id, f.name, f.owner_user_id, f.created_at
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
+    const existingAccess = await getActiveFamilyForUser(db, user.sub);
+    const existing = existingAccess
+      ? await db.prepare("SELECT id, name, owner_user_id, created_at FROM families WHERE id = ? LIMIT 1").bind(existingAccess.id).first<any>()
+      : null;
     if (existing) return json({ family: existing, alreadyMember: true }, 200);
 
     const familyId = uuid();

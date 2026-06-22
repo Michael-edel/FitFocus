@@ -3,6 +3,7 @@
 // This enables true B2C Family mode: one shared menu, different portion sizes per member, one aggregated family shopping list.
 import { json, requireUser } from "../../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../../_lib/db";
+import { requireFamilyOwner } from "../../_lib/family_access";
 import { calculateDailyTargets } from "../../../../domain/profileMath";
 import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
 
@@ -139,18 +140,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
 
-    const fam = await db
-      .prepare(
-        `SELECT f.id, f.owner_user_id
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status='active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
-    if (!fam) throw new Error("NOT_FOUND");
-    if (fam.owner_user_id !== user.sub) throw new Error("FORBIDDEN");
+    const fam = await requireFamilyOwner(db, user.sub);
 
     const now = Math.floor(nowMs() / 1000);
     const shared = buildDeterministicSharedMenu();
@@ -180,7 +170,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .prepare(
         `SELECT user_id, goal, sex, age, height_cm, weight_kg, activity
          FROM family_members
-         WHERE family_id = ? AND status = 'active'`
+         WHERE family_id = ? AND status = 'active' AND is_active = 1`
       )
       .bind(fam.id)
       .all<any>();

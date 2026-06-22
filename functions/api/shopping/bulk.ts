@@ -3,6 +3,7 @@
 // Body: { week_start: 'YYYY-MM-DD', family_id?: string, updates: [{ ingredient_name: string, checked: boolean }] }
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
+import { requireFamilyMember } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -22,6 +23,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const updates = Array.isArray(body.updates) ? body.updates : [];
 
     if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
+    if (family_id) await requireFamilyMember(db, family_id, user.sub);
 
     const norm = updates
       .map((u: any) => ({
@@ -35,6 +37,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     for (const u of norm) {
       const val = u.checked ? 1 : 0;
+      const sharedUserId = family_id ? `family:${family_id}` : user.sub;
       await db
         .prepare(
           `INSERT INTO shopping_checked (user_id, week_start, family_id, ingredient_name, checked, updated_at)
@@ -42,7 +45,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
            ON CONFLICT(user_id, week_start, family_id, ingredient_name)
            DO UPDATE SET checked=excluded.checked, updated_at=excluded.updated_at`
         )
-        .bind(user.sub, week_start, family_id, u.ingredient_name, val, updated_at)
+        .bind(sharedUserId, week_start, family_id, u.ingredient_name, val, updated_at)
         .run();
     }
 

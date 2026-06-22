@@ -3,6 +3,7 @@
 // Body: { goal?: 'LOSS'|'MAINTAIN', sex?: 'MALE'|'FEMALE', age?: number, height_cm?: number, weight_kg?: number, activity?: number }
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, nowMs, toApiError } from "../_lib/db";
+import { requireActiveFamilyForUser } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -21,18 +22,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const weight_kg = body?.weight_kg !== undefined ? Number(body.weight_kg) : null;
     const activity = body?.activity !== undefined ? Number(body.activity) : null;
 
-    // Find active family
-    const fam = await db
-      .prepare(
-        `SELECT f.id AS family_id
-         FROM families f
-         JOIN family_members m ON m.family_id = f.id
-         WHERE m.user_id = ? AND m.status = 'active'
-         LIMIT 1`
-      )
-      .bind(user.sub)
-      .first<any>();
-
+    const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
     if (!fam) return json({ ok: false, error: "NOT_IN_FAMILY" }, 400);
 
     const updatedAt = Math.floor(nowMs() / 1000);
@@ -49,7 +39,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
              updated_at = ?
          WHERE family_id = ? AND user_id = ?`
       )
-      .bind(goal, sex, age, height_cm, weight_kg, activity, updatedAt, fam.family_id, user.sub)
+      .bind(goal, sex, age, height_cm, weight_kg, activity, updatedAt, fam.id, user.sub)
       .run();
 
     return json({ ok: true, updated_at: updatedAt }, 200);

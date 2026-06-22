@@ -3,6 +3,7 @@
 // Body: { week_start: 'YYYY-MM-DD', family_id?: string, items: [{name, grams}] }
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
+import { requireFamilyMember } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -22,6 +23,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const items = Array.isArray(body.items) ? body.items : [];
 
     if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
+    if (family_id) await requireFamilyMember(db, family_id, user.sub);
 
     const norm = items
       .map((it: any) => ({
