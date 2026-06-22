@@ -6,7 +6,7 @@ import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
 const APP_TITLE = 'FitFocus';
 const APP_ICON = '/icon.svg';
-const sw = self as ServiceWorkerGlobalScope;
+const sw = self as unknown as ServiceWorkerGlobalScope;
 
 clientsClaim();
 cleanupOutdatedCaches();

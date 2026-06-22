@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { LogOut, MoreHorizontal, X } from 'lucide-react';
+import { BookMarked, LogOut, MoreHorizontal, X } from 'lucide-react';
 import { BUILD_SHORT_LABEL } from './versioning';
 import { useModalDismissGestures } from './useModalDismissGestures';
 import {
@@ -71,6 +71,7 @@ export default function SidebarNavigation({
     () => mobileMoreTabs.filter((tab) => !mobileQuickTabs.some((quickTab) => quickTab.id === tab.id)),
     [mobileMoreTabs, mobileQuickTabs],
   );
+  const guideTab = React.useMemo(() => visibleTabs.find((tab) => tab.id === 'guide'), [visibleTabs]);
   const dismissGestures = useModalDismissGestures(() => onMobileMoreOpenChange(false));
 
   return (
@@ -118,6 +119,19 @@ export default function SidebarNavigation({
               <span className="font-black">Что нового</span>
               <span className="text-[10px] font-black uppercase tracking-widest">{BUILD_SHORT_LABEL}</span>
             </button>
+            {guideTab && (
+              <button
+                type="button"
+                onClick={() => { onActiveTabChange('guide'); onMobileMoreOpenChange(false); }}
+                className="w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center justify-between gap-3 text-left transition-all bg-emerald-500/10 text-emerald-200 border border-emerald-500/20"
+              >
+                <span className="flex items-center gap-2 font-black">
+                  <guideTab.icon size={18} />
+                  Инструкция
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Открыть</span>
+              </button>
+            )}
             {mobileMoreListTabs.map((tab) => (
               <button key={tab.id} type="button" onClick={() => { onActiveTabChange(tab.id); onMobileMoreOpenChange(false); }} className={`w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all ${activeTab === tab.id ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
                 <tab.icon size={20} className={tab.id === 'pro' && activeTab !== tab.id ? 'text-amber-500' : ''} />
@@ -158,6 +172,15 @@ export default function SidebarNavigation({
                 title="Открыть изменения версии"
               >
                 {BUILD_SHORT_LABEL}
+              </button>
+              <button
+                type="button"
+                onClick={() => onActiveTabChange('guide')}
+                className="mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-[9px] font-black uppercase tracking-widest text-emerald-200 hover:bg-emerald-500/20 transition-colors"
+                title="Открыть инструкцию"
+              >
+                <BookMarked size={12} />
+                Инструкция
               </button>
               <span className={clsx("mt-2 inline-flex w-fit items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest", modeBadge.cls)}>
                 {modeBadge.text}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BookMarked, CheckCircle2, Cloud, Footprints, HelpCircle, Smartphone, Sparkles, Star, ShieldCheck, Utensils, Video, Watch, MessageSquareText, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Bell, BookMarked, CheckCircle2, Cloud, Footprints, HelpCircle, Smartphone, Sparkles, Star, ShieldCheck, Utensils, Video, Watch, MessageSquareText, ChevronRight, Download } from 'lucide-react';
 import { BUILD_COMBINED_LABEL } from './versioning';
 
 type GuideMode = 'user' | 'tester';
@@ -97,6 +97,42 @@ const quickChecklist = [
   'Шаги и сон показывают источник: ручной ввод, bridge или wearable.',
 ];
 
+const pushInstructions = [
+  {
+    title: 'iPhone',
+    badge: 'Safari / PWA',
+    icon: Smartphone,
+    steps: [
+      'Откройте FitFocus и добавьте его на экран «Домой» через кнопку «Поделиться».',
+      'Разрешите уведомления, когда iPhone покажет системный запрос.',
+      'Если запрос не появился, проверьте Настройки iPhone → Уведомления → FitFocus.',
+    ],
+    note: 'На iPhone push надёжнее работают в установленном приложении, а не в обычной вкладке браузера.',
+  },
+  {
+    title: 'Android',
+    badge: 'Chrome / PWA',
+    icon: Download,
+    steps: [
+      'Откройте FitFocus в Chrome или другом Chromium-браузере.',
+      'Разрешите уведомления в браузере и, по желанию, установите приложение на главный экран.',
+      'Если уведомлений нет, проверьте системные настройки Android и разрешения для сайта.',
+    ],
+    note: 'На Android push обычно работают и в браузере, и в PWA-режиме, если разрешения включены.',
+  },
+  {
+    title: 'Проверка',
+    badge: 'FitFocus',
+    icon: Bell,
+    steps: [
+      'Откройте Настройки → Push-уведомления.',
+      'Нажмите «Включить push» или «Отправить тест».',
+      'Если уведомление не пришло, сначала проверьте статус Cloud и разрешение Notification.',
+    ],
+    note: 'Если push не приходят, чаще всего причина в отключённом разрешении или в том, что приложение открыто не как PWA.',
+  },
+];
+
 export default function GuideScreen() {
   const [mode, setMode] = useState<GuideMode>('user');
   const cards = mode === 'user' ? userCards : testerCards;
@@ -157,6 +193,64 @@ export default function GuideScreen() {
           <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Что проверять</div>
           <div className="mt-2 text-2xl font-black text-slate-100">Синк, рецепты, прогресс, часы</div>
           <div className="mt-2 text-slate-400 font-medium leading-7">Если что-то ломается, сначала смотрим источник данных и cloud-статус.</div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-6 md:p-7">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl border border-indigo-500/20 bg-indigo-500/10 flex items-center justify-center text-indigo-200 shrink-0">
+            <Bell size={20} />
+          </div>
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Push-уведомления</div>
+            <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как включить уведомления на iPhone и Android</h2>
+            <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
+              Push приходят только после разрешения на устройстве. Для iPhone лучше использовать установленное приложение FitFocus,
+              а на Android уведомления работают и в браузере, и в PWA-режиме.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {pushInstructions.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="rounded-[1.75rem] border border-slate-800 bg-slate-950/50 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl border border-slate-800 bg-slate-900/80 flex items-center justify-center text-indigo-300">
+                      <Icon size={18} />
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">{item.badge}</div>
+                      <h3 className="mt-1 text-lg font-black text-slate-100">{item.title}</h3>
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-indigo-200">
+                    Push
+                  </div>
+                </div>
+
+                <ol className="mt-4 space-y-3">
+                  {item.steps.map((step, index) => (
+                    <li key={step} className="flex gap-3 text-sm leading-6 text-slate-300">
+                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-800 bg-slate-900/80 text-[11px] font-black text-slate-200">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                  <div className="flex items-start gap-2 text-sm font-semibold text-slate-300 leading-6">
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-300" />
+                    <span>{item.note}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
