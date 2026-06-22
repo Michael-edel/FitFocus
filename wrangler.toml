@@ -8,7 +8,3 @@ binding = "DB"
 database_name = "fitfocus"
 database_id = "061ae786-9341-4bd7-8efe-025dd1bac6d5"
 migrations_dir = "migrations"
-
-[[r2_buckets]]
-binding = "SUPPORT_ATTACHMENTS"
-bucket_name = "fitfocus-support-attachments"
