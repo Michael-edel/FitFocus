@@ -1,4 +1,5 @@
 import type { FoodItem, UserHabit, UserProfile } from '../types';
+import { toLocalDayKey } from '../dateUtils';
 
 export function calcBmi(weightKg: number, heightCm: number) {
   const h = heightCm / 100;
@@ -26,15 +27,18 @@ export function calcGoalProgressPct(user: UserProfile) {
 export function weekRangeISO(today = new Date()) {
   const end = new Date(today);
   const start = new Date(today);
+  end.setHours(12, 0, 0, 0);
+  start.setHours(12, 0, 0, 0);
   start.setDate(today.getDate() - 6);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const fmt = (d: Date) => toLocalDayKey(d);
   return { start, end, startISO: fmt(start), endISO: fmt(end), label: `${fmt(start)} — ${fmt(end)}` };
 }
 
 export function aggregateWeek(foodDiary: FoodItem[], startISO: string, endISO: string) {
   const byDay = new Map<string, { cal: number; p: number; f: number; c: number; items: FoodItem[] }>();
   for (const it of foodDiary) {
-    const day = new Date(it.timestamp).toISOString().slice(0, 10);
+    const day = toLocalDayKey(it.timestamp);
+    if (!day) continue;
     if (day < startISO || day > endISO) continue;
     const prev = byDay.get(day) ?? { cal: 0, p: 0, f: 0, c: 0, items: [] };
     prev.cal += it.calories;
