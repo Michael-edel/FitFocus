@@ -169,7 +169,13 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const directPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = directPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : directPlan;
   const nextVersion = (refreshedMeta.version || 0) + 1;
-  const profile = withProtectedFieldsShared(user, { ...patch, plan: effectivePlan, version: nextVersion });
+  // PUT is merge-hardened to avoid accidental profile data loss from partial clients.
+  const profile = withProtectedFieldsShared(user, {
+    ...(refreshedMeta.profile ?? {}),
+    ...patch,
+    plan: effectivePlan,
+    version: nextVersion,
+  });
 
   const t = nowMs();
   const statements = [
