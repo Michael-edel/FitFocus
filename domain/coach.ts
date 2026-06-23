@@ -3,6 +3,7 @@ import { UserProfile, Goal, FoodItem, UserHabit } from './types';
 import { detectPlateau, plateauAdjustmentCalories } from './plateau';
 import { calculateDailyTargets } from './profileMath';
 import { calculateCompliance, adaptiveTDEE } from './adaptive';
+import { toLocalDayKey } from '../dateUtils';
 import { generatePlateauExplanation } from '../geminiService';
 
 export async function generateDailyTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): Promise<string> {
@@ -45,7 +46,7 @@ export async function generateDailyTask(profile: UserProfile, diary: FoodItem[],
 }
 
 export async function createTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): Promise<UserProfile> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDayKey(new Date());
   const tasks = profile.tasks || [];
   
   if (tasks.find(t => t.date === today)) return profile;
