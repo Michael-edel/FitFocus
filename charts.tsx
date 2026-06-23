@@ -14,6 +14,14 @@ import {
   YAxis,
 } from 'recharts';
 import { calculateStreak, getTodayKey } from './habits';
+import { toLocalDayKey } from './dateUtils';
+
+function addLocalDays(date: Date, deltaDays: number): Date {
+  const next = new Date(date);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() + deltaDays);
+  return next;
+}
 
 type WeightPoint = { date: string; weight: number };
 type MeasurementPoint = { date: string };
@@ -246,13 +254,10 @@ export function HabitStreaksCard({
   dailyHabits: Record<string, { water: boolean; steps: boolean; breakfast: boolean; sleep: boolean }> | undefined;
 }) {
   const last7Days = useMemo(() => {
-    const days: string[] = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
-      days.push(d.toISOString().slice(0, 10));
-    }
-    return days;
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = addLocalDays(new Date(), i - 6);
+      return toLocalDayKey(day);
+    });
   }, []);
 
   const streaks = useMemo(() => {
