@@ -1,8 +1,9 @@
 
 import { UserProfile } from './types';
+import { toLocalDayKey } from './dateUtils';
 
 export function addWeight(profile: UserProfile, weight: number): UserProfile {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = toLocalDayKey(new Date());
   const weightHistory = [...(profile.weightHistory || []), { date, weight }];
   return {
     ...profile,

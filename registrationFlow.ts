@@ -1,6 +1,7 @@
 import { calculateTDEE } from './profileMath';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { buildFallbackAiPlan } from './aiPlanFallback';
+import { toLocalDayKey } from './dateUtils';
 import { Goal, type UserProfile } from './types';
 
 type RegDataLike = {
@@ -123,7 +124,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
     riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,
     riskAcknowledgedGain: !!(deps.regData as any).riskAckGain,
-    weightHistory: [{ date: new Date().toISOString().slice(0, 10), weight: deps.regData.weight }],
+    weightHistory: [{ date: toLocalDayKey(new Date()), weight: deps.regData.weight }],
     progressPhotos: [],
     tasks: [],
     plan: deps.regData.plan,
