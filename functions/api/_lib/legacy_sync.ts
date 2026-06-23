@@ -1,26 +1,5 @@
+import { loadActivePlanByEmail } from "./plans";
 import { nowMs } from "./db";
-
-export async function loadActivePlanByEmail(db: D1Database, email: string): Promise<"free" | "pro" | "family"> {
-  const normalized = String(email || "").trim().toLowerCase();
-  if (!normalized) return "free";
-  try {
-    const row = await db
-      .prepare(
-        `SELECT s.plan
-         FROM subscriptions s
-         JOIN users u ON u.id = s.user_id
-         WHERE lower(u.email) = ?
-           AND s.status IN ('active', 'trialing')
-         ORDER BY s.updated_at DESC
-         LIMIT 1`
-      )
-      .bind(normalized)
-      .first<{ plan?: string }>();
-    const plan = String(row?.plan || "").toLowerCase();
-    if (plan === "pro" || plan === "family") return plan;
-  } catch {}
-  return "free";
-}
 
 export async function loadLegacyProfileByEmail(
   db: D1Database,

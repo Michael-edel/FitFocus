@@ -5,24 +5,11 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
+import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
 import { normalizeWearableSyncSnapshot } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
-
-async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | "pro" | "family"> {
-  try {
-    const row = await db
-      .prepare(
-        "SELECT plan FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing') ORDER BY updated_at DESC LIMIT 1"
-      )
-      .bind(userId)
-      .first<{ plan?: string }>();
-    const plan = String(row?.plan || "").toLowerCase();
-    if (plan === "pro" || plan === "family") return plan;
-  } catch {}
-  return "free";
-}
 
 async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: Record<string, unknown> | null; version: number }> {
   const row = await db
