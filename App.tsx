@@ -52,6 +52,7 @@ import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
+import { toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -511,13 +512,6 @@ type FoodDiaryGroupedProps = {
   mealTypeLabel: (m: MealType) => string;
   activeDayKey?: string;
   onDayChange?: (dayKey: string) => void;
-};
-
-const localDayKey = (value?: string | number | Date | null) => {
-  if (!value) return '';
-  const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const formatLocalDayLabel = (dayKey: string) => {
