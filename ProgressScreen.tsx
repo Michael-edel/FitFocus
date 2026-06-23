@@ -25,6 +25,7 @@ import {
   YAxis,
 } from 'recharts';
 import { WeightTrendChart } from './charts';
+import { toLocalDayKey } from './dateUtils';
 import { downloadProgressComparisonPdf } from './pdf';
 import { normalizeWearableSyncSnapshot } from './wearableSync';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
@@ -123,13 +124,15 @@ const formatShortDate = (iso: string) => {
 };
 
 const toDateKey = (iso?: string | null) => {
-  if (!iso) return '';
-  return iso.includes('T') ? iso.slice(0, 10) : iso;
+  return toLocalDayKey(iso);
 };
 
-const toUtcDate = (dateKey: string) => new Date(`${dateKey}T00:00:00Z`);
-
-const incrementUtcDate = (date: Date) => new Date(date.getTime() + 86400000);
+function addLocalDays(date: Date, deltaDays: number): Date {
+  const next = new Date(date);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() + deltaDays);
+  return next;
+}
 
 const formatDelta = (current?: number | null, prev?: number | null, unit = '') => {
   if (typeof current !== 'number' || typeof prev !== 'number') return '—';
@@ -458,7 +461,8 @@ export default function ProgressScreen({
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .forEach((item) => {
         const dateObj = new Date(item.date);
-        const key = Number.isNaN(dateObj.getTime()) ? item.date.slice(0, 10) : dateObj.toISOString().slice(0, 10);
+        const key = toLocalDayKey(item.date);
+        if (!key) return;
         if (!groups.has(key)) {
           groups.set(key, {
             key,
@@ -529,13 +533,16 @@ export default function ProgressScreen({
       total: number;
     }> = [];
 
-    let cursor = toUtcDate(firstKey);
-    const lastDate = toUtcDate(lastKey);
     let cumulativeMeasurements = 0;
     let cumulativePhotos = 0;
 
-    while (cursor <= lastDate) {
-      const key = cursor.toISOString().slice(0, 10);
+    for (
+      let cursor = addLocalDays(new Date(`${firstKey}T12:00:00`), 0),
+        lastDate = addLocalDays(new Date(`${lastKey}T12:00:00`), 0);
+      cursor <= lastDate;
+      cursor = addLocalDays(cursor, 1)
+    ) {
+      const key = toLocalDayKey(cursor);
       const bucket = dayBuckets.get(key);
       if (bucket) {
         cumulativeMeasurements += bucket.measurements;
@@ -548,7 +555,6 @@ export default function ProgressScreen({
         photos: cumulativePhotos,
         total: cumulativeMeasurements + cumulativePhotos,
       });
-      cursor = incrementUtcDate(cursor);
     }
 
     return series.slice(-60);
