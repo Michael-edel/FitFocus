@@ -24,6 +24,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
 
   const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
   const day = todayKey();
 
   const users = await db.prepare("SELECT COUNT(*) as c FROM users").first<{ c: number }>();
@@ -33,12 +34,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ c: number }>();
 
   const proActive = await db
-    .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'pro' AND status = 'active'")
+    .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > ?)")
+    .bind(nowMs)
     .first<{ c: number }>()
     .catch(() => ({ c: 0 } as any));
 
   const familyActive = await db
-    .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'family' AND status = 'active'")
+    .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'family' AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > ?)")
+    .bind(nowMs)
     .first<{ c: number }>()
     .catch(() => ({ c: 0 } as any));
 

@@ -1,3 +1,5 @@
+import { nowMs } from "./db";
+
 export type ActivePlan = "free" | "pro" | "family";
 
 export function normalizePlan(value: unknown): ActivePlan {
@@ -8,16 +10,18 @@ export function normalizePlan(value: unknown): ActivePlan {
 export async function loadActivePlan(db: D1Database, userId: string): Promise<ActivePlan> {
   if (!db || !userId) return "free";
   try {
+    const now = nowMs();
     const row = await db
       .prepare(
         `SELECT plan
          FROM subscriptions
          WHERE user_id = ?
            AND status IN ('active', 'trialing')
+           AND (current_period_end IS NULL OR current_period_end > ?)
          ORDER BY updated_at DESC
          LIMIT 1`
       )
-      .bind(userId)
+      .bind(userId, now)
       .first<{ plan?: string }>();
     return normalizePlan(row?.plan);
   } catch {
@@ -29,6 +33,7 @@ export async function loadActivePlanByEmail(db: D1Database, email: string): Prom
   const normalized = String(email || "").trim().toLowerCase();
   if (!db || !normalized) return "free";
   try {
+    const now = nowMs();
     const row = await db
       .prepare(
         `SELECT s.plan
@@ -36,10 +41,11 @@ export async function loadActivePlanByEmail(db: D1Database, email: string): Prom
          JOIN users u ON u.id = s.user_id
          WHERE lower(u.email) = ?
            AND s.status IN ('active', 'trialing')
+           AND (s.current_period_end IS NULL OR s.current_period_end > ?)
          ORDER BY s.updated_at DESC
          LIMIT 1`
       )
-      .bind(normalized)
+      .bind(normalized, now)
       .first<{ plan?: string }>();
     return normalizePlan(row?.plan);
   } catch {

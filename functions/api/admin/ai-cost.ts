@@ -53,8 +53,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       `SELECT user_id,
               (SELECT email FROM users u WHERE u.id = ai_events.user_id LIMIT 1) as email,
               (SELECT created_at FROM users u WHERE u.id = ai_events.user_id LIMIT 1) as user_created_at,
-              COALESCE((SELECT plan FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') ORDER BY s.updated_at DESC LIMIT 1), 'free') as plan,
-              COALESCE((SELECT status FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') ORDER BY s.updated_at DESC LIMIT 1), 'inactive') as subscription_status,
+              COALESCE((SELECT plan FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > ?) ORDER BY s.updated_at DESC LIMIT 1), 'free') as plan,
+              COALESCE((SELECT status FROM subscriptions s WHERE s.user_id = ai_events.user_id AND s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > ?) ORDER BY s.updated_at DESC LIMIT 1), 'inactive') as subscription_status,
               SUM(COALESCE(estimated_cost_usd,0)) as cost_usd,
               SUM(COALESCE(total_tokens,0)) as tokens,
               COUNT(*) as calls
@@ -64,7 +64,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        ORDER BY cost_usd DESC
        LIMIT 10`
     )
-    .bind(sevenDaysAgo)
+    .bind(now, now, sevenDaysAgo)
     .all<any>();
 
   const todayCalls = Number(todayAgg?.calls || 0);

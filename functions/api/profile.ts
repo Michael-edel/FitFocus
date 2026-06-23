@@ -4,8 +4,8 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
+import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
 import {
-  loadActivePlanByEmail as loadActivePlanByEmailShared,
   migrateLegacyAccountByEmail as migrateLegacyAccountByEmailShared,
   withProtectedFields as withProtectedFieldsShared,
 } from "./_lib/legacy_sync";
@@ -81,20 +81,6 @@ function sanitizeStateItems(input: unknown): { key: string; value: string }[] {
   return items;
 }
 
-async function loadActivePlan(db: D1Database, userId: string): Promise<"free" | "pro" | "family"> {
-  try {
-    const row = await db
-      .prepare(
-        "SELECT plan FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing') ORDER BY updated_at DESC LIMIT 1"
-      )
-      .bind(userId)
-      .first<{ plan?: string }>();
-    const plan = String(row?.plan || "").toLowerCase();
-    if (plan === "pro" || plan === "family") return plan;
-  } catch {}
-  return "free";
-}
-
 async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
@@ -150,7 +136,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (!migrated) return json({ profile: null }, 200);
     return json({ profile: migrated }, 200);
   }
-  const serverPlan = await loadActivePlan(db, user.sub);
+  const serverPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = serverPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : serverPlan;
   return json({ profile: withProtectedFieldsShared(user, { ...profile, plan: effectivePlan }) }, 200);
 };
@@ -180,7 +166,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
     return conflictResponse(user as any, refreshedMeta.profile, refreshedMeta.version);
   }
-  const directPlan = await loadActivePlan(db, user.sub);
+  const directPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = directPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : directPlan;
   const nextVersion = (refreshedMeta.version || 0) + 1;
   const profile = withProtectedFieldsShared(user, { ...patch, plan: effectivePlan, version: nextVersion });
@@ -235,7 +221,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
     return conflictResponse(user as any, refreshedMeta.profile, refreshedMeta.version);
   }
-  const directPlan = await loadActivePlan(db, user.sub);
+  const directPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = directPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : directPlan;
   const nextVersion = (refreshedMeta.version || 0) + 1;
   const profile = withProtectedFieldsShared(user, { ...(refreshedMeta.profile ?? {}), ...patch, plan: effectivePlan, version: nextVersion });
