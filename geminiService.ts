@@ -26,6 +26,58 @@ const getEnv = (key: string): string | undefined => {
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+const SHOPPING_QTY_RE = /(\d+(?:[.,]\d+)?)\s*(кг|kg|г|гр|g)\b/i;
+
+function extractShoppingGrams(value: string): number {
+  const text = String(value || "").replace(/,/g, ".").toLowerCase();
+  const match = text.match(SHOPPING_QTY_RE);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  const unit = match[2].toLowerCase();
+  return Math.round(unit === "кг" || unit === "kg" ? amount * 1000 : amount);
+}
+
+function stripShoppingQuantity(value: string): string {
+  return String(value || "")
+    .replace(/\s*[—–-]\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b/gi, " ")
+    .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b\s*\)/gi, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
+  const fallbackByName = new Map<string, number>();
+  for (const line of shoppingList || []) {
+    const text = String(line || "").trim();
+    if (!text) continue;
+    const grams = extractShoppingGrams(text);
+    if (!grams) continue;
+    fallbackByName.set(stripShoppingQuantity(text).toLowerCase(), grams);
+  }
+
+  return (Array.isArray(rawItems) ? rawItems : [])
+    .map((it: any) => {
+      const rawName = String(it?.name || "").trim();
+      const cleanedName = stripShoppingQuantity(rawName);
+      const fallbackGrams = fallbackByName.get(cleanedName.toLowerCase()) || 0;
+      const grams = Math.max(
+        0,
+        Math.round(
+          Number(it?.grams || 0) > 0
+            ? Number(it?.grams || 0)
+            : extractShoppingGrams(rawName) || fallbackGrams
+        )
+      );
+      return {
+        name: cleanedName || rawName,
+        grams,
+      };
+    })
+    .filter((it: any) => it.name && it.grams > 0);
+}
+
 /**
  * Прокси-вызов для AI (используется для соблюдения лимитов на сервере)
  */
@@ -378,12 +430,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     .filter(Boolean)
     .slice(0, 40);
 
-  const shoppingListItems = (Array.isArray(obj.shoppingListItems) ? obj.shoppingListItems : [])
-    .map((it: any) => ({
-      name: String(it?.name || "").trim(),
-      grams: Math.max(0, Math.round(Number(it?.grams || 0)))
-    }))
-    .filter((it: any) => it.name && it.grams > 0)
+  const shoppingListItems = normalizeShoppingListItems(obj.shoppingListItems, shoppingList)
     .slice(0, 120);
 
   // weekStart (UTC Monday) for storage/export
@@ -585,12 +632,7 @@ const dietaryBlock = (() => {
     .map((s: any) => String(s).trim())
     .filter(Boolean)
     .slice(0, 60);
-  const shoppingListItems = (Array.isArray(obj.shoppingListItems) ? obj.shoppingListItems : [])
-    .map((it: any) => ({
-      name: String(it?.name || "").trim(),
-      grams: Math.max(0, Math.round(Number(it?.grams || 0))),
-    }))
-    .filter((it: any) => it.name && it.grams > 0)
+  const shoppingListItems = normalizeShoppingListItems(obj.shoppingListItems, shoppingList)
     .slice(0, 80);
 
   // Валидация: пользователю важно видеть "сколько кому" — требуем вес/ккал в каждой порции.
