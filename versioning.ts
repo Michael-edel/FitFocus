@@ -18,9 +18,9 @@ export const APP_VERSION: AppVersion = {
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const APP_VERSION_UI_LABEL = `Релиз продукта ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const BUILD_SHORT_LABEL = `main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_VERSION_LABEL = `сборка main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const APP_VERSION_UI_LABEL = `Публичный релиз ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
+export const BUILD_SHORT_LABEL = `Сборка main №${BUILD_SOURCE.commitCount} • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_VERSION_LABEL = `Текущая ${BUILD_SHORT_LABEL}`;
 export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;
@@ -47,14 +47,14 @@ export const versioningRules = [
 
 export const versioningLayers = [
   {
-    title: "Релиз продукта",
+    title: "Публичный релиз",
     value: APP_VERSION_UI_LABEL,
-    note: "Это номер пользовательского релиза. Он меняется только тогда, когда мы сознательно выпускаем новую публичную версию продукта.",
+    note: "Это номер публичного выпуска. Он меняется только при сознательном релизе новой версии и не обновляется на каждый push в main.",
   },
   {
-    title: "Сборка main",
+    title: "Автосборка main",
     value: BUILD_SHORT_LABEL,
-    note: "Это номер и идентификатор конкретной сборки на main. Он обновляется на каждый push и помогает понять, какой код стоит на устройстве прямо сейчас.",
+    note: "Это номер и идентификатор конкретной сборки на main. Он обновляется автоматически на каждый push и помогает понять, какой код стоит на устройстве прямо сейчас.",
   },
   {
     title: "Схема API",
