@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { BUILD_COMBINED_LABEL, versioningLayers, versioningRules } from './versioning';
+import { APP_VERSION_UI_LABEL, BUILD_SHORT_LABEL, versioningLayers, versioningRules } from './versioning';
 import { formatReleaseTitle, releaseNotes } from './releaseNotes';
 
 type VersionInfoModalProps = {
@@ -82,8 +82,15 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                 <Sparkles size={12} className="text-indigo-400" />
                 Что нового
               </div>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-white tracking-tight">{BUILD_COMBINED_LABEL}</h2>
-               <p className="mt-1 text-sm font-semibold text-slate-400">В хороших продуктах релиз и build разделены: релиз обновляется только при выпуске новой версии, а сборка main меняется на каждый push. Поэтому здесь отдельно видно и номер релиза, и SHA свежей сборки, и служебные схемы, которые помогают не ломать совместимость.</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-indigo-100">
+                  {APP_VERSION_UI_LABEL}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-slate-200">
+                  {BUILD_SHORT_LABEL}
+                </span>
+              </div>
+               <p className="mt-2 text-sm font-semibold text-slate-400">Релиз продукта меняется вручную, а сборка main обновляется автоматически на каждый push. Ниже отдельно показаны релиз, сборка, API, данные и миграция БД — так проще понять, что изменилось и где возможен конфликт.</p>
             </div>
             <button
               type="button"
@@ -141,7 +148,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
             <div className="mt-3 rounded-[1.25rem] border border-indigo-500/20 bg-indigo-500/8 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-indigo-500/20 bg-indigo-500/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-indigo-200">
-                  {current.isCurrent ? BUILD_COMBINED_LABEL : `v${current.version} ${current.label}`}
+                  {current.isCurrent ? BUILD_SHORT_LABEL : `v${current.version} ${current.label}`}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">{current.date}</span>
               </div>

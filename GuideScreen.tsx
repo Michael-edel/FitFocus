@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Bell, BookMarked, CheckCircle2, Cloud, Footprints, HelpCircle, Smartphone, Sparkles, Star, ShieldCheck, Utensils, Video, Watch, MessageSquareText, ChevronRight, Download } from 'lucide-react';
-import { BUILD_COMBINED_LABEL } from './versioning';
+import { APP_VERSION_UI_LABEL, BUILD_SHORT_LABEL } from './versioning';
 
 type GuideMode = 'user' | 'tester';
 
@@ -181,8 +181,11 @@ export default function GuideScreen() {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5">
           <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Текущая сборка</div>
-          <div className="mt-2 text-2xl font-black text-slate-100">{BUILD_COMBINED_LABEL}</div>
-          <div className="mt-2 text-slate-400 font-medium leading-7">Эта версия обновляется вместе с интерфейсом и changelog, поэтому инструкция всегда совпадает с текущей сборкой.</div>
+          <div className="mt-2 text-xl font-black text-slate-100">{APP_VERSION_UI_LABEL}</div>
+          <div className="mt-1 inline-flex items-center rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-slate-200">
+            {BUILD_SHORT_LABEL}
+          </div>
+          <div className="mt-2 text-slate-400 font-medium leading-7">Релиз продукта меняется только при новом выпуске, а сборка main обновляется автоматически на каждый push. Инструкция всегда совпадает с текущей сборкой.</div>
         </div>
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5">
           <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Главное правило</div>
