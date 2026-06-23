@@ -1,5 +1,6 @@
 
 import { UserProfile } from './types';
+import { toLocalDayKey } from './dateUtils';
 
 export const defaultHabits = {
   water: false,
@@ -9,7 +10,7 @@ export const defaultHabits = {
 };
 
 export function getTodayKey() {
-  return new Date().toLocaleDateString('en-CA');
+  return toLocalDayKey(new Date());
 }
 
 export function toggleHabit(profile: UserProfile, habit: keyof typeof defaultHabits): UserProfile {
