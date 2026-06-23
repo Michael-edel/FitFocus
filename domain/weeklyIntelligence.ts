@@ -1,5 +1,6 @@
 import { Goal, UserProfile, FoodItem, UserHabit } from "./types";
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
+import { toLocalDayKey } from "../dateUtils";
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -31,10 +32,10 @@ function calculateCompliance(
 ): number {
   if (!foods.length && !habits.length) return 0;
 
-  const dayKey = (iso: string) => iso.slice(0, 10);
   const sums: Record<string, number> = {};
   for (const f of foods) {
-    const key = dayKey(f.timestamp);
+    const key = toLocalDayKey(f.timestamp);
+    if (!key) continue;
     sums[key] = (sums[key] ?? 0) + (f.calories ?? 0);
   }
 
