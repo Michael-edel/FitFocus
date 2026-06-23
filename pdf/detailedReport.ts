@@ -4,6 +4,7 @@ import type { FoodItem, UserHabit, UserProfile } from '../types';
 import { Gender, Goal } from '../types';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 import { ensurePdfInterFont } from './font';
+import { toLocalDayKey } from '../dateUtils';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle, pdfHeader, pdfPaintBackground } from './theme';
 import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, resolveBloodGlucose, weekRangeISO } from './metrics';
 
@@ -146,7 +147,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   doc.setFont('Inter', 'normal');
   doc.setFontSize(8);
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = toLocalDayKey(new Date());
 
   let hy = habitBlockY + 26;
 
@@ -314,12 +315,12 @@ export async function downloadDetailedHealthReportPdf(opts: {
     const startY = 40;
     const rows = foodDiary
       .filter(f => {
-        const dk = new Date(f.timestamp).toISOString().slice(0, 10);
+        const dk = toLocalDayKey(f.timestamp);
         return dk >= startISO && dk <= endISO;
       })
       .slice(-250)
       .map(f => ([
-        new Date(f.timestamp).toISOString().slice(0, 10),
+        toLocalDayKey(f.timestamp),
         f.name,
         Math.round(f.calories),
         Math.round(f.protein),
