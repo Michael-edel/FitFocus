@@ -57,7 +57,7 @@ function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
     fallbackByName.set(stripShoppingQuantity(text).toLowerCase(), grams);
   }
 
-  return (Array.isArray(rawItems) ? rawItems : [])
+  const normalized = (Array.isArray(rawItems) ? rawItems : [])
     .map((it: any) => {
       const rawName = String(it?.name || "").trim();
       const cleanedName = stripShoppingQuantity(rawName);
@@ -76,6 +76,21 @@ function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
       };
     })
     .filter((it: any) => it.name && it.grams > 0);
+
+  if (normalized.length) {
+    return normalized;
+  }
+
+  return (Array.isArray(shoppingList) ? shoppingList : [])
+    .map((line: any) => {
+      const text = String(line || "").trim();
+      if (!text) return null;
+      const name = stripShoppingQuantity(text);
+      const grams = extractShoppingGrams(text);
+      if (!name || grams <= 0) return null;
+      return { name, grams };
+    })
+    .filter((it: any): it is { name: string; grams: number } => Boolean(it));
 }
 
 /**
