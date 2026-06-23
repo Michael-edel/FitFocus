@@ -37,7 +37,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       await db.prepare(
         "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       )
-        .bind(crypto.randomUUID(), user.sub, Date.now(), "account_delete", 200, Date.now() - t0, 0, JSON.stringify({}), JSON.stringify({ ok: true }), null)
+        .bind(crypto.randomUUID(), user.sub, Date.now(), "account_delete", 200, Date.now() - t0, 0, null, null, null)
         .run();
     } catch {}
 

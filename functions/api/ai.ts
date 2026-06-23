@@ -224,8 +224,6 @@ async function logAiEvent(env: any, args: {
     if (!env?.DB) return;
     const id = crypto.randomUUID();
     const ts = Date.now();
-    const reqStr = args.requestJson ? JSON.stringify(args.requestJson).slice(0, 40000) : null;
-    const resStr = args.responseJson ? JSON.stringify(args.responseJson).slice(0, 40000) : null;
     const baseValues = [
       id,
       args.userId,
@@ -234,8 +232,8 @@ async function logAiEvent(env: any, args: {
       args.status,
       Math.max(0, Math.round(args.latencyMs)),
       args.safeMode ? 1 : 0,
-      reqStr,
-      resStr,
+      null,
+      null,
       args.error || null
     ];
     try {
