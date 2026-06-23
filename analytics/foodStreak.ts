@@ -1,4 +1,5 @@
 import { safeGetItem } from '../storage/utils';
+import { toLocalDayKey } from '../dateUtils';
 
 export type FoodStreakMilestone = 'started' | '3_days' | '7_days';
 
@@ -9,15 +10,8 @@ export type FoodStreakAnalyticsRecord = {
 };
 
 const FOOD_STREAK_ANALYTICS_KEY = 'fitfocus.analytics.food_streak.v1';
-const FOOD_STREAK_MILESTONES_KEY = 'fitfocus.analytics.food_streak.milestones.v1';
+const FOOD_STREAK_SENT_PREFIX = 'fitfocus.analytics.sent.v1:';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-export function toLocalDayKey(timestamp?: string | number | Date | null): string {
-  if (!timestamp) return '';
-  const d = timestamp instanceof Date ? timestamp : new Date(timestamp);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function previousLocalDayKey(dayKey: string): string {
   if (!dayKey) return '';
@@ -68,18 +62,15 @@ export function calculateFoodStreak(foodDiary: Array<{ timestamp?: string | numb
   };
 }
 
-function readMilestones(ownerUserId: string): Record<string, FoodStreakMilestone[]> {
-  if (!ownerUserId) return {};
-  const all = safeGetItem<Record<string, FoodStreakMilestone[]>>(FOOD_STREAK_MILESTONES_KEY, {});
-  return all && typeof all === 'object' ? all : {};
+function readMilestones(ownerUserId: string): FoodStreakMilestone[] {
+  if (!ownerUserId) return [];
+  return safeGetItem<FoodStreakMilestone[]>(`${FOOD_STREAK_SENT_PREFIX}${ownerUserId}`, []);
 }
 
 function writeMilestones(ownerUserId: string, milestones: FoodStreakMilestone[]) {
   if (!ownerUserId) return;
   try {
-    const all = readMilestones(ownerUserId);
-    all[ownerUserId] = Array.from(new Set(milestones));
-    localStorage.setItem(FOOD_STREAK_MILESTONES_KEY, JSON.stringify(all));
+    localStorage.setItem(`${FOOD_STREAK_SENT_PREFIX}${ownerUserId}`, JSON.stringify(Array.from(new Set(milestones))));
   } catch {
     // best effort only
   }
@@ -102,8 +93,7 @@ export function trackFoodStreakMilestone(
 ) {
   if (!ownerUserId) return false;
   try {
-    const all = readMilestones(ownerUserId);
-    const sent = new Set(all[ownerUserId] || []);
+    const sent = new Set(readMilestones(ownerUserId) || []);
     if (sent.has(milestone)) return false;
 
     const event =
@@ -114,8 +104,7 @@ export function trackFoodStreakMilestone(
           : 'food_streak_7_days';
 
     sent.add(milestone);
-    all[ownerUserId] = Array.from(sent);
-    localStorage.setItem(FOOD_STREAK_MILESTONES_KEY, JSON.stringify(all));
+    writeMilestones(ownerUserId, Array.from(sent));
     appendAnalytics({ event, ts: new Date().toISOString(), meta: { streak } });
     return true;
   } catch {
