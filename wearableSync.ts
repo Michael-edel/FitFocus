@@ -1,4 +1,5 @@
 import type { WearableProvider } from './types';
+import { toLocalDayKey } from './dateUtils';
 
 export type WearableSyncSnapshot = {
   provider?: WearableProvider;
@@ -42,6 +43,42 @@ export function parseWearableNumber(value: unknown): number | undefined {
 export function normalizeWearableProvider(value: unknown): WearableProvider {
   const provider = String(value || 'manual').toLowerCase();
   return ALLOWED_PROVIDERS.has(provider as WearableProvider) ? (provider as WearableProvider) : 'manual';
+}
+
+function isLocalDayKey(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+  const day = new Date(`${trimmed}T12:00:00`);
+  if (Number.isNaN(day.getTime())) return false;
+  return toLocalDayKey(day) === trimmed;
+}
+
+function isTimestampLike(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.includes('T') && !Number.isNaN(new Date(trimmed).getTime());
+}
+
+export function resolveWearableLocalDayKey(
+  snapshot: Pick<WearableSyncSnapshot, 'date' | 'metricsUpdatedAt'>,
+  fallbackTimestamp?: string | number | Date | null,
+): string {
+  if (isLocalDayKey(snapshot.date)) return snapshot.date.trim();
+  if (isLocalDayKey(snapshot.metricsUpdatedAt)) return snapshot.metricsUpdatedAt.trim();
+  if (fallbackTimestamp != null) return toLocalDayKey(fallbackTimestamp);
+  if (isTimestampLike(snapshot.date)) return toLocalDayKey(snapshot.date);
+  if (isTimestampLike(snapshot.metricsUpdatedAt)) return toLocalDayKey(snapshot.metricsUpdatedAt);
+  return '';
+}
+
+export function resolveWearableSyncTimestamp(
+  snapshot: Pick<WearableSyncSnapshot, 'date' | 'metricsUpdatedAt'>,
+  fallbackTimestamp: string,
+): string {
+  if (isTimestampLike(snapshot.metricsUpdatedAt)) return snapshot.metricsUpdatedAt.trim();
+  if (isTimestampLike(snapshot.date)) return snapshot.date.trim();
+  return fallbackTimestamp;
 }
 
 export function normalizeWearableSyncSnapshot(input: unknown): WearableSyncSnapshot | null {
