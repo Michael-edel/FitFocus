@@ -23,7 +23,9 @@ export const BUILD_SEQUENCE_LABEL = BUILD_SOURCE.commitCount > 0
   ? `Сборка main №${BUILD_SOURCE.commitCount}`
   : `Сборка main • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_SHORT_LABEL = `${BUILD_SEQUENCE_LABEL} • ${BUILD_SOURCE.shortSha}`;
-export const BUILD_VERSION_LABEL = `Текущая ${BUILD_SHORT_LABEL}`;
+export const BUILD_VERSION_LABEL = BUILD_SOURCE.commitCount > 0
+  ? `Текущая сборка main №${BUILD_SOURCE.commitCount}`
+  : `Текущая сборка main • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;

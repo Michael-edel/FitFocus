@@ -92,6 +92,10 @@ export function localizeCommitSubject(subject: string): string {
   const exactMatches: Record<string, string> = {
     'Improve Russian main build changelog': 'Экран версий обновлён: история main-сборок сохраняется и показывается на русском языке',
     'Localize latest changelog commit label': 'Последний коммит в экране версий теперь тоже подписывается по-русски',
+    'Localize versioning history labels': 'Подписи истории версий приведены к русскому языку',
+    'Improve versioning history labels': 'Улучшены подписи истории версий и разбор main-сборок',
+    'Add support ticket lifecycle and client replies': 'Добавлен жизненный цикл обращений и ответы клиента',
+    'Validate profile stateItems keyspace': 'Проверена область ключей stateItems в профиле',
     'Add automatic main build versioning': 'Добавлено автоматическое версионирование main-сборки',
     'Add admin route guard check': 'Добавлена проверка admin для /api/admin/*',
     'Fix AI identity key and migration version': 'Исправлены ключ идентификации AI и версия миграции',
@@ -150,6 +154,10 @@ export function localizeCommitSubject(subject: string): string {
     .replace(/\bautomatically\b/gi, 'автоматически')
     .replace(/\bmain build changelog\b/gi, 'история main-сборок в экране версий')
     .replace(/\blatest changelog commit label\b/gi, 'подпись последнего коммита в экране версий')
+    .replace(/\bversioning history labels\b/gi, 'подписи истории версий')
+    .replace(/\bsupport ticket lifecycle\b/gi, 'жизненный цикл обращений')
+    .replace(/\bclient replies\b/gi, 'ответы клиента')
+    .replace(/\bstateitems keyspace\b/gi, 'область ключей stateItems')
     .replace(/\bbuild history\b/gi, 'история сборок')
     .replace(/\bbuild\b/gi, 'сборка')
     .replace(/\bbuild history\b/gi, 'история сборок')
