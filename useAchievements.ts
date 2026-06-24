@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AchievementDefinition } from './achievements/catalog';
 import type { AchievementEvaluationContext } from './achievements/engine';
 
@@ -33,6 +33,7 @@ type UseAchievementsParams = {
 };
 
 const COUNTER_PREFIX = 'fitfocus.achievements.counters.v1:';
+const CHECK_THROTTLE_MS = 500;
 
 function readCounters(userId: string): Record<string, number> {
   try {
@@ -64,6 +65,13 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
   const [unlocked, setUnlocked] = useState<UnlockedAchievement[]>([]);
   const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementDefinition[]>([]);
   const [loading, setLoading] = useState(false);
+  const lastCheckAtRef = useRef(0);
+  const throttledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCheckRef = useRef<{
+    reason: AchievementCheckReason;
+    contextPatch: AchievementEvaluationContext;
+    resolve: (value: AchievementDefinition[]) => void;
+  } | null>(null);
 
   const unlockedKeys = useMemo(() => new Set(unlocked.map((item) => item.key)), [unlocked]);
 
@@ -91,7 +99,19 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     void loadAchievements();
   }, [loadAchievements]);
 
-  const checkAchievements = useCallback(async (reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
+  useEffect(() => {
+    return () => {
+      if (throttledTimerRef.current) {
+        clearTimeout(throttledTimerRef.current);
+      }
+      if (pendingCheckRef.current) {
+        pendingCheckRef.current.resolve([]);
+        pendingCheckRef.current = null;
+      }
+    };
+  }, []);
+
+  const runAchievementCheck = useCallback(async (reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
     if (!userId) return [];
     const baseContext = getContext?.() || {};
     const countersPatch: AchievementEvaluationContext = {};
@@ -134,10 +154,10 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
               unlocked_at: Number(item.unlocked_at || Date.now()),
               tier: String(item.tier || ''),
               source: item.source ? String(item.source) : null,
-            }));
+          }));
           return [...additions, ...prev];
         });
-        setNewlyUnlocked(nextUnlocked);
+        setNewlyUnlocked((prev) => [...prev, ...nextUnlocked]);
       }
       return nextUnlocked;
     } catch {
@@ -145,8 +165,37 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     }
   }, [catalog, getContext, userId]);
 
+  const checkAchievements = useCallback((reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
+    if (!userId) return Promise.resolve([]);
+    const now = Date.now();
+    const elapsed = now - lastCheckAtRef.current;
+    if (elapsed >= CHECK_THROTTLE_MS && !throttledTimerRef.current) {
+      lastCheckAtRef.current = now;
+      return runAchievementCheck(reason, contextPatch);
+    }
+
+    return new Promise<AchievementDefinition[]>((resolve) => {
+      if (pendingCheckRef.current) {
+        pendingCheckRef.current.resolve([]);
+      }
+      pendingCheckRef.current = { reason, contextPatch, resolve };
+      if (throttledTimerRef.current) {
+        clearTimeout(throttledTimerRef.current);
+      }
+      const delay = Math.max(0, CHECK_THROTTLE_MS - elapsed);
+      throttledTimerRef.current = setTimeout(() => {
+        throttledTimerRef.current = null;
+        const pending = pendingCheckRef.current;
+        pendingCheckRef.current = null;
+        if (!pending) return;
+        lastCheckAtRef.current = Date.now();
+        void runAchievementCheck(pending.reason, pending.contextPatch).then(pending.resolve).catch(() => pending.resolve([]));
+      }, delay);
+    });
+  }, [runAchievementCheck, userId]);
+
   const dismissAchievementToast = useCallback(() => {
-    setNewlyUnlocked([]);
+    setNewlyUnlocked((prev) => prev.slice(1));
   }, []);
 
   return {
