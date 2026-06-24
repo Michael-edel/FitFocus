@@ -1,6 +1,6 @@
 // /api/shopping/list
 // GET: aggregated shopping list for a week
-// - personal scope: per user (family_id is NULL)
+// - personal scope: per user
 // - family scope: aggregated for the whole family (family_id provided) if user is an active member
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
@@ -12,6 +12,10 @@ type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
 function isIsoDay(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+function getShoppingScopeId(userId: string, familyId?: string | null) {
+  return familyId ? `family:${familyId}` : `personal:${userId}`;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -28,7 +32,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     if (family_id) {
       const famId = String(family_id);
-      const sharedUserId = `family:${famId}`;
+      const scopeId = getShoppingScopeId(user.sub, famId);
 
       const fam = await requireFamilyMember(db, famId, user.sub);
       await requireFamilyPlan(db, fam.owner_user_id);
@@ -49,9 +53,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         .prepare(
           `SELECT ingredient_name as name, checked
            FROM shopping_checked
-           WHERE week_start = ? AND family_id = ? AND user_id IN (?, ?)`
+           WHERE scope_id = ? AND week_start = ?`
         )
-        .bind(week, famId, sharedUserId, user.sub)
+        .bind(scopeId, week)
         .all<any>();
 
       const checkedByKey = new Map<string, boolean>();
@@ -87,9 +91,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .prepare(
         `SELECT ingredient_name as name, checked
          FROM shopping_checked
-         WHERE user_id = ? AND week_start = ? AND family_id IS NULL`
+         WHERE scope_id = ? AND week_start = ?`
       )
-      .bind(user.sub, week)
+      .bind(getShoppingScopeId(user.sub, null), week)
       .all<any>();
 
     const checkedByKey = new Map<string, boolean>();
