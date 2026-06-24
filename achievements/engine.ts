@@ -86,8 +86,8 @@ export function evaluateAchievements(context: AchievementEvaluationContext): Ach
   pushIf(output, 'welcome', !!context.profileExists, context);
   pushIf(output, 'first_food_manual', source === SOURCE_KEYS.foodManual, context);
   pushIf(output, 'first_ai_photo', source === SOURCE_KEYS.aiPhoto || !!context.hasAiPhoto || numeric(context.aiPhotoCount) > 0, context);
-  pushIf(output, 'first_weight', numeric(context.weightHistoryCount) > 0, context);
-  pushIf(output, 'first_measurement', numeric(context.measurementsCount) > 0, context);
+  pushIf(output, 'first_weight', source === 'log_weight', context);
+  pushIf(output, 'first_measurement', source === 'measurement_saved', context);
   pushIf(output, 'first_ai_coach', source === SOURCE_KEYS.aiCoach, context);
   pushIf(output, 'first_ai_plan', source === SOURCE_KEYS.aiPlan || !!context.hasAiPlan, context);
   pushIf(output, 'profile_details_completed', !!context.profileDetailsCompleted, context);
@@ -98,7 +98,7 @@ export function evaluateAchievements(context: AchievementEvaluationContext): Ach
   pushIf(output, 'first_weekly_menu', source === SOURCE_KEYS.weeklyMenu || !!context.hasWeeklyMenu, context);
   pushIf(output, 'first_shopping_item_checked', source === SOURCE_KEYS.shoppingChecked || numeric(context.shoppingCheckedCount) > 0, context);
   pushIf(output, 'first_pdf_report', source === SOURCE_KEYS.pdfReport || numeric(context.pdfReportCount) > 0, context);
-  pushIf(output, 'first_family_join_or_create', source === SOURCE_KEYS.family || !!context.familyActive, context);
+  pushIf(output, 'first_family_join_or_create', source === SOURCE_KEYS.family, context);
   pushIf(output, 'ai_photo_10', numeric(context.aiPhotoCount) >= 10, context);
   pushIf(output, 'weight_loss_1kg', weightLossKg >= 1, context);
   pushIf(output, 'water_first', source === SOURCE_KEYS.water || !!context.waterToday, context);

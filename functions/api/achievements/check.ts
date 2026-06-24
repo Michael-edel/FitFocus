@@ -28,7 +28,7 @@ function contextFromProfile(profile: any): AchievementEvaluationContext {
     initialWeight: firstWeight,
     latestWeight,
     measurementsCount: measurementsHistory.length,
-    familyActive: String(profile?.plan || "").toLowerCase() === "family" || (Array.isArray(profile?.familyMembers) && profile.familyMembers.length > 0),
+    familyActive: Array.isArray(profile?.familyMembers) && profile.familyMembers.length > 0,
     sleepHours: numberOrNull(profile?.wearableSleepHoursLastNight),
   };
 }

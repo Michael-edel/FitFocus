@@ -1872,7 +1872,7 @@ const openEditFood = (item: FoodEntry) => {
       measurementsCount: currentUser?.measurementsHistory?.length || 0,
       wisCount: weeklyReports.length,
       shoppingCheckedCount: familyShopping?.items?.filter((item: any) => item.checked).length || 0,
-      familyActive: !!cloudFamily || currentUser?.plan === 'family',
+      familyActive: !!cloudFamily,
       waterToday: !!todayHabits.water,
       sleepHours: typeof currentUser?.wearableSleepHoursLastNight === 'number' ? currentUser.wearableSleepHoursLastNight : null,
     };
