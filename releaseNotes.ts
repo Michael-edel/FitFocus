@@ -99,6 +99,7 @@ function localizeCommitSubject(subject: string): string {
     'Sanitize AI event logs': 'AI-логи очищены от чувствительных пользовательских данных',
     'Fix active plan expiration checks': 'Проверки активного тарифа теперь учитывают окончание периода подписки',
     'Normalize wearable profile day keys': 'Нормализованы локальные ключи дня для wearable-метрик профиля',
+    'Preserve Russian build history in changelog': 'Сохранена русская история main-сборок в экране версий',
     'Implement real feature rollout percentage': 'Реализован настоящий процентный rollout для feature flags',
     'Fix shopping checked scope key': 'Исправлен scope key для отмеченных товаров в корзине закупа',
     'Harden OAuth state and verified email rules': 'Усилены правила OAuth state и проверки подтверждённого email',
