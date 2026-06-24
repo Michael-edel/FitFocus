@@ -22,6 +22,54 @@ type BuildHistoryItem = {
   subject?: string;
 };
 
+const fallbackMainBuildHistory: readonly BuildHistoryItem[] = [
+  {
+    shortSha: '0ba358d',
+    committedAt: '2026-06-24T18:08:33+05:00',
+    subject: 'Normalize wearable profile day keys',
+  },
+  {
+    shortSha: 'aaa6a33',
+    committedAt: '2026-06-24T17:47:32+05:00',
+    subject: 'Implement real feature rollout percentage',
+  },
+  {
+    shortSha: 'e81769e',
+    committedAt: '2026-06-24T17:29:26+05:00',
+    subject: 'Fix shopping checked scope key',
+  },
+  {
+    shortSha: '3607e1c',
+    committedAt: '2026-06-24T17:21:10+05:00',
+    subject: 'Harden OAuth state and verified email rules',
+  },
+  {
+    shortSha: '9df01cb',
+    committedAt: '2026-06-24T17:14:52+05:00',
+    subject: 'Restrict state API and enforce beta access',
+  },
+  {
+    shortSha: '3d4de06',
+    committedAt: '2026-06-24T17:08:50+05:00',
+    subject: 'Harden Apple OAuth id_token verification',
+  },
+  {
+    shortSha: '222b923',
+    committedAt: '2026-06-24T16:39:29+05:00',
+    subject: 'Improve changelog build history',
+  },
+  {
+    shortSha: 'd87a223',
+    committedAt: '2026-06-24T10:18:23+05:00',
+    subject: 'Fix achievement unlock semantics',
+  },
+  {
+    shortSha: '1b9437f',
+    committedAt: '2026-06-24T09:18:07+05:00',
+    subject: 'Harden achievement MVP',
+  },
+];
+
 function localizeCommitSubject(subject: string): string {
   const s = subject.trim();
   if (!s) return 'Коммит без описания';
@@ -50,6 +98,13 @@ function localizeCommitSubject(subject: string): string {
     'Normalize wearable history day keys': 'История данных со смарт-часов переведена на локальные ключи дня',
     'Sanitize AI event logs': 'AI-логи очищены от чувствительных пользовательских данных',
     'Fix active plan expiration checks': 'Проверки активного тарифа теперь учитывают окончание периода подписки',
+    'Normalize wearable profile day keys': 'Нормализованы локальные ключи дня для wearable-метрик профиля',
+    'Implement real feature rollout percentage': 'Реализован настоящий процентный rollout для feature flags',
+    'Fix shopping checked scope key': 'Исправлен scope key для отмеченных товаров в корзине закупа',
+    'Harden OAuth state and verified email rules': 'Усилены правила OAuth state и проверки подтверждённого email',
+    'Restrict state API and enforce beta access': 'Ограничен доступ к state API и включена жёсткая проверка beta access',
+    'Harden Apple OAuth id_token verification': 'Усилена серверная проверка Apple OAuth id_token',
+    'Improve changelog build history': 'Улучшен экран версий и история main-сборок',
   };
 
   if (exactMatches[s]) {
@@ -92,10 +147,34 @@ function formatBuildHistoryLine(build: BuildHistoryItem): string {
   return `${date} · ${sha} — ${title}`;
 }
 
+function mergeRecentBuildHistory(limit = 12): readonly BuildHistoryItem[] {
+  const merged = [...(BUILD_SOURCE.recentBuilds || []), ...fallbackMainBuildHistory];
+  const deduped = new Map<string, BuildHistoryItem>();
+
+  for (const build of merged) {
+    const key = build.sha || build.shortSha || `${build.committedAt || ''}:${build.subject || ''}`;
+    if (!key || deduped.has(key)) continue;
+    deduped.set(key, build);
+  }
+
+  return [...deduped.values()]
+    .sort((a, b) => {
+      const aTime = a.committedAt ? new Date(a.committedAt).getTime() : 0;
+      const bTime = b.committedAt ? new Date(b.committedAt).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, limit);
+}
+
+const mergedRecentBuilds = mergeRecentBuildHistory();
+const topBuild = mergedRecentBuilds[0];
+const buildShortSha = topBuild?.shortSha || BUILD_SOURCE.shortSha;
+const buildCommittedAt = topBuild?.committedAt || BUILD_SOURCE.builtAt;
+
 const currentBuildReleaseNote: ReleaseNote = {
   version: APP_VERSION_STRING,
   label: 'main',
-  date: new Date(BUILD_SOURCE.builtAt).toLocaleDateString('ru-RU'),
+  date: new Date(buildCommittedAt).toLocaleDateString('ru-RU'),
   summary: BUILD_SOURCE.branch === 'main'
     ? 'Сборка main обновляется автоматически при каждом push. Релизная версия продукта меняется отдельно, а ниже показаны номер текущей сборки, SHA, последние изменения и схема версионирования.'
     : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
@@ -105,7 +184,7 @@ const currentBuildReleaseNote: ReleaseNote = {
       title: 'Как читать номера',
       items: [
         `Версия приложения: ${APP_VERSION_STRING} — это номер релиза, он меняется только при осознанном выпуске новой версии.`,
-        `Сборка main: №${BUILD_SOURCE.commitCount} · ${BUILD_SOURCE.shortSha} — это идентификатор текущего push/деплоя; он меняется автоматически при каждом изменении в main.`,
+        `Сборка main: ${buildShortSha} — это идентификатор текущего push/деплоя; он меняется автоматически при каждом изменении в main.`,
         'API, данные и миграции версионируются отдельно, чтобы можно было обновлять приложение без поломки старых клиентов и базы.',
       ],
     },
@@ -119,8 +198,8 @@ const currentBuildReleaseNote: ReleaseNote = {
     },
     {
       title: 'Последние main-сборки',
-      items: Array.isArray(BUILD_SOURCE.recentBuilds) && BUILD_SOURCE.recentBuilds.length
-        ? BUILD_SOURCE.recentBuilds.map((build) => formatBuildHistoryLine(build))
+      items: mergedRecentBuilds.length
+        ? mergedRecentBuilds.map((build) => formatBuildHistoryLine(build))
         : BUILD_SOURCE.recentCommits.length
           ? BUILD_SOURCE.recentCommits.map((commit) => localizeCommitSubject(commit))
           : ['История сборок недоступна в этой сборке.'],
@@ -137,9 +216,9 @@ const currentBuildReleaseNote: ReleaseNote = {
       title: 'Сборка',
       items: [
         `Ветка: ${BUILD_SOURCE.branch}`,
-        `SHA: ${BUILD_SOURCE.shortSha}`,
+        `Текущий SHA: ${buildShortSha}`,
         `Время сборки: ${new Date(BUILD_SOURCE.builtAt).toLocaleString('ru-RU')}`,
-        `Коммитов в истории репозитория: ${BUILD_SOURCE.commitCount}`,
+        `Показано последних main-сборок: ${mergedRecentBuilds.length}`,
       ],
     },
   ],
