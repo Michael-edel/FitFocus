@@ -4,6 +4,17 @@ import { requireDB } from "../_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
+function safeParseSnapshot(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(String(value));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -28,7 +39,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     unlocked_at: Number(row.unlocked_at || 0),
     tier: String(row.tier || ""),
     source: row.source ? String(row.source) : null,
-    snapshot: row.snapshot_json ? JSON.parse(String(row.snapshot_json)) : null,
+    snapshot: safeParseSnapshot(row.snapshot_json),
     created_at: Number(row.created_at || 0),
   }));
 
