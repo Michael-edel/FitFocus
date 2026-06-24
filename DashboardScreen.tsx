@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { Goal, type FoodItem, type UserProfile } from './types';
 import FoodStreakCard from './components/FoodStreakCard';
+import AchievementsPanel from './components/AchievementsPanel';
+import type { AchievementDefinition } from './achievements/catalog';
+import type { UnlockedAchievement } from './useAchievements';
 
 const DashboardCharts = React.lazy(() => import('./charts'));
 
@@ -96,6 +99,11 @@ type DashboardScreenProps = {
   onShareWisCard: () => void;
   shareWisState: 'idle' | 'busy' | 'success' | 'error';
   shareWisMessage: string | null;
+  achievementsCatalog: AchievementDefinition[];
+  achievementsUnlocked: UnlockedAchievement[];
+  achievementsNewlyUnlocked: AchievementDefinition[];
+  achievementsLoading: boolean;
+  onDismissAchievementToast: () => void;
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
   onOpenProgress: () => void;
@@ -155,6 +163,11 @@ export default function DashboardScreen({
   onShareWisCard,
   shareWisState,
   shareWisMessage,
+  achievementsCatalog,
+  achievementsUnlocked,
+  achievementsNewlyUnlocked,
+  achievementsLoading,
+  onDismissAchievementToast,
   measurementsHistory,
   progressPhotos,
   onOpenProgress,
@@ -344,6 +357,14 @@ export default function DashboardScreen({
           onToggleHabit={(habitKey) => handleToggleHabit(habitKey)}
         />
       </React.Suspense>
+
+      <AchievementsPanel
+        catalog={achievementsCatalog || []}
+        unlocked={achievementsUnlocked || []}
+        newlyUnlocked={achievementsNewlyUnlocked || []}
+        loading={achievementsLoading}
+        onDismissToast={onDismissAchievementToast}
+      />
 
       {currentUser && canUsePro && (
         <div className="bg-slate-900 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500">
