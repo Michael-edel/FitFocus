@@ -14,6 +14,33 @@ function git(args) {
   }
 }
 
+function gitQuiet(args) {
+  try {
+    execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "ignore", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureFullHistory() {
+  if (git(["rev-parse", "--is-shallow-repository"]) !== "true") {
+    return;
+  }
+
+  const fetchAttempts = [
+    ["fetch", "--unshallow", "--tags", "--quiet"],
+    ["fetch", "--deepen=1000", "--tags", "--quiet"],
+    ["fetch", "--deepen=1000", "--quiet"],
+  ];
+
+  for (const attempt of fetchAttempts) {
+    if (gitQuiet(attempt)) {
+      break;
+    }
+  }
+}
+
 function pickBranch() {
   const branch = (
     git(["rev-parse", "--abbrev-ref", "HEAD"]) ||
@@ -74,6 +101,7 @@ function pickRecentBuilds(limit = 20) {
 const branch = pickBranch();
 const sha = pickSha();
 const shortSha = sha === "unknown" ? "unknown" : sha.slice(0, 8);
+ensureFullHistory();
 const commitCount = pickCommitCount();
 const builtAt = new Date().toISOString();
 const recentCommits = pickRecentCommits();
