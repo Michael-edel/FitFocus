@@ -5,6 +5,7 @@ import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
+import { isAllowedStateKey } from "./_lib/state_keys";
 import {
   migrateLegacyAccountByEmail as migrateLegacyAccountByEmailShared,
   withProtectedFields as withProtectedFieldsShared,
@@ -79,6 +80,15 @@ function sanitizeStateItems(input: unknown): { key: string; value: string }[] {
     items.push({ key, value });
   }
   return items;
+}
+
+function validateStateItems(userId: string, stateItems: { key: string; value: string }[]) {
+  for (const item of stateItems) {
+    if (!isAllowedStateKey(userId, item.key)) {
+      return item.key;
+    }
+  }
+  return null;
 }
 
 async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
@@ -157,6 +167,10 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const patch = sanitizePatch(body);
   const stateItems = sanitizeStateItems((body as any).stateItems);
+  const forbiddenStateKey = validateStateItems(user.sub, stateItems);
+  if (forbiddenStateKey) {
+    return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
+  }
   const baseVersion = Number((body as any).baseVersion ?? 0);
   const currentMeta = await loadProfileMeta(db, user.sub);
   if (!currentMeta.profile) {
@@ -215,6 +229,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
   const patch = sanitizePatch(body);
   const stateItems = sanitizeStateItems((body as any).stateItems);
+  const forbiddenStateKey = validateStateItems(user.sub, stateItems);
+  if (forbiddenStateKey) {
+    return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
+  }
   const updatedFields = Object.keys(patch);
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
 
