@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { base64UrlEncode, getBaseUrl, normalizeAppUrl, signState } from "../_oauth";
+import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
 
 function jsonResponse(body: any, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -49,5 +49,18 @@ export const onRequestGet: PagesFunction<{
   auth.searchParams.set("scope", "name email");
   auth.searchParams.set("state", state);
 
-  return Response.redirect(auth.toString(), 302);
+  const headers = new Headers();
+  const isHttps = new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
+  headers.append(
+    "Set-Cookie",
+    cookieSerialize("ff_oauth_nonce", nonce, {
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: Math.floor(OAUTH_STATE_TTL_MS / 1000),
+    }),
+  );
+  headers.set("Location", auth.toString());
+  return new Response(null, { status: 302, headers });
 };

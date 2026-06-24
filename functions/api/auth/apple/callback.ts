@@ -1,6 +1,6 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
-import { ensureAuthSchema, replaceActiveSessionsForUser } from "../../_lib/auth";
+import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
+import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -60,7 +60,11 @@ export const onRequest: PagesFunction<{
     }
 
     if (!code) return json({ error: "Missing code" }, 400);
-    const parsed = await verifyState(state, env.AUTH_JWT_SECRET);
+    const oauthNonce = readCookie(request.headers.get("Cookie") || "", "ff_oauth_nonce");
+    const parsed = await verifyState(state, env.AUTH_JWT_SECRET, {
+      expectedNonce: oauthNonce,
+      maxAgeMs: OAUTH_STATE_TTL_MS,
+    });
     if (!parsed?.r || !parsed?.n) return json({ error: "Missing/invalid state" }, 400);
 
     const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
@@ -208,6 +212,10 @@ export const onRequest: PagesFunction<{
     headers.append(
       "Set-Cookie",
       cookieSerialize("ff_session", sessionJwt, { httpOnly: true, secure: isHttps, sameSite: "Lax", path: "/", maxAge: ttl })
+    );
+    headers.append(
+      "Set-Cookie",
+      cookieSerialize("ff_oauth_nonce", "", { httpOnly: true, secure: isHttps, sameSite: "Lax", path: "/", maxAge: 0 })
     );
     headers.set("Location", `${redirectAfter}/?auth=apple`);
     return new Response(null, { status: 302, headers });

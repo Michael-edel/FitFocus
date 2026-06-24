@@ -36,14 +36,30 @@ export async function signState(raw: string, secret: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(sig));
 }
 
-export async function verifyState(state: string, secret: string): Promise<any | null> {
+export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+export async function verifyState(
+  state: string,
+  secret: string,
+  opts: { expectedNonce?: string | null; nowMs?: number; maxAgeMs?: number } = {},
+): Promise<any | null> {
   if (!state.includes(".")) return null;
   const [stateB64, stateSig] = state.split(".");
   const rawState = new TextDecoder().decode(b64urlDecodeToBytes(stateB64));
   const expected = await signState(rawState, secret);
   if (expected !== stateSig) return null;
   try {
-    return JSON.parse(rawState);
+    const parsed = JSON.parse(rawState);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const issuedAt = Number((parsed as any).t || 0);
+    const now = Number(opts.nowMs ?? Date.now());
+    const maxAgeMs = Number(opts.maxAgeMs ?? OAUTH_STATE_TTL_MS);
+    if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
+    if (issuedAt > now + 60_000) return null;
+    if (now - issuedAt > maxAgeMs) return null;
+    const expectedNonce = opts.expectedNonce ? String(opts.expectedNonce) : "";
+    if (expectedNonce && String((parsed as any).n || "") !== expectedNonce) return null;
+    return parsed;
   } catch {
     return null;
   }
