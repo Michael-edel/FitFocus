@@ -23,9 +23,9 @@ type MainBuildEntry = {
   isCurrent: boolean;
 };
 
-const GITHUB_COMMITS_URL = 'https://api.github.com/repos/Michael-edel/FitFocus/commits?sha=main&per_page=10';
+const GITHUB_COMMITS_URL = 'https://api.github.com/repos/Michael-edel/FitFocus/commits?sha=main&per_page=25';
 const GITHUB_COUNT_URL = 'https://api.github.com/repos/Michael-edel/FitFocus/commits?sha=main&per_page=1&page=1';
-const BUILD_HISTORY_CACHE_KEY = 'fitfocus.build-history.v3';
+const BUILD_HISTORY_CACHE_KEY = 'fitfocus.build-history.v4';
 const BUILD_HISTORY_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function parseLastPage(linkHeader: string | null): number | null {
@@ -117,7 +117,7 @@ async function fetchMainBuildEntries(signal: AbortSignal): Promise<MainBuildEntr
 }
 
 function formatBuildLabel(entry: MainBuildEntry) {
-  return entry.sequence ? `Сборка #${entry.sequence}` : `Сборка ${entry.shortSha}`;
+  return entry.sequence ? `Сборка main №${entry.sequence}` : `Сборка main • ${entry.shortSha}`;
 }
 
 export default function ChangelogScreen() {
@@ -168,7 +168,7 @@ export default function ChangelogScreen() {
               <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
               <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведём версии в FitFocus</h2>
               <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
-                Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а main-сборка увеличивается на 1 с каждым новым commit в ветку main, чтобы можно было быстро понять, какой именно код сейчас стоит у тестера.
+                Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а номер main-сборки увеличивается на 1 с каждым новым commit в ветку main, чтобы можно было быстро понять, какой именно код сейчас стоит у тестера.
               </p>
             </div>
             <div className="flex flex-col gap-2 items-start md:items-end">
@@ -231,7 +231,7 @@ export default function ChangelogScreen() {
                     </div>
                   )}
                 </div>
-                <h2 className="text-2xl md:text-3xl font-black text-slate-100">{formatBuildLabel(entry)} main</h2>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-100">{formatBuildLabel(entry)}</h2>
                 <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-400">
                   <span className="inline-flex items-center gap-2">
                     <CalendarDays className="h-4 w-4" />
