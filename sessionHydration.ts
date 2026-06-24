@@ -33,7 +33,13 @@ const stripLargePhotoPayloads = (items: FoodItem[]): FoodItem[] => {
 export async function hydrateSessionFromCloud(user: UserProfile, deps: HydrationDeps): Promise<HydratedSession> {
   const fetchFn = deps.fetchImpl ?? fetch;
   const userWithResetUsage = deps.resetUsageIfNewTime(user);
-  const prefixes = [`fitfocus_data_${user.id}_`, `ff_`];
+  const prefixes = [
+    `fitfocus_data_${user.id}_`,
+    'ff_gemini_cooldown_until',
+    'ff_ai_last_status_v1',
+    'ff_ai_last_action_v1',
+    'ff_ai_feature_lastcall_v1:',
+  ];
   let kv: Record<string, string> = {};
 
   try {

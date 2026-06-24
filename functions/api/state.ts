@@ -3,10 +3,34 @@
 // This enables cross-device sync while keeping the client code largely unchanged.
 
 import { requireUser, json } from "./_lib/auth";
+import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
+const AI_STATE_KEYS = new Set([
+  "ff_gemini_cooldown_until",
+  "ff_ai_last_status_v1",
+  "ff_ai_last_action_v1",
+]);
+
+const AI_STATE_PREFIXES = [
+  "ff_ai_feature_lastcall_v1:",
+];
+
+function isAllowedStateKey(userId: string, key: string): boolean {
+  if (!key) return false;
+  if (key.startsWith(`fitfocus_data_${userId}_`)) return true;
+  if (AI_STATE_KEYS.has(key)) return true;
+  return AI_STATE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function isAllowedStatePrefix(userId: string, prefix: string): boolean {
+  if (!prefix) return false;
+  if (prefix === `fitfocus_data_${userId}_`) return true;
+  if (AI_STATE_KEYS.has(prefix)) return true;
+  return AI_STATE_PREFIXES.some((allowed) => prefix === allowed);
+}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -15,9 +39,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+  try {
+    await requireBetaAccess(env as any, user as any);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
+  }
 
   const url = new URL(request.url);
   const prefix = url.searchParams.get("prefix") || "";
+  if (!isAllowedStatePrefix(user.sub, prefix)) {
+    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
+  }
 
   const db = requireDB(env);
   const { results } = await db
@@ -36,6 +68,11 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+  try {
+    await requireBetaAccess(env as any, user as any);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
+  }
 
   const db = requireDB(env);
   const body: any = await request.json().catch(() => null);
@@ -53,6 +90,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const results: { key: string; version?: number }[] = [];
   for (const it of items) {
     if (!it?.key) continue;
+    if (!isAllowedStateKey(user.sub, it.key)) {
+      return json({ error: "FORBIDDEN_KEYSPACE", key: String(it.key || "") }, 403);
+    }
     const current = await db
       .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
       .bind(user.sub, it.key)
@@ -82,10 +122,18 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+  try {
+    await requireBetaAccess(env as any, user as any);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
+  }
 
   const url = new URL(request.url);
   const key = url.searchParams.get("key");
   if (!key) return json({ error: "MISSING_KEY" }, 400);
+  if (!isAllowedStateKey(user.sub, key)) {
+    return json({ error: "FORBIDDEN_KEYSPACE", key }, 403);
+  }
 
   const db = requireDB(env);
   await db.prepare("DELETE FROM user_kv WHERE user_id = ? AND k = ?").bind(user.sub, key).run();
