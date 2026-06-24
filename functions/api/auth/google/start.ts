@@ -1,3 +1,4 @@
+import { cookieSerialize, OAUTH_STATE_TTL_MS } from "../_oauth";
 import type { PagesFunction } from "@cloudflare/workers-types";
 
 function jsonResponse(body: any, status = 200, headers: Record<string, string> = {}) {
@@ -80,7 +81,20 @@ export const onRequestGet: PagesFunction<{
   auth.searchParams.set("access_type", "online");
   auth.searchParams.set("state", state);
 
-  return Response.redirect(auth.toString(), 302);
+  const headers = new Headers();
+  const isHttps = new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
+  headers.append(
+    "Set-Cookie",
+    cookieSerialize("ff_oauth_nonce", nonce, {
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: Math.floor(OAUTH_STATE_TTL_MS / 1000),
+    }),
+  );
+  headers.set("Location", auth.toString());
+  return new Response(null, { status: 302, headers });
 };
 
 function normalizeAppUrl(value?: string): string | null {

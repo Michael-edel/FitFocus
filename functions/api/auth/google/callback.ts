@@ -1,5 +1,6 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { ensureAuthSchema, replaceActiveSessionsForUser } from "../../_lib/auth";
+import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
+import { OAUTH_STATE_TTL_MS, verifyState } from "../_oauth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -78,14 +79,12 @@ export const onRequestGet: PagesFunction<{
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state") || "";
     if (!code) return json({ error: "Missing code" }, 400);
-    if (!state.includes(".")) return json({ error: "Missing/invalid state" }, 400);
-
-    const [stateB64, stateSig] = state.split(".");
-    const rawState = new TextDecoder().decode(b64urlDecodeToBytes(stateB64));
-    const expected = await hmacSha256Base64Url(env.AUTH_JWT_SECRET, rawState);
-    if (expected !== stateSig) return json({ error: "Invalid state" }, 400);
-
-    const parsed = JSON.parse(rawState) as { r: string; i?: string; n: string; t: number };
+    const oauthNonce = readCookie(request.headers.get("Cookie") || "", "ff_oauth_nonce");
+    const parsed = await verifyState(state, env.AUTH_JWT_SECRET, {
+      expectedNonce: oauthNonce,
+      maxAgeMs: OAUTH_STATE_TTL_MS,
+    }) as { r: string; i?: string; n: string; t: number } | null;
+    if (!parsed) return json({ error: "Invalid state" }, 400);
     const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
     let redirectAfter = requestBase;
     if (parsed?.r) {
@@ -196,7 +195,7 @@ export const onRequestGet: PagesFunction<{
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
-    if (adminEmails.length && user.email && adminEmails.includes(user.email.toLowerCase())) {
+    if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(user.email.toLowerCase())) {
       await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
     }
     // Bootstrap admin (B2C-safe):
@@ -207,7 +206,7 @@ export const onRequestGet: PagesFunction<{
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
 
-    if (bootstrapEmails.length && user.email) {
+    if (user.email_verified && bootstrapEmails.length && user.email) {
       const anyAdmin = await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first();
       if (!anyAdmin && bootstrapEmails.includes(user.email.toLowerCase())) {
         await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
@@ -238,6 +237,10 @@ export const onRequestGet: PagesFunction<{
     headers.append(
       "Set-Cookie",
       cookieSerialize("ff_session", sessionJwt, { httpOnly: true, secure: isHttps, sameSite: "Lax", path: "/", maxAge: ttl })
+    );
+    headers.append(
+      "Set-Cookie",
+      cookieSerialize("ff_oauth_nonce", "", { httpOnly: true, secure: isHttps, sameSite: "Lax", path: "/", maxAge: 0 })
     );
     headers.set("Location", `${redirectAfter}/?auth=google`);
     return new Response(null, { status: 302, headers });
