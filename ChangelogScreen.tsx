@@ -157,7 +157,7 @@ export default function ChangelogScreen() {
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-slate-100">Изменения по версиям</h1>
         <p className="max-w-3xl text-slate-400 font-medium leading-7">
-          Верхний блок показывает каждую отдельную main-сборку после push: у каждой есть свой номер, SHA, дата и краткое описание на русском. Ниже остаются более крупные релизные версии продукта, такие как 2.4.0 Beta и 2.3.0 Beta.
+          Верхний блок показывает каждую отдельную main-сборку после пуша: у каждой есть свой номер, SHA, дата и краткое описание на русском. Ниже остаются более крупные релизные версии продукта, такие как 2.4.0 Бета и 2.3.0 Бета.
         </p>
       </div>
 
@@ -168,7 +168,7 @@ export default function ChangelogScreen() {
               <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
               <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведём версии в FitFocus</h2>
               <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
-                Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а номер main-сборки увеличивается на 1 с каждым новым commit в ветку main, чтобы можно было быстро понять, какой именно код сейчас стоит у тестера.
+                Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а номер main-сборки увеличивается на 1 с каждым новым коммитом в ветку main, чтобы можно было быстро понять, какой именно код сейчас стоит у тестера.
               </p>
             </div>
             <div className="flex flex-col gap-2 items-start md:items-end">

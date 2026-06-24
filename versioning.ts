@@ -1,6 +1,6 @@
 import { BUILD_SOURCE } from './build-info.generated';
 
-export type AppChannel = "Beta" | "Stable";
+export type AppChannel = 'Бета' | 'Стабильная';
 
 export type AppVersion = {
   major: number;
@@ -13,7 +13,7 @@ export const APP_VERSION: AppVersion = {
   major: 2,
   minor: 4,
   patch: 0,
-  channel: "Beta",
+  channel: 'Бета',
 };
 
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
@@ -32,17 +32,17 @@ export const DB_MIGRATION_VERSION = "0012_support_feedback.sql";
 
 export const versioningRules = [
   {
-    title: "MAJOR",
+    title: 'КРУПНОЕ ОБНОВЛЕНИЕ',
     description: "Ломает совместимость или заметно меняет сценарий работы.",
     examples: ["перестраиваем авторизацию", "меняем модель данных", "ломаем старые API"],
   },
   {
-    title: "MINOR",
+    title: 'НОВАЯ ФУНКЦИЯ',
     description: "Добавляет новую функцию без поломки старого поведения.",
     examples: ["новый экран", "новый workflow", "новая интеграция"],
   },
   {
-    title: "PATCH",
+    title: 'ИСПРАВЛЕНИЕ',
     description: "Исправляет баги, тексты, мелкие UX-проблемы и полировку.",
     examples: ["кнопка не работала", "поправили текст", "устранили падение"],
   },
