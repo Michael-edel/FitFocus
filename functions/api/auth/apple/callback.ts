@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { decodeJwtPayload, getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, verifyState, signSessionJwt } from "../_oauth";
+import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
 import { ensureAuthSchema, replaceActiveSessionsForUser } from "../../_lib/auth";
 
 function json(body: any, status = 200, headers?: Headers) {
@@ -95,12 +95,9 @@ export const onRequest: PagesFunction<{
     const idToken = tokenJson.id_token as string | undefined;
     if (!idToken) return json({ error: "No id_token returned" }, 502);
 
-    const idPayload: any = decodeJwtPayload(idToken);
-    if (!idPayload) return json({ error: "Invalid id_token payload" }, 502);
+    const idPayload = await verifyAppleIdToken(idToken, env.APPLE_CLIENT_ID);
+    if (!idPayload) return json({ error: "Invalid id_token signature or claims" }, 400);
     const now = Math.floor(Date.now() / 1000);
-    if (idPayload.iss !== "https://appleid.apple.com") return json({ error: "Invalid issuer" }, 400);
-    if (String(idPayload.aud || "") !== env.APPLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
-    if (Number(idPayload.exp || 0) <= now) return json({ error: "Expired id_token" }, 400);
 
     const appleSub = String(idPayload.sub || "");
     if (!appleSub) return json({ error: "Missing sub" }, 400);

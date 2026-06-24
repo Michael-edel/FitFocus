@@ -150,13 +150,119 @@ export async function createAppleClientSecret(env: {
   return signEs256Jwt(header, payload, privateKey);
 }
 
-export function decodeJwtPayload(token: string): any | null {
+type JwtParts = {
+  header: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  signingInput: string;
+  signature: Uint8Array;
+};
+
+type AppleJwk = {
+  kty: string;
+  kid: string;
+  use?: string;
+  alg?: string;
+  n: string;
+  e: string;
+};
+
+type AppleKeysResponse = { keys?: AppleJwk[] };
+
+let appleJwksCache: { keys: AppleJwk[]; expiresAt: number } | null = null;
+
+function parseJwtParts(token: string): JwtParts | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   try {
-    const jsonStr = new TextDecoder().decode(b64urlDecodeToBytes(parts[1]));
-    return JSON.parse(jsonStr);
+    const [headerPart, payloadPart, signaturePart] = parts;
+    const headerJson = new TextDecoder().decode(b64urlDecodeToBytes(headerPart));
+    const payloadJson = new TextDecoder().decode(b64urlDecodeToBytes(payloadPart));
+    const header = JSON.parse(headerJson);
+    const payload = JSON.parse(payloadJson);
+    if (!header || typeof header !== "object" || Array.isArray(header)) return null;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    return {
+      header: header as Record<string, unknown>,
+      payload: payload as Record<string, unknown>,
+      signingInput: `${headerPart}.${payloadPart}`,
+      signature: b64urlDecodeToBytes(signaturePart),
+    };
   } catch {
     return null;
   }
+}
+
+async function loadAppleJwks(): Promise<AppleJwk[]> {
+  const now = Date.now();
+  if (appleJwksCache && appleJwksCache.expiresAt > now && appleJwksCache.keys.length > 0) {
+    return appleJwksCache.keys;
+  }
+
+  const response = await fetch("https://appleid.apple.com/auth/keys", {
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`APPLE_JWKS_FETCH_FAILED:${response.status}`);
+  }
+
+  const payload = (await response.json()) as AppleKeysResponse;
+  const keys = Array.isArray(payload?.keys) ? payload.keys.filter((key) => key?.kty === "RSA" && !!key?.kid) : [];
+  if (!keys.length) {
+    throw new Error("APPLE_JWKS_EMPTY");
+  }
+
+  appleJwksCache = {
+    keys,
+    expiresAt: now + 60 * 60 * 1000,
+  };
+  return keys;
+}
+
+async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {
+  return (crypto.subtle.importKey as any)(
+    "jwk",
+    {
+      kty: jwk.kty,
+      kid: jwk.kid,
+      use: jwk.use,
+      alg: "RS256",
+      n: jwk.n,
+      e: jwk.e,
+      ext: true,
+    },
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  ) as Promise<CryptoKey>;
+}
+
+export async function verifyAppleIdToken(token: string, expectedAudience: string): Promise<Record<string, unknown> | null> {
+  const parsed = parseJwtParts(token);
+  if (!parsed) return null;
+
+  const alg = String(parsed.header.alg || "");
+  const kid = String(parsed.header.kid || "");
+  if (alg !== "RS256" || !kid) return null;
+
+  const jwks = await loadAppleJwks();
+  const jwk = jwks.find((item) => item.kid === kid);
+  if (!jwk) return null;
+
+  const key = await importAppleJwk(jwk);
+  const signature = new Uint8Array(parsed.signature);
+  const verified = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    signature,
+    new TextEncoder().encode(parsed.signingInput),
+  );
+  if (!verified) return null;
+
+  const payload = parsed.payload;
+  const now = Math.floor(Date.now() / 1000);
+  if (String(payload.iss || "") !== "https://appleid.apple.com") return null;
+  if (String(payload.aud || "") !== expectedAudience) return null;
+  if (Number(payload.exp || 0) <= now) return null;
+  if (!String(payload.sub || "")) return null;
+  return payload;
 }
