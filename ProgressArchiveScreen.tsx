@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { toLocalDayKey } from './dateUtils';
 import { downloadProgressArchivePdf } from './pdf';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
@@ -22,6 +23,7 @@ type ProgressArchiveScreenProps = {
   wearableProvider?: WearableProvider;
   wearableEnabled?: boolean;
   wearableLastSyncAt?: string;
+  wearableMetricsDayKey?: string;
   wearableMetricsUpdatedAt?: string;
   onOpenSettings?: () => void;
   onOpenProgress?: () => void;
@@ -54,10 +56,7 @@ const formatShortDate = (iso: string) => {
   return `${day}.${month}`;
 };
 
-const toDateKey = (iso?: string | null) => {
-  if (!iso) return '';
-  return iso.includes('T') ? iso.slice(0, 10) : iso;
-};
+const toDateKey = (iso?: string | null) => toLocalDayKey(iso);
 
 export default function ProgressArchiveScreen({
   currentUser,
@@ -68,6 +67,7 @@ export default function ProgressArchiveScreen({
   wearableProvider,
   wearableEnabled,
   wearableLastSyncAt,
+  wearableMetricsDayKey,
   wearableMetricsUpdatedAt,
   onOpenSettings,
   onOpenProgress,
@@ -270,16 +270,17 @@ export default function ProgressArchiveScreen({
     });
 
     if (wearableMetricsUpdatedAt || wearableLastSyncAt) {
+      const wearableDayKey = wearableMetricsDayKey || toLocalDayKey(wearableMetricsUpdatedAt || wearableLastSyncAt);
       items.push({
         kind: 'wearable',
-        date: wearableMetricsUpdatedAt || wearableLastSyncAt || new Date().toISOString(),
+        date: wearableDayKey || wearableMetricsUpdatedAt || wearableLastSyncAt || new Date().toISOString(),
         title: 'Часы',
         detail: wearableProvider && wearableEnabled !== false ? `Источник: ${wearableProvider}` : 'Источник подключён',
       });
     }
 
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12);
-  }, [measurementsSorted, progressPhotosSorted, wearableEnabled, wearableLastSyncAt, wearableMetricsUpdatedAt, wearableProvider]);
+  }, [measurementsSorted, progressPhotosSorted, wearableEnabled, wearableLastSyncAt, wearableMetricsDayKey, wearableMetricsUpdatedAt, wearableProvider]);
 
   const measurementSincePrevious =
     latestMeasurement && previousMeasurement

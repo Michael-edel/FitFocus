@@ -47,6 +47,7 @@ type ProgressScreenProps = {
   wearableStepsToday?: number;
   wearableActiveMinutesToday?: number;
   wearableSleepHoursLastNight?: number;
+  wearableMetricsDayKey?: string;
   wearableMetricsUpdatedAt?: string;
   onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
   syncState?: SyncState;
@@ -214,6 +215,7 @@ export default function ProgressScreen({
   wearableStepsToday,
   wearableActiveMinutesToday,
   wearableSleepHoursLastNight,
+  wearableMetricsDayKey,
   wearableMetricsUpdatedAt,
   onPatchUser,
   syncState,
@@ -407,7 +409,7 @@ export default function ProgressScreen({
     type TimelineItem =
       | { kind: 'measurement'; date: string; title: string; detail: string; tone: string }
       | { kind: 'photo'; date: string; title: string; detail: string; tone: string; thumb?: string }
-      | { kind: 'wearable'; date: string; title: string; detail: string; tone: string };
+      | { kind: 'wearable'; date: string; dayKey?: string; title: string; detail: string; tone: string };
 
     const items: TimelineItem[] = [];
 
@@ -448,6 +450,7 @@ export default function ProgressScreen({
       items.push({
         kind: 'wearable',
         date: wearableDate,
+        dayKey: wearableMetricsDayKey || toLocalDayKey(wearableDate),
         title: 'Часы',
         detail: details.length ? details.join(' · ') : 'Источник подключён, данные ждут обновления',
         tone: 'bg-sky-500/10 text-sky-200 border-sky-500/20',
@@ -461,7 +464,7 @@ export default function ProgressScreen({
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .forEach((item) => {
         const dateObj = new Date(item.date);
-        const key = toLocalDayKey(item.date);
+        const key = item.kind === 'wearable' ? item.dayKey || toLocalDayKey(item.date) : toLocalDayKey(item.date);
         if (!key) return;
         if (!groups.has(key)) {
           groups.set(key, {
@@ -477,7 +480,7 @@ export default function ProgressScreen({
       });
 
     return [...groups.values()].sort((a, b) => b.date - a.date).slice(0, 8);
-  }, [progressPhotosSorted, recentMeasurements, timelineFilter, wearableActiveMinutesToday, wearableConnectedAt, wearableLastSyncAt, wearableMetricsUpdatedAt, wearableSleepHoursLastNight, wearableStepsToday]);
+  }, [progressPhotosSorted, recentMeasurements, timelineFilter, wearableActiveMinutesToday, wearableConnectedAt, wearableLastSyncAt, wearableMetricsDayKey, wearableMetricsUpdatedAt, wearableSleepHoursLastNight, wearableStepsToday]);
 
   const latestPhoto = progressPhotosSorted[0] || null;
   const firstPhoto = progressPhotosSorted.length > 1 ? progressPhotosSorted[progressPhotosSorted.length - 1] : null;
@@ -657,6 +660,7 @@ export default function ProgressScreen({
     setDraftSaving(true);
     try {
       const now = new Date().toISOString();
+      const wearableDayKey = toLocalDayKey(now);
     const historyEntry = {
       date: now,
       weight: nextWeight ?? undefined,
@@ -677,6 +681,7 @@ export default function ProgressScreen({
       wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
       wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
       wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
+        wearableMetricsDayKey: (nextSteps || nextActiveMinutes || nextSleepHours) ? wearableDayKey : currentUser.wearableMetricsDayKey,
         bloodPressureMeasuredAt: currentUser.bloodPressureMeasuredAt,
         bodyMeasurementsMeasuredAt: (nextWaist || nextChest || nextHips || nextPulse) ? now : currentUser.bodyMeasurementsMeasuredAt,
         bloodGlucoseMeasuredAt: nextBloodGlucose ? now : currentUser.bloodGlucoseMeasuredAt,
@@ -702,11 +707,13 @@ export default function ProgressScreen({
 
       const now = new Date().toISOString();
       const importDate = payload.date || now;
+      const wearableDayKey = toLocalDayKey(now);
       const nextPatch: Partial<UserProfile> = {
         wearableProvider: payload.provider || currentUser.wearableProvider || 'manual',
         wearableEnabled: true,
         wearableConnectedAt: currentUser.wearableConnectedAt || now,
         wearableLastSyncAt: now,
+        wearableMetricsDayKey: wearableDayKey,
         wearableMetricsUpdatedAt: now,
       };
 
