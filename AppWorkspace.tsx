@@ -34,7 +34,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent, onDiaryDayChange } = nutrition;
 
   const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
-  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
+  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
@@ -154,6 +154,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             wearableStepsToday={wearableStepsToday}
             wearableActiveMinutesToday={wearableActiveMinutesToday}
             wearableSleepHoursLastNight={wearableSleepHoursLastNight}
+            wearableMetricsDayKey={wearableMetricsDayKey}
             wearableMetricsUpdatedAt={wearableMetricsUpdatedAt}
             onPatchUser={onPatchUser}
             syncState={syncState}
@@ -175,6 +176,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             wearableProvider={wearableProvider}
             wearableEnabled={wearableEnabled}
             wearableLastSyncAt={wearableLastSyncAt}
+            wearableMetricsDayKey={wearableMetricsDayKey}
             wearableMetricsUpdatedAt={wearableMetricsUpdatedAt}
             onOpenSettings={() => setActiveTab('settings')}
             onOpenProgress={() => setActiveTab('progress')}

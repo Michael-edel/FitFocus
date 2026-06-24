@@ -7,6 +7,7 @@ import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
 import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
+import { toLocalDayKey } from "../../../dateUtils";
 import { normalizeWearableSyncSnapshot, resolveWearableLocalDayKey, resolveWearableSyncTimestamp } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
@@ -92,6 +93,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const nextVersion = (currentMeta.version || 0) + 1;
   const timestamp = resolveWearableSyncTimestamp(payload, new Date().toISOString());
   const localDayKey = resolveWearableLocalDayKey(payload, timestamp);
+  const wearableMetricsDayKey = localDayKey || toLocalDayKey(timestamp);
   const nextProfile: Record<string, unknown> = withProtectedFields(user as any, {
     ...currentProfile,
     plan: serverPlan,
@@ -100,17 +102,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     wearableEnabled: true,
     wearableConnectedAt: (currentProfile as any).wearableConnectedAt || timestamp,
     wearableLastSyncAt: timestamp,
+    wearableMetricsDayKey,
     wearableMetricsUpdatedAt: timestamp,
     ...(typeof payload.stepsToday === "number" ? { wearableStepsToday: Math.round(payload.stepsToday) } : {}),
     ...(typeof payload.activeMinutesToday === "number" ? { wearableActiveMinutesToday: Math.round(payload.activeMinutesToday) } : {}),
     ...(typeof payload.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: Number(payload.sleepHoursLastNight.toFixed(1)) } : {}),
     ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: Math.round(payload.pulse), restingPulseMeasuredAt: timestamp } : {}),
     ...(typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0 ? { bloodGlucoseMmolL: Number(payload.bloodGlucoseMmolL.toFixed(1)), bloodGlucoseMeasuredAt: timestamp } : {}),
-    ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight, weightHistory: pushWeightHistory(currentProfile, payload.weight, localDayKey || timestamp) } : {}),
+    ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight, weightHistory: pushWeightHistory(currentProfile, payload.weight, wearableMetricsDayKey || timestamp) } : {}),
     ...((typeof payload.weight === "number" && payload.weight > 0) || (typeof payload.pulse === "number" && payload.pulse > 0) || (typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0)
       ? {
           measurementsHistory: pushMeasurementHistory(currentProfile, {
-            date: localDayKey || timestamp,
+            date: wearableMetricsDayKey || timestamp,
             ...(typeof payload.weight === "number" && payload.weight > 0 ? { weight: payload.weight } : {}),
             ...(typeof payload.pulse === "number" && payload.pulse > 0 ? { restingPulse: Math.round(payload.pulse) } : {}),
             ...(typeof payload.bloodGlucoseMmolL === "number" && payload.bloodGlucoseMmolL > 0 ? { bloodGlucoseMmolL: payload.bloodGlucoseMmolL } : {}),

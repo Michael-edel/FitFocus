@@ -305,6 +305,8 @@ export interface UserProfile {
   wearableActiveMinutesToday?: number;
   /** сон прошлой ночи, в часах */
   wearableSleepHoursLastNight?: number;
+  /** локальный день, к которому относятся wearable-метрики */
+  wearableMetricsDayKey?: string;
   /** когда обновлялись wearable-метрики */
   wearableMetricsUpdatedAt?: string;
 }

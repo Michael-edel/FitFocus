@@ -3209,6 +3209,7 @@ const logWeight = useCallback(() => {
       wearableStepsToday: currentUser?.wearableStepsToday,
       wearableActiveMinutesToday: currentUser?.wearableActiveMinutesToday,
       wearableSleepHoursLastNight: currentUser?.wearableSleepHoursLastNight,
+      wearableMetricsDayKey: currentUser?.wearableMetricsDayKey,
       wearableMetricsUpdatedAt: currentUser?.wearableMetricsUpdatedAt,
       onPatchUser: patchProfileInCloudWithAchievements,
       syncState: profileSyncState,
