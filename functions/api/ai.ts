@@ -309,7 +309,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
 
-  const features = await loadFeatures(env as any);
+  const features = await loadFeatures(env as any, String(user.sub));
   const settings = await loadSettings(env as any);
   const budgetGuardEnabled = isEnabled(features, "ai_budget_guard_enabled", false);
   const emergencyFallback = isEnabled(features, "ai_emergency_fallback", false);

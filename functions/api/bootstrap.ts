@@ -44,7 +44,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .all<{ k: string; v: string; version?: number; updated_at?: number }>();
   const items = (results || []).map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
 
-  const features = await loadFeatures(env);
+  const features = await loadFeatures(env, String(user.sub));
 
   return json({
     schema_version: API_SCHEMA_VERSION,
