@@ -90,7 +90,7 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                   {BUILD_SHORT_LABEL}
                 </span>
               </div>
-               <p className="mt-2 text-sm font-semibold text-slate-400">Релиз продукта меняется вручную, а сборка main обновляется автоматически на каждый push. Ниже отдельно показаны релиз, сборка, API, данные и миграция БД — так проще понять, что изменилось и где возможен конфликт.</p>
+               <p className="mt-2 text-sm font-semibold text-slate-400">Релиз продукта меняется вручную, а сборка main обновляется автоматически на каждый пуш. Ниже отдельно показаны релиз, сборка, API, данные и миграция БД — так проще понять, что изменилось и где возможен конфликт.</p>
             </div>
             <button
               type="button"
