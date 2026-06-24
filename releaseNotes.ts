@@ -70,7 +70,7 @@ const fallbackMainBuildHistory: readonly BuildHistoryItem[] = [
   },
 ];
 
-function localizeCommitSubject(subject: string): string {
+export function localizeCommitSubject(subject: string): string {
   const s = subject.trim();
   if (!s) return 'Коммит без описания';
 
@@ -117,13 +117,43 @@ function localizeCommitSubject(subject: string): string {
     .replace(/^Fix\s+/i, 'Исправлено: ')
     .replace(/^Update\s+/i, 'Обновлено: ')
     .replace(/^Improve\s+/i, 'Улучшено: ')
+    .replace(/^Implement\s+/i, 'Реализовано: ')
+    .replace(/^Harden\s+/i, 'Усилено: ')
+    .replace(/^Normalize\s+/i, 'Нормализовано: ')
+    .replace(/^Preserve\s+/i, 'Сохранено: ')
+    .replace(/^Support\s+/i, 'Поддержка: ')
     .replace(/^Remove\s+/i, 'Удалено: ')
     .replace(/^Refactor\s+/i, 'Рефакторинг: ')
+    .replace(/\bachievement\b/gi, 'достижение')
+    .replace(/\bachievements\b/gi, 'достижения')
+    .replace(/\bapple\b/gi, 'Apple')
+    .replace(/\bauth\b/gi, 'авторизация')
+    .replace(/\bbeta access\b/gi, 'beta access')
     .replace(/\bautomatic\b/gi, 'автоматическое')
     .replace(/\bautomatically\b/gi, 'автоматически')
     .replace(/\bbuild\b/gi, 'сборки')
+    .replace(/\bbuild history\b/gi, 'история сборок')
+    .replace(/\bchangelog\b/gi, 'экран версий')
+    .replace(/\bcommit\b/gi, 'коммит')
+    .replace(/\bcurrent\b/gi, 'текущий')
+    .replace(/\bfeature rollout percentage\b/gi, 'процентный rollout feature-флагов')
+    .replace(/\bfeature rollout\b/gi, 'rollout feature-флагов')
+    .replace(/\bfeature flags\b/gi, 'feature-флаги')
+    .replace(/\bfamily\b/gi, 'семья')
+    .replace(/\bgoogle\b/gi, 'Google')
+    .replace(/\bid_token\b/gi, 'id_token')
+    .replace(/\blatest\b/gi, 'последний')
+    .replace(/\blabel\b/gi, 'подпись')
     .replace(/\bversioning\b/gi, 'версионирование')
     .replace(/\bversion\b/gi, 'версия')
+    .replace(/\boauth\b/gi, 'OAuth')
+    .replace(/\bprofile\b/gi, 'профиль')
+    .replace(/\brussian\b/gi, 'русская')
+    .replace(/\bscope key\b/gi, 'scope key')
+    .replace(/\bshopping checked\b/gi, 'отмеченные покупки')
+    .replace(/\bstate api\b/gi, 'state API')
+    .replace(/\bverified email\b/gi, 'подтверждённый email')
+    .replace(/\bwearable\b/gi, 'wearable')
     .replace(/\bmain\b/gi, 'main');
 
   if (normalized === s) {
