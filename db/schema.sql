@@ -368,12 +368,33 @@ CREATE TABLE IF NOT EXISTS support_feedback (
   priority TEXT NOT NULL DEFAULT 'normal',
   attachment_count INTEGER NOT NULL DEFAULT 0,
   attachments_json TEXT,
-  admin_note TEXT
+  admin_note TEXT,
+  assigned_admin_user_id TEXT,
+  resolved_at INTEGER,
+  closed_at INTEGER,
+  last_reply_at INTEGER,
+  last_reply_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_support_feedback_created_at ON support_feedback(created_at);
 CREATE INDEX IF NOT EXISTS idx_support_feedback_user_id ON support_feedback(user_id);
 CREATE INDEX IF NOT EXISTS idx_support_feedback_status ON support_feedback(status);
+CREATE INDEX IF NOT EXISTS idx_support_feedback_assigned_admin ON support_feedback(assigned_admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_support_feedback_last_reply_at ON support_feedback(last_reply_at);
+
+CREATE TABLE IF NOT EXISTS support_feedback_messages (
+  id TEXT PRIMARY KEY,
+  ticket_id TEXT NOT NULL,
+  author_user_id TEXT NOT NULL,
+  author_role TEXT NOT NULL,
+  message TEXT NOT NULL,
+  attachment_count INTEGER NOT NULL DEFAULT 0,
+  attachments_json TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_support_feedback_messages_ticket
+ON support_feedback_messages(ticket_id, created_at);
 
 CREATE TABLE IF NOT EXISTS ai_rate_limits (
   bucket_key TEXT PRIMARY KEY,
