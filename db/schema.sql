@@ -304,16 +304,16 @@ CREATE INDEX IF NOT EXISTS idx_weekly_menu_items_family_week ON weekly_menu_item
 CREATE INDEX IF NOT EXISTS idx_weekly_menu_items_week ON weekly_menu_items(week_start);
 
 CREATE TABLE IF NOT EXISTS shopping_checked (
-  user_id TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
   week_start TEXT NOT NULL,
   family_id TEXT,
   ingredient_name TEXT NOT NULL,
   checked INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, week_start, family_id, ingredient_name)
+  PRIMARY KEY (scope_id, week_start, ingredient_name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_shopping_checked_user_week ON shopping_checked(user_id, week_start);
+CREATE INDEX IF NOT EXISTS idx_shopping_checked_scope_week ON shopping_checked(scope_id, week_start);
 CREATE INDEX IF NOT EXISTS idx_shopping_checked_family_week ON shopping_checked(family_id, week_start);
 
 

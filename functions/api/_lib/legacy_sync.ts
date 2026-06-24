@@ -92,7 +92,14 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
     { sql: "UPDATE ai_events SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE recipes SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE weekly_menu_items SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
-    { sql: "UPDATE shopping_checked SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
+    {
+      sql: "UPDATE shopping_checked SET scope_id = ? WHERE scope_id = ?",
+      binds: [`personal:${toUserId}`, `personal:${fromUserId}`],
+    },
+    {
+      sql: "UPDATE shopping_checked SET scope_id = ? WHERE scope_id = ?",
+      binds: [`personal:${toUserId}`, fromUserId],
+    },
     { sql: "UPDATE weekly_menu_portions SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE family_members SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE families SET owner_user_id = ? WHERE owner_user_id = ?", binds: [toUserId, fromUserId] },
