@@ -15,6 +15,13 @@ export type ReleaseNote = {
   isCurrent?: boolean;
 };
 
+type BuildHistoryItem = {
+  sha?: string;
+  shortSha?: string;
+  committedAt?: string;
+  subject?: string;
+};
+
 function localizeCommitSubject(subject: string): string {
   const s = subject.trim();
   if (!s) return 'Коммит без описания';
@@ -35,6 +42,14 @@ function localizeCommitSubject(subject: string): string {
     'Deduplicate profiles by email first': 'Профили сначала объединяются по email',
     'Localize version labels and release notes': 'Подписи версий и релиз-ноты переведены на русский',
     'Store support attachments in R2': 'Вложения обращений вынесены в R2',
+    'Fix achievement unlock semantics': 'Исправлена логика открытия достижений по реальным действиям пользователя',
+    'Harden achievement MVP': 'Усилена стабильность MVP достижений и очереди popup-уведомлений',
+    'Sync D1 schema with latest migrations': 'Схема D1 синхронизирована с актуальными миграциями',
+    'Add achievement engine MVP': 'Добавлен базовый движок достижений и первый каталог наград',
+    'Harden profile PUT merge behavior': 'Защищено merge-поведение PUT профиля без потери существующих данных',
+    'Normalize wearable history day keys': 'История данных со смарт-часов переведена на локальные ключи дня',
+    'Sanitize AI event logs': 'AI-логи очищены от чувствительных пользовательских данных',
+    'Fix active plan expiration checks': 'Проверки активного тарифа теперь учитывают окончание периода подписки',
   };
 
   if (exactMatches[s]) {
@@ -63,9 +78,18 @@ function localizeCommitSubject(subject: string): string {
 
 function formatReleaseTitle(release: ReleaseNote): string {
   if (release.isCurrent) {
-    return `Текущая сборка ${BUILD_VERSION_LABEL}`;
+    return BUILD_VERSION_LABEL;
   }
   return `Версия ${release.version} ${release.label}`;
+}
+
+function formatBuildHistoryLine(build: BuildHistoryItem): string {
+  const date = build.committedAt
+    ? new Date(build.committedAt).toLocaleString('ru-RU')
+    : 'Дата коммита недоступна';
+  const title = localizeCommitSubject(build.subject || '');
+  const sha = build.shortSha || build.sha?.slice(0, 8) || 'unknown';
+  return `${date} · ${sha} — ${title}`;
 }
 
 const currentBuildReleaseNote: ReleaseNote = {
@@ -88,15 +112,25 @@ const currentBuildReleaseNote: ReleaseNote = {
     {
       title: 'Что изменилось',
       items: [
-        'Автосборка main создаёт новую сборку без ручных действий команды.',
-        'Экран «Что нового» показывает текущую сборку, SHA и историю изменений полностью на русском.',
-        'Группировка по версиям помогает тестерам быстро отделять свежий push от предыдущих релизов и понимать, что именно попало в текущий деплой.',
+        'Каждый новый push в main получает отдельную сборку с собственным SHA и временем публикации.',
+        'История последних деплоев показывается ниже отдельным списком и больше не затирает релизные карточки от 19.06 и прошлых дат.',
+        'Подписи и краткие описания текущих изменений выводятся на русском, чтобы тестерам не приходилось расшифровывать commit subjects вручную.',
       ],
     },
     {
-      title: 'Последние коммиты',
+      title: 'Последние main-сборки',
+      items: Array.isArray(BUILD_SOURCE.recentBuilds) && BUILD_SOURCE.recentBuilds.length
+        ? BUILD_SOURCE.recentBuilds.map((build) => formatBuildHistoryLine(build))
+        : BUILD_SOURCE.recentCommits.length
+          ? BUILD_SOURCE.recentCommits.map((commit) => localizeCommitSubject(commit))
+          : ['История сборок недоступна в этой сборке.'],
+    },
+    {
+      title: 'Ключевые изменения текущего деплоя',
       items: BUILD_SOURCE.recentCommits.length
-        ? BUILD_SOURCE.recentCommits.map((commit) => localizeCommitSubject(commit))
+        ? BUILD_SOURCE.recentCommits
+            .slice(0, 5)
+            .map((commit) => localizeCommitSubject(commit))
         : ['История коммитов недоступна в этой сборке.'],
     },
     {
