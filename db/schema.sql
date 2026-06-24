@@ -374,3 +374,31 @@ CREATE TABLE IF NOT EXISTS support_feedback (
 CREATE INDEX IF NOT EXISTS idx_support_feedback_created_at ON support_feedback(created_at);
 CREATE INDEX IF NOT EXISTS idx_support_feedback_user_id ON support_feedback(user_id);
 CREATE INDEX IF NOT EXISTS idx_support_feedback_status ON support_feedback(status);
+
+CREATE TABLE IF NOT EXISTS ai_rate_limits (
+  bucket_key TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  feature TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  window_start_ms INTEGER NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_rate_limits_user_kind ON ai_rate_limits(user_id, kind, updated_at);
+CREATE INDEX IF NOT EXISTS idx_ai_rate_limits_updated_at ON ai_rate_limits(updated_at);
+
+CREATE TABLE IF NOT EXISTS user_achievements (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  achievement_key TEXT NOT NULL,
+  unlocked_at INTEGER NOT NULL,
+  tier TEXT NOT NULL,
+  source TEXT,
+  snapshot_json TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, achievement_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_achievements_user
+ON user_achievements(user_id, unlocked_at DESC);
