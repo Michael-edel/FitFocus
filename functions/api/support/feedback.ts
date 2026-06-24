@@ -1,5 +1,5 @@
 import { json, requireUser } from "../_lib/auth";
-import { requireDB, uuid } from "../_lib/db";
+import { nowMs, requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import {
@@ -12,6 +12,111 @@ import {
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
+type SupportMessageRow = {
+  id: string;
+  ticket_id: string;
+  author_user_id: string;
+  author_role: "user" | "admin";
+  message: string;
+  attachment_count: number;
+  attachments_json?: string | null;
+  created_at: number;
+};
+
+function normalizeTicketStatus(status: string) {
+  switch (status.trim()) {
+    case "new":
+    case "in_progress":
+    case "waiting_user":
+    case "resolved":
+    case "closed":
+      return status.trim();
+    default:
+      return "";
+  }
+}
+
+function normalizePriority(priority: string) {
+  switch (priority.trim()) {
+    case "low":
+    case "normal":
+    case "high":
+    case "urgent":
+      return priority.trim();
+    default:
+      return "";
+  }
+}
+
+function parseSteps(value: string) {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.length ? JSON.stringify(lines) : null;
+}
+
+function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
+  return records.map((attachment, index) => ({
+    ...attachment,
+    data_url: attachment.data_url || (scope.messageId ? attachment.data_url : attachmentResponseUrl(scope.ticketId, index)),
+  }));
+}
+
+async function loadMessageThread(db: D1Database, ticketId: string) {
+  const { results } = await db.prepare(
+    `SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
+     FROM support_feedback_messages
+     WHERE ticket_id = ?
+     ORDER BY created_at ASC`
+  ).bind(ticketId).all<SupportMessageRow>();
+
+  return (results || []).map((row) => ({
+    ...row,
+    attachment_count: Number(row.attachment_count || 0),
+    attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId, messageId: row.id }),
+  }));
+}
+
+async function appendSupportMessage(
+  db: D1Database,
+  ticketId: string,
+  authorUserId: string,
+  authorRole: "user" | "admin",
+  message: string,
+  attachments: SupportAttachmentRecord[],
+) {
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage && attachments.length === 0) return null;
+  const id = uuid();
+  const createdAt = nowMs();
+  await db.prepare(
+    `INSERT INTO support_feedback_messages (
+      id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    id,
+    ticketId,
+    authorUserId,
+    authorRole,
+    trimmedMessage,
+    attachments.length,
+    attachments.length ? JSON.stringify(attachments) : null,
+    createdAt,
+  ).run();
+  return { id, createdAt };
+}
+
+async function ticketRowForAdmin(db: D1Database, id: string) {
+  return db.prepare(
+    `SELECT s.*, u.email as user_email, u.name as user_name
+     FROM support_feedback s
+     LEFT JOIN users u ON u.id = s.user_id
+     WHERE s.id = ?
+     LIMIT 1`
+  ).bind(id).first<any>();
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -21,7 +126,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-
   const form = await request.formData().catch(() => null);
   if (!form) return json({ error: "BAD_REQUEST", message: "form data required" }, 400);
 
@@ -54,12 +158,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
   }
 
-  const now = Date.now();
+  const now = nowMs();
   await db.prepare(
     `INSERT INTO support_feedback (
       id, user_id, created_at, updated_at, category, section, subject, message, steps_json,
-      device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 'normal', ?, ?, NULL)`
+      device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note,
+      assigned_admin_user_id, resolved_at, closed_at, last_reply_at, last_reply_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 'normal', ?, ?, NULL, NULL, NULL, NULL, ?, ?)`
   ).bind(
     ticketId,
     user.sub,
@@ -69,19 +174,111 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     section,
     subject,
     message,
-    steps ? JSON.stringify(steps.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) : null,
+    parseSteps(steps),
     device,
     browser,
     contact,
     appVersion,
     attachments.length,
     attachments.length ? JSON.stringify(attachments) : null,
+    now,
+    user.sub,
   ).run();
+
+  await appendSupportMessage(db, ticketId, user.sub, "user", message, attachments);
 
   return json({
     ok: true,
     ticket_id: ticketId,
     attachment_count: attachments.length,
+  });
+};
+
+export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
+  let user;
+  try {
+    user = await requireUser(request, env);
+  } catch {
+    return json({ error: "UNAUTH" }, 401);
+  }
+  try {
+    requireRole(user, "admin");
+  } catch {
+    return json({ error: "FORBIDDEN" }, 403);
+  }
+
+  const db = requireDB(env);
+  await requireAdminRequest(user, request, db);
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return json({ error: "BAD_REQUEST", message: "json required" }, 400);
+
+  const id = String(body.id || "").trim();
+  if (!id) return json({ error: "BAD_REQUEST", message: "ticket id required" }, 400);
+
+  const current = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<any>();
+  if (!current) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+
+  const status = normalizeTicketStatus(String(body.status || ""));
+  const priority = normalizePriority(String(body.priority || ""));
+  const adminNote = body.admin_note == null ? undefined : String(body.admin_note || "").trim();
+  const replyMessage = String(body.message || "").trim();
+  const assignMode = String(body.assign_to || "").trim();
+  const now = nowMs();
+
+  const nextStatus = status || (replyMessage ? "waiting_user" : current.status || "new");
+  const nextPriority = priority || current.priority || "normal";
+  const assignedAdminUserId =
+    assignMode === "me" ? user.sub :
+    assignMode === "none" ? null :
+    current.assigned_admin_user_id || null;
+  const resolvedAt =
+    nextStatus === "resolved"
+      ? current.resolved_at || now
+      : nextStatus === "closed"
+        ? current.resolved_at || now
+        : null;
+  const closedAt = nextStatus === "closed" ? current.closed_at || now : null;
+
+  if (replyMessage) {
+    await appendSupportMessage(db, id, user.sub, "admin", replyMessage, []);
+  }
+
+  await db.prepare(
+    `UPDATE support_feedback
+     SET updated_at = ?,
+         status = ?,
+         priority = ?,
+         admin_note = ?,
+         assigned_admin_user_id = ?,
+         resolved_at = ?,
+         closed_at = ?,
+         last_reply_at = ?,
+         last_reply_by = ?
+     WHERE id = ?`
+  ).bind(
+    now,
+    nextStatus,
+    nextPriority,
+    adminNote === undefined ? current.admin_note || null : adminNote || null,
+    assignedAdminUserId,
+    resolvedAt,
+    closedAt,
+    replyMessage ? now : current.last_reply_at || null,
+    replyMessage ? user.sub : current.last_reply_by || null,
+    id,
+  ).run();
+
+  const ticket = await ticketRowForAdmin(db, id);
+  const messages = await loadMessageThread(db, id);
+  return json({
+    ok: true,
+    ticket: ticket ? {
+      ...ticket,
+      attachment_count: Number(ticket.attachment_count || 0),
+      attachments: mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: id }),
+      messages,
+    } : null,
   });
 };
 
@@ -92,7 +289,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
+  try {
+    requireRole(user, "admin");
+  } catch {
+    return json({ error: "FORBIDDEN" }, 403);
+  }
 
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
@@ -100,40 +301,41 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const id = String(url.searchParams.get("id") || "").trim();
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || "20")));
+  const status = normalizeTicketStatus(String(url.searchParams.get("status") || ""));
 
   if (id) {
-    const row = await db.prepare(
-      `SELECT s.*, u.email as user_email, u.name as user_name
-       FROM support_feedback s
-       LEFT JOIN users u ON u.id = s.user_id
-       WHERE s.id = ?
-       LIMIT 1`
-    ).bind(id).first<any>();
+    const row = await ticketRowForAdmin(db, id);
     if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-    const attachments = parseAttachmentsJson(row.attachments_json).map((attachment, index) => ({
-      ...attachment,
-      data_url: attachment.data_url || attachmentResponseUrl(row.id, index),
-    }));
     return json({
       ticket: {
         ...row,
         attachment_count: Number(row.attachment_count || 0),
-        attachments,
+        attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId: row.id }),
+        messages: await loadMessageThread(db, row.id),
       },
     });
   }
 
-  const { results } = await db.prepare(
-    `SELECT s.id, s.user_id, s.created_at, s.updated_at, s.category, s.section, s.subject, s.message,
-            s.steps_json, s.device, s.browser, s.contact, s.app_version, s.status, s.priority,
-            s.attachment_count,
-            u.email as user_email, u.name as user_name
-     FROM support_feedback s
-     LEFT JOIN users u ON u.id = s.user_id
-     ORDER BY s.created_at DESC
-     LIMIT ?`
-  ).bind(limit).all<any>();
+  const filters: string[] = [];
+  const binds: unknown[] = [];
+  if (status) {
+    filters.push(`s.status = ?`);
+    binds.push(status);
+  }
 
+  const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const query = `
+    SELECT s.id, s.user_id, s.created_at, s.updated_at, s.category, s.section, s.subject, s.message,
+           s.steps_json, s.device, s.browser, s.contact, s.app_version, s.status, s.priority,
+           s.attachment_count, s.assigned_admin_user_id, s.resolved_at, s.closed_at, s.last_reply_at, s.last_reply_by,
+           u.email as user_email, u.name as user_name
+    FROM support_feedback s
+    LEFT JOIN users u ON u.id = s.user_id
+    ${whereClause}
+    ORDER BY COALESCE(s.last_reply_at, s.updated_at, s.created_at) DESC
+    LIMIT ?`;
+
+  const { results } = await db.prepare(query).bind(...binds, limit).all<any>();
   return json({
     tickets: (results || []).map((row) => ({
       ...row,

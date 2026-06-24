@@ -174,8 +174,25 @@ type SupportTicketRow = {
   status: string;
   priority: string;
   attachment_count: number;
+  assigned_admin_user_id?: string | null;
+  resolved_at?: number | null;
+  closed_at?: number | null;
+  last_reply_at?: number | null;
+  last_reply_by?: string | null;
   attachments?: SupportAttachment[];
+  messages?: SupportMessageRow[];
   admin_note?: string | null;
+};
+
+type SupportMessageRow = {
+  id: string;
+  ticket_id: string;
+  author_user_id: string;
+  author_role: "user" | "admin";
+  message: string;
+  attachment_count: number;
+  created_at: number;
+  attachments?: SupportAttachment[];
 };
 
 type UserDetail = {
@@ -344,7 +361,14 @@ export default function AdminScreen() {
 
   const [supportTickets, setSupportTickets] = useState<SupportTicketRow[]>([]);
   const [supportTicketsLimit, setSupportTicketsLimit] = useState(20);
+  const [supportStatusFilter, setSupportStatusFilter] = useState("all");
   const [selectedSupportTicket, setSelectedSupportTicket] = useState<SupportTicketRow | null>(null);
+  const [supportTicketStatusDraft, setSupportTicketStatusDraft] = useState("new");
+  const [supportTicketPriorityDraft, setSupportTicketPriorityDraft] = useState("normal");
+  const [supportTicketAdminNoteDraft, setSupportTicketAdminNoteDraft] = useState("");
+  const [supportTicketReplyDraft, setSupportTicketReplyDraft] = useState("");
+  const [supportTicketAssignDraft, setSupportTicketAssignDraft] = useState<"" | "me" | "none">("");
+  const [supportTicketSaving, setSupportTicketSaving] = useState(false);
 
   const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
   const [aiLogLimit, setAiLogLimit] = useState(50);
@@ -408,7 +432,10 @@ export default function AdminScreen() {
   const loadSupportTickets = async () => {
     try {
       const limit = Math.max(1, Math.min(100, Number(supportTicketsLimit) || 20));
-      const r = await fetch(`/api/support/feedback?limit=${limit}`, { credentials: "include" });
+      const qs = new URLSearchParams();
+      qs.set("limit", String(limit));
+      if (supportStatusFilter !== "all") qs.set("status", supportStatusFilter);
+      const r = await fetch(`/api/support/feedback?${qs.toString()}`, { credentials: "include" });
       if (!r.ok) return;
       const j = await r.json();
       setSupportTickets(Array.isArray(j?.tickets) ? j.tickets : []);
@@ -423,6 +450,46 @@ export default function AdminScreen() {
       const j = await r.json();
       setSelectedSupportTicket(j?.ticket ? j.ticket : null);
     } catch {}
+  };
+
+  useEffect(() => {
+    if (!selectedSupportTicket) return;
+    setSupportTicketStatusDraft(selectedSupportTicket.status || "new");
+    setSupportTicketPriorityDraft(selectedSupportTicket.priority || "normal");
+    setSupportTicketAdminNoteDraft(selectedSupportTicket.admin_note || "");
+    setSupportTicketReplyDraft("");
+    setSupportTicketAssignDraft("");
+  }, [selectedSupportTicket]);
+
+  const saveSupportTicket = async () => {
+    if (!selectedSupportTicket?.id) return;
+    setSupportTicketSaving(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/support/feedback", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: selectedSupportTicket.id,
+          status: supportTicketStatusDraft,
+          priority: supportTicketPriorityDraft,
+          admin_note: supportTicketAdminNoteDraft,
+          message: supportTicketReplyDraft,
+          assign_to: supportTicketAssignDraft || undefined,
+        }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(j?.message || j?.error || "Не удалось обновить обращение");
+      setSelectedSupportTicket(j?.ticket || null);
+      setSupportTicketReplyDraft("");
+      setSupportTicketAssignDraft("");
+      await loadSupportTickets();
+    } catch (e: any) {
+      setErr(e?.message || "Не удалось обновить обращение");
+    } finally {
+      setSupportTicketSaving(false);
+    }
   };
 
   const exportAdminEventsCsv = () => {
@@ -1245,6 +1312,18 @@ export default function AdminScreen() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={supportStatusFilter}
+              onChange={(e) => setSupportStatusFilter(e.target.value)}
+              className="px-3 py-2 rounded-2xl bg-slate-950/40 border border-slate-800 text-slate-100 font-semibold"
+            >
+              <option value="all">Все статусы</option>
+              <option value="new">new</option>
+              <option value="in_progress">in_progress</option>
+              <option value="waiting_user">waiting_user</option>
+              <option value="resolved">resolved</option>
+              <option value="closed">closed</option>
+            </select>
             <input
               type="number"
               min={1}
@@ -1272,6 +1351,8 @@ export default function AdminScreen() {
                 <th className="text-left p-3 font-black">category</th>
                 <th className="text-left p-3 font-black">section</th>
                 <th className="text-left p-3 font-black">status</th>
+                <th className="text-left p-3 font-black">priority</th>
+                <th className="text-left p-3 font-black">last reply</th>
                 <th className="text-left p-3 font-black">attachments</th>
               </tr>
             </thead>
@@ -1303,13 +1384,15 @@ export default function AdminScreen() {
                         {ticket.status}
                       </div>
                     </td>
+                    <td className="p-3 font-semibold text-slate-300">{ticket.priority}</td>
+                    <td className="p-3 font-semibold text-slate-400">{formatTimestamp(ticket.last_reply_at || ticket.updated_at)}</td>
                     <td className="p-3 font-bold">{ticket.attachment_count}</td>
                   </tr>
                 );
               })}
               {!supportTickets.length && (
                 <tr className="border-t border-slate-800">
-                  <td className="p-3 text-slate-400 font-semibold" colSpan={6}>Пока нет обращений.</td>
+                  <td className="p-3 text-slate-400 font-semibold" colSpan={8}>Пока нет обращений.</td>
                 </tr>
               )}
             </tbody>
@@ -1402,6 +1485,124 @@ export default function AdminScreen() {
                   <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1 text-xs font-black text-slate-200">{selectedSupportTicket.priority}</div>
                   <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1 text-xs font-black text-slate-200">{selectedSupportTicket.category}</div>
                 </div>
+                <div className="mt-3 space-y-1 text-sm font-semibold text-slate-400">
+                  <div>Назначен: {selectedSupportTicket.assigned_admin_user_id || "не назначен"}</div>
+                  <div>Последний ответ: {formatTimestamp(selectedSupportTicket.last_reply_at || selectedSupportTicket.updated_at)}</div>
+                  <div>Закрыт: {formatTimestamp(selectedSupportTicket.closed_at)}</div>
+                  <div>Решён: {formatTimestamp(selectedSupportTicket.resolved_at)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Диалог</div>
+                <div className="max-h-[24rem] overflow-auto space-y-3 pr-1">
+                  {(selectedSupportTicket.messages || []).map((message) => (
+                    <div key={message.id} className={`rounded-2xl border p-3 ${message.author_role === "admin" ? "border-cyan-500/20 bg-cyan-500/5" : "border-slate-800 bg-slate-950/50"}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-black text-slate-100">
+                          {message.author_role === "admin" ? "Админ" : "Клиент"}
+                        </div>
+                        <div className="text-xs font-semibold text-slate-500">{formatTimestamp(message.created_at)}</div>
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{message.message || "—"}</div>
+                      {!!message.attachments?.length && (
+                        <div className="mt-3 space-y-2">
+                          {message.attachments.map((attachment, index) => (
+                            <div key={`${message.id}-${attachment.name}-${index}`} className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+                              <div className="flex items-center gap-2 font-black text-slate-100">
+                                {attachment.kind === "photo" && <ImageUp className="h-4 w-4 text-cyan-300" />}
+                                {attachment.kind === "video" && <Video className="h-4 w-4 text-violet-300" />}
+                                {attachment.kind === "voice" && <Mic className="h-4 w-4 text-emerald-300" />}
+                                {attachment.kind === "file" && <Paperclip className="h-4 w-4 text-slate-300" />}
+                                <span className="truncate">{attachment.name}</span>
+                              </div>
+                              {attachment.kind === "photo" && <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-56 w-full rounded-2xl object-cover" />}
+                              {attachment.kind === "video" && <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />}
+                              {attachment.kind === "voice" && <audio className="mt-2 w-full" controls src={attachment.data_url} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(!selectedSupportTicket.messages || selectedSupportTicket.messages.length === 0) && (
+                    <div className="text-slate-500 font-semibold">Диалог пока пуст.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                <div className="text-slate-500 font-black uppercase tracking-[0.24em] text-[11px]">Обработка обращения</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="space-y-2">
+                    <span className="text-xs font-black text-slate-400">Статус</span>
+                    <select
+                      value={supportTicketStatusDraft}
+                      onChange={(e) => setSupportTicketStatusDraft(e.target.value)}
+                      className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100"
+                    >
+                      <option value="new">new</option>
+                      <option value="in_progress">in_progress</option>
+                      <option value="waiting_user">waiting_user</option>
+                      <option value="resolved">resolved</option>
+                      <option value="closed">closed</option>
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-xs font-black text-slate-400">Приоритет</span>
+                    <select
+                      value={supportTicketPriorityDraft}
+                      onChange={(e) => setSupportTicketPriorityDraft(e.target.value)}
+                      className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100"
+                    >
+                      <option value="low">low</option>
+                      <option value="normal">normal</option>
+                      <option value="high">high</option>
+                      <option value="urgent">urgent</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSupportTicketAssignDraft("me")}
+                    className={`px-3 py-2 rounded-2xl font-black border ${supportTicketAssignDraft === "me" ? "border-cyan-500/30 bg-cyan-500/15 text-cyan-100" : "border-slate-700 bg-slate-900/70 text-slate-200"}`}
+                  >
+                    Назначить на меня
+                  </button>
+                  <button
+                    onClick={() => setSupportTicketAssignDraft("none")}
+                    className={`px-3 py-2 rounded-2xl font-black border ${supportTicketAssignDraft === "none" ? "border-amber-500/30 bg-amber-500/15 text-amber-100" : "border-slate-700 bg-slate-900/70 text-slate-200"}`}
+                  >
+                    Снять назначение
+                  </button>
+                </div>
+                <label className="space-y-2 block">
+                  <span className="text-xs font-black text-slate-400">Внутренняя заметка</span>
+                  <textarea
+                    value={supportTicketAdminNoteDraft}
+                    onChange={(e) => setSupportTicketAdminNoteDraft(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100 resize-y"
+                    placeholder="Эту заметку видит только админка"
+                  />
+                </label>
+                <label className="space-y-2 block">
+                  <span className="text-xs font-black text-slate-400">Ответ клиенту</span>
+                  <textarea
+                    value={supportTicketReplyDraft}
+                    onChange={(e) => setSupportTicketReplyDraft(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100 resize-y"
+                    placeholder="Например: воспроизвели ошибку, исправление уже в работе"
+                  />
+                </label>
+                <button
+                  onClick={() => void saveSupportTicket()}
+                  disabled={supportTicketSaving}
+                  className={`w-full px-4 py-3 rounded-2xl font-black ${supportTicketSaving ? "bg-slate-800 text-slate-500" : "bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-100 border border-cyan-500/30"}`}
+                >
+                  {supportTicketSaving ? "Сохраняем..." : "Сохранить статус и ответ"}
+                </button>
               </div>
             </div>
           </div>

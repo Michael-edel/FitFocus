@@ -9,6 +9,44 @@ type AttachmentDraft = {
   previewUrl?: string;
 };
 
+type SupportAttachment = {
+  name: string;
+  mime: string;
+  size: number;
+  kind: 'photo' | 'video' | 'voice' | 'file';
+  data_url?: string;
+};
+
+type SupportMessage = {
+  id: string;
+  author_role: 'user' | 'admin';
+  author_user_id: string;
+  message: string;
+  created_at: number;
+  attachment_count: number;
+  attachments?: SupportAttachment[];
+};
+
+type SupportTicket = {
+  id: string;
+  created_at: number;
+  updated_at: number;
+  category: string;
+  section?: string | null;
+  subject?: string | null;
+  message: string;
+  status: string;
+  priority: string;
+  attachment_count: number;
+  app_version?: string | null;
+  last_reply_at?: number | null;
+  last_reply_by?: string | null;
+  resolved_at?: number | null;
+  closed_at?: number | null;
+  attachments?: SupportAttachment[];
+  messages?: SupportMessage[];
+};
+
 type Props = {
   currentUser?: UserProfile | null;
 };
@@ -69,6 +107,19 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatTimestamp(value?: number | string | null) {
+  if (!value) return '—';
+  const date = new Date(typeof value === 'number' ? value : String(value));
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 async function compressImageAttachment(file: File): Promise<File> {
   const isImage = file.type.startsWith('image/');
   if (!isImage) return file;
@@ -120,6 +171,13 @@ export default function SupportScreen({ currentUser }: Props) {
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+  const [tickets, setTickets] = React.useState<SupportTicket[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = React.useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = React.useState<SupportTicket | null>(null);
+  const [loadingTickets, setLoadingTickets] = React.useState(false);
+  const [replyMessage, setReplyMessage] = React.useState('');
+  const [replyAttachments, setReplyAttachments] = React.useState<AttachmentDraft[]>([]);
+  const [replySending, setReplySending] = React.useState(false);
 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<BlobPart[]>([]);
@@ -129,6 +187,41 @@ export default function SupportScreen({ currentUser }: Props) {
   React.useEffect(() => {
     if (currentUser?.email) setContact(currentUser.email);
   }, [currentUser?.email]);
+
+  const loadMyTickets = React.useCallback(async (preserveSelection = true) => {
+    setLoadingTickets(true);
+    try {
+      const response = await fetch('/api/support/feedback/my', { credentials: 'include' });
+      if (!response.ok) return;
+      const json = await response.json().catch(() => null);
+      const nextTickets = Array.isArray(json?.tickets) ? json.tickets : [];
+      setTickets(nextTickets);
+      const nextSelectedId = preserveSelection ? (selectedTicketId || nextTickets[0]?.id || null) : (nextTickets[0]?.id || null);
+      setSelectedTicketId(nextSelectedId);
+    } finally {
+      setLoadingTickets(false);
+    }
+  }, [selectedTicketId]);
+
+  const loadMyTicketDetail = React.useCallback(async (ticketId: string) => {
+    if (!ticketId) return;
+    const response = await fetch(`/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, { credentials: 'include' });
+    if (!response.ok) return;
+    const json = await response.json().catch(() => null);
+    setSelectedTicket(json?.ticket || null);
+  }, []);
+
+  React.useEffect(() => {
+    void loadMyTickets(false);
+  }, [loadMyTickets]);
+
+  React.useEffect(() => {
+    if (!selectedTicketId) {
+      setSelectedTicket(null);
+      return;
+    }
+    void loadMyTicketDetail(selectedTicketId);
+  }, [loadMyTicketDetail, selectedTicketId]);
 
   React.useEffect(() => {
     return () => {
@@ -246,6 +339,37 @@ export default function SupportScreen({ currentUser }: Props) {
     });
   }, []);
 
+  const addReplyFiles = React.useCallback(async (files: FileList | File[]) => {
+    const picked = Array.from(files);
+    if (picked.length === 0) return;
+    if (replyAttachments.length + picked.length > 3) {
+      setError('К ответу можно прикрепить не больше 3 файлов.');
+      return;
+    }
+    const next: AttachmentDraft[] = [];
+    for (const file of picked) {
+      if (file.size > 2 * 1024 * 1024) {
+        setError(`Файл "${file.name}" слишком большой. Для теста лучше до 2 MB.`);
+        return;
+      }
+      const prepared = await compressImageAttachment(file);
+      next.push({
+        file: prepared,
+        kind: fileKind(prepared),
+        previewUrl: URL.createObjectURL(prepared),
+      });
+    }
+    setReplyAttachments((prev) => [...prev, ...next]);
+  }, [replyAttachments.length]);
+
+  const removeReplyAttachment = React.useCallback((index: number) => {
+    setReplyAttachments((prev) => {
+      const item = prev[index];
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
   const onSubmit = React.useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -310,12 +434,47 @@ export default function SupportScreen({ currentUser }: Props) {
       if (voiceAttachment?.previewUrl) URL.revokeObjectURL(voiceAttachment.previewUrl);
       setVoiceAttachment(null);
       setVoiceSeconds(0);
+      await loadMyTickets(false);
     } catch (e: any) {
       setError(e?.message || 'Не удалось отправить обращение.');
     } finally {
       setSending(false);
     }
-  }, [attachments, browser, category, contact, currentUser?.email, device, message, section, steps, subject, voiceAttachment]);
+  }, [attachments, browser, category, contact, currentUser?.email, device, loadMyTickets, message, section, steps, subject, voiceAttachment]);
+
+  const submitReply = React.useCallback(async () => {
+    if (!selectedTicketId) return;
+    if (!replyMessage.trim() && replyAttachments.length === 0) {
+      setError('Добавьте текст ответа или файл.');
+      return;
+    }
+    setReplySending(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set('ticket_id', selectedTicketId);
+      form.set('message', replyMessage.trim());
+      replyAttachments.forEach((item) => form.append('attachments', item.file, item.file.name));
+      const response = await fetch('/api/support/feedback/my', {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(json?.message || 'Не удалось отправить ответ.');
+      }
+      setSelectedTicket(json?.ticket || null);
+      setReplyMessage('');
+      replyAttachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+      setReplyAttachments([]);
+      await loadMyTickets();
+    } catch (e: any) {
+      setError(e?.message || 'Не удалось отправить ответ.');
+    } finally {
+      setReplySending(false);
+    }
+  }, [loadMyTickets, replyAttachments, replyMessage, selectedTicketId]);
 
   const audioPreview = voiceAttachment?.previewUrl || null;
 
@@ -575,6 +734,187 @@ export default function SupportScreen({ currentUser }: Props) {
           </div>
         </div>
       </form>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-6">
+        <div className="rounded-[2rem] bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black text-slate-100">Мои обращения</h2>
+              <div className="text-slate-400 text-sm font-medium">Статус, история ответов и вложения.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadMyTickets()}
+              className="rounded-2xl border border-slate-700 bg-slate-950/50 px-4 py-2 text-slate-200 font-black hover:bg-slate-900"
+            >
+              Обновить
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {tickets.map((ticket) => {
+              const active = selectedTicketId === ticket.id;
+              return (
+                <button
+                  type="button"
+                  key={ticket.id}
+                  onClick={() => setSelectedTicketId(ticket.id)}
+                  className={`w-full text-left rounded-2xl border p-4 transition ${active ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-slate-800 bg-slate-950/50 hover:bg-slate-900/70'}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-slate-100 font-black truncate">{ticket.subject || ticket.category}</div>
+                      <div className="mt-1 text-slate-400 text-sm font-medium truncate">{ticket.section || 'Другое'} • {ticket.category}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="inline-flex rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-black text-slate-200">
+                        {ticket.status}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-500 font-semibold">
+                    {formatTimestamp(ticket.last_reply_at || ticket.updated_at)} • вложений: {ticket.attachment_count}
+                  </div>
+                </button>
+              );
+            })}
+            {!tickets.length && !loadingTickets && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 text-slate-500 font-medium">
+                Пока нет обращений. После отправки они появятся здесь.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] bg-slate-900/60 border border-slate-800 p-6 space-y-4">
+          <div>
+            <h2 className="text-xl font-black text-slate-100">{selectedTicket?.subject || 'Выберите обращение'}</h2>
+            <div className="mt-1 text-slate-400 text-sm font-medium">
+              {selectedTicket ? `${selectedTicket.category} • ${selectedTicket.section || 'Другое'} • ${selectedTicket.status}` : 'Здесь будет переписка с поддержкой.'}
+            </div>
+          </div>
+
+          {selectedTicket ? (
+            <>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-300">
+                <div className="font-black text-slate-100">{selectedTicket.message}</div>
+                <div className="mt-2 text-slate-500 font-semibold">Создано: {formatTimestamp(selectedTicket.created_at)}</div>
+              </div>
+
+              {!!selectedTicket.attachments?.length && (
+                <div className="space-y-3">
+                  <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Вложения обращения</div>
+                  {selectedTicket.attachments.map((attachment, index) => (
+                    <div key={`${attachment.name}-${index}`} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                      <div className="font-black text-slate-100">{attachment.name}</div>
+                      {attachment.kind === 'photo' && attachment.data_url && <img src={attachment.data_url} alt={attachment.name} className="mt-3 max-h-72 w-full rounded-2xl object-cover" />}
+                      {attachment.kind === 'video' && attachment.data_url && <video className="mt-3 w-full rounded-2xl" controls src={attachment.data_url} />}
+                      {attachment.kind === 'voice' && attachment.data_url && <audio className="mt-3 w-full" controls src={attachment.data_url} />}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">История</div>
+                <div className="space-y-3 max-h-[26rem] overflow-auto pr-1">
+                  {(selectedTicket.messages || []).map((item) => (
+                    <div key={item.id} className={`rounded-2xl border p-4 ${item.author_role === 'admin' ? 'border-cyan-500/20 bg-cyan-500/5' : 'border-slate-800 bg-slate-950/50'}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-black text-slate-100">{item.author_role === 'admin' ? 'Поддержка' : 'Вы'}</div>
+                        <div className="text-xs text-slate-500 font-semibold">{formatTimestamp(item.created_at)}</div>
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-slate-200 leading-7">{item.message || '—'}</div>
+                      {!!item.attachments?.length && (
+                        <div className="mt-3 space-y-2">
+                          {item.attachments.map((attachment, index) => (
+                            <div key={`${item.id}-${attachment.name}-${index}`} className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+                              <div className="font-black text-slate-100">{attachment.name}</div>
+                              {attachment.kind === 'photo' && attachment.data_url && <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />}
+                              {attachment.kind === 'video' && attachment.data_url && <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />}
+                              {attachment.kind === 'voice' && attachment.data_url && <audio className="mt-2 w-full" controls src={attachment.data_url} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(!selectedTicket.messages || selectedTicket.messages.length === 0) && (
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 text-slate-500 font-medium">
+                      Ответов пока нет.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedTicket.status !== 'closed' ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 space-y-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Ответ поддержке</div>
+                  <textarea
+                    value={replyMessage}
+                    onChange={(e) => setReplyMessage(e.target.value)}
+                    rows={4}
+                    placeholder="Добавьте уточнение, новые шаги или скриншот"
+                    className="w-full rounded-2xl bg-slate-900 border border-slate-800 px-4 py-3 text-slate-100 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-3">
+                    <label className="cursor-pointer inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-200 font-black hover:bg-slate-800">
+                      <Paperclip className="h-4 w-4" />
+                      Добавить файл
+                      <input
+                        type="file"
+                        accept="image/*,video/*,audio/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files) void addReplyFiles(e.target.files);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void submitReply()}
+                      disabled={replySending}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-500 px-5 py-3 text-white font-black hover:bg-indigo-400 disabled:opacity-60"
+                    >
+                      {replySending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      {replySending ? 'Отправляем…' : 'Отправить ответ'}
+                    </button>
+                  </div>
+                  {!!replyAttachments.length && (
+                    <div className="space-y-3">
+                      {replyAttachments.map((attachment, index) => (
+                        <div key={`${attachment.file.name}-${index}`} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-black text-slate-100 truncate">{attachment.file.name}</div>
+                            <button
+                              type="button"
+                              onClick={() => removeReplyAttachment(index)}
+                              className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-slate-200 font-bold"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Удалить
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-100 font-medium">
+                  Обращение закрыто. Для новой проблемы создайте новый тикет.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 text-slate-500 font-medium">
+              Выберите обращение слева, чтобы увидеть историю и ответить поддержке.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
