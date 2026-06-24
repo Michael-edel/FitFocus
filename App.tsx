@@ -61,6 +61,9 @@ import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
 import { trackWisShareEvent } from './analytics/wisShare';
+import { calculateFoodStreak } from './analytics/foodStreak';
+import { useAchievements } from './useAchievements';
+import type { AchievementEvaluationContext } from './achievements/engine';
 import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
@@ -1846,6 +1849,46 @@ const openEditFood = (item: FoodEntry) => {
     });
   }, [googleMe?.sub, persistAllUsersSnapshot]);
 
+  const buildAchievementContext = useCallback((): AchievementEvaluationContext => {
+    const weightHistory = currentUser?.weightHistory || [];
+    const firstWeight = typeof weightHistory[0]?.weight === 'number' ? weightHistory[0].weight : null;
+    const latestWeight =
+      typeof weightHistory[weightHistory.length - 1]?.weight === 'number'
+        ? weightHistory[weightHistory.length - 1].weight
+        : typeof currentUser?.weight === 'number'
+          ? currentUser.weight
+          : null;
+    const todayHabits = currentUser?.dailyHabits?.[getTodayKey()] || {};
+    return {
+      profileExists: !!currentUser,
+      profileDetailsCompleted: !!currentUser?.profileDetailsCompleted,
+      hasAiPlan: !!currentUser?.aiPlan,
+      hasWeeklyMenu: !!currentUser?.aiPlan?.weeklyMenu || !!currentUser?.aiPlan?.familyWeeklyMenu,
+      foodDiaryCount: foodDiary.length,
+      foodStreak: calculateFoodStreak(foodDiary).streak,
+      weightHistoryCount: weightHistory.length,
+      initialWeight: firstWeight,
+      latestWeight,
+      measurementsCount: currentUser?.measurementsHistory?.length || 0,
+      wisCount: weeklyReports.length,
+      shoppingCheckedCount: familyShopping?.items?.filter((item: any) => item.checked).length || 0,
+      familyActive: !!cloudFamily || currentUser?.plan === 'family',
+      waterToday: !!todayHabits.water,
+      sleepHours: typeof currentUser?.wearableSleepHoursLastNight === 'number' ? currentUser.wearableSleepHoursLastNight : null,
+    };
+  }, [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
+
+  const achievements = useAchievements({ userId: currentUser?.id, getContext: buildAchievementContext });
+  const checkAchievements = achievements.checkAchievements;
+  const achievementBootstrapUserRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    if (achievementBootstrapUserRef.current === currentUser.id) return;
+    achievementBootstrapUserRef.current = currentUser.id;
+    void checkAchievements('app_open');
+  }, [checkAchievements, currentUser?.id]);
+
   useEffect(() => {
     if (normalizedAllUsers.length !== allUsers.length) {
       setAllUsers(normalizedAllUsers);
@@ -1867,12 +1910,13 @@ const openEditFood = (item: FoodEntry) => {
       const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
       const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
       persistUser(updatedUser);
+      void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
     } catch (e: any) {
       setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
     } finally {
       setWeeklyMenuLoading(false);
     }
-  }, [currentUser, persistUser]);
+  }, [checkAchievements, currentUser, persistUser]);
 
   const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
     const today = new Date().toLocaleDateString('en-CA');
@@ -2019,6 +2063,7 @@ await ensurePdfInterFont(doc);
         });
         setWisShareNotice('success', 'Карточка готова и передана в системное меню отправки.');
         trackWisShareEvent('wis_share_success', { method: 'share_sheet', wis: weekly.wis });
+        void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
         return;
       }
 
@@ -2036,12 +2081,13 @@ await ensurePdfInterFont(doc);
       }
       setWisShareNotice('success', 'Системная отправка недоступна — PNG скачан на устройство.');
       trackWisShareEvent('wis_share_success', { method: 'download', wis: weekly.wis });
+      void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
     } catch (error) {
       const reason = String((error as any)?.message || error || 'unknown_error');
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
       trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
-  }, [currentUser, weekly, setWisShareNotice]);
+  }, [checkAchievements, currentUser, weekly, weeklyReports.length, setWisShareNotice]);
 
   // Оптимизированный запуск AI генерации еженедельных отчетов
   const aiReportGenerationRef = useRef<string | null>(null);
@@ -2233,6 +2279,19 @@ await ensurePdfInterFont(doc);
       suppressProfileSyncStateRef,
     });
   }, [currentUser, loginAsUser, persistUser]);
+
+  const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
+    await patchProfileInCloud(patch);
+    if (patch.profileDetailsCompleted) {
+      void checkAchievements('profile_details_completed', { profileDetailsCompleted: true });
+    }
+    if (Array.isArray(patch.measurementsHistory) && patch.measurementsHistory.length > 0) {
+      void checkAchievements('measurement_saved', { measurementsCount: patch.measurementsHistory.length });
+    }
+    if (typeof patch.wearableSleepHoursLastNight === 'number' && patch.wearableSleepHoursLastNight >= 8) {
+      void checkAchievements('sleep_8h_recorded', { sleepHours: patch.wearableSleepHoursLastNight });
+    }
+  }, [checkAchievements, patchProfileInCloud]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!googleMe?.sub) {
@@ -2457,8 +2516,13 @@ await ensurePdfInterFont(doc);
     const newHistory = [historyItem, ...foodHistory.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY_ITEMS);
     setFoodHistory(newHistory);
     safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(newHistory));
+    const hasAiPhoto = Boolean((item as any).photo || (item as any).photoThumb);
+    void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
+      foodDiaryCount: foodDiary.length + 1,
+      hasAiPhoto,
+    });
     return entryForState;
-  }, [foodHistory, currentUser]);
+  }, [checkAchievements, foodDiary.length, foodHistory, currentUser]);
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!currentUser) return;
     setFoodDiary((prev) => {
@@ -2506,8 +2570,11 @@ await ensurePdfInterFont(doc);
       const isDone = updatedUser.dailyHabits?.[getTodayKey()]?.[habitKey];
       const nextHabits = habits.map(h => h.id === lid ? { ...h, current: isDone ? h.goal : 0 } : h);
       setHabits(nextHabits);
+      if (habitKey === 'water' && isDone) {
+        void checkAchievements('habit_water_done', { waterToday: true });
+      }
     }
-  }, [currentUser, habits, persistUser]);
+  }, [checkAchievements, currentUser, habits, persistUser]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
     if (!currentUser || !currentUser.tasks) return;
@@ -2519,13 +2586,15 @@ await ensurePdfInterFont(doc);
     if (!currentUser) return;
     const { downloadShortHealthReportPdf } = await import('./pdf');
     await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
-  }, [currentUser, targets, foodDiary, habits]);
+    void checkAchievements('pdf_report_generated');
+  }, [checkAchievements, currentUser, targets, foodDiary, habits]);
 
   const exportDetailedPdf = useCallback(async () => {
     if (!currentUser) return;
     const { downloadDetailedHealthReportPdf } = await import('./pdf');
     await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
-  }, [currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
+    void checkAchievements('pdf_report_generated');
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
     let continueAfterOAuth = false;
@@ -2736,7 +2805,11 @@ const logWeight = useCallback(() => {
     const updatedUser = addWeight(currentUser, nextWeight);
     persistUser(updatedUser);
     setNewWeight('');
-  }, [currentUser, newWeight, persistUser]);
+    void checkAchievements('log_weight', {
+      weightHistoryCount: updatedUser.weightHistory?.length || 0,
+      latestWeight: nextWeight,
+    });
+  }, [checkAchievements, currentUser, newWeight, persistUser]);
 
   const handleGetCoachAdvice = async () => {
     if (!currentUser) return;
@@ -2769,6 +2842,7 @@ const logWeight = useCallback(() => {
       });
       setCoachCard(advice); incrementUsage('aiCoachCount');
       safeSetItem(`fitfocus_data_${currentUser.id}_last_coach_card`, JSON.stringify(advice));
+      void checkAchievements('ai_coach_success');
     } catch (e) { console.error(e); } finally { setCoachLoading(false); }
   };
 
@@ -3022,6 +3096,34 @@ const logWeight = useCallback(() => {
     };
   }, [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
 
+  const createFamilyCloudWithAchievements = useCallback(async () => {
+    await createFamilyCloud();
+    void checkAchievements('family_join_or_create', { familyActive: true });
+  }, [checkAchievements, createFamilyCloud]);
+
+  const joinFamilyCloudWithAchievements = useCallback(async () => {
+    await joinFamilyCloud();
+    void checkAchievements('family_join_or_create', { familyActive: true });
+  }, [checkAchievements, joinFamilyCloud]);
+
+  const generateFamilyMenuNowWithAchievements = useCallback(async () => {
+    await generateFamilyMenuNow();
+    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+  }, [checkAchievements, generateFamilyMenuNow]);
+
+  const handleGenerateFamilyWeeklyMenuWithAchievements = useCallback(async () => {
+    await handleGenerateFamilyWeeklyMenu();
+    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+  }, [checkAchievements, handleGenerateFamilyWeeklyMenu]);
+
+  const toggleFamilyShoppingItemWithAchievements = useCallback(async (name: string, checked: boolean) => {
+    await toggleFamilyShoppingItem(name, checked);
+    if (checked) {
+      const checkedCount = (familyShopping?.items || []).filter((item: any) => item.checked).length + 1;
+      void checkAchievements('shopping_item_checked', { shoppingCheckedCount: checkedCount, familyActive: true });
+    }
+  }, [checkAchievements, familyShopping?.items, toggleFamilyShoppingItem]);
+
   const workspaceProps = {
     meta: {
       activeTab,
@@ -3033,7 +3135,7 @@ const logWeight = useCallback(() => {
       logout,
       deleteAccount,
       persistUser,
-      patchProfileInCloud,
+      patchProfileInCloud: patchProfileInCloudWithAchievements,
       onExportBackup,
       onImportBackup,
       onConnectAutosave,
@@ -3088,6 +3190,11 @@ const logWeight = useCallback(() => {
       onShareWisCard: handleShareWisCard,
       shareWisState: wisShareState,
       shareWisMessage: wisShareMessage,
+      achievementsCatalog: achievements.catalog,
+      achievementsUnlocked: achievements.unlocked,
+      achievementsNewlyUnlocked: achievements.newlyUnlocked,
+      achievementsLoading: achievements.loading,
+      dismissAchievementToast: achievements.dismissAchievementToast,
     },
     progress: {
       weightHistory: currentUser?.weightHistory || [],
@@ -3103,7 +3210,7 @@ const logWeight = useCallback(() => {
       wearableActiveMinutesToday: currentUser?.wearableActiveMinutesToday,
       wearableSleepHoursLastNight: currentUser?.wearableSleepHoursLastNight,
       wearableMetricsUpdatedAt: currentUser?.wearableMetricsUpdatedAt,
-      onPatchUser: patchProfileInCloud,
+      onPatchUser: patchProfileInCloudWithAchievements,
       syncState: profileSyncState,
       lastProfileSyncAt,
       onSyncNow: syncAllLocalDataNow,
@@ -3129,13 +3236,13 @@ const logWeight = useCallback(() => {
       setPlanScope,
       familyShoppingLoading,
       familyShopping,
-      toggleFamilyShoppingItem,
+      toggleFamilyShoppingItem: toggleFamilyShoppingItemWithAchievements,
       loadFamilyShopping,
       familyMenuError,
       familyMenu,
       familyMenuLoading,
       setFamilyMenuPrefsOpen,
-      handleGenerateFamilyWeeklyMenu,
+      handleGenerateFamilyWeeklyMenu: handleGenerateFamilyWeeklyMenuWithAchievements,
       paywallPlan: paywall.plan,
       allUsers,
       currentUserGoal: currentUser?.goal || Goal.MAINTAIN,
@@ -3186,10 +3293,10 @@ const logWeight = useCallback(() => {
       setFamilyJoinCode,
       setFamilyNameDraft,
       loadCloudFamily,
-      createFamilyCloud,
-      joinFamilyCloud,
+      createFamilyCloud: createFamilyCloudWithAchievements,
+      joinFamilyCloud: joinFamilyCloudWithAchievements,
       makeInviteCode,
-      generateFamilyMenuNow,
+      generateFamilyMenuNow: generateFamilyMenuNowWithAchievements,
       updateMyFamilyGoal,
     },
     council: {
