@@ -19,7 +19,10 @@ export const APP_VERSION: AppVersion = {
 export const APP_VERSION_STRING = `${APP_VERSION.major}.${APP_VERSION.minor}.${APP_VERSION.patch}`;
 export const APP_VERSION_LABEL = `v${APP_VERSION_STRING} ${APP_VERSION.channel}`;
 export const APP_VERSION_UI_LABEL = `Публичный релиз ${APP_VERSION_STRING} ${APP_VERSION.channel}`;
-export const BUILD_SHORT_LABEL = `Сборка main • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_SEQUENCE_LABEL = BUILD_SOURCE.commitCount > 0
+  ? `Сборка main №${BUILD_SOURCE.commitCount}`
+  : `Сборка main • ${BUILD_SOURCE.shortSha}`;
+export const BUILD_SHORT_LABEL = `${BUILD_SEQUENCE_LABEL} • ${BUILD_SOURCE.shortSha}`;
 export const BUILD_VERSION_LABEL = `Текущая ${BUILD_SHORT_LABEL}`;
 export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
 

@@ -42,7 +42,7 @@ function pickCommitCount() {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pickRecentCommits(limit = 8) {
+function pickRecentCommits(limit = 20) {
   const raw = git(["log", `-${limit}`, "--pretty=format:%s"]);
   if (!raw) return [];
   return raw
@@ -52,7 +52,7 @@ function pickRecentCommits(limit = 8) {
     .slice(0, limit);
 }
 
-function pickRecentBuilds(limit = 8) {
+function pickRecentBuilds(limit = 20) {
   const raw = git(["log", `-${limit}`, "--date=iso-strict", "--pretty=format:%H|%h|%cI|%s"]);
   if (!raw) return [];
   return raw

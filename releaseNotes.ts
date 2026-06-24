@@ -24,6 +24,21 @@ type BuildHistoryItem = {
 
 const fallbackMainBuildHistory: readonly BuildHistoryItem[] = [
   {
+    shortSha: '881efac',
+    committedAt: '2026-06-24T18:55:56+05:00',
+    subject: 'Improve Russian main build changelog',
+  },
+  {
+    shortSha: '8263692',
+    committedAt: '2026-06-24T18:38:38+05:00',
+    subject: 'Localize latest changelog commit label',
+  },
+  {
+    shortSha: '515173c',
+    committedAt: '2026-06-24T18:30:56+05:00',
+    subject: 'Preserve Russian build history in changelog',
+  },
+  {
     shortSha: '0ba358d',
     committedAt: '2026-06-24T18:08:33+05:00',
     subject: 'Normalize wearable profile day keys',
@@ -75,6 +90,8 @@ export function localizeCommitSubject(subject: string): string {
   if (!s) return 'Коммит без описания';
 
   const exactMatches: Record<string, string> = {
+    'Improve Russian main build changelog': 'Экран версий обновлён: история main-сборок сохраняется и показывается на русском языке',
+    'Localize latest changelog commit label': 'Последний коммит в экране версий теперь тоже подписывается по-русски',
     'Add automatic main build versioning': 'Добавлено автоматическое версионирование main-сборки',
     'Add admin route guard check': 'Добавлена проверка admin для /api/admin/*',
     'Fix AI identity key and migration version': 'Исправлены ключ идентификации AI и версия миграции',
@@ -131,7 +148,10 @@ export function localizeCommitSubject(subject: string): string {
     .replace(/\bbeta access\b/gi, 'beta access')
     .replace(/\bautomatic\b/gi, 'автоматическое')
     .replace(/\bautomatically\b/gi, 'автоматически')
-    .replace(/\bbuild\b/gi, 'сборки')
+    .replace(/\bmain build changelog\b/gi, 'история main-сборок в экране версий')
+    .replace(/\blatest changelog commit label\b/gi, 'подпись последнего коммита в экране версий')
+    .replace(/\bbuild history\b/gi, 'история сборок')
+    .replace(/\bbuild\b/gi, 'сборка')
     .replace(/\bbuild history\b/gi, 'история сборок')
     .replace(/\bchangelog\b/gi, 'экран версий')
     .replace(/\bcommit\b/gi, 'коммит')
@@ -148,13 +168,15 @@ export function localizeCommitSubject(subject: string): string {
     .replace(/\bversion\b/gi, 'версия')
     .replace(/\boauth\b/gi, 'OAuth')
     .replace(/\bprofile\b/gi, 'профиль')
-    .replace(/\brussian\b/gi, 'русская')
+    .replace(/\brussian\b/gi, 'русский')
     .replace(/\bscope key\b/gi, 'scope key')
     .replace(/\bshopping checked\b/gi, 'отмеченные покупки')
     .replace(/\bstate api\b/gi, 'state API')
     .replace(/\bverified email\b/gi, 'подтверждённый email')
     .replace(/\bwearable\b/gi, 'wearable')
-    .replace(/\bmain\b/gi, 'main');
+    .replace(/\bmain\b/gi, 'main')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   if (normalized === s) {
     return `Коммит: ${s}`;
@@ -215,7 +237,7 @@ const currentBuildReleaseNote: ReleaseNote = {
       title: 'Как читать номера',
       items: [
         `Версия приложения: ${APP_VERSION_STRING} — это номер релиза, он меняется только при осознанном выпуске новой версии.`,
-        `Сборка main: ${buildShortSha} — это идентификатор текущего push/деплоя; он меняется автоматически при каждом изменении в main.`,
+        `Сборка main: ${BUILD_SOURCE.commitCount > 0 ? `№${BUILD_SOURCE.commitCount}` : buildShortSha} — это номер текущего push/деплоя; он увеличивается на 1 при каждом новом commit в main.`,
         'API, данные и миграции версионируются отдельно, чтобы можно было обновлять приложение без поломки старых клиентов и базы.',
       ],
     },
