@@ -52,12 +52,32 @@ function pickRecentCommits(limit = 8) {
     .slice(0, limit);
 }
 
+function pickRecentBuilds(limit = 8) {
+  const raw = git(["log", `-${limit}`, "--date=iso-strict", "--pretty=format:%H|%h|%cI|%s"]);
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [sha, shortSha, committedAt, subject] = line.split("|");
+      return {
+        sha: sha || "",
+        shortSha: shortSha || "",
+        committedAt: committedAt || "",
+        subject: subject || "",
+      };
+    })
+    .slice(0, limit);
+}
+
 const branch = pickBranch();
 const sha = pickSha();
 const shortSha = sha === "unknown" ? "unknown" : sha.slice(0, 8);
 const commitCount = pickCommitCount();
 const builtAt = new Date().toISOString();
 const recentCommits = pickRecentCommits();
+const recentBuilds = pickRecentBuilds();
 
 const file = `export const BUILD_SOURCE = ${JSON.stringify(
   {
@@ -67,6 +87,7 @@ const file = `export const BUILD_SOURCE = ${JSON.stringify(
     commitCount,
     builtAt,
     recentCommits,
+    recentBuilds,
   },
   null,
   2
