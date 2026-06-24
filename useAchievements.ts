@@ -34,6 +34,13 @@ type UseAchievementsParams = {
 
 const COUNTER_PREFIX = 'fitfocus.achievements.counters.v1:';
 const CHECK_THROTTLE_MS = 500;
+const MAX_PENDING_CHECKS = 5;
+
+type PendingAchievementCheck = {
+  reason: AchievementCheckReason;
+  contextPatch: AchievementEvaluationContext;
+  resolvers: Array<(value: AchievementDefinition[]) => void>;
+};
 
 function readCounters(userId: string): Record<string, number> {
   try {
@@ -67,11 +74,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
   const [loading, setLoading] = useState(false);
   const lastCheckAtRef = useRef(0);
   const throttledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingCheckRef = useRef<{
-    reason: AchievementCheckReason;
-    contextPatch: AchievementEvaluationContext;
-    resolve: (value: AchievementDefinition[]) => void;
-  } | null>(null);
+  const pendingChecksRef = useRef<PendingAchievementCheck[]>([]);
 
   const unlockedKeys = useMemo(() => new Set(unlocked.map((item) => item.key)), [unlocked]);
 
@@ -104,9 +107,11 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
       if (throttledTimerRef.current) {
         clearTimeout(throttledTimerRef.current);
       }
-      if (pendingCheckRef.current) {
-        pendingCheckRef.current.resolve([]);
-        pendingCheckRef.current = null;
+      if (pendingChecksRef.current.length) {
+        for (const pending of pendingChecksRef.current) {
+          for (const resolve of pending.resolvers) resolve([]);
+        }
+        pendingChecksRef.current = [];
       }
     };
   }, []);
@@ -165,6 +170,21 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     }
   }, [catalog, getContext, userId]);
 
+  const flushPendingChecks = useCallback(async () => {
+    throttledTimerRef.current = null;
+    const queue = pendingChecksRef.current.splice(0, pendingChecksRef.current.length);
+    if (!queue.length) return;
+    lastCheckAtRef.current = Date.now();
+    for (const pending of queue) {
+      try {
+        const result = await runAchievementCheck(pending.reason, pending.contextPatch);
+        for (const resolve of pending.resolvers) resolve(result);
+      } catch {
+        for (const resolve of pending.resolvers) resolve([]);
+      }
+    }
+  }, [runAchievementCheck]);
+
   const checkAchievements = useCallback((reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
     if (!userId) return Promise.resolve([]);
     const now = Date.now();
@@ -175,24 +195,29 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     }
 
     return new Promise<AchievementDefinition[]>((resolve) => {
-      if (pendingCheckRef.current) {
-        pendingCheckRef.current.resolve([]);
+      const queue = pendingChecksRef.current;
+      const existing = queue.find((item) => item.reason === reason);
+      if (existing) {
+        existing.contextPatch = contextPatch;
+        existing.resolvers.push(resolve);
+      } else {
+        if (queue.length >= MAX_PENDING_CHECKS) {
+          const dropped = queue.shift();
+          if (dropped) {
+            for (const droppedResolve of dropped.resolvers) droppedResolve([]);
+          }
+        }
+        queue.push({ reason, contextPatch, resolvers: [resolve] });
       }
-      pendingCheckRef.current = { reason, contextPatch, resolve };
-      if (throttledTimerRef.current) {
-        clearTimeout(throttledTimerRef.current);
+
+      if (!throttledTimerRef.current) {
+        const delay = Math.max(0, CHECK_THROTTLE_MS - elapsed);
+        throttledTimerRef.current = setTimeout(() => {
+          void flushPendingChecks();
+        }, delay);
       }
-      const delay = Math.max(0, CHECK_THROTTLE_MS - elapsed);
-      throttledTimerRef.current = setTimeout(() => {
-        throttledTimerRef.current = null;
-        const pending = pendingCheckRef.current;
-        pendingCheckRef.current = null;
-        if (!pending) return;
-        lastCheckAtRef.current = Date.now();
-        void runAchievementCheck(pending.reason, pending.contextPatch).then(pending.resolve).catch(() => pending.resolve([]));
-      }, delay);
     });
-  }, [runAchievementCheck, userId]);
+  }, [flushPendingChecks, runAchievementCheck, userId]);
 
   const dismissAchievementToast = useCallback(() => {
     setNewlyUnlocked((prev) => prev.slice(1));
