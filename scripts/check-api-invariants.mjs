@@ -405,5 +405,21 @@ if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user
   process.exitCode = 1;
 }
 
+const pushTestRoute = read('functions/api/push/test.ts');
+assertIncludes(
+  pushTestRoute,
+  'const statements: D1PreparedStatement[] = [];',
+  'push test route must stage subscription status writes',
+);
+assertIncludes(
+  pushTestRoute,
+  'await db.batch(statements);',
+  'push test route must write subscription status changes through one batch',
+);
+if (pushTestRoute.includes('UPDATE push_subscriptions SET last_sent_at') && pushTestRoute.includes('.run();')) {
+  console.error('push test route must not execute per-subscription status writes separately.');
+  process.exitCode = 1;
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

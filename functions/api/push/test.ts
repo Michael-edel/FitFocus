@@ -55,27 +55,34 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let sent = 0;
   let removed = 0;
   let failed = 0;
+  const statements: D1PreparedStatement[] = [];
 
   for (const row of subscriptions) {
     try {
       await sendPushNotification(env, row, payload);
-      await db
+      statements.push(
+        db
         .prepare("UPDATE push_subscriptions SET last_sent_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
         .bind(nowMs(), nowMs(), row.id)
-        .run();
+      );
       sent += 1;
     } catch (error) {
       failed += 1;
       if (isGoneError(error)) {
-        await db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(row.id).run();
+        statements.push(db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(row.id));
         removed += 1;
       } else {
-        await db
+        statements.push(
+          db
           .prepare("UPDATE push_subscriptions SET last_error = ?, updated_at = ? WHERE id = ?")
           .bind(String(error?.message || error || "PUSH_ERROR"), nowMs(), row.id)
-          .run();
+        );
       }
     }
+  }
+
+  if (statements.length) {
+    await db.batch(statements);
   }
 
   return json({
