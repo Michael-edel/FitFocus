@@ -564,6 +564,16 @@ assertIncludes(
   'reason: "UNKNOWN_PRICE"',
   'billing webhook must skip active subscriptions with unknown prices',
 );
+assertIncludes(
+  billingWebhook,
+  'stripe_subscription_id = ?1',
+  'billing webhook must resolve existing subscriptions when Stripe metadata has no user id',
+);
+assertIncludes(
+  billingWebhook,
+  'stripe_customer_id = ?2',
+  'billing webhook must fall back to customer id when subscription metadata has no user id',
+);
 
 const exportRoute = read('functions/api/export.ts');
 assertIncludes(

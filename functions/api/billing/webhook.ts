@@ -25,8 +25,31 @@ function planForSubscription(status: string, priceId: string | null | undefined,
   return null;
 }
 
+async function resolveSubscriptionUserId(db: D1Database, sub: SubscriptionLike): Promise<string> {
+  const metadataUid = String(sub.metadata?.ff_uid || "").trim();
+  if (metadataUid) return metadataUid;
+
+  const subscriptionId = sub.id?.toString() || null;
+  const customerId = sub.customer?.toString() || null;
+  if (!subscriptionId && !customerId) return "";
+
+  const row = await db
+    .prepare(
+      `SELECT user_id
+       FROM subscriptions
+       WHERE (?1 IS NOT NULL AND stripe_subscription_id = ?1)
+          OR (?2 IS NOT NULL AND stripe_customer_id = ?2)
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    )
+    .bind(subscriptionId, customerId)
+    .first<{ user_id: string }>();
+
+  return String(row?.user_id || "").trim();
+}
+
 export async function applyStripeSubscriptionUpdate(db: D1Database, sub: SubscriptionLike, env: Pick<Env, "PRICE_PRO_MONTHLY" | "PRICE_PRO_YEARLY" | "PRICE_FAMILY_MONTHLY">) {
-  const uid = String(sub.metadata?.ff_uid || "").trim();
+  const uid = await resolveSubscriptionUserId(db, sub);
   if (!uid) return { ok: false, reason: "MISSING_UID" };
 
   const target = await db

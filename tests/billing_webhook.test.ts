@@ -9,7 +9,7 @@ type PreparedStatement = {
   run: () => Promise<{ success: boolean; meta: { changes: number } }>;
 };
 
-function makeDb(options: { userExists?: boolean } = {}) {
+function makeDb(options: { userExists?: boolean; storedUserId?: string } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
 
   const db = {
@@ -23,6 +23,9 @@ function makeDb(options: { userExists?: boolean } = {}) {
           return this;
         },
         async first() {
+          if (sql.includes('FROM subscriptions')) {
+            return options.storedUserId ? { user_id: options.storedUserId } : null;
+          }
           if (sql.includes('SELECT id FROM users')) {
             return options.userExists === false ? null : { id: this.binds[0] };
           }
@@ -103,5 +106,19 @@ describe('billing webhook subscription updates', () => {
 
     expect(result).toMatchObject({ ok: true, plan: 'free', status: 'canceled' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions') && run.binds[1] === 'free')).toBe(true);
+  });
+
+  it('falls back to stored Stripe identifiers when webhook metadata has no user id', async () => {
+    const db = makeDb({ storedUserId: 'user-1' });
+
+    const result = await applyStripeSubscriptionUpdate(db as any, {
+      id: 'sub-1',
+      customer: 'cus-1',
+      status: 'canceled',
+      items: { data: [{ price: { id: 'price_unknown' } }] },
+    }, env);
+
+    expect(result).toMatchObject({ ok: true, user_id: 'user-1', plan: 'free', status: 'canceled' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions') && run.binds[0] === 'user-1')).toBe(true);
   });
 });
