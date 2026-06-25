@@ -267,6 +267,11 @@ assertIncludes(
   'normalizeCleanupLimit(body.limit, 200)',
   'scheduled cleanup endpoint must parse invalid limits with the scheduled default',
 );
+assertIncludes(
+  internalCleanupDeleted,
+  'readBearerToken(request.headers.get("Authorization"))',
+  'scheduled cleanup endpoint must reuse shared bearer parsing',
+);
 
 const accountDeleteLib = read('functions/api/_lib/account_delete.ts');
 assertIncludes(
