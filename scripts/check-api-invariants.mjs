@@ -15,6 +15,13 @@ function assertIncludes(text, needle, label) {
   }
 }
 
+function assertNotIncludes(text, needle, label) {
+  if (text.includes(needle)) {
+    console.error(`${label}: unexpected ${needle}`);
+    process.exitCode = 1;
+  }
+}
+
 function assertOrder(text, before, after, label) {
   const beforeIndex = text.indexOf(before);
   const afterIndex = text.indexOf(after);
@@ -140,6 +147,11 @@ assertIncludes(
   legacyGoogleAuth,
   'await safeResponseJson(r)',
   'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
+);
+assertNotIncludes(
+  legacyGoogleAuth,
+  'await r.text()',
+  'legacy Google auth endpoint must not read unbounded tokeninfo error bodies',
 );
 
 const oauthLib = read('functions/api/auth/_oauth.ts');

@@ -44,6 +44,10 @@ async function postGoogleAuth(db: ReturnType<typeof makeDb>, emailVerified: bool
     headers: { 'content-type': 'application/json' },
   })));
 
+  return postGoogleRequest(db);
+}
+
+async function postGoogleRequest(db: ReturnType<typeof makeDb>) {
   return onRequestPost({
     request: new Request('https://fitfocus.test/api/auth/google', {
       method: 'POST',
@@ -87,5 +91,23 @@ describe('/api/auth/google admin promotion', () => {
 
     expect(response.status).toBe(200);
     expect(hasAdminPromotion(db)).toBe(true);
+  });
+
+  it('does not read tokeninfo error responses through unbounded text()', async () => {
+    const text = vi.fn(async () => 'not-json-error-body');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      json: async () => {
+        throw new Error('not json');
+      },
+      text,
+    })));
+
+    const response = await postGoogleRequest(makeDb());
+    const body = await response.json() as any;
+
+    expect(response.status).toBe(401);
+    expect(body.error).toBe('Invalid Google token');
+    expect(text).not.toHaveBeenCalled();
   });
 });
