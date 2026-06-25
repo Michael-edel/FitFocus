@@ -315,5 +315,26 @@ assertIncludes(
   'billing checkout must support yearly pro pricing',
 );
 
+const familyMenu = read('functions/api/family/menu.ts');
+assertIncludes(
+  familyMenu,
+  'SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1',
+  'family menu save must check for an existing weekly menu row',
+);
+assertIncludes(
+  familyMenu,
+  'UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?',
+  'family menu save must update an existing weekly menu row in place',
+);
+assertIncludes(
+  familyMenu,
+  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  'family menu routes must reject malformed weekStart values',
+);
+if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_start = ?')) {
+  console.error('family menu save must not delete the current weekly menu row before writing a replacement.');
+  process.exitCode = 1;
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

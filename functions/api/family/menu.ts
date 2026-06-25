@@ -8,6 +8,10 @@ import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function isIsoDay(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 function weekStartISO(d: Date) {
   // Monday as week start
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -26,6 +30,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const url = new URL(request.url);
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
+    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
 
     const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
     if (!fam) return json({ weekStart, shared: null, portions: null }, 200);
@@ -66,22 +71,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     if (!menu || typeof menu !== "object") return json({ error: "BAD_MENU" }, 400);
     if (!Array.isArray(menu.days) || !menu.days.length) return json({ error: "BAD_MENU_DAYS" }, 400);
+    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
 
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);
 
     const now = Math.floor(Date.now() / 1000);
-    const menuId = crypto.randomUUID();
     const menuJson = JSON.stringify({ ...menu, weekStart });
-
-    await db.prepare("DELETE FROM weekly_menus WHERE family_id = ? AND week_start = ?")
+    const existing = await db
+      .prepare("SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1")
       .bind(fam.id, weekStart)
-      .run();
+      .first<{ id?: string }>();
+    const menuId = existing?.id || crypto.randomUUID();
 
-    await db
-      .prepare("INSERT INTO weekly_menus (id, family_id, week_start, menu_json, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(menuId, fam.id, weekStart, menuJson, user.sub, now)
-      .run();
+    if (existing?.id) {
+      await db
+        .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
+        .bind(menuJson, user.sub, now, existing.id)
+        .run();
+    } else {
+      await db
+        .prepare("INSERT INTO weekly_menus (id, family_id, week_start, menu_json, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(menuId, fam.id, weekStart, menuJson, user.sub, now)
+        .run();
+    }
 
     return json({ ok: true, weekStart, menuId }, 200);
   } catch (e: any) {
