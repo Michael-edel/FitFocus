@@ -305,6 +305,12 @@ assertIncludes(
   'signal: controller.signal',
   'AI endpoint must pass an abort signal to the upstream Gemini fetch',
 );
+assertOrder(
+  aiEndpoint,
+  'if (!apiKey)',
+  'await enforceAiRateControls',
+  'AI endpoint must not mutate strict rate-limit buckets when Gemini API key is missing',
+);
 
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
