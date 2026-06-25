@@ -7,8 +7,22 @@ type Env = {
   STRIPE_SECRET_KEY: string;
   APP_URL: string;
   PRICE_PRO_MONTHLY?: string;
+  PRICE_PRO_YEARLY?: string;
   PRICE_FAMILY_MONTHLY?: string;
 };
+
+export function resolveCheckoutPlanPrice(plan: string, env: Pick<Env, "PRICE_PRO_MONTHLY" | "PRICE_PRO_YEARLY" | "PRICE_FAMILY_MONTHLY">) {
+  const normalized = String(plan || "").trim().toLowerCase();
+  const priceId =
+    normalized === "pro" ? env.PRICE_PRO_MONTHLY :
+    normalized === "pro_yearly" ? env.PRICE_PRO_YEARLY :
+    normalized === "family" ? env.PRICE_FAMILY_MONTHLY :
+    null;
+  return {
+    normalizedPlan: normalized,
+    priceId: priceId || null,
+  };
+}
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   let user;
@@ -23,11 +37,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   });
 
   const body = await request.json().catch(() => ({}));
-  const plan = String((body as any)?.plan || "").trim();
-  const priceId =
-    plan === "pro" ? env.PRICE_PRO_MONTHLY :
-    plan === "family" ? env.PRICE_FAMILY_MONTHLY :
-    null;
+  const { normalizedPlan, priceId } = resolveCheckoutPlanPrice(String((body as any)?.plan || ""), env);
 
   if (!priceId) return json({ error: "BAD_REQUEST" }, 400);
 
@@ -40,12 +50,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       subscription_data: {
         metadata: {
           ff_uid: user.sub,
-          ff_plan: plan,
+          ff_plan: normalizedPlan,
         }
       },
       metadata: {
         ff_uid: user.sub,
-        ff_plan: plan,
+        ff_plan: normalizedPlan,
       }
     });
 
