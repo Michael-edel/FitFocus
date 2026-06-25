@@ -288,6 +288,22 @@ assertIncludes(
   'action: "support_ticket_update"',
   'admin support patch must write an audit event',
 );
+assertIncludes(
+  supportFeedback,
+  'const writeResults = await db.batch(statements);',
+  'admin support patch must write reply and ticket update through one batch',
+);
+assertIncludes(
+  supportFeedback,
+  'changedRows(updateResult) === 0',
+  'admin support patch must reject ticket updates that affect no row',
+);
+assertOrder(
+  supportFeedback,
+  'changedRows(updateResult) === 0',
+  'action: "support_ticket_update"',
+  'admin support patch must only audit successful ticket writes',
+);
 
 const billingWebhook = read('functions/api/billing/webhook.ts');
 assertIncludes(

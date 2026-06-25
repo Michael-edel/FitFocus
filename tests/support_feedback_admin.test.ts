@@ -39,9 +39,9 @@ type PreparedStatement = {
   run: () => Promise<{ success: boolean; meta: { changes: number } }>;
 };
 
-function makeDb() {
+function makeDb(options: { updateChanges?: number; messageInsertChanges?: number; currentTicket?: Record<string, unknown> | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
-  const currentTicket = {
+  const currentTicket = options.currentTicket === undefined ? {
     id: 'ticket-1',
     user_id: 'user-1',
     status: 'new',
@@ -54,7 +54,7 @@ function makeDb() {
     last_reply_by: null,
     attachments_json: null,
     attachment_count: 0,
-  };
+  } : options.currentTicket;
 
   const db = {
     runs,
@@ -88,6 +88,18 @@ function makeDb() {
         },
       };
       return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      return stmts.map((stmt) => {
+        runs.push({ sql: stmt.sql, binds: stmt.binds });
+        if (stmt.sql.includes('INSERT INTO support_feedback_messages')) {
+          return { success: true, meta: { changes: options.messageInsertChanges ?? 1 } };
+        }
+        if (stmt.sql.includes('UPDATE support_feedback')) {
+          return { success: true, meta: { changes: options.updateChanges ?? 1 } };
+        }
+        return { success: true, meta: { changes: 1 } };
+      });
     },
   };
 
@@ -152,5 +164,18 @@ describe('admin support ticket updates', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'support_ticket_update')).toBe(true);
+  });
+
+  it('rejects a ticket update race when the guarded write changes no rows', async () => {
+    const db = makeDb({ updateChanges: 0, messageInsertChanges: 0 });
+
+    const res = await patchTicket(db, {
+      id: 'ticket-1',
+      message: 'Race reply',
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 });
