@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { deleteUserAccountAndAllData, hardDeleteAccount } from '../functions/api/_lib/account_delete';
+import { deleteUserAccountAndAllData, hardDeleteAccount, softDeleteAccount } from '../functions/api/_lib/account_delete';
 
 type PreparedStatement = {
   sql: string;
@@ -14,6 +14,9 @@ function makeDb(options: {
   supportRows?: Array<{ attachments_json?: string | null }>;
   ownedFamily?: { id: string } | null;
   batchReject?: Error;
+  softDeleteChanges?: number;
+  activeUser?: { id: string; is_active: number; deleted_at: string | null } | null;
+  isAdmin?: boolean;
 } = {}) {
   const prepared: PreparedStatement[] = [];
   const batchedSql: string[] = [];
@@ -30,7 +33,10 @@ function makeDb(options: {
           return this;
         },
         async first() {
-          if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) return null;
+          if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) return options.isAdmin ? { x: 1 } : null;
+          if (sql.includes('SELECT id, is_active, deleted_at FROM users WHERE id = ? LIMIT 1')) {
+            return options.activeUser ?? { id: this.binds[0], is_active: 1, deleted_at: null };
+          }
           if (sql.includes("FROM families WHERE owner_user_id = ? AND is_active = 1")) return null;
           if (sql.includes("FROM families WHERE owner_user_id = ? LIMIT 1")) return options.ownedFamily ?? null;
           return null;
@@ -40,6 +46,9 @@ function makeDb(options: {
           return { results: [] };
         },
         async run() {
+          if (sql.includes('UPDATE users') && sql.includes("deletion_scheduled_at = datetime")) {
+            return { success: true, meta: { changes: options.softDeleteChanges ?? 1 } };
+          }
           return { success: true, meta: { changes: 1 } };
         },
       };
@@ -107,5 +116,11 @@ describe('account deletion', () => {
     });
 
     await expect(hardDeleteAccount(db as any, 'user-1')).rejects.toThrow('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
+  });
+
+  it('softDeleteAccount guards last-admin removal inside the user update', async () => {
+    const db = makeDb({ softDeleteChanges: 0, isAdmin: true });
+
+    await expect(softDeleteAccount(db as any, 'admin-1')).rejects.toThrow('Нельзя удалить аккаунт последнего администратора.');
   });
 });

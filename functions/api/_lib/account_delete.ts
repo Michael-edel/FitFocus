@@ -13,6 +13,10 @@ export interface DeleteUserAccountOptions {
   supportAttachments?: SupportAttachmentBucket;
 }
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 async function collectSupportStorageKeys(db: D1Database, userId: string): Promise<string[]> {
   const keys = new Set<string>();
   const rows = await db.prepare(
@@ -190,14 +194,47 @@ export async function deleteUserAccountAndAllData(
 export async function softDeleteAccount(db: D1Database, userId: string): Promise<void> {
   const now = new Date().toISOString();
 
-  await db.prepare(`
+  const updateResult = await db.prepare(`
     UPDATE users
     SET
       deleted_at = ?,
       deletion_scheduled_at = datetime(?, '+30 days'),
       is_active = 0
     WHERE id = ?
-  `).bind(now, now, userId).run();
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM user_roles ur_self
+          WHERE ur_self.user_id = ?
+            AND ur_self.role = 'admin'
+        )
+        OR (
+          SELECT COUNT(*)
+          FROM user_roles ur
+          JOIN users u ON u.id = ur.user_id
+          WHERE ur.role = 'admin'
+            AND u.is_active = 1
+            AND u.deleted_at IS NULL
+        ) > 1
+      )
+  `).bind(now, now, userId, userId).run();
+
+  if (changedRows(updateResult) === 0) {
+    const activeUser = await db
+      .prepare("SELECT id, is_active, deleted_at FROM users WHERE id = ? LIMIT 1")
+      .bind(userId)
+      .first<any>();
+    if (!activeUser || !activeUser.is_active || activeUser.deleted_at) return;
+
+    const isAdminRow = await db
+      .prepare("SELECT 1 as x FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1")
+      .bind(userId)
+      .first<any>();
+    if (isAdminRow) {
+      throw new Error("Нельзя удалить аккаунт последнего администратора.");
+    }
+    throw new Error("Failed to soft-delete account.");
+  }
 
   const fam = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1")
