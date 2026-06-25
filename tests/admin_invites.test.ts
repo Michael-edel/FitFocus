@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestPut } from '../functions/api/admin/invites';
+import { onRequestGet, onRequestPut } from '../functions/api/admin/invites';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -41,9 +41,11 @@ type PreparedStatement = {
 
 function makeDb(options: { inviteExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const allCalls: Array<{ sql: string; binds: unknown[] }> = [];
 
   const db = {
     runs,
+    allCalls,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -58,6 +60,7 @@ function makeDb(options: { inviteExists?: boolean } = {}) {
           return null;
         },
         async all() {
+          allCalls.push({ sql, binds: this.binds });
           if (sql.includes('FROM user_roles WHERE user_id = ?') && sql.includes("role = 'admin'")) {
             return { results: [{ ok: 1 }] };
           }
@@ -77,6 +80,24 @@ function makeDb(options: { inviteExists?: boolean } = {}) {
   };
 
   return db;
+}
+
+async function getInvites(db: ReturnType<typeof makeDb>, query = '') {
+  const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const request = new Request(`https://fitfocus.test/api/admin/invites${query}`, {
+    headers: {
+      Cookie: `ff_session=${token}`,
+    },
+  });
+
+  return onRequestGet({
+    request,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    params: {},
+    waitUntil() {},
+    next: async () => new Response(null, { status: 404 }),
+    data: {},
+  } as any);
 }
 
 async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
@@ -101,6 +122,16 @@ async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unk
 }
 
 describe('admin invite updates', () => {
+  it('falls back invalid list limits to a bounded default', async () => {
+    const db = makeDb();
+
+    const res = await getInvites(db, '?limit=abc');
+
+    expect(res.status).toBe(200);
+    const query = db.allCalls.find((call) => call.sql.includes('FROM invite_codes ic'));
+    expect(query?.binds.at(-1)).toBe(100);
+  });
+
   it('rejects non-boolean revoked values', async () => {
     const db = makeDb();
 

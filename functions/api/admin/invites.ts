@@ -14,6 +14,11 @@ function changedRows(result: any): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
+function toInt(value: unknown, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -22,7 +27,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     await requireAdminRequest(user, request, db);
 
     const url = new URL(request.url);
-    const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") || 100)));
+    const limit = Math.max(1, Math.min(200, toInt(url.searchParams.get("limit"), 100)));
 
     const rows = await db
       .prepare(

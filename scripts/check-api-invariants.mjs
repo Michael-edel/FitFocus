@@ -258,6 +258,11 @@ assertIncludes(
 const adminInvites = read('functions/api/admin/invites.ts');
 assertIncludes(
   adminInvites,
+  'toInt(url.searchParams.get("limit"), 100)',
+  'admin invite list must parse invalid limit values through a finite fallback',
+);
+assertIncludes(
+  adminInvites,
   'typeof body?.revoked !== "boolean"',
   'admin invite update must require explicit boolean revoked values',
 );
@@ -336,6 +341,11 @@ assertIncludes(
   supportFeedback,
   'changedRows(updateResult) === 0',
   'admin support patch must reject ticket updates that affect no row',
+);
+assertIncludes(
+  supportFeedback,
+  'toInt(url.searchParams.get("limit"), 20)',
+  'admin support list must parse invalid limit values through a finite fallback',
 );
 assertOrder(
   supportFeedback,
