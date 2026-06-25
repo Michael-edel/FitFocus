@@ -39,7 +39,7 @@ type PreparedStatement = {
   run: () => Promise<{ success: boolean; meta: { changes: number } }>;
 };
 
-function makeDb(options: { targetExists?: boolean; adminsCount?: number } = {}) {
+function makeDb(options: { targetExists?: boolean; adminDeleteChanges?: number } = {}) {
   const prepared: PreparedStatement[] = [];
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
 
@@ -60,7 +60,6 @@ function makeDb(options: { targetExists?: boolean; adminsCount?: number } = {}) 
           if (sql.includes('SELECT id FROM users')) {
             return options.targetExists === false ? null : { id: this.binds[0] };
           }
-          if (sql.includes('COUNT(*) as c FROM user_roles')) return { c: options.adminsCount ?? 2 };
           return null;
         },
         async all() {
@@ -74,6 +73,9 @@ function makeDb(options: { targetExists?: boolean; adminsCount?: number } = {}) 
         },
         async run() {
           runs.push({ sql, binds: this.binds });
+          if (sql.includes('DELETE FROM user_roles') && sql.includes("role = 'admin'")) {
+            return { success: true, meta: { changes: options.adminDeleteChanges ?? 1 } };
+          }
           return { success: true, meta: { changes: 1 } };
         },
       };
@@ -145,5 +147,25 @@ describe('admin user role management', () => {
     expect(res.status).toBe(200);
     expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.binds[1] === 'support')).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);
+  });
+
+  it('removes admin only through a guarded conditional delete', async () => {
+    const db = makeDb();
+
+    const res = await postRole(db, { user_id: 'user-2', role: 'admin', action: 'remove' });
+
+    expect(res.status).toBe(200);
+    expect(db.runs.some((run) => run.sql.includes('DELETE FROM user_roles') && run.sql.includes('COUNT(*)'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);
+  });
+
+  it('rejects removing the last active admin when the guarded delete changes no rows', async () => {
+    const db = makeDb({ adminDeleteChanges: 0 });
+
+    const res = await postRole(db, { user_id: 'user-2', role: 'admin', action: 'remove' });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'GUARD' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 });
