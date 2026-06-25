@@ -5,7 +5,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { cleanupDeletedAccounts, normalizeCleanupLimit } from "../_lib/account_cleanup";
+import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from "../_lib/account_cleanup";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
@@ -22,7 +22,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let limit = 50;
   try {
     const body = await request.json();
-    if (body?.limit) limit = normalizeCleanupLimit(body.limit, 50);
+    limit = normalizeCleanupRequestLimit(body, 50);
   } catch {}
 
   const result = await cleanupDeletedAccounts(db, {
