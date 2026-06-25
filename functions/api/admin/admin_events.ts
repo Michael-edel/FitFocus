@@ -26,6 +26,11 @@ function csvEscape(v: any): string {
   return s;
 }
 
+function toInt(value: unknown, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -35,8 +40,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   await requireAdminRequest(user, request, db);
 
   const url = new URL(request.url);
-  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || "50")));
-  const offset = Math.max(0, Number(url.searchParams.get("offset") || "0"));
+  const limit = Math.min(500, Math.max(1, toInt(url.searchParams.get("limit"), 50)));
+  const offset = Math.max(0, toInt(url.searchParams.get("offset"), 0));
 
   const q = (url.searchParams.get("q") || "").trim();
   const action = (url.searchParams.get("action") || "").trim();

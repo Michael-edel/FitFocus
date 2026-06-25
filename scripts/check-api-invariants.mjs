@@ -170,6 +170,30 @@ assertIncludes(
   'hard account delete last-admin precheck must only apply to active admin users',
 );
 
+const adminAiLogs = read('functions/api/admin/ai_logs.ts');
+assertIncludes(
+  adminAiLogs,
+  'toInt(url.searchParams.get("limit"), 50)',
+  'admin ai logs must parse invalid limit values through a finite fallback',
+);
+assertIncludes(
+  adminAiLogs,
+  'return json({ error: "UNAUTH" }, 401);',
+  'admin ai logs must return 401 for unauthenticated requests',
+);
+
+const adminEventsRoute = read('functions/api/admin/admin_events.ts');
+assertIncludes(
+  adminEventsRoute,
+  'toInt(url.searchParams.get("limit"), 50)',
+  'admin events must parse invalid limit values through a finite fallback',
+);
+assertIncludes(
+  adminEventsRoute,
+  'toInt(url.searchParams.get("offset"), 0)',
+  'admin events must parse invalid offset values through a finite fallback',
+);
+
 const adminUserRoles = read('functions/api/admin/user_roles.ts');
 assertIncludes(
   adminUserRoles,
