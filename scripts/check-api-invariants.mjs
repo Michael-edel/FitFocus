@@ -181,5 +181,39 @@ assertIncludes(
   'admin invite update must write an audit event',
 );
 
+const adminFeatureFlags = read('functions/api/admin/feature_flags.ts');
+assertIncludes(
+  adminFeatureFlags,
+  'ALLOWED_FEATURE_FLAGS',
+  'admin feature flag endpoint must allow only known runtime flags',
+);
+assertIncludes(
+  adminFeatureFlags,
+  'typeof body?.enabled !== "boolean"',
+  'admin feature flag endpoint must require explicit boolean enabled values',
+);
+assertIncludes(
+  adminFeatureFlags,
+  'BAD_ROLLOUT',
+  'admin feature flag endpoint must reject invalid rollout values',
+);
+
+const adminSettings = read('functions/api/admin/settings.ts');
+assertIncludes(
+  adminSettings,
+  'SETTING_VALIDATORS',
+  'admin settings endpoint must allow only known runtime settings',
+);
+assertIncludes(
+  adminSettings,
+  'nonNegativeInteger',
+  'admin settings endpoint must validate integer limits',
+);
+assertIncludes(
+  adminSettings,
+  'limitAction',
+  'admin settings endpoint must validate limit action values',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
