@@ -11,6 +11,9 @@ import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
+const ALLOWED_ROLE_VALUES = new Set(["user", "pro", "family_parent", "family_child", "support", "admin"]);
+const ALLOWED_ACTION_VALUES = new Set(["add", "remove"]);
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -22,6 +25,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const userId = (url.searchParams.get("user_id") || "").trim();
   if (!userId) return json({ error: "BAD_REQUEST", message: "user_id required" }, 400);
+
+  const target = await db
+    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
 
   const { results } = await db
     .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")
@@ -44,6 +53,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const role = String(body?.role || "").trim();
   const action = String(body?.action || "add").trim(); // add | remove
   if (!userId || !role) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
+  if (!ALLOWED_ACTION_VALUES.has(action)) return json({ error: "BAD_ACTION", message: "action must be add or remove" }, 400);
+  if (!ALLOWED_ROLE_VALUES.has(role)) return json({ error: "BAD_ROLE", message: "Unknown role" }, 400);
+
+  const target = await db
+    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
 
   if (action === "remove" && role === "admin") {
     const row = await db.prepare("SELECT COUNT(*) as c FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL").first<any>();

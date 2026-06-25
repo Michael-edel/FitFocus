@@ -118,5 +118,22 @@ assertIncludes(
   'cleanup must expose bounded failure details',
 );
 
+const adminUserRoles = read('functions/api/admin/user_roles.ts');
+assertIncludes(
+  adminUserRoles,
+  'ALLOWED_ROLE_VALUES',
+  'admin user role endpoint must validate known role values',
+);
+assertIncludes(
+  adminUserRoles,
+  'ALLOWED_ACTION_VALUES',
+  'admin user role endpoint must validate known actions',
+);
+assertIncludes(
+  adminUserRoles,
+  'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
+  'admin user role endpoint must verify target user exists and is active',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
