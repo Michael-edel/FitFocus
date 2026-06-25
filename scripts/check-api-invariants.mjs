@@ -254,5 +254,37 @@ assertIncludes(
   'billing webhook must skip active subscriptions with unknown prices',
 );
 
+const exportRoute = read('functions/api/export.ts');
+assertIncludes(
+  exportRoute,
+  'SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits',
+  'export must query the current ai_rate_limits schema',
+);
+assertIncludes(
+  exportRoute,
+  'SELECT achievement_key, unlocked_at, tier, source, snapshot_json, created_at FROM user_achievements',
+  'export must query the current user_achievements schema',
+);
+assertIncludes(
+  exportRoute,
+  'SELECT code, family_id, expires_at, created_by_user_id, created_at, used_by_user_id, used_at FROM family_invites',
+  'export must query the current family_invites schema',
+);
+assertIncludes(
+  exportRoute,
+  'SELECT id, title, source_food_name, calories, protein, fat, carbs, ingredients_json, steps_json, allergens_json, created_at FROM recipes',
+  'export must query the current recipes schema',
+);
+for (const legacyNeedle of [
+  'SELECT kind, bucket_key, count, reset_at, updated_at FROM ai_rate_limits',
+  'SELECT achievement_key, unlocked_at, meta_json FROM user_achievements',
+  'SELECT id, title, ingredients_json, steps_json, nutrition_json, tags_json, source, created_at, updated_at FROM recipes',
+]) {
+  if (exportRoute.includes(legacyNeedle)) {
+    console.error(`export route still references legacy schema field: ${legacyNeedle}`);
+    process.exitCode = 1;
+  }
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
