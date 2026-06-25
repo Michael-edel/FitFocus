@@ -125,10 +125,12 @@ Production deploy ожидает Cloudflare Pages + D1 + R2:
    - `STRIPE_WEBHOOK_SECRET`
    - `APP_URL` (должен совпадать с публичным origin приложения, который вы добавляете в Google OAuth redirect URI)
    - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
+   - `CRON_SECRET` для `/api/internal/cleanup_deleted`
 6. В Google Cloud Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/google/callback`.
 7. В Apple Developer Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/apple/callback`.
+8. Для scheduled hard-delete workflow в GitHub Actions добавить repository secret `FITFOCUS_CLEANUP_SECRET` с тем же значением, что и Cloudflare `CRON_SECRET`. Если production URL отличается от `https://fitfocus.pages.dev/api/internal/cleanup_deleted`, добавить repository variable `FITFOCUS_CLEANUP_URL`.
 
 ## Безопасность и Приватность
 
