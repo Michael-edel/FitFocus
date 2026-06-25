@@ -6,6 +6,7 @@ import {
 } from "../../../achievements/engine";
 import { requireUser, json } from "../_lib/auth";
 import { nowMs, requireDB, uuid } from "../_lib/db";
+import { isEnabled, loadFeatures } from "../_lib/features";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -76,6 +77,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
+  const features = await loadFeatures(env as any, String(user.sub));
+  if (!isEnabled(features, "achievements_enabled", true)) {
+    return json({ enabled: false, catalog: [], newlyUnlocked: [] }, 200);
+  }
+
   const body: any = await request.json().catch(() => ({}));
   const db = requireDB(env);
   const row = await db
@@ -93,7 +99,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const context = mergeAchievementContext(contextFromProfile(profile), safeClientContext(body?.context || body));
   const candidates = evaluateAchievements(context);
   if (!candidates.length) {
-    return json({ catalog: ACHIEVEMENT_CATALOG, newlyUnlocked: [] }, 200);
+    return json({ enabled: true, catalog: ACHIEVEMENT_CATALOG, newlyUnlocked: [] }, 200);
   }
 
   const existingRows = await db
@@ -127,5 +133,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  return json({ catalog: ACHIEVEMENT_CATALOG, newlyUnlocked }, 200);
+  return json({ enabled: true, catalog: ACHIEVEMENT_CATALOG, newlyUnlocked }, 200);
 };

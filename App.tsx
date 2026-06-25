@@ -1884,10 +1884,11 @@ const openEditFood = (item: FoodEntry) => {
 
   useEffect(() => {
     if (!currentUser?.id) return;
+    if (!achievements.enabled) return;
     if (achievementBootstrapUserRef.current === currentUser.id) return;
     achievementBootstrapUserRef.current = currentUser.id;
     void checkAchievements('app_open');
-  }, [checkAchievements, currentUser?.id]);
+  }, [achievements.enabled, checkAchievements, currentUser?.id]);
 
   useEffect(() => {
     if (normalizedAllUsers.length !== allUsers.length) {
@@ -3190,6 +3191,7 @@ const logWeight = useCallback(() => {
       onShareWisCard: handleShareWisCard,
       shareWisState: wisShareState,
       shareWisMessage: wisShareMessage,
+      achievementsEnabled: achievements.enabled,
       achievementsCatalog: achievements.catalog,
       achievementsUnlocked: achievements.unlocked,
       achievementsNewlyUnlocked: achievements.newlyUnlocked,

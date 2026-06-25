@@ -1,6 +1,7 @@
 import { ACHIEVEMENT_CATALOG } from "../../../achievements/catalog";
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
+import { isEnabled, loadFeatures } from "../_lib/features";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -23,6 +24,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
+  const features = await loadFeatures(env as any, String(user.sub));
+  if (!isEnabled(features, "achievements_enabled", true)) {
+    return json({ enabled: false, catalog: [], unlocked: [] }, 200);
+  }
+
   const db = requireDB(env);
   const { results } = await db
     .prepare(
@@ -43,5 +49,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     created_at: Number(row.created_at || 0),
   }));
 
-  return json({ catalog: ACHIEVEMENT_CATALOG, unlocked }, 200);
+  return json({ enabled: true, catalog: ACHIEVEMENT_CATALOG, unlocked }, 200);
 };

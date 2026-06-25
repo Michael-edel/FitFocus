@@ -99,6 +99,7 @@ type DashboardScreenProps = {
   onShareWisCard: () => void;
   shareWisState: 'idle' | 'busy' | 'success' | 'error';
   shareWisMessage: string | null;
+  achievementsEnabled: boolean;
   achievementsCatalog: AchievementDefinition[];
   achievementsUnlocked: UnlockedAchievement[];
   achievementsNewlyUnlocked: AchievementDefinition[];
@@ -163,6 +164,7 @@ export default function DashboardScreen({
   onShareWisCard,
   shareWisState,
   shareWisMessage,
+  achievementsEnabled,
   achievementsCatalog,
   achievementsUnlocked,
   achievementsNewlyUnlocked,
@@ -358,13 +360,15 @@ export default function DashboardScreen({
         />
       </React.Suspense>
 
-      <AchievementsPanel
-        catalog={achievementsCatalog || []}
-        unlocked={achievementsUnlocked || []}
-        newlyUnlocked={achievementsNewlyUnlocked || []}
-        loading={achievementsLoading}
-        onDismissToast={onDismissAchievementToast}
-      />
+      {achievementsEnabled && (
+        <AchievementsPanel
+          catalog={achievementsCatalog || []}
+          unlocked={achievementsUnlocked || []}
+          newlyUnlocked={achievementsNewlyUnlocked || []}
+          loading={achievementsLoading}
+          onDismissToast={onDismissAchievementToast}
+        />
+      )}
 
       {currentUser && canUsePro && (
         <div className="bg-slate-900 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 animate-in slide-in-from-bottom-4 duration-500">
