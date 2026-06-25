@@ -10,6 +10,10 @@ function json(body: any, status = 200, headers?: Headers) {
   });
 }
 
+async function safeResponseJson(response: Response): Promise<any> {
+  return response.json().catch(() => ({}));
+}
+
 function b64urlEncode(bytes: Uint8Array) {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -115,7 +119,7 @@ export const onRequestGet: PagesFunction<{
         grant_type: "authorization_code",
       }),
     });
-    const tokenJson: any = await tokenRes.json();
+    const tokenJson: any = await safeResponseJson(tokenRes);
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed", details: tokenJson }, 502);
     }
@@ -124,7 +128,7 @@ export const onRequestGet: PagesFunction<{
 
     // Validate token + get profile
     const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    const info: any = await infoRes.json();
+    const info: any = await safeResponseJson(infoRes);
     if (!infoRes.ok) return json({ error: "tokeninfo failed", details: info }, 502);
     if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
 

@@ -74,6 +74,25 @@ for (const file of [
   );
 }
 
+const googleOAuthCallback = read('functions/api/auth/google/callback.ts');
+assertIncludes(
+  googleOAuthCallback,
+  'await safeResponseJson(tokenRes)',
+  'google OAuth callback must tolerate non-JSON token endpoint failures',
+);
+assertIncludes(
+  googleOAuthCallback,
+  'await safeResponseJson(infoRes)',
+  'google OAuth callback must tolerate non-JSON tokeninfo failures',
+);
+
+const appleOAuthCallback = read('functions/api/auth/apple/callback.ts');
+assertIncludes(
+  appleOAuthCallback,
+  'await safeResponseJson(tokenRes)',
+  'apple OAuth callback must tolerate non-JSON token endpoint failures',
+);
+
 const supportAttachments = read('functions/api/_lib/support_attachments.ts');
 assertIncludes(
   supportAttachments,
