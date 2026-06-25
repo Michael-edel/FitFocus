@@ -64,30 +64,49 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (!items.length) return json({ error: "NO_ITEMS" }, 400);
 
   const t = nowMs();
-  const results: { key: string; version?: number }[] = [];
+  const normalizedItems: { key: string; value: string; baseVersion: number }[] = [];
+  const currentByKey = new Map<string, { value: string; version: number }>();
   for (const it of items) {
     if (!it?.key) continue;
     if (!isAllowedStateKey(user.sub, it.key)) {
       return json({ error: "FORBIDDEN_KEYSPACE", key: String(it.key || "") }, 403);
     }
+    const normalized = {
+      key: String(it.key),
+      value: String(it.value ?? ""),
+      baseVersion: Number(it.baseVersion || 0),
+    };
+    normalizedItems.push(normalized);
     const current = await db
       .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
-      .bind(user.sub, it.key)
+      .bind(user.sub, normalized.key)
       .first<{ v?: string; version?: number }>();
     const currentVersion = Number(current?.version || 0);
-    if (Number(it.baseVersion || 0) > 0 && current && currentVersion !== Number(it.baseVersion || 0)) {
-      return json({ error: "KV_CONFLICT", key: it.key, value: current?.v ?? "", version: currentVersion }, 409);
+    if (normalized.baseVersion > 0 && current && currentVersion !== normalized.baseVersion) {
+      return json({ error: "KV_CONFLICT", key: normalized.key, value: current?.v ?? "", version: currentVersion }, 409);
     }
-    const nextVersion = currentVersion + 1;
-    await db
+    currentByKey.set(normalized.key, {
+      value: String(current?.v ?? ""),
+      version: currentVersion,
+    });
+  }
+
+  const statements = normalizedItems.map((it) => {
+    const current = currentByKey.get(it.key) || { value: "", version: 0 };
+    const nextVersion = current.version + 1;
+    return db
       .prepare(
         "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
           "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
       )
-      .bind(user.sub, it.key, String(it.value ?? ""), t, nextVersion)
-      .run();
-    results.push({ key: it.key, version: nextVersion });
-  }
+      .bind(user.sub, it.key, it.value, t, nextVersion);
+  });
+  await db.batch(statements);
+
+  const results = normalizedItems.map((it) => ({
+    key: it.key,
+    version: (currentByKey.get(it.key)?.version || 0) + 1,
+  }));
 
   return json({ ok: true, items: results }, 200);
 };
