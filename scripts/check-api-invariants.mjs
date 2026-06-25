@@ -192,6 +192,23 @@ assertIncludes(
   'Number.isFinite(parsed) ? Math.floor(parsed) : fallback',
   'AI rate-limit bucket cleanup must reject NaN and infinite limits before querying',
 );
+assertIncludes(
+  aiLimits,
+  'assertDailyLimitAvailable',
+  'AI rate controls must precheck exhausted daily limits before mutating rate buckets',
+);
+assertOrder(
+  aiLimits,
+  'await assertDailyLimitAvailable',
+  'await enforceCooldown',
+  'AI rate controls must check exhausted daily quota before cooldown mutation',
+);
+assertOrder(
+  aiLimits,
+  'await assertDailyLimitAvailable',
+  'await enforceBurst',
+  'AI rate controls must check exhausted daily quota before burst mutation',
+);
 
 const adminCleanupDeleted = read('functions/api/admin/cleanup_deleted.ts');
 assertIncludes(

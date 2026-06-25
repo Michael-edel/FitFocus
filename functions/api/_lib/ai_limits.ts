@@ -57,6 +57,60 @@ function normalizeCleanupBucketLimit(limit: unknown, fallback = 500): number {
   return Math.max(1, Math.min(5000, base));
 }
 
+function throwDailyLimitError(
+  day: string,
+  feature: string,
+  plan: ActivePlan,
+  usedToday: number,
+  limit: number,
+  planDailyLimit: number | null,
+  safeDailyLimit: number | null,
+): never {
+  const isPaywallLimit = planDailyLimit !== null && planDailyLimit <= limit;
+  throw new AiLimitError(
+    isPaywallLimit ? "PAYWALL" : "DAILY_LIMIT",
+    "daily",
+    isPaywallLimit ? 402 : 429,
+    isPaywallLimit
+      ? plan === "free"
+        ? `Free лимит AI достигнут: ${planDailyLimit}/день. Перейдите на Pro или Family для расширенного доступа.`
+        : `Лимит AI для тарифа ${plan} достигнут: ${planDailyLimit}/день.`
+      : "Достигнут временный безопасный лимит AI. Попробуйте позже.",
+    {
+      day,
+      feature,
+      plan,
+      usedToday,
+      limitPerDay: limit,
+      planDailyLimit,
+      safeDailyLimit,
+    },
+  );
+}
+
+async function assertDailyLimitAvailable(
+  db: D1Database,
+  userId: string,
+  feature: string,
+  nowMs: number,
+  limit: number | null,
+  plan: ActivePlan,
+  planDailyLimit: number | null,
+  safeDailyLimit: number | null,
+) {
+  if (limit === null) return;
+  const day = utcDayKey(nowMs);
+  const usageFeature = `ai_${feature}`;
+  const row = await db
+    .prepare("SELECT count FROM usage_daily WHERE user_id = ? AND day = ? AND feature = ?")
+    .bind(userId, day, usageFeature)
+    .first<{ count?: number }>();
+  const usedToday = Number(row?.count || 0);
+  if (Number.isFinite(usedToday) && usedToday >= limit) {
+    throwDailyLimitError(day, feature, plan, usedToday, limit, planDailyLimit, safeDailyLimit);
+  }
+}
+
 async function ensureRateBucket(
   db: D1Database,
   bucketKey: string,
@@ -169,26 +223,7 @@ async function recordDailyUsage(
     .bind(userId, day, usageFeature)
     .first<{ count?: number }>();
 
-  const isPaywallLimit = planDailyLimit !== null && planDailyLimit <= limit;
-  throw new AiLimitError(
-    isPaywallLimit ? "PAYWALL" : "DAILY_LIMIT",
-    "daily",
-    isPaywallLimit ? 402 : 429,
-    isPaywallLimit
-      ? plan === "free"
-        ? `Free лимит AI достигнут: ${planDailyLimit}/день. Перейдите на Pro или Family для расширенного доступа.`
-        : `Лимит AI для тарифа ${plan} достигнут: ${planDailyLimit}/день.`
-      : "Достигнут временный безопасный лимит AI. Попробуйте позже.",
-    {
-      day,
-      feature,
-      plan,
-      usedToday: Number(row?.count || limit),
-      limitPerDay: limit,
-      planDailyLimit,
-      safeDailyLimit,
-    },
-  );
+  throwDailyLimitError(day, feature, plan, Number(row?.count || limit), limit, planDailyLimit, safeDailyLimit);
 }
 
 export async function enforceAiRateControls(input: AiRateControlInput): Promise<void> {
@@ -200,6 +235,16 @@ export async function enforceAiRateControls(input: AiRateControlInput): Promise<
   const safeDailyLimit = input.safeDailyLimit ?? null;
   const effectiveDailyLimit = minLimit(input.planDailyLimit, safeDailyLimit);
 
+  await assertDailyLimitAvailable(
+    input.db,
+    input.userId,
+    feature,
+    nowMs,
+    effectiveDailyLimit,
+    input.plan,
+    input.planDailyLimit,
+    safeDailyLimit,
+  );
   await enforceCooldown(input.db, input.userId, feature, nowMs, cooldownMs);
   await enforceBurst(input.db, input.userId, feature, nowMs, burstLimit, burstWindowMs);
   await recordDailyUsage(
