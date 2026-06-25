@@ -10,6 +10,10 @@ import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -102,10 +106,14 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
     const body = (await request.json().catch(() => null)) as any;
     const code = String(body?.code || "").trim();
-    const revoked = body?.revoked ? 1 : 0;
+    if (typeof body?.revoked !== "boolean") throw new Error("BAD_REQUEST");
+    const revoked = body.revoked ? 1 : 0;
     if (!code) throw new Error("BAD_REQUEST");
 
-    await db.prepare("UPDATE invite_codes SET revoked = ? WHERE code = ?").bind(revoked, code).run();
+    const result = await db.prepare("UPDATE invite_codes SET revoked = ? WHERE code = ?").bind(revoked, code).run();
+    if (changedRows(result) === 0) {
+      return json({ error: "NOT_FOUND", message: "invite code not found" }, 404);
+    }
 
     await logAdminEvent(db, { adminUserId: user.sub, action: "invite_update", targetUserId: null, meta: { code, revoked } });
 
