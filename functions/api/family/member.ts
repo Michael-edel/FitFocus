@@ -7,6 +7,29 @@ import { requireActiveFamilyForUser } from "../_lib/family_access";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
+function normalizeGoal(value: unknown) {
+  if (value == null) return null;
+  const goal = String(value).trim().toUpperCase();
+  return goal === "LOSS" || goal === "MAINTAIN" ? goal : "";
+}
+
+function normalizeSex(value: unknown) {
+  if (value == null) return null;
+  const sex = String(value).trim().toUpperCase();
+  return sex === "MALE" || sex === "FEMALE" ? sex : "";
+}
+
+function normalizeNumber(value: unknown, min: number, max: number, integer = false) {
+  if (value == null) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < min || num > max) return Number.NaN;
+  return integer ? Math.floor(num) : num;
+}
+
 function textList(value: unknown, maxItems = 20): string[] {
   const raw = Array.isArray(value)
     ? value
@@ -58,20 +81,27 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
     const body: any = await request.json().catch(() => ({}));
 
-    const goal = body?.goal ? String(body.goal).toUpperCase() : null; // LOSS | MAINTAIN
-    const sex = body?.sex ? String(body.sex).toUpperCase() : null; // MALE | FEMALE
-    const age = body?.age !== undefined ? Number(body.age) : null;
-    const height_cm = body?.height_cm !== undefined ? Number(body.height_cm) : null;
-    const weight_kg = body?.weight_kg !== undefined ? Number(body.weight_kg) : null;
-    const activity = body?.activity !== undefined ? Number(body.activity) : null;
+    const goal = normalizeGoal(body?.goal);
+    const sex = normalizeSex(body?.sex);
+    const age = normalizeNumber(body?.age, 1, 120, true);
+    const height_cm = normalizeNumber(body?.height_cm, 50, 260, true);
+    const weight_kg = normalizeNumber(body?.weight_kg, 20, 500);
+    const activity = normalizeNumber(body?.activity, 1, 5);
     const restrictionsJson = normalizeRestrictions(body?.dietary ?? body?.restrictions_json);
+
+    if (goal === "") return json({ error: "BAD_GOAL" }, 400);
+    if (sex === "") return json({ error: "BAD_SEX" }, 400);
+    if (Number.isNaN(age)) return json({ error: "BAD_AGE" }, 400);
+    if (Number.isNaN(height_cm)) return json({ error: "BAD_HEIGHT" }, 400);
+    if (Number.isNaN(weight_kg)) return json({ error: "BAD_WEIGHT" }, 400);
+    if (Number.isNaN(activity)) return json({ error: "BAD_ACTIVITY" }, 400);
 
     const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
     if (!fam) return json({ ok: false, error: "NOT_IN_FAMILY" }, 400);
 
     const updatedAt = Math.floor(nowMs() / 1000);
 
-    await db
+    const result = await db
       .prepare(
         `UPDATE family_members
          SET goal = COALESCE(?, goal),
@@ -82,10 +112,11 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
              activity = COALESCE(?, activity),
              restrictions_json = COALESCE(?, restrictions_json),
              updated_at = ?
-         WHERE family_id = ? AND user_id = ?`
+         WHERE family_id = ? AND user_id = ? AND status = 'active' AND is_active = 1`
       )
       .bind(goal, sex, age, height_cm, weight_kg, activity, restrictionsJson, updatedAt, fam.id, user.sub)
       .run();
+    if (changedRows(result) === 0) return json({ error: "NOT_FOUND" }, 404);
 
     return json({ ok: true, updated_at: updatedAt }, 200);
   } catch (e: any) {
