@@ -24,6 +24,7 @@ export interface Env {
   PRO_AI_DAILY_LIMIT?: string;
   FAMILY_AI_DAILY_LIMIT?: string;
   AUTH_JWT_SECRET?: string;
+  GEMINI_TIMEOUT_MS?: string;
 }
 
 type GeminiPart =
@@ -40,10 +41,22 @@ const ALLOWED_GEMINI_MODELS = new Set([
   DEFAULT_GEMINI_MODEL,
   "gemini-2.5-pro",
 ]);
+const DEFAULT_GEMINI_TIMEOUT_MS = 30_000;
+const MIN_GEMINI_TIMEOUT_MS = 1_000;
+const MAX_GEMINI_TIMEOUT_MS = 60_000;
 
 export function resolveGeminiModel(value: unknown): string {
   const model = String(value || "").trim();
   return ALLOWED_GEMINI_MODELS.has(model) ? model : DEFAULT_GEMINI_MODEL;
+}
+
+export function normalizeGeminiTimeoutMs(value: unknown): number {
+  const raw = String(value ?? "").trim();
+  if (!raw) return DEFAULT_GEMINI_TIMEOUT_MS;
+
+  const parsed = Math.floor(Number(raw));
+  if (!Number.isFinite(parsed)) return DEFAULT_GEMINI_TIMEOUT_MS;
+  return Math.min(MAX_GEMINI_TIMEOUT_MS, Math.max(MIN_GEMINI_TIMEOUT_MS, parsed));
 }
 
 function b64urlEncode(bytes: Uint8Array) {
@@ -481,12 +494,17 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let geminiResp: Response | null = null;
   let data: any = {};
   let latency = 0;
+  const geminiTimeoutMs = normalizeGeminiTimeoutMs(env.GEMINI_TIMEOUT_MS);
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   try {
+    timeoutId = setTimeout(() => controller.abort(), geminiTimeoutMs);
     geminiResp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(payloadToSend),
+      signal: controller.signal,
     });
 
     data = await geminiResp.json().catch(() => ({}));
@@ -523,6 +541,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
     await logAiEvent(env as any, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
 
