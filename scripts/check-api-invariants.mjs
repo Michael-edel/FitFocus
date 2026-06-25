@@ -40,6 +40,16 @@ assertIncludes(
   'UPDATE family_invites SET used_by_user_id = NULL, used_at = NULL',
   'family join must release invite when member insert fails',
 );
+assertIncludes(
+  familyJoin,
+  'AND NOT EXISTS (',
+  'family join must prevent concurrent active membership in another family during invite redemption',
+);
+assertIncludes(
+  familyJoin,
+  'FAMILY_JOIN_CONFLICT',
+  'family join must surface unresolved invite redemption races explicitly',
+);
 
 const restore = read('functions/api/account/restore.ts');
 assertIncludes(restore, 'RESTORE_REQUIRES_REAUTH', 'account restore must require re-authentication');

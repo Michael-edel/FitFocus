@@ -62,15 +62,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       `INSERT INTO family_members
        (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
        SELECT ?, ?, ?, 'member', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
-       WHERE (SELECT COUNT(*) FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1) < 5`
-    ).bind(uuid(), inv.family_id, user.sub, now, now, inv.family_id).run();
+       WHERE (SELECT COUNT(*) FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1) < 5
+         AND NOT EXISTS (
+           SELECT 1
+           FROM family_members fm
+           JOIN families f ON f.id = fm.family_id
+           WHERE fm.user_id = ?
+             AND fm.status = 'active'
+             AND fm.is_active = 1
+             AND f.is_active = 1
+         )`
+    ).bind(uuid(), inv.family_id, user.sub, now, now, inv.family_id, user.sub).run();
 
     if (changedRows(memberInsert) !== 1) {
       await db
         .prepare("UPDATE family_invites SET used_by_user_id = NULL, used_at = NULL WHERE code = ? AND used_by_user_id = ?")
         .bind(code, user.sub)
         .run();
-      throw new Error("FAMILY_LIMIT");
+      const latestFamily = await getActiveFamilyForUser(db, user.sub);
+      if (latestFamily) return json({ ok: true, familyId: latestFamily.id, alreadyMember: true }, 200);
+      throw new Error("FAMILY_JOIN_CONFLICT");
     }
 
     return json({ ok: true, familyId: inv.family_id }, 200);
