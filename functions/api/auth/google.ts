@@ -96,7 +96,7 @@ await env.DB.prepare(
 
 // Optional: auto-promote admins/supports by email (enterprise convenience)
 const adminEmails = String((env as any).ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-if (adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
+if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
   await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
 }
 // Create server-tracked session (enterprise layer)

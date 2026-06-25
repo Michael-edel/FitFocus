@@ -113,6 +113,11 @@ assertIncludes(
 );
 assertIncludes(
   legacyGoogleAuth,
+  'if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase()))',
+  'legacy Google auth endpoint must only auto-promote admins with verified emails',
+);
+assertIncludes(
+  legacyGoogleAuth,
   'await safeResponseJson(r)',
   'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
 );
