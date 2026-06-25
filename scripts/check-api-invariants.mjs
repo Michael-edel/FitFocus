@@ -86,6 +86,13 @@ assertIncludes(
   'google OAuth callback must tolerate non-JSON tokeninfo failures',
 );
 
+const googleOAuthStart = read('functions/api/auth/google/start.ts');
+assertIncludes(
+  googleOAuthStart,
+  'import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth"',
+  'google OAuth start must use shared OAuth state helpers',
+);
+
 const appleOAuthCallback = read('functions/api/auth/apple/callback.ts');
 assertIncludes(
   appleOAuthCallback,
