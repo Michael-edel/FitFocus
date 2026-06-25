@@ -2,6 +2,7 @@ import { json, requireUser } from "../_lib/auth";
 import { nowMs, requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import { logAdminEvent } from "../_lib/admin_audit";
 import {
   attachmentResponseUrl,
   fileToAttachment,
@@ -224,6 +225,11 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const adminNote = body.admin_note == null ? undefined : String(body.admin_note || "").trim();
   const replyMessage = String(body.message || "").trim();
   const assignMode = String(body.assign_to || "").trim();
+  if (body.status != null && !status) return json({ error: "BAD_STATUS", message: "Invalid ticket status" }, 400);
+  if (body.priority != null && !priority) return json({ error: "BAD_PRIORITY", message: "Invalid ticket priority" }, 400);
+  if (body.assign_to != null && assignMode && assignMode !== "me" && assignMode !== "none") {
+    return json({ error: "BAD_ASSIGN_TO", message: "Invalid assignee mode" }, 400);
+  }
   const now = nowMs();
 
   const nextStatus = status || (replyMessage ? "waiting_user" : current.status || "new");
@@ -268,6 +274,19 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     replyMessage ? user.sub : current.last_reply_by || null,
     id,
   ).run();
+
+  await logAdminEvent(db, {
+    adminUserId: user.sub,
+    action: "support_ticket_update",
+    targetUserId: current.user_id || null,
+    meta: {
+      ticket_id: id,
+      status: nextStatus,
+      priority: nextPriority,
+      assigned_admin_user_id: assignedAdminUserId,
+      replied: Boolean(replyMessage),
+    },
+  });
 
   const ticket = await ticketRowForAdmin(db, id);
   const messages = await loadMessageThread(db, id);
