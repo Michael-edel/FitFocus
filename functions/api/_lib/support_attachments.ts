@@ -16,6 +16,7 @@ export type SupportAttachmentBucket = {
     }
   ): Promise<unknown>;
   get(key: string): Promise<SupportAttachmentObject | null>;
+  delete?(key: string | string[]): Promise<unknown>;
 };
 
 export type SupportAttachmentRecord = {
@@ -65,8 +66,9 @@ export function sanitizeFileName(name: string) {
   return trimmed.slice(0, 80) || "attachment";
 }
 
-export function buildAttachmentRoute(ticketId: string, index: number) {
-  return `/api/support/attachment?id=${encodeURIComponent(ticketId)}&index=${index}`;
+export function buildAttachmentRoute(ticketId: string, index: number, messageId?: string) {
+  const messageParam = messageId ? `&messageId=${encodeURIComponent(messageId)}` : "";
+  return `/api/support/attachment?id=${encodeURIComponent(ticketId)}${messageParam}&index=${index}`;
 }
 
 export function parseAttachmentsJson(value: unknown): SupportAttachmentRecord[] {
@@ -100,6 +102,7 @@ export async function fileToAttachment(
   options: {
     bucket?: SupportAttachmentBucket;
     ticketId?: string;
+    messageId?: string;
     index?: number;
   } = {}
 ): Promise<SupportAttachmentRecord> {
@@ -115,7 +118,10 @@ export async function fileToAttachment(
   const name = file.name || "attachment";
 
   if (options.bucket && options.ticketId && typeof options.index === "number") {
-    const storageKey = `support/${options.ticketId}/${String(options.index).padStart(2, "0")}-${baseName}`;
+    const storageKeyPrefix = options.messageId
+      ? `support/${options.ticketId}/messages/${options.messageId}`
+      : `support/${options.ticketId}`;
+    const storageKey = `${storageKeyPrefix}/${String(options.index).padStart(2, "0")}-${baseName}`;
     try {
       const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       await options.bucket.put(storageKey, body, {
@@ -125,6 +131,7 @@ export async function fileToAttachment(
           kind,
           size: String(file.size),
           ticketId: options.ticketId,
+          ...(options.messageId ? { messageId: options.messageId } : {}),
           index: String(options.index),
         },
       });
@@ -149,8 +156,8 @@ export async function fileToAttachment(
   };
 }
 
-export function attachmentResponseUrl(ticketId: string, index: number) {
-  return buildAttachmentRoute(ticketId, index);
+export function attachmentResponseUrl(ticketId: string, index: number, messageId?: string) {
+  return buildAttachmentRoute(ticketId, index, messageId);
 }
 
 export function inlineAttachmentBytes(attachment: SupportAttachmentRecord) {

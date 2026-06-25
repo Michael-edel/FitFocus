@@ -1,19 +1,29 @@
 import { cleanupOldAiRateLimitBuckets } from "./ai_limits";
 import { hardDeleteAccount } from "./account_delete";
 import { logAdminEvent } from "./admin_audit";
+import type { SupportAttachmentBucket } from "./support_attachments";
 
 export interface CleanupDeletedAccountsOptions {
   limit?: number;
   actorUserId?: string;
   logAction?: string;
+  supportAttachments?: SupportAttachmentBucket;
 }
 
 export interface CleanupDeletedAccountsResult {
   ok: true;
   found: number;
   deleted: number;
+  failed: number;
+  failures: Array<{ id: string; error: string }>;
   oldAiRateBucketsDeleted: number;
   limit: number;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message?: unknown }).message || "ERROR");
+  return String(error || "ERROR");
 }
 
 export async function cleanupDeletedAccounts(
@@ -28,12 +38,14 @@ export async function cleanupDeletedAccounts(
 
   const ids = (rows.results || []).map((row) => String(row.id)).filter(Boolean);
   let deleted = 0;
+  const failures: Array<{ id: string; error: string }> = [];
 
   for (const id of ids) {
     try {
-      await hardDeleteAccount(db, id);
+      await hardDeleteAccount(db, id, { supportAttachments: options.supportAttachments });
       deleted++;
-    } catch {
+    } catch (error) {
+      failures.push({ id, error: errorMessage(error) });
       // Continue the batch; one broken user must not block GDPR cleanup for others.
     }
   }
@@ -49,11 +61,11 @@ export async function cleanupDeletedAccounts(
     await logAdminEvent(db, {
       adminUserId: options.actorUserId || "system:cleanup",
       action: options.logAction || "cleanup_deleted",
-      meta: { found: ids.length, deleted, limit, oldAiRateBucketsDeleted },
+      meta: { found: ids.length, deleted, failed: failures.length, failures: failures.slice(0, 20), limit, oldAiRateBucketsDeleted },
     });
   } catch {
     // Audit logging is useful, but cleanup must still return a deterministic result.
   }
 
-  return { ok: true, found: ids.length, deleted, oldAiRateBucketsDeleted, limit };
+  return { ok: true, found: ids.length, deleted, failed: failures.length, failures: failures.slice(0, 20), oldAiRateBucketsDeleted, limit };
 }

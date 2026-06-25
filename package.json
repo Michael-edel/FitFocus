@@ -7,10 +7,15 @@
     "dev": "vite",
     "predev": "node scripts/generate-build-info.mjs",
     "build": "vite build",
+    "test:unit": "vitest run",
     "check:admin-guards": "node scripts/check-admin-guards.mjs",
     "prebuild": "node scripts/generate-build-info.mjs && node scripts/check-admin-guards.mjs",
     "pretypecheck": "node scripts/generate-build-info.mjs && node scripts/check-admin-guards.mjs",
     "generate:build-info": "node scripts/generate-build-info.mjs",
+    "check:api-invariants": "node scripts/check-api-invariants.mjs",
+    "check:auth-scope": "node scripts/check-auth-scope.mjs",
+    "check:schema": "python scripts/check-schema-parity.py",
+    "check:privacy": "python scripts/check-privacy-coverage.py",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "migrate:local": "node -e \"console.log('Migrations run in browser on startup via storage/migrations.ts')\""
@@ -29,15 +34,16 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.21",
-    "vite-plugin-pwa": "^0.21.2"
+    "vite": "^6.4.3",
+    "vite-plugin-pwa": "^0.21.2",
+    "vitest": "^4.1.9"
   },
   "overrides": {
-    "dompurify": "^3.4.10"
+    "dompurify": "^3.4.11"
   }
 }

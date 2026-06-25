@@ -2,7 +2,7 @@
 // Accepts wearable snapshots from an iOS bridge (Apple Health / HealthKit)
 // or other providers and writes the normalized data into the user profile.
 
-import { requireUser, json } from "../_lib/auth";
+import { requireMobileUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
 import { loadActivePlan } from "../_lib/plans";
@@ -61,7 +61,7 @@ function pushMeasurementHistory(
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireMobileUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }

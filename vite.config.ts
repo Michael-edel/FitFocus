@@ -123,7 +123,12 @@ export default defineConfig(({ mode }) => {
             if (id.includes('lucide-react')) return 'icons-vendor';
             if (id.includes('recharts')) return 'charts-vendor';
             if (id.includes('@google/genai')) return 'google-ai-vendor';
-            if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf-vendor';
+            if (id.includes('html2canvas')) return 'html2canvas-vendor';
+            if (id.includes('canvg')) return 'canvg-vendor';
+            if (id.includes('dompurify')) return 'dompurify-vendor';
+            if (id.includes('fflate')) return 'fflate-vendor';
+            if (id.includes('jspdf-autotable')) return 'pdf-table-vendor';
+            if (id.includes('jspdf')) return 'pdf-vendor';
             if (id.includes('heic2any')) return 'heic-vendor';
             if (id.includes('stripe')) return 'stripe-vendor';
             if (id.includes('clsx')) return 'utils-vendor';

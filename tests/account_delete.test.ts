@@ -1,0 +1,111 @@
+import { describe, expect, it, vi } from 'vitest';
+import { deleteUserAccountAndAllData, hardDeleteAccount } from '../functions/api/_lib/account_delete';
+
+type PreparedStatement = {
+  sql: string;
+  binds: unknown[];
+  bind: (...args: unknown[]) => PreparedStatement;
+  first: () => Promise<unknown>;
+  all: () => Promise<{ results: unknown[] }>;
+  run: () => Promise<{ success: boolean; meta: { changes: number } }>;
+};
+
+function makeDb(options: {
+  supportRows?: Array<{ attachments_json?: string | null }>;
+  ownedFamily?: { id: string } | null;
+  batchReject?: Error;
+} = {}) {
+  const prepared: PreparedStatement[] = [];
+  const batchedSql: string[] = [];
+
+  const db = {
+    prepared,
+    batchedSql,
+    prepare(sql: string): PreparedStatement {
+      const stmt: PreparedStatement = {
+        sql,
+        binds: [],
+        bind(...args: unknown[]) {
+          this.binds = args;
+          return this;
+        },
+        async first() {
+          if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) return null;
+          if (sql.includes("FROM families WHERE owner_user_id = ? AND is_active = 1")) return null;
+          if (sql.includes("FROM families WHERE owner_user_id = ? LIMIT 1")) return options.ownedFamily ?? null;
+          return null;
+        },
+        async all() {
+          if (sql.includes('FROM support_feedback')) return { results: options.supportRows ?? [] };
+          return { results: [] };
+        },
+        async run() {
+          return { success: true, meta: { changes: 1 } };
+        },
+      };
+      prepared.push(stmt);
+      return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      batchedSql.push(...stmts.map((stmt) => stmt.sql));
+      if (options.batchReject) throw options.batchReject;
+      return stmts.map(() => ({ success: true }));
+    },
+  };
+
+  return db;
+}
+
+describe('account deletion', () => {
+  it('fails closed when support attachments are stored in R2 but no bucket delete is available', async () => {
+    const db = makeDb({
+      supportRows: [
+        { attachments_json: JSON.stringify([{ name: 'a.png', mime: 'image/png', size: 1, storage_key: 'support/t/00-a.png' }]) },
+      ],
+    });
+
+    const result = await deleteUserAccountAndAllData(db as any, 'user-1');
+
+    expect(result).toEqual({ ok: false, message: 'SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE' });
+    expect(db.batchedSql).toEqual([]);
+  });
+
+  it('deletes support storage objects before deleting D1 rows', async () => {
+    const bucket = {
+      put: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+      delete: vi.fn(async () => undefined),
+    };
+    const db = makeDb({
+      supportRows: [
+        { attachments_json: JSON.stringify([{ name: 'a.png', mime: 'image/png', size: 1, storage_key: 'support/t/00-a.png' }]) },
+        { attachments_json: JSON.stringify([{ name: 'b.png', mime: 'image/png', size: 1, storage_key: 'support/t/01-b.png' }]) },
+      ],
+    });
+
+    const result = await deleteUserAccountAndAllData(db as any, 'user-1', false, undefined, { supportAttachments: bucket });
+
+    expect(result.ok).toBe(true);
+    expect(bucket.delete).toHaveBeenCalledWith(['support/t/00-a.png', 'support/t/01-b.png']);
+    expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM support_feedback WHERE user_id = ?'))).toBe(true);
+  });
+
+  it('unassigns admin-owned tickets instead of deleting tickets assigned to the deleted admin', async () => {
+    const db = makeDb();
+
+    await deleteUserAccountAndAllData(db as any, 'admin-1');
+
+    expect(db.batchedSql).toContain('UPDATE support_feedback SET assigned_admin_user_id = NULL, updated_at = ? WHERE assigned_admin_user_id = ?');
+    expect(db.batchedSql).not.toContain('DELETE FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ?');
+  });
+
+  it('hardDeleteAccount throws when deleteUserAccountAndAllData returns ok=false', async () => {
+    const db = makeDb({
+      supportRows: [
+        { attachments_json: JSON.stringify([{ name: 'a.png', mime: 'image/png', size: 1, storage_key: 'support/t/00-a.png' }]) },
+      ],
+    });
+
+    await expect(hardDeleteAccount(db as any, 'user-1')).rejects.toThrow('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
+  });
+});

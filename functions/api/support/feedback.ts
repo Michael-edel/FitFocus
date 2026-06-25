@@ -59,7 +59,7 @@ function parseSteps(value: string) {
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
     ...attachment,
-    data_url: attachment.data_url || (scope.messageId ? attachment.data_url : attachmentResponseUrl(scope.ticketId, index)),
+    data_url: attachment.data_url || attachmentResponseUrl(scope.ticketId, index, scope.messageId),
   }));
 }
 
