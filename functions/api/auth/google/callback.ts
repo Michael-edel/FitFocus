@@ -1,7 +1,7 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 import { consumeInviteCode } from "../../_lib/invites";
-import { OAUTH_STATE_TTL_MS, verifyState } from "../_oauth";
+import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -12,55 +12,6 @@ function json(body: any, status = 200, headers?: Headers) {
 
 async function safeResponseJson(response: Response): Promise<any> {
   return response.json().catch(() => ({}));
-}
-
-function b64urlEncode(bytes: Uint8Array) {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function b64urlDecodeToBytes(s: string) {
-  const pad = s.length % 4 ? "=".repeat(4 - (s.length % 4)) : "";
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function cookieSerialize(name: string, value: string, opts: { httpOnly?: boolean; secure?: boolean; sameSite?: "Lax" | "Strict" | "None"; path?: string; maxAge?: number } = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`];
-  if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
-  parts.push(`Path=${opts.path || "/"}`);
-  if (opts.httpOnly) parts.push("HttpOnly");
-  if (opts.secure) parts.push("Secure");
-  if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`);
-  return parts.join("; ");
-}
-
-async function hmacSha256Base64Url(secret: string, data: string) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
-  return b64urlEncode(new Uint8Array(sig));
-}
-
-async function signSessionJwt(payload: any, secret: string, ttlSeconds: number) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const fullPayload = { ...payload, exp: now + ttlSeconds };
-  const enc = new TextEncoder();
-  const part1 = b64urlEncode(enc.encode(JSON.stringify(header)));
-  const part2 = b64urlEncode(enc.encode(JSON.stringify(fullPayload)));
-  const signingInput = `${part1}.${part2}`;
-  const sig = await hmacSha256Base64Url(secret, signingInput);
-  return `${signingInput}.${sig}`;
-}
-
-function getBaseUrl(req: Request) {
-  const u = new URL(req.url);
-  return `${u.protocol}//${u.host}`;
 }
 
 export const onRequestGet: PagesFunction<{
@@ -234,14 +185,3 @@ export const onRequestGet: PagesFunction<{
     return json({ error: "Server error", details: String(e?.message || e) }, 500);
   }
 };
-
-function normalizeAppUrl(value?: string): string | null {
-  if (!value) return null;
-  try {
-    const u = new URL(value);
-    if (!/^https?:$/.test(u.protocol)) return null;
-    return `${u.protocol}//${u.host}`;
-  } catch {
-    return null;
-  }
-}
