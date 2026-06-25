@@ -618,13 +618,18 @@ async function loadUserProfile(env: any, userId: string): Promise<any> {
   }
 }
 
-function calcTargetCalories(profile: any): number {
+export function calcTargetCalories(profile: any): number {
   // Очень грубая оценка: если есть цель и активность — подстраиваем.
   // Это fallback, не медицинская рекомендация.
-  const weight = Number(profile?.weight_kg || profile?.weightKg || 70);
+  const weight = Number(
+    profile?.weight ??
+    profile?.weight_kg ??
+    profile?.weightKg ??
+    70
+  );
   const base = Math.round(weight * 30); // ~ поддержание
   const goal = String(profile?.goal || profile?.goalType || "loss");
-  const activity = String(profile?.activity_level || profile?.activityLevel || "medium");
+  const activity = String(profile?.activityLevel || profile?.activity_level || "medium");
   let adj = 0;
   if (goal === "loss") adj -= 350;
   else if (goal === "gain") adj += 250;
@@ -667,11 +672,11 @@ function buildFallbackWeeklyMenu(profile: any) {
   };
 }
 
-function buildFallbackAdvice(profile: any) {
+export function buildFallbackAdvice(profile: any) {
   const target = calcTargetCalories(profile);
-  const w = profile?.weight_kg || profile?.weightKg;
-  const tw = profile?.target_weight_kg || profile?.targetWeightKg;
-  const act = profile?.activity_level || profile?.activityLevel;
+  const w = profile?.weight ?? profile?.weight_kg ?? profile?.weightKg;
+  const tw = profile?.targetWeight ?? profile?.target_weight_kg ?? profile?.targetWeightKg;
+  const act = profile?.activityLevel ?? profile?.activity_level;
   return {
     fallback: true,
     reason: "AI temporarily unavailable",

@@ -286,5 +286,34 @@ for (const legacyNeedle of [
   }
 }
 
+const aiRoute = read('functions/api/ai.ts');
+assertIncludes(
+  aiRoute,
+  'profile?.weight ??',
+  'AI fallback must prefer canonical weight profile fields',
+);
+assertIncludes(
+  aiRoute,
+  'profile?.targetWeight ??',
+  'AI fallback must prefer canonical targetWeight profile fields',
+);
+assertIncludes(
+  aiRoute,
+  'profile?.activityLevel ??',
+  'AI fallback must prefer canonical activityLevel profile fields',
+);
+
+const billingCheckout = read('functions/api/billing/checkout.ts');
+assertIncludes(
+  billingCheckout,
+  'resolveCheckoutPlanPrice',
+  'billing checkout must resolve plans through a shared helper',
+);
+assertIncludes(
+  billingCheckout,
+  'PRICE_PRO_YEARLY',
+  'billing checkout must support yearly pro pricing',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
