@@ -343,5 +343,21 @@ assertIncludes(
   'family menu generator must reject malformed weekStart values',
 );
 
+const weeklyMenuItems = read('functions/api/weekly_menu/items.ts');
+assertIncludes(
+  weeklyMenuItems,
+  'await db.batch(statements);',
+  'weekly menu items save must write through a single batch',
+);
+assertIncludes(
+  weeklyMenuItems,
+  'const statements = [',
+  'weekly menu items save must stage statements before replacing rows',
+);
+if (weeklyMenuItems.includes('DELETE FROM weekly_menu_items') && weeklyMenuItems.includes('.run();')) {
+  console.error('weekly menu items save must not run delete/insert statements separately.');
+  process.exitCode = 1;
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
