@@ -17,6 +17,23 @@ function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: s
   }));
 }
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
+async function deleteStoredAttachments(
+  bucket: SupportAttachmentBucket | undefined,
+  attachments: SupportAttachmentRecord[],
+) {
+  const keys = attachments
+    .map((attachment) => attachment.storage_key)
+    .filter((key): key is string => Boolean(key));
+  if (keys.length === 0 || !bucket?.delete) return;
+  try {
+    await bucket.delete(keys);
+  } catch {}
+}
+
 async function loadMessages(db: D1Database, ticketId: string) {
   const { results } = await db.prepare(
     `SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
@@ -30,31 +47,6 @@ async function loadMessages(db: D1Database, ticketId: string) {
     attachment_count: Number(row.attachment_count || 0),
     attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId, messageId: row.id }),
   }));
-}
-
-async function appendMessage(
-  db: D1Database,
-  id: string,
-  ticketId: string,
-  userId: string,
-  message: string,
-  attachments: SupportAttachmentRecord[],
-) {
-  const createdAt = nowMs();
-  await db.prepare(
-    `INSERT INTO support_feedback_messages (
-      id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
-    ) VALUES (?, ?, ?, 'user', ?, ?, ?, ?)`
-  ).bind(
-    id,
-    ticketId,
-    userId,
-    message.trim(),
-    attachments.length,
-    attachments.length ? JSON.stringify(attachments) : null,
-    createdAt,
-  ).run();
-  return createdAt;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -154,12 +146,52 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
   }
 
-  const createdAt = await appendMessage(db, messageId, ticketId, user.sub, message, attachments);
-  await db.prepare(
+  const createdAt = nowMs();
+  const statements: D1PreparedStatement[] = [
+    db.prepare(
+      `INSERT INTO support_feedback_messages (
+        id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
+      )
+       SELECT ?, ?, ?, 'user', ?, ?, ?, ?
+       WHERE EXISTS (
+         SELECT 1
+         FROM support_feedback
+         WHERE id = ?
+           AND user_id = ?
+           AND status != 'closed'
+       )`
+    ).bind(
+      messageId,
+      ticketId,
+      user.sub,
+      message.trim(),
+      attachments.length,
+      attachments.length ? JSON.stringify(attachments) : null,
+      createdAt,
+      ticketId,
+      user.sub,
+    ),
+    db.prepare(
     `UPDATE support_feedback
      SET updated_at = ?, status = ?, last_reply_at = ?, last_reply_by = ?
-     WHERE id = ?`
-  ).bind(createdAt, "new", createdAt, user.sub, ticketId).run();
+     WHERE id = ? AND user_id = ? AND status != 'closed'`
+    ).bind(createdAt, "new", createdAt, user.sub, ticketId, user.sub),
+  ];
+
+  const writeResults = await db.batch(statements);
+  const messageResult = writeResults[0];
+  const updateResult = writeResults[1];
+  if (changedRows(messageResult) === 0 || changedRows(updateResult) === 0) {
+    await deleteStoredAttachments(env.SUPPORT_ATTACHMENTS, attachments);
+    const latest = await db.prepare(
+      `SELECT id, status
+       FROM support_feedback
+       WHERE id = ? AND user_id = ?
+       LIMIT 1`
+    ).bind(ticketId, user.sub).first<any>();
+    if (latest?.status === "closed") return json({ error: "BAD_REQUEST", message: "ticket closed" }, 400);
+    return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+  }
 
   const refreshed = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(ticketId).first<any>();
   return json({
