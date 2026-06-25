@@ -79,13 +79,13 @@ function makeDb(options: { insertChanges?: number[] } = {}) {
   };
 }
 
-async function postInvite(db: ReturnType<typeof makeDb>) {
+async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { ttlHours: 24 }) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   return onRequestPost({
     request: new Request('https://fitfocus.test/api/family/invite', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ttlHours: 24 }),
+      body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
     params: {},
@@ -107,6 +107,20 @@ describe('/api/family/invite', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({ code: 'BBBB2222' });
     expect(db.runs.filter((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))).toHaveLength(2);
+  });
+
+  it('falls back invalid ttlHours before writing expires_at', async () => {
+    randomCode.mockReset();
+    randomCode.mockReturnValue('AAAA1111');
+
+    const db = makeDb();
+    const response = await postInvite(db, { ttlHours: 'abc' });
+
+    expect(response.status).toBe(201);
+    const body = await response.json() as any;
+    expect(Number.isFinite(body.expiresAt)).toBe(true);
+    const insert = db.runs.find((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'));
+    expect(Number.isFinite(insert?.binds.at(-1))).toBe(true);
   });
 
   it('returns 409 when invite generation keeps colliding', async () => {

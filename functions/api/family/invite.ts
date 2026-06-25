@@ -11,6 +11,12 @@ function changedRows(result: any): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
+function normalizeTtlHours(value: unknown): number {
+  const parsedTtlHours = Number(value || 72);
+  const ttlHours = Number.isFinite(parsedTtlHours) ? parsedTtlHours : 72;
+  return Math.max(1, Math.min(24 * 14, ttlHours));
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -21,9 +27,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await requireFamilyPlan(db, user.sub);
 
     const body = await request.json().catch(() => ({}));
-    const ttlHours = Number(body?.ttlHours || 72);
+    const ttlHours = normalizeTtlHours(body?.ttlHours);
     const now = Math.floor(nowMs() / 1000);
-    const expires = now + Math.max(1, Math.min(24 * 14, ttlHours)) * 3600;
+    const expires = now + ttlHours * 3600;
 
     let code = "";
     let inserted = false;

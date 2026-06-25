@@ -577,6 +577,11 @@ assertIncludes(
 const familyInvite = read('functions/api/family/invite.ts');
 assertIncludes(
   familyInvite,
+  'Number.isFinite(parsedTtlHours) ? parsedTtlHours : 72',
+  'family invite TTL parsing must reject NaN before writing expires_at',
+);
+assertIncludes(
+  familyInvite,
   'INSERT OR IGNORE INTO family_invites',
   'family invite creation must tolerate code collisions during insert',
 );
