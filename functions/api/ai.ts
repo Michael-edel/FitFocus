@@ -35,6 +35,17 @@ type GeminiContent = {
   parts: GeminiPart[];
 };
 
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const ALLOWED_GEMINI_MODELS = new Set([
+  DEFAULT_GEMINI_MODEL,
+  "gemini-2.5-pro",
+]);
+
+export function resolveGeminiModel(value: unknown): string {
+  const model = String(value || "").trim();
+  return ALLOWED_GEMINI_MODELS.has(model) ? model : DEFAULT_GEMINI_MODEL;
+}
+
 function b64urlEncode(bytes: Uint8Array) {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
@@ -434,7 +445,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
   }
 
-  const model = body?.model || "gemini-2.5-flash";
+  const model = resolveGeminiModel(body?.model);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const { feature: _drop, ...payload } = body ?? {};
