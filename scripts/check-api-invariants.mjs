@@ -342,6 +342,20 @@ assertIncludes(
   'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
   'family menu generator must reject malformed weekStart values',
 );
+assertIncludes(
+  familyMenuGenerate,
+  'await db.batch(statements);',
+  'family menu generator must write menu, portions, and shopping items through one batch',
+);
+assertIncludes(
+  familyMenuGenerate,
+  'DELETE FROM weekly_menu_items WHERE family_id=? AND week_start=?',
+  'family menu generator must clear stale family shopping rows before rebuilding them',
+);
+if (familyMenuGenerate.includes('UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?') && familyMenuGenerate.includes('.run();')) {
+  console.error('family menu generator must not execute the menu update as a separate write before related rows are ready.');
+  process.exitCode = 1;
+}
 
 const weeklyMenuItems = read('functions/api/weekly_menu/items.ts');
 assertIncludes(
