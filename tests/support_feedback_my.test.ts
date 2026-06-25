@@ -29,10 +29,19 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(captured: { messageAttachmentsJson?: string | null }) {
+function makeDb(
+  captured: { messageAttachmentsJson?: string | null },
+  options: {
+    messageInsertChanges?: number;
+    updateChanges?: number;
+    latestTicketAfterFailedWrite?: { id: string; status: string } | null;
+  } = {},
+) {
+  let ticketReadCount = 0;
   return {
     prepare(sql: string) {
       return {
+        sql,
         binds: [] as unknown[],
         bind(...args: unknown[]) {
           this.binds = args;
@@ -41,7 +50,13 @@ function makeDb(captured: { messageAttachmentsJson?: string | null }) {
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-1', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('FROM users')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('SELECT id, status')) return { id: 'ticket-1', status: 'new' };
+          if (sql.includes('SELECT id, status')) {
+            ticketReadCount += 1;
+            if (ticketReadCount > 1 && 'latestTicketAfterFailedWrite' in options) {
+              return options.latestTicketAfterFailedWrite;
+            }
+            return { id: 'ticket-1', status: 'new' };
+          }
           if (sql.includes('SELECT * FROM support_feedback')) return { id: 'ticket-1', attachments_json: null };
           return null;
         },
@@ -51,12 +66,21 @@ function makeDb(captured: { messageAttachmentsJson?: string | null }) {
           return { results: [] };
         },
         async run() {
-          if (sql.includes('INSERT INTO support_feedback_messages')) {
-            captured.messageAttachmentsJson = this.binds[5] as string | null;
-          }
           return { success: true, meta: { changes: 1 } };
         },
       };
+    },
+    async batch(stmts: Array<{ sql: string; binds: unknown[] }>) {
+      return stmts.map((stmt) => {
+        if (stmt.sql.includes('INSERT INTO support_feedback_messages')) {
+          captured.messageAttachmentsJson = stmt.binds[5] as string | null;
+          return { success: true, meta: { changes: options.messageInsertChanges ?? 1 } };
+        }
+        if (stmt.sql.includes('UPDATE support_feedback')) {
+          return { success: true, meta: { changes: options.updateChanges ?? 1 } };
+        }
+        return { success: true, meta: { changes: 1 } };
+      });
     },
   };
 }
@@ -101,5 +125,52 @@ describe('/api/support/feedback/my', () => {
     const records = JSON.parse(String(captured.messageAttachmentsJson));
     expect(records[0].storage_key).toBe(storedKey);
     expect(records[0].data_url).toBeUndefined();
+  });
+
+  it('removes stored R2 reply attachments when the conditional ticket write loses a race', async () => {
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const captured: { messageAttachmentsJson?: string | null } = {};
+    let storedKey = '';
+    let deletedKeys: string[] = [];
+    const bucket = {
+      async put(key: string) {
+        storedKey = key;
+      },
+      async get() {
+        return null;
+      },
+      async delete(keys: string | string[]) {
+        deletedKeys = Array.isArray(keys) ? keys : [keys];
+      },
+    };
+    const form = new FormData();
+    form.set('ticket_id', 'ticket-1');
+    form.set('message', 'reply');
+    form.append(
+      'attachments',
+      new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'reply.bin', { type: 'application/octet-stream' }),
+    );
+
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/support/feedback/my', {
+        method: 'POST',
+        headers: { Cookie: `ff_session=${token}` },
+        body: form,
+      }),
+      env: {
+        AUTH_JWT_SECRET: SECRET,
+        DB: makeDb(captured, { messageInsertChanges: 0, updateChanges: 0, latestTicketAfterFailedWrite: null }),
+        SUPPORT_ATTACHMENTS: bucket,
+      } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/support/feedback/my',
+    } as any);
+
+    expect(response.status).toBe(404);
+    expect(storedKey).toMatch(/^support\/ticket-1\/messages\/[^/]+\/00-reply\.bin$/);
+    expect(deletedKeys).toEqual([storedKey]);
   });
 });

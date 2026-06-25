@@ -111,6 +111,21 @@ assertIncludes(
   'user support thread must expose URLs for R2 message attachments',
 );
 assertIncludes(
+  userSupport,
+  'const writeResults = await db.batch(statements);',
+  'user support reply must write message and ticket update through one batch',
+);
+assertIncludes(
+  userSupport,
+  'deleteStoredAttachments(env.SUPPORT_ATTACHMENTS, attachments);',
+  'user support reply must remove stored R2 attachments when the guarded write fails',
+);
+assertIncludes(
+  userSupport,
+  "AND status != 'closed'",
+  'user support reply writes must stay conditional on an open ticket',
+);
+assertIncludes(
   adminSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
   'admin support thread must expose URLs for R2 message attachments',
