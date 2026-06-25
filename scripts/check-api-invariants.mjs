@@ -443,5 +443,17 @@ assertIncludes(
   'family member patch must only update active family member rows',
 );
 
+const familyInvite = read('functions/api/family/invite.ts');
+assertIncludes(
+  familyInvite,
+  'INSERT OR IGNORE INTO family_invites',
+  'family invite creation must tolerate code collisions during insert',
+);
+assertIncludes(
+  familyInvite,
+  'INVITE_GENERATION_FAILED',
+  'family invite creation must fail explicitly when unique code generation is exhausted',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
