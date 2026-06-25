@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanupDeletedAccounts } from '../functions/api/_lib/account_cleanup';
+import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from '../functions/api/_lib/account_cleanup';
 import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
 
 type PreparedStatement = {
@@ -68,6 +68,13 @@ function makeDb() {
 }
 
 describe('cleanupDeletedAccounts', () => {
+  it('normalizes optional request limits without skipping explicit zero', () => {
+    expect(normalizeCleanupRequestLimit({}, 50)).toBe(50);
+    expect(normalizeCleanupRequestLimit({ limit: 'abc' }, 50)).toBe(50);
+    expect(normalizeCleanupRequestLimit({ limit: 0 }, 50)).toBe(1);
+    expect(normalizeCleanupRequestLimit({ limit: 999 }, 50)).toBe(200);
+  });
+
   it('reports failed hard deletes instead of hiding them', async () => {
     const db = makeDb();
     const result = await cleanupDeletedAccounts(db as any, { limit: 10, actorUserId: 'system:test' });
@@ -147,5 +154,25 @@ describe('cleanupDeletedAccounts', () => {
     expect(response.status).toBe(500);
     const body = await response.json() as any;
     expect(body.limit).toBe(200);
+  });
+
+  it('normalizes an explicit scheduled request limit of zero to one', async () => {
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer cron-secret' },
+        body: JSON.stringify({ limit: 0 }),
+      }),
+      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/internal/cleanup_deleted',
+    } as any);
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as any;
+    expect(body.limit).toBe(1);
   });
 });

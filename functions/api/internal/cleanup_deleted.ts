@@ -1,7 +1,7 @@
 // POST /api/internal/cleanup_deleted
 // Machine endpoint for scheduled cleanup. Protected by CRON_SECRET bearer token.
 
-import { cleanupDeletedAccounts, normalizeCleanupLimit } from "../_lib/account_cleanup";
+import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from "../_lib/account_cleanup";
 import { json, readBearerToken } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
@@ -38,7 +38,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let limit = 200;
   try {
     const body = await request.json();
-    if (body?.limit) limit = normalizeCleanupLimit(body.limit, 200);
+    limit = normalizeCleanupRequestLimit(body, 200);
   } catch {}
 
   const db = requireDB(env);

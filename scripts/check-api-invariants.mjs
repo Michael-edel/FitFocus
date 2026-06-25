@@ -257,14 +257,14 @@ assertIncludes(
 const adminCleanupDeleted = read('functions/api/admin/cleanup_deleted.ts');
 assertIncludes(
   adminCleanupDeleted,
-  'normalizeCleanupLimit(body.limit, 50)',
+  'normalizeCleanupRequestLimit(body, 50)',
   'admin cleanup endpoint must parse invalid limits with the admin default',
 );
 
 const internalCleanupDeleted = read('functions/api/internal/cleanup_deleted.ts');
 assertIncludes(
   internalCleanupDeleted,
-  'normalizeCleanupLimit(body.limit, 200)',
+  'normalizeCleanupRequestLimit(body, 200)',
   'scheduled cleanup endpoint must parse invalid limits with the scheduled default',
 );
 assertIncludes(

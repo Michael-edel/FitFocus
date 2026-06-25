@@ -32,6 +32,11 @@ export function normalizeCleanupLimit(value: unknown, fallback: number): number 
   return Math.min(200, Math.max(1, base));
 }
 
+export function normalizeCleanupRequestLimit(body: unknown, fallback: number): number {
+  if (!body || typeof body !== "object" || !("limit" in body)) return fallback;
+  return normalizeCleanupLimit((body as { limit?: unknown }).limit, fallback);
+}
+
 export async function cleanupDeletedAccounts(
   db: D1Database,
   options: CleanupDeletedAccountsOptions = {},
