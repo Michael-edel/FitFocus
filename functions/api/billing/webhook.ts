@@ -9,6 +9,55 @@ type Env = {
   PRICE_FAMILY_MONTHLY?: string;
 };
 
+type SubscriptionLike = {
+  id?: string;
+  status?: string;
+  customer?: { toString(): string } | string | null;
+  current_period_end?: number | null;
+  metadata?: { ff_uid?: string | null } | null;
+  items?: { data?: Array<{ price?: { id?: string | null } | null }> } | null;
+};
+
+function planForSubscription(status: string, priceId: string | null | undefined, env: Pick<Env, "PRICE_PRO_MONTHLY" | "PRICE_PRO_YEARLY" | "PRICE_FAMILY_MONTHLY">) {
+  if (status !== "active" && status !== "trialing") return "free";
+  if (priceId === env.PRICE_PRO_MONTHLY || priceId === env.PRICE_PRO_YEARLY) return "pro";
+  if (priceId === env.PRICE_FAMILY_MONTHLY) return "family";
+  return null;
+}
+
+export async function applyStripeSubscriptionUpdate(db: D1Database, sub: SubscriptionLike, env: Pick<Env, "PRICE_PRO_MONTHLY" | "PRICE_PRO_YEARLY" | "PRICE_FAMILY_MONTHLY">) {
+  const uid = String(sub.metadata?.ff_uid || "").trim();
+  if (!uid) return { ok: false, reason: "MISSING_UID" };
+
+  const target = await db
+    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
+    .bind(uid)
+    .first<{ id: string }>();
+  if (!target?.id) return { ok: false, reason: "USER_NOT_FOUND" };
+
+  const status = String(sub.status || "unknown");
+  const priceId = sub.items?.data?.[0]?.price?.id || null;
+  const plan = planForSubscription(status, priceId, env);
+  if (!plan) return { ok: false, reason: "UNKNOWN_PRICE" };
+
+  const periodEnd = sub.current_period_end ? sub.current_period_end * 1000 : null;
+  await db.prepare(
+    `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+     ON CONFLICT(user_id) DO UPDATE SET plan=?2, status=?3, stripe_customer_id=?4, stripe_subscription_id=?5, current_period_end=?6, updated_at=?7`
+  ).bind(
+    uid,
+    plan,
+    status,
+    sub.customer?.toString() || null,
+    sub.id?.toString() || null,
+    periodEnd,
+    Date.now()
+  ).run();
+
+  return { ok: true, user_id: uid, plan, status };
+}
+
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     apiVersion: "2023-10-16"
@@ -28,35 +77,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   if (event.type === "customer.subscription.created" || 
       event.type === "customer.subscription.updated" || 
       event.type === "customer.subscription.deleted") {
-    
-    const sub = event.data.object;
-    const uid = sub.metadata?.ff_uid;
-
-    if (uid) {
-      const status = sub.status; // active, trialing, past_due, canceled
-      const periodEnd = sub.current_period_end ? sub.current_period_end * 1000 : null;
-      const priceId = sub.items?.data?.[0]?.price?.id;
-
-      let plan = "free";
-      if (status === "active" || status === "trialing") {
-        if (priceId === env.PRICE_PRO_MONTHLY || priceId === env.PRICE_PRO_YEARLY) plan = "pro";
-        if (priceId === env.PRICE_FAMILY_MONTHLY) plan = "family";
-      }
-
-      await env.DB.prepare(
-        `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-         ON CONFLICT(user_id) DO UPDATE SET plan=?2, status=?3, stripe_customer_id=?4, stripe_subscription_id=?5, current_period_end=?6, updated_at=?7`
-      ).bind(
-        uid, 
-        plan, 
-        status, 
-        sub.customer?.toString() || null, 
-        sub.id?.toString() || null, 
-        periodEnd, 
-        Date.now()
-      ).run();
-    }
+    await applyStripeSubscriptionUpdate(env.DB, event.data.object as SubscriptionLike, env);
   }
 
   return new Response("ok", { status: 200 });
