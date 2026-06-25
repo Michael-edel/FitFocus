@@ -139,6 +139,21 @@ assertIncludes(
   'changedRows(updateResult) === 0',
   'soft account delete must reject guarded updates that change no rows',
 );
+assertIncludes(
+  accountDeleteLib,
+  'guardHardDeleteAccount',
+  'hard account delete must claim the user with a last-admin guard before deleting external objects',
+);
+assertIncludes(
+  accountDeleteLib,
+  'await guardHardDeleteAccount(db, userId);',
+  'hard account delete must run the guarded user update before support attachment deletion',
+);
+assertIncludes(
+  accountDeleteLib,
+  'JOIN users u ON u.id = ur.user_id',
+  'hard account delete last-admin precheck must only apply to active admin users',
+);
 
 const adminUserRoles = read('functions/api/admin/user_roles.ts');
 assertIncludes(
