@@ -1,5 +1,6 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
+import { consumeInviteCode } from "../../_lib/invites";
 import { OAUTH_STATE_TTL_MS, verifyState } from "../_oauth";
 
 function json(body: any, status = 200, headers?: Headers) {
@@ -153,28 +154,9 @@ export const onRequestGet: PagesFunction<{
     }
 
     if (inviteCode) {
-      // idempotent: if already redeemed by this user, do not consume again
-      const existing = await env.DB.prepare(
-        "SELECT 1 as ok FROM invite_redemptions WHERE code = ? AND user_id = ? LIMIT 1"
-      ).bind(inviteCode, user.sub).first<any>();
-
-      if (!existing?.ok) {
-        const upd = await env.DB.prepare(
-          `UPDATE invite_codes
-           SET uses = uses + 1
-           WHERE code = ?
-             AND revoked = 0
-             AND (expires_at IS NULL OR expires_at > ?)
-             AND uses < COALESCE(max_uses, 1)`
-        ).bind(inviteCode, now).run();
-
-        if (!upd?.changes) {
-          return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
-        }
-
-        await env.DB.prepare(
-          "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
-        ).bind(inviteCode, user.sub, now).run();
+      const consumed = await consumeInviteCode(env.DB, inviteCode, user.sub, now);
+      if (!consumed.ok) {
+        return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
       }
     }
 

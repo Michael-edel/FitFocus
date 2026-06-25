@@ -54,6 +54,7 @@ for (const file of [
   'functions/api/auth/google.ts',
 ]) {
   const oauth = read(file);
+  assertIncludes(oauth, 'consumeInviteCode(', `${file} must consume beta invites through the shared helper`);
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
   assertOrder(
     oauth,
