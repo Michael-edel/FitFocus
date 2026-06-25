@@ -62,7 +62,10 @@ export async function requireFamilyPlan(db: D1Database, userId: string): Promise
 const DEFAULT_FREE_AI_DAILY_LIMIT = 3;
 
 function parseNonNegativeFiniteLimit(value: unknown, fallback: number): number {
-  const parsed = Number(value);
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+
+  const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
@@ -80,7 +83,7 @@ export function dailyAiLimitForPlan(
     FAMILY_AI_DAILY_LIMIT?: string;
   },
 ): number | null {
-  if (plan === "free") return parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || String(DEFAULT_FREE_AI_DAILY_LIMIT), DEFAULT_FREE_AI_DAILY_LIMIT);
+  if (plan === "free") return parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT, DEFAULT_FREE_AI_DAILY_LIMIT);
 
   const raw = plan === "family" ? env.FAMILY_AI_DAILY_LIMIT : env.PRO_AI_DAILY_LIMIT;
   return parseOptionalNonNegativeFiniteLimit(raw, DEFAULT_FREE_AI_DAILY_LIMIT);

@@ -213,7 +213,12 @@ assertOrder(
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
   plansLib,
-  'parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || String(DEFAULT_FREE_AI_DAILY_LIMIT), DEFAULT_FREE_AI_DAILY_LIMIT)',
+  'if (!raw) return fallback;',
+  'AI daily limit parser must treat blank env values as missing',
+);
+assertIncludes(
+  plansLib,
+  'parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT, DEFAULT_FREE_AI_DAILY_LIMIT)',
   'free AI daily limit must fall back to a finite default when env config is invalid',
 );
 assertIncludes(
