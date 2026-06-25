@@ -68,6 +68,7 @@ function incrementCounter(userId: string, key: string): number {
 }
 
 export function useAchievements({ userId, getContext }: UseAchievementsParams) {
+  const [enabled, setEnabled] = useState(true);
   const [catalog, setCatalog] = useState<AchievementDefinition[]>([]);
   const [unlocked, setUnlocked] = useState<UnlockedAchievement[]>([]);
   const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementDefinition[]>([]);
@@ -80,8 +81,10 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
 
   const loadAchievements = useCallback(async () => {
     if (!userId) {
+      setEnabled(true);
       setCatalog([]);
       setUnlocked([]);
+      setNewlyUnlocked([]);
       return;
     }
     setLoading(true);
@@ -89,10 +92,21 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
       const res = await fetch('/api/achievements', { credentials: 'include' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error?.message || data?.error || 'ACHIEVEMENTS_LOAD_FAILED');
+      const nextEnabled = data?.enabled !== false;
+      setEnabled(nextEnabled);
+      if (!nextEnabled) {
+        setCatalog([]);
+        setUnlocked([]);
+        setNewlyUnlocked([]);
+        return;
+      }
       setCatalog(Array.isArray(data.catalog) ? data.catalog : []);
       setUnlocked(Array.isArray(data.unlocked) ? data.unlocked : []);
     } catch {
+      setEnabled(true);
       setCatalog([]);
+      setUnlocked([]);
+      setNewlyUnlocked([]);
     } finally {
       setLoading(false);
     }
@@ -117,7 +131,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
   }, []);
 
   const runAchievementCheck = useCallback(async (reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
-    if (!userId) return [];
+    if (!userId || !enabled) return [];
     const baseContext = getContext?.() || {};
     const countersPatch: AchievementEvaluationContext = {};
     if (reason === 'ai_photo_success') {
@@ -146,6 +160,13 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return [];
+      if (data?.enabled === false) {
+        setEnabled(false);
+        setCatalog([]);
+        setUnlocked([]);
+        setNewlyUnlocked([]);
+        return [];
+      }
       const nextCatalog = Array.isArray(data.catalog) ? data.catalog : catalog;
       const nextUnlocked = Array.isArray(data.newlyUnlocked) ? data.newlyUnlocked : [];
       setCatalog(nextCatalog);
@@ -168,7 +189,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     } catch {
       return [];
     }
-  }, [catalog, getContext, userId]);
+  }, [catalog, enabled, getContext, userId]);
 
   const flushPendingChecks = useCallback(async () => {
     throttledTimerRef.current = null;
@@ -186,7 +207,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
   }, [runAchievementCheck]);
 
   const checkAchievements = useCallback((reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
-    if (!userId) return Promise.resolve([]);
+    if (!userId || !enabled) return Promise.resolve([]);
     const now = Date.now();
     const elapsed = now - lastCheckAtRef.current;
     if (elapsed >= CHECK_THROTTLE_MS && !throttledTimerRef.current) {
@@ -217,13 +238,14 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
         }, delay);
       }
     });
-  }, [flushPendingChecks, runAchievementCheck, userId]);
+  }, [enabled, flushPendingChecks, runAchievementCheck, userId]);
 
   const dismissAchievementToast = useCallback(() => {
     setNewlyUnlocked((prev) => prev.slice(1));
   }, []);
 
   return {
+    enabled,
     catalog,
     unlocked,
     unlockedKeys,

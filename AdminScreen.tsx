@@ -3,9 +3,21 @@ import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, Refres
 
 const DEFAULT_AI_INPUT_COST_PER_1M = "0.30";
 const DEFAULT_AI_OUTPUT_COST_PER_1M = "2.50";
+const REQUIRED_FEATURE_FLAGS: Flag[] = [
+  { key: "achievements_enabled", enabled: 1, rollout_percentage: 100 },
+];
 
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
 type SettingRow = { key: string; value: string };
+
+function mergeRequiredFlags(flags: Flag[]) {
+  const byKey = new Map<string, Flag>();
+  for (const flag of flags || []) byKey.set(String(flag.key), flag);
+  for (const flag of REQUIRED_FEATURE_FLAGS) {
+    if (!byKey.has(flag.key)) byKey.set(flag.key, flag);
+  }
+  return Array.from(byKey.values()).sort((a, b) => String(a.key).localeCompare(String(b.key), "ru"));
+}
 
 function getSettingValue(settings: SettingRow[], key: string, fallback = "") {
   const row = settings.find((s) => s.key === key);
@@ -529,7 +541,7 @@ export default function AdminScreen() {
       const ij = await i.json();
       setStats(sj?.stats || null);
       setAiCost(cj || null);
-      setFlags(Array.isArray(fj?.flags) ? fj.flags : []);
+      setFlags(mergeRequiredFlags(Array.isArray(fj?.flags) ? fj.flags : []));
       setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
       setSettings(Array.isArray(stj?.settings) ? stj.settings : []);
       setInvites(Array.isArray(ij?.invites) ? ij.invites : []);
