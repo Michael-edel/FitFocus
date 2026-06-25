@@ -91,6 +91,15 @@ function validateStateItems(userId: string, stateItems: { key: string; value: st
   return null;
 }
 
+function parseBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'string' && value.trim() === '') return 0;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsedBaseVersion = Number(value);
+  if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
+  return parsedBaseVersion;
+}
+
 async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
@@ -172,7 +181,8 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
   }
-  const baseVersion = Number((body as any).baseVersion ?? 0);
+  const baseVersion = parseBaseVersion((body as any).baseVersion);
+  if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const currentMeta = await loadProfileMeta(db, user.sub);
   if (!currentMeta.profile) {
     await migrateLegacyAccountByEmailShared(db, user as any);
@@ -242,7 +252,8 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (!currentMeta.profile) {
     await migrateLegacyAccountByEmailShared(db, user as any);
   }
-  const baseVersion = Number((body as any).baseVersion ?? 0);
+  const baseVersion = parseBaseVersion((body as any).baseVersion);
+  if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
   if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
     return conflictResponse(user as any, refreshedMeta.profile, refreshedMeta.version);

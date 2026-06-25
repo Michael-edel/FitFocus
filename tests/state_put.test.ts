@@ -131,4 +131,21 @@ describe('/api/state PUT', () => {
     expect(db.batches).toHaveLength(0);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
   });
+
+  it('rejects invalid baseVersion values before writes', async () => {
+    const db = makeDb();
+    const response = await putState(db, {
+      items: [
+        { key: 'fitfocus_data_user-1_food:2', value: '{"client":true}', baseVersion: 'abc' },
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'BAD_BASE_VERSION',
+      key: 'fitfocus_data_user-1_food:2',
+    });
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+  });
 });

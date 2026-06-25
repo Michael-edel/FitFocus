@@ -35,6 +35,15 @@ function conflictResponse(user: { sub: string; email?: string; name?: string; pi
   return json({ error: "PROFILE_CONFLICT", profile: serverProfile, version }, 409);
 }
 
+function parseBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === "string" && value.trim() === "") return 0;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const parsedBaseVersion = Number(value);
+  if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
+  return parsedBaseVersion;
+}
+
 function pushWeightHistory(profile: Record<string, unknown>, weight: number, date: string) {
   const history = Array.isArray(profile.weightHistory) ? [...profile.weightHistory] : [];
   return [{ date, weight }, ...history].slice(0, 120);
@@ -82,7 +91,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const currentMeta = await loadProfileMeta(db, user.sub);
-  const baseVersion = Number(payload.baseVersion ?? 0);
+  const baseVersion = parseBaseVersion(body.baseVersion);
+  if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
     return conflictResponse(user as any, currentMeta.profile, currentMeta.version);
   }
