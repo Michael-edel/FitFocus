@@ -53,8 +53,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if ((cnt?.c || 0) >= 5) throw new Error("FAMILY_LIMIT");
 
     const inviteUpdate = await db
-      .prepare("UPDATE family_invites SET used_by_user_id = ?, used_at = ? WHERE code = ? AND used_by_user_id IS NULL")
-      .bind(user.sub, now, code)
+      .prepare("UPDATE family_invites SET used_by_user_id = ?, used_at = ? WHERE code = ? AND used_by_user_id IS NULL AND expires_at >= ?")
+      .bind(user.sub, now, code, now)
       .run();
     if (changedRows(inviteUpdate) !== 1) throw new Error("INVITE_INVALID");
 

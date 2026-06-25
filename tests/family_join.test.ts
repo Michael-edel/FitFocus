@@ -29,7 +29,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { memberInsertChanges?: number; existingFamilyAfterConflict?: string | null } = {}) {
+function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: number; existingFamilyAfterConflict?: string | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   let familyAccessReadCount = 0;
   return {
@@ -69,7 +69,7 @@ function makeDb(options: { memberInsertChanges?: number; existingFamilyAfterConf
         async run() {
           runs.push({ sql, binds: this.binds });
           if (sql.includes('UPDATE family_invites SET used_by_user_id = ?, used_at = ?')) {
-            return { success: true, meta: { changes: 1 } };
+            return { success: true, meta: { changes: options.inviteClaimChanges ?? 1 } };
           }
           if (sql.includes('INSERT INTO family_members')) {
             return { success: true, meta: { changes: options.memberInsertChanges ?? 1 } };
@@ -108,7 +108,19 @@ describe('/api/family/join', () => {
     const body = await response.json() as any;
     expect(body.familyId).toBe('family-1');
     expect(db.runs.some((run) => run.sql.includes('WHERE code = ? AND used_by_user_id IS NULL'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
+  });
+
+  it('rejects the join if the invite expires before the atomic claim', async () => {
+    const db = makeDb({ inviteClaimChanges: 0 });
+    const response = await postJoin(db);
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as any;
+    expect(body.error.code).toBe('INVITE_INVALID');
+    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(false);
   });
 
   it('releases the invite when the conditional member insert fails on family limit', async () => {
