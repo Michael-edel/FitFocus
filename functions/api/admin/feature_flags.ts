@@ -8,6 +8,14 @@ import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
+const ALLOWED_FEATURE_FLAGS = new Set([
+  "achievements_enabled",
+  "ai_budget_guard_enabled",
+  "ai_emergency_fallback",
+  "ai_safe_mode",
+  "ai_fallback_mode",
+]);
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -31,11 +39,13 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const body = (await request.json().catch(() => null)) as any;
   const key = String(body?.key || "").trim();
   if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
+  if (!ALLOWED_FEATURE_FLAGS.has(key)) return json({ error: "BAD_FLAG", message: "Unknown feature flag" }, 400);
+  if (typeof body?.enabled !== "boolean") return json({ error: "BAD_ENABLED", message: "enabled must be boolean" }, 400);
 
-  const enabled = body?.enabled ? 1 : 0;
-  const rollout = Number.isFinite(body?.rollout_percentage)
-    ? Math.max(0, Math.min(100, Number(body.rollout_percentage)))
-    : 100;
+  const enabled = body.enabled ? 1 : 0;
+  const rawRollout = Number(body?.rollout_percentage ?? 100);
+  if (!Number.isFinite(rawRollout)) return json({ error: "BAD_ROLLOUT", message: "rollout_percentage must be a number" }, 400);
+  const rollout = Math.max(0, Math.min(100, Math.floor(rawRollout)));
 
   await db.prepare(
     "INSERT INTO feature_flags (key, enabled, rollout_percentage) VALUES (?, ?, ?) " +
