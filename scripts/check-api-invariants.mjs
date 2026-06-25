@@ -311,6 +311,21 @@ assertOrder(
   'await enforceAiRateControls',
   'AI endpoint must not mutate strict rate-limit buckets when Gemini API key is missing',
 );
+assertNotIncludes(
+  aiEndpoint,
+  'function getCookie',
+  'AI endpoint must not carry a local cookie parser after requireUser became mandatory',
+);
+assertNotIncludes(
+  aiEndpoint,
+  'async function verifySessionJwt',
+  'AI endpoint must not carry a local session verifier after requireUser became mandatory',
+);
+assertNotIncludes(
+  aiEndpoint,
+  'async function resolveIdentityKey',
+  'AI endpoint must not keep a stale IP/session fallback identity path',
+);
 
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
