@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost } from '../functions/api/family/menu';
+import { onRequestPost as onRequestGeneratePost } from '../functions/api/family/menu/generate';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -98,6 +99,22 @@ async function getMenu(url: string) {
   } as any);
 }
 
+async function generateMenu(url: string) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  return onRequestGeneratePost({
+    request: new Request(url, {
+      method: 'POST',
+      headers: { Cookie: `ff_session=${token}` },
+    }),
+    env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() } as any,
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+    functionPath: '/api/family/menu/generate',
+  } as any);
+}
+
 describe('/api/family/menu', () => {
   it('updates an existing weekly menu without deleting the row first', async () => {
     const db = makeDb({ existingMenuId: 'menu-1' });
@@ -126,6 +143,13 @@ describe('/api/family/menu', () => {
 
   it('rejects malformed week query in GET requests', async () => {
     const response = await getMenu('https://fitfocus.test/api/family/menu?week=bad-week');
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
+  });
+
+  it('rejects malformed week query in generate requests', async () => {
+    const response = await generateMenu('https://fitfocus.test/api/family/menu/generate?week=bad-week');
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
