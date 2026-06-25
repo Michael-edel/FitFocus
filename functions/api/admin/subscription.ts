@@ -5,7 +5,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventStatement } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -37,8 +37,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!target?.id) return json({ error: "NOT_FOUND", message: "user not found" }, 404);
 
   const now = Date.now();
+  let subscriptionStatement: D1PreparedStatement;
   if (plan === "free") {
-    await db.prepare(
+    subscriptionStatement = db.prepare(
       `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at)
        VALUES (?1, 'free', 'canceled', NULL, NULL, NULL, ?2)
        ON CONFLICT(user_id) DO UPDATE SET
@@ -48,9 +49,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          stripe_subscription_id = NULL,
          current_period_end = NULL,
          updated_at = excluded.updated_at`
-    ).bind(userId, now).run();
+    ).bind(userId, now);
   } else {
-    await db.prepare(
+    subscriptionStatement = db.prepare(
       `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at)
        VALUES (?1, ?2, 'active', NULL, NULL, NULL, ?3)
        ON CONFLICT(user_id) DO UPDATE SET
@@ -60,15 +61,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          stripe_subscription_id = NULL,
          current_period_end = NULL,
          updated_at = excluded.updated_at`
-    ).bind(userId, plan, now).run();
+    ).bind(userId, plan, now);
   }
 
-  await logAdminEvent(db, {
+  const auditStatement = buildAdminEventStatement(db, {
     adminUserId: user.sub,
     action: "subscription_update",
     targetUserId: userId,
     meta: { plan },
   });
+  await db.batch([subscriptionStatement, auditStatement]);
 
   return json({
     ok: true,

@@ -42,9 +42,11 @@ type PreparedStatement = {
 
 function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
 
   const db = {
     runs,
+    batches,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -77,6 +79,12 @@ function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {
         },
       };
       return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      const recorded = stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds }));
+      batches.push(recorded);
+      runs.push(...recorded);
+      return stmts.map(() => ({ success: true, meta: { changes: 1 } }));
     },
   };
 
@@ -176,8 +184,9 @@ describe('admin session and subscription mutations', () => {
     const res = await postSubscription(context(request, db));
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO subscriptions'))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
   });
 
   it('upserts a canceled free subscription row instead of silently skipping missing rows', async () => {
@@ -190,9 +199,10 @@ describe('admin session and subscription mutations', () => {
     const res = await postSubscription(context(request, db));
 
     expect(res.status).toBe(200);
-    const subscriptionWrite = db.runs.find((run) => run.sql.includes('INSERT INTO subscriptions'));
+    expect(db.batches).toHaveLength(1);
+    const subscriptionWrite = db.batches[0].find((run) => run.sql.includes('INSERT INTO subscriptions'));
     expect(subscriptionWrite).toBeTruthy();
     expect(subscriptionWrite?.sql).toContain("VALUES (?1, 'free', 'canceled'");
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
   });
 });
