@@ -26,11 +26,17 @@ function errorMessage(error: unknown): string {
   return String(error || "ERROR");
 }
 
+export function normalizeCleanupLimit(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  const base = Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+  return Math.min(200, Math.max(1, base));
+}
+
 export async function cleanupDeletedAccounts(
   db: D1Database,
   options: CleanupDeletedAccountsOptions = {},
 ): Promise<CleanupDeletedAccountsResult> {
-  const limit = Math.min(200, Math.max(1, Math.floor(Number(options.limit || 50))));
+  const limit = normalizeCleanupLimit(options.limit, 50);
   const rows = await db
     .prepare("SELECT id FROM users WHERE deletion_scheduled_at IS NOT NULL AND deletion_scheduled_at <= datetime('now') LIMIT ?")
     .bind(limit)
