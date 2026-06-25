@@ -5,7 +5,7 @@ import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
-import { isAllowedStateKey } from "./_lib/state_keys";
+import { isAllowedStateKey } from "./_lib/state_keyspace";
 import {
   migrateLegacyAccountByEmail as migrateLegacyAccountByEmailShared,
   withProtectedFields as withProtectedFieldsShared,
@@ -167,6 +167,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const patch = sanitizePatch(body);
   const stateItems = sanitizeStateItems((body as any).stateItems);
+  // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
@@ -229,6 +230,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
   const patch = sanitizePatch(body);
   const stateItems = sanitizeStateItems((body as any).stateItems);
+  // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
