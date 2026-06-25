@@ -215,5 +215,27 @@ assertIncludes(
   'admin settings endpoint must validate limit action values',
 );
 
+const supportFeedback = read('functions/api/support/feedback.ts');
+assertIncludes(
+  supportFeedback,
+  'BAD_STATUS',
+  'admin support patch must reject invalid ticket statuses',
+);
+assertIncludes(
+  supportFeedback,
+  'BAD_PRIORITY',
+  'admin support patch must reject invalid ticket priorities',
+);
+assertIncludes(
+  supportFeedback,
+  'BAD_ASSIGN_TO',
+  'admin support patch must reject invalid assignment modes',
+);
+assertIncludes(
+  supportFeedback,
+  'action: "support_ticket_update"',
+  'admin support patch must write an audit event',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
