@@ -389,5 +389,21 @@ if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includ
   process.exitCode = 1;
 }
 
+const stateRoute = read('functions/api/state.ts');
+assertIncludes(
+  stateRoute,
+  'await db.batch(statements);',
+  'state put must write kv items through a single batch after validation',
+);
+assertIncludes(
+  stateRoute,
+  'const currentByKey = new Map<string, { value: string; version: number }>();',
+  'state put must stage current versions before writing',
+);
+if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user.sub, it.key, String(it.value ?? ""), t, nextVersion)\n      .run();')) {
+  console.error('state put must not execute per-item kv writes before the whole request is conflict-checked.');
+  process.exitCode = 1;
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
