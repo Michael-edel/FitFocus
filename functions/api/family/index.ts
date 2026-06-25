@@ -8,6 +8,10 @@ import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -59,19 +63,34 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const familyId = uuid();
     const ts = Math.floor(nowMs() / 1000);
 
-    await db.batch([
-      db.prepare("INSERT INTO families (id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)").bind(
-        familyId,
-        name,
-        user.sub,
-        ts
-      ),
-      db.prepare(
-        `INSERT INTO family_members
-         (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
-         VALUES (?, ?, ?, 'owner', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)`
-      ).bind(uuid(), familyId, user.sub, ts, ts),
-    ]);
+    await db.prepare("INSERT INTO families (id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)")
+      .bind(familyId, name, user.sub, ts)
+      .run();
+
+    const memberInsert = await db.prepare(
+      `INSERT INTO family_members
+       (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
+       SELECT ?, ?, ?, 'owner', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM family_members fm
+         JOIN families f ON f.id = fm.family_id
+         WHERE fm.user_id = ?
+           AND fm.status = 'active'
+           AND fm.is_active = 1
+           AND f.is_active = 1
+       )`
+    ).bind(uuid(), familyId, user.sub, ts, ts, user.sub).run();
+
+    if (changedRows(memberInsert) === 0) {
+      await db.prepare("DELETE FROM families WHERE id = ?").bind(familyId).run();
+      const latestAccess = await getActiveFamilyForUser(db, user.sub);
+      const latestFamily = latestAccess
+        ? await db.prepare("SELECT id, name, owner_user_id, created_at FROM families WHERE id = ? LIMIT 1").bind(latestAccess.id).first<any>()
+        : null;
+      if (latestFamily) return json({ family: latestFamily, alreadyMember: true }, 200);
+      return json({ error: "FAMILY_CREATE_CONFLICT" }, 409);
+    }
 
     return json({ family: { id: familyId, name, owner_user_id: user.sub, created_at: ts } }, 201);
   } catch (e: any) {
