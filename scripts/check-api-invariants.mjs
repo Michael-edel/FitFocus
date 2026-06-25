@@ -237,5 +237,22 @@ assertIncludes(
   'admin support patch must write an audit event',
 );
 
+const billingWebhook = read('functions/api/billing/webhook.ts');
+assertIncludes(
+  billingWebhook,
+  'applyStripeSubscriptionUpdate',
+  'billing webhook must process subscription updates through a tested helper',
+);
+assertIncludes(
+  billingWebhook,
+  'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
+  'billing webhook must verify subscription metadata user exists and is active',
+);
+assertIncludes(
+  billingWebhook,
+  'reason: "UNKNOWN_PRICE"',
+  'billing webhook must skip active subscriptions with unknown prices',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
