@@ -49,6 +49,10 @@ function normalizePriority(priority: string) {
   }
 }
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 function parseSteps(value: string) {
   const lines = value
     .split(/\r?\n/)
@@ -246,11 +250,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
         : null;
   const closedAt = nextStatus === "closed" ? current.closed_at || now : null;
 
+  const statements: D1PreparedStatement[] = [];
   if (replyMessage) {
-    await appendSupportMessage(db, id, user.sub, "admin", replyMessage, []);
+    statements.push(db.prepare(
+      `INSERT INTO support_feedback_messages (
+        id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
+      )
+       SELECT ?, ?, ?, 'admin', ?, 0, NULL, ?
+       WHERE EXISTS (SELECT 1 FROM support_feedback WHERE id = ?)`
+    ).bind(uuid(), id, user.sub, replyMessage, now, id));
   }
 
-  await db.prepare(
+  statements.push(db.prepare(
     `UPDATE support_feedback
      SET updated_at = ?,
          status = ?,
@@ -273,7 +284,14 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     replyMessage ? now : current.last_reply_at || null,
     replyMessage ? user.sub : current.last_reply_by || null,
     id,
-  ).run();
+  ));
+
+  const writeResults = await db.batch(statements);
+  const messageResult = replyMessage ? writeResults[0] : null;
+  const updateResult = writeResults[writeResults.length - 1];
+  if (changedRows(updateResult) === 0 || (replyMessage && changedRows(messageResult) === 0)) {
+    return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+  }
 
   await logAdminEvent(db, {
     adminUserId: user.sub,
