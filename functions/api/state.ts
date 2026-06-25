@@ -5,7 +5,7 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
-import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keys";
+import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
