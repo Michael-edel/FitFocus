@@ -455,5 +455,22 @@ assertIncludes(
   'family invite creation must fail explicitly when unique code generation is exhausted',
 );
 
+const familyIndex = read('functions/api/family/index.ts');
+assertIncludes(
+  familyIndex,
+  'WHERE NOT EXISTS (',
+  'family creation must guard owner membership insertion against concurrent active family membership',
+);
+assertIncludes(
+  familyIndex,
+  'DELETE FROM families WHERE id = ?',
+  'family creation must clean up orphan family rows when membership insertion loses a race',
+);
+assertIncludes(
+  familyIndex,
+  'FAMILY_CREATE_CONFLICT',
+  'family creation must surface unresolved creation races explicitly',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
