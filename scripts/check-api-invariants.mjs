@@ -39,6 +39,11 @@ assertIncludes(
 );
 assertIncludes(
   familyJoin,
+  'AND expires_at >= ?',
+  'family join must include invite expiry in the atomic claim',
+);
+assertIncludes(
+  familyJoin,
   'WHERE (SELECT COUNT(*) FROM family_members WHERE family_id = ? AND status =',
   'family join must enforce member limit during insert',
 );
