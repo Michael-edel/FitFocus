@@ -98,15 +98,12 @@ Apple Sign In использует отдельный Services ID и callback:
 
 ## Cloudflare deploy
 
-Production deploy ожидает Cloudflare Pages + D1 + R2:
+Production deploy ожидает Cloudflare Pages + D1:
 
 1. Собрать frontend: `npm run build`.
 2. Применить D1 миграции: `npx wrangler d1 migrations apply fitfocus`.
-3. Создать R2 bucket для вложений поддержки: `npx wrangler r2 bucket create fitfocus-support-attachments`.
-4. Проверить bindings в `wrangler.toml`:
-   - `DB` должен указывать на D1 database `fitfocus`.
-   - `SUPPORT_ATTACHMENTS` должен указывать на R2 bucket `fitfocus-support-attachments`.
-5. Настроить secrets/vars в Cloudflare Pages:
+3. Проверить binding в `wrangler.toml`: `DB` должен указывать на D1 database `fitfocus`.
+4. Настроить secrets/vars в Cloudflare Pages:
    - `AUTH_JWT_SECRET`
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
@@ -126,11 +123,19 @@ Production deploy ожидает Cloudflare Pages + D1 + R2:
    - `APP_URL` (должен совпадать с публичным origin приложения, который вы добавляете в Google OAuth redirect URI)
    - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
    - `CRON_SECRET` для `/api/internal/cleanup_deleted`
-6. В Google Cloud Console добавить redirect URI:
+5. В Google Cloud Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/google/callback`.
-7. В Apple Developer Console добавить redirect URI:
+6. В Apple Developer Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/apple/callback`.
-8. Для scheduled hard-delete workflow в GitHub Actions добавить repository secret `FITFOCUS_CLEANUP_SECRET` с тем же значением, что и Cloudflare `CRON_SECRET`. Если production URL отличается от `https://fitfocus.pages.dev/api/internal/cleanup_deleted`, добавить repository variable `FITFOCUS_CLEANUP_URL`.
+7. Для scheduled hard-delete workflow в GitHub Actions добавить repository secret `FITFOCUS_CLEANUP_SECRET` с тем же значением, что и Cloudflare `CRON_SECRET`. Если production URL отличается от `https://fitfocus.pages.dev/api/internal/cleanup_deleted`, добавить repository variable `FITFOCUS_CLEANUP_URL`.
+
+Опционально для больших вложений поддержки:
+
+1. Включить R2 в Cloudflare Dashboard.
+2. Создать bucket: `npx wrangler r2 bucket create fitfocus-support-attachments`.
+3. Добавить Pages binding `SUPPORT_ATTACHMENTS` к bucket `fitfocus-support-attachments`.
+
+Без `SUPPORT_ATTACHMENTS` вложения поддержки хранятся inline до 2 MB; файлы больше 2 MB будут отклоняться.
 
 ## Безопасность и Приватность
 
