@@ -421,5 +421,22 @@ if (pushTestRoute.includes('UPDATE push_subscriptions SET last_sent_at') && push
   process.exitCode = 1;
 }
 
+const familyMember = read('functions/api/family/member.ts');
+assertIncludes(
+  familyMember,
+  'changedRows(result) === 0',
+  'family member patch must reject updates that affect no active member row',
+);
+assertIncludes(
+  familyMember,
+  'BAD_GOAL',
+  'family member patch must validate known goal values',
+);
+assertIncludes(
+  familyMember,
+  "AND status = 'active' AND is_active = 1",
+  'family member patch must only update active family member rows',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
