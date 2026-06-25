@@ -144,6 +144,16 @@ assertIncludes(
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
   'admin user role endpoint must verify target user exists and is active',
 );
+assertIncludes(
+  adminUserRoles,
+  'SELECT COUNT(*)',
+  'admin user role endpoint must guard last-admin removal inside the delete statement',
+);
+assertIncludes(
+  adminUserRoles,
+  'changedRows(result) === 0',
+  'admin user role endpoint must reject guarded admin removals that change no rows',
+);
 
 const adminSessions = read('functions/api/admin/sessions.ts');
 assertIncludes(

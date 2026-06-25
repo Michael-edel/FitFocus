@@ -14,6 +14,10 @@ type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 const ALLOWED_ROLE_VALUES = new Set(["user", "pro", "family_parent", "family_child", "support", "admin"]);
 const ALLOWED_ACTION_VALUES = new Set(["add", "remove"]);
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
@@ -62,16 +66,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ id: string }>();
   if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
 
-  if (action === "remove" && role === "admin") {
-    const row = await db.prepare("SELECT COUNT(*) as c FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL").first<any>();
-    const adminsCount = Number(row?.c || 0);
-    if (adminsCount <= 1) {
-      return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 409);
-    }
-  }
-
   if (action === "remove") {
-    await db.prepare("DELETE FROM user_roles WHERE user_id = ? AND role = ?").bind(userId, role).run();
+    if (role === "admin") {
+      const result = await db.prepare(
+        `DELETE FROM user_roles
+         WHERE user_id = ?
+           AND role = 'admin'
+           AND (
+             SELECT COUNT(*)
+             FROM user_roles ur
+             JOIN users u ON u.id = ur.user_id
+             WHERE ur.role = 'admin'
+               AND u.is_active = 1
+               AND u.deleted_at IS NULL
+           ) > 1`
+      ).bind(userId).run();
+      if (changedRows(result) === 0) {
+        return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 409);
+      }
+    } else {
+      await db.prepare("DELETE FROM user_roles WHERE user_id = ? AND role = ?").bind(userId, role).run();
+    }
   } else {
     await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)").bind(userId, role).run();
   }
