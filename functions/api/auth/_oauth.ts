@@ -221,7 +221,7 @@ async function loadAppleJwks(): Promise<AppleJwk[]> {
     throw new Error(`APPLE_JWKS_FETCH_FAILED:${response.status}`);
   }
 
-  const payload = (await response.json()) as AppleKeysResponse;
+  const payload = (await safeResponseJson(response)) as AppleKeysResponse;
   const keys = Array.isArray(payload?.keys) ? payload.keys.filter((key) => key?.kty === "RSA" && !!key?.kid) : [];
   if (!keys.length) {
     throw new Error("APPLE_JWKS_EMPTY");
@@ -232,6 +232,10 @@ async function loadAppleJwks(): Promise<AppleJwk[]> {
     expiresAt: now + 60 * 60 * 1000,
   };
   return keys;
+}
+
+async function safeResponseJson(response: Response): Promise<unknown> {
+  return response.json().catch(() => ({}));
 }
 
 async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {

@@ -93,6 +93,20 @@ assertIncludes(
   'apple OAuth callback must tolerate non-JSON token endpoint failures',
 );
 
+const legacyGoogleAuth = read('functions/api/auth/google.ts');
+assertIncludes(
+  legacyGoogleAuth,
+  'await safeResponseJson(r)',
+  'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
+);
+
+const oauthLib = read('functions/api/auth/_oauth.ts');
+assertIncludes(
+  oauthLib,
+  'await safeResponseJson(response)',
+  'Apple JWKS loader must tolerate non-JSON key endpoint responses',
+);
+
 const supportAttachments = read('functions/api/_lib/support_attachments.ts');
 assertIncludes(
   supportAttachments,

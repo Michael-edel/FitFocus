@@ -4,6 +4,10 @@ import { consumeInviteCode } from "../_lib/invites";
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
 
+async function safeResponseJson(response: Response): Promise<any> {
+  return response.json().catch(() => ({}));
+}
+
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   try {
     const { request, env } = ctx;
@@ -32,7 +36,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       const t = await r.text();
       return json({ error: "Invalid Google token", details: t.slice(0, 200) }, 401);
     }
-    const info: any = await r.json();
+    const info: any = await safeResponseJson(r);
 
     // Basic checks
     if (!allowedAud.includes(String(info.aud || ""))) return json({ error: "Token aud mismatch", aud: info.aud }, 401);
