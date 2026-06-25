@@ -221,6 +221,11 @@ assertIncludes(
   'const model = resolveGeminiModel(body?.model)',
   'AI endpoint must not pass arbitrary client model names to Gemini',
 );
+assertIncludes(
+  aiEndpoint,
+  'const { feature: _drop, model: _model, ...payload } = body ?? {}',
+  'AI endpoint must strip server-only feature/model fields from the upstream Gemini payload',
+);
 
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
