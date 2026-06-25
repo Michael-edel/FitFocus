@@ -474,6 +474,16 @@ assertIncludes(
   "VALUES (?1, 'free', 'canceled', NULL, NULL, NULL, ?2)",
   'admin subscription endpoint must upsert a free canceled row instead of relying on update-only behavior',
 );
+assertIncludes(
+  adminSubscription,
+  'buildAdminEventStatement',
+  'admin subscription endpoint must stage the audit event with the subscription write',
+);
+assertIncludes(
+  adminSubscription,
+  'await db.batch([subscriptionStatement, auditStatement]);',
+  'admin subscription endpoint must write subscription and audit event through one batch',
+);
 
 const adminInvites = read('functions/api/admin/invites.ts');
 assertIncludes(
