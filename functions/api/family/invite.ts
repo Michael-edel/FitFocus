@@ -7,6 +7,10 @@ import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function changedRows(result: any): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
@@ -21,20 +25,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const now = Math.floor(nowMs() / 1000);
     const expires = now + Math.max(1, Math.min(24 * 14, ttlHours)) * 3600;
 
-    let code = randomCode(8);
-    // ensure uniqueness (retry a few times)
-    for (let i = 0; i < 5; i++) {
-      const exists = await db.prepare("SELECT code FROM family_invites WHERE code = ?").bind(code).first();
-      if (!exists) break;
-      code = randomCode(8);
+    let code = "";
+    let inserted = false;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = randomCode(8);
+      const result = await db
+        .prepare(
+          "INSERT OR IGNORE INTO family_invites (code, family_id, created_by_user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(candidate, fam.id, user.sub, now, expires)
+        .run();
+      if (changedRows(result) === 1) {
+        code = candidate;
+        inserted = true;
+        break;
+      }
     }
-
-    await db
-      .prepare(
-        "INSERT INTO family_invites (code, family_id, created_by_user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
-      )
-      .bind(code, fam.id, user.sub, now, expires)
-      .run();
+    if (!inserted) return json({ error: "INVITE_GENERATION_FAILED" }, 409);
 
     return json({ code, expiresAt: expires }, 201);
   } catch (e: any) {
