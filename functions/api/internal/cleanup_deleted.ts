@@ -55,5 +55,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     supportAttachments: env.SUPPORT_ATTACHMENTS,
   });
 
-  return json(result, 200);
+  return json(result, result.failed > 0 ? 500 : 200);
 };
