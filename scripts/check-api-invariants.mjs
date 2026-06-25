@@ -106,6 +106,16 @@ assertIncludes(
   'await safeResponseJson(response)',
   'Apple JWKS loader must tolerate non-JSON key endpoint responses',
 );
+assertIncludes(
+  oauthLib,
+  'timingSafeEqualString(expected, stateSig)',
+  'OAuth state verification must not compare signatures with direct string equality',
+);
+assertIncludes(
+  oauthLib,
+  'if (parts.length !== 2) return null',
+  'OAuth state verification must reject structurally invalid state values',
+);
 
 const supportAttachments = read('functions/api/_lib/support_attachments.ts');
 assertIncludes(
