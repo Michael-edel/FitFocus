@@ -181,6 +181,18 @@ assertIncludes(
   'cleanup must expose bounded failure details',
 );
 
+const aiLimits = read('functions/api/_lib/ai_limits.ts');
+assertIncludes(
+  aiLimits,
+  'normalizeCleanupBucketLimit(limit)',
+  'AI rate-limit bucket cleanup must normalize invalid limits before querying',
+);
+assertIncludes(
+  aiLimits,
+  'Number.isFinite(parsed) ? Math.floor(parsed) : fallback',
+  'AI rate-limit bucket cleanup must reject NaN and infinite limits before querying',
+);
+
 const adminCleanupDeleted = read('functions/api/admin/cleanup_deleted.ts');
 assertIncludes(
   adminCleanupDeleted,

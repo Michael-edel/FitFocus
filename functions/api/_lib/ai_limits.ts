@@ -51,6 +51,12 @@ function minLimit(a: number | null | undefined, b: number | null | undefined): n
   return Math.min(...limits);
 }
 
+function normalizeCleanupBucketLimit(limit: unknown, fallback = 500): number {
+  const parsed = Number(limit);
+  const base = Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+  return Math.max(1, Math.min(5000, base));
+}
+
 async function ensureRateBucket(
   db: D1Database,
   bucketKey: string,
@@ -209,6 +215,7 @@ export async function enforceAiRateControls(input: AiRateControlInput): Promise<
 }
 
 export async function cleanupOldAiRateLimitBuckets(db: D1Database, olderThanMs: number, limit = 500): Promise<number> {
+  const normalizedLimit = normalizeCleanupBucketLimit(limit);
   const result = await db
     .prepare(
       `DELETE FROM ai_rate_limits
@@ -216,7 +223,7 @@ export async function cleanupOldAiRateLimitBuckets(db: D1Database, olderThanMs: 
          SELECT bucket_key FROM ai_rate_limits WHERE updated_at < ? LIMIT ?
        )`
     )
-    .bind(olderThanMs, Math.max(1, Math.min(5000, Math.floor(limit))))
+    .bind(olderThanMs, normalizedLimit)
     .run();
   return changesOf(result);
 }
