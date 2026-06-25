@@ -108,6 +108,11 @@ assertIncludes(
 const legacyGoogleAuth = read('functions/api/auth/google.ts');
 assertIncludes(
   legacyGoogleAuth,
+  'import { cookieSerialize, signSessionJwt } from "./_oauth"',
+  'legacy Google auth endpoint must use shared OAuth session helpers',
+);
+assertIncludes(
+  legacyGoogleAuth,
   'await safeResponseJson(r)',
   'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
 );
