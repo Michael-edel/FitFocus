@@ -35,23 +35,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .filter((it: any) => it.name && it.grams > 0)
       .slice(0, 500);
 
-    // Replace existing items for this scope (user + week [+ family_id])
-    if (family_id) {
-      await db.prepare(
-        "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id = ?"
-      ).bind(user.sub, week_start, family_id).run();
-    } else {
-      await db.prepare(
-        "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id IS NULL"
-      ).bind(user.sub, week_start).run();
-    }
-
     const created_at = nowMs();
-    for (const it of norm) {
-      await db.prepare(
+    const statements = [
+      family_id
+        ? db.prepare(
+            "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id = ?"
+          ).bind(user.sub, week_start, family_id)
+        : db.prepare(
+            "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id IS NULL"
+          ).bind(user.sub, week_start),
+      ...norm.map((it: any) => db.prepare(
         "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).bind(uuid(), user.sub, family_id, week_start, it.name, it.grams, created_at).run();
-    }
+      ).bind(uuid(), user.sub, family_id, week_start, it.name, it.grams, created_at)),
+    ];
+    await db.batch(statements);
 
     return json({ ok: true, stored: norm.length, week_start });
   } catch (e: any) {
