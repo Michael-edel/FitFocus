@@ -179,4 +179,20 @@ describe('admin session and subscription mutations', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
   });
+
+  it('upserts a canceled free subscription row instead of silently skipping missing rows', async () => {
+    const db = makeDb();
+    const request = await adminRequest('https://fitfocus.test/api/admin/subscription', {
+      user_id: 'user-1',
+      plan: 'free',
+    });
+
+    const res = await postSubscription(context(request, db));
+
+    expect(res.status).toBe(200);
+    const subscriptionWrite = db.runs.find((run) => run.sql.includes('INSERT INTO subscriptions'));
+    expect(subscriptionWrite).toBeTruthy();
+    expect(subscriptionWrite?.sql).toContain("VALUES (?1, 'free', 'canceled'");
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
+  });
 });
