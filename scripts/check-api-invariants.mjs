@@ -164,5 +164,22 @@ assertIncludes(
   'admin subscription endpoint must write an audit event',
 );
 
+const adminInvites = read('functions/api/admin/invites.ts');
+assertIncludes(
+  adminInvites,
+  'typeof body?.revoked !== "boolean"',
+  'admin invite update must require explicit boolean revoked values',
+);
+assertIncludes(
+  adminInvites,
+  'changedRows(result) === 0',
+  'admin invite update must reject missing invite rows',
+);
+assertIncludes(
+  adminInvites,
+  'action: "invite_update"',
+  'admin invite update must write an audit event',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
