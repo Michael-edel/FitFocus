@@ -536,10 +536,44 @@ assertIncludes(
   'const currentByKey = new Map<string, { value: string; version: number }>();',
   'state put must stage current versions before writing',
 );
+assertIncludes(
+  stateRoute,
+  'Number.isInteger(parsedBaseVersion)',
+  'state put must reject non-integer baseVersion values',
+);
+assertIncludes(
+  stateRoute,
+  'BAD_BASE_VERSION',
+  'state put must reject invalid baseVersion values instead of bypassing conflict checks',
+);
 if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user.sub, it.key, String(it.value ?? ""), t, nextVersion)\n      .run();')) {
   console.error('state put must not execute per-item kv writes before the whole request is conflict-checked.');
   process.exitCode = 1;
 }
+
+const profileRoute = read('functions/api/profile.ts');
+assertIncludes(
+  profileRoute,
+  'Number.isInteger(parsedBaseVersion)',
+  'profile writes must reject non-integer baseVersion values',
+);
+assertIncludes(
+  profileRoute,
+  'BAD_BASE_VERSION',
+  'profile writes must reject invalid baseVersion values instead of bypassing conflict checks',
+);
+
+const wearableSyncRoute = read('functions/api/wearable/sync.ts');
+assertIncludes(
+  wearableSyncRoute,
+  'Number.isInteger(parsedBaseVersion)',
+  'wearable sync must reject non-integer baseVersion values',
+);
+assertIncludes(
+  wearableSyncRoute,
+  'BAD_BASE_VERSION',
+  'wearable sync must reject invalid baseVersion values instead of bypassing conflict checks',
+);
 
 const pushTestRoute = read('functions/api/push/test.ts');
 assertIncludes(

@@ -9,6 +9,15 @@ import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
+function parseBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === "string" && value.trim() === "") return 0;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const parsedBaseVersion = Number(value);
+  if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
+  return parsedBaseVersion;
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -55,10 +64,10 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const body: any = await request.json().catch(() => null);
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
-  const items: { key: string; value: string; baseVersion?: number }[] = Array.isArray(body.items)
+  const items: { key: unknown; value: unknown; baseVersion?: unknown }[] = Array.isArray(body.items)
     ? body.items
     : body.key
-      ? [{ key: body.key, value: body.value ?? "", baseVersion: Number(body.baseVersion ?? 0) || 0 }]
+      ? [{ key: body.key, value: body.value ?? "", baseVersion: body.baseVersion }]
       : [];
 
   if (!items.length) return json({ error: "NO_ITEMS" }, 400);
@@ -67,14 +76,19 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const normalizedItems: { key: string; value: string; baseVersion: number }[] = [];
   const currentByKey = new Map<string, { value: string; version: number }>();
   for (const it of items) {
-    if (!it?.key) continue;
-    if (!isAllowedStateKey(user.sub, it.key)) {
-      return json({ error: "FORBIDDEN_KEYSPACE", key: String(it.key || "") }, 403);
+    const key = String(it?.key || "");
+    if (!key) continue;
+    if (!isAllowedStateKey(user.sub, key)) {
+      return json({ error: "FORBIDDEN_KEYSPACE", key }, 403);
+    }
+    const baseVersion = parseBaseVersion(it.baseVersion);
+    if (baseVersion === null) {
+      return json({ error: "BAD_BASE_VERSION", key }, 400);
     }
     const normalized = {
-      key: String(it.key),
+      key,
       value: String(it.value ?? ""),
-      baseVersion: Number(it.baseVersion || 0),
+      baseVersion,
     };
     normalizedItems.push(normalized);
     const current = await db
