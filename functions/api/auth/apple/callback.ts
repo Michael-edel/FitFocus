@@ -1,6 +1,7 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
+import { consumeInviteCode } from "../../_lib/invites";
 
 function json(body: any, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
@@ -136,27 +137,9 @@ export const onRequest: PagesFunction<{
     }
 
     if (inviteCode) {
-      const existingRedemption = await env.DB.prepare(
-        "SELECT 1 as ok FROM invite_redemptions WHERE code = ? AND user_id = ? LIMIT 1"
-      ).bind(inviteCode, appleSub).first<any>();
-
-      if (!existingRedemption?.ok) {
-        const upd = await env.DB.prepare(
-          `UPDATE invite_codes
-           SET uses = uses + 1
-           WHERE code = ?
-             AND revoked = 0
-             AND (expires_at IS NULL OR expires_at > ?)
-             AND uses < COALESCE(max_uses, 1)`
-        ).bind(inviteCode, now).run();
-
-        if (!upd?.changes) {
-          return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
-        }
-
-        await env.DB.prepare(
-          "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
-        ).bind(inviteCode, appleSub, now).run();
+      const consumed = await consumeInviteCode(env.DB, inviteCode, appleSub, now);
+      if (!consumed.ok) {
+        return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
       }
     }
 

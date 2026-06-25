@@ -1,4 +1,5 @@
 import { ensureAuthSchema, json, replaceActiveSessionsForUser } from "../_lib/auth";
+import { consumeInviteCode } from "../_lib/invites";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -69,29 +70,10 @@ if (requireInvite) {
   const inviteCode = String(body?.inviteCode || "").trim();
   if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  // atomic consume: only if not revoked/expired and has remaining uses
-  const upd = await env.DB.prepare(
-    `UPDATE invite_codes
-     SET uses = uses + 1
-     WHERE code = ?
-       AND revoked = 0
-       AND (expires_at IS NULL OR expires_at > ?)
-       AND uses < COALESCE(max_uses, 1)`
-  )
-    .bind(inviteCode, nowSec)
-    .run();
-
-  if (!upd?.changes) {
+  const consumed = await consumeInviteCode(env.DB, inviteCode, user.sub, Math.floor(Date.now() / 1000));
+  if (!consumed.ok) {
     return json({ error: "INVITE_INVALID" }, 403);
   }
-
-  // record redemption using the migration-backed table
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO invite_redemptions (code, user_id, redeemed_at) VALUES (?, ?, ?)"
-  )
-    .bind(inviteCode, user.sub, nowSec)
-    .run();
 }
 
 // Restore soft-deleted accounts only after beta/invite access checks pass.
