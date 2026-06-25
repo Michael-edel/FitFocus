@@ -36,6 +36,18 @@ export async function signState(raw: string, secret: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(sig));
 }
 
+function timingSafeEqualString(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = ab.length ^ bb.length;
+  const len = Math.max(ab.length, bb.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (ab[i] || 0) ^ (bb[i] || 0);
+  }
+  return diff === 0;
+}
+
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 export async function verifyState(
@@ -44,11 +56,14 @@ export async function verifyState(
   opts: { expectedNonce?: string | null; nowMs?: number; maxAgeMs?: number } = {},
 ): Promise<any | null> {
   if (!state.includes(".")) return null;
-  const [stateB64, stateSig] = state.split(".");
-  const rawState = new TextDecoder().decode(b64urlDecodeToBytes(stateB64));
-  const expected = await signState(rawState, secret);
-  if (expected !== stateSig) return null;
   try {
+    const parts = state.split(".");
+    if (parts.length !== 2) return null;
+    const [stateB64, stateSig] = parts;
+    const rawState = new TextDecoder().decode(b64urlDecodeToBytes(stateB64));
+    const expected = await signState(rawState, secret);
+    if (!timingSafeEqualString(expected, stateSig)) return null;
+
     const parsed = JSON.parse(rawState);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const issuedAt = Number((parsed as any).t || 0);
