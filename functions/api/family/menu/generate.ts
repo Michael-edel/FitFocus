@@ -282,19 +282,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const menuId = existing?.id || uuid();
 
-    if (existing) {
-      await db
-        .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
-        .bind(JSON.stringify(shared), user.sub, now, menuId)
-        .run();
-      await db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id=?").bind(menuId).run();
-    } else {
-      await db
-        .prepare("INSERT INTO weekly_menus (id, family_id, week_start, menu_json, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(menuId, fam.id, weekStart, JSON.stringify(shared), user.sub, now)
-        .run();
-    }
-
     // Compute and store portions for all active members (B2C sync)
     const members = await db
       .prepare(
@@ -308,6 +295,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const membersList = members.results || [];
     const portionsByUser: Record<string, ReturnType<typeof buildPortionsForMember>> = {};
+    const portionStatements: D1PreparedStatement[] = [];
+    const itemStatements: D1PreparedStatement[] = [];
 
     for (const m of membersList) {
       const kcal = memberTargetKcal(m);
@@ -315,8 +304,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       const computed = buildPortionsForMember(shared, kcal, restrictions);
       portionsByUser[String(m.user_id)] = computed;
 
-      // Upsert portions
-      await db
+      portionStatements.push(
+        db
         .prepare(
           `INSERT INTO weekly_menu_portions (weekly_menu_id, user_id, portions_json, totals_json, updated_at)
            VALUES (?, ?, ?, ?, ?)
@@ -324,23 +313,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
            DO UPDATE SET portions_json=excluded.portions_json, totals_json=excluded.totals_json, updated_at=excluded.updated_at`
         )
         .bind(menuId, String(m.user_id), JSON.stringify(computed.portions), JSON.stringify(computed.totals), now)
-        .run();
-
-      // Replace user's family-scoped weekly_menu_items so shopping list works immediately on all devices
-      await db
-        .prepare("DELETE FROM weekly_menu_items WHERE user_id=? AND family_id=? AND week_start=?")
-        .bind(String(m.user_id), fam.id, weekStart)
-        .run();
+      );
 
       for (const it of computed.totals) {
         const normalized = normalizeShoppingIngredient(it.name, it.grams);
         if (!normalized.name || normalized.grams <= 0) continue;
-        await db
+        itemStatements.push(
+          db
           .prepare(
             "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
           )
           .bind(uuid(), String(m.user_id), fam.id, weekStart, normalized.name, normalized.grams, now)
-          .run();
+        );
       }
     }
 
@@ -401,10 +385,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       shoppingList: shoppingListItems.map((it) => `${it.name} — ${it.grams} г`),
     };
 
-    await db
-      .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
-      .bind(JSON.stringify(familyWeeklyMenu), user.sub, now, menuId)
-      .run();
+    const menuJson = JSON.stringify(familyWeeklyMenu);
+    const statements: D1PreparedStatement[] = [
+      existing
+        ? db
+            .prepare("UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?")
+            .bind(menuJson, user.sub, now, menuId)
+        : db
+            .prepare("INSERT INTO weekly_menus (id, family_id, week_start, menu_json, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(menuId, fam.id, weekStart, menuJson, user.sub, now),
+      db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id=?").bind(menuId),
+      db.prepare("DELETE FROM weekly_menu_items WHERE family_id=? AND week_start=?").bind(fam.id, weekStart),
+      ...portionStatements,
+      ...itemStatements,
+    ];
+    await db.batch(statements);
 
     return json({ ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
   } catch (e: any) {
