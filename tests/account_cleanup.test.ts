@@ -109,6 +109,26 @@ describe('cleanupDeletedAccounts', () => {
     expect(body.failures[0].error).toBe('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
   });
 
+  it('uses shared case-insensitive bearer parsing for the scheduled endpoint', async () => {
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
+        method: 'POST',
+        headers: { Authorization: 'bearer   cron-secret' },
+        body: JSON.stringify({ limit: 10 }),
+      }),
+      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/internal/cleanup_deleted',
+    } as any);
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as any;
+    expect(body.failed).toBe(1);
+  });
+
   it('keeps the scheduled cleanup default for invalid request limits', async () => {
     const response = await onRequestPost({
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {

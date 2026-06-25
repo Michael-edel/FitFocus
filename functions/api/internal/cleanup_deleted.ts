@@ -2,17 +2,11 @@
 // Machine endpoint for scheduled cleanup. Protected by CRON_SECRET bearer token.
 
 import { cleanupDeletedAccounts, normalizeCleanupLimit } from "../_lib/account_cleanup";
-import { json } from "../_lib/auth";
+import { json, readBearerToken } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; CRON_SECRET?: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
-
-function getBearerToken(request: Request): string {
-  const raw = request.headers.get("Authorization") || "";
-  const prefix = "Bearer ";
-  return raw.startsWith(prefix) ? raw.slice(prefix.length).trim() : "";
-}
 
 async function sha256Hex(value: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -36,7 +30,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: false, error: "CRON_SECRET_NOT_CONFIGURED" }, 503);
   }
 
-  const token = getBearerToken(request);
+  const token = readBearerToken(request.headers.get("Authorization")) || "";
   if (!(await sameSecret(token, env.CRON_SECRET))) {
     return json({ ok: false, error: "FORBIDDEN" }, 403);
   }
