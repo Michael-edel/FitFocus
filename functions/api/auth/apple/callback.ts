@@ -116,6 +116,8 @@ export const onRequest: PagesFunction<{
       .first<any>();
 
     const tokenEmail = String(idPayload.email || "");
+    const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";
+    const verifiedTokenEmail = tokenEmailVerified ? tokenEmail : "";
     const formEmail = String(appleUserJson?.email || "");
     const appleName = buildAppleName(appleUserJson);
     const nextEmail = tokenEmail || formEmail || String(existing?.email || "");
@@ -162,7 +164,7 @@ export const onRequest: PagesFunction<{
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
-    if (adminEmails.length && nextEmail && adminEmails.includes(nextEmail.toLowerCase())) {
+    if (adminEmails.length && verifiedTokenEmail && adminEmails.includes(verifiedTokenEmail.toLowerCase())) {
       await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(appleSub).run();
     }
 
@@ -170,9 +172,9 @@ export const onRequest: PagesFunction<{
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
-    if (bootstrapEmails.length && nextEmail) {
+    if (bootstrapEmails.length && verifiedTokenEmail) {
       const anyAdmin = await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first();
-      if (!anyAdmin && bootstrapEmails.includes(nextEmail.toLowerCase())) {
+      if (!anyAdmin && bootstrapEmails.includes(verifiedTokenEmail.toLowerCase())) {
         await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(appleSub).run();
       }
     }

@@ -104,6 +104,26 @@ assertIncludes(
   'await safeResponseJson(tokenRes)',
   'apple OAuth callback must tolerate non-JSON token endpoint failures',
 );
+assertIncludes(
+  appleOAuthCallback,
+  'const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";',
+  'apple OAuth callback must derive admin eligibility from the verified id_token email flag',
+);
+assertIncludes(
+  appleOAuthCallback,
+  'const verifiedTokenEmail = tokenEmailVerified ? tokenEmail : "";',
+  'apple OAuth callback must keep untrusted form email out of admin eligibility',
+);
+assertIncludes(
+  appleOAuthCallback,
+  'if (adminEmails.length && verifiedTokenEmail && adminEmails.includes(verifiedTokenEmail.toLowerCase()))',
+  'apple OAuth callback must only auto-promote admins with verified token email',
+);
+assertIncludes(
+  appleOAuthCallback,
+  'if (bootstrapEmails.length && verifiedTokenEmail)',
+  'apple OAuth callback must only bootstrap admins with verified token email',
+);
 
 const legacyGoogleAuth = read('functions/api/auth/google.ts');
 assertIncludes(
