@@ -134,6 +134,11 @@ assertIncludes(
 const accountCleanup = read('functions/api/_lib/account_cleanup.ts');
 assertIncludes(
   accountCleanup,
+  'Number.isFinite(parsed) ? Math.floor(parsed) : fallback',
+  'cleanup limit normalization must reject NaN and infinite limits before querying',
+);
+assertIncludes(
+  accountCleanup,
   'failed: failures.length',
   'cleanup must expose failed hard deletes',
 );
@@ -141,6 +146,20 @@ assertIncludes(
   accountCleanup,
   'failures: failures.slice(0, 20)',
   'cleanup must expose bounded failure details',
+);
+
+const adminCleanupDeleted = read('functions/api/admin/cleanup_deleted.ts');
+assertIncludes(
+  adminCleanupDeleted,
+  'normalizeCleanupLimit(body.limit, 50)',
+  'admin cleanup endpoint must parse invalid limits with the admin default',
+);
+
+const internalCleanupDeleted = read('functions/api/internal/cleanup_deleted.ts');
+assertIncludes(
+  internalCleanupDeleted,
+  'normalizeCleanupLimit(body.limit, 200)',
+  'scheduled cleanup endpoint must parse invalid limits with the scheduled default',
 );
 
 const accountDeleteLib = read('functions/api/_lib/account_delete.ts');
