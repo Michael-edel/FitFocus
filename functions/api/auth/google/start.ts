@@ -1,4 +1,4 @@
-import { cookieSerialize, OAUTH_STATE_TTL_MS } from "../_oauth";
+import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
 import type { PagesFunction } from "@cloudflare/workers-types";
 
 function jsonResponse(body: any, status = 200, headers: Record<string, string> = {}) {
@@ -8,29 +8,8 @@ function jsonResponse(body: any, status = 200, headers: Record<string, string> =
   });
 }
 
-function base64UrlEncode(bytes: Uint8Array) {
-  // btoa expects binary string
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 // Classic OAuth2 redirect flow (works across browsers; avoids FedCM).
 // GET /api/auth/google/start?redirect=<origin>&invite=<code>
-
-function getBaseUrl(req: Request) {
-  const u = new URL(req.url);
-  return `${u.protocol}//${u.host}`;
-}
-
-function signState(raw: string, secret: string) {
-  // Very small HMAC helper to prevent tampering
-  const enc = new TextEncoder();
-  return crypto.subtle
-    .importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
-    .then((key) => crypto.subtle.sign("HMAC", key, enc.encode(raw)))
-    .then((sig) => base64UrlEncode(new Uint8Array(sig)));
-}
 
 export const onRequestGet: PagesFunction<{
   DB: D1Database;
@@ -96,14 +75,3 @@ export const onRequestGet: PagesFunction<{
   headers.set("Location", auth.toString());
   return new Response(null, { status: 302, headers });
 };
-
-function normalizeAppUrl(value?: string): string | null {
-  if (!value) return null;
-  try {
-    const u = new URL(value);
-    if (!/^https?:$/.test(u.protocol)) return null;
-    return `${u.protocol}//${u.host}`;
-  } catch {
-    return null;
-  }
-}
