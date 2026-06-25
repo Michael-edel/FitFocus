@@ -39,8 +39,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const now = Date.now();
   if (plan === "free") {
     await db.prepare(
-      "UPDATE subscriptions SET plan = 'free', status = 'canceled', stripe_customer_id = NULL, stripe_subscription_id = NULL, current_period_end = NULL, updated_at = ? WHERE user_id = ?"
-    ).bind(now, userId).run();
+      `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at)
+       VALUES (?1, 'free', 'canceled', NULL, NULL, NULL, ?2)
+       ON CONFLICT(user_id) DO UPDATE SET
+         plan = excluded.plan,
+         status = excluded.status,
+         stripe_customer_id = NULL,
+         stripe_subscription_id = NULL,
+         current_period_end = NULL,
+         updated_at = excluded.updated_at`
+    ).bind(userId, now).run();
   } else {
     await db.prepare(
       `INSERT INTO subscriptions (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at)
