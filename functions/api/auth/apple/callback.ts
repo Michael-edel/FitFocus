@@ -130,17 +130,6 @@ export const onRequest: PagesFunction<{
       .bind(appleSub, nextEmail, nextName, nextPicture, now, now)
       .run();
 
-    await env.DB.prepare(
-      `UPDATE users
-       SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
-       WHERE id = ?
-         AND deleted_at IS NOT NULL
-         AND deletion_scheduled_at IS NOT NULL
-         AND deletion_scheduled_at > datetime('now')`
-    )
-      .bind(now, appleSub)
-      .run();
-
     const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
     if (requireInvite && !inviteCode) {
       return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
@@ -170,6 +159,17 @@ export const onRequest: PagesFunction<{
         ).bind(inviteCode, appleSub, now).run();
       }
     }
+
+    await env.DB.prepare(
+      `UPDATE users
+       SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
+       WHERE id = ?
+         AND deleted_at IS NOT NULL
+         AND deletion_scheduled_at IS NOT NULL
+         AND deletion_scheduled_at > datetime('now')`
+    )
+      .bind(now, appleSub)
+      .run();
 
     const adminEmails = String((env as any).ADMIN_EMAILS || "")
       .split(",")
