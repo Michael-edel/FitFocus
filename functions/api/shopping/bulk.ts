@@ -43,20 +43,19 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       .slice(0, 500);
 
     const updated_at = nowMs();
-
-    for (const u of norm) {
+    const scopeId = getShoppingScopeId(user.sub, family_id);
+    const statements = norm.map((u: any) => {
       const val = u.checked ? 1 : 0;
-      const scopeId = getShoppingScopeId(user.sub, family_id);
-      await db
+      return db
         .prepare(
           `INSERT INTO shopping_checked (scope_id, week_start, family_id, ingredient_name, checked, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(scope_id, week_start, ingredient_name)
            DO UPDATE SET checked=excluded.checked, updated_at=excluded.updated_at`
         )
-        .bind(scopeId, week_start, family_id, u.ingredient_name, val, updated_at)
-        .run();
-    }
+        .bind(scopeId, week_start, family_id, u.ingredient_name, val, updated_at);
+    });
+    await db.batch(statements);
 
     return json({ ok: true, updated: norm.length, week_start });
   } catch (e: any) {

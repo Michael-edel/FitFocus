@@ -359,5 +359,21 @@ if (weeklyMenuItems.includes('DELETE FROM weekly_menu_items') && weeklyMenuItems
   process.exitCode = 1;
 }
 
+const shoppingBulk = read('functions/api/shopping/bulk.ts');
+assertIncludes(
+  shoppingBulk,
+  'await db.batch(statements);',
+  'shopping bulk updates must write through a single batch',
+);
+assertIncludes(
+  shoppingBulk,
+  'const scopeId = getShoppingScopeId(user.sub, family_id);',
+  'shopping bulk updates must compute a stable scope id once per request',
+);
+if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includes('.run();')) {
+  console.error('shopping bulk updates must not execute per-item writes separately.');
+  process.exitCode = 1;
+}
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
