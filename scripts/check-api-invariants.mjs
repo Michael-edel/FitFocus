@@ -128,6 +128,18 @@ assertIncludes(
   'cleanup must expose bounded failure details',
 );
 
+const accountDeleteLib = read('functions/api/_lib/account_delete.ts');
+assertIncludes(
+  accountDeleteLib,
+  'NOT EXISTS (',
+  'soft account delete must guard last-admin removal inside the user update statement',
+);
+assertIncludes(
+  accountDeleteLib,
+  'changedRows(updateResult) === 0',
+  'soft account delete must reject guarded updates that change no rows',
+);
+
 const adminUserRoles = read('functions/api/admin/user_roles.ts');
 assertIncludes(
   adminUserRoles,
