@@ -33,11 +33,11 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     // Validate token with Google (simple + reliable, no crypto libs needed).
     const tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential);
     const r = await fetch(tokenInfoUrl, { method: "GET" });
-    if (!r.ok) {
-      const t = await r.text();
-      return json({ error: "Invalid Google token", details: t.slice(0, 200) }, 401);
-    }
     const info: any = await safeResponseJson(r);
+    if (!r.ok) {
+      const details = String(info?.error_description || info?.error || "");
+      return json({ error: "Invalid Google token", details: details.slice(0, 200) }, 401);
+    }
 
     // Basic checks
     if (!allowedAud.includes(String(info.aud || ""))) return json({ error: "Token aud mismatch", aud: info.aud }, 401);
