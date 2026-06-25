@@ -448,7 +448,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const model = resolveGeminiModel(body?.model);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  const { feature: _drop, ...payload } = body ?? {};
+  const { feature: _drop, model: _model, ...payload } = body ?? {};
   const payloadToSend: any = (payload && typeof payload === "object") ? payload : {};
 
   if ("config" in payloadToSend && !("generationConfig" in payloadToSend)) {
