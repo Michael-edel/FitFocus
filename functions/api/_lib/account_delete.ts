@@ -46,6 +46,47 @@ async function deleteSupportStorageKeys(bucket: SupportAttachmentBucket | undefi
   await bucket.delete(keys);
 }
 
+async function guardHardDeleteAccount(db: D1Database, userId: string): Promise<void> {
+  const result = await db.prepare(`
+    UPDATE users
+    SET updated_at = ?
+    WHERE id = ?
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM user_roles ur_self
+          WHERE ur_self.user_id = ?
+            AND ur_self.role = 'admin'
+        )
+        OR is_active != 1
+        OR deleted_at IS NOT NULL
+        OR (
+          SELECT COUNT(*)
+          FROM user_roles ur
+          JOIN users u ON u.id = ur.user_id
+          WHERE ur.role = 'admin'
+            AND u.is_active = 1
+            AND u.deleted_at IS NULL
+        ) > 1
+      )
+  `).bind(Date.now(), userId, userId).run();
+
+  if (changedRows(result) !== 0) return;
+
+  const activeAdmin = await db.prepare(`
+    SELECT 1 as x
+    FROM users u
+    JOIN user_roles ur ON ur.user_id = u.id
+    WHERE u.id = ?
+      AND ur.role = 'admin'
+      AND u.is_active = 1
+      AND u.deleted_at IS NULL
+    LIMIT 1
+  `).bind(userId).first<any>();
+
+  if (activeAdmin) throw new Error("Нельзя удалить последнего активного администратора.");
+}
+
 export async function deleteUserAccountAndAllData(
   db: D1Database,
   userId: string,
@@ -55,12 +96,21 @@ export async function deleteUserAccountAndAllData(
 ): Promise<DeleteUserResult> {
   const stmts: ReturnType<D1Database["prepare"]>[] = [];
 
-  const isAdmin = await db
-    .prepare("SELECT 1 FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1")
+  const isActiveAdmin = await db
+    .prepare(`
+      SELECT 1
+      FROM user_roles ur
+      JOIN users u ON u.id = ur.user_id
+      WHERE ur.user_id = ?
+        AND ur.role = 'admin'
+        AND u.is_active = 1
+        AND u.deleted_at IS NULL
+      LIMIT 1
+    `)
     .bind(userId)
     .first<any>();
 
-  if (isAdmin) {
+  if (isActiveAdmin) {
     const activeAdminsCountRow = await db.prepare(`
       SELECT COUNT(*) as c
       FROM user_roles ur
@@ -103,6 +153,20 @@ export async function deleteUserAccountAndAllData(
 
   if (dryRun) {
     return { ok: true, message: "Dry run: no changes made." };
+  }
+
+  try {
+    await guardHardDeleteAccount(db, userId);
+  } catch (e: any) {
+    const message = e?.message || "Не удалось заблокировать удаление пользователя.";
+    if (logAsAdminId && String(message).includes("последнего активного администратора")) {
+      await logAdminEvent(db, {
+        adminUserId: logAsAdminId,
+        action: "delete_user_failed_last_admin",
+        targetUserId: userId,
+      });
+    }
+    return { ok: false, message };
   }
 
   let supportStorageKeys: string[] = [];

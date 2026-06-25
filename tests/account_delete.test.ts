@@ -15,15 +15,21 @@ function makeDb(options: {
   ownedFamily?: { id: string } | null;
   batchReject?: Error;
   softDeleteChanges?: number;
+  hardDeleteGuardChanges?: number;
+  activeAdminsCount?: number;
   activeUser?: { id: string; is_active: number; deleted_at: string | null } | null;
   isAdmin?: boolean;
+  isActiveAdmin?: boolean;
+  activeAdminAfterGuard?: boolean;
 } = {}) {
   const prepared: PreparedStatement[] = [];
   const batchedSql: string[] = [];
+  const runs: Array<{ sql: string; binds: unknown[] }> = [];
 
   const db = {
     prepared,
     batchedSql,
+    runs,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -33,7 +39,14 @@ function makeDb(options: {
           return this;
         },
         async first() {
+          if (sql.includes('FROM user_roles ur') && sql.includes('WHERE ur.user_id = ?')) {
+            return (options.isActiveAdmin ?? options.isAdmin) ? { x: 1 } : null;
+          }
           if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) return options.isAdmin ? { x: 1 } : null;
+          if (sql.includes('SELECT COUNT(*) as c')) return { c: options.activeAdminsCount ?? 2 };
+          if (sql.includes('FROM users u') && sql.includes('JOIN user_roles ur ON ur.user_id = u.id')) {
+            return options.activeAdminAfterGuard ? { x: 1 } : null;
+          }
           if (sql.includes('SELECT id, is_active, deleted_at FROM users WHERE id = ? LIMIT 1')) {
             return options.activeUser ?? { id: this.binds[0], is_active: 1, deleted_at: null };
           }
@@ -46,8 +59,12 @@ function makeDb(options: {
           return { results: [] };
         },
         async run() {
+          runs.push({ sql, binds: this.binds });
           if (sql.includes('UPDATE users') && sql.includes("deletion_scheduled_at = datetime")) {
             return { success: true, meta: { changes: options.softDeleteChanges ?? 1 } };
+          }
+          if (sql.includes('UPDATE users') && sql.includes('SET updated_at = ?')) {
+            return { success: true, meta: { changes: options.hardDeleteGuardChanges ?? 1 } };
           }
           return { success: true, meta: { changes: 1 } };
         },
@@ -122,5 +139,37 @@ describe('account deletion', () => {
     const db = makeDb({ softDeleteChanges: 0, isAdmin: true });
 
     await expect(softDeleteAccount(db as any, 'admin-1')).rejects.toThrow('Нельзя удалить аккаунт последнего администратора.');
+  });
+
+  it('hard delete stops before R2 deletion when the guarded user update detects a last-admin race', async () => {
+    const bucket = {
+      put: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+      delete: vi.fn(async () => undefined),
+    };
+    const db = makeDb({
+      isAdmin: true,
+      activeAdminsCount: 2,
+      hardDeleteGuardChanges: 0,
+      activeAdminAfterGuard: true,
+      supportRows: [
+        { attachments_json: JSON.stringify([{ name: 'a.png', mime: 'image/png', size: 1, storage_key: 'support/t/00-a.png' }]) },
+      ],
+    });
+
+    const result = await deleteUserAccountAndAllData(db as any, 'admin-1', false, undefined, { supportAttachments: bucket });
+
+    expect(result).toEqual({ ok: false, message: 'Нельзя удалить последнего активного администратора.' });
+    expect(bucket.delete).not.toHaveBeenCalled();
+    expect(db.batchedSql).toEqual([]);
+  });
+
+  it('hard delete allows cleanup for an admin role when the target user is not an active admin', async () => {
+    const db = makeDb({ isAdmin: true, isActiveAdmin: false, activeAdminsCount: 1 });
+
+    const result = await deleteUserAccountAndAllData(db as any, 'admin-1');
+
+    expect(result.ok).toBe(true);
+    expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM users WHERE id = ?'))).toBe(true);
   });
 });
