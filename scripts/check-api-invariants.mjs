@@ -16,6 +16,7 @@ function assertIncludes(text, needle, label) {
 }
 
 const familyJoin = read('functions/api/family/join.ts');
+const wrangler = read('wrangler.toml');
 assertIncludes(
   familyJoin,
   'WHERE code = ? AND used_by_user_id IS NULL',
@@ -79,6 +80,16 @@ assertIncludes(
   adminSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
   'admin support thread must expose URLs for R2 message attachments',
+);
+assertIncludes(
+  wrangler,
+  'binding = "SUPPORT_ATTACHMENTS"',
+  'wrangler.toml must bind support attachments R2 bucket',
+);
+assertIncludes(
+  wrangler,
+  'bucket_name = "fitfocus-support-attachments"',
+  'wrangler.toml must name the support attachments R2 bucket',
 );
 
 const accountCleanup = read('functions/api/_lib/account_cleanup.ts');

@@ -98,12 +98,15 @@ Apple Sign In использует отдельный Services ID и callback:
 
 ## Cloudflare deploy
 
-Production deploy ожидает Cloudflare Pages + D1:
+Production deploy ожидает Cloudflare Pages + D1 + R2:
 
 1. Собрать frontend: `npm run build`.
 2. Применить D1 миграции: `npx wrangler d1 migrations apply fitfocus`.
-3. Проверить binding в `wrangler.toml`: `DB` должен указывать на D1 database `fitfocus`.
-4. Настроить secrets/vars в Cloudflare Pages:
+3. Создать R2 bucket для вложений поддержки: `npx wrangler r2 bucket create fitfocus-support-attachments`.
+4. Проверить bindings в `wrangler.toml`:
+   - `DB` должен указывать на D1 database `fitfocus`.
+   - `SUPPORT_ATTACHMENTS` должен указывать на R2 bucket `fitfocus-support-attachments`.
+5. Настроить secrets/vars в Cloudflare Pages:
    - `AUTH_JWT_SECRET`
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
@@ -122,9 +125,9 @@ Production deploy ожидает Cloudflare Pages + D1:
    - `STRIPE_WEBHOOK_SECRET`
    - `APP_URL` (должен совпадать с публичным origin приложения, который вы добавляете в Google OAuth redirect URI)
    - Stripe price ids: `PRICE_PRO_MONTHLY`, `PRICE_PRO_YEARLY`, `PRICE_FAMILY_MONTHLY`
-5. В Google Cloud Console добавить redirect URI:
+6. В Google Cloud Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/google/callback`.
-6. В Apple Developer Console добавить redirect URI:
+7. В Apple Developer Console добавить redirect URI:
    `https://<ваш-домен>/api/auth/apple/callback`.
 
 ## Безопасность и Приватность
