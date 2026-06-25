@@ -213,8 +213,13 @@ assertOrder(
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
   plansLib,
-  'parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || "3", 3)',
+  'parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || String(DEFAULT_FREE_AI_DAILY_LIMIT), DEFAULT_FREE_AI_DAILY_LIMIT)',
   'free AI daily limit must fall back to a finite default when env config is invalid',
+);
+assertIncludes(
+  plansLib,
+  'parseOptionalNonNegativeFiniteLimit(raw, DEFAULT_FREE_AI_DAILY_LIMIT)',
+  'paid AI daily limits must not become unlimited when env config is invalid',
 );
 
 const adminCleanupDeleted = read('functions/api/admin/cleanup_deleted.ts');

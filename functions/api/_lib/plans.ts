@@ -59,9 +59,17 @@ export async function requireFamilyPlan(db: D1Database, userId: string): Promise
   return plan;
 }
 
+const DEFAULT_FREE_AI_DAILY_LIMIT = 3;
+
 function parseNonNegativeFiniteLimit(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseOptionalNonNegativeFiniteLimit(value: unknown, invalidFallback: number): number | null {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw || raw === "infinity") return null;
+  return parseNonNegativeFiniteLimit(raw, invalidFallback);
 }
 
 export function dailyAiLimitForPlan(
@@ -72,11 +80,8 @@ export function dailyAiLimitForPlan(
     FAMILY_AI_DAILY_LIMIT?: string;
   },
 ): number | null {
-  if (plan === "free") return parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || "3", 3);
+  if (plan === "free") return parseNonNegativeFiniteLimit(env.FREE_AI_DAILY_LIMIT || String(DEFAULT_FREE_AI_DAILY_LIMIT), DEFAULT_FREE_AI_DAILY_LIMIT);
 
   const raw = plan === "family" ? env.FAMILY_AI_DAILY_LIMIT : env.PRO_AI_DAILY_LIMIT;
-  if (!raw || String(raw).trim().toLowerCase() === "infinity") return null;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return parseOptionalNonNegativeFiniteLimit(raw, DEFAULT_FREE_AI_DAILY_LIMIT);
 }
