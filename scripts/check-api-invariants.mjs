@@ -226,6 +226,16 @@ assertIncludes(
   'const { feature: _drop, model: _model, ...payload } = body ?? {}',
   'AI endpoint must strip server-only feature/model fields from the upstream Gemini payload',
 );
+assertIncludes(
+  aiEndpoint,
+  'const geminiTimeoutMs = normalizeGeminiTimeoutMs(env.GEMINI_TIMEOUT_MS)',
+  'AI endpoint must normalize Gemini fetch timeout from env',
+);
+assertIncludes(
+  aiEndpoint,
+  'signal: controller.signal',
+  'AI endpoint must pass an abort signal to the upstream Gemini fetch',
+);
 
 const plansLib = read('functions/api/_lib/plans.ts');
 assertIncludes(
