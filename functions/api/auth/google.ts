@@ -63,18 +63,6 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       .bind(user.sub, user.email, user.name, user.picture, now, now)
       .run();
 
-    // Restore soft-deleted accounts when the same Google user logs in during the grace window.
-    await env.DB.prepare(
-      `UPDATE users
-       SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
-       WHERE id = ?
-         AND deleted_at IS NOT NULL
-         AND deletion_scheduled_at IS NOT NULL
-         AND deletion_scheduled_at > datetime('now')`
-    )
-      .bind(now, user.sub)
-      .run();
-
 // Closed beta (invite codes)
 const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
 if (requireInvite) {
@@ -105,6 +93,18 @@ if (requireInvite) {
     .bind(inviteCode, user.sub, nowSec)
     .run();
 }
+
+// Restore soft-deleted accounts only after beta/invite access checks pass.
+await env.DB.prepare(
+  `UPDATE users
+   SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
+   WHERE id = ?
+     AND deleted_at IS NOT NULL
+     AND deletion_scheduled_at IS NOT NULL
+     AND deletion_scheduled_at > datetime('now')`
+)
+  .bind(now, user.sub)
+  .run();
 
 
 // Optional: auto-promote admins/supports by email (enterprise convenience)

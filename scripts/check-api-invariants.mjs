@@ -15,6 +15,15 @@ function assertIncludes(text, needle, label) {
   }
 }
 
+function assertOrder(text, before, after, label) {
+  const beforeIndex = text.indexOf(before);
+  const afterIndex = text.indexOf(after);
+  if (beforeIndex === -1 || afterIndex === -1 || beforeIndex > afterIndex) {
+    console.error(`${label}: expected ${before} before ${after}`);
+    process.exitCode = 1;
+  }
+}
+
 const familyJoin = read('functions/api/family/join.ts');
 assertIncludes(
   familyJoin,
@@ -37,6 +46,21 @@ assertIncludes(restore, 'RESTORE_REQUIRES_REAUTH', 'account restore must require
 if (restore.includes('requireUser(') || restore.includes('UPDATE users')) {
   console.error('account restore endpoint must not restore a deleted account through a stale session.');
   process.exitCode = 1;
+}
+
+for (const file of [
+  'functions/api/auth/google/callback.ts',
+  'functions/api/auth/apple/callback.ts',
+  'functions/api/auth/google.ts',
+]) {
+  const oauth = read(file);
+  assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
+  assertOrder(
+    oauth,
+    'const requireInvite = String((env as any).REQUIRE_INVITE',
+    'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1',
+    `${file} must restore only after invite access checks`,
+  );
 }
 
 const supportAttachments = read('functions/api/_lib/support_attachments.ts');
