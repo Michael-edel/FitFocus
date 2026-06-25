@@ -53,6 +53,11 @@ function changedRows(result: any): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
+function toInt(value: unknown, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
 function parseSteps(value: string) {
   const lines = value
     .split(/\r?\n/)
@@ -337,7 +342,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const url = new URL(request.url);
   const id = String(url.searchParams.get("id") || "").trim();
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || "20")));
+  const limit = Math.min(100, Math.max(1, toInt(url.searchParams.get("limit"), 20)));
   const status = normalizeTicketStatus(String(url.searchParams.get("status") || ""));
 
   if (id) {
