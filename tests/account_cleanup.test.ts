@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanupDeletedAccounts } from '../functions/api/_lib/account_cleanup';
+import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
 
 type PreparedStatement = {
   sql: string;
@@ -74,5 +75,26 @@ describe('cleanupDeletedAccounts', () => {
     expect(result.failures).toEqual([
       { id: 'blocked-user', error: 'SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE' },
     ]);
+  });
+
+  it('returns HTTP 500 from the scheduled endpoint when hard deletes fail', async () => {
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer cron-secret' },
+        body: JSON.stringify({ limit: 10 }),
+      }),
+      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/internal/cleanup_deleted',
+    } as any);
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as any;
+    expect(body.failed).toBe(1);
+    expect(body.failures[0].error).toBe('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
   });
 });

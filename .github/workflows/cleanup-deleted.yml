@@ -27,8 +27,19 @@ jobs:
           fi
 
           URL="${CLEANUP_URL:-https://fitfocus.pages.dev/api/internal/cleanup_deleted}"
-          curl --fail --show-error --silent \
+          RESPONSE_FILE="$(mktemp)"
+          STATUS="$(curl --show-error --silent \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
             --request POST "$URL" \
             --header "Authorization: Bearer ${CLEANUP_SECRET}" \
             --header "Content-Type: application/json" \
-            --data '{"limit":200}'
+            --data '{"limit":200}')"
+
+          cat "$RESPONSE_FILE"
+          echo
+
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "Cleanup endpoint returned HTTP $STATUS"
+            exit 1
+          fi
