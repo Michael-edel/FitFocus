@@ -10,6 +10,10 @@ function json(body: any, status = 200, headers?: Headers) {
   });
 }
 
+async function safeResponseJson(response: Response): Promise<any> {
+  return response.json().catch(() => ({}));
+}
+
 function parseAppleUserField(value: FormDataEntryValue | null): any | null {
   if (!value || typeof value !== "string") return null;
   try {
@@ -93,7 +97,7 @@ export const onRequest: PagesFunction<{
         grant_type: "authorization_code",
       }),
     });
-    const tokenJson: any = await tokenRes.json();
+    const tokenJson: any = await safeResponseJson(tokenRes);
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed", details: tokenJson }, 502);
     }
