@@ -77,6 +77,11 @@ for (const file of [
 const googleOAuthCallback = read('functions/api/auth/google/callback.ts');
 assertIncludes(
   googleOAuthCallback,
+  'import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth"',
+  'google OAuth callback must use shared OAuth session/state helpers',
+);
+assertIncludes(
+  googleOAuthCallback,
   'await safeResponseJson(tokenRes)',
   'google OAuth callback must tolerate non-JSON token endpoint failures',
 );
