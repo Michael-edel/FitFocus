@@ -11,6 +11,10 @@ import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
+function isIsoDay(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 function weekStartISO(d: Date) {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const day = date.getUTCDay();
@@ -263,6 +267,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const url = new URL(request.url);
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
+    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
 
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);

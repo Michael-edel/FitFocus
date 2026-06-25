@@ -336,5 +336,12 @@ if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_s
   process.exitCode = 1;
 }
 
+const familyMenuGenerate = read('functions/api/family/menu/generate.ts');
+assertIncludes(
+  familyMenuGenerate,
+  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  'family menu generator must reject malformed weekStart values',
+);
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
