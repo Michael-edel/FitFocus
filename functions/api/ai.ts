@@ -399,10 +399,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
-  const db = requireDB(env as any);
-  const activePlan = await loadActivePlan(db, String(user.sub));
   const kv = env.FITFOCUS_KV;
   const identity = String(user?.sub || "");
+
+  if (!apiKey) {
+    await logUsage(env, { identity, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+    return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
+  }
+
+  const db = requireDB(env as any);
+  const activePlan = await loadActivePlan(db, String(user.sub));
 
   // Strict backend controls: D1 is the source of truth for AI cooldown, burst and daily quota.
   // KV remains only for non-critical dedup/cache telemetry below.
@@ -451,11 +457,6 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
       });
     }
-  }
-
-  if (!apiKey) {
-    await logUsage(env, { identity, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-    return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
   }
 
   const model = resolveGeminiModel(body?.model);
