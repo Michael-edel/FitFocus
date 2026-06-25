@@ -5,6 +5,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import { logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -29,7 +30,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "BAD_REQUEST", message: "user_id and plan are required" }, 400);
   }
 
-  const target = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first<any>();
+  const target = await db
+    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
+    .bind(userId)
+    .first<any>();
   if (!target?.id) return json({ error: "NOT_FOUND", message: "user not found" }, 404);
 
   const now = Date.now();
@@ -50,6 +54,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          updated_at = excluded.updated_at`
     ).bind(userId, plan, now).run();
   }
+
+  await logAdminEvent(db, {
+    adminUserId: user.sub,
+    action: "subscription_update",
+    targetUserId: userId,
+    meta: { plan },
+  });
 
   return json({
     ok: true,
