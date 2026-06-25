@@ -29,8 +29,9 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { memberInsertChanges?: number } = {}) {
+function makeDb(options: { memberInsertChanges?: number; existingFamilyAfterConflict?: string | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  let familyAccessReadCount = 0;
   return {
     runs,
     prepare(sql: string) {
@@ -44,7 +45,13 @@ function makeDb(options: { memberInsertChanges?: number } = {}) {
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-1', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('FROM users')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('JOIN family_members')) return null;
+          if (sql.includes('JOIN family_members')) {
+            familyAccessReadCount += 1;
+            if (familyAccessReadCount > 1 && options.existingFamilyAfterConflict) {
+              return { id: options.existingFamilyAfterConflict, owner_user_id: 'owner-2', role: 'member' };
+            }
+            return null;
+          }
           if (sql.includes('FROM family_invites WHERE code = ?')) {
             return { code: 'JOINME', family_id: 'family-1', expires_at: NOW + 3600, used_by_user_id: null };
           }
@@ -110,7 +117,18 @@ describe('/api/family/join', () => {
 
     expect(response.status).toBe(400);
     const body = await response.json() as any;
-    expect(body.error.code).toBe('FAMILY_LIMIT');
+    expect(body.error.code).toBe('FAMILY_JOIN_CONFLICT');
+    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
+  });
+
+  it('returns the latest family when the user loses a concurrent join race', async () => {
+    const db = makeDb({ memberInsertChanges: 0, existingFamilyAfterConflict: 'family-2' });
+    const response = await postJoin(db);
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.familyId).toBe('family-2');
+    expect(body.alreadyMember).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
   });
 });
