@@ -3,6 +3,11 @@ export const API_SCHEMA_VERSION = 3;
 
 export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
 
+type RequireUserOptions = {
+  allowMobileToken?: boolean;
+  requireMobileToken?: boolean;
+};
+
 export async function ensureAuthSchema(db: D1Database): Promise<void> {
   void db;
   // Schema is now driven by migrations + db/schema.sql.
@@ -68,15 +73,20 @@ export async function verifySessionJwt(token: string, secret: string): Promise<a
 
 export async function requireUser(
   request: Request,
-  env: { AUTH_JWT_SECRET?: string; DB?: any }
+  env: { AUTH_JWT_SECRET?: string; DB?: any },
+  options: RequireUserOptions = {},
 ): Promise<SessionUser> {
-  const token =
-    readCookie(request.headers.get("Cookie") || "", "ff_session") ||
-    readBearerToken(request.headers.get("Authorization"));
+  const bearerToken = readBearerToken(request.headers.get("Authorization"));
+  const token = options.requireMobileToken
+    ? bearerToken
+    : readCookie(request.headers.get("Cookie") || "", "ff_session") || bearerToken;
   if (!token) throw new Error("UNAUTH");
   if (!env.AUTH_JWT_SECRET) throw new Error("AUTH_CONFIG");
   const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
   if (!payload?.sub) throw new Error("UNAUTH");
+  const aud = String(payload.aud || "");
+  if (options.requireMobileToken && aud !== "mobile") throw new Error("UNAUTH");
+  if (!options.allowMobileToken && aud === "mobile") throw new Error("UNAUTH");
 
   // Enterprise layer: enforce server-tracked sessions (logout-all, revoke, device control)
   const sid = String(payload.sid || "");
@@ -125,6 +135,13 @@ export async function requireUser(
     picture: payload.picture,
     roles,
   };
+}
+
+export async function requireMobileUser(
+  request: Request,
+  env: { AUTH_JWT_SECRET?: string; DB?: any },
+): Promise<SessionUser> {
+  return requireUser(request, env, { allowMobileToken: true, requireMobileToken: true });
 }
 
 export async function replaceActiveSessionsForUser(

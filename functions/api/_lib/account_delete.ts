@@ -2,10 +2,44 @@
 // NOTE: D1/SQLite. Use db.batch for atomic-ish multi-statement operations.
 
 import { logAdminEvent } from "./admin_audit";
+import { parseAttachmentsJson, type SupportAttachmentBucket } from "./support_attachments";
 
 export interface DeleteUserResult {
   ok: boolean;
   message?: string;
+}
+
+export interface DeleteUserAccountOptions {
+  supportAttachments?: SupportAttachmentBucket;
+}
+
+async function collectSupportStorageKeys(db: D1Database, userId: string): Promise<string[]> {
+  const keys = new Set<string>();
+  const rows = await db.prepare(
+    `SELECT attachments_json
+     FROM support_feedback
+     WHERE user_id = ?
+     UNION ALL
+     SELECT attachments_json
+     FROM support_feedback_messages
+     WHERE author_user_id = ?
+        OR ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ?)`
+  ).bind(userId, userId, userId).all<{ attachments_json?: string | null }>();
+
+  for (const row of rows.results || []) {
+    for (const attachment of parseAttachmentsJson(row.attachments_json)) {
+      if (attachment.storage_key) keys.add(attachment.storage_key);
+    }
+  }
+  return [...keys];
+}
+
+async function deleteSupportStorageKeys(bucket: SupportAttachmentBucket | undefined, keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  if (!bucket?.delete) {
+    throw new Error("SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE");
+  }
+  await bucket.delete(keys);
 }
 
 export async function deleteUserAccountAndAllData(
@@ -13,6 +47,7 @@ export async function deleteUserAccountAndAllData(
   userId: string,
   dryRun = false,
   logAsAdminId?: string,
+  options: DeleteUserAccountOptions = {},
 ): Promise<DeleteUserResult> {
   const stmts: ReturnType<D1Database["prepare"]>[] = [];
 
@@ -66,6 +101,14 @@ export async function deleteUserAccountAndAllData(
     return { ok: true, message: "Dry run: no changes made." };
   }
 
+  let supportStorageKeys: string[] = [];
+  try {
+    supportStorageKeys = await collectSupportStorageKeys(db, userId);
+    await deleteSupportStorageKeys(options.supportAttachments, supportStorageKeys);
+  } catch (e: any) {
+    return { ok: false, message: e?.message || "Не удалось удалить вложения поддержки." };
+  }
+
   stmts.push(db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId));
 
   const ownedFam = await db
@@ -89,6 +132,16 @@ export async function deleteUserAccountAndAllData(
   }
 
   stmts.push(
+    db.prepare("DELETE FROM support_feedback_messages WHERE ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ?) OR author_user_id = ?").bind(userId, userId),
+    db.prepare("UPDATE support_feedback SET assigned_admin_user_id = NULL, updated_at = ? WHERE assigned_admin_user_id = ?").bind(Date.now(), userId),
+    db.prepare("DELETE FROM support_feedback WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM admin_sessions WHERE admin_user_id = ?").bind(userId),
+    db.prepare("DELETE FROM admin_events WHERE admin_user_id = ? OR target_user_id = ?").bind(userId, userId),
+    db.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM ai_rate_limits WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM user_cost_daily WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM user_achievements WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_roles WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_kv WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM usage_daily WHERE user_id = ?").bind(userId),
@@ -97,6 +150,8 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM ai_events WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_profiles WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM recipes WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE created_by_user_id = ?)").bind(userId),
+    db.prepare("DELETE FROM weekly_menus WHERE created_by_user_id = ?").bind(userId),
     db.prepare("DELETE FROM weekly_menu_items WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM shopping_checked WHERE scope_id = ? OR scope_id = ?").bind(`personal:${userId}`, userId),
     db.prepare("DELETE FROM family_invites WHERE created_by_user_id = ? OR used_by_user_id = ?").bind(userId, userId),
@@ -107,11 +162,11 @@ export async function deleteUserAccountAndAllData(
   try {
     await db.batch(stmts);
 
-    if (logAsAdminId) {
+    if (logAsAdminId && logAsAdminId !== userId) {
       await logAdminEvent(db, {
         adminUserId: logAsAdminId,
         action: "delete_user_atomic_successful",
-        targetUserId: userId,
+        meta: { targetDeleted: true, supportStorageObjectsDeleted: supportStorageKeys.length },
       });
     }
 
@@ -164,8 +219,16 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
   await db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId).run();
 }
 
-export async function hardDeleteAccount(db: D1Database, userId: string): Promise<void> {
-  await deleteUserAccountAndAllData(db, userId, false, undefined);
+export async function hardDeleteAccount(
+  db: D1Database,
+  userId: string,
+  options: DeleteUserAccountOptions = {},
+): Promise<DeleteUserResult> {
+  const result = await deleteUserAccountAndAllData(db, userId, false, undefined, options);
+  if (!result.ok) {
+    throw new Error(result.message || "Failed to hard-delete account.");
+  }
+  return result;
 }
 
 export async function ensureNotLastAdmin(db: D1Database, userId: string): Promise<void> {

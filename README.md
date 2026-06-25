@@ -133,5 +133,5 @@ Production deploy ожидает Cloudflare Pages + D1:
 *   **HttpOnly sessions**: авторизация через `ff_session`, проверяемую в D1 sessions.
 *   **Beta access control**: закрытая beta управляется `REQUIRE_INVITE`, `invite_codes` и `invite_redemptions`.
 *   **Защита ключей**: В Production-среде доступ к Gemini осуществляется через прокси с ограничением по IP и хешированием.
-*   **Offline-first**: Основной функционал доступен без интернета благодаря Service Worker.
+*   **PWA runtime cache**: Service Worker кэширует навигацию и статические ресурсы во время использования приложения.
 *   **Push delivery**: уведомления работают только после разрешения в браузере и на устройствах, где включена PWA/Web Push поддержка.

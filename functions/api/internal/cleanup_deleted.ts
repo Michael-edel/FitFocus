@@ -4,8 +4,9 @@
 import { cleanupDeletedAccounts } from "../_lib/account_cleanup";
 import { json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
+import type { SupportAttachmentBucket } from "../_lib/support_attachments";
 
-type Env = { DB: D1Database; CRON_SECRET?: string };
+type Env = { DB: D1Database; CRON_SECRET?: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
 function getBearerToken(request: Request): string {
   const raw = request.headers.get("Authorization") || "";
@@ -51,6 +52,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     limit,
     actorUserId: "system:cron",
     logAction: "cleanup_deleted_scheduled",
+    supportAttachments: env.SUPPORT_ATTACHMENTS,
   });
 
   return json(result, 200);

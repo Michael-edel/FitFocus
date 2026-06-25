@@ -26,7 +26,6 @@ import {
 } from 'recharts';
 import { WeightTrendChart } from './charts';
 import { toLocalDayKey } from './dateUtils';
-import { downloadProgressComparisonPdf } from './pdf';
 import { normalizeWearableSyncSnapshot } from './wearableSync';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
@@ -572,6 +571,7 @@ export default function ProgressScreen({
 
   const exportComparisonPdf = async () => {
     if (!currentUser || !canExportComparison) return;
+    const { downloadProgressComparisonPdf } = await import('./pdf');
     await downloadProgressComparisonPdf({
       userName: currentUser.name,
       fromKey: compareFromKey,

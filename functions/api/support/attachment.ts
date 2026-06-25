@@ -31,27 +31,52 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
 
   const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
+  let isAdmin = false;
+  try { requireRole(user, "admin"); isAdmin = true; } catch {}
+  if (isAdmin) {
+    await requireAdminRequest(user, request, db);
+  }
 
   const url = new URL(request.url);
   const ticketId = String(url.searchParams.get("id") || "").trim();
+  const messageId = String(url.searchParams.get("messageId") || "").trim();
   const index = Number(url.searchParams.get("index") || "-1");
   if (!ticketId || !Number.isInteger(index) || index < 0) {
     return json({ error: "BAD_REQUEST", message: "id and index are required" }, 400);
   }
 
   const row = await db.prepare(
-    `SELECT id, attachments_json
+    `SELECT id, user_id
      FROM support_feedback
      WHERE id = ?
      LIMIT 1`
   ).bind(ticketId).first<any>();
   if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+  if (!isAdmin && row.user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);
 
-  const attachments = parseAttachmentsJson(row.attachments_json);
+  let attachmentsJson: string | null | undefined;
+  if (messageId) {
+    const messageRow = await db.prepare(
+      `SELECT attachments_json
+       FROM support_feedback_messages
+       WHERE id = ? AND ticket_id = ?
+       LIMIT 1`
+    ).bind(messageId, ticketId).first<any>();
+    if (!messageRow) return json({ error: "NOT_FOUND", message: "message not found" }, 404);
+    attachmentsJson = messageRow.attachments_json;
+  } else {
+    const ticketRow = await db.prepare(
+      `SELECT attachments_json
+       FROM support_feedback
+       WHERE id = ?
+       LIMIT 1`
+    ).bind(ticketId).first<any>();
+    attachmentsJson = ticketRow?.attachments_json;
+  }
+
+  const attachments = parseAttachmentsJson(attachmentsJson);
   const attachment = attachments[index];
   if (!attachment) return json({ error: "NOT_FOUND", message: "attachment not found" }, 404);
 

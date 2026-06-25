@@ -6,8 +6,9 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { cleanupDeletedAccounts } from "../_lib/account_cleanup";
+import type { SupportAttachmentBucket } from "../_lib/support_attachments";
 
-type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -24,6 +25,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (body?.limit) limit = Math.min(200, Math.max(1, Number(body.limit)));
   } catch {}
 
-  const result = await cleanupDeletedAccounts(db, { limit, actorUserId: user.sub, logAction: "cleanup_deleted" });
+  const result = await cleanupDeletedAccounts(db, {
+    limit,
+    actorUserId: user.sub,
+    logAction: "cleanup_deleted",
+    supportAttachments: env.SUPPORT_ATTACHMENTS,
+  });
   return json(result, 200);
 };

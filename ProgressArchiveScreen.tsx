@@ -11,7 +11,6 @@ import {
   YAxis,
 } from 'recharts';
 import { toLocalDayKey } from './dateUtils';
-import { downloadProgressArchivePdf } from './pdf';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type ProgressArchiveScreenProps = {
@@ -188,6 +187,7 @@ export default function ProgressArchiveScreen({
 
   const exportArchivePdf = async () => {
     if (!currentUser) return;
+    const { downloadProgressArchivePdf } = await import('./pdf');
     await downloadProgressArchivePdf({
       userName: currentUser.name || 'Пользователь',
       generatedAt: new Date().toLocaleString('ru-RU'),

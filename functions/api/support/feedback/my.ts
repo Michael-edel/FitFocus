@@ -13,7 +13,7 @@ type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: Supp
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
     ...attachment,
-    data_url: attachment.data_url || (scope.messageId ? attachment.data_url : attachmentResponseUrl(scope.ticketId, index)),
+    data_url: attachment.data_url || attachmentResponseUrl(scope.ticketId, index, scope.messageId),
   }));
 }
 
@@ -34,12 +34,12 @@ async function loadMessages(db: D1Database, ticketId: string) {
 
 async function appendMessage(
   db: D1Database,
+  id: string,
   ticketId: string,
   userId: string,
   message: string,
   attachments: SupportAttachmentRecord[],
 ) {
-  const id = uuid();
   const createdAt = nowMs();
   await db.prepare(
     `INSERT INTO support_feedback_messages (
@@ -135,10 +135,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const files = form.getAll("attachments").filter((entry): entry is File => entry instanceof File && entry.size > 0);
   if (files.length > 3) return json({ error: "BAD_REQUEST", message: "Too many attachments" }, 400);
 
+  const messageId = uuid();
   const attachments: SupportAttachmentRecord[] = [];
   try {
-    for (const file of files) {
-      attachments.push(await fileToAttachment(file));
+    for (const [index, file] of files.entries()) {
+      attachments.push(await fileToAttachment(file, {
+        bucket: env.SUPPORT_ATTACHMENTS,
+        ticketId,
+        messageId,
+        index,
+      }));
     }
   } catch (e: any) {
     const msg = String(e?.message || "");
@@ -148,7 +154,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
   }
 
-  const createdAt = await appendMessage(db, ticketId, user.sub, message, attachments);
+  const createdAt = await appendMessage(db, messageId, ticketId, user.sub, message, attachments);
   await db.prepare(
     `UPDATE support_feedback
      SET updated_at = ?, status = ?, last_reply_at = ?, last_reply_by = ?
