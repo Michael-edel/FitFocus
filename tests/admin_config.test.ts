@@ -42,9 +42,11 @@ type PreparedStatement = {
 
 function makeDb() {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
 
   const db = {
     runs,
+    batches,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -73,6 +75,12 @@ function makeDb() {
         },
       };
       return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      const recorded = stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds }));
+      batches.push(recorded);
+      runs.push(...recorded);
+      return stmts.map(() => ({ success: true, meta: { changes: 1 } }));
     },
   };
 
@@ -129,8 +137,9 @@ describe('admin runtime configuration', () => {
     const res = await put('/api/admin/feature_flags', db, { key: 'ai_safe_mode', enabled: true, rollout_percentage: 55.8 });
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('feature_flags') && run.binds[2] === 55)).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'flag_update')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('feature_flags') && run.binds[2] === 55)).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'flag_update')).toBe(true);
   });
 
   it('rejects unknown setting keys', async () => {

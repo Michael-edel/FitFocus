@@ -4,7 +4,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventStatement } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -47,12 +47,18 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (!Number.isFinite(rawRollout)) return json({ error: "BAD_ROLLOUT", message: "rollout_percentage must be a number" }, 400);
   const rollout = Math.max(0, Math.min(100, Math.floor(rawRollout)));
 
-  await db.prepare(
+  const flagStatement = db.prepare(
     "INSERT INTO feature_flags (key, enabled, rollout_percentage) VALUES (?, ?, ?) " +
       "ON CONFLICT(key) DO UPDATE SET enabled = excluded.enabled, rollout_percentage = excluded.rollout_percentage"
-  ).bind(key, enabled, rollout).run();
+  ).bind(key, enabled, rollout);
 
-  await logAdminEvent(db, { adminUserId: user.sub, action: "flag_update", targetUserId: null, meta: { key, enabled, rollout } });
+  const auditStatement = buildAdminEventStatement(db, {
+    adminUserId: user.sub,
+    action: "flag_update",
+    targetUserId: null,
+    meta: { key, enabled, rollout },
+  });
+  await db.batch([flagStatement, auditStatement]);
 
   return json({ ok: true, key, enabled: enabled === 1, rollout_percentage: rollout });
 };
