@@ -43,10 +43,25 @@ type PreparedStatement = {
 function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
+  const auditEvents: Array<{ sql: string; binds: unknown[] }> = [];
+  let lastChanges = 0;
+
+  function runStatement(stmt: PreparedStatement) {
+    let changes = stmt.sql.includes('UPDATE sessions SET revoked = 1') && options.sessionExists === false ? 0 : 1;
+    if (stmt.sql.includes('INSERT INTO admin_events')) {
+      const conditional = stmt.sql.includes('WHERE changes() > 0');
+      changes = conditional && lastChanges === 0 ? 0 : 1;
+      if (changes > 0) auditEvents.push({ sql: stmt.sql, binds: stmt.binds });
+    }
+    runs.push({ sql: stmt.sql, binds: stmt.binds });
+    lastChanges = changes;
+    return { success: true, meta: { changes } };
+  }
 
   const db = {
     runs,
     batches,
+    auditEvents,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -73,9 +88,7 @@ function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {
           return { results: [] };
         },
         async run() {
-          runs.push({ sql, binds: this.binds });
-          const changes = sql.includes('UPDATE sessions SET revoked = 1') && options.sessionExists === false ? 0 : 1;
-          return { success: true, meta: { changes } };
+          return runStatement(this);
         },
       };
       return stmt;
@@ -83,8 +96,7 @@ function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {
     async batch(stmts: PreparedStatement[]) {
       const recorded = stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds }));
       batches.push(recorded);
-      runs.push(...recorded);
-      return stmts.map(() => ({ success: true, meta: { changes: 1 } }));
+      return stmts.map((stmt) => runStatement(stmt));
     },
   };
 
@@ -142,7 +154,7 @@ describe('admin session and subscription mutations', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
+    expect(db.auditEvents.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 
   it('revokes an existing session and writes an audit event', async () => {
@@ -156,8 +168,10 @@ describe('admin session and subscription mutations', () => {
     const res = await postSession(context(request, db));
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('UPDATE sessions SET revoked = 1'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'session_revoke')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('UPDATE sessions SET revoked = 1'))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
+    expect(db.auditEvents.some((run) => String(run.binds[3]) === 'session_revoke')).toBe(true);
   });
 
   it('rejects subscription changes for missing or deleted target users', async () => {
