@@ -509,6 +509,28 @@ export default function SettingsScreen({
     return 'Браузер';
   };
 
+  const getPushBrowserLabel = () => {
+    if (typeof navigator === 'undefined') return 'Браузер';
+    const ua = navigator.userAgent || '';
+    const brands = (navigator as Navigator & { userAgentData?: { brands?: Array<{ brand: string; version: string }> } }).userAgentData?.brands || [];
+    const brandText = brands.map((item) => item.brand).join(' ');
+    if (/YaBrowser/i.test(ua) || /Yandex/i.test(brandText)) return 'Yandex';
+    if (/Comet/i.test(ua) || /Comet/i.test(brandText)) return 'Comet';
+    if (/Edg/i.test(ua)) return 'Edge';
+    if (/OPR/i.test(ua) || /Opera/i.test(brandText)) return 'Opera';
+    if (/Brave/i.test(brandText)) return 'Brave';
+    if (/Firefox/i.test(ua)) return 'Firefox';
+    if (/Chrome/i.test(ua) && !/Edg/i.test(ua) && !/OPR/i.test(ua)) return 'Chrome';
+    if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'Safari';
+    return 'Браузер';
+  };
+
+  const getPushDeviceDisplayLabel = () => {
+    const device = getPushDeviceLabel();
+    const browser = getPushBrowserLabel();
+    return browser === 'Браузер' ? device : `${device} · ${browser}`;
+  };
+
   const getPushDeviceHelp = () => {
     const device = getPushDeviceLabel();
     if (device === 'Windows' || device === 'Mac' || device === 'Linux') {
@@ -711,7 +733,7 @@ export default function SettingsScreen({
       }
 
       setPushSubscribed(true);
-      setPushNotice(`Уведомления включены на устройстве ${payload?.deviceLabel || getPushDeviceLabel()}.`);
+      setPushNotice(`Уведомления включены на устройстве ${payload?.deviceLabel || getPushDeviceDisplayLabel()}.`);
       await refreshPushStatus();
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Не удалось включить push-уведомления.');
@@ -809,14 +831,22 @@ export default function SettingsScreen({
       const sent = Number(payload?.sent || 0);
       const failed = Number(payload?.failed || 0);
       const removed = Number(payload?.removed || 0);
-      const firstFailure = Array.isArray(payload?.failures) ? payload.failures.find((it: any) => it?.message) : null;
-      const failureDetails = firstFailure?.message
-        ? ` Причина: ${String(firstFailure.message).slice(0, 180)}${firstFailure.status ? ` (${firstFailure.status})` : ''}.`
+      const failures = Array.isArray(payload?.failures) ? payload.failures : [];
+      const isGoneFailure = (item: any) => Number(item?.status) === 404 || Number(item?.status) === 410 || /expired|unsubscribed/i.test(String(item?.message || ''));
+      const cleanupCount = failures.filter(isGoneFailure).length;
+      const deliveryFailures = failures.filter((item: any) => !isGoneFailure(item));
+      const firstDeliveryFailure = deliveryFailures.find((item: any) => item?.message) || null;
+      const failureDetails = firstDeliveryFailure?.message
+        ? ` Причина: ${String(firstDeliveryFailure.message).slice(0, 180)}${firstDeliveryFailure.status ? ` (${firstDeliveryFailure.status})` : ''}.`
         : '';
       if (sent > 0 && failed === 0) {
         setPushNotice(`Тест отправлен: ${sent} уведомлений.`);
+      } else if (sent > 0 && deliveryFailures.length === 0) {
+        setPushNotice(`Тест отправлен: доставлено ${sent}${removed > 0 ? `, очищено устаревших подписок ${cleanupCount || removed}` : ''}.`);
       } else if (sent > 0) {
         setPushNotice(`Тест отправлен частично: доставлено ${sent}, ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.${failureDetails}`);
+      } else if (failed > 0 && deliveryFailures.length === 0) {
+        setPushNotice(`Устаревшие подписки очищены${removed > 0 ? `: ${removed}` : ''}. Нажмите «Переподключить push».`);
       } else if (failed > 0) {
         throw new Error(`Тест не доставлен: ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.${failureDetails}`);
       } else {
@@ -1511,7 +1541,7 @@ export default function SettingsScreen({
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 mt-4">
                   <div className="rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Это устройство</div>
-                    <div className="mt-2 text-slate-100 font-black">{getPushDeviceLabel()}</div>
+                    <div className="mt-2 text-slate-100 font-black">{getPushDeviceDisplayLabel()}</div>
                     <div className="mt-2 text-xs text-slate-500 leading-5">
                       {getPushDeviceHelp()}
                     </div>
