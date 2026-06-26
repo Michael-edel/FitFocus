@@ -1021,6 +1021,26 @@ assertIncludes(
   'BAD_BASE_VERSION',
   'profile writes must reject invalid baseVersion values instead of bypassing conflict checks',
 );
+assertIncludes(
+  profileRoute,
+  'readJsonRequest',
+  'profile writes must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  profileRoute,
+  'PROFILE_JSON_BODY_LIMIT_BYTES',
+  'profile writes must enforce an explicit JSON body size limit',
+);
+assertIncludes(
+  profileRoute,
+  'PAYLOAD_TOO_LARGE',
+  'profile writes must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  profileRoute,
+  'request.json()',
+  'profile writes must not read JSON through an unbounded request.json() call',
+);
 
 const wearableSyncRoute = read('functions/api/wearable/sync.ts');
 assertIncludes(
@@ -1032,6 +1052,38 @@ assertIncludes(
   wearableSyncRoute,
   'BAD_BASE_VERSION',
   'wearable sync must reject invalid baseVersion values instead of bypassing conflict checks',
+);
+assertIncludes(
+  wearableSyncRoute,
+  'readJsonRequest',
+  'wearable sync must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  wearableSyncRoute,
+  'PAYLOAD_TOO_LARGE',
+  'wearable sync must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  wearableSyncRoute,
+  'request.json()',
+  'wearable sync must not read JSON through an unbounded request.json() call',
+);
+
+const inviteRedeemRoute = read('functions/api/invite/redeem.ts');
+assertIncludes(
+  inviteRedeemRoute,
+  'readJsonRequest',
+  'invite redeem must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  inviteRedeemRoute,
+  'PAYLOAD_TOO_LARGE',
+  'invite redeem must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  inviteRedeemRoute,
+  'request.json()',
+  'invite redeem must not read JSON through an unbounded request.json() call',
 );
 
 const pushTestRoute = read('functions/api/push/test.ts');

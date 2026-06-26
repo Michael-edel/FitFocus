@@ -4,6 +4,7 @@
 import { json, requireUser } from "../_lib/auth";
 import { requireDB, nowMs, toApiError } from "../_lib/db";
 import { consumeInviteCode } from "../_lib/invites";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database };
 
@@ -12,7 +13,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const user = await requireUser(request, env as any);
     const db = requireDB(env as any);
 
-    const body: any = await request.json().catch(() => null);
+    let body: any = null;
+    try {
+      body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const code = String(body?.code || "").trim();
 
     if (!code) return json({ ok: false, error: "BAD_REQUEST" }, 400);
