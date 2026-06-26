@@ -518,13 +518,23 @@ assertIncludes(
 );
 assertIncludes(
   adminInvites,
-  'changedRows(result) === 0',
+  'changedRows(inviteResult) === 0',
   'admin invite update must reject missing invite rows',
 );
 assertIncludes(
   adminInvites,
   'action: "invite_update"',
   'admin invite update must write an audit event',
+);
+assertIncludes(
+  adminInvites,
+  'buildAdminEventAfterChangeStatement',
+  'admin invite update must audit only after a changed row',
+);
+assertIncludes(
+  adminInvites,
+  'await db.batch([inviteStatement, auditStatement]);',
+  'admin invite update must write revoke changes and audit events through one batch',
 );
 
 const adminFeatureFlags = read('functions/api/admin/feature_flags.ts');

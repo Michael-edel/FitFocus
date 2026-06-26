@@ -42,10 +42,27 @@ type PreparedStatement = {
 function makeDb(options: { inviteExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const allCalls: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
+  const auditEvents: Array<{ sql: string; binds: unknown[] }> = [];
+  let lastChanges = 0;
+
+  function runStatement(stmt: PreparedStatement) {
+    let changes = stmt.sql.includes('UPDATE invite_codes SET revoked') && options.inviteExists === false ? 0 : 1;
+    if (stmt.sql.includes('INSERT INTO admin_events')) {
+      const conditional = stmt.sql.includes('WHERE changes() > 0');
+      changes = conditional && lastChanges === 0 ? 0 : 1;
+      if (changes > 0) auditEvents.push({ sql: stmt.sql, binds: stmt.binds });
+    }
+    runs.push({ sql: stmt.sql, binds: stmt.binds });
+    lastChanges = changes;
+    return { success: true, meta: { changes } };
+  }
 
   const db = {
     runs,
     allCalls,
+    batches,
+    auditEvents,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -70,12 +87,15 @@ function makeDb(options: { inviteExists?: boolean } = {}) {
           return { results: [] };
         },
         async run() {
-          runs.push({ sql, binds: this.binds });
-          const changes = sql.includes('UPDATE invite_codes SET revoked') && options.inviteExists === false ? 0 : 1;
-          return { success: true, meta: { changes } };
+          return runStatement(this);
         },
       };
       return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      const recorded = stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds }));
+      batches.push(recorded);
+      return stmts.map((stmt) => runStatement(stmt));
     },
   };
 
@@ -148,7 +168,7 @@ describe('admin invite updates', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
+    expect(db.auditEvents.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 
   it('updates an existing invite and writes an audit event', async () => {
@@ -157,7 +177,9 @@ describe('admin invite updates', () => {
     const res = await putInvite(db, { code: 'ABC123', revoked: true });
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('UPDATE invite_codes SET revoked') && run.binds[1] === 'ABC123')).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'invite_update')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('UPDATE invite_codes SET revoked') && run.binds[1] === 'ABC123')).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
+    expect(db.auditEvents.some((run) => String(run.binds[3]) === 'invite_update')).toBe(true);
   });
 });
