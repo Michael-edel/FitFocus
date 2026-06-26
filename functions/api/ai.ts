@@ -4,6 +4,7 @@ import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } f
 import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
+import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 
 
 /**
@@ -231,17 +232,15 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let user: any;
   try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   try { await requireBetaAccess(env as any, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && Number(contentLength) > 4 * 1024 * 1024) {
-    return jsonResponse({ error: { message: "Payload too large" } }, 413);
-  }
-
   let bodyText = "";
   let body: any = null;
   try {
-    bodyText = await request.text();
+    bodyText = await readRequestText(request, 4 * 1024 * 1024);
     body = bodyText ? JSON.parse(bodyText) : {};
-  } catch {
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return jsonResponse({ error: { message: "Payload too large" } }, 413);
+    }
     return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
   }
 

@@ -38,11 +38,16 @@ async function collectSupportStorageKeys(db: D1Database, userId: string): Promis
   return [...keys];
 }
 
-async function deleteSupportStorageKeys(bucket: SupportAttachmentBucket | undefined, keys: string[]): Promise<void> {
+function ensureSupportStorageDeleteAvailable(bucket: SupportAttachmentBucket | undefined, keys: string[]): void {
   if (keys.length === 0) return;
   if (!bucket?.delete) {
     throw new Error("SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE");
   }
+}
+
+async function deleteSupportStorageKeys(bucket: SupportAttachmentBucket | undefined, keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  ensureSupportStorageDeleteAvailable(bucket, keys);
   await bucket.delete(keys);
 }
 
@@ -172,7 +177,7 @@ export async function deleteUserAccountAndAllData(
   let supportStorageKeys: string[] = [];
   try {
     supportStorageKeys = await collectSupportStorageKeys(db, userId);
-    await deleteSupportStorageKeys(options.supportAttachments, supportStorageKeys);
+    ensureSupportStorageDeleteAvailable(options.supportAttachments, supportStorageKeys);
   } catch (e: any) {
     return { ok: false, message: e?.message || "Не удалось удалить вложения поддержки." };
   }
@@ -229,6 +234,7 @@ export async function deleteUserAccountAndAllData(
 
   try {
     await db.batch(stmts);
+    await deleteSupportStorageKeys(options.supportAttachments, supportStorageKeys);
 
     if (logAsAdminId && logAsAdminId !== userId) {
       await logAdminEvent(db, {
@@ -305,19 +311,23 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
     .bind(userId)
     .first<any>();
 
+  const cleanupStmts: D1PreparedStatement[] = [];
   if (fam?.id) {
-    await db.prepare("UPDATE families SET is_active = 0 WHERE id = ?").bind(fam.id).run();
-    await db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id).run();
-    await db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id).run();
-    await db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id).run();
-    await db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(fam.id).run();
-    await db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(fam.id).run();
-    await db.prepare("DELETE FROM family_members WHERE family_id = ?").bind(fam.id).run();
+    cleanupStmts.push(
+      db.prepare("UPDATE families SET is_active = 0 WHERE id = ?").bind(fam.id),
+      db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id),
+      db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id),
+      db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id),
+      db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(fam.id),
+      db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(fam.id),
+      db.prepare("DELETE FROM family_members WHERE family_id = ?").bind(fam.id),
+    );
   } else {
-    await db.prepare("DELETE FROM family_members WHERE user_id = ?").bind(userId).run();
+    cleanupStmts.push(db.prepare("DELETE FROM family_members WHERE user_id = ?").bind(userId));
   }
 
-  await db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId).run();
+  cleanupStmts.push(db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId));
+  await db.batch(cleanupStmts);
 }
 
 export async function hardDeleteAccount(

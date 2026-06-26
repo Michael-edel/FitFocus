@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { readRequestText, RequestBodyTooLargeError } from "../_lib/request_body";
 
 type Env = {
   DB: D1Database;
@@ -17,6 +18,8 @@ type SubscriptionLike = {
   metadata?: { ff_uid?: string | null } | null;
   items?: { data?: Array<{ price?: { id?: string | null } | null }> } | null;
 };
+
+const MAX_STRIPE_WEBHOOK_BYTES = 1024 * 1024;
 
 function planForSubscription(status: string, priceId: string | null | undefined, env: Pick<Env, "PRICE_PRO_MONTHLY" | "PRICE_PRO_YEARLY" | "PRICE_FAMILY_MONTHLY">) {
   if (status !== "active" && status !== "trialing") return "free";
@@ -87,7 +90,15 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   });
 
   const sig = request.headers.get("stripe-signature");
-  const rawBody = await request.text();
+  let rawBody = "";
+  try {
+    rawBody = await readRequestText(request, MAX_STRIPE_WEBHOOK_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return new Response("Webhook Error: payload too large", { status: 413 });
+    }
+    throw err;
+  }
 
   let event;
   try {
