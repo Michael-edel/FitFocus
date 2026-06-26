@@ -40,6 +40,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({
     ok: true,
     configured: hasPushConfig(env),
+    vapid_public_key: env.PUSH_VAPID_PUBLIC_KEY || null,
     count: items.length,
     subscriptions: items,
   }, 200);
