@@ -4,6 +4,7 @@
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from "../_lib/account_cleanup";
 import { json, readBearerToken } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; CRON_SECRET?: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
@@ -37,9 +38,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   let limit = 200;
   try {
-    const body = await request.json();
+    const body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
     limit = normalizeCleanupRequestLimit(body, 200);
-  } catch {}
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+  }
 
   const db = requireDB(env);
   const result = await cleanupDeletedAccounts(db, {

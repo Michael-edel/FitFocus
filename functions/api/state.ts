@@ -5,9 +5,11 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
+import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
 function parseBaseVersion(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
@@ -61,7 +63,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const body: any = await request.json().catch(() => null);
+  let body: any = null;
+  try {
+    body = await readJsonRequest(request, STATE_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
   const items: { key: unknown; value: unknown; baseVersion?: unknown }[] = Array.isArray(body.items)

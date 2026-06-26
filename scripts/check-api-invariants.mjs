@@ -412,6 +412,21 @@ assertIncludes(
   'normalizeCleanupRequestLimit(body, 50)',
   'admin cleanup endpoint must parse invalid limits with the admin default',
 );
+assertIncludes(
+  adminCleanupDeleted,
+  'readJsonRequest',
+  'admin cleanup endpoint must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  adminCleanupDeleted,
+  'PAYLOAD_TOO_LARGE',
+  'admin cleanup endpoint must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  adminCleanupDeleted,
+  'request.json()',
+  'admin cleanup endpoint must not read JSON through an unbounded request.json() call',
+);
 
 const internalCleanupDeleted = read('functions/api/internal/cleanup_deleted.ts');
 assertIncludes(
@@ -423,6 +438,21 @@ assertIncludes(
   internalCleanupDeleted,
   'readBearerToken(request.headers.get("Authorization"))',
   'scheduled cleanup endpoint must reuse shared bearer parsing',
+);
+assertIncludes(
+  internalCleanupDeleted,
+  'readJsonRequest',
+  'scheduled cleanup endpoint must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  internalCleanupDeleted,
+  'PAYLOAD_TOO_LARGE',
+  'scheduled cleanup endpoint must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  internalCleanupDeleted,
+  'request.json()',
+  'scheduled cleanup endpoint must not read JSON through an unbounded request.json() call',
 );
 
 const accountDeleteLib = read('functions/api/_lib/account_delete.ts');
@@ -954,6 +984,26 @@ assertIncludes(
   stateRoute,
   'BAD_BASE_VERSION',
   'state put must reject invalid baseVersion values instead of bypassing conflict checks',
+);
+assertIncludes(
+  stateRoute,
+  'readJsonRequest',
+  'state put must parse JSON through the bounded request body helper',
+);
+assertIncludes(
+  stateRoute,
+  'STATE_JSON_BODY_LIMIT_BYTES',
+  'state put must enforce an explicit JSON body size limit',
+);
+assertIncludes(
+  stateRoute,
+  'PAYLOAD_TOO_LARGE',
+  'state put must return 413 for oversized JSON bodies',
+);
+assertNotIncludes(
+  stateRoute,
+  'request.json()',
+  'state put must not read JSON through an unbounded request.json() call',
 );
 if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user.sub, it.key, String(it.value ?? ""), t, nextVersion)\n      .run();')) {
   console.error('state put must not execute per-item kv writes before the whole request is conflict-checked.');
