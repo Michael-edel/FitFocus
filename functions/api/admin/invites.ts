@@ -6,7 +6,7 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, randomCode, nowMs, toApiError } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventAfterChangeStatement, logAdminEvent } from "../_lib/admin_audit";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -115,12 +115,17 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     const revoked = body.revoked ? 1 : 0;
     if (!code) throw new Error("BAD_REQUEST");
 
-    const result = await db.prepare("UPDATE invite_codes SET revoked = ? WHERE code = ?").bind(revoked, code).run();
-    if (changedRows(result) === 0) {
+    const inviteStatement = db.prepare("UPDATE invite_codes SET revoked = ? WHERE code = ?").bind(revoked, code);
+    const auditStatement = buildAdminEventAfterChangeStatement(db, {
+      adminUserId: user.sub,
+      action: "invite_update",
+      targetUserId: null,
+      meta: { code, revoked },
+    });
+    const [inviteResult] = await db.batch([inviteStatement, auditStatement]);
+    if (changedRows(inviteResult) === 0) {
       return json({ error: "NOT_FOUND", message: "invite code not found" }, 404);
     }
-
-    await logAdminEvent(db, { adminUserId: user.sub, action: "invite_update", targetUserId: null, meta: { code, revoked } });
 
     return json({ ok: true, code, revoked: revoked === 1 }, 200);
   } catch (e: any) {
