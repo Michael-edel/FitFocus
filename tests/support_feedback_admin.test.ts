@@ -139,6 +139,10 @@ async function getTickets(db: ReturnType<typeof makeDb>, query = '') {
 }
 
 async function patchTicket(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  return patchTicketRaw(db, JSON.stringify(body));
+}
+
+async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request('https://fitfocus.test/api/support/feedback', {
     method: 'PATCH',
@@ -146,7 +150,7 @@ async function patchTicket(db: ReturnType<typeof makeDb>, body: Record<string, u
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   return onRequestPatch({
@@ -177,6 +181,17 @@ describe('admin support ticket updates', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'BAD_STATUS' });
+    expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(false);
+  });
+
+  it('rejects oversized admin support JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await patchTicketRaw(db, `{"id":"ticket-1","message":"reply","payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(false);
   });

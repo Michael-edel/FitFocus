@@ -5,6 +5,7 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -36,7 +37,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  const body = (await request.json().catch(() => null)) as any;
+  let body: any = null;
+  try {
+    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   const key = String(body?.key || "").trim();
   if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
   if (!ALLOWED_FEATURE_FLAGS.has(key)) return json({ error: "BAD_FLAG", message: "Unknown feature flag" }, 400);

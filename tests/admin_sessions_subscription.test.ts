@@ -115,6 +115,10 @@ function context(request: Request, db: ReturnType<typeof makeDb>) {
 }
 
 async function adminRequest(url: string, body: Record<string, unknown>) {
+  return adminRequestRaw(url, JSON.stringify(body));
+}
+
+async function adminRequestRaw(url: string, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   return new Request(url, {
     method: 'POST',
@@ -122,7 +126,7 @@ async function adminRequest(url: string, body: Record<string, unknown>) {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 }
 
@@ -139,6 +143,20 @@ describe('admin session and subscription mutations', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
+    expect(db.runs.some((run) => run.sql.includes('UPDATE sessions SET revoked = 1'))).toBe(false);
+  });
+
+  it('rejects oversized session revoke JSON before writing', async () => {
+    const db = makeDb();
+    const request = await adminRequestRaw(
+      'https://fitfocus.test/api/admin/sessions',
+      `{"user_id":"user-1","session_id":"sid-user","action":"revoke","payload":"${'x'.repeat(70 * 1024)}"}`,
+    );
+
+    const res = await postSession(context(request, db));
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('UPDATE sessions SET revoked = 1'))).toBe(false);
   });
 
@@ -185,6 +203,20 @@ describe('admin session and subscription mutations', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
+    expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
+  });
+
+  it('rejects oversized subscription JSON before writing', async () => {
+    const db = makeDb();
+    const request = await adminRequestRaw(
+      'https://fitfocus.test/api/admin/subscription',
+      `{"user_id":"user-1","plan":"pro","payload":"${'x'.repeat(70 * 1024)}"}`,
+    );
+
+    const res = await postSubscription(context(request, db));
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
   });
 

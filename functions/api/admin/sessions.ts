@@ -5,6 +5,7 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -46,7 +47,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await requireAdminRequest(user, request, db);
 
 
-  const body = await request.json().catch(() => null) as any;
+  let body: any = null;
+  try {
+    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   const userId = String(body?.user_id || "").trim();
   const sessionId = String(body?.session_id || "").trim();
   const action = String(body?.action || "revoke");

@@ -88,6 +88,10 @@ function makeDb() {
 }
 
 async function put(path: string, db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  return putRaw(path, db, JSON.stringify(body));
+}
+
+async function putRaw(path: string, db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request(`https://fitfocus.test${path}`, {
     method: 'PUT',
@@ -95,7 +99,7 @@ async function put(path: string, db: ReturnType<typeof makeDb>, body: Record<str
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   const context = {
@@ -118,6 +122,16 @@ describe('admin runtime configuration', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'BAD_FLAG' });
+    expect(db.runs.some((run) => run.sql.includes('feature_flags'))).toBe(false);
+  });
+
+  it('rejects oversized feature flag JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await putRaw('/api/admin/feature_flags', db, `{"key":"ai_safe_mode","enabled":true,"payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('feature_flags'))).toBe(false);
   });
 
@@ -149,6 +163,16 @@ describe('admin runtime configuration', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'BAD_SETTING' });
+    expect(db.runs.some((run) => run.sql.includes('feature_settings'))).toBe(false);
+  });
+
+  it('rejects oversized settings JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await putRaw('/api/admin/settings', db, `{"key":"ai_max_calls_per_user_day","value":"1","payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('feature_settings'))).toBe(false);
   });
 

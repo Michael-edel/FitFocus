@@ -121,6 +121,10 @@ async function getInvites(db: ReturnType<typeof makeDb>, query = '') {
 }
 
 async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  return putInviteRaw(db, JSON.stringify(body));
+}
+
+async function putInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request('https://fitfocus.test/api/admin/invites', {
     method: 'PUT',
@@ -128,7 +132,7 @@ async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unk
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   return onRequestPut({
@@ -142,6 +146,10 @@ async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unk
 }
 
 async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  return postInviteRaw(db, JSON.stringify(body));
+}
+
+async function postInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request('https://fitfocus.test/api/admin/invites', {
     method: 'POST',
@@ -149,7 +157,7 @@ async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, un
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   return onRequestPost({
@@ -179,6 +187,16 @@ describe('admin invite updates', () => {
     const res = await putInvite(db, { code: 'ABC123', revoked: 'false' });
 
     expect(res.status).toBe(400);
+    expect(db.runs.some((run) => run.sql.includes('UPDATE invite_codes SET revoked'))).toBe(false);
+  });
+
+  it('rejects oversized invite update JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await putInviteRaw(db, `{"code":"ABC123","revoked":true,"payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('UPDATE invite_codes SET revoked'))).toBe(false);
   });
 
@@ -213,5 +231,15 @@ describe('admin invite updates', () => {
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].filter((run) => run.sql.includes('INSERT INTO invite_codes'))).toHaveLength(2);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'invite_create')).toBe(true);
+  });
+
+  it('rejects oversized invite create JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await postInviteRaw(db, `{"note":"beta","payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO invite_codes'))).toBe(false);
   });
 });
