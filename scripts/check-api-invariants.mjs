@@ -543,6 +543,16 @@ assertIncludes(
   'BAD_ROLLOUT',
   'admin feature flag endpoint must reject invalid rollout values',
 );
+assertIncludes(
+  adminFeatureFlags,
+  'buildAdminEventStatement',
+  'admin feature flag endpoint must stage audit writes with flag updates',
+);
+assertIncludes(
+  adminFeatureFlags,
+  'await db.batch([flagStatement, auditStatement]);',
+  'admin feature flag endpoint must write flag updates and audit events through one batch',
+);
 
 const adminSettings = read('functions/api/admin/settings.ts');
 assertIncludes(
