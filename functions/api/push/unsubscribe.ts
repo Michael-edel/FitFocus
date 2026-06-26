@@ -27,13 +27,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   const parsed = parsePushSubscription(body?.subscription || body);
   const endpoint = String(body?.endpoint || parsed?.endpoint || "").trim();
-  if (!endpoint) return json({ error: "BAD_REQUEST" }, 400);
+  const subscriptionId = String(body?.subscriptionId || body?.id || "").trim();
+  if (!endpoint && !subscriptionId) return json({ error: "BAD_REQUEST" }, 400);
 
   const db = requireDB(env);
-  const result = await db
-    .prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?")
-    .bind(user.sub, endpoint)
-    .run();
+  const statement = endpoint
+    ? db.prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?").bind(user.sub, endpoint)
+    : db.prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND id = ?").bind(user.sub, subscriptionId);
+  const result = await statement.run();
 
   const removed = Number((result as { meta?: { changes?: number } }).meta?.changes || 0);
 

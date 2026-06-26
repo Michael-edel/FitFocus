@@ -1,6 +1,6 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
-import { hasPushConfig } from "../_lib/push";
+import { hasPushConfig, normalizePushDeviceLabel } from "../_lib/push";
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -51,6 +51,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     last_error: row.last_error,
     enabled: Number(row.enabled || 0) === 1,
   }));
+  const currentDeviceLabel = normalizePushDeviceLabel(null, request.headers.get("user-agent"));
+  const enabledItems = items.filter((row) => row.enabled);
+  const currentMatch = enabledItems.find((row) => {
+    const deviceLabel = normalizePushDeviceLabel(row.device_label, row.user_agent);
+    return row.enabled && deviceLabel === currentDeviceLabel;
+  }) || (enabledItems.length === 1 ? enabledItems[0] : null);
 
   const config = pushConfigDiagnostics(env);
 
@@ -62,6 +68,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     config_keys: config.keys,
     checked_at: new Date().toISOString(),
     count: items.length,
+    current_subscription_id: currentMatch?.id || null,
+    current_device_label: currentMatch?.device_label || currentDeviceLabel,
     subscriptions: items,
   }, 200);
 };

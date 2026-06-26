@@ -317,6 +317,7 @@ export default function SettingsScreen({
   const [pushStatusChecked, setPushStatusChecked] = useState(false);
   const [pushStatusError, setPushStatusError] = useState<string | null>(null);
   const [pushMissingConfig, setPushMissingConfig] = useState<string[]>([]);
+  const [pushCurrentSubscriptionId, setPushCurrentSubscriptionId] = useState<string | null>(null);
   const [pushPublicKey, setPushPublicKey] = useState('');
   const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
@@ -566,16 +567,19 @@ export default function SettingsScreen({
     const missingConfig = Array.isArray(payload.missing_config)
       ? payload.missing_config.map((item: unknown) => String(item)).filter(Boolean)
       : [];
+    const currentSubscriptionId = String(payload.current_subscription_id || '').trim() || null;
     const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
     setPushMissingConfig(missingConfig);
+    setPushCurrentSubscriptionId(currentSubscriptionId);
     setPushPublicKey(publicKey);
     setPushSubscriptionCount(Number(payload.count || 0));
     setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
     setPushLastDeliveryError(lastDeliveryError);
-    return { configured, publicKey, lastDeliveryError, missingConfig };
+    setPushSubscribed(Boolean(currentSubscriptionId));
+    return { configured, publicKey, lastDeliveryError, missingConfig, currentSubscriptionId };
   };
 
   const refreshPushStatus = async () => {
@@ -589,6 +593,7 @@ export default function SettingsScreen({
       setPushStatusChecked(true);
       setPushStatusError(null);
       setPushMissingConfig([]);
+      setPushCurrentSubscriptionId(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
@@ -602,6 +607,7 @@ export default function SettingsScreen({
       setPushStatusChecked(true);
       setPushStatusError('Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
       setPushMissingConfig([]);
+      setPushCurrentSubscriptionId(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
@@ -618,18 +624,11 @@ export default function SettingsScreen({
       setPushStatusChecked(true);
       setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
       setPushMissingConfig([]);
+      setPushCurrentSubscriptionId(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
-    }
-
-    try {
-      const registration = await getReadyServiceWorkerRegistration(2500);
-      const subscription = await registration.pushManager.getSubscription();
-      setPushSubscribed(Boolean(subscription));
-    } catch {
-      setPushSubscribed(false);
     }
   };
 
@@ -719,26 +718,39 @@ export default function SettingsScreen({
     setPushNotice(null);
 
     try {
-      const registration = await getReadyServiceWorkerRegistration();
-      const subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        setPushSubscribed(false);
-        setPushNotice('Подписка на этом устройстве уже отключена.');
-        await refreshPushStatus();
-        return;
+      const requestBody: Record<string, unknown> = {};
+      let subscription: PushSubscription | null = null;
+      if (pushCurrentSubscriptionId) requestBody.subscriptionId = pushCurrentSubscriptionId;
+
+      if (!pushCurrentSubscriptionId) {
+        const registration = await getReadyServiceWorkerRegistration();
+        subscription = await registration.pushManager.getSubscription().catch(() => null);
+        if (subscription?.endpoint) {
+          requestBody.endpoint = subscription.endpoint;
+        }
       }
 
-      await fetch('/api/push/unsubscribe', {
+      const response = await fetch('/api/push/unsubscribe', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: subscription.endpoint,
-          subscription: subscription.toJSON(),
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      await subscription.unsubscribe();
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'Не удалось отключить push-уведомления.');
+      }
+
+      if (subscription) {
+        try {
+          await subscription.unsubscribe();
+        } catch {
+          // server-side removal already happened; keep the UI moving
+        }
+      }
       setPushSubscribed(false);
+      setPushCurrentSubscriptionId(null);
       setPushNotice('Уведомления на этом устройстве отключены.');
       await refreshPushStatus();
     } catch (error) {
@@ -1513,7 +1525,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void unsubscribeFromPush()}
-                      disabled={pushBusy || !pushSupported || !pushSubscribed || !serverSession}
+                      disabled={pushBusy || !pushSupported || !pushStatusChecked || !pushCurrentSubscriptionId || !serverSession}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:border-rose-500/30 text-slate-200 font-black transition-all disabled:opacity-50"
                     >
                       <BellOff className="w-4 h-4" />
