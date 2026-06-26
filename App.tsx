@@ -123,6 +123,13 @@ const NutritionScreen = React.lazy(() => import('./NutritionScreen'));
 const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
 const RegistrationScreen = React.lazy(() => import('./RegistrationScreen'));
 const AuthChoiceScreen = React.lazy(() => import('./AuthChoiceScreen'));
+
+function getInitialTabFromHash(): AppTabId | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#\/?/, '').split(/[?&]/)[0];
+  if (!hash || hash === 'admin') return null;
+  return sidebarTabs.some((tab) => tab.id === hash) ? hash as AppTabId : null;
+}
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
@@ -1138,13 +1145,22 @@ const App: React.FC = () => {
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<AppTabId>('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTabId>(() => getInitialTabFromHash() || 'dashboard');
   const mobileMoreStorageKey = useMemo(
     () => `fitfocus.dashboard.mobile-more-open.v1:${currentUser?.id ?? 'anon'}`,
     [currentUser?.id],
   );
   const mobileMoreSkipSaveRef = useRef(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  useEffect(() => {
+    const applyHashTab = () => {
+      const tab = getInitialTabFromHash();
+      if (tab) setActiveTab(tab);
+    };
+    applyHashTab();
+    window.addEventListener('hashchange', applyHashTab);
+    return () => window.removeEventListener('hashchange', applyHashTab);
+  }, []);
   useEffect(() => {
     try {
       mobileMoreSkipSaveRef.current = true;

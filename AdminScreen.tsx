@@ -336,6 +336,46 @@ type PushBroadcastResult = {
   payload?: { title?: string; body?: string; url?: string; tag?: string };
 };
 
+const PUSH_URL_OPTIONS = [
+  { value: "/", label: "Главная / обзор" },
+  { value: "/#dashboard", label: "Обзор" },
+  { value: "/#council", label: "AI Совет" },
+  { value: "/#plan", label: "План" },
+  { value: "/#nutrition", label: "Питание" },
+  { value: "/#progress", label: "Прогресс" },
+  { value: "/#progress-archive", label: "Архив прогресса" },
+  { value: "/#recipes", label: "Рецепты" },
+  { value: "/#workouts", label: "Зал" },
+  { value: "/#course", label: "Курс" },
+  { value: "/#family", label: "Семья" },
+  { value: "/#support", label: "Поддержка" },
+  { value: "/#guide", label: "Инструкция" },
+  { value: "/#updates", label: "Что нового" },
+  { value: "/#pro", label: "Тарифы" },
+  { value: "/#settings", label: "Настройки" },
+];
+
+const PUSH_SORT_OPTIONS: Array<{ value: PushBroadcastSort; label: string }> = [
+  { value: "updated_desc", label: "Недавно обновлённые сначала" },
+  { value: "updated_asc", label: "Давно не обновлялись сначала" },
+  { value: "created_desc", label: "Новые подписки сначала" },
+  { value: "created_asc", label: "Старые подписки сначала" },
+  { value: "last_sent_desc", label: "Недавно получали сначала" },
+  { value: "last_sent_asc", label: "Давно не получали сначала" },
+  { value: "email_asc", label: "Почта: А-Я" },
+  { value: "email_desc", label: "Почта: Я-А" },
+  { value: "device_asc", label: "Устройство: А-Я" },
+  { value: "device_desc", label: "Устройство: Я-А" },
+  { value: "browser_asc", label: "Браузер: А-Я" },
+  { value: "browser_desc", label: "Браузер: Я-А" },
+  { value: "plan_asc", label: "Тариф: А-Я" },
+  { value: "plan_desc", label: "Тариф: Я-А" },
+];
+
+function getPushSortLabel(sort: string) {
+  return PUSH_SORT_OPTIONS.find((item) => item.value === sort)?.label || sort;
+}
+
 function asBool(v: any) { return v === true || v === 1 || v === "1"; }
 
 function toMs(value: unknown): number | null {
@@ -409,7 +449,7 @@ export default function AdminScreen() {
   const [pushWearable, setPushWearable] = useState("all");
   const [pushGlucose, setPushGlucose] = useState("all");
   const [pushMeasurements, setPushMeasurements] = useState("all");
-  const [pushRole, setPushRole] = useState("all");
+  const [pushRole, setPushRole] = useState("");
   const [pushFamilyId, setPushFamilyId] = useState("");
   const [pushDevice, setPushDevice] = useState("all");
   const [pushBrowser, setPushBrowser] = useState("all");
@@ -589,7 +629,7 @@ export default function AdminScreen() {
     if (pushWearable !== "all") segment.wearable = pushWearable;
     if (pushGlucose !== "all") segment.glucose = pushGlucose;
     if (pushMeasurements !== "all") segment.measurements = pushMeasurements;
-    if (pushRole !== "all") segment.role = pushRole;
+    if (pushRole.trim() && pushRole.trim().toLowerCase() !== "all") segment.role = pushRole.trim();
     if (pushFamilyId.trim()) segment.familyId = pushFamilyId.trim();
     if (pushDevice !== "all") segment.device = pushDevice;
     if (pushBrowser !== "all") segment.browser = pushBrowser;
@@ -621,12 +661,12 @@ export default function AdminScreen() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || "Не удалось отправить push-рассылку");
+        throw new Error(payload?.message || payload?.error || "Не удалось отправить пуш-рассылку");
       }
       setPushSendResult(payload as PushBroadcastResult);
       await loadAdminEvents();
     } catch (e: any) {
-      setPushSendError(e?.message || "Не удалось отправить push-рассылку");
+      setPushSendError(e?.message || "Не удалось отправить пуш-рассылку");
     } finally {
       setPushSendBusy(false);
     }
@@ -1028,15 +1068,15 @@ export default function AdminScreen() {
           <div>
             <h2 className="text-xl font-black text-slate-100 flex items-center gap-2">
               <Send className="h-5 w-5 text-indigo-300" />
-              Push-рассылка
+              Пуш-рассылка
             </h2>
             <div className="text-slate-400 font-medium mt-1">
-              Отправка всем клиентам или выборочно по сегменту. Для проверки сначала используйте dry-run.
+              Отправка всем клиентам или выборочно по сегменту. Для проверки сначала используйте «Проверить без отправки».
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
             <Filter className="h-4 w-4" />
-            Фильтры применяются к подпискам push, а не к карточкам пользователей.
+            Фильтры применяются к пуш-подпискам, а не к карточкам пользователей.
           </div>
         </div>
 
@@ -1048,26 +1088,19 @@ export default function AdminScreen() {
                 <input value={pushTitle} onChange={(e) => setPushTitle(e.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
               </div>
               <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">URL</div>
-                <input value={pushUrl} onChange={(e) => setPushUrl(e.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Ссылка</div>
+                <select value={pushUrl} onChange={(e) => setPushUrl(e.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                  {PUSH_URL_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сортировка</div>
                 <select value={pushSort} onChange={(e) => setPushSort(e.target.value as PushBroadcastSort)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
-                  <option value="updated_desc">updated_desc</option>
-                  <option value="updated_asc">updated_asc</option>
-                  <option value="created_desc">created_desc</option>
-                  <option value="created_asc">created_asc</option>
-                  <option value="last_sent_desc">last_sent_desc</option>
-                  <option value="last_sent_asc">last_sent_asc</option>
-                  <option value="email_asc">email_asc</option>
-                  <option value="email_desc">email_desc</option>
-                  <option value="device_asc">device_asc</option>
-                  <option value="device_desc">device_desc</option>
-                  <option value="browser_asc">browser_asc</option>
-                  <option value="browser_desc">browser_desc</option>
-                  <option value="plan_asc">plan_asc</option>
-                  <option value="plan_desc">plan_desc</option>
+                  {PUSH_SORT_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1079,20 +1112,20 @@ export default function AdminScreen() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Limit</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Лимит</div>
                 <input type="number" min={1} max={500} value={pushLimit} onChange={(e) => setPushLimit(Math.max(1, Math.min(500, Number(e.target.value || 50))))} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
               </div>
               <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Offset</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сдвиг</div>
                 <input type="number" min={0} max={100000} value={pushOffset} onChange={(e) => setPushOffset(Math.max(0, Number(e.target.value || 0)))} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
               </div>
               <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Query</div>
-                <input value={pushQuery} onChange={(e) => setPushQuery(e.target.value)} placeholder="email / user_id / name" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Поиск</div>
+                <input value={pushQuery} onChange={(e) => setPushQuery(e.target.value)} placeholder="Почта / ID / имя" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
               </div>
               <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Role</div>
-                <input value={pushRole} onChange={(e) => setPushRole(e.target.value)} placeholder="all / user / family_parent" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Роль</div>
+                <input value={pushRole} onChange={(e) => setPushRole(e.target.value)} placeholder="Все роли или роль из базы" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
               </div>
             </div>
 
@@ -1105,12 +1138,12 @@ export default function AdminScreen() {
               </select>
               <select value={pushPlan} onChange={(e) => setPushPlan(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
                 <option value="all">План: все</option>
-                <option value="free">Free</option>
+                <option value="free">Бесплатный</option>
                 <option value="pro">Pro</option>
                 <option value="family">Family</option>
               </select>
               <select value={pushWearable} onChange={(e) => setPushWearable(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
-                <option value="all">Wearable: все</option>
+                <option value="all">Смарт-часы: все</option>
                 <option value="connected">Подключён</option>
                 <option value="disconnected">Не подключён</option>
               </select>
@@ -1142,11 +1175,11 @@ export default function AdminScreen() {
                 <option value="Brave">Brave</option>
                 <option value="Firefox">Firefox</option>
               </select>
-              <input value={pushFamilyId} onChange={(e) => setPushFamilyId(e.target.value)} placeholder="familyId" className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+              <input value={pushFamilyId} onChange={(e) => setPushFamilyId(e.target.value)} placeholder="ID семьи" className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
             </div>
 
             <div className="space-y-1">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">User IDs</div>
+              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">ID пользователей</div>
               <textarea value={pushUserIds} onChange={(e) => setPushUserIds(e.target.value)} rows={2} placeholder="user-1, user-2" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 resize-y placeholder:text-slate-500" />
             </div>
 
@@ -1158,7 +1191,7 @@ export default function AdminScreen() {
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-sm font-black text-slate-100 hover:border-indigo-500/30 disabled:opacity-50"
               >
                 <Filter className="h-4 w-4" />
-                Dry run
+                Проверить без отправки
               </button>
               <button
                 type="button"
@@ -1167,7 +1200,7 @@ export default function AdminScreen() {
                 className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-500 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
-                Отправить push
+                Отправить пуш
               </button>
             </div>
 
@@ -1179,8 +1212,8 @@ export default function AdminScreen() {
             {pushSendResult && (
               <div className={`rounded-2xl border px-4 py-3 font-semibold ${pushSendResult.dry_run ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-100" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"}`}>
                 {pushSendResult.dry_run
-                  ? `Dry-run: найдено ${pushSendResult.total_candidates}, совпало ${pushSendResult.matched}, выбрано ${pushSendResult.selected}.`
-                  : `Отправка завершена: sent ${pushSendResult.sent ?? 0}, failed ${pushSendResult.failed ?? 0}, removed ${pushSendResult.removed ?? 0}.`}
+                  ? `Проверка: найдено ${pushSendResult.total_candidates}, совпало ${pushSendResult.matched}, выбрано ${pushSendResult.selected}.`
+                  : `Отправка завершена: отправлено ${pushSendResult.sent ?? 0}, ошибок ${pushSendResult.failed ?? 0}, удалено устаревших ${pushSendResult.removed ?? 0}.`}
               </div>
             )}
           </div>
@@ -1189,7 +1222,7 @@ export default function AdminScreen() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Кому уйдёт</div>
               <div className="mt-1 text-slate-100 font-black text-lg">
-                {pushSendResult ? `${pushSendResult.selected ?? 0} подписок` : "Пока нет превью"}
+                {pushSendResult ? `${pushSendResult.selected ?? 0} подписок` : "Пока нет предпросмотра"}
               </div>
               <div className="text-slate-400 text-sm mt-1">
                 {pushSendResult?.segment
@@ -1213,13 +1246,13 @@ export default function AdminScreen() {
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сортировка</div>
-                <div className="mt-1 text-slate-100 font-black">{pushSort}</div>
+                <div className="mt-1 text-slate-100 font-black">{getPushSortLabel(pushSort)}</div>
               </div>
             </div>
 
             {pushSendResult?.preview?.length ? (
               <div className="space-y-2">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Preview</div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Предпросмотр</div>
                 <div className="max-h-[300px] overflow-auto space-y-2 pr-1">
                   {pushSendResult.preview.map((item) => (
                     <div key={item.subscription_id} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-sm">
@@ -1238,7 +1271,7 @@ export default function AdminScreen() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-4 text-slate-500 font-semibold text-sm">
-                Нажмите dry-run, чтобы увидеть список получателей перед отправкой.
+                Нажмите «Проверить без отправки», чтобы увидеть список получателей перед отправкой.
               </div>
             )}
 
@@ -1252,7 +1285,7 @@ export default function AdminScreen() {
                       <div className="mt-1 opacity-90">
                         {failure.message}
                         {failure.status ? ` (${failure.status})` : ""}
-                        {failure.removed ? " · removed" : ""}
+                        {failure.removed ? " · удалена" : ""}
                       </div>
                     </div>
                   ))}
