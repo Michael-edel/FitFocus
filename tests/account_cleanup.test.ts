@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from '../functions/api/_lib/account_cleanup';
 import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
+import { onRequestPost as onAdminCleanupPost } from '../functions/api/admin/cleanup_deleted';
+
+const SECRET = 'unit-test-secret';
+const NOW = Math.floor(Date.now() / 1000);
 
 type PreparedStatement = {
   sql: string;
@@ -10,6 +14,31 @@ type PreparedStatement = {
   all: () => Promise<{ results: unknown[] }>;
   run: () => Promise<{ success: boolean; meta: { changes: number } }>;
 };
+
+function b64url(input: string | Uint8Array | ArrayBuffer) {
+  const bytes =
+    typeof input === 'string'
+      ? new TextEncoder().encode(input)
+      : input instanceof Uint8Array
+        ? input
+        : new Uint8Array(input);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function signJwt(payload: Record<string, unknown>) {
+  const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const p = b64url(JSON.stringify({ exp: NOW + 3600, ...payload }));
+  const data = `${h}.${p}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  return `${data}.${b64url(sig)}`;
+}
 
 function makeDb() {
   const batchedSqlByUser = new Map<string, string[]>();
@@ -29,12 +58,27 @@ function makeDb() {
           return this;
         },
         async first() {
+          if (sql.includes('FROM sessions WHERE id = ? AND user_id = ? LIMIT 1')) {
+            return { id: 'sid-admin', revoked: 0, expires_at: NOW + 3600 };
+          }
+          if (sql.includes('SELECT is_active, deleted_at FROM users WHERE id = ? LIMIT 1')) {
+            return { is_active: 1, deleted_at: null };
+          }
           if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) return null;
           if (sql.includes("FROM families WHERE owner_user_id = ? AND is_active = 1")) return null;
           if (sql.includes("FROM families WHERE owner_user_id = ? LIMIT 1")) return null;
           return null;
         },
         async all() {
+          if (sql.includes('SELECT role FROM user_roles WHERE user_id = ?')) {
+            const userId = String(this.binds[0] || '');
+            if (userId === 'admin-1') return { results: [{ role: 'admin' }, { role: 'user' }] };
+            return { results: [{ role: 'user' }] };
+          }
+          if (sql.includes("FROM user_roles WHERE user_id = ? AND role = 'admin'")) {
+            const userId = String(this.binds[0] || '');
+            return { results: userId === 'admin-1' ? [{ ok: 1 }] : [] };
+          }
           if (sql.includes('SELECT id FROM users WHERE deletion_scheduled_at')) {
             deletionSelectBinds.push(this.binds);
             return { results: [{ id: 'ok-user' }, { id: 'blocked-user' }] };
@@ -174,5 +218,48 @@ describe('cleanupDeletedAccounts', () => {
     expect(response.status).toBe(500);
     const body = await response.json() as any;
     expect(body.limit).toBe(1);
+  });
+
+  it('rejects oversized scheduled cleanup bodies before running cleanup', async () => {
+    const db = makeDb();
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer cron-secret', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
+      }),
+      env: { DB: db, CRON_SECRET: 'cron-secret' } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/internal/cleanup_deleted',
+    } as any);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(db.deletionSelectBinds).toHaveLength(0);
+  });
+
+  it('rejects oversized admin cleanup bodies before running cleanup', async () => {
+    const db = makeDb();
+    const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin' });
+    const response = await onAdminCleanupPost({
+      request: new Request('https://fitfocus.test/api/admin/cleanup_deleted', {
+        method: 'POST',
+        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
+      }),
+      env: { DB: db, AUTH_JWT_SECRET: SECRET } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/admin/cleanup_deleted',
+    } as any);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(db.deletionSelectBinds).toHaveLength(0);
   });
 });
