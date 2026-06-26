@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip } from "lucide-react";
+import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip, Send, Filter } from "lucide-react";
 
 const DEFAULT_AI_INPUT_COST_PER_1M = "0.30";
 const DEFAULT_AI_OUTPUT_COST_PER_1M = "2.50";
@@ -295,6 +295,46 @@ type UserDetail = {
 };
 
 type SubscriptionPlan = "free" | "pro" | "family";
+type PushBroadcastSort = "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "last_sent_desc" | "last_sent_asc" | "email_desc" | "email_asc" | "device_desc" | "device_asc" | "browser_desc" | "browser_asc" | "plan_desc" | "plan_asc";
+type PushBroadcastSegment = {
+  query?: string;
+  status?: string;
+  plan?: string;
+  wearable?: string;
+  glucose?: string;
+  measurements?: string;
+  role?: string;
+  familyId?: string;
+  device?: string;
+  browser?: string;
+  userIds?: string[];
+};
+type PushBroadcastPreview = {
+  subscription_id: string;
+  user_id: string;
+  email?: string | null;
+  device?: string;
+  browser?: string;
+  plan?: string;
+  roles?: string[];
+};
+type PushBroadcastResult = {
+  ok: boolean;
+  dry_run: boolean;
+  total_candidates: number;
+  matched: number;
+  selected: number;
+  limit: number;
+  offset: number;
+  sort: PushBroadcastSort | string;
+  segment?: PushBroadcastSegment;
+  preview?: PushBroadcastPreview[];
+  sent?: number;
+  failed?: number;
+  removed?: number;
+  failures?: Array<{ id: string; status: number | null; message: string; removed: boolean }>;
+  payload?: { title?: string; body?: string; url?: string; tag?: string };
+};
 
 function asBool(v: any) { return v === true || v === 1 || v === "1"; }
 
@@ -357,6 +397,26 @@ export default function AdminScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserDetail | null>(null);
   const [subscriptionPlanDraft, setSubscriptionPlanDraft] = useState<SubscriptionPlan>("free");
+  const [pushTitle, setPushTitle] = useState("FitFocus");
+  const [pushBody, setPushBody] = useState("У вас новое уведомление от FitFocus.");
+  const [pushUrl, setPushUrl] = useState("/");
+  const [pushSort, setPushSort] = useState<PushBroadcastSort>("updated_desc");
+  const [pushLimit, setPushLimit] = useState(50);
+  const [pushOffset, setPushOffset] = useState(0);
+  const [pushQuery, setPushQuery] = useState("");
+  const [pushStatus, setPushStatus] = useState("all");
+  const [pushPlan, setPushPlan] = useState("all");
+  const [pushWearable, setPushWearable] = useState("all");
+  const [pushGlucose, setPushGlucose] = useState("all");
+  const [pushMeasurements, setPushMeasurements] = useState("all");
+  const [pushRole, setPushRole] = useState("all");
+  const [pushFamilyId, setPushFamilyId] = useState("");
+  const [pushDevice, setPushDevice] = useState("all");
+  const [pushBrowser, setPushBrowser] = useState("all");
+  const [pushUserIds, setPushUserIds] = useState("");
+  const [pushSendBusy, setPushSendBusy] = useState(false);
+  const [pushSendError, setPushSendError] = useState<string | null>(null);
+  const [pushSendResult, setPushSendResult] = useState<PushBroadcastResult | null>(null);
 
   const [roles, setRoles] = useState<string[]>([]);
   const [newRole, setNewRole] = useState("pro");
@@ -513,6 +573,63 @@ export default function AdminScreen() {
     if (adminEventFrom) qs.set('from', adminEventFrom);
     if (adminEventTo) qs.set('to', adminEventTo);
     window.open(`/api/admin/admin_events?${qs.toString()}`, '_blank');
+  };
+
+  const normalizeIdList = (value: string) =>
+    value
+      .split(/[\n,;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const buildPushBroadcastBody = (dryRun: boolean) => {
+    const segment: PushBroadcastSegment = {};
+    if (pushQuery.trim()) segment.query = pushQuery.trim();
+    if (pushStatus !== "all") segment.status = pushStatus;
+    if (pushPlan !== "all") segment.plan = pushPlan;
+    if (pushWearable !== "all") segment.wearable = pushWearable;
+    if (pushGlucose !== "all") segment.glucose = pushGlucose;
+    if (pushMeasurements !== "all") segment.measurements = pushMeasurements;
+    if (pushRole !== "all") segment.role = pushRole;
+    if (pushFamilyId.trim()) segment.familyId = pushFamilyId.trim();
+    if (pushDevice !== "all") segment.device = pushDevice;
+    if (pushBrowser !== "all") segment.browser = pushBrowser;
+    const userIds = normalizeIdList(pushUserIds);
+    if (userIds.length) segment.userIds = userIds;
+
+    const body: Record<string, unknown> = {
+      dryRun,
+      title: pushTitle.trim() || "FitFocus",
+      body: pushBody.trim() || "У вас новое уведомление от FitFocus.",
+      url: pushUrl.trim() || "/",
+      sort: pushSort,
+      limit: pushLimit,
+      offset: pushOffset,
+    };
+    if (Object.keys(segment).length > 0) body.segment = segment;
+    return body;
+  };
+
+  const sendPushBroadcast = async (dryRun: boolean) => {
+    setPushSendBusy(true);
+    setPushSendError(null);
+    try {
+      const response = await fetch("/api/admin/push/send", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPushBroadcastBody(dryRun)),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || "Не удалось отправить push-рассылку");
+      }
+      setPushSendResult(payload as PushBroadcastResult);
+      await loadAdminEvents();
+    } catch (e: any) {
+      setPushSendError(e?.message || "Не удалось отправить push-рассылку");
+    } finally {
+      setPushSendBusy(false);
+    }
   };
 
 
@@ -903,6 +1020,246 @@ export default function AdminScreen() {
           <div className="text-slate-400 font-bold">Family-участники</div>
           <div className="text-3xl font-black text-slate-100 mt-2">{stats?.totals?.family_members_active ?? "—"}</div>
           <div className="text-slate-500 font-semibold mt-1">активные связи семьи</div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-black text-slate-100 flex items-center gap-2">
+              <Send className="h-5 w-5 text-indigo-300" />
+              Push-рассылка
+            </h2>
+            <div className="text-slate-400 font-medium mt-1">
+              Отправка всем клиентам или выборочно по сегменту. Для проверки сначала используйте dry-run.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">
+            <Filter className="h-4 w-4" />
+            Фильтры применяются к подпискам push, а не к карточкам пользователей.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.7fr] gap-4 mt-4">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Заголовок</div>
+                <input value={pushTitle} onChange={(e) => setPushTitle(e.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">URL</div>
+                <input value={pushUrl} onChange={(e) => setPushUrl(e.target.value)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сортировка</div>
+                <select value={pushSort} onChange={(e) => setPushSort(e.target.value as PushBroadcastSort)} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                  <option value="updated_desc">updated_desc</option>
+                  <option value="updated_asc">updated_asc</option>
+                  <option value="created_desc">created_desc</option>
+                  <option value="created_asc">created_asc</option>
+                  <option value="last_sent_desc">last_sent_desc</option>
+                  <option value="last_sent_asc">last_sent_asc</option>
+                  <option value="email_asc">email_asc</option>
+                  <option value="email_desc">email_desc</option>
+                  <option value="device_asc">device_asc</option>
+                  <option value="device_desc">device_desc</option>
+                  <option value="browser_asc">browser_asc</option>
+                  <option value="browser_desc">browser_desc</option>
+                  <option value="plan_asc">plan_asc</option>
+                  <option value="plan_desc">plan_desc</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сообщение</div>
+              <textarea value={pushBody} onChange={(e) => setPushBody(e.target.value)} rows={3} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 resize-y" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Limit</div>
+                <input type="number" min={1} max={500} value={pushLimit} onChange={(e) => setPushLimit(Math.max(1, Math.min(500, Number(e.target.value || 50))))} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Offset</div>
+                <input type="number" min={0} max={100000} value={pushOffset} onChange={(e) => setPushOffset(Math.max(0, Number(e.target.value || 0)))} className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100" />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Query</div>
+                <input value={pushQuery} onChange={(e) => setPushQuery(e.target.value)} placeholder="email / user_id / name" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Role</div>
+                <input value={pushRole} onChange={(e) => setPushRole(e.target.value)} placeholder="all / user / family_parent" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <select value={pushStatus} onChange={(e) => setPushStatus(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Статус: все</option>
+                <option value="active">Активные</option>
+                <option value="inactive">Неактивные</option>
+                <option value="deleted">Удалённые</option>
+              </select>
+              <select value={pushPlan} onChange={(e) => setPushPlan(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">План: все</option>
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+                <option value="family">Family</option>
+              </select>
+              <select value={pushWearable} onChange={(e) => setPushWearable(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Wearable: все</option>
+                <option value="connected">Подключён</option>
+                <option value="disconnected">Не подключён</option>
+              </select>
+              <select value={pushGlucose} onChange={(e) => setPushGlucose(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Сахар: все</option>
+                <option value="yes">Есть</option>
+                <option value="no">Нет</option>
+              </select>
+              <select value={pushMeasurements} onChange={(e) => setPushMeasurements(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Замеры: все</option>
+                <option value="yes">Есть</option>
+                <option value="no">Нет</option>
+              </select>
+              <select value={pushDevice} onChange={(e) => setPushDevice(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Устройство: все</option>
+                <option value="Windows">Windows</option>
+                <option value="Android">Android</option>
+                <option value="iPhone">iPhone</option>
+                <option value="iPad">iPad</option>
+                <option value="Mac">Mac</option>
+              </select>
+              <select value={pushBrowser} onChange={(e) => setPushBrowser(e.target.value)} className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100">
+                <option value="all">Браузер: все</option>
+                <option value="Chrome">Chrome</option>
+                <option value="Yandex">Yandex</option>
+                <option value="Comet">Comet</option>
+                <option value="Safari">Safari</option>
+                <option value="Edge">Edge</option>
+                <option value="Brave">Brave</option>
+                <option value="Firefox">Firefox</option>
+              </select>
+              <input value={pushFamilyId} onChange={(e) => setPushFamilyId(e.target.value)} placeholder="familyId" className="rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">User IDs</div>
+              <textarea value={pushUserIds} onChange={(e) => setPushUserIds(e.target.value)} rows={2} placeholder="user-1, user-2" className="w-full rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 resize-y placeholder:text-slate-500" />
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={pushSendBusy}
+                onClick={() => void sendPushBroadcast(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/40 px-4 py-3 text-sm font-black text-slate-100 hover:border-indigo-500/30 disabled:opacity-50"
+              >
+                <Filter className="h-4 w-4" />
+                Dry run
+              </button>
+              <button
+                type="button"
+                disabled={pushSendBusy}
+                onClick={() => void sendPushBroadcast(false)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                Отправить push
+              </button>
+            </div>
+
+            {pushSendError && (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-100 font-semibold">
+                {pushSendError}
+              </div>
+            )}
+            {pushSendResult && (
+              <div className={`rounded-2xl border px-4 py-3 font-semibold ${pushSendResult.dry_run ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-100" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"}`}>
+                {pushSendResult.dry_run
+                  ? `Dry-run: найдено ${pushSendResult.total_candidates}, совпало ${pushSendResult.matched}, выбрано ${pushSendResult.selected}.`
+                  : `Отправка завершена: sent ${pushSendResult.sent ?? 0}, failed ${pushSendResult.failed ?? 0}, removed ${pushSendResult.removed ?? 0}.`}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 space-y-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Кому уйдёт</div>
+              <div className="mt-1 text-slate-100 font-black text-lg">
+                {pushSendResult ? `${pushSendResult.selected ?? 0} подписок` : "Пока нет превью"}
+              </div>
+              <div className="text-slate-400 text-sm mt-1">
+                {pushSendResult?.segment
+                  ? "Применён сегмент"
+                  : "Без сегмента отправка уйдёт всем активным подпискам."}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Всего</div>
+                <div className="mt-1 text-slate-100 font-black">{pushSendResult?.total_candidates ?? "—"}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Совпало</div>
+                <div className="mt-1 text-slate-100 font-black">{pushSendResult?.matched ?? "—"}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Выбрано</div>
+                <div className="mt-1 text-slate-100 font-black">{pushSendResult?.selected ?? "—"}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Сортировка</div>
+                <div className="mt-1 text-slate-100 font-black">{pushSort}</div>
+              </div>
+            </div>
+
+            {pushSendResult?.preview?.length ? (
+              <div className="space-y-2">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Preview</div>
+                <div className="max-h-[300px] overflow-auto space-y-2 pr-1">
+                  {pushSendResult.preview.map((item) => (
+                    <div key={item.subscription_id} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-black text-slate-100">{item.email || item.user_id}</div>
+                        <div className="text-xs text-slate-500">{item.subscription_id}</div>
+                      </div>
+                      <div className="mt-1 text-slate-400 text-xs flex flex-wrap gap-x-3 gap-y-1">
+                        <span>{item.device || "—"}</span>
+                        <span>{item.browser || "—"}</span>
+                        <span>{item.plan || "—"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-4 text-slate-500 font-semibold text-sm">
+                Нажмите dry-run, чтобы увидеть список получателей перед отправкой.
+              </div>
+            )}
+
+            {pushSendResult?.failures?.length ? (
+              <div className="space-y-2">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 font-black">Ошибки</div>
+                <div className="space-y-2">
+                  {pushSendResult.failures.map((failure) => (
+                    <div key={failure.id} className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-100">
+                      <div className="font-black">{failure.id}</div>
+                      <div className="mt-1 opacity-90">
+                        {failure.message}
+                        {failure.status ? ` (${failure.status})` : ""}
+                        {failure.removed ? " · removed" : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
