@@ -105,7 +105,9 @@ function context(request: Request, db: ReturnType<typeof makeDb>, env: Record<st
 describe('push runtime configuration routes', () => {
   it('returns configured status with the public VAPID key', async () => {
     const db = makeDb();
-    const request = await authedRequest('https://fitfocus.test/api/push/status');
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
+    });
 
     const response = await getPushStatus(context(request, db, {
       PUSH_VAPID_PUBLIC_KEY: 'public-key',
@@ -123,13 +125,36 @@ describe('push runtime configuration routes', () => {
         PUSH_VAPID_PRIVATE_KEY: true,
         PUSH_VAPID_SUBJECT: true,
       },
+      current_subscription_id: 'sub-1',
+      current_device_label: 'Windows',
       count: 1,
+    });
+  });
+
+  it('treats the only enabled subscription as current even when ua labels do not match', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' },
+    });
+
+    const response = await getPushStatus(context(request, db, {
+      PUSH_VAPID_PUBLIC_KEY: 'public-key',
+      PUSH_VAPID_PRIVATE_KEY: 'private-key',
+      PUSH_VAPID_SUBJECT: 'mailto:test@example.com',
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      current_subscription_id: 'sub-1',
+      current_device_label: 'Windows',
     });
   });
 
   it('reports missing VAPID keys without exposing private values', async () => {
     const db = makeDb();
-    const request = await authedRequest('https://fitfocus.test/api/push/status');
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
+    });
 
     const response = await getPushStatus(context(request, db, {
       PUSH_VAPID_PUBLIC_KEY: 'public-key',
@@ -146,6 +171,8 @@ describe('push runtime configuration routes', () => {
         PUSH_VAPID_PRIVATE_KEY: false,
         PUSH_VAPID_SUBJECT: false,
       },
+      current_subscription_id: 'sub-1',
+      current_device_label: 'Windows',
     });
     expect(JSON.stringify(payload)).not.toContain('private-key');
   });
@@ -178,5 +205,21 @@ describe('push runtime configuration routes', () => {
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM push_subscriptions'))).toBe(false);
+  });
+
+  it('unsubscribes by subscription id when present', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/unsubscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscriptionId: 'sub-1' }),
+    });
+
+    const response = await postPushUnsubscribe(context(request, db));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, removed: 1 });
+    const deleteRun = db.runs.find((run) => run.sql.includes('DELETE FROM push_subscriptions'));
+    expect(deleteRun?.binds).toEqual(['user-1', 'sub-1']);
   });
 });
