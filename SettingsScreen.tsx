@@ -538,6 +538,13 @@ export default function SettingsScreen({
     return outputArray;
   };
 
+  const getReadyServiceWorkerRegistration = async (timeoutMs = 5000) => {
+    const timeout = new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('Service worker ещё не готов. Закройте и снова откройте приложение.')), timeoutMs);
+    });
+    return Promise.race([navigator.serviceWorker.ready, timeout]);
+  };
+
   const readPushStatus = async () => {
     const response = await fetch('/api/push/status', {
       cache: 'no-store',
@@ -605,14 +612,6 @@ export default function SettingsScreen({
     setPushStatusChecked(false);
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      setPushSubscribed(Boolean(subscription));
-    } catch {
-      setPushSubscribed(false);
-    }
-
-    try {
       await readPushStatus();
     } catch (error) {
       setPushConfigured(false);
@@ -623,6 +622,14 @@ export default function SettingsScreen({
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
+    }
+
+    try {
+      const registration = await getReadyServiceWorkerRegistration(2500);
+      const subscription = await registration.pushManager.getSubscription();
+      setPushSubscribed(Boolean(subscription));
+    } catch {
+      setPushSubscribed(false);
     }
   };
 
@@ -668,7 +675,7 @@ export default function SettingsScreen({
         throw new Error('Разрешите уведомления в браузере.');
       }
 
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await getReadyServiceWorkerRegistration();
       let subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
@@ -712,7 +719,7 @@ export default function SettingsScreen({
     setPushNotice(null);
 
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await getReadyServiceWorkerRegistration();
       const subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         setPushSubscribed(false);
@@ -756,7 +763,7 @@ export default function SettingsScreen({
     setPushNotice(null);
 
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await getReadyServiceWorkerRegistration();
       const subscription = await registration.pushManager.getSubscription();
       const response = await fetch('/api/push/test', {
         method: 'POST',
