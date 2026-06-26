@@ -7,7 +7,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -66,9 +66,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ id: string }>();
   if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
 
+  let roleStatement: D1PreparedStatement;
+  const auditParams = {
+    adminUserId: user.sub,
+    action: action === "remove" ? "role_remove" : "role_add",
+    targetUserId: userId,
+    meta: { role },
+  };
+
   if (action === "remove") {
     if (role === "admin") {
-      const result = await db.prepare(
+      roleStatement = db.prepare(
         `DELETE FROM user_roles
          WHERE user_id = ?
            AND role = 'admin'
@@ -80,23 +88,22 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
                AND u.is_active = 1
                AND u.deleted_at IS NULL
            ) > 1`
-      ).bind(userId).run();
-      if (changedRows(result) === 0) {
+      ).bind(userId);
+      const auditStatement = buildAdminEventAfterChangeStatement(db, auditParams);
+      const [roleResult] = await db.batch([roleStatement, auditStatement]);
+      if (changedRows(roleResult) === 0) {
         return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 409);
       }
     } else {
-      await db.prepare("DELETE FROM user_roles WHERE user_id = ? AND role = ?").bind(userId, role).run();
+      roleStatement = db.prepare("DELETE FROM user_roles WHERE user_id = ? AND role = ?").bind(userId, role);
+      const auditStatement = buildAdminEventStatement(db, auditParams);
+      await db.batch([roleStatement, auditStatement]);
     }
   } else {
-    await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)").bind(userId, role).run();
+    roleStatement = db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)").bind(userId, role);
+    const auditStatement = buildAdminEventStatement(db, auditParams);
+    await db.batch([roleStatement, auditStatement]);
   }
-
-  await logAdminEvent(db, {
-    adminUserId: user.sub,
-    action: action === "remove" ? "role_remove" : "role_add",
-    targetUserId: userId,
-    meta: { role },
-  });
 
   const { results } = await db
     .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")

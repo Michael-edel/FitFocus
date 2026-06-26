@@ -437,8 +437,18 @@ assertIncludes(
 );
 assertIncludes(
   adminUserRoles,
-  'changedRows(result) === 0',
+  'changedRows(roleResult) === 0',
   'admin user role endpoint must reject guarded admin removals that change no rows',
+);
+assertIncludes(
+  adminUserRoles,
+  'buildAdminEventAfterChangeStatement',
+  'admin user role endpoint must audit guarded admin removals only after a changed row',
+);
+assertIncludes(
+  adminUserRoles,
+  'await db.batch([roleStatement, auditStatement]);',
+  'admin user role endpoint must write role changes and audit events through one batch',
 );
 
 const adminSessions = read('functions/api/admin/sessions.ts');
