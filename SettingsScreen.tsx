@@ -317,6 +317,7 @@ export default function SettingsScreen({
   const [pushPublicKey, setPushPublicKey] = useState('');
   const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
+  const [pushLastDeliveryError, setPushLastDeliveryError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushNotice, setPushNotice] = useState<string | null>(null);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -530,11 +531,14 @@ export default function SettingsScreen({
 
     const configured = Boolean(payload.configured);
     const publicKey = String(payload.vapid_public_key || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '');
+    const subscriptions = Array.isArray(payload.subscriptions) ? payload.subscriptions : [];
+    const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
     setPushConfigured(configured);
     setPushPublicKey(publicKey);
     setPushSubscriptionCount(Number(payload.count || 0));
-    setPushDeviceCount(Array.isArray(payload.subscriptions) ? payload.subscriptions.length : Number(payload.count || 0));
-    return { configured, publicKey };
+    setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
+    setPushLastDeliveryError(lastDeliveryError);
+    return { configured, publicKey, lastDeliveryError };
   };
 
   const refreshPushStatus = async () => {
@@ -549,6 +553,7 @@ export default function SettingsScreen({
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
+      setPushLastDeliveryError(null);
       return;
     }
 
@@ -567,6 +572,7 @@ export default function SettingsScreen({
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
+      setPushLastDeliveryError(null);
     }
   };
 
@@ -715,8 +721,19 @@ export default function SettingsScreen({
       if (!response.ok) {
         throw new Error(payload?.message || payload?.error || 'Не удалось отправить тестовое уведомление.');
       }
-      setPushNotice(`Тест отправлен: ${payload?.sent || 0} уведомлений.`);
       await refreshPushStatus();
+      const sent = Number(payload?.sent || 0);
+      const failed = Number(payload?.failed || 0);
+      const removed = Number(payload?.removed || 0);
+      if (sent > 0 && failed === 0) {
+        setPushNotice(`Тест отправлен: ${sent} уведомлений.`);
+      } else if (sent > 0) {
+        setPushNotice(`Тест отправлен частично: доставлено ${sent}, ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.`);
+      } else if (failed > 0) {
+        throw new Error(`Тест не доставлен: ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.`);
+      } else {
+        setPushNotice('Тест отправлен: 0 уведомлений.');
+      }
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Не удалось отправить push-тест.');
     } finally {
@@ -1441,6 +1458,12 @@ export default function SettingsScreen({
                 {pushError && (
                   <div className="mt-3 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                     {pushError}
+                  </div>
+                )}
+
+                {!pushError && pushLastDeliveryError && (
+                  <div className="mt-3 rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    Последняя ошибка доставки: {pushLastDeliveryError}
                   </div>
                 )}
               </div>
