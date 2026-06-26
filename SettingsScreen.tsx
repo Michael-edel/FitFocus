@@ -314,6 +314,9 @@ export default function SettingsScreen({
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushStatusChecked, setPushStatusChecked] = useState(false);
+  const [pushStatusError, setPushStatusError] = useState<string | null>(null);
+  const [pushMissingConfig, setPushMissingConfig] = useState<string[]>([]);
   const [pushPublicKey, setPushPublicKey] = useState('');
   const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
@@ -537,26 +540,38 @@ export default function SettingsScreen({
 
   const readPushStatus = async () => {
     const response = await fetch('/api/push/status', {
+      cache: 'no-store',
       credentials: 'include',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
     });
     const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload) throw new Error('status');
+    if (!response.ok || !payload) {
+      const code = String(payload?.error || '');
+      if (response.status === 401 || code === 'UNAUTH') {
+        throw new Error('Сессия истекла. Войдите снова, чтобы проверить push.');
+      }
+      throw new Error(String(payload?.message || code || `Не удалось проверить push-сервер (${response.status}).`));
+    }
 
     const configured = Boolean(payload.configured);
     const publicKey = String(payload.vapid_public_key || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '');
     const subscriptions = Array.isArray(payload.subscriptions) ? payload.subscriptions : [];
+    const missingConfig = Array.isArray(payload.missing_config)
+      ? payload.missing_config.map((item: unknown) => String(item)).filter(Boolean)
+      : [];
     const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
     setPushConfigured(configured);
+    setPushStatusChecked(true);
+    setPushStatusError(null);
+    setPushMissingConfig(missingConfig);
     setPushPublicKey(publicKey);
     setPushSubscriptionCount(Number(payload.count || 0));
     setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
     setPushLastDeliveryError(lastDeliveryError);
-    return { configured, publicKey, lastDeliveryError };
+    return { configured, publicKey, lastDeliveryError, missingConfig };
   };
 
   const refreshPushStatus = async () => {
-    if (!serverSession) return;
     const supported = isPushSupported();
     setPushSupported(supported);
     setPushPermission(supported ? Notification.permission : 'unsupported');
@@ -564,12 +579,30 @@ export default function SettingsScreen({
     if (!supported) {
       setPushSubscribed(false);
       setPushConfigured(false);
+      setPushStatusChecked(true);
+      setPushStatusError(null);
+      setPushMissingConfig([]);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
       return;
     }
+
+    if (!serverSession) {
+      setPushSubscribed(false);
+      setPushConfigured(false);
+      setPushStatusChecked(true);
+      setPushStatusError('Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
+      setPushMissingConfig([]);
+      setPushPublicKey('');
+      setPushSubscriptionCount(0);
+      setPushDeviceCount(0);
+      setPushLastDeliveryError(null);
+      return;
+    }
+
+    setPushStatusChecked(false);
 
     try {
       const registration = await navigator.serviceWorker.ready;
@@ -581,8 +614,11 @@ export default function SettingsScreen({
 
     try {
       await readPushStatus();
-    } catch {
+    } catch (error) {
       setPushConfigured(false);
+      setPushStatusChecked(true);
+      setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
+      setPushMissingConfig([]);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
@@ -603,13 +639,14 @@ export default function SettingsScreen({
     try {
       const status = await readPushStatus();
       if (!status.configured) {
-        setPushError('Push-сервер не настроен.');
+        const missing = status.missingConfig.length ? ` Не хватает: ${status.missingConfig.join(', ')}.` : '';
+        setPushError(`Push-сервер не настроен.${missing}`);
         return;
       }
       publicKey = status.publicKey;
-    } catch {
+    } catch (error) {
       if (!publicKey) {
-        setPushError('Не удалось получить push-конфигурацию.');
+        setPushError(error instanceof Error ? error.message : 'Не удалось получить push-конфигурацию.');
         return;
       }
     }
@@ -1121,6 +1158,19 @@ export default function SettingsScreen({
   };
 
   const syncDescription = syncStateLabel(syncState);
+  const pushStatusDescription = (() => {
+    if (!serverSession) return 'Войдите в аккаунт, чтобы включить push и синхронизировать подписки между устройствами.';
+    if (!pushSupported) return 'Этот браузер или режим приложения не поддерживает push-уведомления.';
+    if (!pushStatusChecked) return 'Проверяем push-сервер и подписки устройства...';
+    if (pushStatusError) return `Не удалось проверить push-сервер: ${pushStatusError}`;
+    if (pushConfigured) {
+      return 'Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.';
+    }
+    if (pushMissingConfig.length) {
+      return `Push-сервер не настроен. Не хватает: ${pushMissingConfig.join(', ')}.`;
+    }
+    return 'Push-сервер ещё не настроен: нужны VAPID ключи в переменных Cloudflare.';
+  })();
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
@@ -1396,9 +1446,7 @@ export default function SettingsScreen({
                             : 'Этот браузер не поддерживает push'}
                     </div>
                     <div className="text-slate-500 text-sm mt-2">
-                      {pushConfigured
-                        ? 'Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.'
-                        : 'Push-сервер ещё не настроен: нужны VAPID ключи в переменных Cloudflare.'}
+                      {pushStatusDescription}
                     </div>
                   </div>
                   <div className={["w-11 h-11 rounded-2xl flex items-center justify-center border",
@@ -1440,7 +1488,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void subscribeToPush()}
-                      disabled={pushBusy || !pushSupported || !pushConfigured || pushPermission === 'denied' || !serverSession}
+                      disabled={pushBusy || !pushSupported || !pushStatusChecked || !pushConfigured || pushPermission === 'denied' || !serverSession}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
                     >
                       <Bell className="w-4 h-4" />
@@ -1449,7 +1497,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void sendTestPush()}
-                      disabled={pushBusy || !pushSupported || !serverSession}
+                      disabled={pushBusy || !pushSupported || !pushStatusChecked || !pushConfigured || !serverSession}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] border border-slate-800 bg-slate-950/40 hover:border-indigo-500/30 text-slate-100 font-black transition-all disabled:opacity-50"
                     >
                       <Send className="w-4 h-4" />

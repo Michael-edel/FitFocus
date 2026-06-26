@@ -117,8 +117,37 @@ describe('push runtime configuration routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       configured: true,
       vapid_public_key: 'public-key',
+      missing_config: [],
+      config_keys: {
+        PUSH_VAPID_PUBLIC_KEY: true,
+        PUSH_VAPID_PRIVATE_KEY: true,
+        PUSH_VAPID_SUBJECT: true,
+      },
       count: 1,
     });
+  });
+
+  it('reports missing VAPID keys without exposing private values', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/status');
+
+    const response = await getPushStatus(context(request, db, {
+      PUSH_VAPID_PUBLIC_KEY: 'public-key',
+    }));
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload).toMatchObject({
+      configured: false,
+      vapid_public_key: 'public-key',
+      missing_config: ['PUSH_VAPID_PRIVATE_KEY', 'PUSH_VAPID_SUBJECT'],
+      config_keys: {
+        PUSH_VAPID_PUBLIC_KEY: true,
+        PUSH_VAPID_PRIVATE_KEY: false,
+        PUSH_VAPID_SUBJECT: false,
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('private-key');
   });
 
   it('rejects oversized subscribe JSON before writing', async () => {
