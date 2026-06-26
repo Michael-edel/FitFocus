@@ -526,6 +526,24 @@ export default function SettingsScreen({
     return 'Браузер';
   };
 
+  const isPushStandaloneMode = () =>
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true);
+
+  const getPushRestrictionWarning = () => {
+    const device = getPushDeviceLabel();
+    const browser = getPushBrowserLabel();
+    const standalone = isPushStandaloneMode();
+    if ((device === 'iPhone' || device === 'iPad') && browser === 'Safari' && !standalone) {
+      return 'На iPhone и iPad в Safari кнопки push не работают. Откройте FitFocus как установленное приложение с домашнего экрана.';
+    }
+    if ((device === 'iPhone' || device === 'iPad') && standalone) {
+      return 'На iPhone и iPad push работает только в установленном приложении FitFocus, а не в обычной вкладке Safari.';
+    }
+    return null;
+  };
+
   const getPushDeviceDisplayLabel = () => {
     const device = getPushDeviceLabel();
     const browser = pushCurrentBrowserLabel || getPushBrowserLabel();
@@ -1227,8 +1245,10 @@ export default function SettingsScreen({
   };
 
   const syncDescription = syncStateLabel(syncState);
+  const pushRestrictionWarning = getPushRestrictionWarning();
   const pushStatusDescription = (() => {
     if (!serverSession) return 'Войдите в аккаунт, чтобы включить push и синхронизировать подписки между устройствами.';
+    if (pushRestrictionWarning) return pushRestrictionWarning;
     if (!pushSupported) return 'Этот браузер или режим приложения не поддерживает push-уведомления.';
     if (!pushStatusChecked) return 'Проверяем push-сервер и подписки устройства...';
     if (pushStatusError) return `Не удалось проверить push-сервер: ${pushStatusError}`;
@@ -1551,6 +1571,11 @@ export default function SettingsScreen({
                     <div className="mt-2 text-xs text-slate-500 leading-5">
                       {getPushDeviceHelp()}
                     </div>
+                    {pushRestrictionWarning && (
+                      <div className="mt-3 rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-xs text-amber-100 leading-5">
+                        {pushRestrictionWarning}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-2 min-w-[220px]">
