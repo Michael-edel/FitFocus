@@ -7,6 +7,7 @@ import { requireDB, randomCode, nowMs, toApiError } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -60,7 +61,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await requireAdminRequest(user, request, db);
 
-    const body = (await request.json().catch(() => null)) as any;
+    const body = await readJsonRequest<any>(request, SMALL_JSON_BODY_LIMIT_BYTES);
     const note = String(body?.note || "").trim();
     const count = Math.max(1, Math.min(50, Number.isFinite(body?.count) ? Math.floor(Number(body.count)) : 1));
     const maxUses = Number.isFinite(body?.max_uses) ? Math.max(1, Math.min(1000, Number(body.max_uses))) : 1;
@@ -99,6 +100,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     return json({ ok: true, code: codes[0], codes }, 200);
   } catch (e: any) {
+    if (e instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }
@@ -111,7 +115,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await requireAdminRequest(user, request, db);
 
-    const body = (await request.json().catch(() => null)) as any;
+    const body = await readJsonRequest<any>(request, SMALL_JSON_BODY_LIMIT_BYTES);
     const code = String(body?.code || "").trim();
     if (typeof body?.revoked !== "boolean") throw new Error("BAD_REQUEST");
     const revoked = body.revoked ? 1 : 0;
@@ -131,6 +135,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
     return json({ ok: true, code, revoked: revoked === 1 }, 200);
   } catch (e: any) {
+    if (e instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }

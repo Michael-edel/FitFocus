@@ -108,6 +108,10 @@ function makeDb(options: { targetExists?: boolean; adminDeleteChanges?: number }
 }
 
 async function postRole(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  return postRoleRaw(db, JSON.stringify(body));
+}
+
+async function postRoleRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request('https://fitfocus.test/api/admin/user_roles', {
     method: 'POST',
@@ -115,7 +119,7 @@ async function postRole(db: ReturnType<typeof makeDb>, body: Record<string, unkn
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   return onRequestPost({
@@ -136,6 +140,16 @@ describe('admin user role management', () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'BAD_ROLE' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles'))).toBe(false);
+  });
+
+  it('rejects oversized role JSON before writing', async () => {
+    const db = makeDb();
+
+    const res = await postRoleRaw(db, `{"user_id":"user-1","role":"support","action":"add","payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles'))).toBe(false);
   });
 

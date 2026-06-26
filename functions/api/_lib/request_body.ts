@@ -4,6 +4,8 @@ export class RequestBodyTooLargeError extends Error {
   }
 }
 
+export const SMALL_JSON_BODY_LIMIT_BYTES = 64 * 1024;
+
 export async function readRequestText(request: Request, maxBytes: number): Promise<string> {
   const contentLength = request.headers.get("content-length");
   if (contentLength && Number(contentLength) > maxBytes) {
@@ -38,4 +40,18 @@ export async function readRequestText(request: Request, maxBytes: number): Promi
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(bytes);
+}
+
+export async function readJsonRequest<T = unknown>(
+  request: Request,
+  maxBytes = SMALL_JSON_BODY_LIMIT_BYTES,
+): Promise<T | null> {
+  const text = await readRequestText(request, maxBytes);
+  if (!text.trim()) return null;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
 }

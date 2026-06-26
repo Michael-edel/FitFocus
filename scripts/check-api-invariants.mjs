@@ -182,6 +182,18 @@ assertIncludes(
   'messageId?: string',
   'support attachment route builder must support message attachments',
 );
+
+const requestBodyLib = read('functions/api/_lib/request_body.ts');
+assertIncludes(
+  requestBodyLib,
+  'export async function readJsonRequest',
+  'request body helper must expose bounded JSON parsing',
+);
+assertIncludes(
+  requestBodyLib,
+  'await readRequestText(request, maxBytes)',
+  'bounded JSON parsing must use the streaming body size guard',
+);
 assertIncludes(
   supportAttachments,
   'messageId=${encodeURIComponent(messageId)}',
@@ -683,6 +695,32 @@ assertIncludes(
   'const updateResult = writeResults[replyMessage ? 1 : 0];',
   'admin support patch must keep update result checks separate from the staged audit result',
 );
+
+for (const [file, text] of [
+  ['functions/api/admin/feature_flags.ts', adminFeatureFlags],
+  ['functions/api/admin/settings.ts', adminSettings],
+  ['functions/api/admin/sessions.ts', adminSessions],
+  ['functions/api/admin/subscription.ts', adminSubscription],
+  ['functions/api/admin/user_roles.ts', adminUserRoles],
+  ['functions/api/admin/invites.ts', adminInvites],
+  ['functions/api/support/feedback.ts', supportFeedback],
+]) {
+  assertIncludes(
+    text,
+    'readJsonRequest',
+    `${file} must parse JSON through the bounded request body helper`,
+  );
+  assertIncludes(
+    text,
+    'PAYLOAD_TOO_LARGE',
+    `${file} must return 413 for oversized JSON bodies`,
+  );
+  assertNotIncludes(
+    text,
+    'request.json()',
+    `${file} must not read JSON bodies through an unbounded request.json() call`,
+  );
+}
 
 const billingWebhook = read('functions/api/billing/webhook.ts');
 assertIncludes(
