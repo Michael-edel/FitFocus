@@ -16,6 +16,15 @@ function isGoneError(error: any) {
   return status === 404 || status === 410;
 }
 
+function pushErrorDetails(error: any) {
+  const status = Number(error?.statusCode || error?.status || error?.code || 0);
+  const message = String(error?.message || error || "PUSH_ERROR").slice(0, 240);
+  return {
+    status: Number.isFinite(status) && status > 0 ? status : null,
+    message,
+  };
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -64,6 +73,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let sent = 0;
   let removed = 0;
   let failed = 0;
+  const failures: Array<{ id: string; status: number | null; message: string; removed: boolean }> = [];
   const statements: D1PreparedStatement[] = [];
 
   for (const row of subscriptions) {
@@ -77,14 +87,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       sent += 1;
     } catch (error) {
       failed += 1;
-      if (isGoneError(error)) {
+      const details = pushErrorDetails(error);
+      const removedSubscription = isGoneError(error);
+      failures.push({
+        id: String(row.id || ""),
+        ...details,
+        removed: removedSubscription,
+      });
+      if (removedSubscription) {
         statements.push(db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(row.id));
         removed += 1;
       } else {
         statements.push(
           db
           .prepare("UPDATE push_subscriptions SET last_error = ?, updated_at = ? WHERE id = ?")
-          .bind(String(error?.message || error || "PUSH_ERROR"), nowMs(), row.id)
+          .bind(details.message, nowMs(), row.id)
         );
       }
     }
@@ -99,6 +116,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     sent,
     failed,
     removed,
+    failures: failures.slice(0, 5),
     payload,
   }, 200);
 };
