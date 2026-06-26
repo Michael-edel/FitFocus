@@ -37,8 +37,10 @@ function makeDb(
     latestTicketAfterFailedWrite?: { id: string; status: string } | null;
   } = {},
 ) {
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
   let ticketReadCount = 0;
   return {
+    batches,
     prepare(sql: string) {
       return {
         sql,
@@ -71,6 +73,7 @@ function makeDb(
       };
     },
     async batch(stmts: Array<{ sql: string; binds: unknown[] }>) {
+      batches.push(stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds })));
       return stmts.map((stmt) => {
         if (stmt.sql.includes('INSERT INTO support_feedback_messages')) {
           captured.messageAttachmentsJson = stmt.binds[5] as string | null;
@@ -172,5 +175,33 @@ describe('/api/support/feedback/my', () => {
     expect(response.status).toBe(404);
     expect(storedKey).toMatch(/^support\/ticket-1\/messages\/[^/]+\/00-reply\.bin$/);
     expect(deletedKeys).toEqual([storedKey]);
+  });
+
+  it('rejects oversized reply forms before writing', async () => {
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const captured: { messageAttachmentsJson?: string | null } = {};
+    const db = makeDb(captured);
+
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/support/feedback/my', {
+        method: 'POST',
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'multipart/form-data; boundary=x',
+        },
+        body: 'x'.repeat(9 * 1024 * 1024),
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+      functionPath: '/api/support/feedback/my',
+    } as any);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(db.batches).toHaveLength(0);
+    expect(captured.messageAttachmentsJson).toBeUndefined();
   });
 });

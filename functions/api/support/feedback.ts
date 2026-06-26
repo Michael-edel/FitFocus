@@ -3,7 +3,13 @@ import { nowMs, requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import {
+  readFormDataRequest,
+  readJsonRequest,
+  RequestBodyTooLargeError,
+  SMALL_JSON_BODY_LIMIT_BYTES,
+  SUPPORT_FORM_BODY_LIMIT_BYTES,
+} from "../_lib/request_body";
 import {
   attachmentResponseUrl,
   fileToAttachment,
@@ -137,7 +143,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const form = await request.formData().catch(() => null);
+  let form: FormData | null = null;
+  try {
+    form = await readFormDataRequest(request, SUPPORT_FORM_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!form) return json({ error: "BAD_REQUEST", message: "form data required" }, 400);
 
   const category = String(form.get("category") || "").trim() || "Ошибка";
