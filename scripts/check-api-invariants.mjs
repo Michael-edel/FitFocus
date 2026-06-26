@@ -305,6 +305,16 @@ assertIncludes(
   'signal: controller.signal',
   'AI endpoint must pass an abort signal to the upstream Gemini fetch',
 );
+assertIncludes(
+  aiEndpoint,
+  'readRequestText(request, 4 * 1024 * 1024)',
+  'AI endpoint must bound request body reads even when content-length is missing',
+);
+assertNotIncludes(
+  aiEndpoint,
+  'await request.text()',
+  'AI endpoint must not read unbounded request bodies',
+);
 assertOrder(
   aiEndpoint,
   'if (!apiKey)',
@@ -386,8 +396,29 @@ assertIncludes(
 );
 assertIncludes(
   accountDeleteLib,
+  'ensureSupportStorageDeleteAvailable(options.supportAttachments, supportStorageKeys);',
+  'hard account delete must fail closed before D1 writes when support storage deletion is unavailable',
+);
+assertOrder(
+  accountDeleteLib,
+  'await db.batch(stmts);',
+  'await deleteSupportStorageKeys(options.supportAttachments, supportStorageKeys);',
+  'hard account delete must not delete support storage objects before D1 rows are deleted',
+);
+assertIncludes(
+  accountDeleteLib,
   'JOIN users u ON u.id = ur.user_id',
   'hard account delete last-admin precheck must only apply to active admin users',
+);
+assertIncludes(
+  accountDeleteLib,
+  'const cleanupStmts: D1PreparedStatement[] = [];',
+  'soft account delete must stage related cleanup writes',
+);
+assertIncludes(
+  accountDeleteLib,
+  'await db.batch(cleanupStmts);',
+  'soft account delete must batch family cleanup and session revocation',
 );
 
 const adminAiLogs = read('functions/api/admin/ai_logs.ts');
@@ -528,6 +559,21 @@ assertIncludes(
 );
 assertIncludes(
   adminInvites,
+  'action: "invite_create"',
+  'admin invite creation must write an audit event',
+);
+assertIncludes(
+  adminInvites,
+  'const statements: D1PreparedStatement[] = [];',
+  'admin invite creation must stage invite rows before writing',
+);
+assertIncludes(
+  adminInvites,
+  'await db.batch(statements);',
+  'admin invite creation must write invite rows and audit through one batch',
+);
+assertIncludes(
+  adminInvites,
   'buildAdminEventAfterChangeStatement',
   'admin invite update must audit only after a changed row',
 );
@@ -627,11 +673,15 @@ assertIncludes(
   'toInt(url.searchParams.get("limit"), 20)',
   'admin support list must parse invalid limit values through a finite fallback',
 );
-assertOrder(
+assertIncludes(
   supportFeedback,
-  'changedRows(updateResult) === 0',
-  'action: "support_ticket_update"',
-  'admin support patch must only audit successful ticket writes',
+  'buildAdminEventAfterChangeStatement',
+  'admin support patch must audit only after a changed ticket row',
+);
+assertIncludes(
+  supportFeedback,
+  'const updateResult = writeResults[replyMessage ? 1 : 0];',
+  'admin support patch must keep update result checks separate from the staged audit result',
 );
 
 const billingWebhook = read('functions/api/billing/webhook.ts');
@@ -659,6 +709,16 @@ assertIncludes(
   billingWebhook,
   'stripe_customer_id = ?2',
   'billing webhook must fall back to customer id when subscription metadata has no user id',
+);
+assertIncludes(
+  billingWebhook,
+  'readRequestText(request, MAX_STRIPE_WEBHOOK_BYTES)',
+  'billing webhook must bound raw body reads before Stripe verification',
+);
+assertNotIncludes(
+  billingWebhook,
+  'await request.text()',
+  'billing webhook must not read unbounded request bodies',
 );
 
 const exportRoute = read('functions/api/export.ts');

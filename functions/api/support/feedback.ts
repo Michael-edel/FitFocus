@@ -2,7 +2,7 @@ import { json, requireUser } from "../_lib/auth";
 import { nowMs, requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
 import {
   attachmentResponseUrl,
   fileToAttachment,
@@ -291,14 +291,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     id,
   ));
 
-  const writeResults = await db.batch(statements);
-  const messageResult = replyMessage ? writeResults[0] : null;
-  const updateResult = writeResults[writeResults.length - 1];
-  if (changedRows(updateResult) === 0 || (replyMessage && changedRows(messageResult) === 0)) {
-    return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-  }
-
-  await logAdminEvent(db, {
+  statements.push(buildAdminEventAfterChangeStatement(db, {
     adminUserId: user.sub,
     action: "support_ticket_update",
     targetUserId: current.user_id || null,
@@ -309,7 +302,14 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       assigned_admin_user_id: assignedAdminUserId,
       replied: Boolean(replyMessage),
     },
-  });
+  }));
+
+  const writeResults = await db.batch(statements);
+  const messageResult = replyMessage ? writeResults[0] : null;
+  const updateResult = writeResults[replyMessage ? 1 : 0];
+  if (changedRows(updateResult) === 0 || (replyMessage && changedRows(messageResult) === 0)) {
+    return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+  }
 
   const ticket = await ticketRowForAdmin(db, id);
   const messages = await loadMessageThread(db, id);

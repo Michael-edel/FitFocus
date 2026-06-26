@@ -42,6 +42,9 @@ type PreparedStatement = {
 function makeDb(options: { updateChanges?: number; messageInsertChanges?: number; currentTicket?: Record<string, unknown> | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const allCalls: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
+  const auditEvents: Array<{ sql: string; binds: unknown[] }> = [];
+  let lastChanges = 0;
   const currentTicket = options.currentTicket === undefined ? {
     id: 'ticket-1',
     user_id: 'user-1',
@@ -60,6 +63,8 @@ function makeDb(options: { updateChanges?: number; messageInsertChanges?: number
   const db = {
     runs,
     allCalls,
+    batches,
+    auditEvents,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -93,15 +98,21 @@ function makeDb(options: { updateChanges?: number; messageInsertChanges?: number
       return stmt;
     },
     async batch(stmts: PreparedStatement[]) {
+      batches.push(stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds })));
       return stmts.map((stmt) => {
+        let changes = 1;
         runs.push({ sql: stmt.sql, binds: stmt.binds });
         if (stmt.sql.includes('INSERT INTO support_feedback_messages')) {
-          return { success: true, meta: { changes: options.messageInsertChanges ?? 1 } };
+          changes = options.messageInsertChanges ?? 1;
+        } else if (stmt.sql.includes('UPDATE support_feedback')) {
+          changes = options.updateChanges ?? 1;
+        } else if (stmt.sql.includes('INSERT INTO admin_events')) {
+          const conditional = stmt.sql.includes('WHERE changes() > 0');
+          changes = conditional && lastChanges === 0 ? 0 : 1;
+          if (changes > 0) auditEvents.push({ sql: stmt.sql, binds: stmt.binds });
         }
-        if (stmt.sql.includes('UPDATE support_feedback')) {
-          return { success: true, meta: { changes: options.updateChanges ?? 1 } };
-        }
-        return { success: true, meta: { changes: 1 } };
+        lastChanges = changes;
+        return { success: true, meta: { changes } };
       });
     },
   };
@@ -192,9 +203,11 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'support_ticket_update')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
+    expect(db.auditEvents.some((run) => String(run.binds[3]) === 'support_ticket_update')).toBe(true);
   });
 
   it('rejects a ticket update race when the guarded write changes no rows', async () => {
@@ -207,6 +220,6 @@ describe('admin support ticket updates', () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: 'NOT_FOUND' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
+    expect(db.auditEvents.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 });

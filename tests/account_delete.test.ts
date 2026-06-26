@@ -96,7 +96,7 @@ describe('account deletion', () => {
     expect(db.batchedSql).toEqual([]);
   });
 
-  it('deletes support storage objects before deleting D1 rows', async () => {
+  it('deletes support storage objects after deleting D1 rows', async () => {
     const bucket = {
       put: vi.fn(async () => undefined),
       get: vi.fn(async () => null),
@@ -114,6 +114,25 @@ describe('account deletion', () => {
     expect(result.ok).toBe(true);
     expect(bucket.delete).toHaveBeenCalledWith(['support/t/00-a.png', 'support/t/01-b.png']);
     expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM support_feedback WHERE user_id = ?'))).toBe(true);
+  });
+
+  it('does not delete support storage objects when D1 hard delete fails', async () => {
+    const bucket = {
+      put: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+      delete: vi.fn(async () => undefined),
+    };
+    const db = makeDb({
+      supportRows: [
+        { attachments_json: JSON.stringify([{ name: 'a.png', mime: 'image/png', size: 1, storage_key: 'support/t/00-a.png' }]) },
+      ],
+      batchReject: new Error('D1 failed'),
+    });
+
+    const result = await deleteUserAccountAndAllData(db as any, 'user-1', false, undefined, { supportAttachments: bucket });
+
+    expect(result).toEqual({ ok: false, message: 'Ошибка при удалении данных пользователя.' });
+    expect(bucket.delete).not.toHaveBeenCalled();
   });
 
   it('unassigns admin-owned tickets instead of deleting tickets assigned to the deleted admin', async () => {
@@ -139,6 +158,16 @@ describe('account deletion', () => {
     const db = makeDb({ softDeleteChanges: 0, isAdmin: true });
 
     await expect(softDeleteAccount(db as any, 'admin-1')).rejects.toThrow('Нельзя удалить аккаунт последнего администратора.');
+  });
+
+  it('softDeleteAccount batches family cleanup and session revocation after the guarded user update', async () => {
+    const db = makeDb({ ownedFamily: { id: 'family-1' } });
+
+    await softDeleteAccount(db as any, 'user-1');
+
+    expect(db.batchedSql.some((sql) => sql.includes('UPDATE families SET is_active = 0 WHERE id = ?'))).toBe(true);
+    expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM family_members WHERE family_id = ?'))).toBe(true);
+    expect(db.batchedSql.some((sql) => sql.includes('UPDATE sessions SET revoked = 1 WHERE user_id = ?'))).toBe(true);
   });
 
   it('hard delete stops before R2 deletion when the guarded user update detects a last-admin race', async () => {

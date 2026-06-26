@@ -6,7 +6,7 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, randomCode, nowMs, toApiError } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventAfterChangeStatement, logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -72,28 +72,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const createdAt = nowMs();
     const codes: string[] = [];
+    const statements: D1PreparedStatement[] = [];
 
     for (let idx = 0; idx < count; idx += 1) {
       const code = randomCode(10);
       const rowNote = count > 1 ? `${note || "invite"} #${idx + 1}` : note;
 
-      await db
+      statements.push(db
         .prepare(
           `INSERT INTO invite_codes (code, created_at, created_by, note, max_uses, uses, expires_at, revoked)
            VALUES (?, ?, ?, ?, ?, 0, ?, 0)`
         )
-        .bind(code, createdAt, user.sub, rowNote, maxUses, expiresAt)
-        .run();
+        .bind(code, createdAt, user.sub, rowNote, maxUses, expiresAt));
 
       codes.push(code);
     }
 
-    await logAdminEvent(db, {
+    statements.push(buildAdminEventStatement(db, {
       adminUserId: user.sub,
       action: "invite_create",
       targetUserId: null,
       meta: { codes, count, max_uses: maxUses, note, expires_at: expiresAt, expiry_cap_days: 30 },
-    });
+    }));
+
+    await db.batch(statements);
 
     return json({ ok: true, code: codes[0], codes }, 200);
   } catch (e: any) {

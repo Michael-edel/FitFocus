@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestGet, onRequestPut } from '../functions/api/admin/invites';
+import { onRequestGet, onRequestPost, onRequestPut } from '../functions/api/admin/invites';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -141,6 +141,27 @@ async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unk
   } as any);
 }
 
+async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const request = new Request('https://fitfocus.test/api/admin/invites', {
+    method: 'POST',
+    headers: {
+      Cookie: `ff_session=${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return onRequestPost({
+    request,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    params: {},
+    waitUntil() {},
+    next: async () => new Response(null, { status: 404 }),
+    data: {},
+  } as any);
+}
+
 describe('admin invite updates', () => {
   it('falls back invalid list limits to a bounded default', async () => {
     const db = makeDb();
@@ -181,5 +202,16 @@ describe('admin invite updates', () => {
     expect(db.batches[0].some((run) => run.sql.includes('UPDATE invite_codes SET revoked') && run.binds[1] === 'ABC123')).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
     expect(db.auditEvents.some((run) => String(run.binds[3]) === 'invite_update')).toBe(true);
+  });
+
+  it('creates invite codes and the audit event through one batch', async () => {
+    const db = makeDb();
+
+    const res = await postInvite(db, { note: 'beta', count: 2, max_uses: 3 });
+
+    expect(res.status).toBe(200);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].filter((run) => run.sql.includes('INSERT INTO invite_codes'))).toHaveLength(2);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'invite_create')).toBe(true);
   });
 });
