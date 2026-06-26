@@ -49,6 +49,23 @@ export function normalizePushDeviceLabel(label?: string | null, userAgent?: stri
   return getDeviceLabelFallback(userAgent).slice(0, 120);
 }
 
+function getBrowserLabelFallback(userAgent?: string | null, browserHint?: string | null) {
+  const ua = `${browserHint || ""} ${userAgent || ""}`;
+  if (/YaBrowser/i.test(ua) || /Yandex/i.test(ua)) return "Yandex";
+  if (/Comet/i.test(ua)) return "Comet";
+  if (/Edg/i.test(ua)) return "Edge";
+  if (/OPR/i.test(ua) || /Opera/i.test(ua)) return "Opera";
+  if (/Brave/i.test(ua)) return "Brave";
+  if (/Firefox/i.test(ua)) return "Firefox";
+  if (/CriOS/i.test(ua) || /Chrome/i.test(ua)) return "Chrome";
+  if (/Safari/i.test(ua)) return "Safari";
+  return "Браузер";
+}
+
+export function normalizePushBrowserLabel(userAgent?: string | null, browserHint?: string | null) {
+  return getBrowserLabelFallback(userAgent, browserHint).slice(0, 120);
+}
+
 export function parsePushSubscription(payload: PushSubscriptionPayload | null | undefined) {
   const endpoint = String(payload?.endpoint || "").trim();
   const p256dh = String(payload?.keys?.p256dh || "").trim();

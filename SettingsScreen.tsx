@@ -319,6 +319,7 @@ export default function SettingsScreen({
   const [pushStatusError, setPushStatusError] = useState<string | null>(null);
   const [pushMissingConfig, setPushMissingConfig] = useState<string[]>([]);
   const [pushCurrentSubscriptionId, setPushCurrentSubscriptionId] = useState<string | null>(null);
+  const [pushCurrentBrowserLabel, setPushCurrentBrowserLabel] = useState<string | null>(null);
   const [pushPublicKey, setPushPublicKey] = useState('');
   const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
@@ -527,7 +528,7 @@ export default function SettingsScreen({
 
   const getPushDeviceDisplayLabel = () => {
     const device = getPushDeviceLabel();
-    const browser = getPushBrowserLabel();
+    const browser = pushCurrentBrowserLabel || getPushBrowserLabel();
     return browser === 'Браузер' ? device : `${device} · ${browser}`;
   };
 
@@ -604,12 +605,14 @@ export default function SettingsScreen({
       ? payload.missing_config.map((item: unknown) => String(item)).filter(Boolean)
       : [];
     const currentSubscriptionId = String(payload.current_subscription_id || '').trim() || null;
+    const currentBrowserLabel = String(payload.current_browser_label || '').trim() || null;
     const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
     setPushMissingConfig(missingConfig);
     setPushCurrentSubscriptionId(currentSubscriptionId);
+    setPushCurrentBrowserLabel(currentBrowserLabel);
     setPushPublicKey(publicKey);
     setPushSubscriptionCount(Number(payload.count || 0));
     setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
@@ -630,6 +633,7 @@ export default function SettingsScreen({
       setPushStatusError(null);
       setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
+      setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
@@ -644,6 +648,7 @@ export default function SettingsScreen({
       setPushStatusError('Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
       setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
+      setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
@@ -661,6 +666,7 @@ export default function SettingsScreen({
       setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
       setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
+      setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
