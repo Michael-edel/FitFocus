@@ -5,6 +5,7 @@
 import { requireMobileUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
 import { toLocalDayKey } from "../../../dateUtils";
@@ -82,7 +83,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const payload = normalizeWearableSyncSnapshot(body);

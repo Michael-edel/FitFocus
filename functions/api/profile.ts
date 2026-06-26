@@ -4,6 +4,7 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
+import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
 import { isAllowedStateKey } from "./_lib/state_keyspace";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./_lib/legacy_sync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+const PROFILE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
 const EDITABLE_PROFILE_FIELDS = new Set([
   'name',
@@ -171,7 +173,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = await readJsonRequest(request, PROFILE_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
@@ -235,7 +245,15 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = await readJsonRequest(request, PROFILE_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
