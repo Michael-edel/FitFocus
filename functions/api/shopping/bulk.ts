@@ -6,6 +6,7 @@ import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
 import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -23,7 +24,15 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    const body: any = await request.json().catch(() => ({}));
+    let body: any = {};
+    try {
+      body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const week_start = String(body.week_start || "").slice(0, 10);
     const family_id = body.family_id ? String(body.family_id) : null;
     const updates = Array.isArray(body.updates) ? body.updates : [];

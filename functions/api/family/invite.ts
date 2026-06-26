@@ -4,6 +4,7 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, randomCode, nowMs, toApiError } from "../_lib/db";
 import { requireFamilyOwner } from "../_lib/family_access";
 import { requireFamilyPlan } from "../_lib/plans";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -26,7 +27,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);
 
-    const body = await request.json().catch(() => ({}));
+    let body: any = {};
+    try {
+      body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const ttlHours = normalizeTtlHours(body?.ttlHours);
     const now = Math.floor(nowMs() / 1000);
     const expires = now + ttlHours * 3600;
