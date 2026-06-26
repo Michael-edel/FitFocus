@@ -5,7 +5,16 @@
  * В Google AI Studio (native ESM через importmap) import.meta.env отсутствует,
  * поэтому мы просто ничего не делаем.
  */
-export async function initPWA() {
+let pwaInitPromise: Promise<void> | null = null;
+
+export function ensurePWAStarted() {
+  if (!pwaInitPromise) {
+    pwaInitPromise = initPWA();
+  }
+  return pwaInitPromise;
+}
+
+async function initPWA() {
   const env = (import.meta as any)?.env;
   if (!env) return;
 

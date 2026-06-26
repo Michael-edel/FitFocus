@@ -8,6 +8,7 @@ import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
 import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
 import { clearAiCache } from './geminiService';
 import ProfileDetailsSection from './components/ProfileDetailsSection';
+import { ensurePWAStarted } from './pwa';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -539,21 +540,24 @@ export default function SettingsScreen({
     return outputArray;
   };
 
-  const getReadyServiceWorkerRegistration = async (timeoutMs = 15000) => {
+  const getReadyServiceWorkerRegistration = async () => {
     if (!('serviceWorker' in navigator)) {
       throw new Error('Service worker не поддерживается в этом браузере.');
     }
+
+    await ensurePWAStarted();
 
     const existingRegistration = await navigator.serviceWorker.getRegistration().catch(() => null);
     if (existingRegistration?.active) {
       return existingRegistration;
     }
 
-    const timeout = new Promise<never>((_, reject) => {
-      window.setTimeout(() => reject(new Error('Service worker ещё не готов. Подождите несколько секунд и повторите.')), timeoutMs);
-    });
-    const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
-    return registration || existingRegistration || navigator.serviceWorker.getRegistration();
+    const registration = existingRegistration || await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    if (registration.active) {
+      return registration;
+    }
+
+    return navigator.serviceWorker.ready;
   };
 
   const readPushStatus = async () => {
