@@ -370,9 +370,10 @@ export interface FoodItem {
   carbs: number;
   timestamp: string; // ISO datetime
   photo?: string; // data URL
-    photoThumb?: string; // small data URL (cropped/resized)
-insight?: FoodInsight;
+  photoThumb?: string; // small data URL (cropped/resized)
+  insight?: FoodInsight;
   mealType?: MealType;
+  nonFood?: boolean;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
