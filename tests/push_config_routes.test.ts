@@ -31,7 +31,34 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb() {
+function makeDb(options?: {
+  pushSubscriptions?: Array<{
+    id: string;
+    device_label: string;
+    user_agent: string;
+    created_at: number;
+    updated_at: number;
+    last_sent_at: number | null;
+    last_error: string | null;
+    enabled: number;
+  }>;
+  pushSubscriptionCount?: number;
+}) {
+  const pushSubscriptions = options?.pushSubscriptions || [
+    {
+      id: 'sub-1',
+      device_label: 'Windows',
+      user_agent: 'ua',
+      created_at: 1,
+      updated_at: 2,
+      last_sent_at: null,
+      last_error: null,
+      enabled: 1,
+    },
+  ];
+  const pushSubscriptionCount = typeof options?.pushSubscriptionCount === 'number'
+    ? options.pushSubscriptionCount
+    : pushSubscriptions.length;
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const allCalls: Array<{ sql: string; binds: unknown[] }> = [];
   return {
@@ -54,23 +81,10 @@ function makeDb() {
           allCalls.push({ sql, binds: this.binds });
           if (sql.includes('SELECT role FROM user_roles')) return { results: [{ role: 'user' }] };
           if (sql.includes('SELECT id, device_label')) {
-            return {
-              results: [
-                {
-                  id: 'sub-1',
-                  device_label: 'Windows',
-                  user_agent: 'ua',
-                  created_at: 1,
-                  updated_at: 2,
-                  last_sent_at: null,
-                  last_error: null,
-                  enabled: 1,
-                },
-              ],
-            };
+            return { results: pushSubscriptions };
           }
           if (sql.includes('SELECT COUNT(1) AS count FROM push_subscriptions')) {
-            return { results: [{ count: 1 }] };
+            return { results: [{ count: pushSubscriptionCount }] };
           }
           return { results: [] };
         },
@@ -127,6 +141,7 @@ describe('push runtime configuration routes', () => {
       },
       current_subscription_id: 'sub-1',
       current_device_label: 'Windows',
+      current_browser_label: 'Chrome',
       count: 1,
     });
   });
@@ -147,6 +162,7 @@ describe('push runtime configuration routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       current_subscription_id: 'sub-1',
       current_device_label: 'Windows',
+      current_browser_label: 'Safari',
     });
   });
 
@@ -173,8 +189,53 @@ describe('push runtime configuration routes', () => {
       },
       current_subscription_id: 'sub-1',
       current_device_label: 'Windows',
+      current_browser_label: 'Chrome',
     });
     expect(JSON.stringify(payload)).not.toContain('private-key');
+  });
+
+  it('matches the current subscription by browser label when multiple same-device subscriptions exist', async () => {
+    const db = makeDb({
+      pushSubscriptions: [
+        {
+          id: 'sub-chrome',
+          device_label: 'Windows',
+          user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          created_at: 1,
+          updated_at: 2,
+          last_sent_at: null,
+          last_error: null,
+          enabled: 1,
+        },
+        {
+          id: 'sub-yandex',
+          device_label: 'Windows',
+          user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YaBrowser/26.0.0.0 Safari/537.36',
+          created_at: 3,
+          updated_at: 4,
+          last_sent_at: null,
+          last_error: null,
+          enabled: 1,
+        },
+      ],
+      pushSubscriptionCount: 2,
+    });
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YaBrowser/26.0.0.0 Safari/537.36' },
+    });
+
+    const response = await getPushStatus(context(request, db, {
+      PUSH_VAPID_PUBLIC_KEY: 'public-key',
+      PUSH_VAPID_PRIVATE_KEY: 'private-key',
+      PUSH_VAPID_SUBJECT: 'mailto:test@example.com',
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      current_subscription_id: 'sub-yandex',
+      current_device_label: 'Windows',
+      current_browser_label: 'Yandex',
+    });
   });
 
   it('rejects oversized subscribe JSON before writing', async () => {
