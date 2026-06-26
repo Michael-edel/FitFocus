@@ -504,6 +504,20 @@ export default function SettingsScreen({
     return 'Браузер';
   };
 
+  const getPushDeviceHelp = () => {
+    const device = getPushDeviceLabel();
+    if (device === 'Windows' || device === 'Mac' || device === 'Linux') {
+      return 'На компьютере push работает в поддерживаемом браузере, если разрешены уведомления сайта и не отключены системные уведомления ОС.';
+    }
+    if (device === 'iPhone' || device === 'iPad') {
+      return 'Для iPhone и iPad push-уведомления работают в установленном приложении FitFocus с домашнего экрана.';
+    }
+    if (device === 'Android') {
+      return 'На Android push работает в браузере и в PWA-режиме, если разрешения включены.';
+    }
+    return 'Push работает в поддерживаемом браузере, если разрешены уведомления для сайта.';
+  };
+
   const isPushSupported = () =>
     typeof window !== 'undefined' &&
     'Notification' in window &&
@@ -1418,7 +1432,7 @@ export default function SettingsScreen({
                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Это устройство</div>
                     <div className="mt-2 text-slate-100 font-black">{getPushDeviceLabel()}</div>
                     <div className="mt-2 text-xs text-slate-500 leading-5">
-                      Для iPhone push-уведомления работают в установленном приложении FitFocus. На Android они работают в браузере и в PWA-режиме.
+                      {getPushDeviceHelp()}
                     </div>
                   </div>
 

@@ -93,6 +93,33 @@ function detectDeviceLabel() {
   return 'Устройство';
 }
 
+function buildSupportSystemContext() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return '';
+  const nav = navigator as Navigator & { standalone?: boolean; userAgentData?: { platform?: string; mobile?: boolean; brands?: Array<{ brand: string; version: string }> } };
+  const displayStandalone = window.matchMedia?.('(display-mode: standalone)').matches || nav.standalone === true;
+  const notificationPermission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+  const lines = [
+    `Устройство: ${detectDeviceLabel()}`,
+    `Браузер: ${detectBrowserLabel()}`,
+    `URL: ${window.location.href}`,
+    `User-Agent: ${navigator.userAgent}`,
+    `Platform: ${nav.userAgentData?.platform || navigator.platform || 'unknown'}`,
+    `UA mobile: ${nav.userAgentData ? String(nav.userAgentData.mobile) : 'unknown'}`,
+    `UA brands: ${nav.userAgentData?.brands?.map((item) => `${item.brand} ${item.version}`).join(', ') || 'unknown'}`,
+    `Язык: ${navigator.language || 'unknown'}`,
+    `Часовой пояс: ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'}`,
+    `Viewport: ${window.innerWidth}x${window.innerHeight}`,
+    `Screen: ${window.screen?.width || 0}x${window.screen?.height || 0}, DPR ${window.devicePixelRatio || 1}`,
+    `Online: ${String(navigator.onLine)}`,
+    `PWA standalone: ${String(displayStandalone)}`,
+    `Service Worker: ${'serviceWorker' in navigator ? 'supported' : 'unsupported'}`,
+    `Push API: ${'PushManager' in window ? 'supported' : 'unsupported'}`,
+    `Notification permission: ${notificationPermission}`,
+    `Build: ${BUILD_SHORT_LABEL}`,
+  ];
+  return lines.join('\n');
+}
+
 function fileKind(file: File): AttachmentDraft['kind'] {
   if (file.type.startsWith('image/')) return 'photo';
   if (file.type.startsWith('video/')) return 'video';
@@ -406,6 +433,7 @@ export default function SupportScreen({ currentUser }: Props) {
       form.set('browser', browser.trim());
       form.set('contact', contact.trim());
       form.set('app_version', BUILD_SHORT_LABEL);
+      form.set('system_context', buildSupportSystemContext());
       fileList.forEach((item) => {
         form.append('attachments', item.file, item.file.name);
       });

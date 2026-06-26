@@ -73,6 +73,60 @@ function parseSteps(value: string) {
   return lines.length ? JSON.stringify(lines) : null;
 }
 
+function detectBrowserFromUserAgent(userAgent: string) {
+  if (/Edg\//i.test(userAgent)) return "Edge";
+  if (/Chrome\//i.test(userAgent) && !/Edg\//i.test(userAgent)) return "Chrome";
+  if (/Firefox\//i.test(userAgent)) return "Firefox";
+  if (/Safari\//i.test(userAgent) && !/Chrome\//i.test(userAgent)) return "Safari";
+  return "";
+}
+
+function detectDeviceFromUserAgent(userAgent: string) {
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return "iPhone / iPad";
+  if (/Android/i.test(userAgent)) return "Android";
+  if (/Windows/i.test(userAgent)) return "Windows";
+  if (/Macintosh/i.test(userAgent)) return "Mac";
+  if (/Linux/i.test(userAgent)) return "Linux";
+  return "";
+}
+
+function clampContext(value: string, max = 4000) {
+  const trimmed = value.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max)}...` : trimmed;
+}
+
+function buildSupportSystemContext(request: Request, clientContext: string) {
+  const userAgent = request.headers.get("user-agent") || "";
+  const secChUa = request.headers.get("sec-ch-ua") || "";
+  const secChPlatform = request.headers.get("sec-ch-ua-platform") || "";
+  const secChMobile = request.headers.get("sec-ch-ua-mobile") || "";
+  const cfCountry = request.headers.get("cf-ipcountry") || "";
+  const cfRay = request.headers.get("cf-ray") || "";
+  const lines = [
+    "Серверная диагностика:",
+    `Detected device: ${detectDeviceFromUserAgent(userAgent) || "unknown"}`,
+    `Detected browser: ${detectBrowserFromUserAgent(userAgent) || "unknown"}`,
+    `User-Agent: ${userAgent || "unknown"}`,
+    `Sec-CH-UA: ${secChUa || "unknown"}`,
+    `Sec-CH-UA-Platform: ${secChPlatform || "unknown"}`,
+    `Sec-CH-UA-Mobile: ${secChMobile || "unknown"}`,
+    `CF-IPCountry: ${cfCountry || "unknown"}`,
+    `CF-Ray: ${cfRay || "unknown"}`,
+    `Received: ${new Date().toISOString()}`,
+  ];
+  const client = clampContext(clientContext);
+  if (client) {
+    lines.push("", "Клиентская диагностика:", client);
+  }
+  return lines.join("\n");
+}
+
+function appendSystemContextToMessage(message: string, systemContext: string) {
+  const context = clampContext(systemContext, 6000);
+  if (!context) return message;
+  return `${message.trim()}\n\n---\nСистемная диагностика\n${context}`;
+}
+
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
     ...attachment,
@@ -163,6 +217,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const browser = String(form.get("browser") || "").trim();
   const contact = String(form.get("contact") || "").trim();
   const appVersion = String(form.get("app_version") || "").trim();
+  const systemContext = buildSupportSystemContext(request, String(form.get("system_context") || ""));
+  const storedMessage = appendSystemContextToMessage(message, systemContext);
+  const storedDevice = device || detectDeviceFromUserAgent(request.headers.get("user-agent") || "");
+  const storedBrowser = browser || detectBrowserFromUserAgent(request.headers.get("user-agent") || "");
 
   if (!message) return json({ error: "BAD_REQUEST", message: "message required" }, 400);
 
@@ -198,10 +256,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     category,
     section,
     subject,
-    message,
+    storedMessage,
     parseSteps(steps),
-    device,
-    browser,
+    storedDevice,
+    storedBrowser,
     contact,
     appVersion,
     attachments.length,
@@ -210,7 +268,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     user.sub,
   ).run();
 
-  await appendSupportMessage(db, ticketId, user.sub, "user", message, attachments);
+  await appendSupportMessage(db, ticketId, user.sub, "user", storedMessage, attachments);
 
   return json({
     ok: true,

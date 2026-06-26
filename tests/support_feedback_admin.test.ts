@@ -184,6 +184,28 @@ async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, cont
   } as any);
 }
 
+async function postTicketForm(db: ReturnType<typeof makeDb>, form: FormData, extraHeaders: Record<string, string> = {}) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
+  const headers = new Headers({
+    Cookie: `ff_session=${token}`,
+    ...extraHeaders,
+  });
+  const request = new Request('https://fitfocus.test/api/support/feedback', {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+
+  return onRequestPost({
+    request,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    params: {},
+    waitUntil() {},
+    next: async () => new Response(null, { status: 404 }),
+    data: {},
+  } as any);
+}
+
 describe('admin support ticket updates', () => {
   it('falls back invalid list limits to a bounded default', async () => {
     const db = makeDb();
@@ -215,6 +237,38 @@ describe('admin support ticket updates', () => {
     expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO support_feedback'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
+  });
+
+  it('adds automatic device and browser diagnostics to user bug reports', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка');
+    form.set('section', 'Настройки');
+    form.set('subject', 'Push не пришел');
+    form.set('message', 'Проблема с push на компьютере.');
+    form.set('system_context', 'Notification permission: granted\nPush API: supported');
+
+    const res = await postTicketForm(db, form, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Sec-CH-UA': '"Chromium";v="126", "Google Chrome";v="126"',
+      'Sec-CH-UA-Platform': '"Windows"',
+      'CF-IPCountry': 'KZ',
+      'CF-Ray': 'ray-1',
+    });
+
+    expect(res.status).toBe(200);
+    const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
+    expect(ticketInsert).toBeTruthy();
+    expect(ticketInsert?.binds[7]).toContain('Проблема с push на компьютере.');
+    expect(ticketInsert?.binds[7]).toContain('Системная диагностика');
+    expect(ticketInsert?.binds[7]).toContain('Detected device: Windows');
+    expect(ticketInsert?.binds[7]).toContain('Detected browser: Chrome');
+    expect(ticketInsert?.binds[7]).toContain('Notification permission: granted');
+    expect(ticketInsert?.binds[9]).toBe('Windows');
+    expect(ticketInsert?.binds[10]).toBe('Chrome');
+
+    const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
+    expect(messageInsert?.binds[4]).toContain('CF-Ray: ray-1');
   });
 
   it('rejects oversized admin support JSON before writing', async () => {
