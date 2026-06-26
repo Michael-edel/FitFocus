@@ -725,12 +725,16 @@ export default function SettingsScreen({
       const sent = Number(payload?.sent || 0);
       const failed = Number(payload?.failed || 0);
       const removed = Number(payload?.removed || 0);
+      const firstFailure = Array.isArray(payload?.failures) ? payload.failures.find((it: any) => it?.message) : null;
+      const failureDetails = firstFailure?.message
+        ? ` Причина: ${String(firstFailure.message).slice(0, 180)}${firstFailure.status ? ` (${firstFailure.status})` : ''}.`
+        : '';
       if (sent > 0 && failed === 0) {
         setPushNotice(`Тест отправлен: ${sent} уведомлений.`);
       } else if (sent > 0) {
-        setPushNotice(`Тест отправлен частично: доставлено ${sent}, ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.`);
+        setPushNotice(`Тест отправлен частично: доставлено ${sent}, ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.${failureDetails}`);
       } else if (failed > 0) {
-        throw new Error(`Тест не доставлен: ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.`);
+        throw new Error(`Тест не доставлен: ошибок ${failed}${removed > 0 ? `, удалено подписок ${removed}` : ''}.${failureDetails}`);
       } else {
         setPushNotice('Тест отправлен: 0 уведомлений.');
       }
@@ -1461,7 +1465,7 @@ export default function SettingsScreen({
                   </div>
                 )}
 
-                {!pushError && pushLastDeliveryError && (
+                {pushLastDeliveryError && (
                   <div className="mt-3 rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
                     Последняя ошибка доставки: {pushLastDeliveryError}
                   </div>

@@ -121,7 +121,16 @@ describe('/api/push/test', () => {
     const response = await postPushTest(db);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, sent: 1, failed: 2, removed: 1 });
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      sent: 1,
+      failed: 2,
+      removed: 1,
+      failures: [
+        { id: 'sub-2', status: 410, message: 'Gone', removed: true },
+        { id: 'sub-3', status: null, message: 'Boom', removed: false },
+      ],
+    });
     expect(db.runs.some((run) => run.sql.includes('UPDATE push_subscriptions SET last_sent_at'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM push_subscriptions'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('UPDATE push_subscriptions SET last_error'))).toBe(false);
