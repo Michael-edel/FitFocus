@@ -169,7 +169,8 @@ describe('admin runtime configuration', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ key: 'ai_on_limit_action', value: 'block' });
-    expect(db.runs.some((run) => run.sql.includes('feature_settings') && run.binds[1] === 'block')).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'setting_update')).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('feature_settings') && run.binds[1] === 'block')).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'setting_update')).toBe(true);
   });
 });

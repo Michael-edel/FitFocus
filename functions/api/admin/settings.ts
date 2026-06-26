@@ -4,7 +4,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventStatement } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -63,11 +63,17 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const normalizedValue = validator(value);
   if (normalizedValue == null) return json({ error: "BAD_VALUE", message: "Invalid setting value" }, 400);
 
-  await db.prepare(
+  const settingStatement = db.prepare(
     "INSERT INTO feature_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).bind(key, normalizedValue).run();
+  ).bind(key, normalizedValue);
 
-  await logAdminEvent(db, { adminUserId: user.sub, action: "setting_update", targetUserId: null, meta: { key, value: normalizedValue } });
+  const auditStatement = buildAdminEventStatement(db, {
+    adminUserId: user.sub,
+    action: "setting_update",
+    targetUserId: null,
+    meta: { key, value: normalizedValue },
+  });
+  await db.batch([settingStatement, auditStatement]);
 
   return json({ ok: true, key, value: normalizedValue });
 };

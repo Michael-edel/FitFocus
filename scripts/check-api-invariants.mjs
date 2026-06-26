@@ -570,6 +570,16 @@ assertIncludes(
   'limitAction',
   'admin settings endpoint must validate limit action values',
 );
+assertIncludes(
+  adminSettings,
+  'buildAdminEventStatement',
+  'admin settings endpoint must stage audit writes with setting updates',
+);
+assertIncludes(
+  adminSettings,
+  'await db.batch([settingStatement, auditStatement]);',
+  'admin settings endpoint must write setting updates and audit events through one batch',
+);
 
 const supportFeedback = read('functions/api/support/feedback.ts');
 assertIncludes(
