@@ -42,10 +42,30 @@ type PreparedStatement = {
 function makeDb(options: { targetExists?: boolean; adminDeleteChanges?: number } = {}) {
   const prepared: PreparedStatement[] = [];
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
+  const auditEvents: Array<{ sql: string; binds: unknown[] }> = [];
+  let lastChanges = 0;
+
+  function runStatement(stmt: PreparedStatement) {
+    let changes = 1;
+    if (stmt.sql.includes('DELETE FROM user_roles') && stmt.sql.includes("role = 'admin'")) {
+      changes = options.adminDeleteChanges ?? 1;
+    }
+    if (stmt.sql.includes('INSERT INTO admin_events')) {
+      const conditional = stmt.sql.includes('WHERE changes() > 0');
+      changes = conditional && lastChanges === 0 ? 0 : 1;
+      if (changes > 0) auditEvents.push({ sql: stmt.sql, binds: stmt.binds });
+    }
+    runs.push({ sql: stmt.sql, binds: stmt.binds });
+    lastChanges = changes;
+    return { success: true, meta: { changes } };
+  }
 
   const db = {
     prepared,
     runs,
+    batches,
+    auditEvents,
     prepare(sql: string): PreparedStatement {
       const stmt: PreparedStatement = {
         sql,
@@ -72,15 +92,15 @@ function makeDb(options: { targetExists?: boolean; adminDeleteChanges?: number }
           return { results: [] };
         },
         async run() {
-          runs.push({ sql, binds: this.binds });
-          if (sql.includes('DELETE FROM user_roles') && sql.includes("role = 'admin'")) {
-            return { success: true, meta: { changes: options.adminDeleteChanges ?? 1 } };
-          }
-          return { success: true, meta: { changes: 1 } };
+          return runStatement(this);
         },
       };
       prepared.push(stmt);
       return stmt;
+    },
+    async batch(stmts: PreparedStatement[]) {
+      batches.push(stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds })));
+      return stmts.map((stmt) => runStatement(stmt));
     },
   };
 
@@ -145,8 +165,10 @@ describe('admin user role management', () => {
     const res = await postRole(db, { user_id: 'user-1', role: 'support', action: 'add' });
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.binds[1] === 'support')).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.binds[1] === 'support')).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);
+    expect(db.auditEvents.some((run) => String(run.binds[3]) === 'role_add')).toBe(true);
   });
 
   it('removes admin only through a guarded conditional delete', async () => {
@@ -155,8 +177,10 @@ describe('admin user role management', () => {
     const res = await postRole(db, { user_id: 'user-2', role: 'admin', action: 'remove' });
 
     expect(res.status).toBe(200);
-    expect(db.runs.some((run) => run.sql.includes('DELETE FROM user_roles') && run.sql.includes('COUNT(*)'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('DELETE FROM user_roles') && run.sql.includes('COUNT(*)'))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
+    expect(db.auditEvents.some((run) => String(run.binds[3]) === 'role_remove')).toBe(true);
   });
 
   it('rejects removing the last active admin when the guarded delete changes no rows', async () => {
@@ -166,6 +190,6 @@ describe('admin user role management', () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'GUARD' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
+    expect(db.auditEvents.some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(false);
   });
 });
