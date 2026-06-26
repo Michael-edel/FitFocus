@@ -1,6 +1,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB, nowMs } from "../_lib/db";
 import { buildPushPayload, sendPushNotification } from "../_lib/push";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -23,7 +24,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  const body = await request.json().catch(() => null);
+  let body: any = null;
+  try {
+    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   const endpoint = String(body?.endpoint || "").trim();
   const payload = buildPushPayload({
     title: String(body?.title || "FitFocus"),

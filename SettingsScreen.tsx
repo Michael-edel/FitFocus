@@ -313,6 +313,8 @@ export default function SettingsScreen({
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
   const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushPublicKey, setPushPublicKey] = useState('');
   const [pushDeviceCount, setPushDeviceCount] = useState<number>(0);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
   const [pushError, setPushError] = useState<string | null>(null);
@@ -518,6 +520,23 @@ export default function SettingsScreen({
     return outputArray;
   };
 
+  const readPushStatus = async () => {
+    const response = await fetch('/api/push/status', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload) throw new Error('status');
+
+    const configured = Boolean(payload.configured);
+    const publicKey = String(payload.vapid_public_key || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '');
+    setPushConfigured(configured);
+    setPushPublicKey(publicKey);
+    setPushSubscriptionCount(Number(payload.count || 0));
+    setPushDeviceCount(Array.isArray(payload.subscriptions) ? payload.subscriptions.length : Number(payload.count || 0));
+    return { configured, publicKey };
+  };
+
   const refreshPushStatus = async () => {
     if (!serverSession) return;
     const supported = isPushSupported();
@@ -526,6 +545,8 @@ export default function SettingsScreen({
 
     if (!supported) {
       setPushSubscribed(false);
+      setPushConfigured(false);
+      setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       return;
@@ -540,12 +561,10 @@ export default function SettingsScreen({
     }
 
     try {
-      const response = await fetch('/api/push/status');
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload) throw new Error('status');
-      setPushSubscriptionCount(Number(payload.count || 0));
-      setPushDeviceCount(Array.isArray(payload.subscriptions) ? payload.subscriptions.length : Number(payload.count || 0));
+      await readPushStatus();
     } catch {
+      setPushConfigured(false);
+      setPushPublicKey('');
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
     }
@@ -560,9 +579,22 @@ export default function SettingsScreen({
       setPushError('Этот браузер не поддерживает push-уведомления.');
       return;
     }
-    const publicKey = (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '';
+    let publicKey = pushPublicKey || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '';
+    try {
+      const status = await readPushStatus();
+      if (!status.configured) {
+        setPushError('Push-сервер не настроен.');
+        return;
+      }
+      publicKey = status.publicKey;
+    } catch {
+      if (!publicKey) {
+        setPushError('Не удалось получить push-конфигурацию.');
+        return;
+      }
+    }
     if (!publicKey) {
-      setPushError('Не задан VITE_PUSH_VAPID_PUBLIC_KEY.');
+      setPushError('Не задан PUSH_VAPID_PUBLIC_KEY.');
       return;
     }
 
@@ -891,6 +923,8 @@ export default function SettingsScreen({
       setPushSupported(false);
       setPushPermission('unsupported');
       setPushSubscribed(false);
+      setPushConfigured(false);
+      setPushPublicKey('');
       setPushDeviceCount(0);
       setPushSubscriptionCount(0);
       return;
@@ -1327,7 +1361,9 @@ export default function SettingsScreen({
                             : 'Этот браузер не поддерживает push'}
                     </div>
                     <div className="text-slate-500 text-sm mt-2">
-                      Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.
+                      {pushConfigured
+                        ? 'Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.'
+                        : 'Push-сервер ещё не настроен: нужны VAPID ключи в переменных Cloudflare.'}
                     </div>
                   </div>
                   <div className={["w-11 h-11 rounded-2xl flex items-center justify-center border",
@@ -1369,7 +1405,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void subscribeToPush()}
-                      disabled={pushBusy || !pushSupported || pushPermission === 'denied' || !serverSession}
+                      disabled={pushBusy || !pushSupported || !pushConfigured || pushPermission === 'denied' || !serverSession}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
                     >
                       <Bell className="w-4 h-4" />

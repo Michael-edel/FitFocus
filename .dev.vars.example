@@ -6,9 +6,9 @@ GOOGLE_CLIENT_ID=CHANGE_ME
 AUTH_JWT_SECRET=CHANGE_ME_LONG_RANDOM_STRING
 
 # Web Push / PWA notifications
-PUSH_VAPID_PUBLIC_KEY=BKYpoReuDcWg9PA7VlzfP5UTmnnbb3troXhGcpRAp2ksb4aLlD1DGaBiL30pac6e_iZYiNNeWeYDUau-W8-pR-4
-PUSH_VAPID_PRIVATE_KEY=B20lrOqwx8g6butUnCK7GQGFJlILSw3maIbNFJPljqo
-PUSH_VAPID_SUBJECT=mailto:support@fitfocus.pages.dev
+PUSH_VAPID_PUBLIC_KEY=CHANGE_ME_VAPID_PUBLIC_KEY
+PUSH_VAPID_PRIVATE_KEY=CHANGE_ME_VAPID_PRIVATE_KEY
+PUSH_VAPID_SUBJECT=mailto:support@example.com
 
 # Scheduled cleanup endpoint. Use the same value in Cloudflare Pages env var
 # CRON_SECRET and GitHub repository secret FITFOCUS_CLEANUP_SECRET.

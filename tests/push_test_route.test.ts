@@ -89,13 +89,13 @@ function makeDb() {
   };
 }
 
-async function postPushTest(db: ReturnType<typeof makeDb>) {
+async function postPushTest(db: ReturnType<typeof makeDb>, body = JSON.stringify({ title: 'hello' })) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   return onRequestPost({
     request: new Request('https://fitfocus.test/api/push/test', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'hello' }),
+      body,
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
     params: {},
@@ -129,5 +129,16 @@ describe('/api/push/test', () => {
     expect(db.batches[0].some((stmt) => stmt.sql.includes('UPDATE push_subscriptions SET last_sent_at'))).toBe(true);
     expect(db.batches[0].some((stmt) => stmt.sql.includes('DELETE FROM push_subscriptions WHERE id = ?'))).toBe(true);
     expect(db.batches[0].some((stmt) => stmt.sql.includes('UPDATE push_subscriptions SET last_error = ?'))).toBe(true);
+  });
+
+  it('rejects oversized JSON before sending notifications', async () => {
+    const db = makeDb();
+
+    const response = await postPushTest(db, `{"title":"hello","payload":"${'x'.repeat(70 * 1024)}"}`);
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(sendPushNotification).not.toHaveBeenCalled();
+    expect(db.batches).toHaveLength(0);
   });
 });

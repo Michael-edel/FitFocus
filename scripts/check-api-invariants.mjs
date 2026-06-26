@@ -945,6 +945,56 @@ assertIncludes(
 );
 
 const pushTestRoute = read('functions/api/push/test.ts');
+const pushStatusRoute = read('functions/api/push/status.ts');
+const pushSubscribeRoute = read('functions/api/push/subscribe.ts');
+const pushUnsubscribeRoute = read('functions/api/push/unsubscribe.ts');
+const settingsScreen = read('SettingsScreen.tsx');
+assertIncludes(
+  pushStatusRoute,
+  'vapid_public_key: env.PUSH_VAPID_PUBLIC_KEY || null',
+  'push status route must expose the public VAPID key for browser subscription',
+);
+assertIncludes(
+  settingsScreen,
+  "fetch('/api/push/status'",
+  'settings screen must load push runtime config from the server',
+);
+assertIncludes(
+  settingsScreen,
+  'payload.vapid_public_key',
+  'settings screen must use the public VAPID key returned by push status',
+);
+assertIncludes(
+  settingsScreen,
+  'Push-сервер не настроен.',
+  'settings screen must block subscription when the push server is not configured',
+);
+assertNotIncludes(
+  settingsScreen,
+  'Не задан VITE_PUSH_VAPID_PUBLIC_KEY',
+  'settings screen must not depend only on a build-time VITE push key',
+);
+for (const [file, text] of [
+  ['functions/api/push/subscribe.ts', pushSubscribeRoute],
+  ['functions/api/push/unsubscribe.ts', pushUnsubscribeRoute],
+  ['functions/api/push/test.ts', pushTestRoute],
+]) {
+  assertIncludes(
+    text,
+    'readJsonRequest',
+    `${file} must parse JSON through the bounded request body helper`,
+  );
+  assertIncludes(
+    text,
+    'PAYLOAD_TOO_LARGE',
+    `${file} must return 413 for oversized JSON bodies`,
+  );
+  assertNotIncludes(
+    text,
+    'request.json()',
+    `${file} must not read JSON bodies through an unbounded request.json() call`,
+  );
+}
 assertIncludes(
   pushTestRoute,
   'const statements: D1PreparedStatement[] = [];',
