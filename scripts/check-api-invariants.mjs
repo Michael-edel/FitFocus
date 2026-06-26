@@ -459,13 +459,23 @@ assertIncludes(
 );
 assertIncludes(
   adminSessions,
-  'changedRows(result) === 0',
+  'changedRows(revokeResult) === 0',
   'admin session revoke must reject missing session rows',
 );
 assertIncludes(
   adminSessions,
   'action: "session_revoke"',
   'admin session revoke must write an audit event',
+);
+assertIncludes(
+  adminSessions,
+  'buildAdminEventAfterChangeStatement',
+  'admin session revoke must audit only after a changed row',
+);
+assertIncludes(
+  adminSessions,
+  'await db.batch([revokeStatement, auditStatement]);',
+  'admin session revoke must write revoke and audit through one batch',
 );
 
 const adminSubscription = read('functions/api/admin/subscription.ts');

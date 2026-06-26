@@ -4,7 +4,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { logAdminEvent } from "../_lib/admin_audit";
+import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -59,15 +59,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ id: string }>();
   if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
 
-  const result = await db.prepare("UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?").bind(sessionId, userId).run();
-  if (changedRows(result) === 0) return json({ error: "NOT_FOUND", message: "Session not found" }, 404);
-
-  await logAdminEvent(db, {
+  const revokeStatement = db.prepare("UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?").bind(sessionId, userId);
+  const auditStatement = buildAdminEventAfterChangeStatement(db, {
     adminUserId: user.sub,
     action: "session_revoke",
     targetUserId: userId,
     meta: { session_id: sessionId },
   });
+  const [revokeResult] = await db.batch([revokeStatement, auditStatement]);
+  if (changedRows(revokeResult) === 0) return json({ error: "NOT_FOUND", message: "Session not found" }, 404);
 
   return json({ ok: true });
 };
