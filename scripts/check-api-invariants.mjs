@@ -195,6 +195,21 @@ assertIncludes(
   'bounded JSON parsing must use the streaming body size guard',
 );
 assertIncludes(
+  requestBodyLib,
+  'export async function readRequestBytes',
+  'request body helper must expose bounded byte parsing for non-JSON bodies',
+);
+assertIncludes(
+  requestBodyLib,
+  'export async function readFormDataRequest',
+  'request body helper must expose bounded FormData parsing',
+);
+assertIncludes(
+  requestBodyLib,
+  'SUPPORT_FORM_BODY_LIMIT_BYTES',
+  'support FormData body parsing must use an explicit size limit',
+);
+assertIncludes(
   supportAttachments,
   'messageId=${encodeURIComponent(messageId)}',
   'support attachment route builder must include messageId in URLs',
@@ -240,9 +255,34 @@ assertIncludes(
   'user support reply writes must stay conditional on an open ticket',
 );
 assertIncludes(
+  userSupport,
+  'readFormDataRequest(request, SUPPORT_FORM_BODY_LIMIT_BYTES)',
+  'user support reply must parse FormData through the bounded request body helper',
+);
+assertIncludes(
+  userSupport,
+  'PAYLOAD_TOO_LARGE',
+  'user support reply must return 413 for oversized FormData bodies',
+);
+assertNotIncludes(
+  userSupport,
+  'request.formData()',
+  'user support reply must not read FormData through an unbounded request.formData() call',
+);
+assertIncludes(
   adminSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
   'admin support thread must expose URLs for R2 message attachments',
+);
+assertIncludes(
+  adminSupport,
+  'readFormDataRequest(request, SUPPORT_FORM_BODY_LIMIT_BYTES)',
+  'admin support ticket creation must parse FormData through the bounded request body helper',
+);
+assertNotIncludes(
+  adminSupport,
+  'request.formData()',
+  'admin support ticket creation must not read FormData through an unbounded request.formData() call',
 );
 
 const accountCleanup = read('functions/api/_lib/account_cleanup.ts');

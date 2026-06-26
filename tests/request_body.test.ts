@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readJsonRequest, readRequestText, RequestBodyTooLargeError } from '../functions/api/_lib/request_body';
+import { readFormDataRequest, readJsonRequest, readRequestText, RequestBodyTooLargeError } from '../functions/api/_lib/request_body';
 
 describe('bounded request body reader', () => {
   it('rejects oversized content-length before reading the body', async () => {
@@ -55,5 +55,31 @@ describe('bounded request body reader', () => {
     });
 
     await expect(readJsonRequest(request, 32)).rejects.toBeInstanceOf(RequestBodyTooLargeError);
+  });
+
+  it('parses FormData through the bounded body reader', async () => {
+    const form = new FormData();
+    form.set('message', 'hello');
+    form.append('attachments', new File(['file'], 'note.txt', { type: 'text/plain' }));
+    const request = new Request('https://fitfocus.test/api', {
+      method: 'POST',
+      body: form,
+    });
+
+    const parsed = await readFormDataRequest(request, 2048);
+
+    expect(parsed?.get('message')).toBe('hello');
+    expect(parsed?.get('attachments')).toBeInstanceOf(File);
+  });
+
+  it('rejects oversized FormData bodies before parsing fields', async () => {
+    const form = new FormData();
+    form.set('payload', 'x'.repeat(2048));
+    const request = new Request('https://fitfocus.test/api', {
+      method: 'POST',
+      body: form,
+    });
+
+    await expect(readFormDataRequest(request, 256)).rejects.toBeInstanceOf(RequestBodyTooLargeError);
   });
 });

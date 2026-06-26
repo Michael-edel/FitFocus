@@ -5,14 +5,15 @@ export class RequestBodyTooLargeError extends Error {
 }
 
 export const SMALL_JSON_BODY_LIMIT_BYTES = 64 * 1024;
+export const SUPPORT_FORM_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
 
-export async function readRequestText(request: Request, maxBytes: number): Promise<string> {
+export async function readRequestBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
   const contentLength = request.headers.get("content-length");
   if (contentLength && Number(contentLength) > maxBytes) {
     throw new RequestBodyTooLargeError();
   }
 
-  if (!request.body) return "";
+  if (!request.body) return new Uint8Array(0);
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -39,6 +40,11 @@ export async function readRequestText(request: Request, maxBytes: number): Promi
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return bytes;
+}
+
+export async function readRequestText(request: Request, maxBytes: number): Promise<string> {
+  const bytes = await readRequestBytes(request, maxBytes);
   return new TextDecoder().decode(bytes);
 }
 
@@ -51,6 +57,26 @@ export async function readJsonRequest<T = unknown>(
 
   try {
     return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function readFormDataRequest(
+  request: Request,
+  maxBytes = SUPPORT_FORM_BODY_LIMIT_BYTES,
+): Promise<FormData | null> {
+  const bytes = await readRequestBytes(request, maxBytes);
+  const body = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(body).set(bytes);
+  const boundedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+  });
+
+  try {
+    return await boundedRequest.formData();
   } catch {
     return null;
   }

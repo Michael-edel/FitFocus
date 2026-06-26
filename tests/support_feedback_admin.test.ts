@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestGet, onRequestPatch } from '../functions/api/support/feedback';
+import { onRequestGet, onRequestPatch, onRequestPost } from '../functions/api/support/feedback';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -163,6 +163,27 @@ async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
   } as any);
 }
 
+async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, contentType = 'multipart/form-data; boundary=x') {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
+  const request = new Request('https://fitfocus.test/api/support/feedback', {
+    method: 'POST',
+    headers: {
+      Cookie: `ff_session=${token}`,
+      'Content-Type': contentType,
+    },
+    body,
+  });
+
+  return onRequestPost({
+    request,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    params: {},
+    waitUntil() {},
+    next: async () => new Response(null, { status: 404 }),
+    data: {},
+  } as any);
+}
+
 describe('admin support ticket updates', () => {
   it('falls back invalid list limits to a bounded default', async () => {
     const db = makeDb();
@@ -183,6 +204,17 @@ describe('admin support ticket updates', () => {
     expect(await res.json()).toMatchObject({ error: 'BAD_STATUS' });
     expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(false);
+  });
+
+  it('rejects oversized support ticket forms before writing', async () => {
+    const db = makeDb();
+
+    const res = await postTicketRaw(db, 'x'.repeat(9 * 1024 * 1024));
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO support_feedback'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
   });
 
   it('rejects oversized admin support JSON before writing', async () => {

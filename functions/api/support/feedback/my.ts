@@ -1,6 +1,11 @@
 import { json, requireUser } from "../../_lib/auth";
 import { nowMs, requireDB, uuid } from "../../_lib/db";
 import {
+  readFormDataRequest,
+  RequestBodyTooLargeError,
+  SUPPORT_FORM_BODY_LIMIT_BYTES,
+} from "../../_lib/request_body";
+import {
   attachmentResponseUrl,
   fileToAttachment,
   parseAttachmentsJson,
@@ -105,7 +110,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const form = await request.formData().catch(() => null);
+  let form: FormData | null = null;
+  try {
+    form = await readFormDataRequest(request, SUPPORT_FORM_BODY_LIMIT_BYTES);
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw err;
+  }
   if (!form) return json({ error: "BAD_REQUEST", message: "form data required" }, 400);
 
   const ticketId = String(form.get("ticket_id") || "").trim();
