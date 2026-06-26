@@ -4,6 +4,7 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { getActiveFamilyForUser } from "../_lib/family_access";
 import { loadActivePlan } from "../_lib/plans";
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -17,7 +18,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    const body = await request.json().catch(() => ({}));
+    let body: any = {};
+    try {
+      body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const code = (body?.code || "").toString().trim().toUpperCase();
     if (!code) throw new Error("BAD_REQUEST");
 

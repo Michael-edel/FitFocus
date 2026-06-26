@@ -948,6 +948,43 @@ if (weeklyMenuItems.includes('DELETE FROM weekly_menu_items') && weeklyMenuItems
   process.exitCode = 1;
 }
 
+for (const [file, text] of [
+  ['functions/api/family/index.ts', read('functions/api/family/index.ts')],
+  ['functions/api/family/invite.ts', read('functions/api/family/invite.ts')],
+  ['functions/api/family/join.ts', read('functions/api/family/join.ts')],
+  ['functions/api/family/member.ts', read('functions/api/family/member.ts')],
+  ['functions/api/family/menu.ts', familyMenu],
+  ['functions/api/shopping/bulk.ts', read('functions/api/shopping/bulk.ts')],
+  ['functions/api/shopping/check.ts', read('functions/api/shopping/check.ts')],
+  ['functions/api/weekly_menu/items.ts', weeklyMenuItems],
+]) {
+  assertIncludes(
+    text,
+    'readJsonRequest',
+    `${file} must parse JSON through the bounded request body helper`,
+  );
+  assertIncludes(
+    text,
+    'PAYLOAD_TOO_LARGE',
+    `${file} must return 413 for oversized JSON bodies`,
+  );
+  assertNotIncludes(
+    text,
+    'request.json()',
+    `${file} must not read JSON through an unbounded request.json() call`,
+  );
+}
+assertIncludes(
+  familyMenu,
+  'FAMILY_MENU_JSON_BODY_LIMIT_BYTES',
+  'family menu save must enforce an explicit JSON body size limit',
+);
+assertIncludes(
+  weeklyMenuItems,
+  'WEEKLY_MENU_ITEMS_JSON_BODY_LIMIT_BYTES',
+  'weekly menu items save must enforce an explicit JSON body size limit',
+);
+
 const shoppingBulk = read('functions/api/shopping/bulk.ts');
 assertIncludes(
   shoppingBulk,

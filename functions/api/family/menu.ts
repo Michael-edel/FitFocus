@@ -5,8 +5,10 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireActiveFamilyForUser, requireFamilyOwner } from "../_lib/family_access";
 import { requireFamilyPlan } from "../_lib/plans";
+import { readJsonRequest, RequestBodyTooLargeError } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+const FAMILY_MENU_JSON_BODY_LIMIT_BYTES = 256 * 1024;
 
 function isIsoDay(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -65,7 +67,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    const body: any = await request.json().catch(() => ({}));
+    let body: any = {};
+    try {
+      body = await readJsonRequest(request, FAMILY_MENU_JSON_BODY_LIMIT_BYTES) ?? {};
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const menu = body?.menu;
     const weekStart = String(body?.weekStart || body?.week_start || "").slice(0, 10) || weekStartISO(new Date());
 
