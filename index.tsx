@@ -21,6 +21,9 @@ if (!rootElement) {
   throw new Error('Could not find root element to mount to');
 }
 
+// Запускаем регистрацию SW как можно раньше, не дожидаясь рендера всего дерева.
+void initPWA();
+
 // React 18 root
 const root = ReactDOM.createRoot(rootElement);
 root.render(
@@ -28,6 +31,3 @@ root.render(
     <App />
   </React.StrictMode>
 );
-
-// Безопасно: в Google AI Studio ничего не делает, а в Vite (dev/build) регистрирует SW.
-void initPWA();

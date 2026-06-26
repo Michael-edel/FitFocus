@@ -539,11 +539,21 @@ export default function SettingsScreen({
     return outputArray;
   };
 
-  const getReadyServiceWorkerRegistration = async (timeoutMs = 5000) => {
+  const getReadyServiceWorkerRegistration = async (timeoutMs = 15000) => {
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service worker не поддерживается в этом браузере.');
+    }
+
+    const existingRegistration = await navigator.serviceWorker.getRegistration().catch(() => null);
+    if (existingRegistration?.active) {
+      return existingRegistration;
+    }
+
     const timeout = new Promise<never>((_, reject) => {
-      window.setTimeout(() => reject(new Error('Service worker ещё не готов. Закройте и снова откройте приложение.')), timeoutMs);
+      window.setTimeout(() => reject(new Error('Service worker ещё не готов. Подождите несколько секунд и повторите.')), timeoutMs);
     });
-    return Promise.race([navigator.serviceWorker.ready, timeout]);
+    const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+    return registration || existingRegistration || navigator.serviceWorker.getRegistration();
   };
 
   const readPushStatus = async () => {
