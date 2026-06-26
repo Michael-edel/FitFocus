@@ -12,9 +12,10 @@ type Props = {
   isPro?: boolean;
   onUpdateInsight?: (nextInsight: FoodInsight) => void;
   onSaveRecipe?: (fav: FavoriteRecipe) => void;
+  onEdit?: () => void;
 };
 
-export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe }: Props) {
+export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit }: Props) {
   const [active, setActive] = useState<any | null>(null);
   const [haloTheme, setHaloTheme] = useState<'light' | 'dark'>('light');
   const [focusMode, setFocusMode] = useState<boolean>(true);
@@ -368,7 +369,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
         ))}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         {hasRecipe && (
           <button
             onClick={(e) => {
@@ -391,6 +392,16 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
             Сохранить рецепт
           </button>
         )}
+        {onEdit ? (
+          <button
+            className="ff-infocard__focusToggle"
+            type="button"
+            onClick={onEdit}
+            title="Исправить название, КБЖУ, состав и приём пищи"
+          >
+            Корректировать
+          </button>
+        ) : null}
         <button
           className="ff-infocard__focusToggle"
           type="button"
