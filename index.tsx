@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { initPWA } from './pwa';
+import { ensurePWAStarted } from './pwa';
 
 const CANONICAL_APP_HOST = 'fitfocus.pages.dev';
 const isPreviewPagesHost =
@@ -22,7 +22,7 @@ if (!rootElement) {
 }
 
 // Запускаем регистрацию SW как можно раньше, не дожидаясь рендера всего дерева.
-void initPWA();
+void ensurePWAStarted();
 
 // React 18 root
 const root = ReactDOM.createRoot(rootElement);
