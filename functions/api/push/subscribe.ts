@@ -1,6 +1,6 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB, nowMs, uuid } from "../_lib/db";
-import { normalizePushDeviceLabel, parsePushSubscription } from "../_lib/push";
+import { mergePushUserAgentWithBrowserHint, normalizePushDeviceLabel, parsePushSubscription } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asOptionalString, isJsonObject } from "../_lib/json";
 
@@ -34,7 +34,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   const t = nowMs();
   const deviceLabel = normalizePushDeviceLabel(asOptionalString(payload?.deviceLabel), request.headers.get("user-agent"));
-  const userAgent = request.headers.get("user-agent");
+  const browserLabel = asOptionalString(payload?.browserLabel);
+  const userAgent = mergePushUserAgentWithBrowserHint(request.headers.get("user-agent"), browserLabel);
 
   await db
     .prepare(

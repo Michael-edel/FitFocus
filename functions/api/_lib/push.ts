@@ -51,6 +51,11 @@ export function normalizePushDeviceLabel(label?: string | null, userAgent?: stri
 
 function getBrowserLabelFallback(userAgent?: string | null, browserHint?: string | null) {
   const ua = `${browserHint || ""} ${userAgent || ""}`;
+  const storedHint = /FitFocusBrowserHint\/([A-Za-z0-9_-]+)/i.exec(ua)?.[1];
+  if (storedHint) {
+    const decoded = storedHint.replace(/_/g, " ").trim();
+    if (decoded) return decoded;
+  }
   if (/YaBrowser/i.test(ua) || /Yandex/i.test(ua)) return "Yandex";
   if (/Comet/i.test(ua)) return "Comet";
   if (/Edg/i.test(ua)) return "Edge";
@@ -64,6 +69,15 @@ function getBrowserLabelFallback(userAgent?: string | null, browserHint?: string
 
 export function normalizePushBrowserLabel(userAgent?: string | null, browserHint?: string | null) {
   return getBrowserLabelFallback(userAgent, browserHint).slice(0, 120);
+}
+
+export function mergePushUserAgentWithBrowserHint(userAgent?: string | null, browserLabel?: string | null) {
+  const ua = String(userAgent || "").trim();
+  const label = String(browserLabel || "").trim().slice(0, 120);
+  if (!label) return ua;
+  const normalizedLabel = label.replace(/\s+/g, "_");
+  if (ua.includes(`FitFocusBrowserHint/${normalizedLabel}`)) return ua;
+  return `${ua} FitFocusBrowserHint/${normalizedLabel}`.trim();
 }
 
 export function parsePushSubscription(payload: PushSubscriptionPayload | null | undefined) {

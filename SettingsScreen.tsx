@@ -602,10 +602,15 @@ export default function SettingsScreen({
   };
 
   const readPushStatus = async () => {
+    const browserLabel = getPushBrowserLabel();
     const response = await fetch('/api/push/status', {
       cache: 'no-store',
       credentials: 'include',
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-store',
+        'X-FitFocus-Browser-Label': browserLabel,
+      },
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload) {
@@ -745,10 +750,12 @@ export default function SettingsScreen({
 
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subscription: subscription.toJSON(),
           deviceLabel: getPushDeviceLabel(),
+          browserLabel: getPushBrowserLabel(),
         }),
       });
       const payload = await response.json().catch(() => null);

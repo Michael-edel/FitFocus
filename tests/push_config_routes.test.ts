@@ -243,6 +243,43 @@ describe('push runtime configuration routes', () => {
     });
   });
 
+  it('uses the explicit browser label header for Chromium forks such as Comet', async () => {
+    const db = makeDb({
+      pushSubscriptions: [
+        {
+          id: 'sub-comet',
+          device_label: 'Windows',
+          user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 FitFocusBrowserHint/Comet',
+          created_at: 3,
+          updated_at: 4,
+          last_sent_at: null,
+          last_error: null,
+          enabled: 1,
+        },
+      ],
+      pushSubscriptionCount: 1,
+    });
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'X-FitFocus-Browser-Label': 'Comet',
+      },
+    });
+
+    const response = await getPushStatus(context(request, db, {
+      PUSH_VAPID_PUBLIC_KEY: 'public-key',
+      PUSH_VAPID_PRIVATE_KEY: 'private-key',
+      PUSH_VAPID_SUBJECT: 'mailto:test@example.com',
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      current_subscription_id: 'sub-comet',
+      current_device_label: 'Windows',
+      current_browser_label: 'Comet',
+    });
+  });
+
   it('rejects oversized subscribe JSON before writing', async () => {
     const db = makeDb();
     const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
@@ -256,6 +293,28 @@ describe('push runtime configuration routes', () => {
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO push_subscriptions'))).toBe(false);
+  });
+
+  it('stores the explicit browser label hint with the subscription user agent', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        endpoint: 'https://push.example',
+        keys: { p256dh: 'k', auth: 'a' },
+        browserLabel: 'Comet',
+      }),
+    });
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(200);
+    const insertRun = db.runs.find((run) => run.sql.includes('INSERT INTO push_subscriptions'));
+    expect(insertRun?.binds).toContain('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 FitFocusBrowserHint/Comet');
   });
 
   it('rejects oversized unsubscribe JSON before deleting', async () => {
