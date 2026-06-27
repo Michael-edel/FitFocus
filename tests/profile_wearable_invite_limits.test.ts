@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { onRequestPut as putProfile, onRequestPatch as patchProfile } from '../functions/api/profile';
 import { onRequestPost as postWearableSync } from '../functions/api/wearable/sync';
 import { onRequestPost as postInviteRedeem } from '../functions/api/invite/redeem';
+type PutProfileContext = Parameters<typeof putProfile>[0];
+type PatchProfileContext = Parameters<typeof patchProfile>[0];
+type WearableSyncContext = Parameters<typeof postWearableSync>[0];
+type InviteRedeemContext = Parameters<typeof postInviteRedeem>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -91,19 +95,20 @@ describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized profile PUT bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });
-    const response = await putProfile({
+    const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as PutProfileContext['env'];
+    const context: PutProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PUT',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' } as any,
+      env,
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/profile',
-    } as any);
+    };
+    const response = await putProfile(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -114,19 +119,20 @@ describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized profile PATCH bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });
-    const response = await patchProfile({
+    const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as PatchProfileContext['env'];
+    const context: PatchProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PATCH',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' } as any,
+      env,
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/profile',
-    } as any);
+    };
+    const response = await patchProfile(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -137,19 +143,20 @@ describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized wearable sync bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1', aud: 'mobile' });
-    const response = await postWearableSync({
+    const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as WearableSyncContext['env'];
+    const context: WearableSyncContext = {
       request: new Request('https://fitfocus.test/api/wearable/sync', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: 'apple-health', payload: 'x'.repeat(80 * 1024) }),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' } as any,
+      env,
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/wearable/sync',
-    } as any);
+    };
+    const response = await postWearableSync(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -159,19 +166,20 @@ describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized invite redeem bodies before consuming invites', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-    const response = await postInviteRedeem({
+    const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as InviteRedeemContext['env'];
+    const context: InviteRedeemContext = {
       request: new Request('https://fitfocus.test/api/invite/redeem', {
         method: 'POST',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: 'INVITE', payload: 'x'.repeat(80 * 1024) }),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env,
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/invite/redeem',
-    } as any);
+    };
+    const response = await postInviteRedeem(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });

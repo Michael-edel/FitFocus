@@ -53,7 +53,7 @@ describe('billing webhook subscription updates', () => {
   it('updates an active existing user subscription for known prices', async () => {
     const db = makeDb();
 
-    const result = await applyStripeSubscriptionUpdate(db as any, {
+    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
       id: 'sub-1',
       customer: 'cus-1',
       status: 'active',
@@ -69,7 +69,7 @@ describe('billing webhook subscription updates', () => {
   it('skips subscription updates for missing or deleted users', async () => {
     const db = makeDb({ userExists: false });
 
-    const result = await applyStripeSubscriptionUpdate(db as any, {
+    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
       id: 'sub-1',
       status: 'active',
       metadata: { ff_uid: 'deleted-user' },
@@ -83,7 +83,7 @@ describe('billing webhook subscription updates', () => {
   it('skips active subscription updates for unknown prices', async () => {
     const db = makeDb();
 
-    const result = await applyStripeSubscriptionUpdate(db as any, {
+    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
       id: 'sub-1',
       status: 'active',
       metadata: { ff_uid: 'user-1' },
@@ -97,7 +97,7 @@ describe('billing webhook subscription updates', () => {
   it('records deleted subscriptions as free while preserving Stripe status', async () => {
     const db = makeDb();
 
-    const result = await applyStripeSubscriptionUpdate(db as any, {
+    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
       id: 'sub-1',
       status: 'canceled',
       metadata: { ff_uid: 'user-1' },
@@ -111,7 +111,7 @@ describe('billing webhook subscription updates', () => {
   it('falls back to stored Stripe identifiers when webhook metadata has no user id', async () => {
     const db = makeDb({ storedUserId: 'user-1' });
 
-    const result = await applyStripeSubscriptionUpdate(db as any, {
+    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
       id: 'sub-1',
       customer: 'cus-1',
       status: 'canceled',

@@ -29,7 +29,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { memberInsertChanges?: number; latestFamily?: any } = {}) {
+function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFamily | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   let accessReadCount = 0;
   return {
@@ -75,19 +75,19 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: any } = 
 
 async function postFamily(db: ReturnType<typeof makeDb>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: FamilyHandlerContext = {
     request: new Request('https://fitfocus.test/api/family', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Моя семья' }),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/family POST', () => {
@@ -115,3 +115,5 @@ describe('/api/family POST', () => {
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(true);
   });
 });
+type FamilyHandlerContext = Parameters<typeof onRequestPost>[0];
+type LatestFamily = { id: string; owner_user_id: string; created_at: number; name?: string };

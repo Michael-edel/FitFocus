@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet } from '../functions/api/support/attachment';
+import type { SupportAttachmentBucket } from '../functions/api/_lib/support_attachments';
+type SupportAttachmentContext = Parameters<typeof onRequestGet>[0];
+type SupportAttachmentBody = { error?: string };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -81,15 +84,19 @@ function makeContext(userId: string, ticketOwner = 'user-1') {
       }),
     };
 
-    return onRequestGet({
+    const context: SupportAttachmentContext = {
       request,
-      env: { AUTH_JWT_SECRET: SECRET, DB: makeDb(ticketOwner), SUPPORT_ATTACHMENTS: bucket } as any,
+      env: {
+        AUTH_JWT_SECRET: SECRET,
+        DB: makeDb(ticketOwner) as unknown as D1Database,
+        SUPPORT_ATTACHMENTS: bucket as SupportAttachmentBucket,
+      },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/support/attachment',
-    } as any);
+    };
+    return onRequestGet(context);
   };
 }
 
@@ -106,7 +113,7 @@ describe('/api/support/attachment', () => {
     const response = await makeContext('user-2', 'user-1')();
 
     expect(response.status).toBe(403);
-    const body = await response.json() as any;
+    const body = await response.json() as SupportAttachmentBody;
     expect(body.error).toBe('FORBIDDEN');
   });
 });

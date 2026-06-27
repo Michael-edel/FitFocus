@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/weekly_menu/items';
+type WeeklyMenuItemsContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -70,19 +71,19 @@ function makeDb() {
 
 async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: WeeklyMenuItemsContext = {
     request: new Request('https://fitfocus.test/api/weekly_menu/items', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/weekly_menu/items',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/weekly_menu/items', () => {

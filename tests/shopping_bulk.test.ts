@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPatch } from '../functions/api/shopping/bulk';
+type ShoppingBulkContext = Parameters<typeof onRequestPatch>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -70,19 +71,19 @@ function makeDb() {
 
 async function patchBulk(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPatch({
+  const context: ShoppingBulkContext = {
     request: new Request('https://fitfocus.test/api/shopping/bulk', {
       method: 'PATCH',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/shopping/bulk',
-  } as any);
+  };
+  return onRequestPatch(context);
 }
 
 describe('/api/shopping/bulk', () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPut as putFeatureFlag } from '../functions/api/admin/feature_flags';
 import { onRequestPut as putSetting } from '../functions/api/admin/settings';
+type AdminFeatureFlagContext = Parameters<typeof putFeatureFlag>[0];
+type AdminSettingContext = Parameters<typeof putSetting>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -102,16 +104,18 @@ async function putRaw(path: string, db: ReturnType<typeof makeDb>, body: string)
     body,
   });
 
-  const context = {
+  const contextBase = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any;
+  };
 
-  return path.includes('feature_flags') ? putFeatureFlag(context) : putSetting(context);
+  return path.includes('feature_flags')
+    ? putFeatureFlag(contextBase as AdminFeatureFlagContext)
+    : putSetting(contextBase as AdminSettingContext);
 }
 
 describe('admin runtime configuration', () => {

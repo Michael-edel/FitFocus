@@ -7,6 +7,14 @@ import { onRequestPost as postFamilyMenu } from '../functions/api/family/menu';
 import { onRequestPatch as patchShoppingBulk } from '../functions/api/shopping/bulk';
 import { onRequestPatch as patchShoppingCheck } from '../functions/api/shopping/check';
 import { onRequestPost as postWeeklyMenuItems } from '../functions/api/weekly_menu/items';
+type FamilyIndexContext = Parameters<typeof postFamily>[0];
+type FamilyInviteContext = Parameters<typeof postFamilyInvite>[0];
+type FamilyJoinContext = Parameters<typeof postFamilyJoin>[0];
+type FamilyMemberContext = Parameters<typeof patchFamilyMember>[0];
+type FamilyMenuContext = Parameters<typeof postFamilyMenu>[0];
+type ShoppingBulkContext = Parameters<typeof patchShoppingBulk>[0];
+type ShoppingCheckContext = Parameters<typeof patchShoppingCheck>[0];
+type WeeklyMenuItemsContext = Parameters<typeof postWeeklyMenuItems>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -97,15 +105,15 @@ async function authedJsonRequest(url: string, method: string, body: string) {
 describe('bounded JSON body guards on family and shopping routes', () => {
   it('rejects oversized family create bodies before family writes', async () => {
     const db = makeDb();
-    const response = await postFamily({
+    const context: FamilyIndexContext = {
       request: await authedJsonRequest('https://fitfocus.test/api/family', 'POST', JSON.stringify({ name: 'x'.repeat(80 * 1024) })),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/family',
-    } as any);
+    };
+    const response = await postFamily(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -114,15 +122,15 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized family invite bodies before invite writes', async () => {
     const db = makeDb();
-    const response = await postFamilyInvite({
+    const context: FamilyInviteContext = {
       request: await authedJsonRequest('https://fitfocus.test/api/family/invite', 'POST', JSON.stringify({ ttlHours: 24, payload: 'x'.repeat(80 * 1024) })),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/family/invite',
-    } as any);
+    };
+    const response = await postFamilyInvite(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -131,15 +139,15 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized family join bodies before claim writes', async () => {
     const db = makeDb();
-    const response = await postFamilyJoin({
+    const context: FamilyJoinContext = {
       request: await authedJsonRequest('https://fitfocus.test/api/family/join', 'POST', JSON.stringify({ code: 'JOINME', payload: 'x'.repeat(80 * 1024) })),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/family/join',
-    } as any);
+    };
+    const response = await postFamilyJoin(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -148,15 +156,15 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized family member bodies before updates', async () => {
     const db = makeDb();
-    const response = await patchFamilyMember({
+    const context: FamilyMemberContext = {
       request: await authedJsonRequest('https://fitfocus.test/api/family/member', 'PATCH', JSON.stringify({ goal: 'LOSS', payload: 'x'.repeat(80 * 1024) })),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/family/member',
-    } as any);
+    };
+    const response = await patchFamilyMember(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -165,19 +173,19 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized family menu bodies before weekly menu writes', async () => {
     const db = makeDb();
-    const response = await postFamilyMenu({
+    const context: FamilyMenuContext = {
       request: await authedJsonRequest(
         'https://fitfocus.test/api/family/menu',
         'POST',
         JSON.stringify({ weekStart: '2026-06-22', menu: { days: [{ day: 'Mon', items: ['x'.repeat(300 * 1024)] }] } }),
       ),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/family/menu',
-    } as any);
+    };
+    const response = await postFamilyMenu(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -186,19 +194,19 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized shopping bulk bodies before batch writes', async () => {
     const db = makeDb();
-    const response = await patchShoppingBulk({
+    const context: ShoppingBulkContext = {
       request: await authedJsonRequest(
         'https://fitfocus.test/api/shopping/bulk',
         'PATCH',
         JSON.stringify({ week_start: '2026-06-22', updates: [{ ingredient_name: 'x'.repeat(80 * 1024), checked: true }] }),
       ),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/shopping/bulk',
-    } as any);
+    };
+    const response = await patchShoppingBulk(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -207,19 +215,19 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized shopping check bodies before writes', async () => {
     const db = makeDb();
-    const response = await patchShoppingCheck({
+    const context: ShoppingCheckContext = {
       request: await authedJsonRequest(
         'https://fitfocus.test/api/shopping/check',
         'PATCH',
         JSON.stringify({ week_start: '2026-06-22', ingredient_name: 'x'.repeat(80 * 1024), checked: true }),
       ),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/shopping/check',
-    } as any);
+    };
+    const response = await patchShoppingCheck(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -228,19 +236,19 @@ describe('bounded JSON body guards on family and shopping routes', () => {
 
   it('rejects oversized weekly menu items bodies before batch writes', async () => {
     const db = makeDb();
-    const response = await postWeeklyMenuItems({
+    const context: WeeklyMenuItemsContext = {
       request: await authedJsonRequest(
         'https://fitfocus.test/api/weekly_menu/items',
         'POST',
         JSON.stringify({ week_start: '2026-06-22', items: [{ name: 'x'.repeat(300 * 1024), grams: 100 }] }),
       ),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/weekly_menu/items',
-    } as any);
+    };
+    const response = await postWeeklyMenuItems(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });

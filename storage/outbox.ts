@@ -1,5 +1,13 @@
 import { safeGetItem, safeSetItem } from "./utils";
 
+type OutboxPatch =
+  | null
+  | boolean
+  | number
+  | string
+  | OutboxPatch[]
+  | { [key: string]: OutboxPatch };
+
 export type OutboxOp = {
   opId: string;
   deviceId: string;
@@ -7,7 +15,7 @@ export type OutboxOp = {
   tenantId: string;
   entityType: string;
   entityId: string;
-  patch: any;        // JSON Patch-like object
+  patch: OutboxPatch; // JSON-compatible patch payload
   updatedAt: number; // ms epoch
 };
 

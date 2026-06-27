@@ -16,7 +16,9 @@ export type ConfidenceInput = {
 };
 
 export function computeConfidence(input: ConfidenceInput): AnalysisMeta {
-  let score = Number.isFinite(input.modelConfidence as any) ? (input.modelConfidence as number) : 0.9;
+  let score = typeof input.modelConfidence === "number" && Number.isFinite(input.modelConfidence)
+    ? input.modelConfidence
+    : 0.9;
   const reasons: string[] = [];
 
   // Compression penalty

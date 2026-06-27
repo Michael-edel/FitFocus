@@ -5,6 +5,13 @@ export type Migration = (ctx: { from: number; to: number }) => void;
 
 const LATEST_VERSION = 3;
 
+function generateUserUid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
 function getVersion(): number {
   const v = safeGetItem<number>(STORAGE_KEYS.schemaVersion, 0);
   return Number.isFinite(v) ? v : 0;
@@ -43,7 +50,7 @@ function ensureProfileDefaults(obj: Record<string, unknown>): boolean {
     changed = true;
   }
   if (!("userUid" in obj)) {
-    obj.userUid = (crypto as any)?.randomUUID?.() || String(Date.now()) + "_" + Math.random().toString(16).slice(2);
+    obj.userUid = generateUserUid();
     changed = true;
   }
   return changed;

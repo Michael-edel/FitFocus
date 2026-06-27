@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost, onRequestPut } from '../functions/api/admin/invites';
+type AdminInvitesGetContext = Parameters<typeof onRequestGet>[0];
+type AdminInvitesPostContext = Parameters<typeof onRequestPost>[0];
+type AdminInvitesPutContext = Parameters<typeof onRequestPut>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -110,14 +113,15 @@ async function getInvites(db: ReturnType<typeof makeDb>, query = '') {
     },
   });
 
-  return onRequestGet({
+  const context: AdminInvitesGetContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any);
+  };
+  return onRequestGet(context);
 }
 
 async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
@@ -135,14 +139,15 @@ async function putInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
     body,
   });
 
-  return onRequestPut({
+  const context: AdminInvitesPutContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any);
+  };
+  return onRequestPut(context);
 }
 
 async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
@@ -160,14 +165,15 @@ async function postInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
     body,
   });
 
-  return onRequestPost({
+  const context: AdminInvitesPostContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('admin invite updates', () => {

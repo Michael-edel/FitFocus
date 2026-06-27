@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const randomCode = vi.fn();
 
 vi.mock('../functions/api/_lib/db', async () => {
-  const actual = await vi.importActual<any>('../functions/api/_lib/db');
+  const actual = await vi.importActual<typeof import('../functions/api/_lib/db')>('../functions/api/_lib/db');
   return {
     ...actual,
     randomCode,
@@ -11,6 +11,8 @@ vi.mock('../functions/api/_lib/db', async () => {
 });
 
 const { onRequestPost } = await import('../functions/api/family/invite');
+type FamilyInviteContext = Parameters<typeof onRequestPost>[0];
+type InviteResponseBody = { code?: string; expiresAt?: number; error?: string };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -81,19 +83,19 @@ function makeDb(options: { insertChanges?: number[] } = {}) {
 
 async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { ttlHours: 24 }) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: FamilyInviteContext = {
     request: new Request('https://fitfocus.test/api/family/invite', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/invite',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/family/invite', () => {
@@ -117,7 +119,7 @@ describe('/api/family/invite', () => {
     const response = await postInvite(db, { ttlHours: 'abc' });
 
     expect(response.status).toBe(201);
-    const body = await response.json() as any;
+    const body = await response.json() as InviteResponseBody;
     expect(Number.isFinite(body.expiresAt)).toBe(true);
     const insert = db.runs.find((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'));
     expect(Number.isFinite(insert?.binds.at(-1))).toBe(true);

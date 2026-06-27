@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/family/menu/generate';
+type FamilyMenuGenerateContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -99,18 +100,18 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
 
 async function generateMenu(db: ReturnType<typeof makeDb>, url = 'https://fitfocus.test/api/family/menu/generate?week=2026-06-22') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}` },
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/menu/generate',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/family/menu/generate', () => {

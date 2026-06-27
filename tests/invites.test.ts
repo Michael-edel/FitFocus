@@ -38,7 +38,7 @@ function makeDb(options: { existing?: boolean; insertChanges?: number; updateCha
 describe('consumeInviteCode', () => {
   it('does not increment uses for an already redeemed invite', async () => {
     const db = makeDb({ existing: true });
-    const result = await consumeInviteCode(db as any, 'INVITE', 'user-1', 123);
+    const result = await consumeInviteCode(db as unknown as D1Database, 'INVITE', 'user-1', 123);
 
     expect(result).toEqual({ ok: true, already: true });
     expect(db.calls.some((sql) => sql.includes('uses = uses + 1'))).toBe(false);
@@ -46,7 +46,7 @@ describe('consumeInviteCode', () => {
 
   it('returns invalid when invite capacity update does not change a row', async () => {
     const db = makeDb({ updateChanges: 0 });
-    const result = await consumeInviteCode(db as any, 'INVITE', 'user-1', 123);
+    const result = await consumeInviteCode(db as unknown as D1Database, 'INVITE', 'user-1', 123);
 
     expect(result).toEqual({ ok: false, error: 'INVITE_INVALID' });
     expect(db.calls.some((sql) => sql.includes('INSERT OR IGNORE INTO invite_redemptions'))).toBe(false);
@@ -54,7 +54,7 @@ describe('consumeInviteCode', () => {
 
   it('rolls back the uses increment when redemption insert is ignored', async () => {
     const db = makeDb({ insertChanges: 0 });
-    const result = await consumeInviteCode(db as any, 'INVITE', 'user-1', 123);
+    const result = await consumeInviteCode(db as unknown as D1Database, 'INVITE', 'user-1', 123);
 
     expect(result).toEqual({ ok: true, already: true });
     expect(db.calls.some((sql) => sql.includes('uses = MAX(0, uses - 1)'))).toBe(true);
