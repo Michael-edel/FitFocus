@@ -2956,6 +2956,7 @@ const logWeight = useCallback(() => {
       setDevPlanOverride,
       generatePersonalPlan,
       loginAsUser,
+      persistUser,
       setAllUsers,
       setCurrentUser,
       setAuthState,
@@ -2963,7 +2964,7 @@ const logWeight = useCallback(() => {
       setPlanIntroOpen,
       fetchImpl: fetch,
     });
-  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
+  }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
   const handleActivateWithTransition = useCallback(() => {
     if (!regNameValid || isActivatingPlan) return;
