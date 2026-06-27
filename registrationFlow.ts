@@ -42,7 +42,7 @@ type RegisterFlowDeps = {
   allUsersCount: number;
   requireInvite: boolean;
   inviteCode: string;
-  googleMe: { email?: string; sub?: string; picture?: string } | null;
+  googleMe: { email?: string; name?: string; sub?: string; picture?: string } | null;
   setPlanError: (message: string | null) => void;
   setLastAiAction: (value: { feature: string; type: 'plan'; userId: string }) => void;
   setDevPlanOverride: (plan: UserProfile['plan'] | '', userId?: string | null) => void;
@@ -82,13 +82,16 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     }
   } catch {}
 
-  if (!deps.regNameValid) return;
   deps.setPlanError(null);
 
-  const safeName = deps.regData.name.trim();
+  const safeName =
+    deps.regData.name.trim()
+    || deps.googleMe?.name?.trim()
+    || deps.googleMe?.email?.split('@')[0]?.trim()
+    || 'Пользователь';
   let newUser: UserProfile = {
     id: `user-${Date.now()}`,
-    name: safeName.length ? safeName : 'Пользователь',
+    name: safeName,
     email: deps.googleMe?.email,
     googleSub: deps.googleMe?.sub,
     picture: deps.googleMe?.picture,

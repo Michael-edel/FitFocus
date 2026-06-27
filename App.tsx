@@ -1706,7 +1706,6 @@ const App: React.FC = () => {
   }, [authState, googleMe?.email, googleMe?.name, regData.name]);
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
-  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
   const [isActivatingPlan, setIsActivatingPlan] = useState(false);
   const [activationStep, setActivationStep] = useState(0);
   const activationTimerRef = useRef<number | null>(null);
@@ -2967,7 +2966,7 @@ const logWeight = useCallback(() => {
   }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
   const handleActivateWithTransition = useCallback(() => {
-    if (!regNameValid || isActivatingPlan) return;
+    if (isActivatingPlan) return;
     setActivationStep(0); setIsActivatingPlan(true);
     if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
     activationIntervalRef.current = window.setInterval(() => {
@@ -2979,7 +2978,7 @@ const logWeight = useCallback(() => {
       activationIntervalRef.current = null; activationTimerRef.current = null;
       await handleRegister(); setIsActivatingPlan(false);
     }, ACTIVATION_TOTAL_MS);
-  }, [handleRegister, regNameValid, isActivatingPlan, ACTIVATION_STEPS.length, ACTIVATION_STEP_MS, ACTIVATION_TOTAL_MS]);
+  }, [handleRegister, isActivatingPlan, ACTIVATION_STEPS.length, ACTIVATION_STEP_MS, ACTIVATION_TOTAL_MS]);
 
   useEffect(() => {
     return () => {
@@ -3378,8 +3377,7 @@ const logWeight = useCallback(() => {
       <RegistrationScreen
         regData={regData}
         setRegData={setRegData}
-        onboardingStep={onboardingStep}
-        setOnboardingStep={setOnboardingStep}
+        planError={planError}
         isActivatingPlan={isActivatingPlan}
         activationStep={activationStep}
         activationSteps={ACTIVATION_STEPS}
