@@ -71,6 +71,14 @@ const goalOptions = [
 
 const numberInputClassName = 'w-full px-4 py-3 rounded-[1rem] bg-slate-950/70 border border-slate-800 text-slate-100 font-black tabular-nums outline-none transition-all placeholder:text-slate-600';
 
+function deriveSuggestedTargetWeight(weight: number, goal: Goal): number {
+  const baseWeight = Number.isFinite(weight) && weight > 0 ? weight : 0;
+  if (!baseWeight) return 0;
+  if (goal === Goal.LOSS) return Number(Math.max(40, baseWeight * 0.9).toFixed(1));
+  if (goal === Goal.GAIN) return Number(Math.max(baseWeight + 1, baseWeight * 1.05).toFixed(1));
+  return Number(baseWeight.toFixed(1));
+}
+
 export default function RegistrationScreen({
   regData,
   setRegData,
@@ -244,8 +252,18 @@ export default function RegistrationScreen({
                         min={25}
                         max={350}
                         inputMode="numeric"
-                        value={regData.weight}
-                        onChange={(e) => setRegData((prev) => ({ ...prev, weight: Math.max(0, Number(e.target.value) || 0) }))}
+                        value={regData.weight || ''}
+                        onChange={(e) => setRegData((prev) => {
+                          const weight = Math.max(0, Number(e.target.value) || 0);
+                          const prevSuggested = deriveSuggestedTargetWeight(prev.weight, prev.goal);
+                          const nextSuggested = deriveSuggestedTargetWeight(weight, prev.goal);
+                          const shouldUpdateTarget = !prev.targetWeight || prev.targetWeight === prevSuggested;
+                          return {
+                            ...prev,
+                            weight,
+                            targetWeight: shouldUpdateTarget ? nextSuggested : prev.targetWeight,
+                          };
+                        })}
                         className={numberInputClassName}
                       />
                     </label>
@@ -256,7 +274,7 @@ export default function RegistrationScreen({
                         min={120}
                         max={230}
                         inputMode="numeric"
-                        value={regData.height}
+                        value={regData.height || ''}
                         onChange={(e) => setRegData((prev) => ({ ...prev, height: Math.max(0, Number(e.target.value) || 0) }))}
                         className={numberInputClassName}
                       />
@@ -266,7 +284,7 @@ export default function RegistrationScreen({
                       <input
                         type="number"
                         inputMode="numeric"
-                        value={regData.age}
+                        value={regData.age || ''}
                         onChange={(e) => setRegData((prev) => ({ ...prev, age: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
                         className={numberInputClassName}
                       />
@@ -301,7 +319,16 @@ export default function RegistrationScreen({
                         <button
                           key={goal.value}
                           type="button"
-                          onClick={() => setRegData((prev) => ({ ...prev, goal: goal.value }))}
+                          onClick={() => setRegData((prev) => {
+                            const prevSuggested = deriveSuggestedTargetWeight(prev.weight, prev.goal);
+                            const nextSuggested = deriveSuggestedTargetWeight(prev.weight, goal.value);
+                            const shouldUpdateTarget = !prev.targetWeight || prev.targetWeight === prevSuggested;
+                            return {
+                              ...prev,
+                              goal: goal.value,
+                              targetWeight: shouldUpdateTarget ? nextSuggested : prev.targetWeight,
+                            };
+                          })}
                           className={clsx(
                             'w-full p-3.5 rounded-[1.25rem] border text-left transition-all',
                             regData.goal === goal.value
@@ -318,6 +345,23 @@ export default function RegistrationScreen({
                           </div>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Целевой вес (кг)</div>
+                    <input
+                      type="number"
+                      min={25}
+                      max={350}
+                      step="0.1"
+                      inputMode="decimal"
+                      value={regData.targetWeight || ''}
+                      onChange={(e) => setRegData((prev) => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
+                      className={numberInputClassName}
+                    />
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      Можно изменить вручную. Если не менять, FitFocus подставит рекомендованное значение.
                     </div>
                   </div>
 
