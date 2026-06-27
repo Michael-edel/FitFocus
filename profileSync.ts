@@ -27,6 +27,18 @@ function isAccessDeniedStatus(status: number) {
   return status === 401 || status === 403;
 }
 
+async function readApiErrorMessage(response: Response, fallback: string): Promise<string> {
+  const payload = await response.json().catch(() => null);
+  const message = typeof payload?.message === 'string' && payload.message.trim()
+    ? payload.message.trim()
+    : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+      ? payload.error.message.trim()
+      : typeof payload?.error === 'string' && payload.error.trim()
+        ? payload.error.trim()
+        : '';
+  return message || fallback;
+}
+
 async function handleProfileConflict(
   response: Response,
   deps: ProfileSyncDeps,
@@ -98,7 +110,16 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       }
     }
     const payload = await r.json().catch(() => null);
-    if (!r.ok) throw new Error('PROFILE_SYNC_FAILED');
+    if (!r.ok) {
+      const message = typeof payload?.message === 'string' && payload.message.trim()
+        ? payload.message.trim()
+        : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+          ? payload.error.message.trim()
+          : typeof payload?.error === 'string' && payload.error.trim()
+            ? payload.error.trim()
+            : 'PROFILE_SYNC_FAILED';
+      throw new Error(message);
+    }
     const serverProfile = payload?.profile as UserProfile | undefined;
     if (serverProfile) {
       if (deps.suppressNextFullProfileSyncRef) {
@@ -112,8 +133,9 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
     deps.setProfileSyncState('saved');
     deps.setProfileSyncNote?.('Синхронизировано с облаком.');
     deps.setLastProfileSyncAt(Date.now());
-  } catch {
-    deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : 'Не удалось сохранить изменения в облако.';
+    deps.setProfileSyncNote?.(message);
     deps.setProfileSyncState('error');
   } finally {
     if (deps.suppressProfileSyncStateRef) {
@@ -176,7 +198,16 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       }
     }
     const payload = await r.json().catch(() => null);
-    if (!r.ok) throw new Error('PROFILE_PATCH_FAILED');
+    if (!r.ok) {
+      const message = typeof payload?.message === 'string' && payload.message.trim()
+        ? payload.message.trim()
+        : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+          ? payload.error.message.trim()
+          : typeof payload?.error === 'string' && payload.error.trim()
+            ? payload.error.trim()
+            : 'PROFILE_PATCH_FAILED';
+      throw new Error(message);
+    }
     const serverProfile = payload?.profile as UserProfile | undefined;
     if (serverProfile) {
       if (deps.suppressNextFullProfileSyncRef) {
@@ -190,8 +221,9 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
     deps.setProfileSyncState('saved');
     deps.setProfileSyncNote?.('Синхронизировано с облаком.');
     deps.setLastProfileSyncAt(Date.now());
-  } catch {
-    deps.setProfileSyncNote?.('Не удалось сохранить изменения в облако.');
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : 'Не удалось сохранить изменения в облако.';
+    deps.setProfileSyncNote?.(message);
     deps.setProfileSyncState('error');
   } finally {
     if (deps.suppressProfileSyncStateRef) {
@@ -215,7 +247,9 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
       deps.setProfileSyncState('idle');
       return;
     }
-    if (!pr.ok) throw new Error('PROFILE_LOAD_FAILED');
+    if (!pr.ok) {
+      throw new Error(await readApiErrorMessage(pr, 'PROFILE_LOAD_FAILED'));
+    }
     const pj = await pr.json();
     const profile = pj?.profile as UserProfile | null;
     if (!profile) return;
@@ -233,8 +267,9 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
     deps.setProfileSyncState('saved');
     deps.setProfileSyncNote?.('Профиль загружен из облака.');
     deps.setLastProfileSyncAt(Date.now());
-  } catch {
-    deps.setProfileSyncNote?.('Не удалось загрузить профиль из облака.');
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : 'Не удалось загрузить профиль из облака.';
+    deps.setProfileSyncNote?.(message);
     deps.setProfileSyncState('error');
   } finally {
     if (deps.suppressProfileSyncStateRef) {

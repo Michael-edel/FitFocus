@@ -63,7 +63,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     enabled: Number(row.enabled || 0) === 1,
   }));
   const currentDeviceLabel = normalizePushDeviceLabel(null, request.headers.get("user-agent"));
-  const currentBrowserLabel = normalizePushBrowserLabel(request.headers.get("user-agent"), request.headers.get("sec-ch-ua"));
+  const explicitBrowserLabel = String(request.headers.get("x-fitfocus-browser-label") || "").trim();
+  const currentBrowserLabel = explicitBrowserLabel
+    ? explicitBrowserLabel.slice(0, 120)
+    : normalizePushBrowserLabel(request.headers.get("user-agent"), request.headers.get("sec-ch-ua"));
   const enabledItems = items.filter((row) => row.enabled);
   const currentMatch = enabledItems.find((row) => {
     const deviceLabel = normalizePushDeviceLabel(row.device_label, row.user_agent);
