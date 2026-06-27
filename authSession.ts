@@ -102,6 +102,13 @@ function clearAuthRecoveryReloadMarker(): void {
   } catch {}
 }
 
+export function clearOAuthContinuationState(): void {
+  try {
+    sessionStorage.removeItem('fitfocus.auth.pending-oauth.v1');
+  } catch {}
+  clearAuthRecoveryReloadMarker();
+}
+
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
 
@@ -224,9 +231,7 @@ export function createLogoutSession(params: LogoutParams) {
       } catch {}
     }
 
-    try {
-      sessionStorage.removeItem('fitfocus.auth.pending-oauth.v1');
-    } catch {}
+    clearOAuthContinuationState();
 
     params.setGoogleMe(null);
     params.setCurrentUser?.(null);
