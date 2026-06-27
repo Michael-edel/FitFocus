@@ -7,6 +7,8 @@ import {
 import { requireUser, json } from "../_lib/auth";
 import { nowMs, requireDB, uuid } from "../_lib/db";
 import { isEnabled, loadFeatures } from "../_lib/features";
+import { isJsonObject, safeJsonParseObject, type JsonObject } from "../_lib/json";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -15,16 +17,18 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(next) ? next : null;
 }
 
-function contextFromProfile(profile: any): AchievementEvaluationContext {
+function contextFromProfile(profile: JsonObject | null): AchievementEvaluationContext {
   const weightHistory = Array.isArray(profile?.weightHistory) ? profile.weightHistory : [];
   const measurementsHistory = Array.isArray(profile?.measurementsHistory) ? profile.measurementsHistory : [];
-  const firstWeight = numberOrNull(weightHistory[0]?.weight);
-  const latestWeight = numberOrNull(weightHistory[weightHistory.length - 1]?.weight ?? profile?.weight);
+  const aiPlan = isJsonObject(profile?.aiPlan) ? profile.aiPlan : null;
+  const firstWeight = isJsonObject(weightHistory[0]) ? numberOrNull(weightHistory[0].weight) : null;
+  const latestWeightEntry = weightHistory[weightHistory.length - 1];
+  const latestWeight = numberOrNull((isJsonObject(latestWeightEntry) ? latestWeightEntry.weight : undefined) ?? profile?.weight);
   return {
     profileExists: !!profile,
     profileDetailsCompleted: !!profile?.profileDetailsCompleted,
-    hasAiPlan: !!profile?.aiPlan,
-    hasWeeklyMenu: !!profile?.aiPlan?.weeklyMenu || !!profile?.aiPlan?.familyWeeklyMenu,
+    hasAiPlan: !!aiPlan,
+    hasWeeklyMenu: Boolean(aiPlan?.weeklyMenu) || Boolean(aiPlan?.familyWeeklyMenu),
     weightHistoryCount: weightHistory.length,
     initialWeight: firstWeight,
     latestWeight,
@@ -34,8 +38,8 @@ function contextFromProfile(profile: any): AchievementEvaluationContext {
   };
 }
 
-function safeClientContext(input: any): AchievementEvaluationContext {
-  if (!input || typeof input !== "object") return {};
+function safeClientContext(input: unknown): AchievementEvaluationContext {
+  if (!isJsonObject(input)) return {};
   const allowed: (keyof AchievementEvaluationContext)[] = [
     "source",
     "profileExists",
@@ -63,7 +67,7 @@ function safeClientContext(input: any): AchievementEvaluationContext {
     const value = input[key];
     if (value === undefined) continue;
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
-      (output as any)[key] = value;
+      output[key] = value as never;
     }
   }
   return output;
@@ -77,24 +81,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  const features = await loadFeatures(env as any, String(user.sub));
+  const features = await loadFeatures(env, String(user.sub));
   if (!isEnabled(features, "achievements_enabled", true)) {
     return json({ enabled: false, catalog: [], newlyUnlocked: [] }, 200);
   }
 
-  const body: any = await request.json().catch(() => ({}));
+  let body: JsonObject = {};
+  try {
+    body = (await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES)) ?? {};
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    return json({ error: "BAD_JSON" }, 400);
+  }
   const db = requireDB(env);
   const row = await db
     .prepare("SELECT profile_json FROM user_profiles WHERE user_id = ? LIMIT 1")
     .bind(user.sub)
     .first<{ profile_json?: string }>();
 
-  let profile: any = null;
-  try {
-    profile = row?.profile_json ? JSON.parse(row.profile_json) : null;
-  } catch {
-    profile = null;
-  }
+  const profile = row?.profile_json ? safeJsonParseObject(row.profile_json) : null;
 
   const context = mergeAchievementContext(contextFromProfile(profile), safeClientContext(body?.context || body));
   const candidates = evaluateAchievements(context);
@@ -106,9 +113,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .prepare("SELECT achievement_key FROM user_achievements WHERE user_id = ?")
     .bind(user.sub)
     .all();
-  const existing = new Set((existingRows.results || []).map((item: any) => String(item.achievement_key || "")));
+  const existing = new Set((existingRows.results || []).map((item) => String(item.achievement_key || "")));
   const now = nowMs();
-  const newlyUnlocked: any[] = [];
+  const newlyUnlocked: Array<Record<string, unknown>> = [];
 
   for (const candidate of candidates) {
     if (existing.has(candidate.key)) continue;
@@ -123,7 +130,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       )
       .bind(uuid(), user.sub, candidate.key, now, definition.tier, candidate.source || context.source || null, snapshotJson, now)
       .run();
-    if (Number((result as any)?.meta?.changes || 0) > 0) {
+    const meta = isJsonObject(result?.meta) ? result.meta : null;
+    if (Number(meta?.changes || 0) > 0) {
       existing.add(candidate.key);
       newlyUnlocked.push({
         ...definition,

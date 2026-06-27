@@ -5,6 +5,7 @@ import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
+import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
 
 
 /**
@@ -35,6 +36,26 @@ type GeminiPart =
 type GeminiContent = {
   role?: "user" | "model";
   parts: GeminiPart[];
+};
+
+type UsageRecord = {
+  count: number;
+  errorCount: number;
+  totalLatency: number;
+  totalBytesIn: number;
+  cacheHits: number;
+  lastStatus: number;
+  lastTs: number;
+};
+
+const EMPTY_USAGE_RECORD: UsageRecord = {
+  count: 0,
+  errorCount: 0,
+  totalLatency: 0,
+  totalBytesIn: 0,
+  cacheHits: 0,
+  lastStatus: 0,
+  lastTs: 0,
 };
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
@@ -209,7 +230,11 @@ async function logUsage(
     const key = `usage:${day}:${ev.identity}:${ev.feature}`;
 
     const prevRaw = await env.FITFOCUS_KV.get(key);
-    const prev = prevRaw ? JSON.parse(prevRaw) : { count: 0, errorCount: 0, totalLatency: 0, totalBytesIn: 0, cacheHits: 0, lastStatus: 0, lastTs: 0 };
+    const prevParsed = typeof prevRaw === "string" ? safeJsonParseObject(prevRaw) : null;
+    const prev: UsageRecord = {
+      ...EMPTY_USAGE_RECORD,
+      ...(prevParsed ?? {}),
+    };
 
     prev.count += 1;
     if (ev.status >= 400) prev.errorCount += 1;
@@ -229,14 +254,19 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const startedAt = Date.now();
 
   // Enterprise Layer: require authenticated user (server-driven)
-  let user: any;
-  try { user = await requireUser(request, env as any); } catch { return jsonV({ error: "UNAUTH" }, 401); }
-  try { await requireBetaAccess(env as any, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
+  let user;
+  try { user = await requireUser(request, env); } catch { return jsonV({ error: "UNAUTH" }, 401); }
+  try { await requireBetaAccess(env, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
   let bodyText = "";
-  let body: any = null;
+  let body: JsonObject = {};
   try {
     bodyText = await readRequestText(request, 4 * 1024 * 1024);
-    body = bodyText ? JSON.parse(bodyText) : {};
+    const parsedBody = bodyText ? safeJsonParse(bodyText) : {};
+    if (parsedBody !== null && isJsonObject(parsedBody)) {
+      body = parsedBody;
+    } else if (bodyText.trim()) {
+      return jsonResponse({ error: { message: "Invalid JSON body" } }, 400);
+    }
   } catch (err) {
     if (err instanceof RequestBodyTooLargeError) {
       return jsonResponse({ error: { message: "Payload too large" } }, 413);
@@ -246,8 +276,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   const feature = (typeof body?.feature === "string" && body.feature.trim()) ? body.feature.trim() : "ai";
 
-  const features = await loadFeatures(env as any, String(user.sub));
-  const settings = await loadSettings(env as any);
+  const features = await loadFeatures(env, String(user.sub));
+  const settings = await loadSettings(env);
   const budgetGuardEnabled = isEnabled(features, "ai_budget_guard_enabled", false);
   const emergencyFallback = isEnabled(features, "ai_emergency_fallback", false);
   const onLimitAction = (getSetting(settings, "ai_on_limit_action", "fallback") || "fallback").toLowerCase();
@@ -266,16 +296,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   // Emergency: force fallback for everyone (kill switch)
   if (emergencyFallback) {
-    const profile = await loadUserProfile(env as any, String(user.sub));
+    const profile = await loadUserProfile(env, String(user.sub));
     const fallback = buildFallback(feature, profile);
-    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_emergency", isFallback: true });
+    await logAiEvent(env, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_emergency", isFallback: true });
     return jsonResponse({ ...fallback, text: JSON.stringify(fallback) }, 200, { "X-FF-AI-Fallback": "1" });
   }
 
   // Budget Guard (admin-managed)
   if (budgetGuardEnabled && (maxCallsPerUserDay > 0 || maxCostPerUserDay > 0 || maxCostTotalDay > 0)) {
     try {
-      const db = requireDB(env as any);
+      const db = requireDB(env);
 
       // per-user calls today
       const callsRow = await db.prepare("SELECT COUNT(*) as cnt FROM ai_events WHERE user_id = ? AND ts >= ?")
@@ -301,9 +331,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
           return jsonV({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
         }
         // default: fallback
-        const profile = await loadUserProfile(env as any, String(user.sub));
+        const profile = await loadUserProfile(env, String(user.sub));
         const fallback = buildFallback(feature, profile);
-        await logAiEvent(env as any, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
+        await logAiEvent(env, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
         return jsonV({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
       }
     } catch {
@@ -311,7 +341,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     }
   }
 
-  const apiKey = (env as any).GEMINI_API_KEY || (env as any).API_KEY || (env as any).GOOGLE_API_KEY;
+  const apiKey = env.GEMINI_API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).GOOGLE_API_KEY;
   const kv = env.FITFOCUS_KV;
   const identity = String(user?.sub || "");
 
@@ -320,7 +350,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
   }
 
-  const db = requireDB(env as any);
+  const db = requireDB(env);
   const activePlan = await loadActivePlan(db, String(user.sub));
 
   // Strict backend controls: D1 is the source of truth for AI cooldown, burst and daily quota.
@@ -338,7 +368,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     if (err instanceof AiLimitError || err?.name === "AiLimitError") {
       const status = Number(err.status || 429);
       await logUsage(env, { identity, feature, status, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-      await logAiEvent(env as any, {
+      await logAiEvent(env, {
         userId: identity,
         feature,
         status,
@@ -362,11 +392,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const dedupKey = `dedup:60s:${identity}:${feature}:${bodyHash}`;
 
   if (kv) {
-    const cached = await kv.get(dedupKey, { type: "json" }) as any | null;
-    if (cached && typeof cached === "object" && cached.data) {
-      await logUsage(env, { identity, feature, status: cached.status || 200, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
+    const cached = await kv.get(dedupKey, { type: "json" }) as unknown;
+    if (isJsonObject(cached) && "data" in cached) {
+      const cachedStatus = Number(cached.status || 200);
+      await logUsage(env, { identity, feature, status: cachedStatus, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
       return new Response(JSON.stringify(cached.data), {
-        status: cached.status || 200,
+        status: cachedStatus,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
       });
     }
@@ -376,7 +407,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const { feature: _drop, model: _model, ...payload } = body ?? {};
-  const payloadToSend: any = (payload && typeof payload === "object") ? payload : {};
+  const payloadToSend: Record<string, unknown> = (payload && typeof payload === "object") ? { ...payload } : {};
 
   if ("config" in payloadToSend && !("generationConfig" in payloadToSend)) {
     payloadToSend.generationConfig = payloadToSend.config;
@@ -386,12 +417,13 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   if (safeMode) {
-    payloadToSend.generationConfig = payloadToSend.generationConfig || {};
+    const generationConfig = isJsonObject(payloadToSend.generationConfig) ? payloadToSend.generationConfig : {};
+    payloadToSend.generationConfig = generationConfig;
     // Conservative defaults to reduce latency/cost and force structured output
-    if (payloadToSend.generationConfig.maxOutputTokens == null) payloadToSend.generationConfig.maxOutputTokens = 900;
-    if (payloadToSend.generationConfig.temperature == null) payloadToSend.generationConfig.temperature = 0.4;
+    if (generationConfig.maxOutputTokens == null) generationConfig.maxOutputTokens = 900;
+    if (generationConfig.temperature == null) generationConfig.temperature = 0.4;
     // Encourage JSON-only outputs
-    if (payloadToSend.generationConfig.responseMimeType == null) payloadToSend.generationConfig.responseMimeType = "application/json";
+    if (generationConfig.responseMimeType == null) generationConfig.responseMimeType = "application/json";
   }
 
   if ("contents" in payloadToSend) {
@@ -427,9 +459,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     latency = Date.now() - startedAt;
 
     if (fallbackMode) {
-      const profile = await loadUserProfile(env as any, String(user.sub));
+      const profile = await loadUserProfile(env, String(user.sub));
       const fallback = buildFallback(feature, profile);
-      await logAiEvent(env as any, {
+      await logAiEvent(env, {
         userId: String(user.sub),
         feature,
         status: 200,
@@ -453,7 +485,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       });
     }
 
-    await logAiEvent(env as any, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
+    await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
@@ -466,9 +498,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const extractedText = extractTextFromGemini(data);
   // Fallback on quota/5xx: return a deterministic plan instead of breaking the product.
   if (fallbackMode && shouldFallback(geminiResp!.status)) {
-    const profile = await loadUserProfile(env as any, String(user.sub));
+    const profile = await loadUserProfile(env, String(user.sub));
     const fallback = buildFallback(feature, profile);
-    await logAiEvent(env as any, {
+    await logAiEvent(env, {
       userId: String(user.sub),
       feature,
       status: 200,
@@ -500,7 +532,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   
   const usage = getGeminiUsage(data);
-  await logAiEvent(env as any, {
+  await logAiEvent(env, {
     userId: String(user.sub),
     feature,
     status: geminiResp.status,
@@ -551,13 +583,13 @@ function extractTextFromGemini(data: any): string {
 // --- Fallback layer ---------------------------------------------------------
 // Когда Gemini недоступен/квота/ошибка, продукт не должен "умирать".
 // В fallback режиме возвращаем упрощённый, но полезный результат на основе профиля.
-async function loadUserProfile(env: any, userId: string): Promise<any> {
+async function loadUserProfile(env: Env, userId: string): Promise<JsonObject> {
   try {
     const row = await env?.DB?.prepare(
       "SELECT profile_json FROM user_profiles WHERE user_id = ?"
     ).bind(userId).first();
     if (!row?.profile_json) return {};
-    return JSON.parse(row.profile_json);
+    return safeJsonParseObject(row.profile_json) ?? {};
   } catch {
     return {};
   }

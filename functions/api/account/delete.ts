@@ -5,6 +5,8 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, softDeleteAccount } from "../_lib/account_delete";
+import { asString } from "../_lib/json";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -14,9 +16,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const user = await requireUser(request, env);
     const db = requireDB(env);
 
-    let body: any = null;
-    try { body = await request.json(); } catch {}
-    const confirm = String(body?.confirm || "").trim().toUpperCase();
+    const body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES).catch((error) => {
+      if (error instanceof RequestBodyTooLargeError) throw error;
+      return null;
+    });
+    const confirm = asString(body?.confirm).toUpperCase();
     if (confirm !== "DELETE") {
       return json({ ok: false, error: "CONFIRM_REQUIRED" }, 400);
     }
@@ -45,8 +49,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // Clear cookie on client side too
     h.append("Set-Cookie", "ff_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
     return json({ ok: true, scheduled_days: 30 }, 200, h);
-  } catch (e: any) {
-    const msg = String(e?.message || "ERROR");
+  } catch (e: unknown) {
+    if (e instanceof RequestBodyTooLargeError) {
+      return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    const msg = e instanceof Error ? e.message : "ERROR";
     const code = msg.includes("последнего администратора") ? 409 : 401;
     return json({ ok: false, error: msg }, code);
   }

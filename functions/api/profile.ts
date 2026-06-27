@@ -5,6 +5,7 @@ import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
+import { isJsonObject, safeJsonParseObject, type JsonObject } from "./_lib/json";
 import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
 import { isAllowedStateKey } from "./_lib/state_keyspace";
 import {
@@ -60,10 +61,10 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'profileDetailsCompleted',
 ]);
 
-function sanitizePatch(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  const source = input as Record<string, unknown>;
-  const patch: Record<string, unknown> = {};
+function sanitizePatch(input: unknown): JsonObject {
+  if (!isJsonObject(input)) return {};
+  const patch: JsonObject = {};
+  const source = input;
   for (const [key, value] of Object.entries(source)) {
     if (!EDITABLE_PROFILE_FIELDS.has(key)) continue;
     patch[key] = value;
@@ -75,9 +76,9 @@ function sanitizeStateItems(input: unknown): { key: string; value: string }[] {
   if (!Array.isArray(input)) return [];
   const items: { key: string; value: string }[] = [];
   for (const entry of input) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-    const key = typeof (entry as any).key === 'string' ? (entry as any).key : '';
-    const value = typeof (entry as any).value === 'string' ? (entry as any).value : '';
+    if (!isJsonObject(entry)) continue;
+    const key = typeof entry.key === 'string' ? entry.key : '';
+    const value = typeof entry.value === 'string' ? entry.value : '';
     if (!key) continue;
     items.push({ key, value });
   }
@@ -102,40 +103,32 @@ function parseBaseVersion(value: unknown): number | null {
   return parsedBaseVersion;
 }
 
-async function loadProfile(db: D1Database, userId: string): Promise<Record<string, unknown> | null> {
+async function loadProfile(db: D1Database, userId: string): Promise<JsonObject | null> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
 
   if (!row?.profile_json) return null;
-  try {
-    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
-    return parsed && typeof parsed === 'object' ? { ...parsed, version: Number(row.version || 1) } : null;
-  } catch {
-    return null;
-  }
+  const parsed = safeJsonParseObject(String(row.profile_json));
+  return parsed ? { ...parsed, version: Number(row.version || 1) } : null;
 }
 
-async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: Record<string, unknown> | null; version: number }> {
+async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: JsonObject | null; version: number }> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
 
   if (!row?.profile_json) return { profile: null, version: 0 };
-  try {
-    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
-    return {
-      profile: parsed && typeof parsed === 'object' ? parsed : null,
-      version: Number(row.version || 1),
-    };
-  } catch {
-    return { profile: null, version: Number(row?.version || 0) };
-  }
+  const parsed = safeJsonParseObject(String(row.profile_json));
+  return {
+    profile: parsed,
+    version: Number(row.version || 1),
+  };
 }
 
-function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>, version: number) {
+function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: JsonObject, version: number) {
   const serverProfile = withProtectedFieldsShared(user, { ...profile, version });
   return json({ error: 'PROFILE_CONFLICT', profile: serverProfile, version }, 409);
 }
@@ -148,12 +141,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
   const profile = await loadProfile(db, user.sub);
   if (!profile) {
-    const migrated = await migrateLegacyAccountByEmailShared(db, user as any);
+    const migrated = await migrateLegacyAccountByEmailShared(db, user);
     if (!migrated) return json({ profile: null }, 200);
     return json({ profile: migrated }, 200);
   }
@@ -170,10 +163,10 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  let body: Record<string, unknown> | null = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, PROFILE_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -182,24 +175,24 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
-  const stateItems = sanitizeStateItems((body as any).stateItems);
+  const stateItems = sanitizeStateItems(body.stateItems);
   // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
   }
-  const baseVersion = parseBaseVersion((body as any).baseVersion);
+  const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const currentMeta = await loadProfileMeta(db, user.sub);
   if (!currentMeta.profile) {
-    await migrateLegacyAccountByEmailShared(db, user as any);
+    await migrateLegacyAccountByEmailShared(db, user);
   }
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
   if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
-    return conflictResponse(user as any, refreshedMeta.profile, refreshedMeta.version);
+    return conflictResponse(user, refreshedMeta.profile, refreshedMeta.version);
   }
   const directPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = directPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : directPlan;
@@ -242,10 +235,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env as any, user as any); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  let body: Record<string, unknown> | null = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, PROFILE_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -254,10 +247,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
 
   const patch = sanitizePatch(body);
-  const stateItems = sanitizeStateItems((body as any).stateItems);
+  const stateItems = sanitizeStateItems(body.stateItems);
   // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
@@ -268,13 +261,13 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 
   const currentMeta = await loadProfileMeta(db, user.sub);
   if (!currentMeta.profile) {
-    await migrateLegacyAccountByEmailShared(db, user as any);
+    await migrateLegacyAccountByEmailShared(db, user);
   }
-  const baseVersion = parseBaseVersion((body as any).baseVersion);
+  const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
   if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
-    return conflictResponse(user as any, refreshedMeta.profile, refreshedMeta.version);
+    return conflictResponse(user, refreshedMeta.profile, refreshedMeta.version);
   }
   const directPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = directPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : directPlan;

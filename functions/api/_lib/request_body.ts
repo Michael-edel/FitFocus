@@ -1,3 +1,5 @@
+import { isJsonObject, safeJsonParse, type JsonObject } from "./json";
+
 export class RequestBodyTooLargeError extends Error {
   constructor() {
     super("REQUEST_BODY_TOO_LARGE");
@@ -54,12 +56,16 @@ export async function readJsonRequest<T = unknown>(
 ): Promise<T | null> {
   const text = await readRequestText(request, maxBytes);
   if (!text.trim()) return null;
+  const parsed = safeJsonParse(text);
+  return (parsed as T | null) ?? null;
+}
 
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
+export async function readJsonObjectRequest(
+  request: Request,
+  maxBytes = SMALL_JSON_BODY_LIMIT_BYTES,
+): Promise<JsonObject | null> {
+  const parsed = await readJsonRequest(request, maxBytes);
+  return isJsonObject(parsed) ? parsed : null;
 }
 
 export async function readFormDataRequest(
