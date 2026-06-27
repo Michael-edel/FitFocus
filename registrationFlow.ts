@@ -47,6 +47,8 @@ type RegisterFlowDeps = {
   generatePersonalPlan: (user: UserProfile) => Promise<UserProfile['aiPlan']>;
   loginAsUser: (user: UserProfile) => Promise<void>;
   setAllUsers: (value: UserProfile[] | ((prev: UserProfile[]) => UserProfile[])) => void;
+  setCurrentUser: (value: UserProfile | null) => void;
+  setAuthState: (value: 'auth_choice' | 'register' | 'app') => void;
   setActiveTab: (value: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => void;
   setPlanIntroOpen: (value: boolean) => void;
   fetchImpl?: typeof fetch;
@@ -192,7 +194,18 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
   }
 
   deps.setAllUsers([newUser]);
-  await deps.loginAsUser(newUser);
+  try {
+    await deps.loginAsUser(newUser);
+  } catch {
+    // Android WebView / mobile browsers can occasionally fail during the
+    // post-registration hydration step even after the profile has already been
+    // created and saved. Keep the user in the created session instead of
+    // dropping them back to the registration step.
+    deps.setCurrentUser(newUser);
+    deps.setAllUsers([newUser]);
+    deps.setAuthState('app');
+    deps.setPlanError('План создан. Вход выполнен локально, облачная синхронизация догрузится автоматически.');
+  }
   deps.setActiveTab('plan');
   deps.setPlanIntroOpen(true);
 }

@@ -2955,6 +2955,8 @@ const logWeight = useCallback(() => {
       generatePersonalPlan,
       loginAsUser,
       setAllUsers,
+      setCurrentUser,
+      setAuthState,
       setActiveTab,
       setPlanIntroOpen,
       fetchImpl: fetch,
