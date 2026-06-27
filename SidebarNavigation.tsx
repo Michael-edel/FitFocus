@@ -28,7 +28,7 @@ type SidebarNavigationProps = {
   activeTab: AppTabId;
   isAdmin: boolean;
   lastAiAction: unknown;
-  logout: () => void;
+  logout: () => void | Promise<void>;
   mobileMoreOpen: boolean;
   modeBadge: { cls: string; text: string };
   onAiRetry: (opts?: { force?: boolean }) => void;
@@ -143,7 +143,7 @@ export default function SidebarNavigation({
                 type="button"
                 onClick={() => {
                   onMobileMoreOpenChange(false);
-                  logout();
+                  void logout();
                 }}
                 className="w-full min-h-[52px] px-4 rounded-[1.3rem] flex items-center gap-3 text-left transition-all bg-rose-500/10 text-rose-200 border border-rose-500/20"
               >
@@ -288,7 +288,7 @@ export default function SidebarNavigation({
           </div>
         </div>
 
-        <button onClick={logout} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5">
+        <button onClick={() => void logout()} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5">
           <X size={20} />
           <span className="font-bold">Выйти</span>
         </button>

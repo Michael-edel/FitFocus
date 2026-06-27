@@ -23,6 +23,31 @@ function withFetch(fetchImpl?: typeof fetch) {
   return fetchImpl ?? fetch;
 }
 
+const PROFILE_SYNC_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit | undefined, fetchImpl?: typeof fetch) {
+  const fetchFn = withFetch(fetchImpl);
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(new Error('PROFILE_SYNC_TIMEOUT')), PROFILE_SYNC_TIMEOUT_MS)
+    : null;
+  try {
+    return await fetchFn(input, {
+      ...(init || {}),
+      signal: controller?.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'PROFILE_SYNC_TIMEOUT')) {
+      throw new Error('Сервер слишком долго отвечает. Проверьте сеть и повторите синхронизацию.');
+    }
+    throw error;
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
+
 function isAccessDeniedStatus(status: number) {
   return status === 401 || status === 403;
 }
@@ -67,18 +92,17 @@ function buildRetryProfile(localProfile: UserProfile, serverProfile: UserProfile
 }
 
 export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
-  const fetchFn = withFetch(deps.fetchImpl);
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
     const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
     const body = { ...profile, baseVersion: profile.version ?? 0, stateItems };
-    const r = await fetchFn('/api/profile', {
+    const r = await fetchWithTimeout('/api/profile', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, deps.fetchImpl);
     if (isAccessDeniedStatus(r.status)) {
       deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');
@@ -88,12 +112,12 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
         const retryProfile = buildRetryProfile(profile, serverProfile);
-        const retry = await fetchFn('/api/profile', {
+        const retry = await fetchWithTimeout('/api/profile', {
           method: 'PUT',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...retryProfile, baseVersion: serverProfile.version ?? 0, stateItems }),
-        });
+        }, deps.fetchImpl);
         const retryPayload = await retry.json().catch(() => null);
         if (retry.ok && retryPayload?.profile) {
           if (deps.suppressNextFullProfileSyncRef) {
@@ -156,17 +180,16 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
   }
   deps.persistUser(nextUser);
 
-  const fetchFn = withFetch(deps.fetchImpl);
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
     const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
-    const r = await fetchFn('/api/profile', {
+    const r = await fetchWithTimeout('/api/profile', {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
-    });
+    }, deps.fetchImpl);
     if (isAccessDeniedStatus(r.status)) {
       deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');
@@ -176,12 +199,12 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
         const retryProfile = buildRetryProfile(nextUser, serverProfile);
-        const retry = await fetchFn('/api/profile', {
+        const retry = await fetchWithTimeout('/api/profile', {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...retryProfile, ...patch, baseVersion: serverProfile.version ?? 0, stateItems }),
-        });
+        }, deps.fetchImpl);
         const retryPayload = await retry.json().catch(() => null);
         if (retry.ok && retryPayload?.profile) {
           if (deps.suppressNextFullProfileSyncRef) {
@@ -239,9 +262,8 @@ export async function syncAllLocalDataNow(deps: ProfileSyncDeps): Promise<void> 
 
 export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> {
   if (!deps.currentUser) return;
-  const fetchFn = withFetch(deps.fetchImpl);
   try {
-    const pr = await fetchFn('/api/profile', { credentials: 'include' });
+    const pr = await fetchWithTimeout('/api/profile', { credentials: 'include' }, deps.fetchImpl);
     if (isAccessDeniedStatus(pr.status)) {
       deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');

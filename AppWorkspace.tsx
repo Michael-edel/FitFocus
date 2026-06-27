@@ -25,7 +25,7 @@ type AppWorkspaceProps = {
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { meta, dashboard, plan, nutrition, progress, family, council, content } = workspaceProps;
 
-  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
+  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
 
   const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, setAdaptLoading, setLastAiAction, generatePlateauExplanation, adaptNote, setAdaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
 
@@ -326,6 +326,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onConnectAutosave={onConnectAutosave}
             autosaveEnabled={autosaveEnabled}
             syncState={profileSyncState}
+            syncNote={profileSyncNote}
             lastProfileSyncAt={lastProfileSyncAt}
             onSyncNow={syncAllLocalDataNow}
             onReloadFromCloud={reloadUserFromCloud}
