@@ -1,5 +1,7 @@
 import Stripe from "stripe";
 import { json, requireUser } from "../_lib/auth";
+import { asString } from "../_lib/json";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = {
   AUTH_JWT_SECRET: string;
@@ -36,8 +38,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     apiVersion: "2023-10-16"
   });
 
-  const body = await request.json().catch(() => ({}));
-  const { normalizedPlan, priceId } = resolveCheckoutPlanPrice(String((body as any)?.plan || ""), env);
+  let body = null;
+  try {
+    body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    }
+    throw error;
+  }
+  const { normalizedPlan, priceId } = resolveCheckoutPlanPrice(asString(body?.plan), env);
 
   if (!priceId) return json({ error: "BAD_REQUEST" }, 400);
 
@@ -60,7 +70,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     });
 
     return json({ url: session.url });
-  } catch (error: any) {
-    return json({ error: String(error?.message || error) }, 500);
+  } catch (error: unknown) {
+    return json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 }

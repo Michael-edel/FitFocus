@@ -1,10 +1,18 @@
 import { STORAGE_KEYS } from "./keys";
 
-export function safeGetItem<T>(key: string, fallback: T): T {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function safeGetItem<T>(key: string, fallback: T, validate?: (value: unknown) => value is T): T {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    return JSON.parse(raw) as T;
+    const parsed: unknown = JSON.parse(raw);
+    if (validate) {
+      return validate(parsed) ? parsed : fallback;
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }
@@ -60,12 +68,12 @@ export function evictLargeLocalStorage(): void {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) continue;
         let changed = false;
-        const next = parsed.map((user: any) => {
-          if (!user || typeof user !== 'object') return user;
+        const next = parsed.map((user: unknown) => {
+          if (!isRecord(user)) return user;
           const copy = { ...user };
           if (Array.isArray(copy.progressPhotos) && copy.progressPhotos.length > 6) {
-            copy.progressPhotos = copy.progressPhotos.slice(0, 6).map((photo: any) => {
-              if (!photo || typeof photo !== 'object') return photo;
+            copy.progressPhotos = copy.progressPhotos.slice(0, 6).map((photo: unknown) => {
+              if (!isRecord(photo)) return photo;
               return {
                 ...photo,
                 photo: typeof photo.thumb === 'string' && photo.thumb ? photo.thumb : photo.photo,

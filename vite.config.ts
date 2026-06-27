@@ -136,6 +136,13 @@ export default defineConfig(({ mode }) => {
           }
         }
       }
+    },
+    test: {
+      exclude: [
+        'e2e/**',
+        'node_modules/**',
+        'dist/**',
+      ],
     }
   }
 })

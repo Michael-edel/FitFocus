@@ -7,7 +7,8 @@ import { requireRole } from "../../_lib/rbac";
 import { requireAdminRequest } from "../../_lib/admin_guard";
 import { buildAdminEventStatement } from "../../_lib/admin_audit";
 import { buildPushPayload, normalizePushBrowserLabel, normalizePushDeviceLabel, sendPushNotification } from "../../_lib/push";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
+import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 
 type Env = {
   AUTH_JWT_SECRET: string;
@@ -74,7 +75,7 @@ type PushRecipientRow = {
   roles_csv: string | null;
 };
 
-type ParsedProfile = Record<string, unknown>;
+type ParsedProfile = JsonObject;
 
 type Recipient = PushRecipientRow & {
   profile: ParsedProfile;
@@ -87,8 +88,7 @@ type Recipient = PushRecipientRow & {
 };
 
 function toText(value: unknown, fallback = "") {
-  const text = String(value ?? "").trim();
-  return text || fallback;
+  return asString(value, fallback);
 }
 
 function toInt(value: unknown, fallback: number, min: number, max: number) {
@@ -99,16 +99,7 @@ function toInt(value: unknown, fallback: number, min: number, max: number) {
 
 function parseProfile(profileJson: unknown): ParsedProfile {
   if (!profileJson) return {};
-  try {
-    const parsed = JSON.parse(String(profileJson));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as ParsedProfile : {};
-  } catch {
-    return {};
-  }
-}
-
-function asBoolean(value: unknown): boolean {
-  return value === true || value === 1 || value === "1";
+  return safeJsonParseObject(String(profileJson)) ?? {};
 }
 
 function asRoles(value: unknown): string[] {
@@ -119,18 +110,19 @@ function asRoles(value: unknown): string[] {
 }
 
 function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item).trim()).filter(Boolean);
+  return asStringArray(value);
 }
 
-function isGoneError(error: any) {
+function isGoneError(error: unknown) {
+  if (!isJsonObject(error)) return false;
   const status = Number(error?.statusCode || error?.status || error?.code || 0);
   return status === 404 || status === 410;
 }
 
-function pushErrorDetails(error: any) {
-  const status = Number(error?.statusCode || error?.status || error?.code || 0);
-  const message = String(error?.message || error || "PUSH_ERROR").slice(0, 240);
+function pushErrorDetails(error: unknown) {
+  const errorObject = isJsonObject(error) ? error : null;
+  const status = Number(errorObject?.statusCode || errorObject?.status || errorObject?.code || 0);
+  const message = String(errorObject?.message || error || "PUSH_ERROR").slice(0, 240);
   return {
     status: Number.isFinite(status) && status > 0 ? status : null,
     message,
@@ -217,8 +209,8 @@ function matchesSegment(recipient: Recipient, segment: SegmentInput, userIds: Se
   const familyId = toText(segment.familyId);
   if (familyId) {
     const familyMembers = Array.isArray(recipient.profile.familyMembers) ? recipient.profile.familyMembers : [];
-    const inFamily = familyMembers.some((member: any) => {
-      if (!member || typeof member !== "object") return false;
+    const inFamily = familyMembers.some((member) => {
+      if (!isJsonObject(member)) return false;
       const memberFamilyId = String(member.familyId || member.family_id || "").trim();
       const memberActive = member.isActive === true || member.is_active === 1 || member.status === "active";
       return memberFamilyId === familyId && memberActive;
@@ -291,9 +283,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  let body: PushSendBody | null = null;
+  let body: JsonObject | null = null;
   try {
-    body = await readJsonRequest<PushSendBody>(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
     if (err instanceof RequestBodyTooLargeError) {
       return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
@@ -301,7 +293,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     throw err;
   }
 
-  const segment = body?.segment && typeof body.segment === "object" ? body.segment : {};
+  const segment = isJsonObject(body?.segment) ? body.segment : {};
   const userIds = new Set([
     ...normalizeStringArray(body?.userIds),
     ...normalizeStringArray(segment.userIds),
@@ -346,12 +338,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     GROUP BY ps.id
     ORDER BY ps.updated_at DESC
   `;
-  const { results } = await db.prepare(query).all<any>();
-  const allRecipients = (results || []).map((row: any) => getRecipient(row as PushRecipientRow));
+  const { results } = await db.prepare(query).all<PushRecipientRow>();
+  const allRecipients = (results || []).map((row) => getRecipient(row));
   const matchedRecipients = allRecipients.filter((recipient) => matchesSegment(recipient, segment, userIds));
   sortRecipients(matchedRecipients, sort);
 
   const selectedRecipients = matchedRecipients.slice(offset, offset + limit);
+  const actions = Array.isArray(body?.actions)
+    ? body.actions
+        .filter((item): item is JsonObject => isJsonObject(item))
+        .map((item) => ({ action: asString(item.action), title: asString(item.title) }))
+        .filter((item) => item.action && item.title)
+    : undefined;
+
   const payload = buildPushPayload({
     title: toText(body?.title, "FitFocus"),
     body: toText(body?.body, "У вас новое уведомление от FitFocus."),
@@ -359,8 +358,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     tag: toText(body?.tag, `fitfocus-admin-${Date.now()}`),
     icon: toText(body?.icon, "/icon.svg"),
     badge: toText(body?.badge, "/icon.svg"),
-    actions: Array.isArray(body?.actions) ? body?.actions as Array<{ action: string; title: string }> : undefined,
-    data: (body?.data && typeof body.data === "object" && !Array.isArray(body.data)) ? body.data as Record<string, unknown> : undefined,
+    actions,
+    data: isJsonObject(body?.data) ? body.data : undefined,
   });
 
   if (dryRun) {

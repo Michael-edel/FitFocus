@@ -1,19 +1,30 @@
 import { ensureAuthSchema, json, replaceActiveSessionsForUser } from "../_lib/auth";
 import { consumeInviteCode } from "../_lib/invites";
+import { asString, isJsonObject, type JsonObject } from "../_lib/json";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { cookieSerialize, signSessionJwt } from "./_oauth";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
 
-async function safeResponseJson(response: Response): Promise<any> {
-  return response.json().catch(() => ({}));
+async function safeResponseJson(response: Response): Promise<JsonObject> {
+  const parsed = await response.json().catch(() => null);
+  return isJsonObject(parsed) ? parsed : {};
 }
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   try {
     const { request, env } = ctx;
 
-    const body = await request.json().catch(() => ({} as any));
+    let body: JsonObject | null = null;
+    try {
+      body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    } catch (err) {
+      if (err instanceof RequestBodyTooLargeError) {
+        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+      }
+      throw err;
+    }
     const credential = body?.credential;
     if (!credential || typeof credential !== "string") {
       return json({ error: "Missing credential" }, 400);
@@ -33,7 +44,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     // Validate token with Google (simple + reliable, no crypto libs needed).
     const tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential);
     const r = await fetch(tokenInfoUrl, { method: "GET" });
-    const info: any = await safeResponseJson(r);
+    const info = await safeResponseJson(r);
     if (!r.ok) {
       const details = String(info?.error_description || info?.error || "");
       return json({ error: "Invalid Google token", details: details.slice(0, 200) }, 401);
@@ -72,7 +83,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 // Closed beta (invite codes)
 const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
 if (requireInvite) {
-  const inviteCode = String(body?.inviteCode || "").trim();
+  const inviteCode = asString(body?.inviteCode);
   if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);
 
   const consumed = await consumeInviteCode(env.DB, inviteCode, user.sub, Math.floor(Date.now() / 1000));
@@ -95,7 +106,7 @@ await env.DB.prepare(
 
 
 // Optional: auto-promote admins/supports by email (enterprise convenience)
-const adminEmails = String((env as any).ADMIN_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+const adminEmails = asString(env.ADMIN_EMAILS).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
   await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
 }
@@ -143,18 +154,21 @@ await env.DB.prepare(
     );
 
     return json({ ok: true, user }, 200, headers);
-  } catch (e: any) {
-    return json({ error: "Server error", details: String(e?.message || e) }, 500);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return json({ error: "Server error", details: message }, 500);
   }
 };
 
 type Env = {
   AUTH_JWT_SECRET: string;
-  DB: any;
+  DB: D1Database;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_ID_LOCAL?: string;
   GOOGLE_CLIENT_ID_PROD?: string;
   VITE_GOOGLE_CLIENT_ID?: string;
   VITE_GOOGLE_CLIENT_ID_LOCAL?: string;
   VITE_GOOGLE_CLIENT_ID_PROD?: string;
+  REQUIRE_INVITE?: string;
+  ADMIN_EMAILS?: string;
 };
