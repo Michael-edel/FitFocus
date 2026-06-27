@@ -1,6 +1,7 @@
 // Feature flags helpers (Enterprise Layer)
 
 export type FeatureMap = Record<string, boolean>;
+type SettingsRow = { key?: string; value?: string | null };
 
 type FeatureFlagRow = {
   key?: string;
@@ -36,7 +37,7 @@ function isFeatureEnabledForActor(row: FeatureFlagRow, actorKey?: string | null)
   return stableRolloutBucket(`${key}:${actorKey}`) < rollout;
 }
 
-export async function loadFeatures(env: { DB?: any }, actorKey?: string | null): Promise<FeatureMap> {
+export async function loadFeatures(env: { DB?: D1Database }, actorKey?: string | null): Promise<FeatureMap> {
   if (!env.DB) return {};
   try {
     const rows = await env.DB.prepare("SELECT key, enabled, rollout_percentage FROM feature_flags").all();
@@ -60,12 +61,12 @@ export function isEnabled(features: FeatureMap, key: string, fallback = false): 
 
 export type SettingMap = Record<string, string>;
 
-export async function loadSettings(env: { DB?: any }): Promise<SettingMap> {
+export async function loadSettings(env: { DB?: D1Database }): Promise<SettingMap> {
   if (!env.DB) return {};
   try {
-    const rows = await env.DB.prepare("SELECT key, value FROM feature_settings").all();
+    const rows = await env.DB.prepare("SELECT key, value FROM feature_settings").all<SettingsRow>();
     const settings: SettingMap = {};
-    for (const r of rows.results || []) settings[String(r.key)] = String((r as any).value ?? "");
+    for (const r of rows.results || []) settings[String(r.key)] = String(r.value ?? "");
     return settings;
   } catch {
     return {};

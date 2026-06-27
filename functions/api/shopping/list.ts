@@ -9,6 +9,8 @@ import { aggregateShoppingRows, ingredientKey } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type ShoppingRow = { name?: string | null; grams?: number | null };
+type CheckedRow = { name?: string | null; checked?: number | boolean | null };
 
 function isIsoDay(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -47,7 +49,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
            ORDER BY w.ingredient_name`
         )
         .bind(week, famId)
-        .all<any>();
+        .all<ShoppingRow>();
 
       const checkedRows = await db
         .prepare(
@@ -56,7 +58,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
            WHERE scope_id = ? AND week_start = ?`
         )
         .bind(scopeId, week)
-        .all<any>();
+        .all<CheckedRow>();
 
       const checkedByKey = new Map<string, boolean>();
       for (const row of checkedRows?.results || []) {
@@ -64,13 +66,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         if (key) checkedByKey.set(key, Boolean(row.checked) || Boolean(checkedByKey.get(key)));
       }
 
-      const items = aggregateShoppingRows((rows?.results || []).map((row: any) => ({
+      const items = aggregateShoppingRows((rows?.results || []).map((row) => ({
         name: row.name,
         grams: row.grams,
         checked: checkedByKey.get(ingredientKey(String(row.name || ""))) || false,
       })));
 
-      const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
+      const totalGrams = items.reduce((s, it) => s + it.grams, 0);
       return json({ week_start: week, family_id: famId, items, total_grams: totalGrams });
     }
 
@@ -85,7 +87,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
          ORDER BY w.ingredient_name`
       )
       .bind(user.sub, week)
-      .all<any>();
+      .all<ShoppingRow>();
 
     const checkedRows = await db
       .prepare(
@@ -94,7 +96,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
          WHERE scope_id = ? AND week_start = ?`
       )
       .bind(getShoppingScopeId(user.sub, null), week)
-      .all<any>();
+      .all<CheckedRow>();
 
     const checkedByKey = new Map<string, boolean>();
     for (const row of checkedRows?.results || []) {
@@ -102,15 +104,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       if (key) checkedByKey.set(key, Boolean(row.checked) || Boolean(checkedByKey.get(key)));
     }
 
-    const items = aggregateShoppingRows((rows?.results || []).map((row: any) => ({
+    const items = aggregateShoppingRows((rows?.results || []).map((row) => ({
       name: row.name,
       grams: row.grams,
       checked: checkedByKey.get(ingredientKey(String(row.name || ""))) || false,
     })));
 
-    const totalGrams = items.reduce((s: number, it: any) => s + it.grams, 0);
+    const totalGrams = items.reduce((s, it) => s + it.grams, 0);
     return json({ week_start: week, items, total_grams: totalGrams });
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }

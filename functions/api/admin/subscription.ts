@@ -7,6 +7,7 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -24,17 +25,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  let body: Record<string, unknown> | null = null;
+  let body: unknown = null;
   try {
-    body = await readJsonRequest<Record<string, unknown>>(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
     if (err instanceof RequestBodyTooLargeError) {
       return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
     }
     throw err;
   }
-  const userId = String(body?.user_id || "").trim();
-  const plan = normalizePlan(body?.plan);
+  if (!isJsonObject(body)) return json({ error: "BAD_REQUEST", message: "user_id and plan are required" }, 400);
+  const userId = asString(body.user_id);
+  const plan = normalizePlan(body.plan);
   if (!userId || !plan) {
     return json({ error: "BAD_REQUEST", message: "user_id and plan are required" }, 400);
   }
@@ -42,7 +44,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const target = await db
     .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<{ id: string }>();
   if (!target?.id) return json({ error: "NOT_FOUND", message: "user not found" }, 404);
 
   const now = Date.now();

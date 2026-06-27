@@ -31,11 +31,16 @@ export interface AiRateControlInput {
   burstWindowMs?: number;
 }
 
+type ChangesResult = {
+  meta?: { changes?: number } | null;
+  changes?: number;
+};
+
 function sanitizeFeature(value: string): string {
   return String(value || "ai").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 64) || "ai";
 }
 
-function changesOf(result: any): number {
+function changesOf(result: ChangesResult | null | undefined): number {
   const changes = Number(result?.meta?.changes ?? result?.changes ?? 0);
   return Number.isFinite(changes) ? changes : 0;
 }

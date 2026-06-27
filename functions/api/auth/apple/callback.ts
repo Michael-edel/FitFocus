@@ -2,30 +2,35 @@ import type { PagesFunction } from "@cloudflare/workers-types";
 import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 import { consumeInviteCode } from "../../_lib/invites";
+import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 
-function json(body: any, status = 200, headers?: Headers) {
+type ExistingAppleUserRow = {
+  email?: string | null;
+  name?: string | null;
+  picture?: string | null;
+};
+
+function json(body: unknown, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
     status,
     headers: headers || new Headers({ "content-type": "application/json; charset=utf-8" }),
   });
 }
 
-async function safeResponseJson(response: Response): Promise<any> {
-  return response.json().catch(() => ({}));
+async function safeResponseJson(response: Response): Promise<JsonObject> {
+  const parsed = await response.json().catch(() => null);
+  return isJsonObject(parsed) ? parsed : {};
 }
 
-function parseAppleUserField(value: FormDataEntryValue | null): any | null {
+function parseAppleUserField(value: FormDataEntryValue | null): JsonObject | null {
   if (!value || typeof value !== "string") return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
+  return safeJsonParseObject(value);
 }
 
-function buildAppleName(userJson: any): string {
-  const first = String(userJson?.name?.firstName || "").trim();
-  const last = String(userJson?.name?.lastName || "").trim();
+function buildAppleName(userJson: JsonObject | null): string {
+  const name = isJsonObject(userJson?.name) ? userJson.name : null;
+  const first = String(name?.firstName || "").trim();
+  const last = String(name?.lastName || "").trim();
   return [first, last].filter(Boolean).join(" ").trim();
 }
 
@@ -38,6 +43,7 @@ export const onRequest: PagesFunction<{
   APPLE_PRIVATE_KEY?: string;
   AUTH_JWT_SECRET: string;
   APP_URL?: string;
+  REQUIRE_INVITE?: string;
   ADMIN_EMAILS?: string;
   BOOTSTRAP_ADMIN_EMAILS?: string;
 }> = async ({ request, env }) => {
@@ -55,7 +61,7 @@ export const onRequest: PagesFunction<{
     const url = new URL(request.url);
     let code = url.searchParams.get("code") || "";
     let state = url.searchParams.get("state") || "";
-    let appleUserJson: any = null;
+    let appleUserJson: JsonObject | null = null;
 
     if (request.method === "POST") {
       const form = await request.formData();
@@ -75,12 +81,13 @@ export const onRequest: PagesFunction<{
     const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
     let redirectAfter = requestBase;
     try {
-      const ru = new URL(parsed.r);
+      const redirectCandidate = asString(parsed.r);
+      const ru = new URL(redirectCandidate);
       if (/^https?:$/.test(ru.protocol) && ru.origin === requestBase) {
         redirectAfter = ru.origin;
       }
     } catch {}
-    const inviteCode = parsed?.i || "";
+    const inviteCode = asString(parsed?.i);
 
     const baseUrl = requestBase;
     const redirectUri = `${baseUrl}/api/auth/apple/callback`;
@@ -97,7 +104,7 @@ export const onRequest: PagesFunction<{
         grant_type: "authorization_code",
       }),
     });
-    const tokenJson: any = await safeResponseJson(tokenRes);
+    const tokenJson = await safeResponseJson(tokenRes);
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed", details: tokenJson }, 502);
     }
@@ -113,7 +120,7 @@ export const onRequest: PagesFunction<{
 
     const existing = await env.DB.prepare("SELECT email, name, picture FROM users WHERE id = ? LIMIT 1")
       .bind(appleSub)
-      .first<any>();
+      .first<ExistingAppleUserRow>();
 
     const tokenEmail = String(idPayload.email || "");
     const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";
@@ -137,7 +144,7 @@ export const onRequest: PagesFunction<{
       .bind(appleSub, nextEmail, nextName, nextPicture, now, now)
       .run();
 
-    const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
+    const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
     if (requireInvite && !inviteCode) {
       return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
     }
@@ -160,7 +167,7 @@ export const onRequest: PagesFunction<{
       .bind(now, appleSub)
       .run();
 
-    const adminEmails = String((env as any).ADMIN_EMAILS || "")
+    const adminEmails = String(env.ADMIN_EMAILS || "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
@@ -168,7 +175,7 @@ export const onRequest: PagesFunction<{
       await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(appleSub).run();
     }
 
-    const bootstrapEmails = String((env as any).BOOTSTRAP_ADMIN_EMAILS || "")
+    const bootstrapEmails = String(env.BOOTSTRAP_ADMIN_EMAILS || "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
@@ -208,7 +215,7 @@ export const onRequest: PagesFunction<{
     );
     headers.set("Location", `${redirectAfter}/?auth=apple`);
     return new Response(null, { status: 302, headers });
-  } catch (e: any) {
-    return json({ error: "Server error", details: String(e?.message || e) }, 500);
+  } catch (e: unknown) {
+    return json({ error: "Server error", details: e instanceof Error ? e.message : String(e) }, 500);
   }
 };

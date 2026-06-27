@@ -81,7 +81,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       .run();
 
 // Closed beta (invite codes)
-const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
+const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
 if (requireInvite) {
   const inviteCode = asString(body?.inviteCode);
   if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);

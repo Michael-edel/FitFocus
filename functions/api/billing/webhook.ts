@@ -103,8 +103,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   let event;
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
-  } catch (err: any) {
-    return new Response(`Webhook Error: ${String(err?.message || err)}`, { status: 400 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(`Webhook Error: ${message}`, { status: 400 });
   }
 
   // Обработка событий подписки

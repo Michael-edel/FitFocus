@@ -18,9 +18,12 @@ import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } fro
  */
 
 export interface Env {
-  DB?: any;
+  DB?: D1Database;
   GEMINI_API_KEY: string;
-  FITFOCUS_KV?: any;
+  FITFOCUS_KV?: {
+    get(key: string, options?: { type?: "text" | "json" | "arrayBuffer" | "stream" }): Promise<unknown>;
+    put(key: string, value: string, options?: { expirationTtl?: number }): Promise<unknown>;
+  };
   IP_HASH_SALT?: string;
   FREE_AI_DAILY_LIMIT?: string;
   PRO_AI_DAILY_LIMIT?: string;
@@ -47,6 +50,58 @@ type UsageRecord = {
   lastStatus: number;
   lastTs: number;
 };
+
+type GeminiUsageMetadata = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+};
+
+type GeminiCandidate = {
+  content?: {
+    parts?: Array<{ text?: string }>;
+  };
+};
+
+type GeminiResponse = JsonObject & {
+  text?: string;
+  output_text?: string;
+  usageMetadata?: GeminiUsageMetadata;
+  candidates?: GeminiCandidate[];
+  error?: string | { message?: string };
+};
+
+type AiEventArgs = {
+  userId: string;
+  feature: string;
+  status: number;
+  latencyMs: number;
+  safeMode: boolean;
+  requestJson?: unknown;
+  responseJson?: unknown;
+  error?: string | null;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimatedCostUsd?: number;
+  isFallback?: boolean;
+};
+
+type MobileProfileLike = JsonObject & {
+  weight?: unknown;
+  weight_kg?: unknown;
+  weightKg?: unknown;
+  goal?: unknown;
+  goalType?: unknown;
+  activityLevel?: unknown;
+  activity_level?: unknown;
+  targetWeight?: unknown;
+  target_weight_kg?: unknown;
+  targetWeightKg?: unknown;
+};
+
+type UserProfileRow = { profile_json?: string | null };
 
 const EMPTY_USAGE_RECORD: UsageRecord = {
   count: 0,
@@ -81,7 +136,7 @@ export function normalizeGeminiTimeoutMs(value: unknown): number {
   return Math.min(MAX_GEMINI_TIMEOUT_MS, Math.max(MIN_GEMINI_TIMEOUT_MS, parsed));
 }
 
-function jsonResponse(obj: any, status = 200, extraHeaders: Record<string,string> = {}) {
+function jsonResponse(obj: unknown, status = 200, extraHeaders: Record<string,string> = {}) {
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
@@ -92,8 +147,8 @@ function jsonResponse(obj: any, status = 200, extraHeaders: Record<string,string
   });
 }
 
-function getGeminiUsage(data: any) {
-  const usage = data?.usageMetadata || {};
+function getGeminiUsage(data: GeminiResponse) {
+  const usage = isJsonObject(data.usageMetadata) ? data.usageMetadata : {};
   const inputTokens = Number(usage.promptTokenCount || 0);
   const outputTokens = Number(usage.candidatesTokenCount || 0);
   const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens || 0);
@@ -104,6 +159,12 @@ function estimateCostUsd(inputTokens: number, outputTokens: number, inputPerMill
   return (inputTokens / 1_000_000) * inputPerMillion + (outputTokens / 1_000_000) * outputPerMillion;
 }
 
+function getGeminiErrorMessage(error: GeminiResponse["error"], fallback: string): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (isJsonObject(error) && typeof error.message === "string" && error.message.trim()) return error.message;
+  return fallback;
+}
+
 function getSettingNumberOrDefault(settings: Record<string, string>, key: string, fallback: number) {
   const raw = getSetting(settings, key, "");
   if (raw.trim() === "") return fallback;
@@ -111,23 +172,24 @@ function getSettingNumberOrDefault(settings: Record<string, string>, key: string
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function normalizeContents(input: any): GeminiContent[] {
+function normalizeContents(input: unknown): GeminiContent[] {
   const toTextContent = (t: string): GeminiContent => ({
     role: "user",
     parts: [{ text: t }],
   });
 
-  const isPart = (p: any): p is GeminiPart =>
+  const isPart = (p: unknown): p is GeminiPart =>
     !!p &&
-    (typeof p?.text === "string" ||
-      (p?.inlineData &&
-        typeof p.inlineData?.mimeType === "string" &&
-        typeof p.inlineData?.data === "string"));
+    (isJsonObject(p) && typeof p.text === "string" ||
+      (isJsonObject(p) &&
+        isJsonObject(p.inlineData) &&
+        typeof p.inlineData.mimeType === "string" &&
+        typeof p.inlineData.data === "string"));
 
-  const toContent = (c: any): GeminiContent | null => {
+  const toContent = (c: unknown): GeminiContent | null => {
     if (!c) return null;
 
-    if (Array.isArray(c?.parts) && c.parts.every(isPart)) {
+    if (isJsonObject(c) && Array.isArray(c.parts) && c.parts.every(isPart)) {
       const role = c.role === "model" ? "model" : "user";
       return { role, parts: c.parts };
     }
@@ -137,7 +199,7 @@ function normalizeContents(input: any): GeminiContent[] {
     }
 
     if (typeof c === "string") return toTextContent(c);
-    if (typeof c?.text === "string") return toTextContent(c.text);
+    if (isJsonObject(c) && typeof c.text === "string") return toTextContent(c.text);
 
     return null;
   };
@@ -164,24 +226,9 @@ async function sha256Hex(input: string) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function logAiEvent(env: any, args: {
-  userId: string;
-  feature: string;
-  status: number;
-  latencyMs: number;
-  safeMode: boolean;
-  requestJson?: any;
-  responseJson?: any;
-  error?: string;
-  model?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  estimatedCostUsd?: number;
-  isFallback?: boolean;
-}) {
+async function logAiEvent(env: Env, args: AiEventArgs) {
   try {
-    if (!env?.DB) return;
+    if (!env.DB) return;
     const id = crypto.randomUUID();
     const ts = Date.now();
     const baseValues = [
@@ -364,9 +411,10 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       planDailyLimit: dailyAiLimitForPlan(activePlan, env),
       safeDailyLimit: safeMode ? (activePlan === "free" ? 50 : 200) : null,
     });
-  } catch (err: any) {
-    if (err instanceof AiLimitError || err?.name === "AiLimitError") {
-      const status = Number(err.status || 429);
+  } catch (error: unknown) {
+    if (error instanceof AiLimitError || (error instanceof Error && error.name === "AiLimitError")) {
+      const aiError = error as AiLimitError;
+      const status = Number(aiError.status || 429);
       await logUsage(env, { identity, feature, status, latency: Date.now() - startedAt, bytesIn: bodyText.length });
       await logAiEvent(env, {
         userId: identity,
@@ -375,17 +423,17 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         latencyMs: Date.now() - startedAt,
         safeMode,
         requestJson: body,
-        error: err.code || "AI_LIMIT",
+        error: aiError.code || "AI_LIMIT",
       });
       return jsonResponse({
         error: {
-          code: err.code || "AI_LIMIT",
-          message: err.message || "Достигнут лимит AI.",
-          meta: err.meta || { feature, plan: activePlan },
+          code: aiError.code || "AI_LIMIT",
+          message: aiError.message || "Достигнут лимит AI.",
+          meta: aiError.meta || { feature, plan: activePlan },
         },
-      }, status, err.kind === "daily" ? { "X-FF-Quota": "EXCEEDED" } : {});
+      }, status, aiError.kind === "daily" ? { "X-FF-Quota": "EXCEEDED" } : {});
     }
-    throw err;
+    throw error;
   }
 
   const bodyHash = await sha256Hex(bodyText || "{}");
@@ -438,7 +486,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   let geminiResp: Response | null = null;
-  let data: any = {};
+  let data: GeminiResponse = {};
   let latency = 0;
   const geminiTimeoutMs = normalizeGeminiTimeoutMs(env.GEMINI_TIMEOUT_MS);
   const controller = new AbortController();
@@ -455,8 +503,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
     data = await geminiResp.json().catch(() => ({}));
     latency = Date.now() - startedAt;
-  } catch (err: any) {
+  } catch (error: unknown) {
     latency = Date.now() - startedAt;
+    const errorMessage = error instanceof Error ? error.message : String(error || "fetch_failed");
 
     if (fallbackMode) {
       const profile = await loadUserProfile(env, String(user.sub));
@@ -469,7 +518,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         safeMode,
         requestJson: body,
         responseJson: fallback,
-        error: (err && (err.message || String(err))) || "fetch_failed",
+        error: errorMessage,
         model: "fallback_fetch_failed",
         isFallback: true,
       });
@@ -485,7 +534,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       });
     }
 
-    await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: (err && (err.message || String(err))) || "fetch_failed" });
+    await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: errorMessage });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
@@ -508,7 +557,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       safeMode,
       requestJson: body,
       responseJson: fallback,
-      error: data?.error?.message || data?.error || `status_${geminiResp!.status}`,
+        error: getGeminiErrorMessage(data.error, `status_${geminiResp!.status}`),
       model: "fallback_status",
       isFallback: true,
     });
@@ -540,7 +589,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     safeMode,
     requestJson: body,
     responseJson: { text: extractedText },
-    error: geminiResp.status >= 400 ? (data?.error?.message || data?.error || null) : null,
+    error: geminiResp.status >= 400 ? getGeminiErrorMessage(data.error, "") || null : null,
     model,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
@@ -559,23 +608,23 @@ return new Response(JSON.stringify({ ...data, text: extractedText }), {
   });
 }
 
-function extractTextFromGemini(data: any): string {
-  if (data && typeof data.text === 'string') return data.text;
+function extractTextFromGemini(data: GeminiResponse): string {
+  if (typeof data.text === 'string') return data.text;
 
   const parts: string[] = [];
-  const candidates = data?.candidates;
+  const candidates = data.candidates;
   if (Array.isArray(candidates)) {
     for (const c of candidates) {
-      const p = c?.content?.parts;
+      const p = c.content?.parts;
       if (Array.isArray(p)) {
         for (const part of p) {
-          if (part && typeof part.text === 'string') parts.push(part.text);
+          if (typeof part?.text === 'string') parts.push(part.text);
         }
       }
     }
   }
 
-  if (!parts.length && typeof data?.output_text === 'string') return data.output_text;
+  if (!parts.length && typeof data.output_text === 'string') return data.output_text;
   return parts.join('\n').trim();
 }
 
@@ -587,7 +636,7 @@ async function loadUserProfile(env: Env, userId: string): Promise<JsonObject> {
   try {
     const row = await env?.DB?.prepare(
       "SELECT profile_json FROM user_profiles WHERE user_id = ?"
-    ).bind(userId).first();
+    ).bind(userId).first<UserProfileRow>();
     if (!row?.profile_json) return {};
     return safeJsonParseObject(row.profile_json) ?? {};
   } catch {
@@ -595,7 +644,7 @@ async function loadUserProfile(env: Env, userId: string): Promise<JsonObject> {
   }
 }
 
-export function calcTargetCalories(profile: any): number {
+export function calcTargetCalories(profile: MobileProfileLike): number {
   // Очень грубая оценка: если есть цель и активность — подстраиваем.
   // Это fallback, не медицинская рекомендация.
   const weight = Number(
@@ -616,7 +665,7 @@ export function calcTargetCalories(profile: any): number {
   return cals;
 }
 
-function buildFallbackWeeklyMenu(profile: any) {
+function buildFallbackWeeklyMenu(profile: MobileProfileLike) {
   const target = calcTargetCalories(profile);
   const perMeal = Math.round(target / 3);
   const days = [
@@ -649,7 +698,7 @@ function buildFallbackWeeklyMenu(profile: any) {
   };
 }
 
-export function buildFallbackAdvice(profile: any) {
+export function buildFallbackAdvice(profile: MobileProfileLike) {
   const target = calcTargetCalories(profile);
   const w = profile?.weight ?? profile?.weight_kg ?? profile?.weightKg;
   const tw = profile?.targetWeight ?? profile?.target_weight_kg ?? profile?.targetWeightKg;
@@ -675,7 +724,7 @@ export function buildFallbackAdvice(profile: any) {
   };
 }
 
-function buildFallback(feature: string, profile: any) {
+function buildFallback(feature: string, profile: MobileProfileLike) {
   if (feature === "weekly_menu" || feature === "menu_week" || feature === "weekly_plan") {
     return buildFallbackWeeklyMenu(profile);
   }

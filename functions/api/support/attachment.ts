@@ -10,6 +10,8 @@ import {
 } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
+type SupportTicketOwnerRow = { id: string; user_id: string; attachments_json?: string | null };
+type SupportMessageAttachmentRow = { attachments_json?: string | null };
 
 function safeFileName(name: string) {
   return name.replace(/["\\]/g, "_").slice(0, 120) || "attachment";
@@ -52,7 +54,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
      FROM support_feedback
      WHERE id = ?
      LIMIT 1`
-  ).bind(ticketId).first<any>();
+  ).bind(ticketId).first<SupportTicketOwnerRow>();
   if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   if (!isAdmin && row.user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);
 
@@ -63,7 +65,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        FROM support_feedback_messages
        WHERE id = ? AND ticket_id = ?
        LIMIT 1`
-    ).bind(messageId, ticketId).first<any>();
+    ).bind(messageId, ticketId).first<SupportMessageAttachmentRow>();
     if (!messageRow) return json({ error: "NOT_FOUND", message: "message not found" }, 404);
     attachmentsJson = messageRow.attachments_json;
   } else {
@@ -72,7 +74,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        FROM support_feedback
        WHERE id = ?
        LIMIT 1`
-    ).bind(ticketId).first<any>();
+    ).bind(ticketId).first<SupportMessageAttachmentRow>();
     attachmentsJson = ticketRow?.attachments_json;
   }
 
@@ -85,7 +87,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (!stored) return json({ error: "NOT_FOUND", message: "attachment not found" }, 404);
     const headers = attachmentHeaders(attachment, attachment.name);
     stored.writeHttpMetadata?.(headers);
-    const etag = (stored as any).httpEtag as string | undefined;
+    const etag = stored.httpEtag;
     if (etag) headers.set("etag", etag);
     return new Response(stored.body, { status: 200, headers });
   }

@@ -8,6 +8,7 @@ import { aggregateShoppingRows, normalizeShoppingIngredient } from "../../_lib/i
 import { requireFamilyPlan } from "../../_lib/plans";
 import { calculateDailyTargets } from "../../../../domain/profileMath";
 import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
+import { isJsonObject, safeJsonParse } from "../../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -114,6 +115,58 @@ type MemberRestrictions = {
   notes: string;
 };
 
+type RestrictionsPayload = {
+  allergens?: unknown;
+  intolerances?: unknown;
+  excludedFoods?: unknown;
+  exclusions?: unknown;
+  forbidden?: unknown;
+  severity?: unknown;
+  notes?: unknown;
+};
+
+type SharedMeal = {
+  title: string;
+  items: ItemKey[];
+};
+
+type SharedDay = {
+  name: string;
+  breakfast: SharedMeal;
+  lunch: SharedMeal;
+  dinner: SharedMeal;
+  snack: SharedMeal;
+};
+
+type SharedMenu = {
+  version: number;
+  days: SharedDay[];
+};
+
+type PortionIngredient = { key: ItemKey; originalKey: ItemKey; name: string; grams: number };
+type PortionMeal = { title: string; ingredients: PortionIngredient[] };
+type PortionDay = { name: string; meals: Record<"breakfast" | "lunch" | "dinner" | "snack", PortionMeal> };
+type PortionTotals = { name: string; grams: number };
+type MemberPortions = {
+  portions: PortionDay[];
+  totals: PortionTotals[];
+  kcalPerDay: number;
+  replacements: Record<string, string>;
+};
+
+type FamilyMemberRow = {
+  user_id: string;
+  goal?: string | null;
+  sex?: string | null;
+  age?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  activity?: number | null;
+  restrictions_json?: string | null;
+};
+
+type WeeklyMenuRow = { id?: string };
+
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/ё/g, "е").trim();
 }
@@ -125,24 +178,21 @@ function splitTextList(value: unknown): string[] {
 }
 
 function parseRestrictions(value: unknown): MemberRestrictions {
-  let raw: any = value;
+  let raw: unknown = value;
   if (typeof value === "string") {
-    try {
-      raw = JSON.parse(value);
-    } catch {
-      raw = { notes: value };
-    }
+    raw = safeJsonParse(value) ?? { notes: value };
   }
-  if (!raw || typeof raw !== "object") {
+  if (!isJsonObject(raw)) {
     raw = {};
   }
+  const data: RestrictionsPayload = raw;
   const clean = (v: unknown) => splitTextList(v).map((x) => normalizeText(x)).filter(Boolean).slice(0, 20);
   return {
-    allergens: clean(raw.allergens),
-    intolerances: clean(raw.intolerances),
-    excludedFoods: clean(raw.excludedFoods || raw.exclusions || raw.forbidden),
-    severity: String(raw.severity || "").toLowerCase() === "soft" ? "soft" : "strict",
-    notes: String(raw.notes || "").slice(0, 300),
+    allergens: clean(data.allergens),
+    intolerances: clean(data.intolerances),
+    excludedFoods: clean(data.excludedFoods || data.exclusions || data.forbidden),
+    severity: String(data.severity || "").toLowerCase() === "soft" ? "soft" : "strict",
+    notes: String(data.notes || "").slice(0, 300),
   };
 }
 
@@ -173,7 +223,7 @@ function resolveItemKey(key: ItemKey, r: MemberRestrictions): ItemKey {
   return candidates.find((candidate) => !isRestrictedItem(candidate, r)) || key;
 }
 
-function buildDeterministicSharedMenu() {
+function buildDeterministicSharedMenu(): SharedMenu {
   const days = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const sharedDay = () => ({
     breakfast: { title: "Овсянка + йогурт + фрукт", items: ["oatmeal","greek_yogurt","banana","egg"] as ItemKey[] },
@@ -184,7 +234,7 @@ function buildDeterministicSharedMenu() {
   return { version: 1, days: days.map((name)=>({ name, ...sharedDay() })) };
 }
 
-function memberTargetKcal(member: any): number {
+function memberTargetKcal(member: FamilyMemberRow): number {
   const goalRaw = String(member?.goal || "").toUpperCase();
   const goal = goalRaw === "LOSS" ? Goal.LOSS : Goal.MAINTAIN;
 
@@ -197,8 +247,8 @@ function memberTargetKcal(member: any): number {
 
   if ((sexRaw === "MALE" || sexRaw === "FEMALE") && age > 0 && height > 0 && weight > 0) {
     const gender = sexRaw === "MALE" ? Gender.MALE : Gender.FEMALE;
-    const activityLevel = Object.values(ActivityLevel).includes(activityNum as any)
-      ? (activityNum as any)
+    const activityLevel = Object.values(ActivityLevel).includes(activityNum as ActivityLevel)
+      ? (activityNum as ActivityLevel)
       : ActivityLevel.SEDENTARY;
 
     const targets = calculateDailyTargets({
@@ -211,7 +261,7 @@ function memberTargetKcal(member: any): number {
       adaptationMultiplier: 1.0,
       lossDeficit: undefined,
       gainSurplus: undefined,
-    } as any);
+    });
     return Math.max(1200, Math.round(targets.calories || 2000));
   }
 
@@ -219,12 +269,12 @@ function memberTargetKcal(member: any): number {
   return goal === Goal.LOSS ? 1700 : 2000;
 }
 
-function buildPortionsForMember(shared: any, kcalPerDay: number, restrictions: MemberRestrictions = parseRestrictions(null)) {
+function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number, restrictions: MemberRestrictions = parseRestrictions(null)): MemberPortions {
   const k = Math.max(0.6, Math.min(1.8, kcalPerDay / BASE_DAY_KCAL));
   const totals: Record<string, number> = {};
   const replacements: Record<string, string> = {};
-  const portions = shared.days.map((d: any) => {
-    const outDay: any = { name: d.name, meals: {} };
+  const portions: PortionDay[] = shared.days.map((d) => {
+    const meals = {} as Record<"breakfast" | "lunch" | "dinner" | "snack", PortionMeal>;
     for (const mealKey of ["breakfast","lunch","dinner","snack"]) {
       const m = d[mealKey];
       const ing = (m.items as ItemKey[]).map((key) => {
@@ -237,9 +287,9 @@ function buildPortionsForMember(shared: any, kcalPerDay: number, restrictions: M
         totals[meta.name] = (totals[meta.name] || 0) + grams;
         return { key: resolvedKey, originalKey: key, name: meta.name, grams };
       });
-      outDay.meals[mealKey] = { title: m.title, ingredients: ing };
+      meals[mealKey] = { title: m.title, ingredients: ing };
     }
-    return outDay;
+    return { name: d.name, meals };
   });
 
   // Totals for the whole week
@@ -278,7 +328,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const existing = await db
       .prepare("SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1")
       .bind(fam.id, weekStart)
-      .first<any>();
+      .first<WeeklyMenuRow>();
 
     const menuId = existing?.id || uuid();
 
@@ -291,10 +341,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          WHERE family_id = ? AND status = 'active' AND is_active = 1`
       )
       .bind(fam.id)
-      .all<any>();
+      .all<FamilyMemberRow>();
 
     const membersList = members.results || [];
-    const portionsByUser: Record<string, ReturnType<typeof buildPortionsForMember>> = {};
+    const portionsByUser: Record<string, MemberPortions> = {};
     const portionStatements: D1PreparedStatement[] = [];
     const itemStatements: D1PreparedStatement[] = [];
 
@@ -335,7 +385,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       snack: 0.10,
     };
 
-    const shoppingListRows = membersList.flatMap((m: any) => {
+    const shoppingListRows = membersList.flatMap((m) => {
         const computed = portionsByUser[String(m.user_id)];
         return (computed?.totals || []).map((item) => ({ name: item.name, grams: item.grams }));
       });
@@ -346,7 +396,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     const familyWeeklyMenu = {
       prefs: {
-        includeIds: membersList.map((m: any) => String(m.user_id)),
+        includeIds: membersList.map((m) => String(m.user_id)),
         cookingMode: "all_meals" as const,
         budgetPerWeek: undefined,
         currency: "KZT",
@@ -355,7 +405,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         ),
       },
       weekStart,
-      days: shared.days.map((day: any, dayIdx: number) => {
+      days: shared.days.map((day, dayIdx: number) => {
         const buildMeal = (mealKey: "breakfast" | "lunch" | "dinner" | "snack") => {
           const baseMeal = day[mealKey];
           const portions: Record<string, string> = {};
@@ -402,8 +452,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await db.batch(statements);
 
     return json({ ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
-  } catch (e: any) {
-    const apiErr = toApiError(e);
+  } catch (error: unknown) {
+    const apiErr = toApiError(error);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

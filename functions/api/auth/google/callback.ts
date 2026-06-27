@@ -1,16 +1,28 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 import { consumeInviteCode } from "../../_lib/invites";
+import { isJsonObject } from "../../_lib/json";
 import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth";
 
-function json(body: any, status = 200, headers?: Headers) {
+type GoogleTokenResponse = { id_token?: string };
+type GoogleTokenInfoResponse = {
+  aud?: string;
+  sub?: string;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  picture?: string;
+  email_verified?: string | boolean;
+};
+
+function json(body: unknown, status = 200, headers?: Headers) {
   return new Response(JSON.stringify(body), {
     status,
     headers: headers || new Headers({ "content-type": "application/json; charset=utf-8" }),
   });
 }
 
-async function safeResponseJson(response: Response): Promise<any> {
+async function safeResponseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}));
 }
 
@@ -20,6 +32,7 @@ export const onRequestGet: PagesFunction<{
   GOOGLE_CLIENT_SECRET: string;
   AUTH_JWT_SECRET: string;
   APP_URL?: string;
+  REQUIRE_INVITE?: string;
   ADMIN_EMAILS?: string;
   BOOTSTRAP_ADMIN_EMAILS?: string;
 }> = async ({ request, env }) => {
@@ -70,16 +83,18 @@ export const onRequestGet: PagesFunction<{
         grant_type: "authorization_code",
       }),
     });
-    const tokenJson: any = await safeResponseJson(tokenRes);
+    const tokenJsonRaw = await safeResponseJson(tokenRes);
+    const tokenJson: GoogleTokenResponse = isJsonObject(tokenJsonRaw) ? tokenJsonRaw : {};
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed", details: tokenJson }, 502);
     }
-    const idToken = tokenJson.id_token as string | undefined;
+    const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token : undefined;
     if (!idToken) return json({ error: "No id_token returned" }, 502);
 
     // Validate token + get profile
     const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    const info: any = await safeResponseJson(infoRes);
+    const infoRaw = await safeResponseJson(infoRes);
+    const info: GoogleTokenInfoResponse = isJsonObject(infoRaw) ? infoRaw : {};
     if (!infoRes.ok) return json({ error: "tokeninfo failed", details: info }, 502);
     if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
 
@@ -103,7 +118,7 @@ export const onRequestGet: PagesFunction<{
       .run();
 
     // Closed beta invite handling
-    const requireInvite = String((env as any).REQUIRE_INVITE || "").trim() === "1";
+    const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
     if (requireInvite && !inviteCode) {
       return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
     }
@@ -128,7 +143,7 @@ export const onRequestGet: PagesFunction<{
       .run();
 
     // Admin role by email list
-    const adminEmails = String((env as any).ADMIN_EMAILS || "")
+    const adminEmails = String(env.ADMIN_EMAILS || "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
@@ -138,7 +153,7 @@ export const onRequestGet: PagesFunction<{
     // Bootstrap admin (B2C-safe):
     // - only when there are NO admins yet
     // - only for emails listed in BOOTSTRAP_ADMIN_EMAILS
-    const bootstrapEmails = String((env as any).BOOTSTRAP_ADMIN_EMAILS || "")
+    const bootstrapEmails = String(env.BOOTSTRAP_ADMIN_EMAILS || "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
@@ -181,7 +196,7 @@ export const onRequestGet: PagesFunction<{
     );
     headers.set("Location", `${redirectAfter}/?auth=google`);
     return new Response(null, { status: 302, headers });
-  } catch (e: any) {
-    return json({ error: "Server error", details: String(e?.message || e) }, 500);
+  } catch (error: unknown) {
+    return json({ error: "Server error", details: error instanceof Error ? error.message : String(error) }, 500);
   }
 };

@@ -2,11 +2,13 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB, nowMs, uuid } from "../_lib/db";
 import { normalizePushDeviceLabel, parsePushSubscription } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asOptionalString, isJsonObject } from "../_lib/json";
 
 type Env = {
   AUTH_JWT_SECRET?: string;
   DB?: D1Database;
 };
+type CountRow = { count?: number };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -16,7 +18,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -25,12 +27,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  const parsed = parsePushSubscription(body?.subscription || body);
+  const payload = isJsonObject(body) ? body : null;
+  const parsed = parsePushSubscription(payload?.subscription || payload);
   if (!parsed) return json({ error: "BAD_REQUEST" }, 400);
 
   const db = requireDB(env);
   const t = nowMs();
-  const deviceLabel = normalizePushDeviceLabel(body?.deviceLabel, request.headers.get("user-agent"));
+  const deviceLabel = normalizePushDeviceLabel(asOptionalString(payload?.deviceLabel), request.headers.get("user-agent"));
   const userAgent = request.headers.get("user-agent");
 
   await db
@@ -47,7 +50,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const { results } = await db
     .prepare("SELECT COUNT(1) AS count FROM push_subscriptions WHERE user_id = ? AND enabled = 1")
     .bind(user.sub)
-    .all<any>();
+    .all<CountRow>();
 
   return json({
     ok: true,

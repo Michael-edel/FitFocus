@@ -2,6 +2,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { parsePushSubscription } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -16,7 +17,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -25,9 +26,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  const parsed = parsePushSubscription(body?.subscription || body);
-  const endpoint = String(body?.endpoint || parsed?.endpoint || "").trim();
-  const subscriptionId = String(body?.subscriptionId || body?.id || "").trim();
+  const payload = isJsonObject(body) ? body : null;
+  const parsed = parsePushSubscription(payload?.subscription || payload);
+  const endpoint = asString(payload?.endpoint || parsed?.endpoint);
+  const subscriptionId = asString(payload?.subscriptionId || payload?.id);
   if (!endpoint && !subscriptionId) return json({ error: "BAD_REQUEST" }, 400);
 
   const db = requireDB(env);

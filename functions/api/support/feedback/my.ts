@@ -14,6 +14,27 @@ import {
 } from "../../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
+type ChangesResult = {
+  meta?: { changes?: number } | null;
+  changes?: number;
+};
+type SupportTicketRow = {
+  id: string;
+  status?: string | null;
+  attachment_count?: number | null;
+  attachments_json?: string | null;
+  [key: string]: unknown;
+};
+type SupportMessageRow = {
+  id: string;
+  ticket_id: string;
+  author_user_id: string;
+  author_role: "user" | "admin";
+  message: string;
+  attachment_count: number;
+  attachments_json?: string | null;
+  created_at: number;
+};
 
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
@@ -22,7 +43,7 @@ function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: s
   }));
 }
 
-function changedRows(result: any): number {
+function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -45,7 +66,7 @@ async function loadMessages(db: D1Database, ticketId: string) {
      FROM support_feedback_messages
      WHERE ticket_id = ?
      ORDER BY created_at ASC`
-  ).bind(ticketId).all<any>();
+  ).bind(ticketId).all<SupportMessageRow>();
 
   return (results || []).map((row) => ({
     ...row,
@@ -72,7 +93,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        FROM support_feedback
        WHERE id = ? AND user_id = ?
        LIMIT 1`
-    ).bind(id, user.sub).first<any>();
+    ).bind(id, user.sub).first<SupportTicketRow>();
     if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
     return json({
       ticket: {
@@ -91,7 +112,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
      WHERE user_id = ?
      ORDER BY COALESCE(last_reply_at, updated_at, created_at) DESC
      LIMIT 100`
-  ).bind(user.sub).all<any>();
+  ).bind(user.sub).all<SupportTicketRow>();
 
   return json({
     tickets: (results || []).map((row) => ({
@@ -133,7 +154,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
      FROM support_feedback
      WHERE id = ? AND user_id = ?
      LIMIT 1`
-  ).bind(ticketId, user.sub).first<any>();
+  ).bind(ticketId, user.sub).first<SupportTicketRow>();
   if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   if (ticket.status === "closed") return json({ error: "BAD_REQUEST", message: "ticket closed" }, 400);
 
@@ -151,8 +172,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         index,
       }));
     }
-  } catch (e: any) {
-    const msg = String(e?.message || "");
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error || "");
     if (msg.startsWith("FILE_TOO_LARGE:")) {
       return json({ error: "BAD_REQUEST", message: `Файл ${msg.split(":")[1]} слишком большой. Прикрепите файл до 2 MB.` }, 400);
     }
@@ -201,12 +222,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
        FROM support_feedback
        WHERE id = ? AND user_id = ?
        LIMIT 1`
-    ).bind(ticketId, user.sub).first<any>();
+    ).bind(ticketId, user.sub).first<SupportTicketRow>();
     if (latest?.status === "closed") return json({ error: "BAD_REQUEST", message: "ticket closed" }, 400);
     return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   }
 
-  const refreshed = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(ticketId).first<any>();
+  const refreshed = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(ticketId).first<SupportTicketRow>();
   return json({
     ok: true,
     ticket: refreshed ? {

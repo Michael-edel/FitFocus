@@ -5,10 +5,12 @@ import { requireDB, ensureUserRow, randomCode, nowMs, toApiError } from "../_lib
 import { requireFamilyOwner } from "../_lib/family_access";
 import { requireFamilyPlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { isJsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type MutationResult = { meta?: { changes?: number }; changes?: number };
 
-function changedRows(result: any): number {
+function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -27,7 +29,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);
 
-    let body: any = {};
+    let body: unknown = {};
     try {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
@@ -36,7 +38,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
-    const ttlHours = normalizeTtlHours(body?.ttlHours);
+    const payload = isJsonObject(body) ? body : null;
+    const ttlHours = normalizeTtlHours(payload?.ttlHours);
     const now = Math.floor(nowMs() / 1000);
     const expires = now + ttlHours * 3600;
 
@@ -59,7 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!inserted) return json({ error: "INVITE_GENERATION_FAILED" }, 409);
 
     return json({ code, expiresAt: expires }, 201);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }

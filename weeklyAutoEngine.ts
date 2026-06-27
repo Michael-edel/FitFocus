@@ -7,6 +7,18 @@ export interface WeeklyStoredReport {
   aiText?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeJsonParse(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Получение ключа текущей недели в формате ГГГГ-НН
  */
@@ -29,7 +41,10 @@ const inFlightKey = (userId: string) => `ff_weekly_ai_inflight_${userId}`;
 function getInFlight(userId: string) {
   try {
     const raw = localStorage.getItem(inFlightKey(userId));
-    return raw ? (JSON.parse(raw) as { weekKey: string; startedAt: number }) : null;
+    const parsed = raw ? safeJsonParse(raw) : null;
+    return isRecord(parsed) && typeof parsed.weekKey === "string" && typeof parsed.startedAt === "number"
+      ? { weekKey: parsed.weekKey, startedAt: parsed.startedAt }
+      : null;
   } catch {
     return null;
   }
@@ -47,7 +62,8 @@ export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
   try {
     const key = storageKey(userId);
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? safeJsonParse(raw) : [];
+    return Array.isArray(parsed) ? parsed as WeeklyStoredReport[] : [];
   } catch {
     return [];
   }
@@ -115,14 +131,14 @@ export async function ensureWeeklyReportWithAI(
     clearInFlight(userId);
 
     return { report: newReport, isNew: true };
-  } catch (err) {
+  } catch (error: unknown) {
     // Не ставим cooldown для "мягких" ситуаций (дубль/нет ключа и т.п.)
-    const msg = String((err as any)?.message || err || "").toLowerCase();
+    const msg = String(error instanceof Error ? error.message : error || "").toLowerCase();
     const soft = msg.includes("already in progress") || msg.includes("api key") || msg.includes("key") || msg.includes("missing");
     if (!soft) {
       localStorage.setItem(lastAttemptKey(userId), String(Date.now()));
     }
     clearInFlight(userId);
-    throw err;
+    throw error;
   }
 }

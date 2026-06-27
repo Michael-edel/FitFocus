@@ -33,7 +33,7 @@ export async function ensureUserRow(db: D1Database, user: { sub: string; email?:
     .run();
 }
 
-export function toApiError(e: any) {
-  const code = typeof e?.message === "string" ? e.message : "BAD_REQUEST";
+export function toApiError(e: unknown) {
+  const code = e instanceof Error ? e.message : "BAD_REQUEST";
   return errRu(code);
 }

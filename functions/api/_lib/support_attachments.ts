@@ -1,3 +1,5 @@
+import { asFiniteNumber, asOptionalString, asString, isJsonObject, safeJsonParse } from "./json";
+
 export type SupportAttachmentKind = "photo" | "video" | "voice" | "file";
 
 export type SupportAttachmentObject = {
@@ -29,6 +31,10 @@ export type SupportAttachmentRecord = {
 };
 
 const INLINE_ATTACHMENT_LIMIT = 2 * 1024 * 1024;
+
+function isSupportAttachmentKind(value: unknown): value is SupportAttachmentKind {
+  return value === "photo" || value === "video" || value === "voice" || value === "file";
+}
 
 export function kindFromMime(mime: string): SupportAttachmentKind {
   if (mime.startsWith("image/")) return "photo";
@@ -73,28 +79,28 @@ export function buildAttachmentRoute(ticketId: string, index: number, messageId?
 
 export function parseAttachmentsJson(value: unknown): SupportAttachmentRecord[] {
   if (!value) return [];
-  try {
-    const arr = JSON.parse(String(value));
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const raw = item as Partial<SupportAttachmentRecord>;
-        const name = String(raw.name || "").trim() || "attachment";
-        const mime = String(raw.mime || "").trim() || "application/octet-stream";
-        const kind = raw.kind === "photo" || raw.kind === "video" || raw.kind === "voice" || raw.kind === "file"
-          ? raw.kind
-          : kindFromMime(mime);
-        const size = Number(raw.size || 0);
-        const record: SupportAttachmentRecord = { name, mime, size: Number.isFinite(size) && size > 0 ? size : 0, kind };
-        if (typeof raw.data_url === "string" && raw.data_url.trim()) record.data_url = raw.data_url.trim();
-        if (typeof raw.storage_key === "string" && raw.storage_key.trim()) record.storage_key = raw.storage_key.trim();
-        return record;
-      })
-      .filter((item): item is SupportAttachmentRecord => Boolean(item));
-  } catch {
-    return [];
-  }
+  const parsed = safeJsonParse(String(value));
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((item) => {
+      if (!isJsonObject(item)) return null;
+      const name = asString(item.name, "attachment");
+      const mime = asString(item.mime, "application/octet-stream");
+      const kind = isSupportAttachmentKind(item.kind) ? item.kind : kindFromMime(mime);
+      const size = asFiniteNumber(item.size);
+      const record: SupportAttachmentRecord = {
+        name,
+        mime,
+        size: size && size > 0 ? size : 0,
+        kind,
+      };
+      const dataUrl = asOptionalString(item.data_url);
+      const storageKey = asOptionalString(item.storage_key);
+      if (dataUrl) record.data_url = dataUrl;
+      if (storageKey) record.storage_key = storageKey;
+      return record;
+    })
+    .filter((item): item is SupportAttachmentRecord => Boolean(item));
 }
 
 export async function fileToAttachment(

@@ -1,3 +1,5 @@
+import { isJsonObject, safeJsonParseObject } from "../_lib/json";
+
 export function base64UrlEncode(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -54,7 +56,7 @@ export async function verifyState(
   state: string,
   secret: string,
   opts: { expectedNonce?: string | null; nowMs?: number; maxAgeMs?: number } = {},
-): Promise<any | null> {
+): Promise<Record<string, unknown> | null> {
   if (!state.includes(".")) return null;
   try {
     const parts = state.split(".");
@@ -64,16 +66,16 @@ export async function verifyState(
     const expected = await signState(rawState, secret);
     if (!timingSafeEqualString(expected, stateSig)) return null;
 
-    const parsed = JSON.parse(rawState);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    const issuedAt = Number((parsed as any).t || 0);
+    const parsed = safeJsonParseObject(rawState);
+    if (!parsed) return null;
+    const issuedAt = Number(parsed.t || 0);
     const now = Number(opts.nowMs ?? Date.now());
     const maxAgeMs = Number(opts.maxAgeMs ?? OAUTH_STATE_TTL_MS);
     if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
     if (issuedAt > now + 60_000) return null;
     if (now - issuedAt > maxAgeMs) return null;
     const expectedNonce = opts.expectedNonce ? String(opts.expectedNonce) : "";
-    if (expectedNonce && String((parsed as any).n || "") !== expectedNonce) return null;
+    if (expectedNonce && String(parsed.n || "") !== expectedNonce) return null;
     return parsed;
   } catch {
     return null;
@@ -126,7 +128,7 @@ function derToJose(signatureDer: ArrayBuffer): Uint8Array {
   return out;
 }
 
-async function signEs256Jwt(header: Record<string, any>, payload: Record<string, any>, privateKeyPem: string): Promise<string> {
+async function signEs256Jwt(header: Record<string, unknown>, payload: Record<string, unknown>, privateKeyPem: string): Promise<string> {
   const enc = new TextEncoder();
   const part1 = base64UrlEncode(enc.encode(JSON.stringify(header)));
   const part2 = base64UrlEncode(enc.encode(JSON.stringify(payload)));
@@ -137,7 +139,7 @@ async function signEs256Jwt(header: Record<string, any>, payload: Record<string,
   return `${signingInput}.${sig}`;
 }
 
-export async function signSessionJwt(payload: Record<string, any>, secret: string, ttlSeconds: number): Promise<string> {
+export async function signSessionJwt(payload: Record<string, unknown>, secret: string, ttlSeconds: number): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = { ...payload, exp: now + ttlSeconds };
@@ -208,10 +210,10 @@ function parseJwtParts(token: string): JwtParts | null {
     const [headerPart, payloadPart, signaturePart] = parts;
     const headerJson = new TextDecoder().decode(b64urlDecodeToBytes(headerPart));
     const payloadJson = new TextDecoder().decode(b64urlDecodeToBytes(payloadPart));
-    const header = JSON.parse(headerJson);
-    const payload = JSON.parse(payloadJson);
-    if (!header || typeof header !== "object" || Array.isArray(header)) return null;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    const header = safeJsonParseObject(headerJson);
+    const payload = safeJsonParseObject(payloadJson);
+    if (!header) return null;
+    if (!payload) return null;
     return {
       header: header as Record<string, unknown>,
       payload: payload as Record<string, unknown>,
@@ -249,17 +251,23 @@ async function loadAppleJwks(): Promise<AppleJwk[]> {
   return keys;
 }
 
-async function safeResponseJson(response: Response): Promise<unknown> {
-  return response.json().catch(() => ({}));
+async function safeResponseJson(response: Response): Promise<Record<string, unknown>> {
+  const parsed = await response.json().catch(() => null);
+  return isJsonObject(parsed) ? parsed : {};
 }
 
 async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {
-  return (crypto.subtle.importKey as any)(
+  const importJwk = crypto.subtle.importKey as unknown as (
+    format: "jwk",
+    keyData: JsonWebKey,
+    algorithm: RsaHashedImportParams,
+    extractable: boolean,
+    keyUsages: ReadonlyArray<KeyUsage>,
+  ) => Promise<CryptoKey>;
+  return importJwk(
     "jwk",
     {
       kty: jwk.kty,
-      kid: jwk.kid,
-      use: jwk.use,
       alg: "RS256",
       n: jwk.n,
       e: jwk.e,
@@ -268,7 +276,7 @@ async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["verify"],
-  ) as Promise<CryptoKey>;
+  );
 }
 
 export async function verifyAppleIdToken(token: string, expectedAudience: string): Promise<Record<string, unknown> | null> {

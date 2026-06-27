@@ -19,6 +19,27 @@ import {
 } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
+type ChangesResult = {
+  meta?: { changes?: number } | null;
+  changes?: number;
+};
+type SupportTicketAdminRow = {
+  id: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  attachment_count?: number | null;
+  attachments_json?: string | null;
+  admin_note?: string | null;
+  assigned_admin_user_id?: string | null;
+  resolved_at?: number | null;
+  closed_at?: number | null;
+  last_reply_at?: number | null;
+  last_reply_by?: string | null;
+  [key: string]: unknown;
+};
 
 type SupportMessageRow = {
   id: string;
@@ -56,7 +77,7 @@ function normalizePriority(priority: string) {
   }
 }
 
-function changedRows(result: any): number {
+function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -185,7 +206,7 @@ async function ticketRowForAdmin(db: D1Database, id: string) {
      LEFT JOIN users u ON u.id = s.user_id
      WHERE s.id = ?
      LIMIT 1`
-  ).bind(id).first<any>();
+  ).bind(id).first<SupportTicketAdminRow>();
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -233,8 +254,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     for (const [index, file] of files.entries()) {
       attachments.push(await fileToAttachment(file, { bucket: env.SUPPORT_ATTACHMENTS, ticketId, index }));
     }
-  } catch (e: any) {
-    const msg = String(e?.message || "");
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error || "");
     if (msg.startsWith("FILE_TOO_LARGE:")) {
       return json({ error: "BAD_REQUEST", message: `Файл ${msg.split(":")[1]} слишком большой. Прикрепите файл до 2 MB.` }, 400);
     }
@@ -307,7 +328,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const id = String(body.id || "").trim();
   if (!id) return json({ error: "BAD_REQUEST", message: "ticket id required" }, 400);
 
-  const current = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<any>();
+  const current = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<SupportTicketAdminRow>();
   if (!current) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
 
   const status = normalizeTicketStatus(String(body.status || ""));
@@ -458,7 +479,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     ORDER BY COALESCE(s.last_reply_at, s.updated_at, s.created_at) DESC
     LIMIT ?`;
 
-  const { results } = await db.prepare(query).bind(...binds, limit).all<any>();
+  const { results } = await db.prepare(query).bind(...binds, limit).all<SupportTicketAdminRow>();
   return json({
     tickets: (results || []).map((row) => ({
       ...row,

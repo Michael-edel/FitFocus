@@ -1,5 +1,14 @@
-export const onRequestGet: PagesFunction = async (context) => {
-  const env = (context as any).env || {};
+type Env = {
+  VITE_GOOGLE_CLIENT_ID_LOCAL?: string;
+  GOOGLE_CLIENT_ID_LOCAL?: string;
+  VITE_GOOGLE_CLIENT_ID_PROD?: string;
+  GOOGLE_CLIENT_ID_PROD?: string;
+  REQUIRE_INVITE?: string;
+  VITE_REQUIRE_INVITE?: string;
+};
+
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const env = context.env || {};
   const googleClientIdLocal =
     env.VITE_GOOGLE_CLIENT_ID_LOCAL ||
     env.GOOGLE_CLIENT_ID_LOCAL ||

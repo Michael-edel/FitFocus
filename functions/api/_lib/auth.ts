@@ -1,7 +1,31 @@
 // Shared auth utilities for Pages Functions (HS256 JWT in ff_session cookie)
+import { isJsonObject, safeJsonParseObject, type JsonObject } from "./json";
+
 export const API_SCHEMA_VERSION = 3;
 
 export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
+type SessionPayload = JsonObject & {
+  sub?: string;
+  sid?: string;
+  aud?: string;
+  exp?: number;
+  email?: string;
+  name?: string;
+  picture?: string;
+};
+type PreparedStatementLike = {
+  bind(...values: unknown[]): PreparedStatementLike;
+  first(): Promise<unknown>;
+  all(): Promise<{ results?: unknown[] }>;
+  run(): Promise<unknown>;
+};
+type AuthDbLike = {
+  prepare(sql: string): PreparedStatementLike;
+};
+type EnvWithAuth = { AUTH_JWT_SECRET?: string; DB?: AuthDbLike };
+type SessionRow = { id?: string; revoked?: number; expires_at?: number };
+type UserLifecycleRow = { is_active?: number; deleted_at?: string | null };
+type UserRoleRow = { role?: string };
 
 type RequireUserOptions = {
   allowMobileToken?: boolean;
@@ -46,18 +70,18 @@ async function hmacVerify(data: string, signatureB64Url: string, secret: string)
   return crypto.subtle.verify("HMAC", key, b64urlToBytes(signatureB64Url) as BufferSource, new TextEncoder().encode(data));
 }
 
-function parseJwtPayload(token: string): any | null {
+function parseJwtPayload(token: string): SessionPayload | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   try {
     const jsonStr = new TextDecoder().decode(b64urlToBytes(parts[1]));
-    return JSON.parse(jsonStr);
+    return safeJsonParseObject(jsonStr);
   } catch {
     return null;
   }
 }
 
-export async function verifySessionJwt(token: string, secret: string): Promise<any | null> {
+export async function verifySessionJwt(token: string, secret: string): Promise<SessionPayload | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [h, p, sig] = parts;
@@ -73,7 +97,7 @@ export async function verifySessionJwt(token: string, secret: string): Promise<a
 
 export async function requireUser(
   request: Request,
-  env: { AUTH_JWT_SECRET?: string; DB?: any },
+  env: EnvWithAuth,
   options: RequireUserOptions = {},
 ): Promise<SessionUser> {
   const bearerToken = readBearerToken(request.headers.get("Authorization"));
@@ -93,14 +117,14 @@ export async function requireUser(
   if (!sid) throw new Error("UNAUTH"); // force re-login if cookie is legacy without sid
   if (!env.DB) throw new Error("DB_CONFIG");
 
-  await ensureAuthSchema(env.DB);
+  await ensureAuthSchema(env.DB as D1Database);
 
   const now = Math.floor(Date.now() / 1000);
   const s = await env.DB.prepare(
     "SELECT id, revoked, expires_at FROM sessions WHERE id = ? AND user_id = ? LIMIT 1"
   )
     .bind(sid, payload.sub)
-    .first();
+    .first() as SessionRow | null;
 
   if (!s) throw new Error("UNAUTH");
   if (Number(s.revoked || 0) === 1) throw new Error("UNAUTH");
@@ -110,7 +134,7 @@ export async function requireUser(
   // Account lifecycle: block deleted/disabled users (B2C safe delete)
   const urow = await env.DB.prepare("SELECT is_active, deleted_at FROM users WHERE id = ? LIMIT 1")
     .bind(payload.sub)
-    .first();
+    .first() as UserLifecycleRow | null;
   if (urow && (Number(urow.is_active ?? 1) === 0 || urow.deleted_at)) {
     // Revoke current session as well (best-effort)
     try { await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ?").bind(sid).run(); } catch {}
@@ -119,7 +143,7 @@ export async function requireUser(
 
 
   // RBAC layer: load roles from DB (auto-assign 'user' for everyone)
-  let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all();
+  let rolesRows = await env.DB.prepare("SELECT role FROM user_roles WHERE user_id = ?").bind(payload.sub).all() as { results?: UserRoleRow[] };
   let roles = (rolesRows.results || []).map((r) => String(r.role)).filter(Boolean);
   if (roles.length === 0) {
     // Assign baseline role for existing users (one-time)
@@ -139,7 +163,7 @@ export async function requireUser(
 
 export async function requireMobileUser(
   request: Request,
-  env: { AUTH_JWT_SECRET?: string; DB?: any },
+  env: EnvWithAuth,
 ): Promise<SessionUser> {
   return requireUser(request, env, { allowMobileToken: true, requireMobileToken: true });
 }
@@ -158,15 +182,15 @@ export async function replaceActiveSessionsForUser(
     .run();
 }
 
-export function json(data: any, status = 200, headers?: Headers, schemaVersion: number = API_SCHEMA_VERSION) {
+export function json(data: unknown, status = 200, headers?: Headers, schemaVersion: number = API_SCHEMA_VERSION) {
   const h = headers ? new Headers(headers) : new Headers();
   h.set("Content-Type", "application/json; charset=utf-8");
   h.set("Cache-Control", "no-store");
   h.set("X-API-Schema-Version", String(schemaVersion));
 
   // Backward-compatible: keep original shape, but add schema_version if absent
-  if (data && typeof data === "object" && !Array.isArray(data) && (data as any).schema_version === undefined) {
-    (data as any).schema_version = schemaVersion;
+  if (isJsonObject(data) && data.schema_version === undefined) {
+    data.schema_version = schemaVersion;
   }
 
   return new Response(JSON.stringify(data), { status, headers: h });

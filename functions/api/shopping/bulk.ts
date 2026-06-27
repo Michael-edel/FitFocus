@@ -7,8 +7,10 @@ import { requireFamilyMember } from "../_lib/family_access";
 import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type ShoppingBulkUpdate = { ingredient_name: string; checked: boolean };
 
 function isIsoDay(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -24,7 +26,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    let body: any = {};
+    let body: unknown = {};
     try {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
@@ -33,8 +35,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
-    const week_start = String(body.week_start || "").slice(0, 10);
-    const family_id = body.family_id ? String(body.family_id) : null;
+    if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+    const week_start = asString(body.week_start).slice(0, 10);
+    const family_id = body.family_id ? asString(body.family_id) : null;
     const updates = Array.isArray(body.updates) ? body.updates : [];
 
     if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
@@ -43,17 +46,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       await requireFamilyPlan(db, fam.owner_user_id);
     }
 
-    const norm = updates
-      .map((u: any) => ({
+    const norm: ShoppingBulkUpdate[] = updates
+      .filter(isJsonObject)
+      .map((u) => ({
         ingredient_name: normalizeShoppingIngredient(u.ingredient_name || u.ingredient, 1).name,
         checked: Boolean(u.checked),
       }))
-      .filter((u: any) => u.ingredient_name)
+      .filter((u) => u.ingredient_name)
       .slice(0, 500);
 
     const updated_at = nowMs();
     const scopeId = getShoppingScopeId(user.sub, family_id);
-    const statements = norm.map((u: any) => {
+    const statements = norm.map((u) => {
       const val = u.checked ? 1 : 0;
       return db
         .prepare(
@@ -67,7 +71,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     await db.batch(statements);
 
     return json({ ok: true, updated: norm.length, week_start });
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }

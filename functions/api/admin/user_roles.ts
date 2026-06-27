@@ -9,13 +9,14 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
 const ALLOWED_ROLE_VALUES = new Set(["user", "pro", "family_parent", "family_child", "support", "admin"]);
 const ALLOWED_ACTION_VALUES = new Set(["add", "remove"]);
 
-function changedRows(result: any): number {
+function changedRows(result: { meta?: { changes?: number }; changes?: number }): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -53,7 +54,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -62,9 +63,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  const userId = String(body?.user_id || "").trim();
-  const role = String(body?.role || "").trim();
-  const action = String(body?.action || "add").trim(); // add | remove
+  if (!isJsonObject(body)) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
+  const userId = asString(body.user_id);
+  const role = asString(body.role);
+  const action = asString(body.action, "add"); // add | remove
   if (!userId || !role) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
   if (!ALLOWED_ACTION_VALUES.has(action)) return json({ error: "BAD_ACTION", message: "action must be add or remove" }, 400);
   if (!ALLOWED_ROLE_VALUES.has(role)) return json({ error: "BAD_ROLE", message: "Unknown role" }, 400);

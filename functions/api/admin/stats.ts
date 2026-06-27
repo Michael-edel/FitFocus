@@ -6,6 +6,16 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type CountRow = { c?: number };
+type AiAggRow = { calls?: number; errors?: number; avg_latency?: number };
+type ProfileAggRow = {
+  total_profiles?: number;
+  with_measurements?: number;
+  with_glucose?: number;
+  with_wearable?: number;
+  with_progress_photos?: number;
+  with_family_members?: number;
+};
 
 function todayKey() {
   const d = new Date();
@@ -37,28 +47,28 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'pro' AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > ?)")
     .bind(nowMs)
     .first<{ c: number }>()
-    .catch(() => ({ c: 0 } as any));
+    .catch((): CountRow => ({ c: 0 }));
 
   const familyActive = await db
     .prepare("SELECT COUNT(*) as c FROM subscriptions WHERE plan = 'family' AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > ?)")
     .bind(nowMs)
     .first<{ c: number }>()
-    .catch(() => ({ c: 0 } as any));
+    .catch((): CountRow => ({ c: 0 }));
 
   const deletedUsers = await db
     .prepare("SELECT COUNT(*) as c FROM users WHERE deleted_at IS NOT NULL")
     .first<{ c: number }>()
-    .catch(() => ({ c: 0 } as any));
+    .catch((): CountRow => ({ c: 0 }));
 
   const inactiveUsers = await db
     .prepare("SELECT COUNT(*) as c FROM users WHERE deleted_at IS NULL AND is_active = 0")
     .first<{ c: number }>()
-    .catch(() => ({ c: 0 } as any));
+    .catch((): CountRow => ({ c: 0 }));
 
   const familyMembersActive = await db
     .prepare("SELECT COUNT(*) as c FROM family_members WHERE status = 'active'")
     .first<{ c: number }>()
-    .catch(() => ({ c: 0 } as any));
+    .catch((): CountRow => ({ c: 0 }));
 
   // usage_daily is optional; if not present, return 0
   let aiCalls = 0;
@@ -89,7 +99,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const agg = await db.prepare(
       "SELECT COUNT(*) as calls, SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors, AVG(latency_ms) as avg_latency FROM ai_events WHERE ts >= ? AND ts < ?"
-    ).bind(startMs, endMs).first<{ calls: number; errors: number; avg_latency: number }>();
+    ).bind(startMs, endMs).first<AiAggRow>();
 
     aiCallsEvents = Number(agg?.calls || 0);
     aiErrorsEvents = Number(agg?.errors || 0);
@@ -117,8 +127,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
          SUM(CASE WHEN COALESCE(CAST(CASE WHEN json_valid(profile_json) THEN json_extract(profile_json, '$.wearableEnabled') END AS INTEGER), 0) = 1 THEN 1 ELSE 0 END) as with_wearable,
          SUM(CASE WHEN COALESCE(CASE WHEN json_valid(profile_json) THEN json_array_length(json_extract(profile_json, '$.progressPhotos')) END, 0) > 0 THEN 1 ELSE 0 END) as with_progress_photos,
          SUM(CASE WHEN COALESCE(CASE WHEN json_valid(profile_json) THEN json_array_length(json_extract(profile_json, '$.familyMembers')) END, 0) > 0 THEN 1 ELSE 0 END) as with_family_members
-       FROM user_profiles`
-    ).first<any>();
+      FROM user_profiles`
+    ).first<ProfileAggRow>();
 
     profilesWithMeasurements = Number(profileAgg?.with_measurements || 0);
     profilesWithGlucose = Number(profileAgg?.with_glucose || 0);

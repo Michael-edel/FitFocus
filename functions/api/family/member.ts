@@ -5,10 +5,12 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, nowMs, toApiError } from "../_lib/db";
 import { requireActiveFamilyForUser } from "../_lib/family_access";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { isJsonObject, safeJsonParseObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type MutationResult = { meta?: { changes?: number }; changes?: number };
 
-function changedRows(result: any): number {
+function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -49,16 +51,12 @@ function textList(value: unknown, maxItems = 20): string[] {
 function normalizeRestrictions(input: unknown): string | null {
   if (input === undefined) return null;
 
-  let data: any = input;
+  let data: unknown = input;
   if (typeof input === "string") {
-    try {
-      data = JSON.parse(input);
-    } catch {
-      data = { notes: input };
-    }
+    data = safeJsonParseObject(input) ?? { notes: input };
   }
 
-  if (!data || typeof data !== "object") {
+  if (!isJsonObject(data)) {
     return JSON.stringify({ allergens: [], intolerances: [], excludedFoods: [], severity: "strict", notes: "" });
   }
 
@@ -80,7 +78,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    let body: any = {};
+    let body: unknown = {};
     try {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
@@ -89,14 +87,15 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
+    if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
 
-    const goal = normalizeGoal(body?.goal);
-    const sex = normalizeSex(body?.sex);
-    const age = normalizeNumber(body?.age, 1, 120, true);
-    const height_cm = normalizeNumber(body?.height_cm, 50, 260, true);
-    const weight_kg = normalizeNumber(body?.weight_kg, 20, 500);
-    const activity = normalizeNumber(body?.activity, 1, 5);
-    const restrictionsJson = normalizeRestrictions(body?.dietary ?? body?.restrictions_json);
+    const goal = normalizeGoal(body.goal);
+    const sex = normalizeSex(body.sex);
+    const age = normalizeNumber(body.age, 1, 120, true);
+    const height_cm = normalizeNumber(body.height_cm, 50, 260, true);
+    const weight_kg = normalizeNumber(body.weight_kg, 20, 500);
+    const activity = normalizeNumber(body.activity, 1, 5);
+    const restrictionsJson = normalizeRestrictions(body.dietary ?? body.restrictions_json);
 
     if (goal === "") return json({ error: "BAD_GOAL" }, 400);
     if (sex === "") return json({ error: "BAD_SEX" }, 400);
@@ -128,7 +127,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     if (changedRows(result) === 0) return json({ error: "NOT_FOUND" }, 404);
 
     return json({ ok: true, updated_at: updatedAt }, 200);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }

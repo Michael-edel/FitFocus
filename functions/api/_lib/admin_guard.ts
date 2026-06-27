@@ -10,9 +10,11 @@ import { requireUser } from "./auth";
 import { touchAdminSession } from "./admin_sessions";
 
 type EnvLike = { DB?: D1Database; AUTH_JWT_SECRET?: string };
+type ForbiddenError = Error & { code?: string };
+type RequestLike = Request | undefined;
 
 function forbidden(): never {
-  const err: any = new Error("FORBIDDEN");
+  const err: ForbiddenError = new Error("FORBIDDEN");
   err.code = "FORBIDDEN";
   throw err;
 }
@@ -51,8 +53,8 @@ export async function requireAdminRequest(
   }
 
   // Style (user, request, db)
-  const user = a as SessionUser;
-  const request = b as Request | undefined;
+  const user: SessionUser = a;
+  const request: RequestLike = b instanceof Request ? b : undefined;
   const db = c;
 
   if (!db) throw new Error("DB_CONFIG");

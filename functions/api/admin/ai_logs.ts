@@ -3,12 +3,24 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 
+type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type AiLogRow = {
+  id: string;
+  user_id: string;
+  ts: number;
+  feature: string;
+  status: number;
+  latency_ms?: number | null;
+  safe_mode?: number | boolean | null;
+  error?: string | null;
+};
+
 function toInt(value: unknown, fallback: number) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
-export async function onRequestGet({ request, env }: { request: Request; env: any }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -22,7 +34,7 @@ export async function onRequestGet({ request, env }: { request: Request; env: an
   const feature = url.searchParams.get("feature");
 
   let sql = "SELECT id, user_id, ts, feature, status, latency_ms, safe_mode, error FROM ai_events";
-  const binds: any[] = [];
+  const binds: Array<string | number> = [];
   const where: string[] = [];
 
   if (userId) { where.push("user_id = ?"); binds.push(userId); }
@@ -30,6 +42,6 @@ export async function onRequestGet({ request, env }: { request: Request; env: an
   if (where.length) sql += " WHERE " + where.join(" AND ");
   sql += " ORDER BY ts DESC LIMIT ?"; binds.push(limit);
 
-  const rows = await env.DB.prepare(sql).bind(...binds).all();
+  const rows = await env.DB.prepare(sql).bind(...binds).all<AiLogRow>();
   return json({ logs: rows.results || [] });
 }
