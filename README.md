@@ -7,7 +7,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 Текущая проверенная ревизия:
 
 - Ветка: `main`
-- Коммит: `20933b6 Harden API payload typing and refresh README`
+- Актуальная ревизия: определяется командой `git log -1 --oneline` на текущем `HEAD`
 - Версия из `package.json`: `2.0.0-architecture.0`
 - Основная среда развертывания: Cloudflare Pages + функции Cloudflare Pages + D1
 
