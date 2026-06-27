@@ -1147,11 +1147,6 @@ const App: React.FC = () => {
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<AppTabId>(() => getInitialTabFromHash() || 'dashboard');
-  const mobileMoreStorageKey = useMemo(
-    () => `fitfocus.dashboard.mobile-more-open.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const mobileMoreSkipSaveRef = useRef(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   useEffect(() => {
     const applyHashTab = () => {
@@ -1162,26 +1157,6 @@ const App: React.FC = () => {
     window.addEventListener('hashchange', applyHashTab);
     return () => window.removeEventListener('hashchange', applyHashTab);
   }, []);
-  useEffect(() => {
-    try {
-      mobileMoreSkipSaveRef.current = true;
-      setMobileMoreOpen(localStorage.getItem(mobileMoreStorageKey) === '1');
-    } catch {
-      mobileMoreSkipSaveRef.current = true;
-      setMobileMoreOpen(false);
-    }
-  }, [mobileMoreStorageKey]);
-  useEffect(() => {
-    if (mobileMoreSkipSaveRef.current) {
-      mobileMoreSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(mobileMoreStorageKey, mobileMoreOpen ? '1' : '0');
-    } catch {
-      // ignore storage issues
-    }
-  }, [mobileMoreOpen, mobileMoreStorageKey]);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
   const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
@@ -1341,7 +1316,6 @@ const App: React.FC = () => {
     }
 
     dashboardWeightSkipSaveRef.current = true;
-    mobileMoreSkipSaveRef.current = true;
     cameraFacingSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
@@ -3163,6 +3137,7 @@ const logWeight = useCallback(() => {
       onConnectAutosave,
       autosaveEnabled,
       profileSyncState,
+      profileSyncNote,
       lastProfileSyncAt,
       syncAllLocalDataNow,
       reloadUserFromCloud,

@@ -59,6 +59,7 @@ type Props = {
   onConnectAutosave?: () => Promise<boolean>;
   autosaveEnabled?: boolean;
   syncState?: SyncState;
+  syncNote?: string | null;
   lastProfileSyncAt?: number | null;
   onSyncNow?: () => Promise<void> | void;
   onReloadFromCloud?: () => Promise<void> | void;
@@ -264,6 +265,7 @@ export default function SettingsScreen({
   onServerLogout,
   onDeleteAccount,
   syncState,
+  syncNote,
   lastProfileSyncAt,
   onSyncNow,
   onReloadFromCloud,
@@ -1500,6 +1502,17 @@ export default function SettingsScreen({
                     <div className="text-slate-100 font-black">{syncDescription}</div>
                     <div className="text-slate-400 text-sm mt-1">Последняя синхронизация: {formatSyncTs(lastProfileSyncAt)}</div>
                     <div className="text-slate-500 text-sm mt-2">Профиль хранится локально для мгновенного отклика и в облаке для доступа с других устройств.</div>
+                    {syncNote && (
+                      <div className={`mt-3 rounded-[1rem] border px-3 py-3 text-sm leading-5 ${
+                        syncState === 'error'
+                          ? 'border-rose-500/20 bg-rose-500/10 text-rose-100'
+                          : syncState === 'saving'
+                            ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-100'
+                            : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+                      }`}>
+                        {syncNote}
+                      </div>
+                    )}
                   </div>
                   <div className={["w-11 h-11 rounded-2xl flex items-center justify-center border", syncState === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : syncState === 'saved' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'].join(' ')}>
                     <Cloud className="w-5 h-5" />

@@ -41,6 +41,8 @@ type DeleteAccountParams = {
   onLogout: () => void | Promise<void>;
 };
 
+const LOGOUT_TIMEOUT_MS = 5_000;
+
 function scoreStoredProfile(profile: UserProfile, serverUser: ServerUser | null | undefined): number {
   let score = 0;
   if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) score += 1000;
@@ -223,14 +225,9 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
 }
 
 export function createLogoutSession(params: LogoutParams) {
-  return async () => {
-    const fetchFn = params.fetchImpl ?? fetch;
-    if (params.googleSub) {
-      try {
-        await fetchFn('/api/logout', { method: 'POST', credentials: 'include', cache: 'no-store' });
-      } catch {}
-    }
+  let serverLogoutInFlight: Promise<void> | null = null;
 
+  const clearClientSession = () => {
     clearOAuthContinuationState();
 
     params.setGoogleMe(null);
@@ -238,6 +235,37 @@ export function createLogoutSession(params: LogoutParams) {
     params.setProfileSyncState?.('idle');
     params.setLastProfileSyncAt?.(null);
     params.setAuthState('auth_choice');
+  };
+
+  const sendServerLogout = async () => {
+    const fetchFn = params.fetchImpl ?? fetch;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS) : null;
+    try {
+      await fetchFn('/api/logout', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        keepalive: true,
+        signal: controller?.signal,
+      });
+    } catch {
+      // Local logout is authoritative for the UI; server cleanup is best effort.
+    } finally {
+      if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
+    }
+  };
+
+  return async () => {
+    clearClientSession();
+
+    if (!params.googleSub) return;
+    if (!serverLogoutInFlight) {
+      serverLogoutInFlight = sendServerLogout().finally(() => {
+        serverLogoutInFlight = null;
+      });
+    }
+    await serverLogoutInFlight;
   };
 }
 
