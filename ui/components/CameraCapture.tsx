@@ -23,7 +23,8 @@ type Props = {
 export default function CameraCapture({ open, onClose, onCaptured, pro, facing, onFacingChange }: Props) {
   const dismissGestures = useModalDismissGestures(onClose);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const bootIdRef = useRef(0);
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -31,17 +32,60 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
 
   const canShowTorch = useMemo(() => pro && torchAvailable, [pro, torchAvailable]);
 
-  async function boot(nextFacing: CameraFacing) {
+  function clearCurrentStream() {
+    stopCamera(streamRef.current);
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }
+
+  function formatCameraError(error: any) {
+    const name = String(error?.name || "");
+    const message = String(error?.message || "");
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      return "Нет доступа к камере. Разрешите камеру для FitFocus в настройках браузера или приложения.";
+    }
+    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      return "Камера не найдена на этом устройстве.";
+    }
+    if (name === "NotReadableError" || name === "TrackStartError") {
+      return "Камера занята другим приложением или браузером.";
+    }
+    if (name === "AbortError" || /abort/i.test(message)) {
+      return "Камера не успела запуститься. Закройте окно и нажмите «Снять» ещё раз.";
+    }
+    return message || "Не удалось открыть камеру";
+  }
+
+  async function playVideo(video: HTMLVideoElement) {
+    try {
+      await video.play();
+    } catch (error: any) {
+      if (error?.name !== "AbortError") throw error;
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      await video.play();
+    }
+  }
+
+  async function boot(nextFacing: CameraFacing, bootId: number) {
     setStarting(true);
     setErr(null);
     try {
-      stopCamera(stream);
+      clearCurrentStream();
       const s = await startCamera(nextFacing);
-      setStream(s);
+      if (bootId !== bootIdRef.current) {
+        stopCamera(s);
+        return;
+      }
+
+      streamRef.current = s;
 
       if (videoRef.current) {
         videoRef.current.srcObject = s;
-        await videoRef.current.play();
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        await playVideo(videoRef.current);
       }
 
       const hasTorch = isTorchSupported(s);
@@ -50,38 +94,44 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
         await setTorch(s, true);
       }
     } catch (e: any) {
-      setErr(e?.message || "Не удалось открыть камеру");
+      if (bootId !== bootIdRef.current) return;
+      setErr(formatCameraError(e));
       setTorchAvailable(false);
       setTorchOn(false);
     } finally {
-      setStarting(false);
+      if (bootId === bootIdRef.current) setStarting(false);
     }
   }
 
   useEffect(() => {
     if (!open) {
-      stopCamera(stream);
-      setStream(null);
+      bootIdRef.current += 1;
+      clearCurrentStream();
       setErr(null);
       setTorchAvailable(false);
       setTorchOn(false);
       return;
     }
 
-    boot(facing);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    const bootId = bootIdRef.current + 1;
+    bootIdRef.current = bootId;
+    void boot(facing, bootId);
+    return () => {
+      if (bootId === bootIdRef.current) bootIdRef.current += 1;
+      clearCurrentStream();
+    };
 
-  useEffect(() => {
-    if (!open) return;
-    boot(facing);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facing]);
+  }, [open, facing]);
 
   async function handleCapture() {
     if (!videoRef.current) return;
+    if (!streamRef.current || videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setErr("Камера ещё не готова. Подождите пару секунд и нажмите «Снять» снова.");
+      return;
+    }
     try {
-      const blob = await capturePhoto(stream, videoRef.current, "image/jpeg", 0.95);
+      const blob = await capturePhoto(streamRef.current, videoRef.current, "image/jpeg", 0.95);
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
       await onCaptured(file);
       onClose();
@@ -93,7 +143,7 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
   async function toggleTorch() {
     const next = !torchOn;
     setTorchOn(next);
-    const ok = await setTorch(stream, next);
+    const ok = await setTorch(streamRef.current, next);
     if (!ok) setTorchOn(!next);
   }
 

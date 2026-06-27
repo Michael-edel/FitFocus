@@ -73,6 +73,9 @@ export default function NutritionScreen({
   MacroBarComponent,
   FoodDiaryGroupedComponent,
 }: NutritionScreenProps) {
+  const useNativeCameraCapture =
+    typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-5">
@@ -86,9 +89,16 @@ export default function NutritionScreen({
             <p className="text-xl font-black text-indigo-400 tabular-nums">{remainingScans} AI Сканов</p>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setCameraOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
-              <Camera size={24} /><span>Снять</span>
-            </button>
+            {useNativeCameraCapture ? (
+              <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
+                <Camera size={24} /><span>Снять</span>
+                <input type="file" accept="image/*" capture={cameraFacing} className="hidden" onChange={handlePhotoUpload} />
+              </label>
+            ) : (
+              <button type="button" onClick={() => setCameraOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
+                <Camera size={24} /><span>Снять</span>
+              </button>
+            )}
             <label title="Можно выбрать сразу несколько фото (Shift/Ctrl)" className="bg-slate-800 hover:bg-slate-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-slate-900/30 active:scale-95">
               <Plus size={24} /><span>Загрузить</span>
               <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
