@@ -1,18 +1,41 @@
 export type CameraFacing = "user" | "environment";
 
 export async function startCamera(facing: CameraFacing): Promise<MediaStream> {
-  // Prefer higher resolution for better analysis results.
-  const constraints: MediaStreamConstraints = {
-    video: {
-      facingMode: { ideal: facing },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-    },
-    audio: false,
-  };
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Камера не поддерживается этим браузером");
+  }
 
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  return stream;
+  const attempts: MediaStreamConstraints[] = [
+    {
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    },
+    {
+      video: {
+        facingMode: { ideal: facing },
+      },
+      audio: false,
+    },
+    {
+      video: true,
+      audio: false,
+    },
+  ];
+
+  let lastError: unknown = null;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Не удалось открыть камеру");
 }
 
 export function stopCamera(stream: MediaStream | null) {
