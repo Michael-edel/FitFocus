@@ -3,6 +3,7 @@ import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLU
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
+import { persistAllUsersSnapshot } from './storage/hybrid';
 import { Goal, type UserProfile } from './types';
 
 type RegDataLike = {
@@ -47,6 +48,7 @@ type RegisterFlowDeps = {
   setDevPlanOverride: (plan: UserProfile['plan'] | '', userId?: string | null) => void;
   generatePersonalPlan: (user: UserProfile) => Promise<UserProfile['aiPlan']>;
   loginAsUser: (user: UserProfile) => Promise<void>;
+  persistUser?: (user: UserProfile) => void;
   setAllUsers: (value: UserProfile[] | ((prev: UserProfile[]) => UserProfile[])) => void;
   setCurrentUser: (value: UserProfile | null) => void;
   setAuthState: (value: 'auth_choice' | 'register' | 'app') => void;
@@ -198,6 +200,8 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
 
   deps.setCurrentUser(newUser);
   deps.setAllUsers([newUser]);
+  deps.persistUser?.(newUser);
+  persistAllUsersSnapshot(newUser.id, [newUser]);
   clearOAuthContinuationState();
   deps.setAuthState('app');
   deps.setActiveTab('plan');
