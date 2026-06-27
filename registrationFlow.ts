@@ -95,7 +95,9 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     age: Math.max(0, Math.floor(deps.regData.age || 0)),
     activityLevel: deps.regData.activityLevel,
     goal: deps.regData.goal,
-    targetWeight: deriveTargetWeight(deps.regData.weight, deps.regData.goal),
+    targetWeight: Number(deps.regData.targetWeight) > 0
+      ? Number(Number(deps.regData.targetWeight).toFixed(1))
+      : deriveTargetWeight(deps.regData.weight, deps.regData.goal),
     adaptationMultiplier: 1.0,
     familyMembers: [],
     exclusions: '',
