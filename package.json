@@ -8,6 +8,9 @@
     "predev": "node scripts/generate-build-info.mjs",
     "build": "vite build",
     "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
     "check:admin-guards": "node scripts/check-admin-guards.mjs",
     "prebuild": "node scripts/generate-build-info.mjs && node scripts/check-admin-guards.mjs",
     "pretypecheck": "node scripts/generate-build-info.mjs && node scripts/check-admin-guards.mjs",
@@ -34,6 +37,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",

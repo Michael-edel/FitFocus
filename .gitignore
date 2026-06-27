@@ -31,6 +31,9 @@ fitfocus.zip
 ui.zip
 *.zip
 build-info.generated.ts
+playwright-report/
+test-results/
+blob-report/
 
 
 functions/api/debug/
