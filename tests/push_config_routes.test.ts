@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { onRequestGet as getPushStatus } from '../functions/api/push/status';
 import { onRequestPost as postPushSubscribe } from '../functions/api/push/subscribe';
 import { onRequestPost as postPushUnsubscribe } from '../functions/api/push/unsubscribe';
+type PushStatusContext = Parameters<typeof getPushStatus>[0];
+type PushSubscribeContext = Parameters<typeof postPushSubscribe>[0];
+type PushUnsubscribeContext = Parameters<typeof postPushUnsubscribe>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -106,14 +109,16 @@ async function authedRequest(url: string, init: RequestInit = {}) {
 }
 
 function context(request: Request, db: ReturnType<typeof makeDb>, env: Record<string, unknown> = {}) {
-  return {
+  const baseEnv = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, ...env };
+  const context: PushStatusContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any, ...env },
+    env: baseEnv,
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-  } as any;
+  };
+  return context;
 }
 
 describe('push runtime configuration routes', () => {

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onRequestPost } from '../functions/api/auth/google';
+type GoogleAuthContext = Parameters<typeof onRequestPost>[0];
+type GoogleAuthBody = { error?: string };
 
 const SECRET = 'unit-test-secret';
 
@@ -48,7 +50,7 @@ async function postGoogleAuth(db: ReturnType<typeof makeDb>, emailVerified: bool
 }
 
 async function postGoogleRequest(db: ReturnType<typeof makeDb>) {
-  return onRequestPost({
+  const context: GoogleAuthContext = {
     request: new Request('https://fitfocus.test/api/auth/google', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
@@ -56,16 +58,16 @@ async function postGoogleRequest(db: ReturnType<typeof makeDb>) {
     }),
     env: {
       AUTH_JWT_SECRET: SECRET,
-      DB: db,
+      DB: db as unknown as D1Database,
       GOOGLE_CLIENT_ID: 'google-client-id',
       ADMIN_EMAILS: 'admin@example.com',
-    } as any,
+    },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/auth/google',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 function hasAdminPromotion(db: ReturnType<typeof makeDb>) {
@@ -104,7 +106,7 @@ describe('/api/auth/google admin promotion', () => {
     })));
 
     const response = await postGoogleRequest(makeDb());
-    const body = await response.json() as any;
+    const body = await response.json() as GoogleAuthBody;
 
     expect(response.status).toBe(401);
     expect(body.error).toBe('Invalid Google token');

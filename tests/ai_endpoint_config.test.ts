@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/ai';
+type AiPostContext = Parameters<typeof onRequestPost>[0];
+type AiErrorBody = { error?: { message?: string } };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -68,21 +70,22 @@ function makeDb() {
 
 async function postAi(db: ReturnType<typeof makeDb>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: AiPostContext = {
     request: new Request('https://fitfocus.test/api/ai', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ feature: 'coach', contents: 'hello' }),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
-  });
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, GEMINI_API_KEY: '' },
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/ai server configuration', () => {
   it('does not mutate strict rate-limit buckets when Gemini API key is missing', async () => {
     const db = makeDb();
     const response = await postAi(db);
-    const body = await response.json() as any;
+    const body = await response.json() as AiErrorBody;
 
     expect(response.status).toBe(500);
     expect(body.error.message).toContain('GEMINI_API_KEY');

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/family/join';
+type FamilyJoinContext = Parameters<typeof onRequestPost>[0];
+type FamilyJoinBody = { familyId?: string; alreadyMember?: boolean; error?: { code?: string } };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -84,19 +86,19 @@ function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: nu
 
 async function postJoin(db: ReturnType<typeof makeDb>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: FamilyJoinContext = {
     request: new Request('https://fitfocus.test/api/family/join', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: 'joinme' }),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/join',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/family/join', () => {
@@ -105,7 +107,7 @@ describe('/api/family/join', () => {
     const response = await postJoin(db);
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-1');
     expect(db.runs.some((run) => run.sql.includes('WHERE code = ? AND used_by_user_id IS NULL'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
@@ -117,7 +119,7 @@ describe('/api/family/join', () => {
     const response = await postJoin(db);
 
     expect(response.status).toBe(400);
-    const body = await response.json() as any;
+    const body = await response.json() as FamilyJoinBody;
     expect(body.error.code).toBe('INVITE_INVALID');
     expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(false);
@@ -128,7 +130,7 @@ describe('/api/family/join', () => {
     const response = await postJoin(db);
 
     expect(response.status).toBe(400);
-    const body = await response.json() as any;
+    const body = await response.json() as FamilyJoinBody;
     expect(body.error.code).toBe('FAMILY_JOIN_CONFLICT');
     expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
   });
@@ -138,7 +140,7 @@ describe('/api/family/join', () => {
     const response = await postJoin(db);
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-2');
     expect(body.alreadyMember).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);

@@ -44,7 +44,7 @@ describe('AI rate limit cleanup', () => {
   it('falls back invalid cleanup limits before binding SQL', async () => {
     const db = makeDb();
 
-    const deleted = await cleanupOldAiRateLimitBuckets(db as any, 12345, Number.NaN);
+    const deleted = await cleanupOldAiRateLimitBuckets(db as unknown as D1Database, 12345, Number.NaN);
 
     expect(deleted).toBe(7);
     expect(db.runs).toHaveLength(1);
@@ -55,7 +55,7 @@ describe('AI rate limit cleanup', () => {
     const db = makeDb({ dailyCount: 1 });
 
     await expect(enforceAiRateControls({
-      db: db as any,
+      db: db as unknown as D1Database,
       userId: 'user-1',
       feature: 'coach',
       plan: 'free',

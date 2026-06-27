@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost } from '../functions/api/family/menu';
 import { onRequestPost as onRequestGeneratePost } from '../functions/api/family/menu/generate';
+type FamilyMenuPostContext = Parameters<typeof onRequestPost>[0];
+type FamilyMenuGetContext = Parameters<typeof onRequestGet>[0];
+type FamilyMenuGenerateContext = Parameters<typeof onRequestGeneratePost>[0];
+type FamilyMenuBody = { menuId?: string };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -68,51 +72,51 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
 
 async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPost({
+  const context: FamilyMenuPostContext = {
     request: new Request('https://fitfocus.test/api/family/menu', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/menu',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 async function getMenu(url: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestGet({
+  const context: FamilyMenuGetContext = {
     request: new Request(url, {
       method: 'GET',
       headers: { Cookie: `ff_session=${token}` },
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/menu',
-  } as any);
+  };
+  return onRequestGet(context);
 }
 
 async function generateMenu(url: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestGeneratePost({
+  const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}` },
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/family/menu/generate',
-  } as any);
+  };
+  return onRequestGeneratePost(context);
 }
 
 describe('/api/family/menu', () => {
@@ -124,7 +128,7 @@ describe('/api/family/menu', () => {
     });
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = await response.json() as FamilyMenuBody;
     expect(body.menuId).toBe('menu-1');
     expect(db.runs.some((run) => run.sql.includes('UPDATE weekly_menus SET menu_json=?'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM weekly_menus'))).toBe(false);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/admin/user_roles';
+type AdminUserRolesContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -122,14 +123,15 @@ async function postRoleRaw(db: ReturnType<typeof makeDb>, body: string) {
     body,
   });
 
-  return onRequestPost({
+  const context: AdminUserRolesContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('admin user role management', () => {

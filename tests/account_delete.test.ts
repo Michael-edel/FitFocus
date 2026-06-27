@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { deleteUserAccountAndAllData, hardDeleteAccount, softDeleteAccount } from '../functions/api/_lib/account_delete';
+import type { SupportAttachmentBucket } from '../functions/api/_lib/support_attachments';
 
 type PreparedStatement = {
   sql: string;
@@ -90,7 +91,7 @@ describe('account deletion', () => {
       ],
     });
 
-    const result = await deleteUserAccountAndAllData(db as any, 'user-1');
+    const result = await deleteUserAccountAndAllData(db as unknown as D1Database, 'user-1');
 
     expect(result).toEqual({ ok: false, message: 'SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE' });
     expect(db.batchedSql).toEqual([]);
@@ -109,7 +110,13 @@ describe('account deletion', () => {
       ],
     });
 
-    const result = await deleteUserAccountAndAllData(db as any, 'user-1', false, undefined, { supportAttachments: bucket });
+    const result = await deleteUserAccountAndAllData(
+      db as unknown as D1Database,
+      'user-1',
+      false,
+      undefined,
+      { supportAttachments: bucket as SupportAttachmentBucket },
+    );
 
     expect(result.ok).toBe(true);
     expect(bucket.delete).toHaveBeenCalledWith(['support/t/00-a.png', 'support/t/01-b.png']);
@@ -129,7 +136,13 @@ describe('account deletion', () => {
       batchReject: new Error('D1 failed'),
     });
 
-    const result = await deleteUserAccountAndAllData(db as any, 'user-1', false, undefined, { supportAttachments: bucket });
+    const result = await deleteUserAccountAndAllData(
+      db as unknown as D1Database,
+      'user-1',
+      false,
+      undefined,
+      { supportAttachments: bucket as SupportAttachmentBucket },
+    );
 
     expect(result).toEqual({ ok: false, message: 'Ошибка при удалении данных пользователя.' });
     expect(bucket.delete).not.toHaveBeenCalled();
@@ -138,7 +151,7 @@ describe('account deletion', () => {
   it('unassigns admin-owned tickets instead of deleting tickets assigned to the deleted admin', async () => {
     const db = makeDb();
 
-    await deleteUserAccountAndAllData(db as any, 'admin-1');
+    await deleteUserAccountAndAllData(db as unknown as D1Database, 'admin-1');
 
     expect(db.batchedSql).toContain('UPDATE support_feedback SET assigned_admin_user_id = NULL, updated_at = ? WHERE assigned_admin_user_id = ?');
     expect(db.batchedSql).not.toContain('DELETE FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ?');
@@ -151,19 +164,19 @@ describe('account deletion', () => {
       ],
     });
 
-    await expect(hardDeleteAccount(db as any, 'user-1')).rejects.toThrow('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
+    await expect(hardDeleteAccount(db as unknown as D1Database, 'user-1')).rejects.toThrow('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
   });
 
   it('softDeleteAccount guards last-admin removal inside the user update', async () => {
     const db = makeDb({ softDeleteChanges: 0, isAdmin: true });
 
-    await expect(softDeleteAccount(db as any, 'admin-1')).rejects.toThrow('Нельзя удалить аккаунт последнего администратора.');
+    await expect(softDeleteAccount(db as unknown as D1Database, 'admin-1')).rejects.toThrow('Нельзя удалить аккаунт последнего администратора.');
   });
 
   it('softDeleteAccount batches family cleanup and session revocation after the guarded user update', async () => {
     const db = makeDb({ ownedFamily: { id: 'family-1' } });
 
-    await softDeleteAccount(db as any, 'user-1');
+    await softDeleteAccount(db as unknown as D1Database, 'user-1');
 
     expect(db.batchedSql.some((sql) => sql.includes('UPDATE families SET is_active = 0 WHERE id = ?'))).toBe(true);
     expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM family_members WHERE family_id = ?'))).toBe(true);
@@ -186,7 +199,13 @@ describe('account deletion', () => {
       ],
     });
 
-    const result = await deleteUserAccountAndAllData(db as any, 'admin-1', false, undefined, { supportAttachments: bucket });
+    const result = await deleteUserAccountAndAllData(
+      db as unknown as D1Database,
+      'admin-1',
+      false,
+      undefined,
+      { supportAttachments: bucket as SupportAttachmentBucket },
+    );
 
     expect(result).toEqual({ ok: false, message: 'Нельзя удалить последнего активного администратора.' });
     expect(bucket.delete).not.toHaveBeenCalled();
@@ -196,7 +215,7 @@ describe('account deletion', () => {
   it('hard delete allows cleanup for an admin role when the target user is not an active admin', async () => {
     const db = makeDb({ isAdmin: true, isActiveAdmin: false, activeAdminsCount: 1 });
 
-    const result = await deleteUserAccountAndAllData(db as any, 'admin-1');
+    const result = await deleteUserAccountAndAllData(db as unknown as D1Database, 'admin-1');
 
     expect(result.ok).toBe(true);
     expect(db.batchedSql.some((sql) => sql.includes('DELETE FROM users WHERE id = ?'))).toBe(true);

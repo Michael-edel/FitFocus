@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/support/feedback/my';
+import type { SupportAttachmentBucket } from '../functions/api/_lib/support_attachments';
+type SupportFeedbackMyContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -109,19 +111,23 @@ describe('/api/support/feedback/my', () => {
       new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'reply.bin', { type: 'application/octet-stream' }),
     );
 
-    const response = await onRequestPost({
+    const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
         headers: { Cookie: `ff_session=${token}` },
         body: form,
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: makeDb(captured), SUPPORT_ATTACHMENTS: bucket } as any,
+      env: {
+        AUTH_JWT_SECRET: SECRET,
+        DB: makeDb(captured) as unknown as D1Database,
+        SUPPORT_ATTACHMENTS: bucket as SupportAttachmentBucket,
+      },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/support/feedback/my',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(200);
     expect(storedKey).toMatch(/^support\/ticket-1\/messages\/[^/]+\/00-reply\.bin$/);
@@ -154,7 +160,7 @@ describe('/api/support/feedback/my', () => {
       new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'reply.bin', { type: 'application/octet-stream' }),
     );
 
-    const response = await onRequestPost({
+    const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
         headers: { Cookie: `ff_session=${token}` },
@@ -162,15 +168,15 @@ describe('/api/support/feedback/my', () => {
       }),
       env: {
         AUTH_JWT_SECRET: SECRET,
-        DB: makeDb(captured, { messageInsertChanges: 0, updateChanges: 0, latestTicketAfterFailedWrite: null }),
-        SUPPORT_ATTACHMENTS: bucket,
-      } as any,
+        DB: makeDb(captured, { messageInsertChanges: 0, updateChanges: 0, latestTicketAfterFailedWrite: null }) as unknown as D1Database,
+        SUPPORT_ATTACHMENTS: bucket as SupportAttachmentBucket,
+      },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/support/feedback/my',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(404);
     expect(storedKey).toMatch(/^support\/ticket-1\/messages\/[^/]+\/00-reply\.bin$/);
@@ -182,7 +188,7 @@ describe('/api/support/feedback/my', () => {
     const captured: { messageAttachmentsJson?: string | null } = {};
     const db = makeDb(captured);
 
-    const response = await onRequestPost({
+    const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
         headers: {
@@ -191,13 +197,13 @@ describe('/api/support/feedback/my', () => {
         },
         body: 'x'.repeat(9 * 1024 * 1024),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/support/feedback/my',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });

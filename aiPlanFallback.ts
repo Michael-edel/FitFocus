@@ -4,7 +4,7 @@ import { Goal, type AIPlan, type UserProfile } from './types';
 const clampList = (items: string[], limit: number) => items.slice(0, limit).map((s) => String(s).trim()).filter(Boolean);
 
 export function buildFallbackAiPlan(user: UserProfile): AIPlan {
-  const targets = calculateDailyTargets(user as any);
+  const targets = calculateDailyTargets(user);
   const isLoss = user.goal === Goal.LOSS;
   const isGain = user.goal === Goal.GAIN;
 

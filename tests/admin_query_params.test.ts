@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet as getAdminEvents } from '../functions/api/admin/admin_events';
 import { onRequestGet as getAiLogs } from '../functions/api/admin/ai_logs';
+type AdminEventsContext = Parameters<typeof getAdminEvents>[0];
+type AiLogsContext = Parameters<typeof getAiLogs>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -79,14 +81,15 @@ async function adminRequest(url: string) {
 }
 
 function pagesContext(request: Request, db: ReturnType<typeof makeDb>) {
-  return {
+  const context: AdminEventsContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-  } as any;
+  };
+  return context;
 }
 
 describe('admin query params', () => {
@@ -105,20 +108,22 @@ describe('admin query params', () => {
 
   it('falls back invalid ai_logs limit and clamps oversized limits', async () => {
     const db = makeDb();
-    const invalidResponse = await getAiLogs({
+    const invalidContext: AiLogsContext = {
       request: await adminRequest('https://fitfocus.test/api/admin/ai_logs?limit=abc'),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
-    });
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+    };
+    const invalidResponse = await getAiLogs(invalidContext);
 
     expect(invalidResponse.status).toBe(200);
     let query = db.allCalls.find((call) => call.sql.includes('FROM ai_events'));
     expect(query?.binds.at(-1)).toBe(50);
 
     const clampDb = makeDb();
-    const clampResponse = await getAiLogs({
+    const clampContext: AiLogsContext = {
       request: await adminRequest('https://fitfocus.test/api/admin/ai_logs?limit=9999'),
-      env: { AUTH_JWT_SECRET: SECRET, DB: clampDb as any },
-    });
+      env: { AUTH_JWT_SECRET: SECRET, DB: clampDb as unknown as D1Database },
+    };
+    const clampResponse = await getAiLogs(clampContext);
 
     expect(clampResponse.status).toBe(200);
     query = clampDb.allCalls.find((call) => call.sql.includes('FROM ai_events'));

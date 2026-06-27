@@ -359,8 +359,13 @@ E2E:
 5. Stripe billing зависит от корректных Cloudflare secrets, price ids и webhook secret. Без них checkout/webhook не завершат полный платный цикл.
 6. ИИ зависит от `GEMINI_API_KEY` и доступности Gemini. Резервный режим есть, но это не равно качеству полноценного ИИ-ответа.
 7. Большие UI-файлы повышают стоимость сопровождения: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `ProgressScreen.tsx` больше типичного размера компонентных модулей.
-8. Основной backend/API слой уже заметно ужесточен по runtime typing и JSON parsing, но в проекте все еще остаются отдельные `any` и слаботипизированные участки, прежде всего во frontend/service/test-коде.
+8. Основной backend/API слой уже заметно ужесточен по runtime typing и JSON parsing, но в проекте все еще остаются отдельные `any` и слаботипизированные участки, прежде всего в крупных frontend/UI/runtime-модулях.
 9. Скрипт `migrate:local` в `package.json` только печатает сообщение; реальные D1 migrations применяются через `wrangler d1 migrations apply`.
+
+Примечание по последней серии правок:
+
+- Слой `storage`, часть domain/utils и большая часть unit/integration tests уже переведены с широких `any` на более узкие типы и typed context/env mocks.
+- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, `AdminScreen.tsx`, `geminiService.ts`, `SettingsScreen.tsx`, `PlanScreen.tsx`, `RecipesScreen.tsx`, `FoodInsightCard.tsx` и связанных helper-модулях.
 
 ## Команды разработки
 

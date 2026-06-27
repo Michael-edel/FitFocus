@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost as postSession } from '../functions/api/admin/sessions';
 import { onRequestPost as postSubscription } from '../functions/api/admin/subscription';
+type AdminSessionContext = Parameters<typeof postSession>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -104,14 +105,15 @@ function makeDb(options: { targetExists?: boolean; sessionExists?: boolean } = {
 }
 
 function context(request: Request, db: ReturnType<typeof makeDb>) {
-  return {
+  const context: AdminSessionContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     waitUntil() {},
     next: async () => new Response(null, { status: 404 }),
     data: {},
-  } as any;
+  };
+  return context;
 }
 
 async function adminRequest(url: string, body: Record<string, unknown>) {

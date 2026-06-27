@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPut } from '../functions/api/state';
+type StatePutContext = Parameters<typeof onRequestPut>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -75,19 +76,20 @@ function makeDb() {
 
 async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-  return onRequestPut({
+  const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StatePutContext['env'];
+  const context: StatePutContext = {
     request: new Request('https://fitfocus.test/api/state', {
       method: 'PUT',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' } as any,
+    env,
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/state',
-  } as any);
+  };
+  return onRequestPut(context);
 }
 
 describe('/api/state PUT', () => {
@@ -152,19 +154,20 @@ describe('/api/state PUT', () => {
   it('rejects oversized JSON bodies before writes', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
-    const response = await onRequestPut({
+    const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StatePutContext['env'];
+    const context: StatePutContext = {
       request: new Request('https://fitfocus.test/api/state', {
         method: 'PUT',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: [{ key: 'fitfocus_data_user-1_food:1', value: 'x'.repeat(600 * 1024) }] }),
       }),
-      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' } as any,
+      env,
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/state',
-    } as any);
+    };
+    const response = await onRequestPut(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });

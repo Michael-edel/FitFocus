@@ -6,7 +6,7 @@ const verifyState = vi.fn();
 const signSessionJwt = vi.fn();
 
 vi.mock('../functions/api/auth/_oauth', async () => {
-  const actual = await vi.importActual<any>('../functions/api/auth/_oauth');
+  const actual = await vi.importActual<typeof import('../functions/api/auth/_oauth')>('../functions/api/auth/_oauth');
   return {
     ...actual,
     createAppleClientSecret,
@@ -17,6 +17,7 @@ vi.mock('../functions/api/auth/_oauth', async () => {
 });
 
 const { onRequest } = await import('../functions/api/auth/apple/callback');
+type AppleCallbackContext = Parameters<typeof onRequest>[0];
 
 function makeDb() {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
@@ -61,7 +62,7 @@ async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Recor
     name: { firstName: 'Admin', lastName: 'User' },
   }));
 
-  return onRequest({
+  const context: AppleCallbackContext = {
     request: new Request('https://fitfocus.test/api/auth/apple/callback', {
       method: 'POST',
       headers: { Cookie: 'ff_oauth_nonce=nonce', 'x-forwarded-proto': 'https' },
@@ -70,15 +71,15 @@ async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Recor
     env: {
       AUTH_JWT_SECRET: 'unit-test-secret',
       APPLE_CLIENT_ID: 'apple-client-id',
-      DB: db,
+      DB: db as unknown as D1Database,
       ADMIN_EMAILS: 'admin@example.com',
-    } as any,
+    },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/auth/apple/callback',
-  } as any);
+  };
+  return onRequest(context);
 }
 
 describe('/api/auth/apple admin promotion', () => {

@@ -17,6 +17,12 @@ type ProfileLike = {
   plan?: unknown;
 };
 
+type RemoteStateItem = {
+  key: string;
+  value: string;
+  version?: number;
+};
+
 const REMOTE_STATE_PREFIXES = [
   STORAGE_KEYS.dataPrefix,
   "ff_gemini_cooldown_until",
@@ -70,6 +76,17 @@ async function applyRemoteKVConflict(key: string, serverValue: string, version?:
   }
 }
 
+function isRemoteStateItem(value: unknown): value is RemoteStateItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.key !== "string") return false;
+  if (typeof candidate.value !== "string") return false;
+  if ("version" in candidate && candidate.version !== undefined && typeof candidate.version !== "number") {
+    return false;
+  }
+  return true;
+}
+
 function enqueueRemoteKVWrite(key: string, value: string) {
   if (!shouldMirrorKey(key)) return;
   __kvQueue.push({ key, value, baseVersion: getStoredVersion(key) });
@@ -89,7 +106,9 @@ function enqueueRemoteKVWrite(key: string, value: string) {
         });
         const payload = await r.json().catch(() => null);
         if (r.ok) {
-          const serverItem = Array.isArray(payload?.items) ? payload.items.find((x: any) => x?.key === item.key) : null;
+          const serverItem = Array.isArray(payload?.items)
+            ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === item.key) ?? null
+            : null;
           if (typeof serverItem?.version === 'number') {
             setStoredVersion(item.key, serverItem.version);
           }
@@ -308,14 +327,11 @@ export function rememberRemoteStateVersion(key: string, version?: number) {
 export function applyRemoteStateItems(input: unknown) {
   if (!Array.isArray(input)) return;
   for (const item of input) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const key = typeof (item as any).key === 'string' ? (item as any).key : '';
-    const value = typeof (item as any).value === 'string' ? (item as any).value : null;
-    if (!key || value === null) continue;
+    if (!isRemoteStateItem(item)) continue;
     try {
-      localStorage.setItem(key, value);
-      if (typeof (item as any).version === 'number') {
-        setStoredVersion(key, (item as any).version);
+      localStorage.setItem(item.key, item.value);
+      if (typeof item.version === 'number') {
+        setStoredVersion(item.key, item.version);
       }
     } catch {
       // Best-effort hydration only.

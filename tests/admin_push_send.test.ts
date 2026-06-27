@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost as postAdminPushSend } from '../functions/api/admin/push/send';
+type AdminPushSendContext = Parameters<typeof postAdminPushSend>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -113,14 +114,15 @@ async function adminRequest(body: Record<string, unknown>) {
 }
 
 function context(request: Request, db: ReturnType<typeof makeDb>) {
-  return {
+  const context: AdminPushSendContext = {
     request,
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as any },
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-  } as any;
+  };
+  return context;
 }
 
 const rows: Row[] = [

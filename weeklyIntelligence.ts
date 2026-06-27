@@ -15,7 +15,9 @@ export interface WeeklyIntelligenceResult {
   status: "excellent" | "stable" | "adjust" | "critical";
 }
 
-function calculateWeightDelta(history: any[], days: number): number {
+type WeightHistoryEntry = UserProfile["weightHistory"][number];
+
+function calculateWeightDelta(history: WeightHistoryEntry[], days: number): number {
   if (!history || history.length < 2) return 0;
   const now = history[history.length - 1];
   const past = history

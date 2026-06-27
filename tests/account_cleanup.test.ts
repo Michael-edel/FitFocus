@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from '../functions/api/_lib/account_cleanup';
 import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
 import { onRequestPost as onAdminCleanupPost } from '../functions/api/admin/cleanup_deleted';
+type ScheduledCleanupContext = Parameters<typeof onRequestPost>[0];
+type AdminCleanupContext = Parameters<typeof onAdminCleanupPost>[0];
+type CleanupBody = { failed?: number; failures?: Array<{ error?: string }>; limit?: number; error?: string };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -121,7 +124,7 @@ describe('cleanupDeletedAccounts', () => {
 
   it('reports failed hard deletes instead of hiding them', async () => {
     const db = makeDb();
-    const result = await cleanupDeletedAccounts(db as any, { limit: 10, actorUserId: 'system:test' });
+    const result = await cleanupDeletedAccounts(db as unknown as D1Database, { limit: 10, actorUserId: 'system:test' });
 
     expect(result.found).toBe(2);
     expect(result.deleted).toBe(1);
@@ -133,108 +136,108 @@ describe('cleanupDeletedAccounts', () => {
 
   it('falls back invalid helper limits before querying', async () => {
     const db = makeDb();
-    const result = await cleanupDeletedAccounts(db as any, { limit: Number.NaN, actorUserId: 'system:test' });
+    const result = await cleanupDeletedAccounts(db as unknown as D1Database, { limit: Number.NaN, actorUserId: 'system:test' });
 
     expect(result.limit).toBe(50);
     expect(db.deletionSelectBinds.at(-1)?.[0]).toBe(50);
   });
 
   it('returns HTTP 500 from the scheduled endpoint when hard deletes fail', async () => {
-    const response = await onRequestPost({
+    const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
         headers: { Authorization: 'Bearer cron-secret' },
         body: JSON.stringify({ limit: 10 }),
       }),
-      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/internal/cleanup_deleted',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = await response.json() as CleanupBody;
     expect(body.failed).toBe(1);
     expect(body.failures[0].error).toBe('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
   });
 
   it('uses shared case-insensitive bearer parsing for the scheduled endpoint', async () => {
-    const response = await onRequestPost({
+    const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
         headers: { Authorization: 'bearer   cron-secret' },
         body: JSON.stringify({ limit: 10 }),
       }),
-      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/internal/cleanup_deleted',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = await response.json() as CleanupBody;
     expect(body.failed).toBe(1);
   });
 
   it('keeps the scheduled cleanup default for invalid request limits', async () => {
-    const response = await onRequestPost({
+    const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
         headers: { Authorization: 'Bearer cron-secret' },
         body: JSON.stringify({ limit: 'abc' }),
       }),
-      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/internal/cleanup_deleted',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = await response.json() as CleanupBody;
     expect(body.limit).toBe(200);
   });
 
   it('normalizes an explicit scheduled request limit of zero to one', async () => {
-    const response = await onRequestPost({
+    const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
         headers: { Authorization: 'Bearer cron-secret' },
         body: JSON.stringify({ limit: 0 }),
       }),
-      env: { DB: makeDb(), CRON_SECRET: 'cron-secret' } as any,
+      env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/internal/cleanup_deleted',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = await response.json() as CleanupBody;
     expect(body.limit).toBe(1);
   });
 
   it('rejects oversized scheduled cleanup bodies before running cleanup', async () => {
     const db = makeDb();
-    const response = await onRequestPost({
+    const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
         headers: { Authorization: 'Bearer cron-secret', 'Content-Type': 'application/json' },
         body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
       }),
-      env: { DB: db, CRON_SECRET: 'cron-secret' } as any,
+      env: { DB: db as unknown as D1Database, CRON_SECRET: 'cron-secret' },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/internal/cleanup_deleted',
-    } as any);
+    };
+    const response = await onRequestPost(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
@@ -244,19 +247,19 @@ describe('cleanupDeletedAccounts', () => {
   it('rejects oversized admin cleanup bodies before running cleanup', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin' });
-    const response = await onAdminCleanupPost({
+    const context: AdminCleanupContext = {
       request: new Request('https://fitfocus.test/api/admin/cleanup_deleted', {
         method: 'POST',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
       }),
-      env: { DB: db, AUTH_JWT_SECRET: SECRET } as any,
+      env: { DB: db as unknown as D1Database, AUTH_JWT_SECRET: SECRET },
       params: {},
       data: {},
       waitUntil: () => undefined,
       next: () => Promise.resolve(new Response(null, { status: 404 })),
-      functionPath: '/api/admin/cleanup_deleted',
-    } as any);
+    };
+    const response = await onAdminCleanupPost(context);
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });

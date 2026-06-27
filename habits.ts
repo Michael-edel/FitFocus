@@ -29,7 +29,9 @@ export function toggleHabit(profile: UserProfile, habit: keyof typeof defaultHab
   };
 }
 
-export function calculateStreak(habits: Record<string, any> | undefined, habitKey: string): number {
+type DailyHabitsMap = NonNullable<UserProfile['dailyHabits']>;
+
+export function calculateStreak(habits: DailyHabitsMap | undefined, habitKey: keyof typeof defaultHabits): number {
   if (!habits) return 0;
   const dates = Object.keys(habits).sort().reverse();
   let streak = 0;

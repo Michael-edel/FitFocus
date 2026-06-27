@@ -21,9 +21,9 @@ type HydrationDeps = {
 };
 
 const stripLargePhotoPayloads = (items: FoodItem[]): FoodItem[] => {
-  return (items || []).map((it: any) => {
+  return (items || []).map((it) => {
     if (!it || typeof it !== 'object') return it;
-    const copy: any = { ...it };
+    const copy: FoodItem = { ...it };
     if (typeof copy.photo === 'string') delete copy.photo;
     if (typeof copy.photoThumb === 'string' && copy.photoThumb.length > 120_000) delete copy.photoThumb;
     return copy;

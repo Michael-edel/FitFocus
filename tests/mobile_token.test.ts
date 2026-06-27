@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/mobile/token';
 import { verifySessionJwt } from '../functions/api/_lib/auth';
+type MobileTokenContext = Parameters<typeof onRequestPost>[0];
+type MobileTokenBody = { tokenType?: string; token?: string; error?: string; user?: { id?: string } };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -58,18 +60,18 @@ function makeDb(options: { revoked?: number; expiresAt?: number } = {}) {
 
 async function postMobileToken(db: ReturnType<typeof makeDb>) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com', name: 'User' });
-  return onRequestPost({
+  const context: MobileTokenContext = {
     request: new Request('https://fitfocus.test/api/mobile/token', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}` },
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db } as any,
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
     next: () => Promise.resolve(new Response(null, { status: 404 })),
-    functionPath: '/api/mobile/token',
-  } as any);
+  };
+  return onRequestPost(context);
 }
 
 describe('/api/mobile/token', () => {
@@ -77,7 +79,7 @@ describe('/api/mobile/token', () => {
     const response = await postMobileToken(makeDb());
 
     expect(response.status).toBe(200);
-    const body = await response.json() as any;
+    const body = await response.json() as MobileTokenBody;
     expect(body.tokenType).toBe('Bearer');
     expect(body.user.id).toBe('user-1');
 
@@ -89,7 +91,7 @@ describe('/api/mobile/token', () => {
     const response = await postMobileToken(makeDb({ revoked: 1 }));
 
     expect(response.status).toBe(401);
-    const body = await response.json() as any;
+    const body = await response.json() as MobileTokenBody;
     expect(body.error).toBe('UNAUTH');
   });
 });
