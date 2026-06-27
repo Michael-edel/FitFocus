@@ -5,6 +5,7 @@ import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { aggregateShoppingRows } from "../_lib/ingredients";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type ShoppingExportRow = { name?: string | null; grams?: number | null };
 
 function isIsoDay(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -35,7 +36,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        FROM weekly_menu_items
        WHERE user_id = ? AND week_start = ? AND family_id IS NULL
        ORDER BY ingredient_name`
-    ).bind(user.sub, week).all<any>();
+    ).bind(user.sub, week).all<ShoppingExportRow>();
 
     const items = aggregateShoppingRows(rows?.results || []);
 
@@ -56,7 +57,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         "Cache-Control": "no-store",
       },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }

@@ -7,6 +7,36 @@ export type BackupPayload = {
   localStorage: Record<string, string>;
 };
 
+type BackupFileHandle = {
+  createWritable(): Promise<{
+    write(data: string): Promise<void>;
+    close(): Promise<void>;
+  }>;
+};
+
+type FilePickerWindow = Window & {
+  showSaveFilePicker?: (options: {
+    suggestedName?: string;
+    types?: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<BackupFileHandle>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isBackupPayload(value: unknown): value is BackupPayload {
+  return isRecord(value) && isRecord(value.localStorage) && typeof value.version === "number" && typeof value.createdAt === "string";
+}
+
+function safeJsonParse(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function isFitFocusBackupKey(key: string): boolean {
   return (
     key.startsWith('fitfocus_') ||
@@ -40,11 +70,9 @@ export function createBackupPayload(): BackupPayload {
 
 export function applyBackupPayload(payload: unknown): { ok: boolean; error?: string } {
   try {
-    const p = payload as BackupPayload;
-    if (!p || typeof p !== 'object') return { ok: false, error: 'Invalid payload' };
-    if (!p.localStorage || typeof p.localStorage !== 'object') return { ok: false, error: 'Missing localStorage in payload' };
+    if (!isBackupPayload(payload)) return { ok: false, error: 'Invalid payload' };
 
-    const ls = p.localStorage as Record<string, string>;
+    const ls = payload.localStorage;
     for (const [k, v] of Object.entries(ls)) {
       if (typeof k !== 'string') continue;
       if (typeof v !== 'string') continue;
@@ -52,15 +80,18 @@ export function applyBackupPayload(payload: unknown): { ok: boolean; error?: str
       try { localStorage.setItem(k, v); } catch {}
     }
     return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message || 'Failed to apply backup' };
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Failed to apply backup' };
   }
 }
 
 export async function restoreFromFile(file: File): Promise<BackupPayload> {
   const txt = await file.text();
-  const payload = JSON.parse(txt);
-  return payload as BackupPayload;
+  const payload = safeJsonParse(txt);
+  if (!isBackupPayload(payload)) {
+    throw new Error('Invalid backup file');
+  }
+  return payload;
 }
 
 export function downloadJson(filename: string, payload: unknown) {
@@ -78,19 +109,17 @@ export function downloadJson(filename: string, payload: unknown) {
 // --- Optional File System Access API support (best-effort; safe no-ops elsewhere) ---
 
 export function supportsFileSystemAccessApi(): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w: any = window as any;
+  const w: FilePickerWindow = window as FilePickerWindow;
   return !!w?.showSaveFilePicker;
 }
 
 // We don't persist the handle in this prototype; just provide stubs.
-export async function getSavedBackupHandle(): Promise<any | null> {
+export async function getSavedBackupHandle(): Promise<BackupFileHandle | null> {
   return null;
 }
 
-export async function chooseAndSaveBackupHandle(): Promise<any | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w: any = window as any;
+export async function chooseAndSaveBackupHandle(): Promise<BackupFileHandle | null> {
+  const w: FilePickerWindow = window as FilePickerWindow;
   if (!w?.showSaveFilePicker) return null;
   try {
     const handle = await w.showSaveFilePicker({
@@ -103,7 +132,7 @@ export async function chooseAndSaveBackupHandle(): Promise<any | null> {
   }
 }
 
-export async function writeBackupToHandle(handle: any, payload: unknown): Promise<boolean> {
+export async function writeBackupToHandle(handle: BackupFileHandle | null, payload: unknown): Promise<boolean> {
   if (!handle) return false;
   try {
     const writable = await handle.createWritable();

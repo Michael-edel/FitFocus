@@ -6,6 +6,16 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type AdminEventRow = {
+  id: string;
+  ts: number;
+  action: string;
+  admin_user_id?: string | null;
+  admin_email?: string | null;
+  target_user_id?: string | null;
+  target_email?: string | null;
+  meta_json?: string | null;
+};
 
 function parseDateParam(v: string | null): number | null {
   if (!v) return null;
@@ -20,7 +30,7 @@ function parseDateParam(v: string | null): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
-function csvEscape(v: any): string {
+function csvEscape(v: unknown): string {
   const s = String(v ?? "");
   if (/[\n\r",]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
   return s;
@@ -50,7 +60,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const format = (url.searchParams.get("format") || "").toLowerCase();
 
   const where: string[] = [];
-  const binds: any[] = [];
+  const binds: Array<string | number> = [];
 
   if (action) { where.push("e.action = ?"); binds.push(action); }
   if (fromTs !== null) { where.push("e.ts >= ?"); binds.push(fromTs); }
@@ -74,7 +84,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     ${whereSql}
     ORDER BY e.ts DESC
     LIMIT ? OFFSET ?
-  `).bind(...binds, limit, offset).all<any>();
+  `).bind(...binds, limit, offset).all<AdminEventRow>();
 
   const events = results || [];
 

@@ -13,7 +13,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
     if (token && env.AUTH_JWT_SECRET && env.DB) {
-      const payload: any = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
+      const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
       const sid = String(payload?.sid || "");
       const sub = String(payload?.sub || "");
       if (sid && sub) {
@@ -41,7 +41,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 };
 
-type Env = { AUTH_JWT_SECRET?: string; DB?: any };
+type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
 function cookieSerialize(
   name: string,

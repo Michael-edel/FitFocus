@@ -3,8 +3,10 @@
 
 import { requireUser } from "./_lib/auth";
 import { requireDB } from "./_lib/db";
+import { safeJsonParse } from "./_lib/json";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type KvRow = { k: string; v: string; updated_at?: number; version?: number };
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -60,7 +62,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     profile: profRow?.profile_json ? safeParse(profRow.profile_json) : null,
     profile_updated_at: profRow?.updated_at ?? null,
     profile_version: profRow?.version ?? null,
-    kv: kv.map((r: any) => ({ key: r.k, value: r.v, updated_at: r.updated_at, version: r.version })),
+    kv: kv.map((r: KvRow) => ({ key: r.k, value: r.v, updated_at: r.updated_at, version: r.version })),
     sessions,
     roles,
     subscriptions,
@@ -98,8 +100,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   });
 };
 
-function safeParse(s: string) {
-  try { return JSON.parse(s); } catch { return null; }
+function safeParse(s: string): unknown | null {
+  return safeJsonParse(s);
 }
 
 async function allRows<T = Record<string, unknown>>(db: D1Database, sql: string, ...binds: unknown[]): Promise<T[]> {

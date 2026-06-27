@@ -4,11 +4,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function safeJsonParse(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 export function safeGetItem<T>(key: string, fallback: T, validate?: (value: unknown) => value is T): T {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = safeJsonParse(raw);
+    if (parsed === null) return fallback;
     if (validate) {
       return validate(parsed) ? parsed : fallback;
     }
@@ -21,14 +30,14 @@ export function safeGetItem<T>(key: string, fallback: T, validate?: (value: unkn
 export function safeSetItem(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch (e: any) {
+  } catch (error: unknown) {
     // If storage quota is exceeded, try evicting big data and retry once.
-    if (String(e?.name || "").includes("QuotaExceeded")) {
+    if (error instanceof Error && String(error.name || "").includes("QuotaExceeded")) {
       evictLargeLocalStorage();
       localStorage.setItem(key, JSON.stringify(value));
       return;
     }
-    throw e;
+    throw error;
   }
 }
 
@@ -49,7 +58,7 @@ export function evictLargeLocalStorage(): void {
       if (!k) continue;
       if (!k.startsWith(STORAGE_KEYS.dataPrefix) || !k.endsWith(STORAGE_KEYS.councilHistorySuffix)) continue;
       try {
-        const hist = JSON.parse(localStorage.getItem(k) || "[]");
+        const hist = safeJsonParse(localStorage.getItem(k) || "[]");
         if (Array.isArray(hist) && hist.length > 60) {
           localStorage.setItem(k, JSON.stringify(hist.slice(-50)));
         }
@@ -65,7 +74,7 @@ export function evictLargeLocalStorage(): void {
       try {
         const raw = localStorage.getItem(k);
         if (!raw) continue;
-        const parsed = JSON.parse(raw);
+        const parsed = safeJsonParse(raw);
         if (!Array.isArray(parsed)) continue;
         let changed = false;
         const next = parsed.map((user: unknown) => {

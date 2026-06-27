@@ -2,7 +2,7 @@ type AdminEventParams = {
   adminUserId: string;
   action: string;
   targetUserId?: string | null;
-  meta?: any;
+  meta?: Record<string, unknown> | null;
 };
 
 function adminEventValues(params: AdminEventParams) {

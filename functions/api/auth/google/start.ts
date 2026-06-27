@@ -1,7 +1,7 @@
 import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
 import type { PagesFunction } from "@cloudflare/workers-types";
 
-function jsonResponse(body: any, status = 200, headers: Record<string, string> = {}) {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json; charset=utf-8", ...headers },

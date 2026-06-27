@@ -6,6 +6,7 @@ import { requireUser, json } from "./_lib/auth";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { migrateLegacyAccountByEmail, withProtectedFields } from "./_lib/legacy_sync";
+import { safeJsonParseObject, type JsonObject } from "./_lib/json";
 import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATION_VERSION } from "../../versioning";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
@@ -28,9 +29,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   let profile = profRow?.profile_json ? safeParse(profRow.profile_json) : null;
   if (!profile) {
-    profile = await migrateLegacyAccountByEmail(db, user as any);
+    profile = await migrateLegacyAccountByEmail(db, user);
   } else {
-    profile = withProtectedFields(user as any, {
+    profile = withProtectedFields(user, {
       ...profile,
       version: Number(profRow?.version || profile.version || 1),
     });
@@ -59,6 +60,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }, 200);
 };
 
-function safeParse(s: string) {
-  try { return JSON.parse(s); } catch { return null; }
+function safeParse(s: string): JsonObject | null {
+  return safeJsonParseObject(s);
 }

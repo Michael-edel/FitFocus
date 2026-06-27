@@ -29,12 +29,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     );
 
     return json({ ok: true }, 200, headers);
-  } catch (e: any) {
-    return json({ ok: false, error: String(e?.message || e) }, 401);
+  } catch (e: unknown) {
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 401);
   }
 };
 
-type Env = { AUTH_JWT_SECRET?: string; DB?: any };
+type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
 function cookieSerialize(
   name: string,

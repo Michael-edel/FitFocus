@@ -7,6 +7,7 @@ import { requireFamilyMember } from "../_lib/family_access";
 import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -23,7 +24,7 @@ async function handle(request: Request, env: Env) {
   const db = requireDB(env);
   await ensureUserRow(db, user);
 
-  let body: any = {};
+  let body: unknown = {};
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
   } catch (err) {
@@ -32,10 +33,11 @@ async function handle(request: Request, env: Env) {
     }
     throw err;
   }
-  const week_start = String(body.week_start || "").slice(0, 10);
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+  const week_start = asString(body.week_start).slice(0, 10);
   const ingredient_name = normalizeShoppingIngredient(body.ingredient_name || body.ingredient, 1).name;
   const checked = Boolean(body.checked);
-  const family_id = body.family_id ? String(body.family_id) : null;
+  const family_id = body.family_id ? asString(body.family_id) : null;
 
   if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
   if (!ingredient_name) return json({ error: "BAD_INGREDIENT" }, 400);
@@ -65,7 +67,7 @@ async function handle(request: Request, env: Env) {
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   try {
     return await handle(request, env);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
@@ -74,7 +76,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     return await handle(request, env);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }

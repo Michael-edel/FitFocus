@@ -8,30 +8,27 @@ import { requireDB, nowMs } from "../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
+import { isJsonObject, safeJsonParseObject, type JsonObject } from "../_lib/json";
 import { toLocalDayKey } from "../../../dateUtils";
 import { normalizeWearableSyncSnapshot, resolveWearableLocalDayKey, resolveWearableSyncTimestamp } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
-async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: Record<string, unknown> | null; version: number }> {
+async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: JsonObject | null; version: number }> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
 
   if (!row?.profile_json) return { profile: null, version: 0 };
-  try {
-    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
-    return {
-      profile: parsed && typeof parsed === "object" ? parsed : null,
-      version: Number(row.version || 1),
-    };
-  } catch {
-    return { profile: null, version: Number(row?.version || 0) };
-  }
+  const parsed = safeJsonParseObject(String(row.profile_json));
+  return {
+    profile: parsed,
+    version: Number(row.version || 1),
+  };
 }
 
-function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: Record<string, unknown>, version: number) {
+function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: JsonObject, version: number) {
   const serverProfile = withProtectedFields(user, { ...profile, version });
   return json({ error: "PROFILE_CONFLICT", profile: serverProfile, version }, 409);
 }
@@ -45,13 +42,13 @@ function parseBaseVersion(value: unknown): number | null {
   return parsedBaseVersion;
 }
 
-function pushWeightHistory(profile: Record<string, unknown>, weight: number, date: string) {
+function pushWeightHistory(profile: JsonObject, weight: number, date: string) {
   const history = Array.isArray(profile.weightHistory) ? [...profile.weightHistory] : [];
   return [{ date, weight }, ...history].slice(0, 120);
 }
 
 function pushMeasurementHistory(
-  profile: Record<string, unknown>,
+  profile: JsonObject,
   entry: {
     date: string;
     weight?: number;
@@ -77,13 +74,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   try {
-    await requireBetaAccess(env as any, user as any);
+    await requireBetaAccess(env, user);
   } catch {
     return json({ error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);
-  let body: Record<string, unknown> | null = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -92,7 +89,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "BAD_JSON" }, 400);
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
 
   const payload = normalizeWearableSyncSnapshot(body);
   if (!payload) {
@@ -103,7 +100,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
-    return conflictResponse(user as any, currentMeta.profile, currentMeta.version);
+    return conflictResponse(user, currentMeta.profile, currentMeta.version);
   }
 
   const currentProfile = currentMeta.profile ?? {};
@@ -113,13 +110,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const timestamp = resolveWearableSyncTimestamp(payload, new Date().toISOString());
   const localDayKey = resolveWearableLocalDayKey(payload, timestamp);
   const wearableMetricsDayKey = localDayKey || toLocalDayKey(timestamp);
-  const nextProfile: Record<string, unknown> = withProtectedFields(user as any, {
+  const nextProfile: JsonObject = withProtectedFields(user, {
     ...currentProfile,
     plan: serverPlan,
     version: nextVersion,
     wearableProvider: payload.provider || "manual",
     wearableEnabled: true,
-    wearableConnectedAt: (currentProfile as any).wearableConnectedAt || timestamp,
+    wearableConnectedAt: typeof currentProfile.wearableConnectedAt === "string" ? currentProfile.wearableConnectedAt : timestamp,
     wearableLastSyncAt: timestamp,
     wearableMetricsDayKey,
     wearableMetricsUpdatedAt: timestamp,

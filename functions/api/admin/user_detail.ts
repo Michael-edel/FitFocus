@@ -4,22 +4,72 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import { safeJsonParseObject, type JsonObject } from "../_lib/json";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type UserRow = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  picture?: string | null;
+  created_at?: number;
+  updated_at?: number;
+  deleted_at?: string | null;
+  deletion_scheduled_at?: string | null;
+  is_active?: number;
+};
+type ProfileRow = { profile_json?: string | null; updated_at?: number; version?: number };
+type FamilyRow = {
+  family_id: string;
+  family_name?: string | null;
+  owner_user_id: string;
+  family_created_at?: number | null;
+  member_role?: string | null;
+  member_status?: string | null;
+  member_created_at?: number | null;
+  member_updated_at?: number | null;
+  active_members?: number | null;
+};
+type RoleRow = { role: string };
+type SubscriptionRow = {
+  plan?: string | null;
+  status?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  current_period_end?: number | null;
+  updated_at?: number | null;
+};
+type SessionRow = {
+  id: string;
+  created_at?: number;
+  expires_at?: number;
+  revoked?: number;
+  user_agent?: string | null;
+  ip?: string | null;
+};
+type SessionStatsRow = {
+  total_sessions?: number;
+  revoked_sessions?: number;
+  active_sessions?: number;
+  expired_sessions?: number;
+  ttl_seconds?: number;
+};
+type AiStatsRow = {
+  calls?: number;
+  tokens?: number;
+  cost_usd?: number;
+  errors?: number;
+  fallback_calls?: number;
+  last_ts?: number | null;
+};
 
 function toNumber(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
-function parseProfile(profileJson: unknown): Record<string, unknown> {
-  if (!profileJson) return {};
-  try {
-    const parsed = JSON.parse(String(profileJson));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
+function parseProfile(profileJson: unknown): JsonObject {
+  return profileJson ? safeJsonParseObject(String(profileJson)) ?? {} : {};
 }
 
 function asNumber(value: unknown): number | null {
@@ -46,14 +96,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 1`
     )
     .bind(userId)
-    .first<any>();
+    .first<UserRow>();
 
   if (!userRow) return json({ error: "NOT_FOUND", message: "user not found" }, 404);
 
   const profileRow = await db
     .prepare("SELECT profile_json, updated_at, version FROM user_profiles WHERE user_id = ? LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<ProfileRow>();
   const profile = parseProfile(profileRow?.profile_json);
   const measurementsHistory = Array.isArray(profile.measurementsHistory) ? profile.measurementsHistory : [];
   const progressPhotos = Array.isArray(profile.progressPhotos) ? profile.progressPhotos : [];
@@ -74,12 +124,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 1`
     )
     .bind(userId)
-    .first<any>();
+    .first<FamilyRow>();
 
   const rolesRow = await db
     .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")
     .bind(userId)
-    .all<any>();
+    .all<RoleRow>();
 
   const subscriptionRow = await db
     .prepare(
@@ -90,7 +140,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 1`
     )
     .bind(userId)
-    .first<any>();
+    .first<SubscriptionRow>();
 
   const sessionsResult = await db
     .prepare(
@@ -101,7 +151,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 50`
     )
     .bind(userId)
-    .all<any>();
+    .all<SessionRow>();
 
   const nowSec = Math.floor(Date.now() / 1000);
   const sessionStats = await db
@@ -115,7 +165,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        WHERE user_id = ?`
     )
     .bind(nowSec, nowSec, userId)
-    .first<any>();
+    .first<SessionStatsRow>();
 
   const sevenDaysAgo = Date.now() - 7 * 86400000;
   const aiRow = await db
@@ -130,9 +180,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        WHERE user_id = ? AND ts >= ?`
     )
     .bind(userId, sevenDaysAgo)
-    .first<any>();
+    .first<AiStatsRow>();
 
-  const sessions = (sessionsResult?.results || []).map((row: any) => {
+  const sessions = (sessionsResult?.results || []).map((row) => {
     const createdAt = toNumber(row.created_at);
     const expiresAt = toNumber(row.expires_at);
     const ttlSeconds = Math.max(0, expiresAt - createdAt);
@@ -226,7 +276,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       has_glucose: hasGlucose,
       weight_history_count: Array.isArray(profile.weightHistory) ? profile.weightHistory.length : 0,
     },
-    roles: (rolesRow?.results || []).map((row: any) => String(row.role)),
+    roles: (rolesRow?.results || []).map((row) => String(row.role)),
     family: familyRow ? {
       family_id: String(familyRow.family_id),
       family_name: String(familyRow.family_name || "Семья"),

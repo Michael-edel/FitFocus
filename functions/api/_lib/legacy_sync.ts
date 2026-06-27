@@ -1,5 +1,6 @@
 import { loadActivePlanByEmail } from "./plans";
 import { nowMs } from "./db";
+import { isJsonObject, safeJsonParse } from "./json";
 
 export async function loadLegacyProfileByEmail(
   db: D1Database,
@@ -20,8 +21,8 @@ export async function loadLegacyProfileByEmail(
       .bind(normalized)
       .first<{ user_id?: string; profile_json?: string; version?: number }>();
     if (!row?.profile_json || !row.user_id) return null;
-    const parsed = JSON.parse(String(row.profile_json)) as Record<string, unknown>;
-    return parsed && typeof parsed === "object"
+    const parsed = safeJsonParse(String(row.profile_json));
+    return isJsonObject(parsed)
       ? { userId: row.user_id, profile: parsed, version: Number(row.version || 1) }
       : null;
   } catch {

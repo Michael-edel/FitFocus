@@ -5,10 +5,15 @@ import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { getActiveFamilyForUser } from "../_lib/family_access";
 import { loadActivePlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString, isJsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
+type MutationResult = { meta?: { changes?: number }; changes?: number };
+type FamilyInviteRow = { code: string; family_id: string; expires_at: number; used_by_user_id?: string | null };
+type ActiveFamilyRow = { id: string; owner_user_id: string };
+type CountRow = { c?: number };
 
-function changedRows(result: any): number {
+function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -18,7 +23,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
-    let body: any = {};
+    let body: unknown = {};
     try {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
@@ -27,7 +32,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
-    const code = (body?.code || "").toString().trim().toUpperCase();
+    if (!isJsonObject(body)) throw new Error("BAD_REQUEST");
+    const code = asString(body.code).toUpperCase();
     if (!code) throw new Error("BAD_REQUEST");
 
     // already in a family?
@@ -40,7 +46,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          FROM family_invites WHERE code = ? LIMIT 1`
       )
       .bind(code)
-      .first<any>();
+      .first<FamilyInviteRow>();
 
     const now = Math.floor(nowMs() / 1000);
     if (!inv || inv.used_by_user_id || now > inv.expires_at) throw new Error("INVITE_INVALID");
@@ -48,7 +54,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const activeFamily = await db
       .prepare("SELECT id, owner_user_id FROM families WHERE id = ? AND is_active = 1 LIMIT 1")
       .bind(inv.family_id)
-      .first<any>();
+      .first<ActiveFamilyRow>();
     if (!activeFamily) throw new Error("INVITE_INVALID");
 
     const ownerPlan = await loadActivePlan(db, String(activeFamily.owner_user_id || ""));
@@ -58,7 +64,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const cnt = await db
       .prepare("SELECT COUNT(*) as c FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1")
       .bind(inv.family_id)
-      .first<any>();
+      .first<CountRow>();
     if ((cnt?.c || 0) >= 5) throw new Error("FAMILY_LIMIT");
 
     const inviteUpdate = await db
@@ -94,7 +100,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     return json({ ok: true, familyId: inv.family_id }, 200);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
   }

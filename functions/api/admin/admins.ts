@@ -5,6 +5,13 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type AdminRow = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  picture?: string | null;
+  created_at?: number | null;
+};
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -21,7 +28,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     WHERE u.deleted_at IS NULL
     ORDER BY u.created_at DESC
     LIMIT 200
-  `).all<any>();
+  `).all<AdminRow>();
 
   return json({ ok: true, admins: results || [] });
 };

@@ -6,8 +6,19 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB, nowMs } from "../_lib/db";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type MobileSessionPayload = {
+  v: number;
+  sub: string;
+  sid: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  aud?: "mobile";
+  iat?: number;
+  exp?: number;
+};
 
-async function signSessionJwt(payload: any, secret: string, ttlSeconds: number): Promise<string> {
+async function signSessionJwt(payload: MobileSessionPayload, secret: string, ttlSeconds: number): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
   const full = { ...payload, iat: now, exp: now + ttlSeconds };

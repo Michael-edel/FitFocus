@@ -4,22 +4,34 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import { safeJsonParseObject, type JsonObject } from "../_lib/json";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
+type AdminUserListRow = {
+  id: string;
+  email?: string | null;
+  created_at?: number;
+  deleted_at?: string | null;
+  deletion_scheduled_at?: string | null;
+  is_active?: number;
+  subscription_plan?: string | null;
+  subscription_status?: string | null;
+  current_period_end?: number | null;
+  subscription_updated_at?: number | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  profile_json?: string | null;
+  profile_updated_at?: number | null;
+  profile_version?: number | null;
+};
 
 function toInt(value: unknown, fallback: number) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
-function parseProfile(profileJson: unknown): Record<string, unknown> {
-  if (!profileJson) return {};
-  try {
-    const parsed = JSON.parse(String(profileJson));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
+function parseProfile(profileJson: unknown): JsonObject {
+  return profileJson ? safeJsonParseObject(String(profileJson)) ?? {} : {};
 }
 
 function asNumber(value: unknown): number | null {
@@ -133,9 +145,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   `;
 
   const countRow = await db.prepare(countQuery).bind(...binds).first<{ c: number }>();
-  const { results } = await db.prepare(query).bind(...binds, limit, offset).all<any>();
+  const { results } = await db.prepare(query).bind(...binds, limit, offset).all<AdminUserListRow>();
 
-  const users = (results || []).map((row: any) => {
+  const users = (results || []).map((row) => {
     const profile = parseProfile(row.profile_json);
     const measurementsHistory = Array.isArray(profile.measurementsHistory) ? profile.measurementsHistory : [];
     const progressPhotos = Array.isArray(profile.progressPhotos) ? profile.progressPhotos : [];

@@ -5,6 +5,7 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
+import { asString, isJsonObject } from "../_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
@@ -55,7 +56,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -64,8 +65,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  const key = String(body?.key || "").trim();
-  const value = String(body?.value ?? "").trim();
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+  const key = asString(body.key);
+  const value = asString(body.value);
   if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
   const validator = SETTING_VALIDATORS[key];
   if (!validator) return json({ error: "BAD_SETTING", message: "Unknown setting" }, 400);

@@ -4,10 +4,19 @@ import { json } from "../_lib/auth";
 import { requireDB, nowMs, toApiError } from "../_lib/db";
 
 type Env = { DB: D1Database };
+type InviteCodeRow = {
+  code: string;
+  created_at?: number;
+  note?: string | null;
+  max_uses?: number | null;
+  uses?: number | null;
+  expires_at?: number | null;
+  revoked?: number | null;
+};
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const db = requireDB(env as any);
+    const db = requireDB(env);
     const url = new URL(request.url);
     const code = String(url.searchParams.get("code") || "").trim();
     if (!code) return json({ valid: false, error: "BAD_REQUEST" }, 400);
@@ -22,7 +31,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
          LIMIT 1`
       )
       .bind(code)
-      .first<any>();
+      .first<InviteCodeRow>();
 
     if (!row) return json({ valid: false }, 404);
     const revoked = Number(row.revoked || 0) === 1;
@@ -44,7 +53,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       },
       valid ? 200 : 200
     );
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ valid: false, error: apiErr }, 400);
   }

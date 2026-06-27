@@ -10,6 +10,17 @@ type Env = {
   PUSH_VAPID_SUBJECT?: string;
 };
 
+type PushStatusRow = {
+  id: string;
+  device_label: string | null;
+  user_agent: string | null;
+  created_at: number;
+  updated_at: number;
+  last_sent_at: number | null;
+  last_error: string | null;
+  enabled: number;
+};
+
 function pushConfigDiagnostics(env: Env) {
   const missing: string[] = [];
   if (!env.PUSH_VAPID_PUBLIC_KEY) missing.push("PUSH_VAPID_PUBLIC_KEY");
@@ -39,7 +50,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       "SELECT id, device_label, user_agent, created_at, updated_at, last_sent_at, last_error, enabled FROM push_subscriptions WHERE user_id = ? ORDER BY updated_at DESC"
     )
     .bind(user.sub)
-    .all<any>();
+    .all<PushStatusRow>();
 
   const items = (results || []).map((row) => ({
     id: row.id,

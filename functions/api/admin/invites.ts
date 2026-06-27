@@ -8,10 +8,24 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { isJsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type MutationResult = { meta?: { changes?: number }; changes?: number };
+type InviteListRow = {
+  code: string;
+  created_at?: number;
+  created_by?: string | null;
+  note?: string | null;
+  max_uses?: number | null;
+  uses?: number | null;
+  expires_at?: number | null;
+  revoked?: number | null;
+  redemption_count?: number | null;
+  last_redeemed_at?: number | null;
+};
 
-function changedRows(result: any): number {
+function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
@@ -45,10 +59,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
          LIMIT ?`
       )
       .bind(limit)
-      .all<any>();
+      .all<InviteListRow>();
 
     return json({ invites: rows.results || [] }, 200);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
   }
@@ -61,12 +75,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await requireAdminRequest(user, request, db);
 
-    const body = await readJsonRequest<any>(request, SMALL_JSON_BODY_LIMIT_BYTES);
-    const note = String(body?.note || "").trim();
-    const count = Math.max(1, Math.min(50, Number.isFinite(body?.count) ? Math.floor(Number(body.count)) : 1));
-    const maxUses = Number.isFinite(body?.max_uses) ? Math.max(1, Math.min(1000, Number(body.max_uses))) : 1;
+    const body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    const payload = isJsonObject(body) ? body : {};
+    const note = String(payload.note || "").trim();
+    const count = Math.max(1, Math.min(50, Number.isFinite(payload.count) ? Math.floor(Number(payload.count)) : 1));
+    const maxUses = Number.isFinite(payload.max_uses) ? Math.max(1, Math.min(1000, Number(payload.max_uses))) : 1;
     const maxExpiryMs = nowMs() + 30 * 24 * 60 * 60 * 1000;
-    const requestedExpiresAt = body?.expires_at ? Number(body.expires_at) : null;
+    const requestedExpiresAt = payload.expires_at ? Number(payload.expires_at) : null;
     const expiresAt = Number.isFinite(requestedExpiresAt) && requestedExpiresAt > 0
       ? Math.min(requestedExpiresAt, maxExpiryMs)
       : null;
@@ -99,7 +114,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await db.batch(statements);
 
     return json({ ok: true, code: codes[0], codes }, 200);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof RequestBodyTooLargeError) {
       return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
     }
@@ -115,8 +130,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     const db = requireDB(env);
     await requireAdminRequest(user, request, db);
 
-    const body = await readJsonRequest<any>(request, SMALL_JSON_BODY_LIMIT_BYTES);
-    const code = String(body?.code || "").trim();
+    const body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    if (!isJsonObject(body)) throw new Error("BAD_REQUEST");
+    const code = String(body.code || "").trim();
     if (typeof body?.revoked !== "boolean") throw new Error("BAD_REQUEST");
     const revoked = body.revoked ? 1 : 0;
     if (!code) throw new Error("BAD_REQUEST");
@@ -134,7 +150,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     return json({ ok: true, code, revoked: revoked === 1 }, 200);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof RequestBodyTooLargeError) {
       return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
     }

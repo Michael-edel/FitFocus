@@ -80,7 +80,7 @@ for (const file of [
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
   assertOrder(
     oauth,
-    'const requireInvite = String((env as any).REQUIRE_INVITE',
+    'const requireInvite = String(',
     'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1',
     `${file} must restore only after invite access checks`,
   );

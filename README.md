@@ -7,7 +7,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 Текущая проверенная ревизия:
 
 - Ветка: `main`
-- Коммит: `5d65121 Simplify Android onboarding activation`
+- Коммит: `20933b6 Harden API payload typing and refresh README`
 - Версия из `package.json`: `2.0.0-architecture.0`
 - Основная среда развертывания: Cloudflare Pages + функции Cloudflare Pages + D1
 
@@ -28,7 +28,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| `git status --short` до правки README | чисто |
+| `git status --short` до правки README | есть локальный пакет изменений; README синхронизирован перед commit + push |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 19 миграций / 29 таблиц |
@@ -359,7 +359,7 @@ E2E:
 5. Stripe billing зависит от корректных Cloudflare secrets, price ids и webhook secret. Без них checkout/webhook не завершат полный платный цикл.
 6. ИИ зависит от `GEMINI_API_KEY` и доступности Gemini. Резервный режим есть, но это не равно качеству полноценного ИИ-ответа.
 7. Большие UI-файлы повышают стоимость сопровождения: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `ProgressScreen.tsx` больше типичного размера компонентных модулей.
-8. В коде много `as any` и dynamic JSON parsing. Typecheck проходит, но это зона риска для ошибок выполнения на некорректных payload.
+8. Основной backend/API слой уже заметно ужесточен по runtime typing и JSON parsing, но в проекте все еще остаются отдельные `any` и слаботипизированные участки, прежде всего во frontend/service/test-коде.
 9. Скрипт `migrate:local` в `package.json` только печатает сообщение; реальные D1 migrations применяются через `wrangler d1 migrations apply`.
 
 ## Команды разработки

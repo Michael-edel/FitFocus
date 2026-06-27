@@ -5,6 +5,24 @@ import { requireDB } from "../_lib/db";
 import { requireAdminRequest } from "../_lib/admin_guard";
 
 type Env = { DB?: D1Database; AUTH_JWT_SECRET?: string };
+type CostAggRow = {
+  calls?: number;
+  errors?: number;
+  tokens?: number;
+  cost_usd?: number;
+  fallback_calls?: number;
+  avg_latency_ms?: number;
+};
+type TopUserRow = {
+  user_id: string;
+  email?: string | null;
+  user_created_at?: number | null;
+  plan?: string | null;
+  subscription_status?: string | null;
+  cost_usd?: number | null;
+  tokens?: number | null;
+  calls?: number | null;
+};
 
 function startOfUtcDayMs(d = new Date()) {
   const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -33,7 +51,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        WHERE ts >= ?`
     )
     .bind(dayStart)
-    .first<any>();
+    .first<CostAggRow>();
 
   const weekAgg = await db
     .prepare(
@@ -46,7 +64,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        WHERE ts >= ?`
     )
     .bind(sevenDaysAgo)
-    .first<any>();
+    .first<CostAggRow>();
 
   const topUsers7d = await db
     .prepare(
@@ -65,7 +83,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        LIMIT 10`
     )
     .bind(now, now, sevenDaysAgo)
-    .all<any>();
+    .all<TopUserRow>();
 
   const todayCalls = Number(todayAgg?.calls || 0);
   const todayFallback = Number(todayAgg?.fallback_calls || 0);
@@ -91,7 +109,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       fallback_calls: weekFallback,
       fallback_pct: weekCalls > 0 ? Math.round((weekFallback / weekCalls) * 100) : 0,
     },
-    top_users_7d: (topUsers7d?.results || []).map((r: any) => ({
+    top_users_7d: (topUsers7d?.results || []).map((r) => ({
       user_id: String(r.user_id),
       email: r.email ? String(r.email) : undefined,
       user_created_at: r.user_created_at ? Number(r.user_created_at) : undefined,

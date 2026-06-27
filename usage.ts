@@ -2,6 +2,18 @@ import type { UsageCounters } from './types';
 
 const KEY = 'fitfocus_usage_counters_v1';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeJsonParse(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function weekStartISO(d = new Date()) {
   // Monday as week start
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -16,7 +28,8 @@ export function loadUsage(): UsageCounters {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { weekStart: nowWeek, recipes: 0 };
-    const parsed = JSON.parse(raw);
+    const parsed = safeJsonParse(raw);
+    if (!isRecord(parsed)) return { weekStart: nowWeek, recipes: 0 };
     if (parsed?.weekStart !== nowWeek) return { weekStart: nowWeek, recipes: 0 };
     return {
       weekStart: String(parsed.weekStart),

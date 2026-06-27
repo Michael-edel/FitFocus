@@ -5,11 +5,13 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
+import { isJsonObject } from "./_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
+type StatePutItem = { key: unknown; value: unknown; baseVersion?: unknown };
 
 function parseBaseVersion(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
@@ -28,7 +30,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
   try {
-    await requireBetaAccess(env as any, user as any);
+    await requireBetaAccess(env, user);
   } catch {
     return json({ error: "ACCESS_REQUIRED" }, 403);
   }
@@ -57,13 +59,13 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
   try {
-    await requireBetaAccess(env as any, user as any);
+    await requireBetaAccess(env, user);
   } catch {
     return json({ error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, STATE_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -74,9 +76,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
-  const items: { key: unknown; value: unknown; baseVersion?: unknown }[] = Array.isArray(body.items)
-    ? body.items
-    : body.key
+  const items: StatePutItem[] = isJsonObject(body) && Array.isArray(body.items)
+    ? body.items.map((item) => (isJsonObject(item) ? { key: item.key, value: item.value, baseVersion: item.baseVersion } : { key: null, value: null }))
+    : isJsonObject(body) && body.key
       ? [{ key: body.key, value: body.value ?? "", baseVersion: body.baseVersion }]
       : [];
 
@@ -143,7 +145,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
   try {
-    await requireBetaAccess(env as any, user as any);
+    await requireBetaAccess(env, user);
   } catch {
     return json({ error: "ACCESS_REQUIRED" }, 403);
   }

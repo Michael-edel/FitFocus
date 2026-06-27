@@ -2,18 +2,21 @@ import { ACHIEVEMENT_CATALOG } from "../../../achievements/catalog";
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { isEnabled, loadFeatures } from "../_lib/features";
+import { safeJsonParseObject, type JsonObject } from "../_lib/json";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type AchievementRow = {
+  achievement_key?: string;
+  unlocked_at?: number;
+  tier?: string;
+  source?: string | null;
+  snapshot_json?: string | null;
+  created_at?: number;
+};
 
-function safeParseSnapshot(value: unknown): Record<string, unknown> | null {
+function safeParseSnapshot(value: unknown): JsonObject | null {
   if (!value) return null;
-  try {
-    const parsed = JSON.parse(String(value));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  return safeJsonParseObject(String(value));
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -24,7 +27,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  const features = await loadFeatures(env as any, String(user.sub));
+  const features = await loadFeatures(env, String(user.sub));
   if (!isEnabled(features, "achievements_enabled", true)) {
     return json({ enabled: false, catalog: [], unlocked: [] }, 200);
   }
@@ -38,9 +41,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
        ORDER BY unlocked_at DESC`
     )
     .bind(user.sub)
-    .all();
+    .all<AchievementRow>();
 
-  const unlocked = (results || []).map((row: any) => ({
+  const unlocked = (results || []).map((row) => ({
     key: String(row.achievement_key || ""),
     unlocked_at: Number(row.unlocked_at || 0),
     tier: String(row.tier || ""),

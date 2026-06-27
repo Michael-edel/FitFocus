@@ -13,8 +13,19 @@ export interface DeleteUserAccountOptions {
   supportAttachments?: SupportAttachmentBucket;
 }
 
-function changedRows(result: any): number {
+type ChangesResult = {
+  meta?: { changes?: number } | null;
+  changes?: number;
+};
+
+type SingleValueRow = { x?: number; c?: number; id?: string; is_active?: number; deleted_at?: string | null };
+
+function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
+function messageOf(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 async function collectSupportStorageKeys(db: D1Database, userId: string): Promise<string[]> {
@@ -87,7 +98,7 @@ async function guardHardDeleteAccount(db: D1Database, userId: string): Promise<v
       AND u.is_active = 1
       AND u.deleted_at IS NULL
     LIMIT 1
-  `).bind(userId).first<any>();
+  `).bind(userId).first<SingleValueRow>();
 
   if (activeAdmin) throw new Error("Нельзя удалить последнего активного администратора.");
 }
@@ -113,7 +124,7 @@ export async function deleteUserAccountAndAllData(
       LIMIT 1
     `)
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   if (isActiveAdmin) {
     const activeAdminsCountRow = await db.prepare(`
@@ -121,7 +132,7 @@ export async function deleteUserAccountAndAllData(
       FROM user_roles ur
       JOIN users u ON u.id = ur.user_id
       WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL
-    `).first<any>();
+    `).first<SingleValueRow>();
 
     const activeAdminsCount = Number(activeAdminsCountRow?.c || 0);
 
@@ -141,7 +152,7 @@ export async function deleteUserAccountAndAllData(
   const familyOwnerRow = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? AND is_active = 1 LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   if (familyOwnerRow) {
     if (logAsAdminId) {
@@ -162,8 +173,8 @@ export async function deleteUserAccountAndAllData(
 
   try {
     await guardHardDeleteAccount(db, userId);
-  } catch (e: any) {
-    const message = e?.message || "Не удалось заблокировать удаление пользователя.";
+  } catch (error: unknown) {
+    const message = messageOf(error, "Не удалось заблокировать удаление пользователя.");
     if (logAsAdminId && String(message).includes("последнего активного администратора")) {
       await logAdminEvent(db, {
         adminUserId: logAsAdminId,
@@ -178,8 +189,8 @@ export async function deleteUserAccountAndAllData(
   try {
     supportStorageKeys = await collectSupportStorageKeys(db, userId);
     ensureSupportStorageDeleteAvailable(options.supportAttachments, supportStorageKeys);
-  } catch (e: any) {
-    return { ok: false, message: e?.message || "Не удалось удалить вложения поддержки." };
+  } catch (error: unknown) {
+    return { ok: false, message: messageOf(error, "Не удалось удалить вложения поддержки.") };
   }
 
   stmts.push(db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId));
@@ -187,7 +198,7 @@ export async function deleteUserAccountAndAllData(
   const ownedFam = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   if (ownedFam?.id) {
     stmts.push(
@@ -245,15 +256,15 @@ export async function deleteUserAccountAndAllData(
     }
 
     return { ok: true };
-  } catch (e: any) {
-    console.error(`Failed to delete user ${userId} data:`, e);
+  } catch (error: unknown) {
+    console.error(`Failed to delete user ${userId} data:`, error);
 
     if (logAsAdminId) {
       await logAdminEvent(db, {
         adminUserId: logAsAdminId,
         action: "delete_user_atomic_failed",
         targetUserId: userId,
-        meta: { error: e?.message || String(e) },
+        meta: { error: messageOf(error, String(error)) },
       });
     }
 
@@ -293,13 +304,13 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
     const activeUser = await db
       .prepare("SELECT id, is_active, deleted_at FROM users WHERE id = ? LIMIT 1")
       .bind(userId)
-      .first<any>();
+      .first<SingleValueRow>();
     if (!activeUser || !activeUser.is_active || activeUser.deleted_at) return;
 
     const isAdminRow = await db
       .prepare("SELECT 1 as x FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1")
       .bind(userId)
-      .first<any>();
+      .first<SingleValueRow>();
     if (isAdminRow) {
       throw new Error("Нельзя удалить аккаунт последнего администратора.");
     }
@@ -309,7 +320,7 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
   const fam = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   const cleanupStmts: D1PreparedStatement[] = [];
   if (fam?.id) {
@@ -346,7 +357,7 @@ export async function ensureNotLastAdmin(db: D1Database, userId: string): Promis
   const isAdminRow = await db
     .prepare("SELECT 1 as x FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   if (!isAdminRow) return;
 
@@ -355,7 +366,7 @@ export async function ensureNotLastAdmin(db: D1Database, userId: string): Promis
     FROM user_roles ur
     JOIN users u ON u.id = ur.user_id
     WHERE ur.role = 'admin' AND u.is_active = 1 AND u.deleted_at IS NULL
-  `).first<any>();
+  `).first<SingleValueRow>();
 
   const adminsCount = Number(row?.c || 0);
 
@@ -368,7 +379,7 @@ export async function checkIfOwnerOfActiveFamily(db: D1Database, userId: string)
   const familyOwnerRow = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? AND is_active = 1 LIMIT 1")
     .bind(userId)
-    .first<any>();
+    .first<SingleValueRow>();
 
   return Boolean(familyOwnerRow);
 }

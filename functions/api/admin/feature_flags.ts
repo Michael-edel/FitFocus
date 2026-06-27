@@ -5,6 +5,7 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
+import { asBoolean, asFiniteNumber, asString, isJsonObject } from "../_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
@@ -37,7 +38,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
-  let body: any = null;
+  let body: unknown = null;
   try {
     body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
@@ -46,14 +47,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     }
     throw err;
   }
-  const key = String(body?.key || "").trim();
+  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+  const key = asString(body.key);
   if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
   if (!ALLOWED_FEATURE_FLAGS.has(key)) return json({ error: "BAD_FLAG", message: "Unknown feature flag" }, 400);
   if (typeof body?.enabled !== "boolean") return json({ error: "BAD_ENABLED", message: "enabled must be boolean" }, 400);
 
-  const enabled = body.enabled ? 1 : 0;
-  const rawRollout = Number(body?.rollout_percentage ?? 100);
-  if (!Number.isFinite(rawRollout)) return json({ error: "BAD_ROLLOUT", message: "rollout_percentage must be a number" }, 400);
+  const enabled = asBoolean(body.enabled) ? 1 : 0;
+  const rawRollout = asFiniteNumber(body.rollout_percentage ?? 100);
+  if (rawRollout === null) return json({ error: "BAD_ROLLOUT", message: "rollout_percentage must be a number" }, 400);
   const rollout = Math.max(0, Math.min(100, Math.floor(rawRollout)));
 
   const flagStatement = db.prepare(
