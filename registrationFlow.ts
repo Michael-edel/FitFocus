@@ -2,6 +2,7 @@ import { calculateTDEE } from './profileMath';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
+import { clearOAuthContinuationState } from './authSession';
 import { Goal, type UserProfile } from './types';
 
 type RegDataLike = {
@@ -197,6 +198,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
 
   deps.setCurrentUser(newUser);
   deps.setAllUsers([newUser]);
+  clearOAuthContinuationState();
   deps.setAuthState('app');
   deps.setActiveTab('plan');
   deps.setPlanIntroOpen(true);

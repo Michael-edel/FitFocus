@@ -80,6 +80,7 @@ import {
 import { hydrateSessionFromCloud } from './sessionHydration';
 import {
   bootstrapAuthSession,
+  clearOAuthContinuationState,
   createLogoutSession,
   deleteAccountSession,
   ensureInviteCodeIsValid,
@@ -2250,6 +2251,7 @@ await ensurePdfInterFont(doc);
     setFoodFavorites(hydrated.foodFavorites);
     setCoachCard(hydrated.coachCard);
     setCurrentLesson(null);
+    clearOAuthContinuationState();
     setAuthState('app');
     setProfileSyncState('saved');
     setLastProfileSyncAt(Date.now());
