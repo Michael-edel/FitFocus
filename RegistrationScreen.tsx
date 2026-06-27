@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
-import OnboardingAhaCard from './components/OnboardingAhaCard';
 import { trackOnboardingEvent } from './analytics/onboarding';
 import { Gender, Goal, ActivityLevel, type TariffPlan } from './types';
 
@@ -45,8 +44,7 @@ export type RegistrationData = {
 type RegistrationScreenProps = {
   regData: RegistrationData;
   setRegData: React.Dispatch<React.SetStateAction<RegistrationData>>;
-  onboardingStep: 1 | 2;
-  setOnboardingStep: React.Dispatch<React.SetStateAction<1 | 2>>;
+  planError: string | null;
   isActivatingPlan: boolean;
   activationStep: number;
   activationSteps: ActivationStep[];
@@ -82,8 +80,7 @@ function deriveSuggestedTargetWeight(weight: number, goal: Goal): number {
 export default function RegistrationScreen({
   regData,
   setRegData,
-  onboardingStep,
-  setOnboardingStep,
+  planError,
   isActivatingPlan,
   activationStep,
   activationSteps,
@@ -111,13 +108,13 @@ export default function RegistrationScreen({
     if (onboardingStartedRef.current) return;
     onboardingStartedRef.current = true;
     trackOnboardingEvent('onboarding_started', {
-      step: onboardingStep,
+      step: 1,
       goal: regData.goal,
       activityLevel: regData.activityLevel,
     });
-  }, [onboardingStep, regData.activityLevel, regData.goal]);
+  }, [regData.activityLevel, regData.goal]);
 
-  const goNext = () => {
+  const onCreatePlan = () => {
     trackOnboardingEvent('onboarding_basic_completed', {
       goal: regData.goal,
       activityLevel: regData.activityLevel,
@@ -125,10 +122,6 @@ export default function RegistrationScreen({
       height: regData.height,
       age: regData.age,
     });
-    setOnboardingStep(2);
-  };
-
-  const onCreatePlan = () => {
     trackOnboardingEvent('aha_card_cta_clicked', {
       goal: regData.goal,
       weight: regData.weight,
@@ -233,14 +226,12 @@ export default function RegistrationScreen({
 
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center gap-2 text-[10px] font-black text-slate-50 uppercase tracking-widest">
-              <span className={clsx('w-2 h-2 rounded-full', onboardingStep === 1 ? 'bg-indigo-400' : 'bg-slate-700')} />
-              <span className={clsx('w-2 h-2 rounded-full', onboardingStep === 2 ? 'bg-indigo-400' : 'bg-slate-700')} />
-              <span>Шаг {onboardingStep} из 2</span>
+              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+              <span>Шаг 1 из 1</span>
             </div>
           </div>
 
-          {onboardingStep === 1 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
               <div className="space-y-4">
                 <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-5 space-y-4">
                   <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">Базовые данные</div>
@@ -402,92 +393,45 @@ export default function RegistrationScreen({
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={goNext}
-                  disabled={!regStep1Valid}
-                  className={clsx(
-                    'w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50',
-                    regStep1Valid
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/40'
-                      : 'bg-slate-800 text-slate-600'
-                  )}
-                >
-                  Рассчитать мой план
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <OnboardingAhaCard
-                  gender={regData.gender}
-                  weight={regData.weight}
-                  height={regData.height}
-                  age={regData.age}
-                  activityLevel={regData.activityLevel}
-                  goal={regData.goal}
-                  lossDeficit={regData.lossDeficit}
-                  gainSurplus={regData.gainSurplus}
-                />
-                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-5">
-                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">Дальше</div>
-                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">
-                    Когда базовые параметры готовы, FitFocus подхватит имя из Google-аккаунта и создаст личный cloud-профиль.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <OnboardingAhaCard
-                gender={regData.gender}
-                weight={regData.weight}
-                height={regData.height}
-                age={regData.age}
-                activityLevel={regData.activityLevel}
-                goal={regData.goal}
-                lossDeficit={regData.lossDeficit}
-                gainSurplus={regData.gainSurplus}
-              />
-              <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-5 flex items-start gap-3">
-                <div className="mt-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 p-2 text-indigo-300">
-                  <Sparkles size={14} />
-                </div>
-                <div>
-                  <div className="text-sm font-black text-slate-100">Имя и cloud-профиль</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-400">
-                    Имя профиля подставим из Google-аккаунта. После создания плана данные будут синхронизироваться между устройствами.
+                {planError && (
+                  <div className="rounded-[1.25rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 font-semibold flex items-start gap-2">
+                    <AlertTriangle size={16} className="mt-0.5 text-rose-300" />
+                    <span>{planError}</span>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
+                )}
 
-          <div className="pt-2 space-y-3">
-            {onboardingStep === 2 ? (
-              <>
                 <button
                   type="button"
                   onClick={onCreatePlan}
-                  disabled={isActivatingPlan || !regData.name?.trim()}
+                  disabled={!regStep1Valid || isActivatingPlan}
                   className={clsx(
                     'w-full py-5 rounded-[1.5rem] font-black text-base shadow-xl transition-all active:scale-[0.98] disabled:opacity-50',
-                    regData.name?.trim()
+                    regStep1Valid
                       ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/40'
                       : 'bg-slate-800 text-slate-600'
                   )}
                 >
                   Создать AI-план
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOnboardingStep(1)}
-                  disabled={isActivatingPlan}
-                  className="w-full py-3 rounded-[1.5rem] font-black text-xs text-slate-400 border border-slate-800 hover:bg-slate-800/50 transition-all disabled:opacity-50"
-                >
-                  Назад к параметрам
-                </button>
-              </>
-            ) : null}
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-5">
+                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">Что будет дальше</div>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">
+                    FitFocus создаст личный cloud-профиль, сохранит AI-план и сразу откроет приложение.
+                  </p>
+                </div>
+                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-5">
+                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-500">Проверка данных</div>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">
+                    Если сервер не примет профиль, причина появится на этом экране.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          <div className="pt-2 space-y-3">
             <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Сначала локально • затем в облако</p>
           </div>
         </div>

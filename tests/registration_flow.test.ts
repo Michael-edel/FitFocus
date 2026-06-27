@@ -112,4 +112,59 @@ describe('runRegistrationFlow', () => {
 
     expect(stored.some((profile) => profile.googleSub === 'google-sub-1')).toBe(true);
   });
+
+  it('uses an auth fallback name when the registration name is still empty', async () => {
+    const setAuthState = vi.fn();
+    const persistUser = vi.fn();
+
+    await runRegistrationFlow({
+      regData: {
+        name: '',
+        gender: Gender.FEMALE,
+        weight: 51,
+        height: 164,
+        age: 52,
+        activityLevel: ActivityLevel.LIGHTLY_ACTIVE,
+        goal: Goal.LOSS,
+        targetWeight: 49.2,
+        plan: 'free' as TariffPlan,
+        medicalRestrictions: '',
+        bloodPressureSystolic: 0,
+        bloodPressureDiastolic: 0,
+        restingPulse: 0,
+        bloodGlucoseMmolL: 0,
+        waistCm: 0,
+        chestCm: 0,
+        hipsCm: 0,
+        lossDeficit: 400,
+        gainSurplus: 200,
+      },
+      regNameValid: false,
+      allUsersCount: 0,
+      requireInvite: false,
+      inviteCode: '',
+      googleMe: { sub: 'google-sub-2', email: 'galaxy@example.com' },
+      setPlanError: vi.fn(),
+      setLastAiAction: vi.fn(),
+      setDevPlanOverride: vi.fn(),
+      generatePersonalPlan: vi.fn().mockResolvedValue({ mode: 'test-plan' }),
+      loginAsUser: vi.fn().mockResolvedValue(undefined),
+      persistUser,
+      setAllUsers: vi.fn(),
+      setCurrentUser: vi.fn(),
+      setAuthState,
+      setActiveTab: vi.fn(),
+      setPlanIntroOpen: vi.fn(),
+      fetchImpl: vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      } as Response),
+    });
+
+    expect(setAuthState).toHaveBeenCalledWith('app');
+    expect(persistUser).toHaveBeenCalledWith(expect.objectContaining({
+      googleSub: 'google-sub-2',
+      name: 'galaxy',
+    }));
+  });
 });
