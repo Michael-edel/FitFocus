@@ -195,19 +195,16 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     return;
   }
 
+  deps.setCurrentUser(newUser);
   deps.setAllUsers([newUser]);
+  deps.setAuthState('app');
+  deps.setActiveTab('plan');
+  deps.setPlanIntroOpen(true);
+
   try {
     await deps.loginAsUser(newUser);
   } catch {
-    // Android WebView / mobile browsers can occasionally fail during the
-    // post-registration hydration step even after the profile has already been
-    // created and saved. Keep the user in the created session instead of
-    // dropping them back to the registration step.
-    deps.setCurrentUser(newUser);
-    deps.setAllUsers([newUser]);
-    deps.setAuthState('app');
+    // Keep the freshly created local session if background hydration fails.
     deps.setPlanError('План создан. Вход выполнен локально, облачная синхронизация догрузится автоматически.');
   }
-  deps.setActiveTab('plan');
-  deps.setPlanIntroOpen(true);
 }
