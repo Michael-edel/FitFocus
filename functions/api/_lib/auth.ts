@@ -187,6 +187,9 @@ export function json(data: unknown, status = 200, headers?: Headers, schemaVersi
   h.set("Content-Type", "application/json; charset=utf-8");
   h.set("Cache-Control", "no-store");
   h.set("X-API-Schema-Version", String(schemaVersion));
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("Referrer-Policy", "no-referrer");
+  h.set("Cross-Origin-Resource-Policy", "same-origin");
 
   // Backward-compatible: keep original shape, but add schema_version if absent
   if (isJsonObject(data) && data.schema_version === undefined) {

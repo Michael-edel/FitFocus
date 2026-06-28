@@ -25,6 +25,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
     },
   });
 };

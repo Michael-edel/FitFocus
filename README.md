@@ -2,7 +2,7 @@
 
 FitFocus - PWA-приложение для питания, прогресса, ИИ-плана, семейного меню, push-уведомлений, поддержки и администрирования.
 
-Документ обновлен после локальной проверки проекта и текущего пакета исправлений 27.06.2026.
+Документ обновлен после локальной проверки проекта и текущего пакета исправлений 28.06.2026.
 
 Текущая проверенная ревизия:
 
@@ -17,9 +17,9 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 Объем проекта без `node_modules`, `dist`, `coverage`:
 
-- 307 файлов.
-- 207 файлов `.ts`.
-- 39 файлов `.tsx`.
+- 318 файлов.
+- 216 файлов `.ts`.
+- 40 файлов `.tsx`.
 - 20 файлов `.sql`.
 - 29 таблиц в `db/schema.sql`.
 - 19 файлов миграций D1 в `migrations/`.
@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| `git status --short` до правки README | есть локальный пакет изменений; README синхронизирован перед commit + push |
+| `git status --short` до правки README | есть локальный security/privacy пакет изменений; README синхронизирован перед commit + push |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 19 миграций / 29 таблиц |
 | `npm run check:privacy` | пройдено, 26 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 44 файла / 169 тестов |
+| `npm run test:unit` | пройдено, 46 файлов / 177 тестов |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | 0 уязвимостей |
 
@@ -42,22 +42,32 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 ## Последний пакет изменений
 
-Пакет от 27.06.2026:
+Пакет от 28.06.2026:
 
-- Cloud + Sync: ошибки `/api/profile` теперь показывают текст ответа сервера, а запросы синхронизации имеют клиентский таймаут 15 секунд.
-- Настройки: блок `Cloud + Sync` показывает понятное сообщение о текущей ошибке или состоянии синхронизации.
-- Мобильное меню `Ещё`: состояние больше не сохраняется в `localStorage`, поэтому старое восстановленное значение не мешает первому нажатию.
-- Выход из аккаунта: локальная сессия очищается сразу, а `/api/logout` отправляется как best-effort запрос с `keepalive` и таймаутом 5 секунд.
-- Добавлен unit-тест `tests/authSession_logout.test.ts` на мгновенную очистку клиентской сессии и защиту от повторного server logout при двойном нажатии.
+- Добавлена публичная страница политики конфиденциальности `/privacy.html`.
+- Добавлен экран `Конфиденциальность` внутри PWA.
+- Ссылки на политику добавлены до отправки пользовательских данных: на экране входа и в онбординге.
+- Добавлен Cloudflare Pages файл `public/_headers` для статических PWA-ответов: HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP.
+- Shared API JSON helper теперь добавляет `no-store`, `nosniff`, `no-referrer` и `Cross-Origin-Resource-Policy`.
+- OAuth-маршруты Google/Apple больше не возвращают клиенту upstream `details` от провайдера и внутренние тексты исключений.
+- Экспорт пользователя больше не отдает push credentials `endpoint`, `p256dh`, `auth`.
+- Экспорт поддержки переведен с `SELECT *` на явные списки колонок.
+- Example env-файлы больше не содержат персональный bootstrap admin email и слабый пример `AUTH_JWT_SECRET`.
+- Добавлен unit-тест `tests/security_privacy.test.ts`, который фиксирует security headers, privacy page, суженный экспорт и отсутствие OAuth details.
 
 Фактически выполненные проверки для этого пакета:
 
 | Проверка | Результат |
 |---|---:|
-| `npm run test:unit -- tests/authSession_logout.test.ts` | пройдено, 1 файл / 1 тест |
-| `npm run test:unit -- tests/push_config_routes.test.ts tests/authSession_logout.test.ts` | пройдено, 2 файла / 10 тестов |
+| `npm run test:unit -- tests/security_privacy.test.ts tests/google_auth_admin.test.ts tests/apple_auth_admin.test.ts tests/oauth_state.test.ts tests/oauth_start.test.ts` | пройдено, 5 файлов / 14 тестов |
+| `npm run check:api-invariants` | пройдено |
+| `npm run check:auth-scope` | пройдено |
+| `npm run check:schema` | пройдено, 19 миграций / 29 таблиц |
+| `npm run check:privacy` | пройдено |
+| `npm run test:unit` | пройдено, 46 файлов / 177 тестов |
 | `npm run typecheck` | пройдено |
 | `npm run build` | пройдено |
+| `npm audit --omit=dev` | пройдено, 0 уязвимостей |
 
 ## Архитектура
 
@@ -76,6 +86,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Привязка D1: `DB`.
 - Миграции D1 в `migrations/`.
 - Runtime-конфигурация в `wrangler.toml`.
+- Security headers для статических Pages assets: `public/_headers`.
 
 Хранилище:
 
@@ -335,6 +346,21 @@ E2E:
 - Best-effort autosave через File System Access API.
 - Cloud-first модель: источником правды для авторизованного пользователя является D1/облако, локальное хранилище используется как быстрый слой и резервный снимок.
 
+### Конфиденциальность и экспорт данных
+
+Реализовано:
+
+- Публичная политика `/privacy.html`.
+- Экран `Конфиденциальность` внутри PWA.
+- Ссылки на политику до входа и до создания AI-плана.
+- Экспорт пользовательских данных через `/api/export`.
+- Экспорт не отдает push credentials `endpoint`, `p256dh`, `auth`.
+- Таблицы с пользовательскими данными контролируются проверкой `npm run check:privacy`.
+
+Ограничение:
+
+- Юридические реквизиты оператора и отдельный внешний контакт должны быть заполнены владельцем проекта перед публичным коммерческим запуском.
+
 Ограничения:
 
 - `backup.ts` прямо содержит статус prototype.
@@ -361,7 +387,8 @@ E2E:
 | Оплата Stripe | 75% | Checkout/webhook/tests есть; зависит от внешних Stripe secrets/prices/webhook setup |
 | Wearable/Health | 45% | Snapshot API + iOS HealthKit bridge есть; прямые Google/Fitbit/Garmin интеграции не готовы |
 | Backup/autosave/PWA-кэш | 45% | JSON backup есть; autosave prototype; источник правды для авторизованного пользователя - D1/облако |
-| Тестовое покрытие системных инвариантов | 86% | unit tests + check scripts + Playwright E2E для production PWA shell, onboarding и push settings |
+| Тестовое покрытие системных инвариантов | 87% | unit tests + check scripts + Playwright E2E для production PWA shell, onboarding и push settings |
+| Privacy/security baseline | 72% | privacy page, API headers, Pages `_headers`, export redaction and tests есть; юридические реквизиты владельца не заполнены в коде |
 
 ## Критические и системные проблемы
 
@@ -377,9 +404,10 @@ E2E:
 4. Push зависит от разрешений браузера/ОС, VAPID secrets и валидных подписок. Код обрабатывает устаревшие подписки, но доставка не гарантируется для браузеров/ОС, которые блокируют Web Push.
 5. Stripe billing зависит от корректных Cloudflare secrets, price ids и webhook secret. Без них checkout/webhook не завершат полный платный цикл.
 6. ИИ зависит от `GEMINI_API_KEY` и доступности Gemini. Резервный режим есть, но это не равно качеству полноценного ИИ-ответа.
-7. Большие UI-файлы повышают стоимость сопровождения: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `ProgressScreen.tsx` больше типичного размера компонентных модулей.
-8. Основной backend/API слой уже заметно ужесточен по runtime typing и JSON parsing, но в проекте все еще остаются отдельные `any` и слаботипизированные участки, прежде всего в крупных frontend/UI/runtime-модулях.
-9. Скрипт `migrate:local` в `package.json` только печатает сообщение; реальные D1 migrations применяются через `wrangler d1 migrations apply`.
+7. Privacy page добавлена, но юридические реквизиты оператора и отдельный внешний контакт не могут быть заполнены из кода без фактических данных владельца.
+8. Большие UI-файлы повышают стоимость сопровождения: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `ProgressScreen.tsx` больше типичного размера компонентных модулей.
+9. Основной backend/API слой уже заметно ужесточен по runtime typing и JSON parsing, но в проекте все еще остаются отдельные `any` и слаботипизированные участки, прежде всего в крупных frontend/UI/runtime-модулях.
+10. Скрипт `migrate:local` в `package.json` только печатает сообщение; реальные D1 migrations применяются через `wrangler d1 migrations apply`.
 
 Примечание по последней серии правок:
 
@@ -632,6 +660,15 @@ CI использует Node.js 24 и Python 3.12.
 
 Реализованные контроли:
 
+- Публичная политика конфиденциальности `/privacy.html`.
+- Экран `Конфиденциальность` внутри PWA.
+- Cloudflare Pages `_headers` для статических PWA-ответов.
+- CSP с `frame-ancestors 'none'`, `object-src 'none'` и ограниченными источниками.
+- `X-Frame-Options: DENY`.
+- `X-Content-Type-Options: nosniff`.
+- `Referrer-Policy`.
+- `Permissions-Policy`.
+- HSTS для HTTPS.
 - HttpOnly `ff_session`.
 - Проверка JWT-подписи через `AUTH_JWT_SECRET`.
 - Проверка существования, отзыва и срока действия D1-сессии.
@@ -644,6 +681,8 @@ CI использует Node.js 24 и Python 3.12.
 - Admin audit events.
 - Ограничения частоты ИИ-запросов и контроль бюджета.
 - Приватный VAPID-ключ push не раскрывается через `/api/push/status`.
+- Пользовательский экспорт не возвращает push credentials подписок.
+- OAuth error responses не возвращают upstream details от Google/Apple.
 
 ## Что этот репозиторий не доказывает
 

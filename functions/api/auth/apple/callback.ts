@@ -11,9 +11,14 @@ type ExistingAppleUserRow = {
 };
 
 function json(body: unknown, status = 200, headers?: Headers) {
+  const responseHeaders = headers ? new Headers(headers) : new Headers();
+  responseHeaders.set("content-type", "application/json; charset=utf-8");
+  responseHeaders.set("cache-control", "no-store");
+  responseHeaders.set("x-content-type-options", "nosniff");
+  responseHeaders.set("referrer-policy", "no-referrer");
   return new Response(JSON.stringify(body), {
     status,
-    headers: headers || new Headers({ "content-type": "application/json; charset=utf-8" }),
+    headers: responseHeaders,
   });
 }
 
@@ -106,7 +111,7 @@ export const onRequest: PagesFunction<{
     });
     const tokenJson = await safeResponseJson(tokenRes);
     if (!tokenRes.ok) {
-      return json({ error: "Token exchange failed", details: tokenJson }, 502);
+      return json({ error: "Token exchange failed" }, 502);
     }
     const idToken = tokenJson.id_token as string | undefined;
     if (!idToken) return json({ error: "No id_token returned" }, 502);
@@ -215,7 +220,7 @@ export const onRequest: PagesFunction<{
     );
     headers.set("Location", `${redirectAfter}/?auth=apple`);
     return new Response(null, { status: 302, headers });
-  } catch (e: unknown) {
-    return json({ error: "Server error", details: e instanceof Error ? e.message : String(e) }, 500);
+  } catch {
+    return json({ error: "Server error" }, 500);
   }
 };

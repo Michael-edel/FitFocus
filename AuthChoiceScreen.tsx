@@ -170,6 +170,14 @@ export default function AuthChoiceScreen({
             <ArrowRight size={12} className="text-indigo-400" />
             Версия и изменения
           </button>
+          <a
+            href="/privacy.html"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center text-xs font-black uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-200"
+          >
+            Политика конфиденциальности
+          </a>
         </div>
       </div>
     </div>

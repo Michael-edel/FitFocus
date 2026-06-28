@@ -16,9 +16,14 @@ type GoogleTokenInfoResponse = {
 };
 
 function json(body: unknown, status = 200, headers?: Headers) {
+  const responseHeaders = headers ? new Headers(headers) : new Headers();
+  responseHeaders.set("content-type", "application/json; charset=utf-8");
+  responseHeaders.set("cache-control", "no-store");
+  responseHeaders.set("x-content-type-options", "nosniff");
+  responseHeaders.set("referrer-policy", "no-referrer");
   return new Response(JSON.stringify(body), {
     status,
-    headers: headers || new Headers({ "content-type": "application/json; charset=utf-8" }),
+    headers: responseHeaders,
   });
 }
 
@@ -86,7 +91,7 @@ export const onRequestGet: PagesFunction<{
     const tokenJsonRaw = await safeResponseJson(tokenRes);
     const tokenJson: GoogleTokenResponse = isJsonObject(tokenJsonRaw) ? tokenJsonRaw : {};
     if (!tokenRes.ok) {
-      return json({ error: "Token exchange failed", details: tokenJson }, 502);
+      return json({ error: "Token exchange failed" }, 502);
     }
     const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token : undefined;
     if (!idToken) return json({ error: "No id_token returned" }, 502);
@@ -95,7 +100,7 @@ export const onRequestGet: PagesFunction<{
     const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     const infoRaw = await safeResponseJson(infoRes);
     const info: GoogleTokenInfoResponse = isJsonObject(infoRaw) ? infoRaw : {};
-    if (!infoRes.ok) return json({ error: "tokeninfo failed", details: info }, 502);
+    if (!infoRes.ok) return json({ error: "tokeninfo failed" }, 502);
     if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
 
     const user = {
@@ -196,7 +201,7 @@ export const onRequestGet: PagesFunction<{
     );
     headers.set("Location", `${redirectAfter}/?auth=google`);
     return new Response(null, { status: 302, headers });
-  } catch (error: unknown) {
-    return json({ error: "Server error", details: error instanceof Error ? error.message : String(error) }, 500);
+  } catch {
+    return json({ error: "Server error" }, 500);
   }
 };

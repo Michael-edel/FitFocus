@@ -17,6 +17,7 @@ const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
 const SupportScreen = React.lazy(() => import('./SupportScreen'));
 const GuideScreen = React.lazy(() => import('./GuideScreen'));
 const ChangelogScreen = React.lazy(() => import('./ChangelogScreen'));
+const PrivacyScreen = React.lazy(() => import('./PrivacyScreen'));
 
 type AppWorkspaceProps = {
   workspaceProps: any;
@@ -303,6 +304,11 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'guide' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка инструкции...</div>}>
           <GuideScreen />
+        </React.Suspense>
+      )}
+      {activeTab === 'privacy' && (
+        <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка политики конфиденциальности...</div>}>
+          <PrivacyScreen />
         </React.Suspense>
       )}
       {activeTab === 'updates' && (

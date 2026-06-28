@@ -1,7 +1,7 @@
 // Cloudflare Pages Function: /api/export
 // GDPR-style export of user data stored in D1.
 
-import { requireUser } from "./_lib/auth";
+import { json, requireUser } from "./_lib/auth";
 import { requireDB } from "./_lib/db";
 import { safeJsonParse } from "./_lib/json";
 
@@ -13,7 +13,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     user = await requireUser(request, env);
   } catch {
-    return new Response(JSON.stringify({ error: "UNAUTH" }), { status: 401, headers: { "Content-Type": "application/json; charset=utf-8" } });
+    return json({ error: "UNAUTH" }, 401);
   }
 
   const db = requireDB(env);
@@ -37,7 +37,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const aiEvents = await allRows(db, "SELECT id, ts, feature, status, latency_ms, safe_mode, model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, is_fallback, request_json, response_json, error FROM ai_events WHERE user_id = ? ORDER BY ts DESC", userId);
   const aiRateLimits = await allRows(db, "SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const userCostDaily = await allRows(db, "SELECT day, input_tokens, output_tokens, total_tokens, estimated_cost_usd, updated_at FROM user_cost_daily WHERE user_id = ? ORDER BY day DESC", userId);
-  const pushSubscriptions = await allRows(db, "SELECT id, endpoint, p256dh, auth, content_encoding, device_label, user_agent, created_at, updated_at, last_sent_at, last_error, enabled FROM push_subscriptions WHERE user_id = ? ORDER BY updated_at DESC", userId);
+  const pushSubscriptions = await allRows(db, "SELECT id, content_encoding, device_label, user_agent, created_at, updated_at, last_sent_at, last_error, enabled FROM push_subscriptions WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const achievements = await allRows(db, "SELECT achievement_key, unlocked_at, tier, source, snapshot_json, created_at FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC", userId);
   const inviteRedemptions = await allRows(db, "SELECT code, redeemed_at FROM invite_redemptions WHERE user_id = ? ORDER BY redeemed_at DESC", userId);
   const familyMemberships = await allRows(db, "SELECT id, family_id, role, status, display_name, restrictions_json, is_active, updated_at, sex, age, height_cm, weight_kg, activity, goal, created_at FROM family_members WHERE user_id = ? ORDER BY created_at DESC", userId);
@@ -51,8 +51,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const weeklyMenuPortions = await allRows(db, "SELECT weekly_menu_id, portions_json, totals_json, updated_at FROM weekly_menu_portions WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const shoppingChecked = await allRows(db, "SELECT scope_id, week_start, family_id, ingredient_name, checked, updated_at FROM shopping_checked WHERE scope_id = ? OR scope_id = ? ORDER BY updated_at DESC", `personal:${userId}`, userId);
   const familyShoppingChecked = await allRows(db, "SELECT scope_id, week_start, family_id, ingredient_name, checked, updated_at FROM shopping_checked WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT family_id FROM family_members WHERE user_id = ?) ORDER BY updated_at DESC", userId, userId);
-  const supportFeedback = await allRows(db, "SELECT * FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ? ORDER BY created_at DESC", userId, userId);
-  const supportMessages = await allRows(db, "SELECT * FROM support_feedback_messages WHERE author_user_id = ? OR ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ?) ORDER BY created_at ASC", userId, userId, userId);
+  const supportFeedback = await allRows(db, "SELECT id, user_id, created_at, updated_at, category, section, subject, message, steps_json, device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note, assigned_admin_user_id, resolved_at, closed_at, last_reply_at, last_reply_by FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ? ORDER BY created_at DESC", userId, userId);
+  const supportMessages = await allRows(db, "SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at FROM support_feedback_messages WHERE author_user_id = ? OR ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ?) ORDER BY created_at ASC", userId, userId, userId);
   const adminSessions = await allRows(db, "SELECT id, session_id, ip, user_agent, created_at, last_seen_at FROM admin_sessions WHERE admin_user_id = ? ORDER BY last_seen_at DESC", userId);
   const adminEvents = await allRows(db, "SELECT id, admin_user_id, ts, action, target_user_id, meta_json FROM admin_events WHERE admin_user_id = ? OR target_user_id = ? ORDER BY ts DESC", userId, userId);
 
@@ -96,6 +96,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Content-Disposition": `attachment; filename="fitfocus-export-${date}.json"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
     },
   });
 };
