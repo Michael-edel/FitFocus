@@ -321,12 +321,37 @@ E2E:
 
 Реализовано:
 
-- UI выбора провайдера: Apple Health, Google Fit, Fitbit, Garmin, Ручной импорт.
+- UI выбора провайдера: Apple Health, Huawei Health, Google Fit, Fitbit, Garmin, Ручной импорт.
 - Маршрут `/api/wearable/sync`.
 - Mobile bearer auth через `/api/mobile/token`.
 - Нормализация snapshot: steps, active minutes, sleep hours, pulse, glucose, weight.
 - Запись wearable metrics в профиль.
 - Native iOS HealthKit bridge в `mobile/ios-healthkit-bridge`.
+- Huawei Health server-side OAuth routes:
+  - `/api/wearable/huawei/status`
+  - `/api/wearable/huawei/start`
+  - `/api/wearable/huawei/callback`
+  - `/api/wearable/huawei/sync`
+  - `/api/wearable/huawei/disconnect`
+- D1-таблица `wearable_connections` для server-side provider tokens. Huawei access/refresh tokens шифруются перед записью.
+
+Для Huawei Health нужны Cloudflare variables/secrets:
+
+- `HUAWEI_HEALTH_CLIENT_ID`
+- `HUAWEI_HEALTH_CLIENT_SECRET`
+- `HUAWEI_HEALTH_SCOPES`
+- `HUAWEI_HEALTH_REDIRECT_URI`, если callback отличается от `<APP_URL>/api/wearable/huawei/callback`
+- `HUAWEI_HEALTH_TOKEN_SECRET`, опционально; если не задан, используется `AUTH_JWT_SECRET`
+
+Опциональные override-переменные:
+
+- `HUAWEI_HEALTH_AUTH_URL`
+- `HUAWEI_HEALTH_TOKEN_URL`
+- `HUAWEI_HEALTH_API_BASE_URL`
+- `HUAWEI_HEALTH_STEPS_DATA_TYPE`
+- `HUAWEI_HEALTH_ACTIVE_MINUTES_DATA_TYPE`
+- `HUAWEI_HEALTH_SLEEP_DATA_TYPE`
+- `HUAWEI_HEALTH_PULSE_DATA_TYPE`
 
 Не реализовано в репозитории как полноценные интеграции провайдеров:
 
@@ -334,7 +359,7 @@ E2E:
 - Fitbit OAuth/API sync.
 - Garmin OAuth/API sync.
 
-Для них есть UI-выбор и общая snapshot-модель, но нет полного server-side OAuth/provider polling flow.
+Для Google Fit/Fitbit/Garmin есть UI-выбор и общая snapshot-модель, но нет полного server-side OAuth/provider polling flow. Huawei Health имеет OAuth flow и ручной server-side sync, но фактическая работа в production зависит от одобренного Huawei Health Kit приложения, выданных scopes и корректных Cloudflare secrets.
 
 ### Резервные копии и PWA-кэш
 
@@ -385,7 +410,7 @@ E2E:
 | Поддержка и вложения | 85% | User/admin support routes, diagnostics, R2/inline attachments, тесты есть |
 | Админка | 80% | Основные sections/routes/guards есть; большой компонент требует поддержки |
 | Оплата Stripe | 75% | Checkout/webhook/tests есть; зависит от внешних Stripe secrets/prices/webhook setup |
-| Wearable/Health | 45% | Snapshot API + iOS HealthKit bridge есть; прямые Google/Fitbit/Garmin интеграции не готовы |
+| Wearable/Health | 55% | Snapshot API + iOS HealthKit bridge есть; Huawei OAuth/sync scaffold добавлен; прямые Google/Fitbit/Garmin интеграции не готовы |
 | Backup/autosave/PWA-кэш | 45% | JSON backup есть; autosave prototype; источник правды для авторизованного пользователя - D1/облако |
 | Тестовое покрытие системных инвариантов | 87% | unit tests + check scripts + Playwright E2E для production PWA shell, onboarding и push settings |
 | Privacy/security baseline | 72% | privacy page, API headers, Pages `_headers`, export redaction and tests есть; юридические реквизиты владельца не заполнены в коде |
@@ -399,7 +424,7 @@ E2E:
 Системные риски и недоделанные зоны:
 
 1. Android onboarding issue на Galaxy S23+ не может считаться полностью закрытым без проверки на реальном устройстве; Playwright покрывает Android-эмуляцию, но не конкретную прошивку Samsung.
-2. Wearable-интеграции Google Fit/Fitbit/Garmin не являются полноценными provider-интеграциями; сейчас есть UI, общий snapshot endpoint и iOS HealthKit bridge.
+2. Wearable-интеграции Google Fit/Fitbit/Garmin не являются полноценными provider-интеграциями; сейчас есть UI, общий snapshot endpoint и iOS HealthKit bridge. Huawei Health добавлен как server-side OAuth/sync flow, но требует внешней настройки Huawei Health Kit credentials/scopes.
 3. Backup/autosave остается prototype-level: JSON export/import есть, но persistent file handle не сохраняется между сессиями; работа без сети как основной режим не входит в заявленную cloud-first модель.
 4. Push зависит от разрешений браузера/ОС, VAPID secrets и валидных подписок. Код обрабатывает устаревшие подписки, но доставка не гарантируется для браузеров/ОС, которые блокируют Web Push.
 5. Stripe billing зависит от корректных Cloudflare secrets, price ids и webhook secret. Без них checkout/webhook не завершат полный платный цикл.
@@ -692,6 +717,7 @@ CI использует Node.js 24 и Python 3.12.
 - Точность определения КБЖУ по фото во всех реальных случаях.
 - Гарантированную доставку push во всех браузерах, на всех устройствах и на всех Android/iOS прошивках.
 - Завершенные прямые интеграции с Google Fit, Fitbit и Garmin API.
+- Готовую production-доставку данных Huawei Health без настройки Huawei Developer/Huawei Health Kit credentials и scopes.
 - Работу без сети как основной сценарий: источник правды для авторизованного пользователя - D1/облако.
 - Полную готовность платежей в продакшене без настройки Stripe dashboard.
 - Полную стабильность на мобильных устройствах только на основании эмуляторов Playwright без проверки каждой реальной модели устройства.

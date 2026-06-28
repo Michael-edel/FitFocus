@@ -221,6 +221,8 @@ export default function ProgressArchiveScreen({
     switch (provider) {
       case 'apple_health':
         return 'Apple Health';
+      case 'huawei_health':
+        return 'Huawei Health';
       case 'google_fit':
         return 'Google Fit';
       case 'fitbit':

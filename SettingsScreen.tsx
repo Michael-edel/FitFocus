@@ -19,6 +19,16 @@ const MAX_BMI = 60;
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
+type HuaweiHealthStatus = {
+  configured: boolean;
+  missingConfig: string[];
+  connected: boolean;
+  status: string;
+  scope: string;
+  expiresAt: number | null;
+  lastSyncAt: number | null;
+};
+
 type SettingsUiState = {
   draftName: string;
   draftGoal: Goal;
@@ -113,6 +123,7 @@ const goalOptions = [
 
 const wearableOptions: Array<{ value: WearableProvider; label: string; note: string }> = [
   { value: 'apple_health', label: 'Apple Health', note: 'iPhone / Apple Watch · HealthKit' },
+  { value: 'huawei_health', label: 'Huawei Health', note: 'Huawei Watch GT / Band · OAuth API' },
   { value: 'google_fit', label: 'Google Fit', note: 'Android / Wear OS' },
   { value: 'fitbit', label: 'Fitbit', note: 'Часы и браслеты Fitbit' },
   { value: 'garmin', label: 'Garmin', note: 'Спортивные часы Garmin' },
@@ -121,6 +132,7 @@ const wearableOptions: Array<{ value: WearableProvider; label: string; note: str
 
 const wearableProviderLabel: Record<WearableProvider, string> = {
   apple_health: 'Apple Health',
+  huawei_health: 'Huawei Health',
   google_fit: 'Google Fit',
   fitbit: 'Fitbit',
   garmin: 'Garmin',
@@ -305,6 +317,10 @@ export default function SettingsScreen({
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [huaweiStatus, setHuaweiStatus] = useState<HuaweiHealthStatus | null>(null);
+  const [huaweiBusy, setHuaweiBusy] = useState<'status' | 'connect' | 'sync' | 'disconnect' | null>(null);
+  const [huaweiError, setHuaweiError] = useState<string | null>(null);
+  const [huaweiNotice, setHuaweiNotice] = useState<string | null>(null);
   const [uiResetAt, setUiResetAt] = useState<number | null>(null);
   const [mobileTokenBusy, setMobileTokenBusy] = useState(false);
   const [mobileTokenValue, setMobileTokenValue] = useState('');
@@ -418,7 +434,81 @@ export default function SettingsScreen({
     return `fitfocusbridge://setup?${params.toString()}`;
   }, [bridgeBaseUrl, mobileTokenExpiresAt, mobileTokenValue]);
 
+  const loadHuaweiStatus = React.useCallback(async () => {
+    if (!serverSession) {
+      setHuaweiStatus(null);
+      return null;
+    }
+    setHuaweiBusy((current) => current || 'status');
+    try {
+      const response = await fetch('/api/wearable/huawei/status', {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось проверить Huawei Health.');
+      }
+      const next: HuaweiHealthStatus = {
+        configured: payload.configured === true,
+        missingConfig: Array.isArray(payload.missingConfig) ? payload.missingConfig.filter((item: unknown) => typeof item === 'string') : [],
+        connected: payload.connected === true,
+        status: typeof payload.status === 'string' ? payload.status : 'disconnected',
+        scope: typeof payload.scope === 'string' ? payload.scope : '',
+        expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : null,
+        lastSyncAt: typeof payload.lastSyncAt === 'number' ? payload.lastSyncAt : null,
+      };
+      setHuaweiStatus(next);
+      return next;
+    } catch (error) {
+      setHuaweiError(error instanceof Error ? error.message : 'Не удалось проверить Huawei Health.');
+      return null;
+    } finally {
+      setHuaweiBusy((current) => current === 'status' ? null : current);
+    }
+  }, [serverSession]);
+
+  useEffect(() => {
+    void loadHuaweiStatus();
+  }, [loadHuaweiStatus]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('wearable') === 'huawei_health' && url.searchParams.get('connected') === '1') {
+      setHuaweiNotice('Huawei Health подключён. Нажмите «Обновить Huawei», чтобы подтянуть данные за сегодня.');
+      url.searchParams.delete('connected');
+      window.history.replaceState({}, '', url.toString());
+      void loadHuaweiStatus();
+    }
+  }, [loadHuaweiStatus]);
+
+  const connectHuaweiHealth = async () => {
+    if (!serverSession) {
+      setHuaweiError('Сначала войдите в аккаунт FitFocus.');
+      return;
+    }
+    setHuaweiBusy('connect');
+    setHuaweiError(null);
+    setHuaweiNotice(null);
+    try {
+      const status = huaweiStatus || await loadHuaweiStatus();
+      if (status && !status.configured) {
+        throw new Error(`Huawei Health API не настроен в Cloudflare: ${status.missingConfig.join(', ') || 'нет обязательных переменных'}.`);
+      }
+      const redirect = typeof window !== 'undefined' ? window.location.href : bridgeBaseUrl;
+      window.location.href = `/api/wearable/huawei/start?redirect=${encodeURIComponent(redirect)}`;
+    } catch (error) {
+      setHuaweiBusy(null);
+      setHuaweiError(error instanceof Error ? error.message : 'Не удалось начать подключение Huawei Health.');
+    }
+  };
+
   const syncWearableProvider = async (provider: WearableProvider) => {
+    if (provider === 'huawei_health') {
+      await connectHuaweiHealth();
+      return;
+    }
     if (!user || !onPatchUser) return;
     const now = new Date().toISOString();
     setWearableBusy(provider);
@@ -436,6 +526,36 @@ export default function SettingsScreen({
 
   const disconnectWearable = async () => {
     if (!user || !onPatchUser) return;
+    if (user.wearableProvider === 'huawei_health') {
+      setWearableBusy('disconnect');
+      setHuaweiBusy('disconnect');
+      setHuaweiError(null);
+      setHuaweiNotice(null);
+      try {
+        const response = await fetch('/api/wearable/huawei/disconnect', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось отключить Huawei Health.');
+        }
+        if (payload?.profile && onChangeUser) {
+          onChangeUser(payload.profile as UserProfile);
+        } else {
+          await onPatchUser({ wearableEnabled: false });
+        }
+        setHuaweiNotice('Huawei Health отключён.');
+        await loadHuaweiStatus();
+      } catch (error) {
+        setHuaweiError(error instanceof Error ? error.message : 'Не удалось отключить Huawei Health.');
+      } finally {
+        setWearableBusy(null);
+        setHuaweiBusy(null);
+      }
+      return;
+    }
     setWearableBusy('disconnect');
     try {
       await onPatchUser({
@@ -443,6 +563,44 @@ export default function SettingsScreen({
       });
     } finally {
       setWearableBusy(null);
+    }
+  };
+
+  const syncHuaweiHealth = async () => {
+    setHuaweiBusy('sync');
+    setHuaweiError(null);
+    setHuaweiNotice(null);
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const today = new Date();
+      const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const response = await fetch('/api/wearable/huawei/sync', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ timezone, date }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        const message = payload?.error === 'HUAWEI_NOT_CONNECTED'
+          ? 'Huawei Health ещё не подключён.'
+          : payload?.error === 'NO_HUAWEI_DATA'
+            ? 'Huawei Health не вернул данные за сегодня.'
+            : payload?.error === 'UNAUTH'
+              ? 'Сначала войдите в аккаунт FitFocus.'
+              : 'Не удалось синхронизировать Huawei Health.';
+        throw new Error(message);
+      }
+      if (payload.profile && onChangeUser) {
+        onChangeUser(payload.profile as UserProfile);
+      }
+      const count = Array.isArray(payload.updatedFields) ? payload.updatedFields.length : 0;
+      setHuaweiNotice(`Huawei Health синхронизирован: обновлено полей ${count}.`);
+      await loadHuaweiStatus();
+    } catch (error) {
+      setHuaweiError(error instanceof Error ? error.message : 'Не удалось синхронизировать Huawei Health.');
+    } finally {
+      setHuaweiBusy(null);
     }
   };
 
@@ -1657,8 +1815,10 @@ export default function SettingsScreen({
                       {user?.wearableProvider && user.wearableEnabled !== false
                         ? (user.wearableProvider === 'apple_health'
                             ? 'Apple Health подключён. iPhone-клиент может отправлять HealthKit-снимки в FitFocus через /api/wearable/sync.'
+                            : user.wearableProvider === 'huawei_health'
+                              ? 'Huawei Health подключён через OAuth. Данные подтягиваются сервером из Huawei Health API.'
                             : 'Источник подключён и может передавать шаги, сон и пульс.')
-                        : 'Выберите Apple Health, Google Fit, Fitbit или Garmin для синхронизации.'}
+                        : 'Выберите Apple Health, Huawei Health, Google Fit, Fitbit или Garmin для синхронизации.'}
                     </div>
                   </div>
                   <div className="w-11 h-11 rounded-2xl flex items-center justify-center border bg-sky-500/10 border-sky-500/30 text-sky-300">
@@ -1674,11 +1834,11 @@ export default function SettingsScreen({
                         key={option.value}
                         type="button"
                         onClick={() => void syncWearableProvider(option.value)}
-                        disabled={!onPatchUser || wearableBusy !== null}
+                        disabled={!onPatchUser || wearableBusy !== null || huaweiBusy === 'connect'}
                         className={[
                           'w-full rounded-[1.25rem] border px-4 py-4 text-left transition-all',
                           selected ? 'border-sky-500/40 bg-sky-500/10' : 'border-slate-800 bg-slate-950/30 hover:border-slate-700',
-                          wearableBusy !== null ? 'opacity-60 cursor-wait' : '',
+                          wearableBusy !== null || huaweiBusy === 'connect' ? 'opacity-60 cursor-wait' : '',
                         ].join(' ')}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -1690,13 +1850,55 @@ export default function SettingsScreen({
                             'text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border',
                             selected ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-slate-800 bg-slate-900 text-slate-500',
                           ].join(' ')}>
-                            {selected ? 'подключено' : 'выбрать'}
+                            {selected ? 'подключено' : option.value === 'huawei_health' ? 'подключить' : 'выбрать'}
                           </div>
                         </div>
                       </button>
                     );
                   })}
                 </div>
+
+                {(user?.wearableProvider === 'huawei_health' || huaweiStatus?.connected || huaweiStatus?.configured === false || huaweiError || huaweiNotice) && (
+                  <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/35 p-4 mt-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Huawei Health API</div>
+                        <div className="mt-1 text-slate-100 font-black">
+                          {huaweiStatus?.connected ? 'Подключено' : huaweiStatus?.configured === false ? 'Нужна настройка Cloudflare' : 'Готово к подключению'}
+                        </div>
+                        <div className="mt-2 text-sm text-slate-400 leading-5">
+                          {huaweiStatus?.configured === false
+                            ? `Нет переменных: ${huaweiStatus.missingConfig.join(', ')}`
+                            : 'Для Huawei Watch GT данные идут через HUAWEI Health и Huawei Health API. Токены хранятся только на сервере.'}
+                        </div>
+                        {huaweiStatus?.lastSyncAt && (
+                          <div className="mt-2 text-xs text-slate-500">
+                            Последняя синхронизация: {formatSyncTs(huaweiStatus.lastSyncAt * 1000)}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void syncHuaweiHealth()}
+                        disabled={!serverSession || !huaweiStatus?.connected || huaweiBusy !== null}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        {huaweiBusy === 'sync' ? 'Обновляем…' : 'Обновить Huawei'}
+                      </button>
+                    </div>
+                    {huaweiNotice && (
+                      <div className="mt-3 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                        {huaweiNotice}
+                      </div>
+                    )}
+                    {huaweiError && (
+                      <div className="mt-3 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                        {huaweiError}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="rounded-[1.25rem] border border-slate-800 bg-slate-950/35 p-4 mt-4">
                   <div className="flex items-start justify-between gap-3">
