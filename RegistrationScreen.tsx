@@ -193,6 +193,14 @@ export default function RegistrationScreen({
                 </div>
               </div>
               <div className="mt-6 text-xs text-slate-500 font-semibold">Нажимая «Создать AI-план», вы запускаете персональную модель — можно изменить цель и тариф позже.</div>
+              <a
+                href="/privacy.html"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-200"
+              >
+                Политика конфиденциальности
+              </a>
             </div>
           </div>
         </div>
@@ -433,6 +441,14 @@ export default function RegistrationScreen({
 
           <div className="pt-2 space-y-3">
             <p className="text-center text-[9px] text-slate-600 font-semibold uppercase tracking-wider">Сначала локально • затем в облако</p>
+            <a
+              href="/privacy.html"
+              target="_blank"
+              rel="noreferrer"
+              className="flex justify-center text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-200"
+            >
+              Политика конфиденциальности
+            </a>
           </div>
         </div>
       </div>

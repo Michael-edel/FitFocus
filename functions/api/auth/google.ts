@@ -46,12 +46,11 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     const r = await fetch(tokenInfoUrl, { method: "GET" });
     const info = await safeResponseJson(r);
     if (!r.ok) {
-      const details = String(info?.error_description || info?.error || "");
-      return json({ error: "Invalid Google token", details: details.slice(0, 200) }, 401);
+      return json({ error: "Invalid Google token" }, 401);
     }
 
     // Basic checks
-    if (!allowedAud.includes(String(info.aud || ""))) return json({ error: "Token aud mismatch", aud: info.aud }, 401);
+    if (!allowedAud.includes(String(info.aud || ""))) return json({ error: "Token aud mismatch" }, 401);
     if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com") {
       return json({ error: "Token iss mismatch" }, 401);
     }
@@ -154,9 +153,8 @@ await env.DB.prepare(
     );
 
     return json({ ok: true, user }, 200, headers);
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    return json({ error: "Server error", details: message }, 500);
+  } catch {
+    return json({ error: "Server error" }, 500);
   }
 };
 
