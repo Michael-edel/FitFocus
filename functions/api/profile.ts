@@ -59,6 +59,15 @@ const EDITABLE_PROFILE_FIELDS = new Set([
   'dietary',
   'onboardingVersion',
   'profileDetailsCompleted',
+  'wearableProvider',
+  'wearableEnabled',
+  'wearableConnectedAt',
+  'wearableLastSyncAt',
+  'wearableStepsToday',
+  'wearableActiveMinutesToday',
+  'wearableSleepHoursLastNight',
+  'wearableMetricsDayKey',
+  'wearableMetricsUpdatedAt',
 ]);
 
 function sanitizePatch(input: unknown): JsonObject {

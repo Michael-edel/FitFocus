@@ -82,6 +82,7 @@ const metricMeta: Record<MetricKey, { label: string; unit: string; color: string
 
 const wearableOptions: Array<{ value: WearableProvider; label: string; note: string }> = [
   { value: 'apple_health', label: 'Apple Health', note: 'iPhone / Apple Watch' },
+  { value: 'huawei_health', label: 'Huawei Health', note: 'Huawei Watch GT / Band' },
   { value: 'google_fit', label: 'Google Fit', note: 'Android / Wear OS' },
   { value: 'fitbit', label: 'Fitbit', note: 'Часы и браслеты Fitbit' },
   { value: 'garmin', label: 'Garmin', note: 'Спортивные часы Garmin' },
@@ -90,6 +91,7 @@ const wearableOptions: Array<{ value: WearableProvider; label: string; note: str
 
 const providerLabel: Record<WearableProvider, string> = {
   apple_health: 'Apple Health',
+  huawei_health: 'Huawei Health',
   google_fit: 'Google Fit',
   fitbit: 'Fitbit',
   garmin: 'Garmin',
@@ -595,6 +597,8 @@ export default function ProgressScreen({
   const wearableIsConnected = !!wearableProvider && wearableEnabled !== false;
   const wearableSourceHint = wearableProvider === 'apple_health'
     ? 'Apple Health получает данные через iPhone bridge и отправляет их в FitFocus.'
+    : wearableProvider === 'huawei_health'
+      ? 'Huawei Health синхронизируется сервером через Huawei Health API.'
     : wearableProvider
       ? 'Источник подключён и может обновлять шаги, сон и пульс.'
       : 'Выберите источник синхронизации в настройках.';
@@ -1126,11 +1130,18 @@ export default function ProgressScreen({
           <div className="mt-5 space-y-2">
             {wearableOptions.map((option) => {
               const selected = wearableProvider === option.value && wearableEnabled !== false;
+              const requiresSettingsOAuth = option.value === 'huawei_health';
               return (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => void applyWearableProvider(option.value)}
+                  onClick={() => {
+                    if (requiresSettingsOAuth) {
+                      onOpenSettings?.();
+                      return;
+                    }
+                    void applyWearableProvider(option.value);
+                  }}
                   disabled={!onPatchUser || wearableBusy !== null}
                   className={clsx(
                     'w-full rounded-[1.25rem] border px-4 py-4 text-left transition-all',
@@ -1141,10 +1152,12 @@ export default function ProgressScreen({
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-slate-100 font-black">{option.label}</div>
-                      <div className="mt-1 text-sm text-slate-400">{option.note}</div>
+                      <div className="mt-1 text-sm text-slate-400">
+                        {requiresSettingsOAuth ? `${option.note} · подключается в настройках` : option.note}
+                      </div>
                     </div>
                     <div className={clsx('text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border', selected ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-slate-800 bg-slate-900 text-slate-500')}>
-                      {selected ? 'подключено' : 'выбрать'}
+                      {selected ? 'подключено' : requiresSettingsOAuth ? 'настройки' : 'выбрать'}
                     </div>
                   </div>
                 </button>

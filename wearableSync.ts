@@ -17,7 +17,7 @@ export type WearableSyncSnapshot = {
   baseVersion?: number;
 };
 
-const ALLOWED_PROVIDERS = new Set<WearableProvider>(['apple_health', 'google_fit', 'fitbit', 'garmin', 'manual']);
+const ALLOWED_PROVIDERS = new Set<WearableProvider>(['apple_health', 'huawei_health', 'google_fit', 'fitbit', 'garmin', 'manual']);
 
 export const wearableSyncExamplePayload: WearableSyncSnapshot = {
   provider: 'apple_health',
