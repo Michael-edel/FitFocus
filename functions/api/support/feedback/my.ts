@@ -20,9 +20,21 @@ type ChangesResult = {
 };
 type SupportTicketRow = {
   id: string;
+  created_at?: number | null;
+  updated_at?: number | null;
+  category?: string | null;
+  section?: string | null;
+  subject?: string | null;
+  message?: string | null;
   status?: string | null;
+  priority?: string | null;
   attachment_count?: number | null;
   attachments_json?: string | null;
+  app_version?: string | null;
+  last_reply_at?: number | null;
+  last_reply_by?: string | null;
+  resolved_at?: number | null;
+  closed_at?: number | null;
   [key: string]: unknown;
 };
 type SupportMessageRow = {
@@ -36,11 +48,46 @@ type SupportMessageRow = {
   created_at: number;
 };
 
+const PUBLIC_TICKET_COLUMNS = `
+  id, created_at, updated_at, category, section, subject, message, status, priority,
+  attachment_count, attachments_json, app_version, last_reply_at, last_reply_by, resolved_at, closed_at
+`;
+
+function publicMessageText(value: unknown): string {
+  const text = typeof value === "string" ? value : "";
+  const marker = "\n\n---\nСистемная диагностика\n";
+  const index = text.indexOf(marker);
+  return (index >= 0 ? text.slice(0, index) : text).trim();
+}
+
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
     ...attachment,
     data_url: attachment.data_url || attachmentResponseUrl(scope.ticketId, index, scope.messageId),
   }));
+}
+
+async function publicTicket(db: D1Database, ticket: SupportTicketRow, includeMessages: boolean) {
+  const attachments = mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: ticket.id });
+  return {
+    id: ticket.id,
+    created_at: ticket.created_at,
+    updated_at: ticket.updated_at,
+    category: ticket.category,
+    section: ticket.section,
+    subject: ticket.subject,
+    message: publicMessageText(ticket.message),
+    status: ticket.status,
+    priority: ticket.priority,
+    attachment_count: Number(ticket.attachment_count || 0),
+    app_version: ticket.app_version,
+    last_reply_at: ticket.last_reply_at,
+    last_reply_by: ticket.last_reply_by,
+    resolved_at: ticket.resolved_at,
+    closed_at: ticket.closed_at,
+    ...(includeMessages ? { attachments } : {}),
+    ...(includeMessages ? { messages: await loadMessages(db, ticket.id) } : {}),
+  };
 }
 
 function changedRows(result: ChangesResult | null | undefined): number {
@@ -70,6 +117,7 @@ async function loadMessages(db: D1Database, ticketId: string) {
 
   return (results || []).map((row) => ({
     ...row,
+    message: publicMessageText(row.message),
     attachment_count: Number(row.attachment_count || 0),
     attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId, messageId: row.id }),
   }));
@@ -89,19 +137,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   if (id) {
     const ticket = await db.prepare(
-      `SELECT *
+      `SELECT ${PUBLIC_TICKET_COLUMNS}
        FROM support_feedback
        WHERE id = ? AND user_id = ?
        LIMIT 1`
     ).bind(id, user.sub).first<SupportTicketRow>();
     if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
     return json({
-      ticket: {
-        ...ticket,
-        attachment_count: Number(ticket.attachment_count || 0),
-        attachments: mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: ticket.id }),
-        messages: await loadMessages(db, ticket.id),
-      },
+      ticket: await publicTicket(db, ticket, true),
     });
   }
 
@@ -115,10 +158,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   ).bind(user.sub).all<SupportTicketRow>();
 
   return json({
-    tickets: (results || []).map((row) => ({
-      ...row,
-      attachment_count: Number(row.attachment_count || 0),
-    })),
+    tickets: await Promise.all((results || []).map((row) => publicTicket(db, row, false))),
   });
 };
 
@@ -227,14 +267,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   }
 
-  const refreshed = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(ticketId).first<SupportTicketRow>();
+  const refreshed = await db.prepare(
+    `SELECT ${PUBLIC_TICKET_COLUMNS}
+     FROM support_feedback
+     WHERE id = ? AND user_id = ?
+     LIMIT 1`
+  ).bind(ticketId, user.sub).first<SupportTicketRow>();
   return json({
     ok: true,
-    ticket: refreshed ? {
-      ...refreshed,
-      attachment_count: Number(refreshed.attachment_count || 0),
-      attachments: mapAttachments(parseAttachmentsJson(refreshed.attachments_json), { ticketId: refreshed.id }),
-      messages: await loadMessages(db, refreshed.id),
-    } : null,
+    ticket: refreshed ? await publicTicket(db, refreshed, true) : null,
   });
 };

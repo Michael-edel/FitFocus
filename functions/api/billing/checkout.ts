@@ -70,7 +70,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     });
 
     return json({ url: session.url });
-  } catch (error: unknown) {
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+  } catch {
+    console.error("billing.checkout_failed");
+    return json({ error: "CHECKOUT_FAILED" }, 500);
   }
 }

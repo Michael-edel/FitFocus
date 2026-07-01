@@ -142,12 +142,6 @@ function buildSupportSystemContext(request: Request, clientContext: string) {
   return lines.join("\n");
 }
 
-function appendSystemContextToMessage(message: string, systemContext: string) {
-  const context = clampContext(systemContext, 6000);
-  if (!context) return message;
-  return `${message.trim()}\n\n---\nСистемная диагностика\n${context}`;
-}
-
 function supportValidationError(fields: string[]) {
   return json({
     error: "VALIDATION_ERROR",
@@ -257,7 +251,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (missingFields.length > 0) return supportValidationError(missingFields);
   if (files.length > 3) return json({ error: "TOO_MANY_ATTACHMENTS", public_message: "Можно отправить не больше 3 файлов." }, 400);
 
-  const storedMessage = appendSystemContextToMessage(message, systemContext);
+  const storedMessage = message.trim();
+  const storedAdminNote = systemContext ? `Системная диагностика\n${systemContext}` : null;
 
   const ticketId = uuid();
   const attachments: SupportAttachmentRecord[] = [];
@@ -279,7 +274,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       id, user_id, created_at, updated_at, category, section, subject, message, steps_json,
       device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note,
       assigned_admin_user_id, resolved_at, closed_at, last_reply_at, last_reply_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 'normal', ?, ?, NULL, NULL, NULL, NULL, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 'normal', ?, ?, ?, NULL, NULL, NULL, ?, ?)`
   ).bind(
     ticketId,
     user.sub,
@@ -296,6 +291,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     appVersion,
     attachments.length,
     attachments.length ? JSON.stringify(attachments) : null,
+    storedAdminNote,
     now,
     user.sub,
   ).run();

@@ -58,4 +58,21 @@ describe('security and privacy baseline', () => {
     expect(googleCallback).not.toContain('details: info');
     expect(appleCallback).not.toContain('details: tokenJson');
   });
+
+  it('does not expose infrastructure diagnostics in user-facing API responses', () => {
+    const pushStatus = read('functions/api/push/status.ts');
+    const huaweiStatus = read('functions/api/wearable/huawei/status.ts');
+    const huaweiStart = read('functions/api/wearable/huawei/start.ts');
+    const checkout = read('functions/api/billing/checkout.ts');
+    const supportMy = read('functions/api/support/feedback/my.ts');
+
+    expect(pushStatus).not.toContain('missing_config');
+    expect(pushStatus).not.toContain('config_keys');
+    expect(huaweiStatus).not.toContain('missingConfig');
+    expect(huaweiStart).not.toContain('missing: config.missing');
+    expect(checkout).not.toContain('error instanceof Error ? error.message');
+    expect(checkout).not.toContain('String(error)');
+    expect(supportMy).not.toContain('SELECT *');
+    expect(supportMy).not.toContain('...ticket');
+  });
 });

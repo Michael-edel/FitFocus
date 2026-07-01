@@ -7,7 +7,6 @@ import { ensureHuaweiConnectionsSchema, getHuaweiConfig, huaweiProviderId, readH
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const config = getHuaweiConfig(env, request);
   let user;
   try {
     user = await requireUser(request, env);
@@ -15,6 +14,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+  const config = getHuaweiConfig(env, request);
 
   const db = requireDB(env);
   await ensureHuaweiConnectionsSchema(db);
@@ -26,7 +26,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({
     provider: huaweiProviderId(),
     configured: config.missing.length === 0,
-    missingConfig: config.missing,
     connected: row?.status === "connected",
     status: row?.status || "disconnected",
     scope: row?.scope || "",

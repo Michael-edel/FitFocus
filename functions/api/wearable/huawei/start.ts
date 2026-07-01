@@ -8,11 +8,6 @@ import { buildHuaweiAuthorizeUrl, getHuaweiConfig, type HuaweiHealthEnv } from "
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const config = getHuaweiConfig(env, request);
-  if (config.missing.length) {
-    return json({ error: "HUAWEI_CONFIG_MISSING", missing: config.missing }, 500);
-  }
-
   let user;
   try {
     user = await requireUser(request, env);
@@ -20,6 +15,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
+
+  const config = getHuaweiConfig(env, request);
+  if (config.missing.length) {
+    return json({ error: "HUAWEI_CONFIG_MISSING" }, 503);
+  }
+
   requireDB(env);
 
   const url = new URL(request.url);

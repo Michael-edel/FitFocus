@@ -21,21 +21,6 @@ type PushStatusRow = {
   enabled: number;
 };
 
-function pushConfigDiagnostics(env: Env) {
-  const missing: string[] = [];
-  if (!env.PUSH_VAPID_PUBLIC_KEY) missing.push("PUSH_VAPID_PUBLIC_KEY");
-  if (!env.PUSH_VAPID_PRIVATE_KEY) missing.push("PUSH_VAPID_PRIVATE_KEY");
-  if (!env.PUSH_VAPID_SUBJECT) missing.push("PUSH_VAPID_SUBJECT");
-  return {
-    missing,
-    keys: {
-      PUSH_VAPID_PUBLIC_KEY: Boolean(env.PUSH_VAPID_PUBLIC_KEY),
-      PUSH_VAPID_PRIVATE_KEY: Boolean(env.PUSH_VAPID_PRIVATE_KEY),
-      PUSH_VAPID_SUBJECT: Boolean(env.PUSH_VAPID_SUBJECT),
-    },
-  };
-}
-
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -74,14 +59,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return row.enabled && deviceLabel === currentDeviceLabel && browserLabel === currentBrowserLabel;
   }) || (enabledItems.length === 1 ? enabledItems[0] : null);
 
-  const config = pushConfigDiagnostics(env);
-
   return json({
     ok: true,
     configured: hasPushConfig(env),
     vapid_public_key: env.PUSH_VAPID_PUBLIC_KEY || null,
-    missing_config: config.missing,
-    config_keys: config.keys,
     checked_at: new Date().toISOString(),
     count: items.length,
     current_subscription_id: currentMatch?.id || null,

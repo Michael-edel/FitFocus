@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| `git status --short` перед коммитом | изменения только в state sync, keyspace, тестах и `README.md` |
+| `git status --short` перед коммитом | изменения только в API/UI отправки-получения, тестах и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 49 файлов / 190 тестов |
+| `npm run test:unit` | пройдено, 49 файлов / 192 теста |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
 
@@ -42,13 +42,14 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 ## Последний пакет изменений
 
-Пакет от 01.07.2026:
+Пакет от 02.07.2026:
 
-- Локальный legacy-снимок `fitfocus_data_<user>_all_users` больше не зеркалится в `/api/state`.
-- Серверный keyspace `/api/state` и `/api/profile` больше не принимает `_all_users` как синхронизируемый ключ.
-- `GET /api/state?prefix=...` фильтрует старые `_all_users` записи, если они уже были в D1.
-- Клиентская очередь state sync дедуплицирует повторные записи одного ключа и делает паузу после `401/403`, чтобы не плодить десятки одинаковых запросов при истекшей сессии.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 49 unit-файлов и 190 тестов.
+- Проверены клиентские отправки `fetch`, серверные API-ответы и маршруты поддержки, push, Huawei Health и Stripe checkout.
+- Пользовательский `/api/support/feedback/my` больше не возвращает admin-only поля и системную диагностику; используется явный публичный serializer.
+- Форма поддержки хранит пользовательский текст отдельно от системной диагностики; диагностика уходит в `admin_note` для админки.
+- `/api/push/status` и Huawei routes больше не раскрывают имена Cloudflare env-переменных в пользовательских ответах.
+- `/api/billing/checkout` больше не возвращает raw exception message клиенту.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 49 unit-файлов и 192 теста.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -58,11 +59,19 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 49 файлов / 190 тестов |
+| `npm run test:unit` | пройдено, 49 файлов / 192 теста |
 | `npm run typecheck` | пройдено |
 | `npm run build` | пройдено |
 
-## Предыдущий пакет изменений
+## Предыдущие пакеты изменений
+
+Пакет от 01.07.2026:
+
+- Локальный legacy-снимок `fitfocus_data_<user>_all_users` больше не зеркалится в `/api/state`.
+- Серверный keyspace `/api/state` и `/api/profile` больше не принимает `_all_users` как синхронизируемый ключ.
+- `GET /api/state?prefix=...` фильтрует старые `_all_users` записи, если они уже были в D1.
+- Клиентская очередь state sync дедуплицирует повторные записи одного ключа и делает паузу после `401/403`, чтобы не плодить десятки одинаковых запросов при истекшей сессии.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 49 unit-файлов и 190 тестов.
 
 Пакет от 28.06.2026:
 
@@ -416,6 +425,8 @@ npx wrangler d1 migrations apply fitfocus --remote
 - Экспорт пользовательских данных через `/api/export`.
 - Экспорт не отдает push credentials `endpoint`, `p256dh`, `auth`.
 - Таблицы с пользовательскими данными контролируются проверкой `npm run check:privacy`.
+- Пользовательский support API возвращает только публичные поля обращения и не отдает `admin_note`, назначенного админа или системную диагностику.
+- Пользовательские status/config API не возвращают имена Cloudflare secrets/vars.
 
 Ограничение:
 
@@ -442,13 +453,13 @@ npx wrangler d1 migrations apply fitfocus --remote
 | Семья, меню, покупки | 75% | D1 routes/tests есть; зависит от Family tariff и cloud state |
 | Push для пользователя | 86% | VAPID status/subscribe/test/unsubscribe, SW push handler, unit tests и production E2E push settings есть; зависит от разрешений ОС/браузера |
 | Админская push-рассылка | 85% | `/api/admin/push/send`, проверка без отправки, фильтры, сортировка, предпросмотр, тесты есть |
-| Поддержка и вложения | 85% | User/admin support routes, diagnostics, R2/inline attachments, тесты есть |
+| Поддержка и вложения | 88% | User/admin support routes, diagnostics для админки, публичный serializer для клиента, R2/inline attachments, тесты есть |
 | Админка | 80% | Основные sections/routes/guards есть; большой компонент требует поддержки |
 | Оплата Stripe | 75% | Checkout/webhook/tests есть; зависит от внешних Stripe secrets/prices/webhook setup |
 | Wearable/Health | 55% | Snapshot API + iOS HealthKit bridge есть; Huawei OAuth/sync scaffold добавлен; прямые Google/Fitbit/Garmin интеграции не готовы |
 | Backup/autosave/PWA-кэш | 45% | JSON backup есть; autosave prototype; источник правды для авторизованного пользователя - D1/облако |
 | Тестовое покрытие системных инвариантов | 87% | unit tests + check scripts + Playwright E2E для production PWA shell, onboarding и push settings |
-| Privacy/security baseline | 72% | privacy page, API headers, Pages `_headers`, export redaction and tests есть; юридические реквизиты владельца не заполнены в коде |
+| Privacy/security baseline | 76% | privacy page, API headers, Pages `_headers`, export redaction, support redaction и tests есть; юридические реквизиты владельца не заполнены в коде |
 
 ## Критические и системные проблемы
 
@@ -746,6 +757,9 @@ CI использует Node.js 24 и Python 3.12.
 - Приватный VAPID-ключ push не раскрывается через `/api/push/status`.
 - Пользовательский экспорт не возвращает push credentials подписок.
 - OAuth error responses не возвращают upstream details от Google/Apple.
+- Пользовательские API поддержки не возвращают admin-only поля и системную диагностику.
+- Push/Huawei пользовательские status routes не раскрывают имена Cloudflare env-переменных.
+- Billing checkout не возвращает клиенту raw exception message.
 
 ## Что этот репозиторий не доказывает
 
