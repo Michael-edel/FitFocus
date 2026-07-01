@@ -42,6 +42,7 @@ EXPECTED_USER_RELATED_TABLES = {
     "support_feedback_messages",
     "ai_rate_limits",
     "user_achievements",
+    "wearable_connections",
 }
 
 # Some tables are related through family_id/scope_id rather than a direct user-id column.

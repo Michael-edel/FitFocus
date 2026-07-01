@@ -222,6 +222,7 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM admin_sessions WHERE admin_user_id = ?").bind(userId),
     db.prepare("DELETE FROM admin_events WHERE admin_user_id = ? OR target_user_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM wearable_connections WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM ai_rate_limits WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_cost_daily WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_achievements WHERE user_id = ?").bind(userId),

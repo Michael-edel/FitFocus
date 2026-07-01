@@ -32,7 +32,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 19 миграций / 29 таблиц |
-| `npm run check:privacy` | пройдено, 26 пользовательских таблиц |
+| `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
 | `npm run test:unit` | пройдено, 46 файлов / 177 тестов |
 | `npm run build` | пройдено |

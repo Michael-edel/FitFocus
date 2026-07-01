@@ -38,6 +38,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const aiRateLimits = await allRows(db, "SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const userCostDaily = await allRows(db, "SELECT day, input_tokens, output_tokens, total_tokens, estimated_cost_usd, updated_at FROM user_cost_daily WHERE user_id = ? ORDER BY day DESC", userId);
   const pushSubscriptions = await allRows(db, "SELECT id, content_encoding, device_label, user_agent, created_at, updated_at, last_sent_at, last_error, enabled FROM push_subscriptions WHERE user_id = ? ORDER BY updated_at DESC", userId);
+  const wearableConnections = await allRows(db, "SELECT id, provider, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const achievements = await allRows(db, "SELECT achievement_key, unlocked_at, tier, source, snapshot_json, created_at FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC", userId);
   const inviteRedemptions = await allRows(db, "SELECT code, redeemed_at FROM invite_redemptions WHERE user_id = ? ORDER BY redeemed_at DESC", userId);
   const familyMemberships = await allRows(db, "SELECT id, family_id, role, status, display_name, restrictions_json, is_active, updated_at, sex, age, height_cm, weight_kg, activity, goal, created_at FROM family_members WHERE user_id = ? ORDER BY created_at DESC", userId);
@@ -71,6 +72,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     ai_rate_limits: aiRateLimits,
     user_cost_daily: userCostDaily,
     push_subscriptions: pushSubscriptions,
+    wearable_connections: wearableConnections,
     achievements,
     invite_redemptions: inviteRedemptions,
     family_memberships: familyMemberships,
