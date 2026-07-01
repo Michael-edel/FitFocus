@@ -52,24 +52,24 @@ export default function FoodStreakCard({ userId, foodDiary }: FoodStreakCardProp
   }, [streakState.streak, userId]);
 
   return (
-    <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4 relative overflow-hidden">
+    <div className="min-w-0 rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4 relative overflow-hidden min-h-[172px]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-400 via-amber-300 to-rose-400 opacity-80" />
       <div className="flex items-center justify-between gap-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Food Streak</div>
-        <Flame size={14} className="text-orange-300" />
+        <div className="min-w-0 text-[10px] font-black uppercase tracking-widest text-slate-500 truncate">Food Streak</div>
+        <Flame size={14} className="text-orange-300 shrink-0" />
       </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0">
           <div className="text-2xl font-black text-slate-100 tabular-nums">{streakState.streak}</div>
           <div className="text-xs text-slate-500">дней подряд с записью еды</div>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-orange-200">
-          <Sparkles size={12} />
-          {copy.badge}
+        <div className="inline-flex w-full max-w-full items-center justify-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-center text-[10px] font-black uppercase tracking-wide leading-tight text-orange-200 sm:w-auto sm:max-w-[14rem] sm:tracking-widest">
+          <Sparkles size={12} className="shrink-0" />
+          <span className="min-w-0 break-words">{copy.badge}</span>
         </div>
       </div>
-      <div className="mt-3 text-sm font-black text-slate-100">{copy.title}</div>
-      <div className="mt-1 text-xs text-slate-500 leading-relaxed">{copy.note}</div>
+      <div className="mt-3 text-sm font-black text-slate-100 leading-snug">{copy.title}</div>
+      <div className="mt-1 min-h-[2rem] text-xs text-slate-500 leading-relaxed">{copy.note}</div>
     </div>
   );
 }

@@ -134,14 +134,14 @@ export function WeightTrendChart({ weightHistory, targetWeight }: { weightHistor
           {typeof targetWeight === 'number' && Number.isFinite(targetWeight) ? (
             <ReferenceLine y={targetWeight} stroke="#818CF8" strokeDasharray="6 4" strokeOpacity={0.7} label={{ value: 'цель', position: 'insideTopRight', fill: '#a5b4fc', fontSize: 10, fontWeight: 800 }} />
           ) : null}
-          <Area 
+          <Area
             type="monotone" 
             dataKey="weight" 
             stroke="#818CF8" 
             strokeWidth={4} 
             fillOpacity={1} 
             fill="url(#colorWeightChart)" 
-            animationDuration={1500}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -240,8 +240,8 @@ export function ProgressArchiveChart({
             itemStyle={{ color: '#f8fafc' }}
             labelStyle={{ color: '#64748b', marginBottom: '4px' }}
           />
-          <Area type="monotone" dataKey="measurements" stroke="#22c55e" strokeWidth={3} fill="url(#colorProgressMeasurements)" fillOpacity={1} name="Замеры" />
-          <Area type="monotone" dataKey="photos" stroke="#f472b6" strokeWidth={3} fill="url(#colorProgressPhotos)" fillOpacity={1} name="Фото" />
+          <Area type="monotone" dataKey="measurements" stroke="#22c55e" strokeWidth={3} fill="url(#colorProgressMeasurements)" fillOpacity={1} name="Замеры" isAnimationActive={false} />
+          <Area type="monotone" dataKey="photos" stroke="#f472b6" strokeWidth={3} fill="url(#colorProgressPhotos)" fillOpacity={1} name="Фото" isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -380,8 +380,8 @@ export default function DashboardChartsPanel({
     'text-sky-300';
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
+    <div className="grid min-w-0 grid-cols-1 lg:grid-cols-4 gap-8">
+      <div className="min-w-0 bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-100">Дневник нутриентов</h3>
           <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center font-black', caloriePercentClass, caloriePercent > 100 ? 'bg-rose-500/10' : 'bg-indigo-500/10')}>
@@ -390,7 +390,7 @@ export default function DashboardChartsPanel({
         </div>
         <div className="relative h-48 md:h-64 flex items-center justify-center">
           <PieChart width={160} height={160} className="md:hidden">
-            <Pie data={macroPieData} innerRadius={46} outerRadius={72} paddingAngle={8} dataKey="value" stroke="none">
+            <Pie data={macroPieData} innerRadius={46} outerRadius={72} paddingAngle={8} dataKey="value" stroke="none" isAnimationActive={false}>
               {macroPieData.map((entry, index) => (
                 <Cell key={`mobile-cell-${index}`} fill={entry.color} />
               ))}
@@ -398,7 +398,7 @@ export default function DashboardChartsPanel({
             <Tooltip contentStyle={{ backgroundColor: 'var(--ff-card)', borderRadius: '24px', border: '1px solid var(--ff-border)', fontWeight: 'bold', color: 'var(--ff-text)' }} />
           </PieChart>
           <PieChart width={200} height={200} className="hidden md:block">
-            <Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">
+            <Pie data={macroPieData} innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none" isAnimationActive={false}>
               {macroPieData.map((entry, index) => (
                 <Cell key={`desktop-cell-${index}`} fill={entry.color} />
               ))}
@@ -428,7 +428,7 @@ export default function DashboardChartsPanel({
         </div>
       </div>
 
-      <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
+      <div className="min-w-0 bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-100">Полезные привычки</h3>
           <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">✓</div>
@@ -465,7 +465,7 @@ export default function DashboardChartsPanel({
         <HabitStreaksCard dailyHabits={dailyHabits} />
       </div>
 
-      <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col">
+      <div className="min-w-0 bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-100">Мой вес</h3>
           <div className="flex flex-col items-end">
@@ -505,7 +505,7 @@ export default function DashboardChartsPanel({
         </div>
       </div>
 
-      <div className="bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col">
+      <div className="min-w-0 bg-slate-900 p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-slate-800 space-y-6 md:space-y-8 flex flex-col">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-xl font-black text-slate-100">Фото и замеры</h3>
           <div className="w-10 h-10 rounded-xl bg-fuchsia-500/10 flex items-center justify-center text-fuchsia-300">◎</div>
