@@ -134,6 +134,48 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function requiredFieldsMessage(fields: string[]) {
+  if (fields.length === 0) return '';
+  return `Заполните обязательные поля: ${fields.join(', ')}.`;
+}
+
+function objectPayload(payload: unknown): Record<string, unknown> {
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function supportSubmitErrorMessage(status: number, payload: unknown) {
+  const body = objectPayload(payload);
+  const code = String(body.code || body.error || '');
+  if (status === 401 || code === 'UNAUTH') return 'Сессия истекла. Войдите снова и повторите отправку.';
+  if (status === 413 || code === 'PAYLOAD_TOO_LARGE') return 'Слишком большой объём данных. Уменьшите размер вложений и попробуйте снова.';
+  if (code === 'VALIDATION_ERROR' || code === 'REQUIRED_FIELDS') {
+    const labels: Record<string, string> = {
+      subject: 'тема',
+      message: 'описание проблемы или вложение',
+      device: 'устройство',
+      browser: 'браузер',
+    };
+    const fields = Array.isArray(body.fields)
+      ? body.fields.map((field: unknown) => labels[String(field)] || String(field)).filter(Boolean)
+      : [];
+    return fields.length ? requiredFieldsMessage(fields) : 'Заполните обязательные поля.';
+  }
+  if (code === 'TOO_MANY_ATTACHMENTS') return 'Можно отправить не больше 3 файлов.';
+  if (code === 'ATTACHMENT_TOO_LARGE') return 'Один из файлов слишком большой. Прикрепите файл до 2 MB.';
+  if (code === 'ATTACHMENT_PROCESSING_FAILED') return 'Не удалось обработать вложение. Попробуйте другой файл.';
+  return 'Не удалось отправить обращение. Проверьте обязательные поля и попробуйте ещё раз.';
+}
+
+function supportReplyErrorMessage(status: number, payload: unknown) {
+  const message = supportSubmitErrorMessage(status, payload);
+  if (message.includes('обращение')) return message.replace('обращение', 'ответ');
+  return message;
+}
+
 function formatTimestamp(value?: number | string | null) {
   if (!value) return '—';
   const date = new Date(typeof value === 'number' ? value : String(value));
@@ -307,8 +349,8 @@ export default function SupportScreen({ currentUser }: Props) {
       setVoiceRecording(true);
       setVoiceSeconds(0);
       timerRef.current = window.setInterval(() => setVoiceSeconds((prev) => prev + 1), 1000);
-    } catch (e: any) {
-      setError(e?.name === 'NotAllowedError' ? 'Нужно разрешить доступ к микрофону.' : 'Не удалось начать запись голоса.');
+    } catch (e: unknown) {
+      setError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Нужно разрешить доступ к микрофону.' : 'Не удалось начать запись голоса.');
       resetVoice();
     }
   }, [resetVoice]);
@@ -403,8 +445,13 @@ export default function SupportScreen({ currentUser }: Props) {
     setSuccess(null);
 
     const trimmedMessage = message.trim();
-    if (!trimmedMessage && !voiceAttachment && attachments.length === 0) {
-      setError('Опишите проблему текстом, голосом или добавьте файл.');
+    const missingFields: string[] = [];
+    if (!subject.trim()) missingFields.push('тема');
+    if (!device.trim()) missingFields.push('устройство');
+    if (!browser.trim()) missingFields.push('браузер');
+    if (!trimmedMessage && !voiceAttachment && attachments.length === 0) missingFields.push('описание проблемы или вложение');
+    if (missingFields.length > 0) {
+      setError(requiredFieldsMessage(missingFields));
       return;
     }
 
@@ -445,7 +492,7 @@ export default function SupportScreen({ currentUser }: Props) {
       });
       const json = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(json?.error?.message || json?.message || 'Не удалось отправить обращение.');
+        throw new Error(supportSubmitErrorMessage(response.status, json));
       }
 
       setSuccess('Обращение отправлено. Оно появится в админке и будет доступно для проверки.');
@@ -463,8 +510,8 @@ export default function SupportScreen({ currentUser }: Props) {
       setVoiceAttachment(null);
       setVoiceSeconds(0);
       await loadMyTickets(false);
-    } catch (e: any) {
-      setError(e?.message || 'Не удалось отправить обращение.');
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Не удалось отправить обращение. Проверьте обязательные поля и попробуйте ещё раз.'));
     } finally {
       setSending(false);
     }
@@ -490,15 +537,15 @@ export default function SupportScreen({ currentUser }: Props) {
       });
       const json = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(json?.message || 'Не удалось отправить ответ.');
+        throw new Error(supportReplyErrorMessage(response.status, json));
       }
       setSelectedTicket(json?.ticket || null);
       setReplyMessage('');
       replyAttachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
       setReplyAttachments([]);
       await loadMyTickets();
-    } catch (e: any) {
-      setError(e?.message || 'Не удалось отправить ответ.');
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Не удалось отправить ответ. Проверьте поля и попробуйте ещё раз.'));
     } finally {
       setReplySending(false);
     }
@@ -564,10 +611,11 @@ export default function SupportScreen({ currentUser }: Props) {
             </div>
 
             <div className="mt-4 space-y-2">
-              <label className="block text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Тема</label>
+              <label className="block text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Тема *</label>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
+                aria-required="true"
                 placeholder="Например: кнопка не нажимается после сохранения рецепта"
                 className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/40"
               />
@@ -575,20 +623,22 @@ export default function SupportScreen({ currentUser }: Props) {
 
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <label className="space-y-2">
-                <span className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Устройство</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Устройство *</span>
                 <input
                   value={device}
                   onChange={(e) => setDevice(e.target.value)}
+                  aria-required="true"
                   placeholder="iPhone 17 Pro / Windows / Mac"
                   className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/40"
                 />
               </label>
 
               <label className="space-y-2">
-                <span className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Браузер</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Браузер *</span>
                 <input
                   value={browser}
                   onChange={(e) => setBrowser(e.target.value)}
+                  aria-required="true"
                   placeholder="Safari / Chrome / Edge"
                   className="w-full rounded-2xl bg-slate-950/50 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/40"
                 />
@@ -734,7 +784,7 @@ export default function SupportScreen({ currentUser }: Props) {
             </div>
             <div className="text-slate-100 font-black text-lg">В Admin Console FitFocus</div>
             <p className="text-slate-400 font-medium leading-7">
-              Обращение попадает в D1-таблицу `support_feedback`, а в админке его можно открыть, посмотреть вложения и разобрать проблему вручную.
+              Обращение попадает в защищённую панель поддержки FitFocus, где его можно открыть, посмотреть вложения и разобрать проблему вручную.
             </p>
 
             <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">

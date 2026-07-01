@@ -143,6 +143,7 @@ describe('Huawei Health integration', () => {
     expect(bodyText).not.toContain('access-token');
     expect(bodyText).not.toContain('refresh-token');
     expect(bodyText).not.toContain(encrypted.accessTokenEnc);
+    expect(db.runs.some((run) => run.sql.includes('CREATE TABLE IF NOT EXISTS wearable_connections'))).toBe(true);
   });
 
   it('syncs today steps from Huawei Health into the profile', async () => {

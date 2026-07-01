@@ -2,7 +2,7 @@ import type { PagesFunction } from "@cloudflare/workers-types";
 import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
-import { huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
+import { ensureHuaweiConnectionsSchema, huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { loadActivePlan } from "../../_lib/plans";
@@ -29,6 +29,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
   const db = requireDB(env);
+  await ensureHuaweiConnectionsSchema(db);
   const provider = huaweiProviderId();
   await db.prepare("DELETE FROM wearable_connections WHERE user_id = ? AND provider = ?").bind(user.sub, provider).run();
 

@@ -2,7 +2,7 @@ import type { PagesFunction } from "@cloudflare/workers-types";
 import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
-import { getHuaweiConfig, huaweiProviderId, readHuaweiMetadata, type HuaweiConnectionRow, type HuaweiHealthEnv } from "../../_lib/huawei_health";
+import { ensureHuaweiConnectionsSchema, getHuaweiConfig, huaweiProviderId, readHuaweiMetadata, type HuaweiConnectionRow, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -16,7 +16,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "UNAUTH" }, 401);
   }
 
-  const row = await requireDB(env)
+  const db = requireDB(env);
+  await ensureHuaweiConnectionsSchema(db);
+  const row = await db
     .prepare("SELECT * FROM wearable_connections WHERE user_id = ? AND provider = ? LIMIT 1")
     .bind(user.sub, huaweiProviderId())
     .first<HuaweiConnectionRow>();

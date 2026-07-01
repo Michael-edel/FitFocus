@@ -9,6 +9,7 @@ import { loadActivePlan } from "../../_lib/plans";
 import {
   decryptHuaweiAccessToken,
   decryptHuaweiRefreshToken,
+  ensureHuaweiConnectionsSchema,
   encryptHuaweiTokenSet,
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
@@ -71,6 +72,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
+  await ensureHuaweiConnectionsSchema(db);
   const provider = huaweiProviderId();
   const row = await db
     .prepare("SELECT * FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1")

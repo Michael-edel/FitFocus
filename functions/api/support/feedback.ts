@@ -148,6 +148,15 @@ function appendSystemContextToMessage(message: string, systemContext: string) {
   return `${message.trim()}\n\n---\nСистемная диагностика\n${context}`;
 }
 
+function supportValidationError(fields: string[]) {
+  return json({
+    error: "VALIDATION_ERROR",
+    code: "REQUIRED_FIELDS",
+    public_message: "Заполните обязательные поля.",
+    fields,
+  }, 400);
+}
+
 function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
   return records.map((attachment, index) => ({
     ...attachment,
@@ -239,14 +248,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const contact = String(form.get("contact") || "").trim();
   const appVersion = String(form.get("app_version") || "").trim();
   const systemContext = buildSupportSystemContext(request, String(form.get("system_context") || ""));
-  const storedMessage = appendSystemContextToMessage(message, systemContext);
   const storedDevice = device || detectDeviceFromUserAgent(request.headers.get("user-agent") || "");
   const storedBrowser = browser || detectBrowserFromUserAgent(request.headers.get("user-agent") || "");
-
-  if (!message) return json({ error: "BAD_REQUEST", message: "message required" }, 400);
-
   const files = form.getAll("attachments").filter((entry): entry is File => entry instanceof File && entry.size > 0);
-  if (files.length > 3) return json({ error: "BAD_REQUEST", message: "Too many attachments" }, 400);
+  const missingFields: string[] = [];
+  if (!subject) missingFields.push("subject");
+  if (!message && files.length === 0) missingFields.push("message");
+  if (missingFields.length > 0) return supportValidationError(missingFields);
+  if (files.length > 3) return json({ error: "TOO_MANY_ATTACHMENTS", public_message: "Можно отправить не больше 3 файлов." }, 400);
+
+  const storedMessage = appendSystemContextToMessage(message, systemContext);
 
   const ticketId = uuid();
   const attachments: SupportAttachmentRecord[] = [];
@@ -257,9 +268,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error || "");
     if (msg.startsWith("FILE_TOO_LARGE:")) {
-      return json({ error: "BAD_REQUEST", message: `Файл ${msg.split(":")[1]} слишком большой. Прикрепите файл до 2 MB.` }, 400);
+      return json({ error: "ATTACHMENT_TOO_LARGE", public_message: "Файл слишком большой. Прикрепите файл до 2 MB." }, 400);
     }
-    return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
+    return json({ error: "ATTACHMENT_PROCESSING_FAILED", public_message: "Не удалось обработать вложение." }, 400);
   }
 
   const now = nowMs();
