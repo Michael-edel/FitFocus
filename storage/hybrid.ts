@@ -35,10 +35,21 @@ const __kvQueue: KVItem[] = [];
 const __kvDeleteQueue: string[] = [];
 let __kvTimer: number | null = null;
 let __kvDeleteTimer: number | null = null;
+let __remoteAuthBlockedUntil = 0;
+const REMOTE_AUTH_BACKOFF_MS = 30_000;
 
-function shouldMirrorKey(key: string): boolean {
+export function shouldMirrorKey(key: string): boolean {
   if (key.endsWith('__ffv')) return false;
+  if (key.endsWith('_all_users')) return false;
   return REMOTE_STATE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function isRemoteAuthBlocked(): boolean {
+  return Date.now() < __remoteAuthBlockedUntil;
+}
+
+function blockRemoteSyncAfterAuthFailure() {
+  __remoteAuthBlockedUntil = Date.now() + REMOTE_AUTH_BACKOFF_MS;
 }
 
 function versionMetaKey(key: string) {
@@ -89,7 +100,15 @@ function isRemoteStateItem(value: unknown): value is RemoteStateItem {
 
 function enqueueRemoteKVWrite(key: string, value: string) {
   if (!shouldMirrorKey(key)) return;
-  __kvQueue.push({ key, value, baseVersion: getStoredVersion(key) });
+  if (isRemoteAuthBlocked()) return;
+
+  const existing = __kvQueue.find((item) => item.key === key);
+  if (existing) {
+    existing.value = value;
+    existing.baseVersion = getStoredVersion(key);
+  } else {
+    __kvQueue.push({ key, value, baseVersion: getStoredVersion(key) });
+  }
 
   if (__kvTimer != null) return;
   __kvTimer = window.setTimeout(async () => {
@@ -114,6 +133,10 @@ function enqueueRemoteKVWrite(key: string, value: string) {
           }
           continue;
         }
+        if (r.status === 401 || r.status === 403) {
+          blockRemoteSyncAfterAuthFailure();
+          break;
+        }
         if (r.status === 409 && payload?.key) {
           const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
           const currentValue = localStorage.getItem(item.key);
@@ -134,7 +157,10 @@ function enqueueRemoteKVWrite(key: string, value: string) {
 
 function enqueueRemoteKVDelete(key: string) {
   if (!shouldMirrorKey(key)) return;
-  __kvDeleteQueue.push(key);
+  if (isRemoteAuthBlocked()) return;
+  if (!__kvDeleteQueue.includes(key)) {
+    __kvDeleteQueue.push(key);
+  }
 
   if (__kvDeleteTimer != null) return;
   __kvDeleteTimer = window.setTimeout(async () => {
@@ -142,12 +168,16 @@ function enqueueRemoteKVDelete(key: string) {
     const batch = __kvDeleteQueue.splice(0, __kvDeleteQueue.length);
     if (!batch.length) return;
     try {
-      await Promise.all(batch.map((k) =>
-        fetch(`/api/state?key=${encodeURIComponent(k)}`, {
+      for (const k of batch) {
+        const response = await fetch(`/api/state?key=${encodeURIComponent(k)}`, {
           method: 'DELETE',
           credentials: 'include',
-        })
-      ));
+        });
+        if (response.status === 401 || response.status === 403) {
+          blockRemoteSyncAfterAuthFailure();
+          break;
+        }
+      }
     } catch {
       // Best-effort mirror only. A later full sync can clean this up.
     }
@@ -303,7 +333,7 @@ export function collectLocalStateItems(userId: string): KVItem[] {
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
     if (!key) continue;
-    if (key.endsWith('__ffv')) continue;
+    if (!shouldMirrorKey(key)) continue;
     if (
       !key.startsWith(STORAGE_KEYS.dataPrefix) &&
       key !== 'ff_gemini_cooldown_until' &&

@@ -47,7 +47,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub, prefix + "%")
     .all();
 
-  const items = (results || []).map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
+  const items = (results || [])
+    .filter((r) => typeof r.k === "string" && isAllowedStateKey(user.sub, r.k))
+    .map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
   return json({ items }, 200);
 };
 
