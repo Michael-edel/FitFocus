@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestPut } from '../functions/api/state';
+import { onRequestGet, onRequestPut } from '../functions/api/state';
+import { isAllowedStateKey } from '../functions/api/_lib/state_keyspace';
 type StatePutContext = Parameters<typeof onRequestPut>[0];
+type StateGetContext = Parameters<typeof onRequestGet>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -58,6 +60,14 @@ function makeDb() {
         },
         async all() {
           if (sql.includes('SELECT role FROM user_roles')) return { results: [{ role: 'user' }] };
+          if (sql.includes('FROM user_kv')) {
+            return {
+              results: [
+                { k: 'fitfocus_data_user-1_food:1', v: '{"meal":true}', version: 2, updated_at: 1000 },
+                { k: 'fitfocus_data_user-1_all_users', v: '[{"name":"Hidden"}]', version: 3, updated_at: 1001 },
+              ],
+            };
+          }
           return { results: [] };
         },
         async run() {
@@ -92,7 +102,54 @@ async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unkn
   return onRequestPut(context);
 }
 
+async function getState(db: ReturnType<typeof makeDb>, prefix: string) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateGetContext['env'];
+  const context: StateGetContext = {
+    request: new Request(`https://fitfocus.test/api/state?prefix=${encodeURIComponent(prefix)}`, {
+      method: 'GET',
+      headers: { Cookie: `ff_session=${token}` },
+    }),
+    env,
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return onRequestGet(context);
+}
+
 describe('/api/state PUT', () => {
+  it('rejects legacy all-users snapshots from the remote state keyspace', async () => {
+    expect(isAllowedStateKey('user-1', 'fitfocus_data_user-1_all_users')).toBe(false);
+
+    const db = makeDb();
+    const response = await putState(db, {
+      key: 'fitfocus_data_user-1_all_users',
+      value: '[{"name":"Should not sync"}]',
+      baseVersion: 0,
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'FORBIDDEN_KEYSPACE',
+      key: 'fitfocus_data_user-1_all_users',
+    });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('does not return legacy all-users snapshots during prefix hydration', async () => {
+    const db = makeDb();
+    const response = await getState(db, 'fitfocus_data_user-1_');
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      items: [
+        { key: 'fitfocus_data_user-1_food:1', value: '{"meal":true}', version: 2 },
+      ],
+    });
+  });
+
   it('writes multiple keys through one batch after all conflicts are checked', async () => {
     const db = makeDb();
     const response = await putState(db, {
