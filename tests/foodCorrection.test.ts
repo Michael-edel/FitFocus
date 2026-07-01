@@ -108,4 +108,66 @@ describe('food correction helpers', () => {
       },
     });
   });
+
+  it('opens an existing non-food entry with zero nutrition even if stale calories were stored', () => {
+    const item: FoodItem = {
+      id: 'food-2',
+      name: 'Золотистый ретривер (не блюдо)',
+      calories: 400,
+      protein: 200,
+      fat: 13,
+      carbs: 15,
+      timestamp: '2026-07-01T08:15:00.000Z',
+      mealType: 'snack',
+      nonFood: true,
+      insight: {
+        calories: 400,
+        macros: { protein: 200, fat: 13, carbs: 15 },
+        ingredients: [{ name: 'Объект на фото', percent: 100 }],
+        notes: ['Это не блюдо и не пищевой продукт.'],
+      },
+    };
+
+    const draft = buildFoodCorrectionDraft(item, 'snack');
+
+    expect(draft).toMatchObject({
+      calories: '0',
+      protein: '0',
+      fat: '0',
+      carbs: '0',
+      ingredientsText: '',
+      nonFood: true,
+      sourceNonFood: true,
+    });
+  });
+
+  it('keeps a source non-food entry non-food when the checkbox is removed without food data', () => {
+    const patch = buildCorrectedFoodPatch({
+      id: 'food-2',
+      name: 'Золотистый ретривер (не блюдо)',
+      mealType: 'snack',
+      timestamp: '2026-07-01T08:15:00.000Z',
+      calories: '0',
+      protein: '0',
+      fat: '0',
+      carbs: '0',
+      ingredientsText: '',
+      notesText: '',
+      nonFood: false,
+      sourceNonFood: true,
+    });
+
+    expect(patch).toMatchObject({
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      nonFood: true,
+      insight: {
+        calories: 0,
+        macros: { protein: 0, fat: 0, carbs: 0 },
+        ingredients: [],
+      },
+    });
+  });
 });

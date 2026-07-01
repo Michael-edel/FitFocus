@@ -12,6 +12,7 @@ export type FoodCorrectionDraft = {
   ingredientsText: string;
   notesText: string;
   nonFood: boolean;
+  sourceNonFood?: boolean;
 };
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -74,18 +75,20 @@ export function parseNotesForCorrection(value: string): string[] {
 export function buildFoodCorrectionDraft(item: FoodItem, fallbackMealType: MealType): FoodCorrectionDraft {
   const insight = item.insight;
   const mealType = normalizeMealType(item.mealType, fallbackMealType);
+  const nonFood = item.nonFood === true;
   return {
     id: item.id,
     name: item.name || '',
     mealType,
     timestamp: item.timestamp || new Date().toISOString(),
-    calories: numberToDraft(item.calories),
-    protein: numberToDraft(item.protein),
-    fat: numberToDraft(item.fat),
-    carbs: numberToDraft(item.carbs),
-    ingredientsText: formatIngredientsForCorrection(insight?.ingredients),
+    calories: nonFood ? '0' : numberToDraft(item.calories),
+    protein: nonFood ? '0' : numberToDraft(item.protein),
+    fat: nonFood ? '0' : numberToDraft(item.fat),
+    carbs: nonFood ? '0' : numberToDraft(item.carbs),
+    ingredientsText: nonFood ? '' : formatIngredientsForCorrection(insight?.ingredients),
     notesText: (insight?.notes || []).join('\n'),
-    nonFood: item.nonFood === true,
+    nonFood,
+    sourceNonFood: nonFood,
   };
 }
 
@@ -96,8 +99,9 @@ export function buildCorrectedFoodPatch(draft: FoodCorrectionDraft, previousInsi
   const carbs = parseNonNegativeNumber(draft.carbs);
   const ingredients = parseIngredientsForCorrection(draft.ingredientsText);
   const notes = parseNotesForCorrection(draft.notesText);
+  const hasFoodData = calories > 0 || protein > 0 || fat > 0 || carbs > 0 || ingredients.length > 0;
 
-  if (draft.nonFood) {
+  if (draft.nonFood || (draft.sourceNonFood === true && !hasFoodData)) {
     return {
       name: draft.name.trim() || 'Не еда',
       mealType: normalizeMealType(draft.mealType, 'snack'),

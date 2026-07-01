@@ -730,7 +730,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         },
       },
       {
-        text: 'Анализируй это блюдо. Верни JSON с полями: name (название блюда НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
+        text: 'Определи, является ли изображение едой или напитком для человека. Если это не еда и не напиток, верни nonFood=true, calories=0, protein=0, fat=0, carbs=0, ingredients=[] и notes с кратким объяснением НА РУССКОМ; не оценивай калорийность непищевого объекта. Если это еда или напиток, анализируй блюдо. Верни JSON с полями: nonFood (boolean), name (название НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
@@ -739,6 +739,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
       type: "OBJECT",
       properties: {
         name: { type: "STRING" },
+        nonFood: { type: "BOOLEAN" },
         calories: { type: "NUMBER" },
         protein: { type: "NUMBER" },
         fat: { type: "NUMBER" },
@@ -755,10 +756,24 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         },
         notes: { type: "ARRAY", items: { type: "STRING" } }
       },
-      required: ["name", "calories", "protein", "fat", "carbs", "ingredients"]
+      required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
     }
   });
-  return JSON.parse(response.text || "{}");
+  const parsed = JSON.parse(response.text || "{}");
+  if (parsed?.nonFood === true) {
+    return {
+      ...parsed,
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      ingredients: [],
+      notes: Array.isArray(parsed.notes) && parsed.notes.length
+        ? parsed.notes
+        : ["Это не еда и не пищевой продукт. Запись не учитывается в КБЖУ."],
+    };
+  }
+  return parsed;
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients

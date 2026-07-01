@@ -1143,7 +1143,7 @@ const App: React.FC = () => {
       carbs: acc.carbs + (item.carbs || 0),
     }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
   }, [foodDiary, resolvedDiaryDayKey]);
-  const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight }>(null);
+  const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const [activeTab, setActiveTab] = useState<AppTabId>(() => getInitialTabFromHash() || 'dashboard');
@@ -2766,15 +2766,26 @@ await ensurePdfInterFont(doc);
         const result = await analyzeFoodPhoto(base64);
         if (!result) continue;
 
+        const nonFood = result.nonFood === true;
         const insight: FoodInsight = {
-          calories: result.calories,
-          macros: { protein: result.protein, fat: result.fat, carbs: result.carbs },
-          ingredients: Array.isArray(result.ingredients) ? result.ingredients : [],
+          calories: nonFood ? 0 : result.calories,
+          macros: {
+            protein: nonFood ? 0 : result.protein,
+            fat: nonFood ? 0 : result.fat,
+            carbs: nonFood ? 0 : result.carbs,
+          },
+          ingredients: nonFood || !Array.isArray(result.ingredients) ? [] : result.ingredients,
           notes: Array.isArray(result.notes) ? result.notes : []
         };
 
-        const newEntry = addFoodToDiary({ ...result, photo, photoThumb, insight });
-        if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight });
+        const newEntry = addFoodToDiary({
+          ...result,
+          ...(nonFood ? { calories: 0, protein: 0, fat: 0, carbs: 0, ingredients: [], nonFood: true } : {}),
+          photo,
+          photoThumb,
+          insight,
+        });
+        if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight, nonFood: newEntry.nonFood === true });
         incrementUsage('aiFoodPhotoCount');
       }
     } catch (err) {
@@ -3270,7 +3281,7 @@ const logWeight = useCallback(() => {
       bulkRemoveSelectedFoods,
       deleteFoodEntry,
       deleteFoodPhoto,
-      openInsight: (item: any) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight! }),
+      openInsight: (item: any) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
       openEditFood,
       formatTime,
       mealTypeLabel,
@@ -3450,13 +3461,26 @@ const logWeight = useCallback(() => {
                 <input
                   type="checkbox"
                   checked={editFoodModal.nonFood}
-                  onChange={(e) => setEditFoodModal({ ...editFoodModal, nonFood: e.target.checked })}
+                  onChange={(e) => {
+                    const nonFood = e.target.checked;
+                    setEditFoodModal({
+                      ...editFoodModal,
+                      nonFood,
+                      ...(nonFood ? {
+                        calories: '0',
+                        protein: '0',
+                        fat: '0',
+                        carbs: '0',
+                        ingredientsText: '',
+                      } : {}),
+                    });
+                  }}
                   className="mt-1 h-5 w-5 rounded-md accent-amber-400"
                 />
                 <span>
                   <span className="block text-sm font-black text-amber-100">Это не еда</span>
                   <span className="block text-xs font-medium text-amber-100/70 mt-1">
-                    Фото останется в дневнике как исправленная запись, но КБЖУ будут обнулены и не попадут в дневной итог.
+                    Фото останется в дневнике как исправленная запись, но КБЖУ будут обнулены и не попадут в дневной итог. Если снимаете галочку, заполните КБЖУ или состав вручную.
                   </span>
                 </span>
               </label>
@@ -3571,6 +3595,7 @@ const logWeight = useCallback(() => {
                         ...insightModal,
                         name: String(patch.name || insightModal.name),
                         insight: patch.insight,
+                        nonFood: patch.nonFood === true,
                       });
                     }
                     setEditFoodModal(null);
@@ -3593,6 +3618,7 @@ const logWeight = useCallback(() => {
                 photo={insightModal.photo}
                 name={insightModal.name}
                 insight={insightModal.insight}
+                nonFood={Boolean(insightEntry?.nonFood ?? insightModal.nonFood)}
                 isPro={paywall.canUsePro}
                 onEdit={insightEntry ? () => openEditFood(insightEntry) : undefined}
                 onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); persistFoodDiary(newDiary); setInsightModal({ ...insightModal, insight: next }); }}
