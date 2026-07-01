@@ -246,6 +246,48 @@ describe('admin support ticket updates', () => {
     expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
   });
 
+  it('returns safe validation details for missing required support fields', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка');
+    form.set('section', 'Обзор');
+    form.set('message', 'Кнопка не отправляет обращение.');
+
+    const res = await postTicketForm(db, form);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'VALIDATION_ERROR',
+      code: 'REQUIRED_FIELDS',
+      public_message: 'Заполните обязательные поля.',
+      fields: ['subject'],
+    });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO support_feedback'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('support_feedback_messages'))).toBe(false);
+  });
+
+  it('accepts a new support ticket with a required subject and attachment-only message body', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка');
+    form.set('section', 'Обзор');
+    form.set('subject', 'Кнопка не нажимается');
+    form.append('attachments', new File([new Uint8Array([1, 2, 3])], 'voice.webm', { type: 'audio/webm' }));
+
+    const res = await postTicketForm(db, form, {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    });
+
+    expect(res.status).toBe(200);
+    const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
+    expect(ticketInsert?.binds[6]).toBe('Кнопка не нажимается');
+    expect(ticketInsert?.binds[7]).toContain('Системная диагностика');
+    expect(ticketInsert?.binds[13]).toBe(1);
+    const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
+    expect(messageInsert?.binds[4]).toContain('Системная диагностика');
+    expect(messageInsert?.binds[5]).toBe(1);
+  });
+
   it('adds automatic device and browser diagnostics to user bug reports', async () => {
     const db = makeDb();
     const form = new FormData();

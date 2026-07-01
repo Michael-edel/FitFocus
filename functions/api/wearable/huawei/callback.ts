@@ -3,7 +3,7 @@ import { requireUser, json, readCookie } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, verifyState } from "../../auth/_oauth";
-import { encryptHuaweiTokenSet, exchangeHuaweiCode, huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
+import { ensureHuaweiConnectionsSchema, encryptHuaweiTokenSet, exchangeHuaweiCode, huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { loadActivePlan } from "../../_lib/plans";
@@ -44,6 +44,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (!parsed || parsed.u !== user.sub) return json({ error: "Invalid state" }, 400);
 
     const db = requireDB(env);
+    await ensureHuaweiConnectionsSchema(db);
     const tokenSet = await exchangeHuaweiCode(env, request, code);
     const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
     const now = Math.floor(Date.now() / 1000);

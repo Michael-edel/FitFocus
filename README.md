@@ -334,6 +334,7 @@ E2E:
   - `/api/wearable/huawei/sync`
   - `/api/wearable/huawei/disconnect`
 - D1-таблица `wearable_connections` для server-side provider tokens. Huawei access/refresh tokens шифруются перед записью.
+- Huawei endpoints дополнительно создают `wearable_connections` и индексы через `CREATE ... IF NOT EXISTS`, чтобы рассинхронизация remote D1 не приводила к Cloudflare 1101.
 
 Для Huawei Health нужны Cloudflare variables/secrets:
 
@@ -360,6 +361,12 @@ E2E:
 - Garmin OAuth/API sync.
 
 Для Google Fit/Fitbit/Garmin есть UI-выбор и общая snapshot-модель, но нет полного server-side OAuth/provider polling flow. Huawei Health имеет OAuth flow и ручной server-side sync, но фактическая работа в production зависит от одобренного Huawei Health Kit приложения, выданных scopes и корректных Cloudflare secrets.
+
+После добавления новых D1 migrations нужно применять их к remote D1 отдельно:
+
+```bash
+npx wrangler d1 migrations apply fitfocus --remote
+```
 
 ### Резервные копии и PWA-кэш
 
@@ -623,6 +630,7 @@ npm run check:privacy
 - shopping_checked
 - support_feedback
 - support_feedback_messages
+- wearable_connections
 - admin_events
 - admin_sessions
 - user_achievements
@@ -658,6 +666,8 @@ CI использует Node.js 24 и Python 3.12.
 
 - Создайте bucket, например `fitfocus-support-attachments`.
 - Привяжите его к Pages как `SUPPORT_ATTACHMENTS`.
+
+Форма поддержки валидирует обязательные поля на клиенте и сервере. Пользователю показываются только безопасные публичные ошибки без D1/R2/internal route details.
 
 ## Условия доставки push
 
