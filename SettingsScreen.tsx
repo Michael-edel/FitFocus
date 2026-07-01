@@ -21,7 +21,6 @@ type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type HuaweiHealthStatus = {
   configured: boolean;
-  missingConfig: string[];
   connected: boolean;
   status: string;
   scope: string;
@@ -335,7 +334,6 @@ export default function SettingsScreen({
   const [pushConfigured, setPushConfigured] = useState(false);
   const [pushStatusChecked, setPushStatusChecked] = useState(false);
   const [pushStatusError, setPushStatusError] = useState<string | null>(null);
-  const [pushMissingConfig, setPushMissingConfig] = useState<string[]>([]);
   const [pushCurrentSubscriptionId, setPushCurrentSubscriptionId] = useState<string | null>(null);
   const [pushCurrentBrowserLabel, setPushCurrentBrowserLabel] = useState<string | null>(null);
   const [pushPublicKey, setPushPublicKey] = useState('');
@@ -451,7 +449,6 @@ export default function SettingsScreen({
       }
       const next: HuaweiHealthStatus = {
         configured: payload.configured === true,
-        missingConfig: Array.isArray(payload.missingConfig) ? payload.missingConfig.filter((item: unknown) => typeof item === 'string') : [],
         connected: payload.connected === true,
         status: typeof payload.status === 'string' ? payload.status : 'disconnected',
         scope: typeof payload.scope === 'string' ? payload.scope : '',
@@ -494,7 +491,7 @@ export default function SettingsScreen({
     try {
       const status = huaweiStatus || await loadHuaweiStatus();
       if (status && !status.configured) {
-        throw new Error(`Huawei Health API не настроен в Cloudflare: ${status.missingConfig.join(', ') || 'нет обязательных переменных'}.`);
+        throw new Error('Huawei Health API еще не настроен на сервере FitFocus.');
       }
       const redirect = typeof window !== 'undefined' ? window.location.href : bridgeBaseUrl;
       window.location.href = `/api/wearable/huawei/start?redirect=${encodeURIComponent(redirect)}`;
@@ -784,16 +781,12 @@ export default function SettingsScreen({
     const configured = Boolean(payload.configured);
     const publicKey = String(payload.vapid_public_key || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '');
     const subscriptions = Array.isArray(payload.subscriptions) ? payload.subscriptions : [];
-    const missingConfig = Array.isArray(payload.missing_config)
-      ? payload.missing_config.map((item: unknown) => String(item)).filter(Boolean)
-      : [];
     const currentSubscriptionId = String(payload.current_subscription_id || '').trim() || null;
     const currentBrowserLabel = String(payload.current_browser_label || '').trim() || null;
     const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
-    setPushMissingConfig(missingConfig);
     setPushCurrentSubscriptionId(currentSubscriptionId);
     setPushCurrentBrowserLabel(currentBrowserLabel);
     setPushPublicKey(publicKey);
@@ -801,7 +794,7 @@ export default function SettingsScreen({
     setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
     setPushLastDeliveryError(lastDeliveryError);
     setPushSubscribed(Boolean(currentSubscriptionId));
-    return { configured, publicKey, lastDeliveryError, missingConfig, currentSubscriptionId };
+    return { configured, publicKey, lastDeliveryError, currentSubscriptionId };
   };
 
   const refreshPushStatus = async () => {
@@ -814,7 +807,6 @@ export default function SettingsScreen({
       setPushConfigured(false);
       setPushStatusChecked(true);
       setPushStatusError(null);
-      setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
       setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
@@ -829,7 +821,6 @@ export default function SettingsScreen({
       setPushConfigured(false);
       setPushStatusChecked(true);
       setPushStatusError('Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
-      setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
       setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
@@ -847,7 +838,6 @@ export default function SettingsScreen({
       setPushConfigured(false);
       setPushStatusChecked(true);
       setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
-      setPushMissingConfig([]);
       setPushCurrentSubscriptionId(null);
       setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
@@ -870,8 +860,7 @@ export default function SettingsScreen({
     try {
       const status = await readPushStatus();
       if (!status.configured) {
-        const missing = status.missingConfig.length ? ` Не хватает: ${status.missingConfig.join(', ')}.` : '';
-        setPushError(`Push-сервер не настроен.${missing}`);
+        setPushError('Push-сервер не настроен.');
         return;
       }
       publicKey = status.publicKey;
@@ -1422,10 +1411,7 @@ export default function SettingsScreen({
     if (pushConfigured) {
       return 'Уведомления приходят на это устройство и на все остальные устройства аккаунта, где пользователь включил push.';
     }
-    if (pushMissingConfig.length) {
-      return `Push-сервер не настроен. Не хватает: ${pushMissingConfig.join(', ')}.`;
-    }
-    return 'Push-сервер ещё не настроен: нужны VAPID ключи в переменных Cloudflare.';
+    return 'Push-сервер ещё не настроен.';
   })();
 
   return (
@@ -1868,7 +1854,7 @@ export default function SettingsScreen({
                         </div>
                         <div className="mt-2 text-sm text-slate-400 leading-5">
                           {huaweiStatus?.configured === false
-                            ? `Нет переменных: ${huaweiStatus.missingConfig.join(', ')}`
+                            ? 'Huawei Health API еще не настроен на сервере FitFocus.'
                             : 'Для Huawei Watch GT данные идут через HUAWEI Health и Huawei Health API. Токены хранятся только на сервере.'}
                         </div>
                         {huaweiStatus?.lastSyncAt && (

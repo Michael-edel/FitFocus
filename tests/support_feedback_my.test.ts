@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestPost } from '../functions/api/support/feedback/my';
+import { onRequestGet, onRequestPost } from '../functions/api/support/feedback/my';
 import type { SupportAttachmentBucket } from '../functions/api/_lib/support_attachments';
+type SupportFeedbackMyGetContext = Parameters<typeof onRequestGet>[0];
 type SupportFeedbackMyContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -61,12 +62,46 @@ function makeDb(
             }
             return { id: 'ticket-1', status: 'new' };
           }
-          if (sql.includes('SELECT * FROM support_feedback')) return { id: 'ticket-1', attachments_json: null };
+          if (sql.includes('FROM support_feedback') && sql.includes('WHERE id = ?')) {
+            return {
+              id: 'ticket-1',
+              created_at: 1000,
+              updated_at: 1001,
+              category: 'Ошибка',
+              section: 'Настройки',
+              subject: 'Push',
+              message: 'Пользовательское описание\n\n---\nСистемная диагностика\nUser-Agent: secret',
+              status: 'new',
+              priority: 'normal',
+              attachment_count: 0,
+              attachments_json: null,
+              app_version: 'test',
+              last_reply_at: null,
+              last_reply_by: null,
+              resolved_at: null,
+              closed_at: null,
+              admin_note: 'internal admin note',
+              assigned_admin_user_id: 'admin-1',
+            };
+          }
           return null;
         },
         async all() {
           if (sql.includes('FROM user_roles')) return { results: [{ role: 'user' }] };
-          if (sql.includes('FROM support_feedback_messages')) return { results: [] };
+          if (sql.includes('FROM support_feedback_messages')) {
+            return {
+              results: [{
+                id: 'message-1',
+                ticket_id: 'ticket-1',
+                author_user_id: 'user-1',
+                author_role: 'user',
+                message: 'Ответ пользователя\n\n---\nСистемная диагностика\nCF-Ray: secret',
+                attachment_count: 0,
+                attachments_json: null,
+                created_at: 1002,
+              }],
+            };
+          }
           return { results: [] };
         },
         async run() {
@@ -90,7 +125,37 @@ function makeDb(
   };
 }
 
+async function getMyTicket(db: ReturnType<typeof makeDb>, ticketId: string) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const context: SupportFeedbackMyGetContext = {
+    request: new Request(`https://fitfocus.test/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, {
+      headers: { Cookie: `ff_session=${token}` },
+    }),
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return onRequestGet(context);
+}
+
 describe('/api/support/feedback/my', () => {
+  it('does not return admin-only notes or system diagnostics to the ticket owner', async () => {
+    const captured: { messageAttachmentsJson?: string | null } = {};
+    const response = await getMyTicket(makeDb(captured), 'ticket-1');
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.ticket.message).toBe('Пользовательское описание');
+    expect(payload.ticket).not.toHaveProperty('admin_note');
+    expect(payload.ticket).not.toHaveProperty('assigned_admin_user_id');
+    expect(JSON.stringify(payload)).not.toContain('Системная диагностика');
+    expect(JSON.stringify(payload)).not.toContain('User-Agent: secret');
+    expect(JSON.stringify(payload)).not.toContain('CF-Ray: secret');
+    expect(payload.ticket.messages[0].message).toBe('Ответ пользователя');
+  });
+
   it('stores large reply attachments in R2 with message-scoped keys', async () => {
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
     const captured: { messageAttachmentsJson?: string | null } = {};

@@ -138,12 +138,6 @@ describe('push runtime configuration routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       configured: true,
       vapid_public_key: 'public-key',
-      missing_config: [],
-      config_keys: {
-        PUSH_VAPID_PUBLIC_KEY: true,
-        PUSH_VAPID_PRIVATE_KEY: true,
-        PUSH_VAPID_SUBJECT: true,
-      },
       current_subscription_id: 'sub-1',
       current_device_label: 'Windows',
       current_browser_label: 'Chrome',
@@ -171,7 +165,7 @@ describe('push runtime configuration routes', () => {
     });
   });
 
-  it('reports missing VAPID keys without exposing private values', async () => {
+  it('reports missing VAPID keys without exposing private values or variable names', async () => {
     const db = makeDb();
     const request = await authedRequest('https://fitfocus.test/api/push/status', {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
@@ -186,17 +180,14 @@ describe('push runtime configuration routes', () => {
     expect(payload).toMatchObject({
       configured: false,
       vapid_public_key: 'public-key',
-      missing_config: ['PUSH_VAPID_PRIVATE_KEY', 'PUSH_VAPID_SUBJECT'],
-      config_keys: {
-        PUSH_VAPID_PUBLIC_KEY: true,
-        PUSH_VAPID_PRIVATE_KEY: false,
-        PUSH_VAPID_SUBJECT: false,
-      },
       current_subscription_id: 'sub-1',
       current_device_label: 'Windows',
       current_browser_label: 'Chrome',
     });
     expect(JSON.stringify(payload)).not.toContain('private-key');
+    expect(payload).not.toHaveProperty('missing_config');
+    expect(payload).not.toHaveProperty('config_keys');
+    expect(JSON.stringify(payload)).not.toContain('PUSH_VAPID_PRIVATE_KEY');
   });
 
   it('matches the current subscription by browser label when multiple same-device subscriptions exist', async () => {

@@ -281,10 +281,11 @@ describe('admin support ticket updates', () => {
     expect(res.status).toBe(200);
     const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
     expect(ticketInsert?.binds[6]).toBe('Кнопка не нажимается');
-    expect(ticketInsert?.binds[7]).toContain('Системная диагностика');
+    expect(ticketInsert?.binds[7]).toBe('');
     expect(ticketInsert?.binds[13]).toBe(1);
+    expect(ticketInsert?.binds[15]).toContain('Системная диагностика');
     const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
-    expect(messageInsert?.binds[4]).toContain('Системная диагностика');
+    expect(messageInsert?.binds[4]).toBe('');
     expect(messageInsert?.binds[5]).toBe(1);
   });
 
@@ -308,16 +309,17 @@ describe('admin support ticket updates', () => {
     expect(res.status).toBe(200);
     const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
     expect(ticketInsert).toBeTruthy();
-    expect(ticketInsert?.binds[7]).toContain('Проблема с push на компьютере.');
-    expect(ticketInsert?.binds[7]).toContain('Системная диагностика');
-    expect(ticketInsert?.binds[7]).toContain('Detected device: Windows');
-    expect(ticketInsert?.binds[7]).toContain('Detected browser: Chrome');
-    expect(ticketInsert?.binds[7]).toContain('Notification permission: granted');
+    expect(ticketInsert?.binds[7]).toBe('Проблема с push на компьютере.');
+    expect(ticketInsert?.binds[15]).toContain('Системная диагностика');
+    expect(ticketInsert?.binds[15]).toContain('Detected device: Windows');
+    expect(ticketInsert?.binds[15]).toContain('Detected browser: Chrome');
+    expect(ticketInsert?.binds[15]).toContain('Notification permission: granted');
+    expect(ticketInsert?.binds[15]).toContain('CF-Ray: ray-1');
     expect(ticketInsert?.binds[9]).toBe('Windows');
     expect(ticketInsert?.binds[10]).toBe('Chrome');
 
     const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
-    expect(messageInsert?.binds[4]).toContain('CF-Ray: ray-1');
+    expect(messageInsert?.binds[4]).toBe('Проблема с push на компьютере.');
   });
 
   it('rejects oversized admin support JSON before writing', async () => {
