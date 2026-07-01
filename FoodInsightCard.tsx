@@ -13,9 +13,10 @@ type Props = {
   onUpdateInsight?: (nextInsight: FoodInsight) => void;
   onSaveRecipe?: (fav: FavoriteRecipe) => void;
   onEdit?: () => void;
+  nonFood?: boolean;
 };
 
-export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit }: Props) {
+export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
   const [active, setActive] = useState<any | null>(null);
   const [haloTheme, setHaloTheme] = useState<'light' | 'dark'>('light');
   const [focusMode, setFocusMode] = useState<boolean>(true);
@@ -29,6 +30,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
   const plan: 'free' | 'pro' | 'family' = isPro ? 'pro' : 'free';
 
   const callouts = useMemo(() => {
+    if (nonFood) return [];
     const items = (insight?.ingredients || []).slice(0, 8);
     const n = items.length || 1;
     
@@ -55,15 +57,17 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
         __anchor: { x: ax, y: ay },
       };
     });
-  }, [insight]);
+  }, [insight, nonFood]);
 
   const totalCalories = useMemo(() => {
+    if (nonFood) return 0;
     const v = insight?.calories;
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? n : null;
-  }, [insight]);
+  }, [insight, nonFood]);
 
   const macroPct = useMemo(() => {
+    if (nonFood) return { protein: 0, carbs: 0, fats: 0 };
     const m = insight?.macros;
     const p = m ? (typeof m.protein === 'number' ? m.protein : Number(m.protein)) : NaN;
     const c = m ? (typeof m.carbs === 'number' ? m.carbs : Number(m.carbs)) : NaN;
@@ -73,11 +77,11 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
       carbs: Number.isFinite(c) ? c : null,
       fats: Number.isFinite(f) ? f : null,
     };
-  }, [insight]);
+  }, [insight, nonFood]);
 
   const ingredientBreakdown = useMemo(() => {
     const ings = Array.isArray(insight?.ingredients) ? insight.ingredients : [];
-    if (!totalCalories) return [];
+    if (nonFood || !totalCalories) return [];
     return ings
       .filter((i: any) => i?.name)
       .map((i: any) => {
@@ -88,9 +92,9 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
       })
       .sort((a: any, b: any) => (b.percent ?? 0) - (a.percent ?? 0))
       .slice(0, 8);
-  }, [insight, totalCalories]);
+  }, [insight, totalCalories, nonFood]);
 
-  const recipe = insight?.recipe;
+  const recipe = nonFood ? undefined : insight?.recipe;
 
   useLayoutEffect(() => {
     const stage = stageRef.current;
@@ -222,7 +226,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
     else img.onload = analyze;
   }, [active, activeCallout, photo]);
 
-  const hasRecipe = !!insight.recipe;
+  const hasRecipe = !nonFood && !!insight.recipe;
 
   return (
     <div className="ff-infocard">
@@ -278,13 +282,13 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
             type="button"
             className={"ff-infocard__bubble ff-ui ff-infocard__bubbleBtn" + (active?.__type === 'TOTAL' ? " ff-infocard__bubbleBtn--active" : "")}
             onClick={() => setActive({ __type: 'TOTAL' })}
-            aria-label="Итого калорий — открыть детали"
-            title="Нажми, чтобы увидеть детали расчёта"
+            aria-label={nonFood ? "Не еда — запись не учитывается в КБЖУ" : "Итого калорий — открыть детали"}
+            title={nonFood ? "Запись не учитывается в КБЖУ" : "Нажми, чтобы увидеть детали расчёта"}
           >
-            <div className="ff-infocard__bubbleLabel">ИТОГО</div>
+            <div className="ff-infocard__bubbleLabel">{nonFood ? 'НЕ ЕДА' : 'ИТОГО'}</div>
             <div className="ff-infocard__bubbleValue">{totalCalories ?? '—'}</div>
             <div className="ff-infocard__bubbleUnit">ккал</div>
-            <div className="ff-infocard__bubbleHint">детали</div>
+            <div className="ff-infocard__bubbleHint">{nonFood ? 'не учитывается' : 'детали'}</div>
           </button>
 
           <svg className="ff-infocard__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -354,7 +358,12 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
       </div>
 
       <div className="ff-infocard__ingredientsList" aria-label="Ингредиенты">
-        {(insight?.ingredients || []).slice(0, 8).map((it, idx) => (
+        {nonFood ? (
+          <div className="ff-infocard__ingredient">
+            <span className="ff-infocard__ingredientName">Пищевой состав не применяется</span>
+            <span className="ff-infocard__ingredientPct">0%</span>
+          </div>
+        ) : (insight?.ingredients || []).slice(0, 8).map((it, idx) => (
           <button
             className={`ff-infocard__ingredient ${active?.name === it.name ? 'ff-infocard__ingredient--active' : ''} ${active && focusMode && active.name !== it.name ? 'ff-infocard__ingredient--dim' : ''}`}
             key={idx}
@@ -415,12 +424,18 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
         <div className="ff-infocard__tooltip" role="dialog" aria-modal="true">
           {active.__type === 'TOTAL' ? (
             <>
-              <div className="ff-infocard__tooltipTitle">Итого калорий</div>
-              <div className="ff-infocard__tooltipRow">
-                Оценка: <b>{totalCalories ?? '—'} ккал</b>
-              </div>
+              <div className="ff-infocard__tooltipTitle">{nonFood ? 'Не еда' : 'Итого калорий'}</div>
+              {nonFood ? (
+                <div className="ff-infocard__tooltipRow">
+                  Запись не учитывается в дневных КБЖУ. Чтобы перевести её в еду, откройте корректировку и вручную заполните КБЖУ или состав.
+                </div>
+              ) : (
+                <div className="ff-infocard__tooltipRow">
+                  Оценка: <b>{totalCalories ?? '—'} ккал</b>
+                </div>
+              )}
 
-              {(macroPct.protein != null || macroPct.carbs != null || macroPct.fats != null) ? (
+              {!nonFood && (macroPct.protein != null || macroPct.carbs != null || macroPct.fats != null) ? (
                 <div className="ff-infocard__tooltipRow">
                   Макросы (в граммах):{" "}
                   <span className="ff-infocard__pill">Б {Math.round(macroPct.protein ?? 0)}</span>
