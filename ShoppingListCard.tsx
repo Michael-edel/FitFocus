@@ -1,26 +1,21 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import clsx from "clsx";
-
-type Category = "vegetables" | "fruits" | "protein" | "dairy" | "carbs" | "fat" | "other";
-
-const CATEGORY_LABEL: Record<Category, string> = {
-  vegetables: "Овощи",
-  fruits: "Фрукты",
-  protein: "Белки",
-  dairy: "Молочка",
-  carbs: "Крупы / углеводы",
-  fat: "Жиры / соусы",
-  other: "Другое",
-};
-
-const CATEGORY_ORDER: Category[] = ["vegetables", "fruits", "dairy", "protein", "carbs", "fat", "other"];
+import { groupShoppingItemsByDepartment } from "./shoppingDepartments";
 
 type ShoppingItem = {
   name: string;
   grams: number;
-  category: Category;
   checked: boolean;
   display_qty: string;
+};
+
+type ShoppingListPayloadItem = {
+  name?: unknown;
+  ingredient_name?: unknown;
+  grams?: unknown;
+  checked?: unknown;
+  display_qty?: unknown;
+  displayQty?: unknown;
 };
 
 function formatShoppingQty(grams: number) {
@@ -33,53 +28,21 @@ function formatShoppingQty(grams: number) {
   return `${rounded} г`;
 }
 
-function categorizeItem(name: string): Category {
-  const n = name.toLowerCase();
-  if (/(огур|помид|томат|капуст|морков|лук|перец|баклаж|кабач|цуккини|брокколи|шпинат|салат|зелень|укроп|петруш|овощ|фасоль|гриб)/i.test(n)) {
-    return "vegetables";
-  }
-  if (/(яблок|банан|апельсин|ягод|фрукт|груш|киви|лимон|авокад)/i.test(n)) {
-    return "fruits";
-  }
-  if (/(творог|йогурт|кефир|молок|сыр|сметан)/i.test(n)) {
-    return "dairy";
-  }
-  if (/(куриц|индейк|говядин|свинин|рыб|треск|минтай|яйц|тунец|лосос|мяс|филе)/i.test(n)) {
-    return "protein";
-  }
-  if (/(греч|рис|овсян|хлоп|макарон|паста|картоф|хлеб|круп|булгур|киноа)/i.test(n)) {
-    return "carbs";
-  }
-  if (/(масло|орех|миндаль|семен|чиа|соус)/i.test(n)) {
-    return "fat";
-  }
-  return "other";
+function asPayloadItem(raw: unknown): ShoppingListPayloadItem {
+  return raw && typeof raw === "object" ? raw as ShoppingListPayloadItem : {};
 }
 
-function normalizeShoppingItem(raw: any): ShoppingItem | null {
-  const name = String(raw?.name || raw?.ingredient_name || "").trim();
+function normalizeShoppingItem(raw: unknown): ShoppingItem | null {
+  const item = asPayloadItem(raw);
+  const name = String(item.name || item.ingredient_name || "").trim();
   if (!name) return null;
-  const grams = Math.max(0, Math.round(Number(raw?.grams || 0)));
+  const grams = Math.max(0, Math.round(Number(item.grams || 0)));
   return {
     name,
     grams,
-    category: (raw?.category as Category) || categorizeItem(name),
-    checked: Boolean(raw?.checked),
-    display_qty: String(raw?.display_qty || raw?.displayQty || "").trim() || formatShoppingQty(grams),
+    checked: Boolean(item.checked),
+    display_qty: String(item.display_qty || item.displayQty || "").trim() || formatShoppingQty(grams),
   };
-}
-
-function groupItems(items: ShoppingItem[]) {
-  const groups = new Map<Category, ShoppingItem[]>();
-  for (const cat of CATEGORY_ORDER) groups.set(cat, []);
-  for (const it of items) {
-    const list = groups.get(it.category) || groups.get("other")!;
-    list.push(it);
-  }
-  // drop empty groups
-  return CATEGORY_ORDER
-    .map((cat) => ({ category: cat, items: (groups.get(cat) || []).sort((a, b) => a.name.localeCompare(b.name, "ru")) }))
-    .filter((g) => g.items.length > 0);
 }
 
 export default function ShoppingListCard({
@@ -143,12 +106,10 @@ export default function ShoppingListCard({
     };
   }, [load]);
 
-  const visibleItems = useMemo(() => {
-    const list = items || [];
-    return onlyUnchecked ? list.filter((i) => !i.checked) : list;
-  }, [items, onlyUnchecked]);
-
-  const groups = useMemo(() => groupItems(visibleItems), [visibleItems]);
+  const groups = useMemo(
+    () => groupShoppingItemsByDepartment(items || [], { onlyUnchecked }),
+    [items, onlyUnchecked],
+  );
 
   const toggleChecked = useCallback(
     async (name: string, checked: boolean) => {
@@ -176,7 +137,7 @@ export default function ShoppingListCard({
   const copyText = useCallback(async () => {
     const lines: string[] = [];
     for (const g of groups) {
-      lines.push(`${CATEGORY_LABEL[g.category]}:`);
+      lines.push(`${g.label}:`);
       for (const it of g.items) lines.push(`- ${it.name} — ${it.display_qty}`);
       lines.push("");
     }
@@ -193,8 +154,17 @@ export default function ShoppingListCard({
     return {
       name: (parts[0] || '').trim().replace(/^•\s*/, ''),
       qty: (parts.slice(1).join('—') || '').trim(),
+      checked: false,
     };
   }).filter((it) => it.name), [fallbackList]);
+
+  const fallbackGroups = useMemo(
+    () => groupShoppingItemsByDepartment(
+      fallbackParsed.map((it) => ({ ...it, checked: Boolean(fallbackChecked[it.name]) })),
+      { onlyUnchecked },
+    ),
+    [fallbackChecked, fallbackParsed, onlyUnchecked],
+  );
 
   const content =
     items && items.length ? (
@@ -226,14 +196,21 @@ export default function ShoppingListCard({
         </div>
 
         {groups.map((g) => {
-          const isCollapsed = Boolean(collapsed[g.category]);
+          const isCollapsed = Boolean(collapsed[g.department]);
           return (
-            <div key={g.category} className="rounded-[1.5rem] bg-slate-950/40 border border-slate-800">
+            <div key={g.department} className="rounded-[1.5rem] bg-slate-950/40 border border-slate-800">
               <button
-                onClick={() => setCollapsed((p) => ({ ...p, [g.category]: !p[g.category] }))}
+                onClick={() => setCollapsed((p) => ({ ...p, [g.department]: !p[g.department] }))}
                 className="w-full flex items-center justify-between px-4 py-3"
               >
-                <div className="text-slate-200 font-black text-sm">{CATEGORY_LABEL[g.category]}</div>
+                <div>
+                  <div className="text-slate-200 font-black text-sm">{g.label}</div>
+                  <div className="text-slate-500 font-bold text-xs">
+                    {onlyUnchecked
+                      ? `${g.uncheckedCount} не куплено`
+                      : `${g.uncheckedCount} не куплено · ${g.checkedCount} куплено`}
+                  </div>
+                </div>
                 <div className="text-slate-500 font-black text-xs">{isCollapsed ? "Показать" : "Скрыть"}</div>
               </button>
 
@@ -266,7 +243,7 @@ export default function ShoppingListCard({
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => setCollapsed((p) => ({ ...p, [g.category]: true }))}
+                      onClick={() => setCollapsed((p) => ({ ...p, [g.department]: true }))}
                       className="px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-300 font-black text-xs hover:bg-slate-900/70 hover:border-indigo-500/30 hover:text-indigo-200 transition-all"
                     >
                       Свернуть
@@ -291,25 +268,39 @@ export default function ShoppingListCard({
               />
               Только некупленное
             </label>
-            <div className="grid grid-cols-1 gap-2 text-sm font-bold text-slate-200">
-              {fallbackParsed.filter((it) => !onlyUnchecked || !fallbackChecked[it.name]).map((it, i) => (
-                <label key={`${it.name}_${i}`} className={clsx(
-                  "flex items-center justify-between gap-3 p-3 rounded-[1.2rem] border",
-                  fallbackChecked[it.name]
-                    ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through"
-                    : "bg-slate-950/30 border-slate-800 text-slate-200"
-                )}>
-                  <span className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="accent-slate-200"
-                      checked={!!fallbackChecked[it.name]}
-                      onChange={(e) => setFallbackChecked((prev) => ({ ...prev, [it.name]: e.target.checked }))}
-                    />
-                    <span>{it.name}</span>
-                  </span>
-                  {it.qty ? <span className="text-slate-300 font-black whitespace-nowrap">{it.qty}</span> : null}
-                </label>
+            <div className="space-y-3 text-sm font-bold text-slate-200">
+              {fallbackGroups.map((group) => (
+                <div key={group.department} className="rounded-[1.5rem] bg-slate-950/40 border border-slate-800">
+                  <div className="px-4 py-3">
+                    <div className="text-slate-200 font-black text-sm">{group.label}</div>
+                    <div className="text-slate-500 font-bold text-xs">
+                      {onlyUnchecked
+                        ? `${group.uncheckedCount} не куплено`
+                        : `${group.uncheckedCount} не куплено · ${group.checkedCount} куплено`}
+                    </div>
+                  </div>
+                  <div className="px-4 pb-4 grid grid-cols-1 gap-2">
+                    {group.items.map((it, i) => (
+                      <label key={`${it.name}_${i}`} className={clsx(
+                        "flex items-center justify-between gap-3 p-3 rounded-[1.2rem] border",
+                        it.checked
+                          ? "bg-slate-900/20 border-slate-800 text-slate-500 line-through"
+                          : "bg-slate-950/30 border-slate-800 text-slate-200"
+                      )}>
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            className="accent-slate-200"
+                            checked={it.checked}
+                            onChange={(e) => setFallbackChecked((prev) => ({ ...prev, [it.name]: e.target.checked }))}
+                          />
+                          <span>{it.name}</span>
+                        </span>
+                        {it.qty ? <span className="text-slate-300 font-black whitespace-nowrap">{it.qty}</span> : null}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
