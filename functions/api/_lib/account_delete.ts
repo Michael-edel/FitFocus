@@ -20,6 +20,8 @@ type ChangesResult = {
 
 type SingleValueRow = { x?: number; c?: number; id?: string; is_active?: number; deleted_at?: string | null };
 
+const ACCOUNT_HARD_DELETE_FAILED = "ACCOUNT_HARD_DELETE_FAILED";
+
 function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
@@ -257,15 +259,15 @@ export async function deleteUserAccountAndAllData(
     }
 
     return { ok: true };
-  } catch (error: unknown) {
-    console.error(`Failed to delete user ${userId} data:`, error);
+  } catch {
+    console.error("account_delete.hard_delete_failed");
 
     if (logAsAdminId) {
       await logAdminEvent(db, {
         adminUserId: logAsAdminId,
         action: "delete_user_atomic_failed",
         targetUserId: userId,
-        meta: { error: messageOf(error, String(error)) },
+        meta: { error: ACCOUNT_HARD_DELETE_FAILED },
       });
     }
 

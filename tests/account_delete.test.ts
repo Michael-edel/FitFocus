@@ -148,6 +148,33 @@ describe('account deletion', () => {
     expect(bucket.delete).not.toHaveBeenCalled();
   });
 
+  it('logs hard delete failures without raw exception details', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const db = makeDb({ batchReject: new Error('D1 failed with private details') });
+
+    try {
+      const result = await deleteUserAccountAndAllData(
+        db as unknown as D1Database,
+        'user-1',
+        false,
+        'admin-1',
+      );
+
+      expect(result).toEqual({ ok: false, message: 'Ошибка при удалении данных пользователя.' });
+      expect(consoleError).toHaveBeenCalledWith('account_delete.hard_delete_failed');
+      expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('user-1'), expect.anything());
+
+      const auditEvent = db.runs.find((run) => run.sql.includes('INSERT INTO admin_events'));
+      expect(auditEvent).toBeTruthy();
+      expect(auditEvent?.binds[3]).toBe('delete_user_atomic_failed');
+      expect(auditEvent?.binds[4]).toBe('user-1');
+      expect(auditEvent?.binds[5]).toBe(JSON.stringify({ error: 'ACCOUNT_HARD_DELETE_FAILED' }));
+      expect(String(auditEvent?.binds[5])).not.toContain('D1 failed with private details');
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('unassigns admin-owned tickets instead of deleting tickets assigned to the deleted admin', async () => {
     const db = makeDb();
 
