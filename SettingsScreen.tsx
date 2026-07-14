@@ -212,6 +212,15 @@ const readJsonRecord = async (response: Response): Promise<JsonRecord | null> =>
   }
 };
 
+const parseJsonRecord = (raw: string): JsonRecord | null => {
+  try {
+    const payload: unknown = JSON.parse(raw);
+    return isJsonRecord(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
 const textFromUnknown = (value: unknown): string =>
   typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
@@ -1122,7 +1131,8 @@ export default function SettingsScreen({
     try {
       const raw = localStorage.getItem(settingsUiStorageKey);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<SettingsUiState>;
+        const parsed = parseJsonRecord(raw);
+        if (!parsed) throw new Error('Invalid settings UI state');
         const fallbackName = user.name || '';
         const fallbackGoal = user.goal || Goal.MAINTAIN;
         const fallbackTargetWeight = user.targetWeight ? String(user.targetWeight) : '';
@@ -1398,8 +1408,8 @@ export default function SettingsScreen({
       bloodPressureSystolic: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 ? Math.round(parsedBloodPressureSystolic) : user.bloodPressureSystolic,
       bloodPressureDiastolic: Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? Math.round(parsedBloodPressureDiastolic) : user.bloodPressureDiastolic,
       bloodPressureMeasuredAt: Number.isFinite(parsedBloodPressureSystolic) && parsedBloodPressureSystolic > 0 && Number.isFinite(parsedBloodPressureDiastolic) && parsedBloodPressureDiastolic > 0 ? measurementTimestamp : user.bloodPressureMeasuredAt,
-      bloodGlucoseMmolL: nextBloodGlucoseMmolL as any,
-      bloodGlucoseMeasuredAt: (nextBloodGlucoseMmolL !== null ? measurementTimestamp : null) as any,
+      bloodGlucoseMmolL: nextBloodGlucoseMmolL,
+      bloodGlucoseMeasuredAt: nextBloodGlucoseMmolL !== null ? measurementTimestamp : null,
       waistCm: Number.isFinite(parsedWaistCm) && parsedWaistCm > 0 ? Math.round(parsedWaistCm) : user.waistCm,
       chestCm: Number.isFinite(parsedChestCm) && parsedChestCm > 0 ? Math.round(parsedChestCm) : user.chestCm,
       hipsCm: Number.isFinite(parsedHipsCm) && parsedHipsCm > 0 ? Math.round(parsedHipsCm) : user.hipsCm,
@@ -1464,8 +1474,8 @@ export default function SettingsScreen({
       await saveProgressPhotos(next);
       setProgressPhotoNote('');
       if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
-    } catch (e: any) {
-      setProgressPhotoError(e?.message || 'Не удалось добавить фото');
+    } catch {
+      setProgressPhotoError('Не удалось добавить фото прогресса.');
     } finally {
       setProgressPhotoBusy(false);
     }
