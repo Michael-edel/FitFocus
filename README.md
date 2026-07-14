@@ -17,8 +17,8 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 Объем проекта без `node_modules`, `dist`, `coverage`:
 
-- 347 файлов.
-- 231 файл `.ts`.
+- 348 файлов.
+- 232 файла `.ts`.
 - 40 файлов `.tsx`.
 - 21 файл `.sql`.
 - 30 таблиц в `db/schema.sql`.
@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 52 файла / 209 тестов |
+| `npm run test:unit` | пройдено, 53 файла / 214 тестов |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
@@ -60,9 +60,10 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Hard-delete audit аккаунта больше не пишет raw D1 exception text и user id в `console.error`; в `admin_events.meta` сохраняется стабильный код `ACCOUNT_HARD_DELETE_FAILED`.
 - Ошибки модального запуска камеры больше не показывают raw browser text вроде `The operation was aborted`; сообщения нормализованы на русском, а ImageCapture/torch-ветки типизированы без `as any`.
 - WIS-share и weekly AI report во фронтенде больше не пишут raw exception text в пользовательское состояние или аналитику; используются стабильные коды классификации.
+- Верхний слой `geminiService.ts` типизирует env, AI proxy response, Gemini text extraction и нормализацию списка покупок без прежних `as any`; кириллические единицы `г/кг` в списке покупок распознаются через явную границу, а не через `\b`.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 52 unit-файла и 209 тестов.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 53 unit-файла и 214 тестов.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -72,7 +73,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 52 файла / 209 тестов |
+| `npm run test:unit` | пройдено, 53 файла / 214 тестов |
 | `npm run typecheck` | пройдено |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |

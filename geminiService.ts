@@ -8,14 +8,72 @@ import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
 // через серверный прокси /api/ai (Vite dev middleware или Cloudflare Functions).
 
+type JsonRecord = Record<string, unknown>;
+type ShoppingListItem = { name: string; grams: number };
+type AiContentPart = JsonRecord & {
+  text?: string;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
+};
+type AiContent = JsonRecord & {
+  role?: string;
+  parts: AiContentPart[];
+};
+type AiProxyConfig = JsonRecord;
+type AiProxyResponse = JsonRecord & {
+  text: string;
+};
+type RuntimeGlobal = typeof globalThis & {
+  process?: { env?: Record<string, string | undefined> };
+  __ENV?: Record<string, string | undefined>;
+  [key: string]: unknown;
+};
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {};
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function finiteNumber(value: unknown): number {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function safeJsonObject(text: string | undefined, fallback: JsonRecord = {}): JsonRecord {
+  try {
+    const parsed = JSON.parse(text || "{}");
+    return asRecord(parsed);
+  } catch {
+    return fallback;
+  }
+}
+
+function isAiContent(value: unknown): value is AiContent {
+  return isRecord(value) && Array.isArray(value.parts);
+}
+
 const getEnv = (key: string): string | undefined => {
   try {
-    const g: any = globalThis as any;
+    const g = globalThis as RuntimeGlobal;
+    const viteEnv = import.meta.env as Record<string, string | undefined>;
     return (
       g?.process?.env?.[key] ??
-      (import.meta as any)?.env?.[key] ??
-      (import.meta as any)?.env?.[`VITE_${key}`] ??
-      g?.[key] ??
+      viteEnv?.[key] ??
+      viteEnv?.[`VITE_${key}`] ??
+      optionalString(g?.[key]) ??
       // иногда AI Studio прокидывает env в window.__ENV
       g?.__ENV?.[key]
     );
@@ -26,7 +84,7 @@ const getEnv = (key: string): string | undefined => {
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-const SHOPPING_QTY_RE = /(\d+(?:[.,]\d+)?)\s*(кг|kg|г|гр|g)\b/i;
+const SHOPPING_QTY_RE = /(\d+(?:[.,]\d+)?)\s*(кг|kg|г|гр|g)(?=\s|$|[),.;])/i;
 
 function extractShoppingGrams(value: string): number {
   const text = String(value || "").replace(/,/g, ".").toLowerCase();
@@ -40,14 +98,14 @@ function extractShoppingGrams(value: string): number {
 
 function stripShoppingQuantity(value: string): string {
   return String(value || "")
-    .replace(/\s*[—–-]\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b/gi, " ")
-    .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b\s*\)/gi, " ")
-    .replace(/\b\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)\b/gi, " ")
+    .replace(/\s*[—–-]\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)(?=\s|$|[),.;])/gi, " ")
+    .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)(?=\s|$|[),.;])\s*\)/gi, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:кг|kg|г|гр|g)(?=\s|$|[),.;])/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
+export function normalizeShoppingListItems(rawItems: unknown, shoppingList: string[]): ShoppingListItem[] {
   const fallbackByName = new Map<string, number>();
   for (const line of shoppingList || []) {
     const text = String(line || "").trim();
@@ -58,15 +116,16 @@ function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
   }
 
   const normalized = (Array.isArray(rawItems) ? rawItems : [])
-    .map((it: any) => {
-      const rawName = String(it?.name || "").trim();
+    .map((rawItem): ShoppingListItem => {
+      const item = asRecord(rawItem);
+      const rawName = stringValue(item.name).trim();
       const cleanedName = stripShoppingQuantity(rawName);
       const fallbackGrams = fallbackByName.get(cleanedName.toLowerCase()) || 0;
       const grams = Math.max(
         0,
         Math.round(
-          Number(it?.grams || 0) > 0
-            ? Number(it?.grams || 0)
+          finiteNumber(item.grams) > 0
+            ? finiteNumber(item.grams)
             : extractShoppingGrams(rawName) || fallbackGrams
         )
       );
@@ -75,14 +134,14 @@ function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
         grams,
       };
     })
-    .filter((it: any) => it.name && it.grams > 0);
+    .filter((it): it is ShoppingListItem => Boolean(it.name && it.grams > 0));
 
   if (normalized.length) {
     return normalized;
   }
 
   return (Array.isArray(shoppingList) ? shoppingList : [])
-    .map((line: any) => {
+    .map((line): ShoppingListItem | null => {
       const text = String(line || "").trim();
       if (!text) return null;
       const name = stripShoppingQuantity(text);
@@ -90,13 +149,18 @@ function normalizeShoppingListItems(rawItems: any[], shoppingList: string[]) {
       if (!name || grams <= 0) return null;
       return { name, grams };
     })
-    .filter((it: any): it is { name: string; grams: number } => Boolean(it));
+    .filter((it): it is ShoppingListItem => Boolean(it));
 }
 
 /**
  * Прокси-вызов для AI (используется для соблюдения лимитов на сервере)
  */
-async function callAiProxy(model: string, contents: any, feature: string, config?: any) {
+async function callAiProxy(
+  model: string,
+  contents: unknown,
+  feature: string,
+  config?: AiProxyConfig
+): Promise<AiProxyResponse> {
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
   // ✅ Глобальная языковая политика продукта
@@ -109,24 +173,27 @@ async function callAiProxy(model: string, contents: any, feature: string, config
     "Если возвращаешь JSON — все строковые значения тоже на русском.";
 
   // ✅ Нормализуем contents (на всякий случай) — текст всегда Content[]
+  let normalizedContents: AiContent[];
   if (typeof contents === "string") {
-    contents = [{ role: "user", parts: [{ text: `${RU_POLICY}\n\n${contents}` }] }];
-  } else if (contents && !Array.isArray(contents) && Array.isArray((contents as any).parts)) {
+    normalizedContents = [{ role: "user", parts: [{ text: `${RU_POLICY}\n\n${contents}` }] }];
+  } else if (isAiContent(contents)) {
     // Один Content (часто для vision). Подмешиваем RU_POLICY первой текстовой частью.
-    const c: any = contents;
-    const parts = Array.isArray(c.parts) ? [...c.parts] : [];
+    const parts = [...contents.parts];
     parts.unshift({ text: RU_POLICY });
-    contents = [{ ...c, role: c.role || "user", parts }];
+    normalizedContents = [{ ...contents, role: contents.role || "user", parts }];
   } else if (Array.isArray(contents)) {
     // Content[]
-    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }, ...contents];
+    normalizedContents = [
+      { role: "user", parts: [{ text: RU_POLICY }] },
+      ...contents.filter(isAiContent),
+    ];
   } else {
     // Непредвиденный формат — всё равно обеспечиваем инструкцию
-    contents = [{ role: "user", parts: [{ text: RU_POLICY }] }];
+    normalizedContents = [{ role: "user", parts: [{ text: RU_POLICY }] }];
   }
 
   // ✅ Gemini не принимает поле `config` — прокидываем как `generationConfig`
-  const basePayload: any = { contents, feature };
+  const basePayload: JsonRecord = { contents: normalizedContents, feature };
   if (config && typeof config === "object") basePayload.generationConfig = config;
 
   const doReq = async (m: string) => {
@@ -137,7 +204,7 @@ async function callAiProxy(model: string, contents: any, feature: string, config
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const data = await res.json().catch(() => ({}));
+    const data = asRecord(await res.json().catch(() => ({})));
     return { res, data };
   };
 
@@ -151,13 +218,14 @@ async function callAiProxy(model: string, contents: any, feature: string, config
   }
 
   if (!res.ok) {
+    const error = asRecord(data.error);
     // Если исчерпан бесплатный лимит гостя — попросим авторизацию
-    if (res.status === 402 && (data as any)?.error?.code === "PAYWALL") {
+    if (res.status === 402 && stringValue(error.code) === "PAYWALL") {
       try {
-        window.dispatchEvent(new CustomEvent("ff:auth-required", { detail: (data as any).error }));
+        window.dispatchEvent(new CustomEvent("ff:auth-required", { detail: error }));
       } catch {}
     }
-    const msg = (data as any)?.error?.message || (data as any)?.message || `AI proxy error: ${res.status}`;
+    const msg = stringValue(error.message) || stringValue(data.message) || `AI proxy error: ${res.status}`;
     throw new Error(msg);
   }
 
@@ -165,29 +233,33 @@ async function callAiProxy(model: string, contents: any, feature: string, config
   // а Gemini API часто возвращает структуру candidates[].content.parts[].text
   const text = extractTextFromGemini(data);
   if (!text || !String(text).trim()) {
-    const status = (data && (data.status || data.error?.code)) ? ` (status: ${data.status || data.error?.code})` : "";
+    const statusCode = stringValue(data.status) || stringValue(asRecord(data.error).code);
+    const status = statusCode ? ` (status: ${statusCode})` : "";
     throw new Error(`AI вернул пустой ответ${status}. Возможен safety-block или недоступная модель.`);
   }
   return { ...data, text };
 }
 
-function extractTextFromGemini(data: any): string {
-  if (data && typeof data.text === "string") return data.text;
+export function extractTextFromGemini(data: unknown): string {
+  const record = asRecord(data);
+  if (typeof record.text === "string") return record.text;
 
   const out: string[] = [];
-  const candidates = data?.candidates;
+  const candidates = record.candidates;
   if (Array.isArray(candidates)) {
     for (const c of candidates) {
-      const parts = c?.content?.parts;
+      const content = asRecord(asRecord(c).content);
+      const parts = content.parts;
       if (Array.isArray(parts)) {
         for (const p of parts) {
-          if (p && typeof p.text === "string") out.push(p.text);
+          const text = stringValue(asRecord(p).text);
+          if (text) out.push(text);
         }
       }
     }
   }
 
-  if (!out.length && typeof data?.output_text === "string") return data.output_text;
+  if (!out.length && typeof record.output_text === "string") return record.output_text;
   return out.join("\n").trim();
 }
 
@@ -201,7 +273,7 @@ export async function callAiCouncil(
 ): Promise<CouncilResponse> {
   const callModel = async (prompt: string, role: AIAgentRole) => {
     const res = await callAiProxy('gemini-2.5-flash', prompt, `council_${role}`);
-    return (res as any).text || '';
+    return res.text || '';
   };
 
   return await runCouncil(query, user, { diary, habits }, callModel);
@@ -233,7 +305,7 @@ const FEATURE_MIN_INTERVAL_MS: Record<string, number> = {
 
 const MIN_CALL_INTERVAL_MS = 4000;
 let lastCallAt = 0;
-let queue: Promise<any> = Promise.resolve();
+let queue: Promise<unknown> = Promise.resolve();
 
 type AiStatusSource = 'live' | 'cache' | 'stale-cache' | 'fallback' | 'cooldown-cache' | 'cooldown-stale-cache' | 'cooldown-fallback' | 'error';
 
@@ -424,24 +496,23 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     responseSchema: schema
   });
 
-  let obj: any = {};
-  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
+  const obj = safeJsonObject(res.text);
 
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const days = Array.isArray(obj.days) ? obj.days : [];
   const normDays = dayNames.map((dn, i) => {
-    const d: any = days[i] || {};
+    const d = asRecord(days[i]);
     return {
-      day: String(d?.day || dn),
-      breakfast: String(d?.breakfast || ""),
-      lunch: String(d?.lunch || ""),
-      dinner: String(d?.dinner || ""),
-      snack: String(d?.snack || "")
+      day: stringValue(d.day) || dn,
+      breakfast: stringValue(d.breakfast),
+      lunch: stringValue(d.lunch),
+      dinner: stringValue(d.dinner),
+      snack: stringValue(d.snack)
     };
   });
 
   const shoppingList = (Array.isArray(obj.shoppingList) ? obj.shoppingList : [])
-    .map((s: any) => String(s).trim())
+    .map((s) => String(s).trim())
     .filter(Boolean)
     .slice(0, 40);
 
@@ -469,7 +540,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
   } catch {}
 
   // Legacy list fallback from items if shoppingList empty
-  const legacyFromItems = shoppingListItems.map((it: any) => `${it.name} — ${it.grams} г`);
+  const legacyFromItems = shoppingListItems.map((it) => `${it.name} — ${it.grams} г`);
   const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
 
   return { days: normDays, shoppingList: finalShoppingList, shoppingListItems, weekStart };
