@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { FavoriteRecipe } from './types';
 import clsx from 'clsx';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
+import type { EnhancedFoodPhotoAnalysisResult } from './geminiService';
 import { Heart, Search, Trash2, Clock3, Users, Camera, Upload, Loader2, X, CheckCircle2 } from 'lucide-react';
 import type { Recipe } from './types';
 
@@ -13,11 +14,27 @@ type Props = {
 };
 
 type DraftRecipe = FavoriteRecipe & {
-  ingredients?: Array<{ name: string; amount?: string }>;
-  steps?: Array<{ n: number; text: string; timeMin?: number }>;
+  calories?: number;
+  protein?: number;
+  fat?: number;
+  carbs?: number;
+  servings?: number;
+  timeMinutes?: number;
+  ingredients?: Recipe['ingredients'];
+  steps?: Recipe['steps'];
 };
 
-const toRecipeIngredient = (value: unknown): { name: string; amount?: string } | null => {
+type RecipeIngredient = Recipe['ingredients'][number];
+type RecipeStep = Recipe['steps'][number];
+type DraftNutritionKey = 'calories' | 'protein' | 'fat' | 'carbs';
+const DRAFT_NUTRITION_FIELDS: Array<{ k: DraftNutritionKey; label: string }> = [
+  { k: 'calories', label: 'Ккал' },
+  { k: 'protein', label: 'Белки' },
+  { k: 'fat', label: 'Жиры' },
+  { k: 'carbs', label: 'Углеводы' },
+];
+
+const toRecipeIngredient = (value: unknown): RecipeIngredient | null => {
   const parseText = (input: string) => {
     const text = input.trim();
     if (!text) return null;
@@ -37,10 +54,10 @@ const toRecipeIngredient = (value: unknown): { name: string; amount?: string } |
     return parseText(value);
   }
   if (!value || typeof value !== 'object') return null;
-  const item = value as { name?: unknown; amount?: unknown; grams?: unknown };
-  const name = String(item.name || '').trim();
+  const item = value as { name?: unknown; title?: unknown; amount?: unknown; grams?: unknown; value?: unknown };
+  const name = String(item.name || item.title || '').trim();
   if (!name) return null;
-  const amount = item.amount ?? item.grams;
+  const amount = item.amount ?? item.grams ?? item.value;
   return {
     name,
     amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
@@ -57,24 +74,45 @@ const pickIngredientSource = (primary: unknown, fallback: unknown) => {
   return primaryArr.length ? primaryArr : fallbackArr;
 };
 
-const toRecipeStep = (value: unknown, index: number) => {
+const toRecipeStep = (value: unknown, index: number): RecipeStep | null => {
   if (typeof value === 'string') {
     const text = value.trim();
-    return text ? ({ n: index + 1, text } as const) : null;
+    return text ? { n: index + 1, text } : null;
   }
   if (!value || typeof value !== 'object') return null;
-  const step = value as { n?: unknown; text?: unknown; timeMin?: unknown };
-  const text = String(step.text || '').trim();
+  const step = value as { n?: unknown; text?: unknown; step?: unknown; timeMin?: unknown; time_minutes?: unknown };
+  const text = String(step.text || step.step || '').trim();
   if (!text) return null;
   const n = Number(step.n || index + 1);
-  const timeMin = step.timeMin === undefined || step.timeMin === null || step.timeMin === ''
+  const rawTimeMin = step.timeMin ?? step.time_minutes;
+  const timeMin = rawTimeMin === undefined || rawTimeMin === null || rawTimeMin === ''
     ? undefined
-    : Number(step.timeMin);
+    : Number(rawTimeMin);
   return {
     n: Number.isFinite(n) && n > 0 ? n : index + 1,
     text,
     ...(Number.isFinite(timeMin as number) && (timeMin as number) > 0 ? { timeMin: Number(timeMin) } : {}),
   };
+};
+
+const toRecipeIngredients = (value: unknown): RecipeIngredient[] =>
+  (Array.isArray(value) ? value : [])
+    .map(toRecipeIngredient)
+    .filter((ingredient): ingredient is RecipeIngredient => Boolean(ingredient));
+
+const toRecipeSteps = (value: unknown): RecipeStep[] =>
+  (Array.isArray(value) ? value : [])
+    .map(toRecipeStep)
+    .filter((step): step is RecipeStep => Boolean(step));
+
+const positiveNumber = (value: unknown): number | undefined => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+};
+
+const nutritionNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
 };
 
 const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
@@ -101,8 +139,8 @@ const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
     title: String(rawRecipe?.title || item.title || 'Рецепт'),
     servings: Number(legacy.servings ?? rawRecipe?.servings ?? 0) || undefined,
     timeMinutes: Number(legacy.timeMinutes ?? rawRecipe?.timeMinutes ?? 0) || undefined,
-    ingredients: ingredientsSource.map(toRecipeIngredient).filter(Boolean) as Array<{ name: string; amount?: string }>,
-    steps: stepsSource.map(toRecipeStep).filter(Boolean) as Recipe['steps'],
+    ingredients: toRecipeIngredients(ingredientsSource),
+    steps: toRecipeSteps(stepsSource),
     tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
   };
 };
@@ -141,7 +179,7 @@ const normalizeCsvText = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const parseIngredientLine = (line: string) => {
+const parseIngredientLine = (line: string): RecipeIngredient | null => {
   const text = line.trim();
   if (!text) return null;
   const separators = ['—', '-', ':'];
@@ -154,7 +192,7 @@ const parseIngredientLine = (line: string) => {
   return { name: text };
 };
 
-const parseStepLine = (line: string, index: number) => {
+const parseStepLine = (line: string, index: number): RecipeStep | null => {
   const text = line.trim().replace(/^\d+[\).\s-]*/, '').trim();
   return text ? { n: index + 1, text } : null;
 };
@@ -194,11 +232,11 @@ const editorToFavoriteRecipe = (editor: RecipeEditorState): FavoriteRecipe => {
   const ingredients = editor.ingredientsText
     .split('\n')
     .map(parseIngredientLine)
-    .filter(Boolean) as Array<{ name: string; amount?: string }>;
+    .filter((ingredient): ingredient is RecipeIngredient => Boolean(ingredient));
   const steps = editor.stepsText
     .split('\n')
     .map(parseStepLine)
-    .filter(Boolean) as Recipe['steps'];
+    .filter((step): step is RecipeStep => Boolean(step));
   const recipe: Recipe = {
     title: editor.title.trim() || 'Рецепт',
     servings: editor.servings.trim() ? Number(editor.servings) || undefined : undefined,
@@ -222,6 +260,45 @@ const editorToFavoriteRecipe = (editor: RecipeEditorState): FavoriteRecipe => {
     ...(editor.fat.trim() ? { fat: Number(editor.fat) || 0 } : {}),
     ...(editor.carbs.trim() ? { carbs: Number(editor.carbs) || 0 } : {}),
   } as FavoriteRecipe;
+};
+
+export const buildDraftRecipeFromAi = (
+  ai: EnhancedFoodPhotoAnalysisResult,
+  photo: string,
+  id = globalThis.crypto?.randomUUID?.() || String(Date.now()),
+): DraftRecipe => {
+  const title = (ai.name || 'Рецепт').toString().slice(0, 80);
+  const ingredients = toRecipeIngredients(ai.ingredients);
+  const steps = toRecipeSteps(ai.steps);
+  const servings = positiveNumber(ai.servings) ?? 1;
+  const timeMinutes = positiveNumber(ai.timeMinutes ?? ai.time_minutes) ?? 0;
+  const tips = Array.isArray(ai.tips) ? ai.tips.map(String).filter(Boolean) : [];
+
+  return {
+    id,
+    title,
+    createdAt: new Date().toISOString(),
+    photo,
+    sourceFoodName: ai.name || '',
+    allergens: Array.isArray(ai.allergens) ? ai.allergens.map(String).filter(Boolean) : undefined,
+    intolerances: Array.isArray(ai.intolerances) ? ai.intolerances.map(String).filter(Boolean) : undefined,
+    calories: nutritionNumber(ai.calories),
+    protein: nutritionNumber(ai.protein),
+    fat: nutritionNumber(ai.fat),
+    carbs: nutritionNumber(ai.carbs),
+    ingredients,
+    steps,
+    servings,
+    timeMinutes,
+    recipe: {
+      title,
+      servings,
+      timeMinutes: timeMinutes || undefined,
+      ingredients,
+      steps,
+      tips,
+    },
+  };
 };
 
 export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Props) {
@@ -288,8 +365,7 @@ const fileToCompressedDataUrl = async (file: File) => {
     srcCanvas.width = w;
     srcCanvas.height = h;
     srcCtx.drawImage(bitmap, 0, 0);
-    // @ts-ignore
-    bitmap.close?.();
+    bitmap.close();
   } catch {
     const img = await loadImage();
     w = img.naturalWidth || img.width;
@@ -320,99 +396,9 @@ const handlePick = async (file?: File) => {
       fileToCompressedDataUrl(file),
     ]);
     const ai = await analyzeFoodPhotoEnhanced(b64);
-
-    const title = (ai?.name || 'Рецепт').toString().slice(0, 80);
-    const ingredients = Array.isArray(ai?.ingredients)
-      ? ai.ingredients
-          .map((it: any) => {
-            if (typeof it === 'string') {
-              const value = it.trim();
-              return value ? { name: value } : null;
-            }
-            if (!it || typeof it !== 'object') return null;
-            const name = String(it.name || it.title || '').trim();
-            if (!name) return null;
-            const amount = it.amount ?? it.grams ?? it.value;
-            return {
-              name,
-              ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
-            };
-          })
-          .filter(Boolean)
-      : [];
-    const steps = Array.isArray(ai?.steps)
-      ? ai.steps
-          .map((it: any) => {
-            if (typeof it === 'string') return it.trim();
-            if (!it || typeof it !== 'object') return '';
-            return String(it.text || it.step || '').trim();
-          })
-          .filter(Boolean)
-      : [];
-    const recipe = {
-      id: (globalThis.crypto?.randomUUID?.() || String(Date.now())),
-      title,
-      createdAt: new Date().toISOString(),
-      photo,
-      sourceFoodName: ai?.name || '',
-      allergens: Array.isArray(ai?.allergens) ? ai.allergens.map(String) : undefined,
-      intolerances: Array.isArray(ai?.intolerances) ? ai.intolerances.map(String) : undefined,
-      calories: Number(ai?.calories || 0),
-      protein: Number(ai?.protein || 0),
-      fat: Number(ai?.fat || 0),
-      carbs: Number(ai?.carbs || 0),
-      ingredients,
-      steps,
-      servings: Number(ai?.servings || 1) || 1,
-      timeMinutes: Number(ai?.timeMinutes || ai?.time_minutes || 0) || 0,
-      recipe: {
-        title,
-        servings: Number(ai?.servings || 1) || 1,
-        timeMinutes: Number(ai?.timeMinutes || ai?.time_minutes || 0) || undefined,
-        ingredients: Array.isArray(ai?.ingredients)
-          ? ai.ingredients
-              .map((it: any) => {
-                if (typeof it === 'string') {
-                  const value = it.trim();
-                  return value ? { name: value } : null;
-                }
-                if (!it || typeof it !== 'object') return null;
-                const name = String(it.name || it.title || '').trim();
-                if (!name) return null;
-                const amount = it.amount ?? it.grams ?? it.value;
-                return {
-                  name,
-                  ...(amount === undefined || amount === null || amount === '' ? {} : { amount: String(amount) }),
-                };
-              })
-              .filter(Boolean)
-          : [],
-        steps: Array.isArray(ai?.steps)
-          ? ai.steps
-              .map((it: any, idx: number) => {
-                if (typeof it === 'string') return { n: idx + 1, text: it.trim() };
-                if (!it || typeof it !== 'object') return null;
-                const text = String(it.text || it.step || '').trim();
-                if (!text) return null;
-                const n = Number(it.n || idx + 1);
-                const timeMin = it.timeMin ?? it.time_minutes;
-                return {
-                  n: Number.isFinite(n) && n > 0 ? n : idx + 1,
-                  text,
-                  ...(timeMin === undefined || timeMin === null || timeMin === ''
-                    ? {}
-                    : { timeMin: Number(timeMin) || undefined }),
-                };
-              })
-              .filter(Boolean)
-          : [],
-        tips: Array.isArray(ai?.tips) ? ai.tips.map(String).filter(Boolean) : [],
-      },
-    } as any as DraftRecipe;
-
-    setDraft(recipe);
-  } catch (e: any) {
-    alert(e?.message || 'Не удалось распознать рецепт по фото');
+    setDraft(buildDraftRecipeFromAi(ai, photo));
+  } catch (e: unknown) {
+    alert(e instanceof Error && e.message ? e.message : 'Не удалось распознать рецепт по фото');
   } finally {
     setIsAnalyzing(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -451,7 +437,7 @@ const handlePick = async (file?: File) => {
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: 'Фото', value: draft.photo ? 'Сохранено' : 'Не добавлено' },
-              { label: 'Граммовка', value: (Array.isArray((draft as any).ingredients) && (draft as any).ingredients.some((ing: any) => !!ing?.amount)) ? 'Есть' : 'Нужно заполнить' },
+              { label: 'Граммовка', value: draft.ingredients?.some((ing) => Boolean(ing.amount)) ? 'Есть' : 'Нужно заполнить' },
             ].map((item) => (
               <div key={item.label} className="rounded-[1.25rem] border border-slate-800 bg-slate-900/20 px-4 py-3">
                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{item.label}</div>
@@ -464,25 +450,24 @@ const handlePick = async (file?: File) => {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Название</label>
             <input
               value={draft.title || ''}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value } as any)}
+              onChange={(e) => setDraft({
+                ...draft,
+                title: e.target.value,
+                recipe: { ...draft.recipe, title: e.target.value },
+              })}
               className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { k: "calories", label: "Ккал" },
-              { k: "protein", label: "Белки" },
-              { k: "fat", label: "Жиры" },
-              { k: "carbs", label: "Углеводы" },
-            ].map(x => (
+            {DRAFT_NUTRITION_FIELDS.map(x => (
               <div key={x.k} className="flex items-center justify-between p-3 bg-slate-900/20 rounded-[1.25rem] border border-slate-800">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{x.label}</span>
                 <input
                   type="number"
                   className="w-24 bg-transparent text-right font-black text-white tabular-nums outline-none text-sm"
-                  value={Number((draft as any)[x.k] || 0)}
-                  onChange={(e) => setDraft({ ...draft, [x.k]: Number(e.target.value || 0) } as any)}
+                  value={Number(draft[x.k] || 0)}
+                  onChange={(e) => setDraft({ ...draft, [x.k]: Number(e.target.value || 0) })}
                 />
               </div>
             ))}
@@ -546,7 +531,7 @@ const handlePick = async (file?: File) => {
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Аллергены / запреты (через запятую)</label>
             <input
               value={(draft.allergens || []).join(", ")}
-              onChange={(e) => setDraft({ ...draft, allergens: e.target.value.split(",").map(s => s.trim()).filter(Boolean) } as any)}
+              onChange={(e) => setDraft({ ...draft, allergens: normalizeCsvText(e.target.value) })}
               placeholder="например: орехи, лактоза"
               className="w-full p-3.5 bg-slate-950 rounded-[1.25rem] border border-slate-800 outline-none font-bold text-white placeholder:text-slate-600 text-sm"
             />
