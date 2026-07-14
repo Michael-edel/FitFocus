@@ -34,7 +34,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 50 файлов / 202 теста |
+| `npm run test:unit` | пройдено, 50 файлов / 203 теста |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
@@ -57,9 +57,10 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - `/api/logout_all` и `/api/account/delete` больше не возвращают клиенту raw auth/config/delete exception text.
 - Вложения поддержки больше не классифицируют oversized-файлы через строковый `Error.message` с именем файла; используется типизированная ошибка.
 - AI telemetry больше не сохраняет raw текст исключения при сбое запроса к Gemini; в `ai_events` пишется стабильный код `AI_FETCH_*`.
+- Hard-delete audit аккаунта больше не пишет raw D1 exception text и user id в `console.error`; в `admin_events.meta` сохраняется стабильный код `ACCOUNT_HARD_DELETE_FAILED`.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 50 unit-файлов и 202 теста.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 50 unit-файлов и 203 теста.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -69,7 +70,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 50 файлов / 202 теста |
+| `npm run test:unit` | пройдено, 50 файлов / 203 теста |
 | `npm run typecheck` | пройдено |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |

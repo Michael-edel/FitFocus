@@ -82,6 +82,7 @@ describe('security and privacy baseline', () => {
     const aiRoute = read('functions/api/ai.ts');
     const logoutAll = read('functions/api/logout_all.ts');
     const accountDelete = read('functions/api/account/delete.ts');
+    const accountDeleteLib = read('functions/api/_lib/account_delete.ts');
     const supportAttachments = read('functions/api/_lib/support_attachments.ts');
 
     expect(pushStatus).not.toContain('missing_config');
@@ -107,6 +108,9 @@ describe('security and privacy baseline', () => {
     expect(logoutAll).not.toContain('String(e)');
     expect(accountDelete).not.toContain('return json({ ok: false, error: msg }');
     expect(accountDelete).toContain('ACCOUNT_DELETE_FAILED');
+    expect(accountDeleteLib).not.toContain('Failed to delete user ${userId} data');
+    expect(accountDeleteLib).not.toContain('messageOf(error, String(error))');
+    expect(accountDeleteLib).toContain('ACCOUNT_HARD_DELETE_FAILED');
     expect(googleStart).not.toContain('Missing GOOGLE_CLIENT_ID');
     expect(googleStart).not.toContain('Missing AUTH_JWT_SECRET');
     expect(googleCallback).not.toContain('Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
