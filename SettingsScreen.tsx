@@ -185,6 +185,84 @@ const formatMobileTokenExpiry = (ts?: number | null) => {
   }
 };
 
+type JsonRecord = Record<string, unknown>;
+type PushRuntimeEnv = {
+  VITE_PUSH_VAPID_PUBLIC_KEY?: unknown;
+};
+type PushImportMeta = ImportMeta & {
+  env?: PushRuntimeEnv;
+};
+type PushStatusSubscription = {
+  lastError: string | null;
+};
+type PushDeliveryFailure = {
+  status: number | null;
+  message: string;
+};
+
+const isJsonRecord = (value: unknown): value is JsonRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readJsonRecord = async (response: Response): Promise<JsonRecord | null> => {
+  try {
+    const payload: unknown = await response.json();
+    return isJsonRecord(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
+const textFromUnknown = (value: unknown): string =>
+  typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+
+const trimmedTextFromUnknown = (value: unknown): string =>
+  textFromUnknown(value).trim();
+
+const numberFromUnknown = (value: unknown): number => {
+  const next = Number(value ?? 0);
+  return Number.isFinite(next) ? next : 0;
+};
+
+const readBuildTimePushPublicKey = () => {
+  const env = (import.meta as PushImportMeta).env;
+  const value = env?.VITE_PUSH_VAPID_PUBLIC_KEY;
+  return typeof value === 'string' ? value : '';
+};
+
+const pushApiErrorMessage = (payload: JsonRecord | null, fallback: string) => {
+  const code = trimmedTextFromUnknown(payload?.error);
+  if (code === 'UNAUTH') return 'Сессия истекла. Войдите снова.';
+  return trimmedTextFromUnknown(payload?.message) || fallback;
+};
+
+const normalizePushStatusSubscriptions = (value: unknown): PushStatusSubscription[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isJsonRecord)
+    .map((item) => ({
+      lastError: trimmedTextFromUnknown(item.last_error) || null,
+    }));
+};
+
+const normalizePushDeliveryFailures = (value: unknown): PushDeliveryFailure[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isJsonRecord)
+    .map((item) => {
+      const status = numberFromUnknown(item.status);
+      return {
+        status: status > 0 ? status : null,
+        message: trimmedTextFromUnknown(item.message),
+      };
+    })
+    .filter((item) => item.status !== null || item.message);
+};
+
+const isStalePushFailure = (item: PushDeliveryFailure) =>
+  item.status === 404 ||
+  item.status === 410 ||
+  /expired|unsubscribed/i.test(item.message);
+
 async function loadImageElement(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file);
   try {
@@ -769,29 +847,29 @@ export default function SettingsScreen({
         'X-FitFocus-Browser-Label': browserLabel,
       },
     });
-    const payload = await response.json().catch(() => null);
+    const payload = await readJsonRecord(response);
     if (!response.ok || !payload) {
-      const code = String(payload?.error || '');
+      const code = trimmedTextFromUnknown(payload?.error);
       if (response.status === 401 || code === 'UNAUTH') {
         throw new Error('Сессия истекла. Войдите снова, чтобы проверить push.');
       }
-      throw new Error(String(payload?.message || code || `Не удалось проверить push-сервер (${response.status}).`));
+      throw new Error(pushApiErrorMessage(payload, 'Не удалось проверить push-сервер.'));
     }
 
     const configured = Boolean(payload.configured);
-    const publicKey = String(payload.vapid_public_key || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '');
-    const subscriptions = Array.isArray(payload.subscriptions) ? payload.subscriptions : [];
-    const currentSubscriptionId = String(payload.current_subscription_id || '').trim() || null;
-    const currentBrowserLabel = String(payload.current_browser_label || '').trim() || null;
-    const lastDeliveryError = subscriptions.find((item: any) => typeof item?.last_error === 'string' && item.last_error.trim())?.last_error || null;
+    const publicKey = trimmedTextFromUnknown(payload.vapid_public_key) || readBuildTimePushPublicKey();
+    const subscriptions = normalizePushStatusSubscriptions(payload.subscriptions);
+    const currentSubscriptionId = trimmedTextFromUnknown(payload.current_subscription_id) || null;
+    const currentBrowserLabel = trimmedTextFromUnknown(payload.current_browser_label) || null;
+    const lastDeliveryError = subscriptions.find((item) => item.lastError)?.lastError || null;
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
     setPushCurrentSubscriptionId(currentSubscriptionId);
     setPushCurrentBrowserLabel(currentBrowserLabel);
     setPushPublicKey(publicKey);
-    setPushSubscriptionCount(Number(payload.count || 0));
-    setPushDeviceCount(subscriptions.length || Number(payload.count || 0));
+    setPushSubscriptionCount(numberFromUnknown(payload.count));
+    setPushDeviceCount(subscriptions.length || numberFromUnknown(payload.count));
     setPushLastDeliveryError(lastDeliveryError);
     setPushSubscribed(Boolean(currentSubscriptionId));
     return { configured, publicKey, lastDeliveryError, currentSubscriptionId };
@@ -856,7 +934,7 @@ export default function SettingsScreen({
       setPushError('Этот браузер не поддерживает push-уведомления.');
       return;
     }
-    let publicKey = pushPublicKey || (import.meta as any)?.env?.VITE_PUSH_VAPID_PUBLIC_KEY || '';
+    let publicKey = pushPublicKey || readBuildTimePushPublicKey();
     try {
       const status = await readPushStatus();
       if (!status.configured) {
@@ -871,7 +949,7 @@ export default function SettingsScreen({
       }
     }
     if (!publicKey) {
-      setPushError('Не задан PUSH_VAPID_PUBLIC_KEY.');
+      setPushError('Push-сервер не настроен.');
       return;
     }
 
@@ -907,13 +985,13 @@ export default function SettingsScreen({
           browserLabel: getPushBrowserLabel(),
         }),
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || 'Не удалось сохранить push-подписку.');
+        throw new Error(pushApiErrorMessage(payload, 'Не удалось сохранить push-подписку.'));
       }
 
       setPushSubscribed(true);
-      setPushNotice(`Уведомления включены на устройстве ${payload?.deviceLabel || getPushDeviceDisplayLabel()}.`);
+      setPushNotice(`Уведомления включены на устройстве ${trimmedTextFromUnknown(payload?.deviceLabel) || getPushDeviceDisplayLabel()}.`);
       await refreshPushStatus();
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Не удалось включить push-уведомления.');
@@ -953,9 +1031,9 @@ export default function SettingsScreen({
         body: JSON.stringify(requestBody),
       });
 
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || 'Не удалось отключить push-уведомления.');
+        throw new Error(pushApiErrorMessage(payload, 'Не удалось отключить push-уведомления.'));
       }
 
       if (subscription) {
@@ -1003,21 +1081,20 @@ export default function SettingsScreen({
           url: '/',
         }),
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || 'Не удалось отправить тестовое уведомление.');
+        throw new Error(pushApiErrorMessage(payload, 'Не удалось отправить тестовое уведомление.'));
       }
       await refreshPushStatus();
-      const sent = Number(payload?.sent || 0);
-      const failed = Number(payload?.failed || 0);
-      const removed = Number(payload?.removed || 0);
-      const failures = Array.isArray(payload?.failures) ? payload.failures : [];
-      const isGoneFailure = (item: any) => Number(item?.status) === 404 || Number(item?.status) === 410 || /expired|unsubscribed/i.test(String(item?.message || ''));
-      const cleanupCount = failures.filter(isGoneFailure).length;
-      const deliveryFailures = failures.filter((item: any) => !isGoneFailure(item));
-      const firstDeliveryFailure = deliveryFailures.find((item: any) => item?.message) || null;
+      const sent = numberFromUnknown(payload?.sent);
+      const failed = numberFromUnknown(payload?.failed);
+      const removed = numberFromUnknown(payload?.removed);
+      const failures = normalizePushDeliveryFailures(payload?.failures);
+      const cleanupCount = failures.filter(isStalePushFailure).length;
+      const deliveryFailures = failures.filter((item) => !isStalePushFailure(item));
+      const firstDeliveryFailure = deliveryFailures.find((item) => item.message) || null;
       const failureDetails = firstDeliveryFailure?.message
-        ? ` Причина: ${String(firstDeliveryFailure.message).slice(0, 180)}${firstDeliveryFailure.status ? ` (${firstDeliveryFailure.status})` : ''}.`
+        ? ` Причина: ${firstDeliveryFailure.message.slice(0, 180)}${firstDeliveryFailure.status ? ` (${firstDeliveryFailure.status})` : ''}.`
         : '';
       if (sent > 0 && failed === 0) {
         setPushNotice(`Тест отправлен: ${sent} уведомлений.`);
