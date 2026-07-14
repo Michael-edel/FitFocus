@@ -275,4 +275,39 @@ describe('/api/support/feedback/my', () => {
     expect(db.batches).toHaveLength(0);
     expect(captured.messageAttachmentsJson).toBeUndefined();
   });
+
+  it('does not expose oversized reply attachment names in public errors', async () => {
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const captured: { messageAttachmentsJson?: string | null } = {};
+    const db = makeDb(captured);
+    const form = new FormData();
+    form.set('ticket_id', 'ticket-1');
+    form.set('message', 'reply');
+    form.append('attachments', new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'secret-diagnostic-name.bin', {
+      type: 'application/octet-stream',
+    }));
+
+    const context: SupportFeedbackMyContext = {
+      request: new Request('https://fitfocus.test/api/support/feedback/my', {
+        method: 'POST',
+        headers: { Cookie: `ff_session=${token}` },
+        body: form,
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+    };
+    const response = await onRequestPost(context);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({
+      error: 'BAD_REQUEST',
+      message: 'Файл слишком большой. Прикрепите файл до 2 MB.',
+    });
+    expect(JSON.stringify(body)).not.toContain('secret-diagnostic-name.bin');
+    expect(db.batches).toHaveLength(0);
+  });
 });
