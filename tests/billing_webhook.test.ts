@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyStripeSubscriptionUpdate } from '../functions/api/billing/webhook';
+import { applyStripeSubscriptionUpdate, onRequestPost } from '../functions/api/billing/webhook';
 
 type PreparedStatement = {
   sql: string;
@@ -50,6 +50,30 @@ const env = {
 };
 
 describe('billing webhook subscription updates', () => {
+  it('does not expose Stripe signature verification details', async () => {
+    const response = await onRequestPost({
+      request: new Request('https://fitfocus.test/api/billing/webhook', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'bad-signature' },
+        body: '{}',
+      }),
+      env: {
+        DB: makeDb() as unknown as D1Database,
+        STRIPE_SECRET_KEY: 'sk_test_unit',
+        STRIPE_WEBHOOK_SECRET: 'whsec_unit',
+        ...env,
+      },
+    });
+
+    const text = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(text).toBe('Webhook Error: invalid signature');
+    expect(text).not.toContain('bad-signature');
+    expect(text).not.toContain('No signatures found');
+    expect(text).not.toContain('stripe-signature');
+  });
+
   it('updates an active existing user subscription for known prices', async () => {
     const db = makeDb();
 

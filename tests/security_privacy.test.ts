@@ -70,6 +70,7 @@ describe('security and privacy baseline', () => {
     const huaweiSync = read('functions/api/wearable/huawei/sync.ts');
     const huaweiStart = read('functions/api/wearable/huawei/start.ts');
     const checkout = read('functions/api/billing/checkout.ts');
+    const webhook = read('functions/api/billing/webhook.ts');
     const supportAdmin = read('functions/api/support/feedback.ts');
     const supportMy = read('functions/api/support/feedback/my.ts');
     const googleStart = read('functions/api/auth/google/start.ts');
@@ -88,6 +89,9 @@ describe('security and privacy baseline', () => {
     expect(huaweiStart).not.toContain('missing: config.missing');
     expect(checkout).not.toContain('error instanceof Error ? error.message');
     expect(checkout).not.toContain('String(error)');
+    expect(webhook).not.toContain('error instanceof Error ? error.message');
+    expect(webhook).not.toContain('String(error)');
+    expect(webhook).toContain('Webhook Error: invalid signature');
     expect(supportAdmin).not.toContain('SELECT *');
     expect(supportMy).not.toContain('SELECT *');
     expect(supportMy).not.toContain('...ticket');
