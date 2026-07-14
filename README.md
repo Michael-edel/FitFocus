@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 53 файла / 214 тестов |
+| `npm run test:unit` | пройдено, 53 файла / 219 тестов |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
@@ -61,9 +61,11 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Ошибки модального запуска камеры больше не показывают raw browser text вроде `The operation was aborted`; сообщения нормализованы на русском, а ImageCapture/torch-ветки типизированы без `as any`.
 - WIS-share и weekly AI report во фронтенде больше не пишут raw exception text в пользовательское состояние или аналитику; используются стабильные коды классификации.
 - Верхний слой `geminiService.ts` типизирует env, AI proxy response, Gemini text extraction и нормализацию списка покупок без прежних `as any`; кириллические единицы `г/кг` в списке покупок распознаются через явную границу, а не через `\b`.
+- Нижний слой `geminiService.ts` больше не содержит `any` и не делает прямой `JSON.parse` по AI response text; ответы для фото еды, enhanced-разбора, коуч-совета, персонального плана, семейного меню и рецепта проходят через типизированные нормализаторы.
+- Для `nonFood=true` нормализатор фото еды принудительно обнуляет КБЖУ и очищает ингредиенты, даже если модель вернула калории.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 53 unit-файла и 214 тестов.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 53 unit-файла и 219 тестов.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -73,7 +75,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 53 файла / 214 тестов |
+| `npm run test:unit` | пройдено, 53 файла / 219 тестов |
 | `npm run typecheck` | пройдено |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
