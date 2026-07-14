@@ -1,5 +1,21 @@
 export type CameraFacing = "user" | "environment";
 
+type ImageCaptureConstructor = new (track: MediaStreamTrack) => {
+  takePhoto: () => Promise<Blob>;
+};
+
+type WindowWithImageCapture = Window & typeof globalThis & {
+  ImageCapture?: ImageCaptureConstructor;
+};
+
+type TorchCapabilities = MediaTrackCapabilities & {
+  torch?: boolean;
+};
+
+type TorchConstraintSet = MediaTrackConstraintSet & {
+  torch?: boolean;
+};
+
 export async function startCamera(facing: CameraFacing): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Камера не поддерживается этим браузером");
@@ -81,7 +97,7 @@ export async function capturePhoto(
   quality: number = 0.95
 ): Promise<Blob> {
   try {
-    const w: any = window as any;
+    const w = window as WindowWithImageCapture;
     if (w.ImageCapture && stream) {
       const track = stream.getVideoTracks()[0];
       if (track) {
@@ -101,7 +117,7 @@ export function isTorchSupported(stream: MediaStream | null): boolean {
   try {
     const track = stream?.getVideoTracks?.()[0];
     if (!track || !track.getCapabilities) return false;
-    const caps: any = track.getCapabilities();
+    const caps = track.getCapabilities() as TorchCapabilities;
     return !!caps?.torch;
   } catch {
     return false;
@@ -112,8 +128,9 @@ export async function setTorch(stream: MediaStream | null, on: boolean): Promise
   try {
     const track = stream?.getVideoTracks?.()[0];
     if (!track || !track.applyConstraints) return false;
-    const anyTrack: any = track as any;
-    await anyTrack.applyConstraints({ advanced: [{ torch: on }] });
+    const torchConstraint: TorchConstraintSet = { torch: on };
+    const constraints: MediaTrackConstraints = { advanced: [torchConstraint] };
+    await track.applyConstraints(constraints);
     return true;
   } catch {
     return false;
