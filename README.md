@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 50 файлов / 201 тест |
+| `npm run test:unit` | пройдено, 50 файлов / 202 теста |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
@@ -55,9 +55,10 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Stripe webhook больше не возвращает наружу raw детали ошибки проверки подписи.
 - `/api/state` и `/api/profile` больше не возвращают запрещенный state key в ответе `FORBIDDEN_KEYSPACE`.
 - `/api/logout_all` и `/api/account/delete` больше не возвращают клиенту raw auth/config/delete exception text.
+- Вложения поддержки больше не классифицируют oversized-файлы через строковый `Error.message` с именем файла; используется типизированная ошибка.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 50 unit-файлов и 201 тест.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 50 unit-файлов и 202 теста.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -67,7 +68,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 50 файлов / 201 тест |
+| `npm run test:unit` | пройдено, 50 файлов / 202 теста |
 | `npm run typecheck` | пройдено |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |

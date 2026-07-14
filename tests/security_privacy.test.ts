@@ -82,6 +82,7 @@ describe('security and privacy baseline', () => {
     const aiRoute = read('functions/api/ai.ts');
     const logoutAll = read('functions/api/logout_all.ts');
     const accountDelete = read('functions/api/account/delete.ts');
+    const supportAttachments = read('functions/api/_lib/support_attachments.ts');
 
     expect(pushStatus).not.toContain('missing_config');
     expect(pushStatus).not.toContain('config_keys');
@@ -97,6 +98,9 @@ describe('security and privacy baseline', () => {
     expect(supportAdmin).not.toContain('SELECT *');
     expect(supportMy).not.toContain('SELECT *');
     expect(supportMy).not.toContain('...ticket');
+    expect(supportAdmin).not.toContain('startsWith("FILE_TOO_LARGE:")');
+    expect(supportMy).not.toContain('startsWith("FILE_TOO_LARGE:")');
+    expect(supportAttachments).not.toContain('FILE_TOO_LARGE:${file.name}');
     expect(read('functions/api/state.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
     expect(read('functions/api/profile.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
     expect(logoutAll).not.toContain('e instanceof Error ? e.message');

@@ -5,6 +5,7 @@ import {
   fileToAttachment,
   inlineAttachmentBytes,
   parseAttachmentsJson,
+  SupportAttachmentTooLargeError,
 } from '../functions/api/_lib/support_attachments';
 
 describe('support attachment helpers', () => {
@@ -59,5 +60,14 @@ describe('support attachment helpers', () => {
 
     expect(storedKey).toBe('support/ticket-1/messages/message-1/00-voice_note.txt');
     expect(attachment.storage_key).toBe(storedKey);
+  });
+
+  it('throws a typed oversized attachment error without exposing the file name', async () => {
+    const file = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'secret-diagnostic-name.bin', {
+      type: 'application/octet-stream',
+    });
+
+    await expect(fileToAttachment(file)).rejects.toBeInstanceOf(SupportAttachmentTooLargeError);
+    await expect(fileToAttachment(file)).rejects.not.toThrow('secret-diagnostic-name.bin');
   });
 });

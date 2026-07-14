@@ -9,6 +9,7 @@ import {
   attachmentResponseUrl,
   fileToAttachment,
   parseAttachmentsJson,
+  SupportAttachmentTooLargeError,
   type SupportAttachmentBucket,
   type SupportAttachmentRecord,
 } from "../../_lib/support_attachments";
@@ -213,8 +214,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }));
     }
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error || "");
-    if (msg.startsWith("FILE_TOO_LARGE:")) {
+    if (error instanceof SupportAttachmentTooLargeError) {
       return json({ error: "BAD_REQUEST", message: "Файл слишком большой. Прикрепите файл до 2 MB." }, 400);
     }
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);

@@ -32,6 +32,13 @@ export type SupportAttachmentRecord = {
 
 const INLINE_ATTACHMENT_LIMIT = 2 * 1024 * 1024;
 
+export class SupportAttachmentTooLargeError extends Error {
+  constructor() {
+    super("SUPPORT_ATTACHMENT_TOO_LARGE");
+    this.name = "SupportAttachmentTooLargeError";
+  }
+}
+
 function isSupportAttachmentKind(value: unknown): value is SupportAttachmentKind {
   return value === "photo" || value === "video" || value === "voice" || value === "file";
 }
@@ -113,7 +120,7 @@ export async function fileToAttachment(
   } = {}
 ): Promise<SupportAttachmentRecord> {
   if (file.size > INLINE_ATTACHMENT_LIMIT && !options.bucket) {
-    throw new Error(`FILE_TOO_LARGE:${file.name}`);
+    throw new SupportAttachmentTooLargeError();
   }
 
   const buffer = await file.arrayBuffer();
