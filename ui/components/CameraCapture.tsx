@@ -40,29 +40,11 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
     }
   }
 
-  function formatCameraError(error: any) {
-    const name = String(error?.name || "");
-    const message = String(error?.message || "");
-    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-      return "Нет доступа к камере. Разрешите камеру для FitFocus в настройках браузера или приложения.";
-    }
-    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-      return "Камера не найдена на этом устройстве.";
-    }
-    if (name === "NotReadableError" || name === "TrackStartError") {
-      return "Камера занята другим приложением или браузером.";
-    }
-    if (name === "AbortError" || /abort/i.test(message)) {
-      return "Камера не успела запуститься. Закройте окно и нажмите «Снять» ещё раз.";
-    }
-    return message || "Не удалось открыть камеру";
-  }
-
   async function playVideo(video: HTMLVideoElement) {
     try {
       await video.play();
-    } catch (error: any) {
-      if (error?.name !== "AbortError") throw error;
+    } catch (error: unknown) {
+      if (getErrorName(error) !== "AbortError") throw error;
       await new Promise((resolve) => window.setTimeout(resolve, 150));
       await video.play();
     }
@@ -93,7 +75,7 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
       if (hasTorch && torchOn) {
         await setTorch(s, true);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (bootId !== bootIdRef.current) return;
       setErr(formatCameraError(e));
       setTorchAvailable(false);
@@ -135,8 +117,8 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
       await onCaptured(file);
       onClose();
-    } catch (e: any) {
-      setErr(e?.message || "Не удалось сделать фото");
+    } catch {
+      setErr("Не удалось сделать фото. Проверьте изображение в окне камеры и попробуйте снова.");
     }
   }
 
@@ -231,4 +213,45 @@ export default function CameraCapture({ open, onClose, onCaptured, pro, facing, 
       </div>
     </div>
   );
+}
+
+type ErrorRecord = {
+  name?: unknown;
+  message?: unknown;
+};
+
+function getErrorRecord(error: unknown): ErrorRecord {
+  return error && typeof error === "object" ? error as ErrorRecord : {};
+}
+
+function getErrorName(error: unknown): string {
+  const name = getErrorRecord(error).name;
+  return typeof name === "string" ? name : "";
+}
+
+function getErrorMessage(error: unknown): string {
+  const message = getErrorRecord(error).message;
+  return typeof message === "string" ? message : "";
+}
+
+export function formatCameraError(error: unknown) {
+  const name = getErrorName(error);
+  const message = getErrorMessage(error);
+
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Нет доступа к камере. Разрешите камеру для FitFocus в настройках браузера или приложения.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "Камера не найдена на этом устройстве.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Камера занята другим приложением или браузером.";
+  }
+  if (name === "AbortError" || /abort/i.test(message)) {
+    return "Камера не успела запуститься. Закройте окно и нажмите «Снять» ещё раз.";
+  }
+  if (message === "Камера не поддерживается этим браузером" || message === "Не удалось открыть камеру") {
+    return message;
+  }
+  return "Не удалось открыть камеру. Проверьте доступ к камере и попробуйте снова.";
 }
