@@ -1,5 +1,6 @@
 import React from 'react';
 import { Goal } from './types';
+import type { AppSettings, UserProfile } from './types';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
@@ -20,7 +21,55 @@ const ChangelogScreen = React.lazy(() => import('./ChangelogScreen'));
 const PrivacyScreen = React.lazy(() => import('./PrivacyScreen'));
 
 type AppWorkspaceProps = {
-  workspaceProps: any;
+  workspaceProps: AppWorkspaceData;
+};
+
+type PassThroughProp = unknown;
+
+type AppWorkspaceData = {
+  meta: {
+    activeTab: string;
+    isAdmin: boolean;
+    currentUser: UserProfile | null;
+    paywall: {
+      plan: string;
+      canUsePro: boolean;
+      openPaywall: () => void;
+    };
+    setActiveTab: (tab: string) => void;
+    googleMe: { sub?: string } | null;
+    logout: () => Promise<void> | void;
+    deleteAccount: () => Promise<void> | void;
+    persistUser?: (user: UserProfile) => Promise<void> | void;
+    patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    onExportBackup?: () => void;
+    onImportBackup?: (file: File) => void;
+    onConnectAutosave?: () => Promise<boolean>;
+    autosaveEnabled?: boolean;
+    profileSyncState?: PassThroughProp;
+    profileSyncNote?: string | null;
+    lastProfileSyncAt?: number | null;
+    syncAllLocalDataNow?: () => Promise<void> | void;
+    reloadUserFromCloud?: () => Promise<void> | void;
+    resetUiState?: () => void;
+    aiBadge: PassThroughProp;
+    retryMeta: PassThroughProp;
+  };
+  dashboard: Record<string, PassThroughProp>;
+  plan: Record<string, PassThroughProp> & {
+    currentUserGoal?: Goal;
+  };
+  nutrition: Record<string, PassThroughProp>;
+  progress: Record<string, PassThroughProp> & {
+    onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    syncState?: PassThroughProp;
+  };
+  family: Record<string, PassThroughProp>;
+  council: Record<string, PassThroughProp>;
+  content: Record<string, PassThroughProp> & {
+    settings: AppSettings;
+    setSettings: (next: AppSettings) => void;
+  };
 };
 
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
@@ -325,8 +374,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onServerLogout={logout}
             onDeleteAccount={deleteAccount}
             user={currentUser}
-            onChangeUser={(u: any) => u && persistUser?.(u)}
-            onPatchUser={(patch: any) => void patchProfileInCloud?.(patch)}
+            onChangeUser={(u: UserProfile) => void persistUser?.(u)}
+            onPatchUser={(patch: Partial<UserProfile>) => void patchProfileInCloud?.(patch)}
             onExportBackup={onExportBackup}
             onImportBackup={onImportBackup}
             onConnectAutosave={onConnectAutosave}
