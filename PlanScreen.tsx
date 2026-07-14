@@ -8,7 +8,13 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { Goal } from './types';
+import {
+  Goal,
+  type AIPlan,
+  type FamilyWeeklyMenu,
+  type ShoppingListItem,
+  type UserProfile,
+} from './types';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -17,9 +23,12 @@ type ShoppingListCardComponent = React.ComponentType<{
   fallbackList?: string[];
   userId?: string | null;
 }>;
+type CloudFamilyRef = { id?: string | null } | null;
+type FamilyShoppingItem = ShoppingListItem & { checked?: boolean };
+type FamilyShoppingState = { week_start: string; items: FamilyShoppingItem[] } | null;
 
 type PlanScreenProps = {
-  currentUser: any;
+  currentUser: UserProfile | null;
   planTaskDone: Record<string, boolean>;
   setPlanTaskDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setActiveTab: (tab: string) => void;
@@ -31,24 +40,24 @@ type PlanScreenProps = {
   weeklyMenuLoading: boolean;
   handleGenerateWeeklyMenu: () => void;
   weeklyMenuError: string | null;
-  currentUserAiPlan: any;
+  currentUserAiPlan?: AIPlan | null;
   currentUserTargetWeight?: number | null;
   formatGramsPretty: (value: number) => string;
   MealParts: MealPartsComponent;
-  cloudFamily: any;
+  cloudFamily: CloudFamilyRef;
   planScope: 'personal' | 'family';
   setPlanScope: React.Dispatch<React.SetStateAction<'personal' | 'family'>>;
   familyShoppingLoading: boolean;
-  familyShopping: any;
+  familyShopping: FamilyShoppingState;
   toggleFamilyShoppingItem: (name: string, checked: boolean) => void;
   loadFamilyShopping: () => void;
   familyMenuError: string | null;
-  familyMenu: any;
+  familyMenu?: FamilyWeeklyMenu | null;
   familyMenuLoading: boolean;
   setFamilyMenuPrefsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleGenerateFamilyWeeklyMenu: () => void;
   paywallPlan: string;
-  allUsers: any[];
+  allUsers: UserProfile[];
   currentUserGoal: Goal | string;
   DEFAULT_DEFICIT: number;
   DEFAULT_SURPLUS: number;
@@ -123,7 +132,7 @@ export default function PlanScreen({
   React.useEffect(() => {
     const nextDay = weeklyMenu?.days?.[0]?.day || '';
     if (!nextDay) return;
-    setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d: any) => d.day === prev) ? prev : nextDay));
+    setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d) => d.day === prev) ? prev : nextDay));
   }, [weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
 
   React.useEffect(() => {
@@ -143,7 +152,7 @@ export default function PlanScreen({
   const weeklyMenuDay = React.useMemo(() => {
     const days = weeklyMenu?.days ?? [];
     if (!days.length) return null;
-    return days.find((d: any) => d.day === activeWeekDay) || days[0];
+    return days.find((d) => d.day === activeWeekDay) || days[0];
   }, [weeklyMenu?.days, activeWeekDay]);
 
   const mealTemplateFields = [
@@ -371,7 +380,7 @@ export default function PlanScreen({
           <div className="mt-4 space-y-4">
             <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-slate-950/95 backdrop-blur border-y border-slate-800/70">
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {weeklyMenu.days.map((d: any, i: number) => {
+                {weeklyMenu.days.map((d, i) => {
                   const active = (weeklyMenuDay?.day || weeklyMenu.days[0]?.day) === d.day;
                   return (
                     <button
@@ -518,7 +527,7 @@ export default function PlanScreen({
                 title="Список покупок"
                 fallbackList={
                   Array.isArray(weeklyMenu.shoppingListItems) && weeklyMenu.shoppingListItems.length
-                    ? weeklyMenu.shoppingListItems.map((it: any) => `${it.name} — ${formatGramsPretty(Number(it.grams || 0))}`)
+                    ? weeklyMenu.shoppingListItems.map((it) => `${it.name} — ${formatGramsPretty(Number(it.grams || 0))}`)
                     : weeklyMenu.shoppingList
                 }
                 userId={currentUser?.id ?? null}
@@ -543,7 +552,7 @@ export default function PlanScreen({
           {familyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{familyMenuError}</p>)}
           {familyMenu ? (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {familyMenu.days.map((d: any, i: number) => (
+              {familyMenu.days.map((d, i) => (
                 <div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
                   <div className="text-slate-200 font-black mb-2">{d.day}</div>
                   {([['Завтрак', d.breakfast], ['Обед', d.lunch], ['Ужин', d.dinner], ['Перекус', d.snack]] as const).map(([label, meal], j) => (
@@ -570,7 +579,7 @@ export default function PlanScreen({
               <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
                 {(familyMenu?.shoppingListItems || []).length
-                  ? familyMenu.shoppingListItems.slice(0, 40).map((it: any, i: number) => (
+                  ? familyMenu.shoppingListItems.slice(0, 40).map((it, i) => (
                       <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
                         <span className="truncate">• {it.name}</span>
                         <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
