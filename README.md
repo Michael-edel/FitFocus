@@ -28,7 +28,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, service-worker push parsing, FoodInsightCard typing, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, service-worker push parsing, FoodInsightCard/PlanScreen typing, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
@@ -66,6 +66,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - `RecipesScreen.tsx` больше не разбирает enhanced AI-ответ через `any`; черновик рецепта строится типизированной функцией, которая сохраняет граммовки, шаги, аллергены и нутриенты.
 - `sw.ts` больше не разбирает push payload через `any`; service worker нормализует title/body/icon/actions, ограничивает URL уведомления same-origin путем и безопасно обрабатывает битый payload.
 - `FoodInsightCard.tsx` больше не использует `any`: активный ингредиент, выноски, CSS custom properties, разбивка ингредиентов и recipe view типизированы; ошибка генерации рецепта показывается безопасным публичным текстом.
+- `PlanScreen.tsx` больше не использует `any`: props, AI-план, недельное меню, семейное меню, список покупок и пользовательские профили типизированы через существующие модели проекта.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для PWA shell, onboarding и push settings синхронизирован с текущими экранами и моками.
 - README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 54 unit-файла и 220 тестов.
@@ -515,7 +516,7 @@ npx wrangler d1 migrations apply fitfocus --remote
 Примечание по последней серии правок:
 
 - Слой `storage`, часть domain/utils и большая часть unit/integration tests уже переведены с широких `any` на более узкие типы и typed context/env mocks.
-- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `PlanScreen.tsx` и связанных helper-модулях.
+- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx` и связанных helper-модулях.
 
 ## Команды разработки
 
