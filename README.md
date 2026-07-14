@@ -28,13 +28,13 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
-| `npm run test:unit` | пройдено, 49 файлов / 193 теста |
+| `npm run test:unit` | пройдено, 49 файлов / 194 теста |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
@@ -52,9 +52,10 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Huawei Health status/sync больше не используют `SELECT *`; status не читает зашифрованные token-поля.
 - Админский PATCH поддержки больше не использует `SELECT *` для чтения обращения.
 - Пользовательский reply в поддержку больше не возвращает имя oversized-вложения в публичной ошибке.
+- Stripe webhook больше не возвращает наружу raw детали ошибки проверки подписи.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
-- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 49 unit-файлов и 193 теста.
+- README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 49 unit-файлов и 194 теста.
 
 Фактически выполненные проверки для этого пакета:
 
@@ -64,7 +65,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
-| `npm run test:unit` | пройдено, 49 файлов / 193 теста |
+| `npm run test:unit` | пройдено, 49 файлов / 194 теста |
 | `npm run typecheck` | пройдено |
 | `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
 | `npm run build` | пройдено |
