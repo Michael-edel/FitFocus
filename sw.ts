@@ -8,6 +8,94 @@ const APP_TITLE = 'FitFocus';
 const APP_ICON = '/icon.svg';
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
+type JsonRecord = Record<string, unknown>;
+
+type PushNotificationAction = {
+  action: string;
+  title: string;
+  icon?: string;
+};
+
+type ServiceWorkerNotificationOptions = NotificationOptions & {
+  badge?: string;
+  tag?: string;
+  renotify?: boolean;
+  data?: JsonRecord;
+  actions?: PushNotificationAction[];
+  requireInteraction?: boolean;
+};
+
+type PushNotificationPayload = {
+  title?: string;
+  body?: string;
+  url?: string;
+  icon?: string;
+  badge?: string;
+  tag?: string;
+  data?: JsonRecord;
+  actions?: PushNotificationAction[];
+  requireInteraction?: boolean;
+};
+
+const isRecord = (value: unknown): value is JsonRecord =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const nonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+};
+
+const normalizeActions = (value: unknown): PushNotificationAction[] => {
+  const actions = (Array.isArray(value) ? value : [])
+    .map((raw): PushNotificationAction | null => {
+      if (!isRecord(raw)) return null;
+      const action = nonEmptyString(raw.action);
+      const title = nonEmptyString(raw.title);
+      const icon = nonEmptyString(raw.icon);
+      return action && title ? { action, title, ...(icon ? { icon } : {}) } : null;
+    })
+    .filter((action): action is PushNotificationAction => Boolean(action))
+    .slice(0, 3);
+
+  return actions.length > 0 ? actions : [{ action: 'open', title: 'Открыть' }];
+};
+
+const normalizeTargetUrl = (value: unknown): string => {
+  const raw = nonEmptyString(value) || '/';
+  try {
+    const url = new URL(raw, sw.location.origin);
+    if (url.origin !== sw.location.origin) return '/';
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/';
+  }
+};
+
+const parsePushPayload = (event: PushEvent): PushNotificationPayload => {
+  const rawText = event.data?.text() || '';
+  if (!rawText) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(rawText);
+    if (!isRecord(parsed)) return { body: rawText };
+
+    return {
+      title: nonEmptyString(parsed.title),
+      body: nonEmptyString(parsed.body),
+      url: normalizeTargetUrl(parsed.url),
+      icon: nonEmptyString(parsed.icon),
+      badge: nonEmptyString(parsed.badge),
+      tag: nonEmptyString(parsed.tag),
+      data: isRecord(parsed.data) ? parsed.data : undefined,
+      actions: normalizeActions(parsed.actions),
+      requireInteraction: parsed.requireInteraction === true,
+    };
+  } catch {
+    return { body: rawText };
+  }
+};
+
 clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute([]);
@@ -29,38 +117,31 @@ registerRoute(
 );
 
 sw.addEventListener('push', (event) => {
-  let payload: any = {};
-  try {
-    payload = event.data?.json?.() ?? JSON.parse(event.data?.text?.() || '{}');
-  } catch {
-    payload = { body: event.data?.text?.() || '' };
-  }
-
-  const title = String(payload?.title || APP_TITLE);
-  const body = String(payload?.body || 'У вас новое уведомление от FitFocus.');
-  const url = String(payload?.url || '/');
+  const payload = parsePushPayload(event);
+  const targetUrl = normalizeTargetUrl(payload.url);
+  const options: ServiceWorkerNotificationOptions = {
+    body: payload.body || 'У вас новое уведомление от FitFocus.',
+    icon: payload.icon || APP_ICON,
+    badge: payload.badge || APP_ICON,
+    tag: payload.tag || 'fitfocus-push',
+    renotify: true,
+    data: {
+      ...(payload.data || {}),
+      url: targetUrl,
+    },
+    actions: payload.actions || [{ action: 'open', title: 'Открыть' }],
+    requireInteraction: payload.requireInteraction === true,
+  };
 
   event.waitUntil(
-      sw.registration.showNotification(title, {
-      body,
-      icon: String(payload?.icon || APP_ICON),
-      badge: String(payload?.badge || APP_ICON),
-      tag: String(payload?.tag || 'fitfocus-push'),
-      renotify: true,
-      data: {
-        ...(payload?.data || {}),
-        url,
-      },
-      actions: Array.isArray(payload?.actions) ? payload.actions : [{ action: 'open', title: 'Открыть' }],
-      requireInteraction: Boolean(payload?.requireInteraction),
-    } as NotificationOptions)
+    sw.registration.showNotification(payload.title || APP_TITLE, options)
   );
 });
 
 sw.addEventListener('notificationclick', (event) => {
   const notification = event.notification;
-  const data = (notification.data || {}) as { url?: string };
-  const targetUrl = data.url || '/';
+  const data = isRecord(notification.data) ? notification.data : {};
+  const targetUrl = normalizeTargetUrl(data.url);
 
   notification.close();
   event.waitUntil(
