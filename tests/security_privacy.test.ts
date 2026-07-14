@@ -95,6 +95,8 @@ describe('security and privacy baseline', () => {
     expect(supportAdmin).not.toContain('SELECT *');
     expect(supportMy).not.toContain('SELECT *');
     expect(supportMy).not.toContain('...ticket');
+    expect(read('functions/api/state.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
+    expect(read('functions/api/profile.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
     expect(googleStart).not.toContain('Missing GOOGLE_CLIENT_ID');
     expect(googleStart).not.toContain('Missing AUTH_JWT_SECRET');
     expect(googleCallback).not.toContain('Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
