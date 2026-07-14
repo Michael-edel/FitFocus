@@ -28,14 +28,14 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, service-worker push parsing, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run typecheck` | пройдено |
 | `npm run test:unit` | пройдено, 54 файла / 220 тестов |
-| `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
+| `npm run test:e2e -- e2e/pwa-shell.spec.ts e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 18 passed / 3 skipped |
 | `npm run build` | пройдено |
 | `npm audit --omit=dev` | не запускалось в текущем пакете |
 
@@ -64,8 +64,9 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Нижний слой `geminiService.ts` больше не содержит `any` и не делает прямой `JSON.parse` по AI response text; ответы для фото еды, enhanced-разбора, коуч-совета, персонального плана, семейного меню и рецепта проходят через типизированные нормализаторы.
 - Для `nonFood=true` нормализатор фото еды принудительно обнуляет КБЖУ и очищает ингредиенты, даже если модель вернула калории.
 - `RecipesScreen.tsx` больше не разбирает enhanced AI-ответ через `any`; черновик рецепта строится типизированной функцией, которая сохраняет граммовки, шаги, аллергены и нутриенты.
+- `sw.ts` больше не разбирает push payload через `any`; service worker нормализует title/body/icon/actions, ограничивает URL уведомления same-origin путем и безопасно обрабатывает битый payload.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
-- Production E2E smoke для onboarding и push settings синхронизирован с текущими экранами и моками.
+- Production E2E smoke для PWA shell, onboarding и push settings синхронизирован с текущими экранами и моками.
 - README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 54 unit-файла и 220 тестов.
 
 Фактически выполненные проверки для этого пакета:
@@ -78,7 +79,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 | `npm run check:privacy` | пройдено, 27 пользовательских таблиц |
 | `npm run test:unit` | пройдено, 54 файла / 220 тестов |
 | `npm run typecheck` | пройдено |
-| `npm run test:e2e -- e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 11 passed / 3 skipped |
+| `npm run test:e2e -- e2e/pwa-shell.spec.ts e2e/onboarding.spec.ts e2e/push-settings.spec.ts` | пройдено, 18 passed / 3 skipped |
 | `npm run build` | пройдено |
 
 ## Предыдущие пакеты изменений
@@ -167,6 +168,7 @@ Push:
 - Web Push без Node-only runtime в Worker: отправка реализована через Web Crypto в `functions/api/_lib/push.ts`.
 - Пользовательские маршруты: `/api/push/status`, `/api/push/subscribe`, `/api/push/unsubscribe`, `/api/push/test`.
 - Админская рассылка: `/api/admin/push/send`.
+- Service worker `sw.ts` типизированно разбирает push payload, ограничивает click URL same-origin путем и не принимает произвольный внешний URL из уведомления.
 
 E2E:
 
@@ -512,7 +514,7 @@ npx wrangler d1 migrations apply fitfocus --remote
 Примечание по последней серии правок:
 
 - Слой `storage`, часть domain/utils и большая часть unit/integration tests уже переведены с широких `any` на более узкие типы и typed context/env mocks.
-- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, `AdminScreen.tsx`, `geminiService.ts`, `SettingsScreen.tsx`, `PlanScreen.tsx`, `RecipesScreen.tsx`, `FoodInsightCard.tsx` и связанных helper-модулях.
+- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, `AdminScreen.tsx`, `SettingsScreen.tsx`, `PlanScreen.tsx`, `FoodInsightCard.tsx` и связанных helper-модулях.
 
 ## Команды разработки
 
