@@ -394,7 +394,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   if (!apiKey) {
     await logUsage(env, { identity, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
-    return jsonResponse({ error: { message: "GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY) не настроен на сервере." } }, 500);
+    return jsonResponse({ error: { code: "AI_UNAVAILABLE", message: "AI-сервис временно недоступен. Попробуйте позже." } }, 500);
   }
 
   const db = requireDB(env);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/ai';
 type AiPostContext = Parameters<typeof onRequestPost>[0];
-type AiErrorBody = { error?: { message?: string } };
+type AiErrorBody = { error?: { code?: string; message?: string } };
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -88,7 +88,8 @@ describe('/api/ai server configuration', () => {
     const body = await response.json() as AiErrorBody;
 
     expect(response.status).toBe(500);
-    expect(body.error.message).toContain('GEMINI_API_KEY');
+    expect(body.error?.code).toBe('AI_UNAVAILABLE');
+    expect(body.error?.message).not.toContain('GEMINI_API_KEY');
     expect(db.prepared.some((stmt) => stmt.sql.includes('FROM subscriptions'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('ai_rate_limits'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('usage_daily'))).toBe(false);

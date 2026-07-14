@@ -1,6 +1,8 @@
 import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
 import type { PagesFunction } from "@cloudflare/workers-types";
 
+const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
+
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -18,10 +20,10 @@ export const onRequestGet: PagesFunction<{
   APP_URL?: string;
 }> = async ({ request, env }) => {
   if (!env.GOOGLE_CLIENT_ID) {
-    return jsonResponse({ error: "Missing GOOGLE_CLIENT_ID" }, 500);
+    return jsonResponse(AUTH_UNAVAILABLE, 500);
   }
   if (!env.AUTH_JWT_SECRET) {
-    return jsonResponse({ error: "Missing AUTH_JWT_SECRET" }, 500);
+    return jsonResponse(AUTH_UNAVAILABLE, 500);
   }
 
   const url = new URL(request.url);

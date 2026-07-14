@@ -3,12 +3,16 @@ import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, 
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 import { consumeInviteCode } from "../../_lib/invites";
 import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
+import { readFormDataRequest, RequestBodyTooLargeError } from "../../_lib/request_body";
 
 type ExistingAppleUserRow = {
   email?: string | null;
   name?: string | null;
   picture?: string | null;
 };
+
+const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
+const OAUTH_FORM_BODY_LIMIT_BYTES = 32 * 1024;
 
 function json(body: unknown, status = 200, headers?: Headers) {
   const responseHeaders = headers ? new Headers(headers) : new Headers();
@@ -54,13 +58,13 @@ export const onRequest: PagesFunction<{
 }> = async ({ request, env }) => {
   try {
     if (!env.DB) {
-      return json({ error: "Missing DB" }, 500);
+      return json(AUTH_UNAVAILABLE, 500);
     }
     if (!env.APPLE_CLIENT_ID) {
-      return json({ error: "Missing APPLE_CLIENT_ID" }, 500);
+      return json(AUTH_UNAVAILABLE, 500);
     }
     if (!env.AUTH_JWT_SECRET) {
-      return json({ error: "Missing AUTH_JWT_SECRET" }, 500);
+      return json(AUTH_UNAVAILABLE, 500);
     }
 
     const url = new URL(request.url);
@@ -69,7 +73,8 @@ export const onRequest: PagesFunction<{
     let appleUserJson: JsonObject | null = null;
 
     if (request.method === "POST") {
-      const form = await request.formData();
+      const form = await readFormDataRequest(request, OAUTH_FORM_BODY_LIMIT_BYTES);
+      if (!form) return json({ error: "BAD_REQUEST" }, 400);
       code = String(form.get("code") || code || "");
       state = String(form.get("state") || state || "");
       appleUserJson = parseAppleUserField(form.get("user"));
@@ -220,7 +225,10 @@ export const onRequest: PagesFunction<{
     );
     headers.set("Location", `${redirectAfter}/?auth=apple`);
     return new Response(null, { status: 302, headers });
-  } catch {
+  } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) {
+      return json({ error: "PAYLOAD_TOO_LARGE" }, 413);
+    }
     return json({ error: "Server error" }, 500);
   }
 };

@@ -15,6 +15,8 @@ type GoogleTokenInfoResponse = {
   email_verified?: string | boolean;
 };
 
+const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
+
 function json(body: unknown, status = 200, headers?: Headers) {
   const responseHeaders = headers ? new Headers(headers) : new Headers();
   responseHeaders.set("content-type", "application/json; charset=utf-8");
@@ -43,10 +45,10 @@ export const onRequestGet: PagesFunction<{
 }> = async ({ request, env }) => {
   try {
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-      return json({ error: "Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET" }, 500);
+      return json(AUTH_UNAVAILABLE, 500);
     }
     if (!env.AUTH_JWT_SECRET) {
-      return json({ error: "Missing AUTH_JWT_SECRET" }, 500);
+      return json(AUTH_UNAVAILABLE, 500);
     }
 
     const url = new URL(request.url);

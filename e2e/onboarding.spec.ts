@@ -18,12 +18,12 @@ test.describe('onboarding activation', () => {
 
     await openApp(page, '/');
 
-    await expect(page.getByRole('button', { name: 'Рассчитать мой план' })).toBeVisible();
-    await page.getByRole('button', { name: 'Рассчитать мой план' }).click();
-    await page.getByRole('button', { name: 'Создать AI-план' }).click();
+    const createPlanButton = page.getByRole('button', { name: 'Создать AI-план' });
+    await expect(createPlanButton).toBeVisible();
+    await createPlanButton.click();
 
     await expect(page.getByText('AI Инициализация')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Ваш AI/ })).toBeVisible({ timeout: 12_000 });
-    await expect(page.getByRole('button', { name: 'Создать AI-план' })).toHaveCount(0);
+    await expect(page.getByText(/Ваш AI/)).toBeVisible({ timeout: 12_000 });
+    await expect(createPlanButton).toHaveCount(0);
   });
 });
