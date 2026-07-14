@@ -173,7 +173,6 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       await json({
         configured: push.configured,
         vapid_public_key: push.configured ? 'BEl6eA3k0t7K8U3d5j4LmE2E2mockPublicKeyForPlaywright12345' : '',
-        missing_config: push.configured ? [] : ['PUSH_VAPID_PUBLIC_KEY', 'PUSH_VAPID_PRIVATE_KEY'],
         current_subscription_id: currentSubscriptionId,
         current_browser_label: currentBrowserLabel,
         count: currentSubscriptionId ? 1 : 0,

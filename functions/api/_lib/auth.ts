@@ -202,8 +202,8 @@ export function json(data: unknown, status = 200, headers?: Headers, schemaVersi
 export function errRu(code: string): { code: string; message: string } {
   const map: Record<string, string> = {
     UNAUTH: "Вы не авторизованы. Войдите через Google.",
-    AUTH_CONFIG: "Сервер не настроен: отсутствует AUTH_JWT_SECRET.",
-    DB_CONFIG: "Сервер не настроен: отсутствует база данных.",
+    AUTH_CONFIG: "Сервис авторизации временно недоступен.",
+    DB_CONFIG: "Сервис временно недоступен.",
     NOT_FOUND: "Не найдено.",
     LIMIT: "Лимит достигнут. Попробуйте позже.",
     BAD_REQUEST: "Некорректный запрос.",

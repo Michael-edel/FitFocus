@@ -75,7 +75,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await ensureHuaweiConnectionsSchema(db);
   const provider = huaweiProviderId();
   const row = await db
-    .prepare("SELECT * FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1")
+    .prepare("SELECT user_id, provider, access_token_enc, refresh_token_enc, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1")
     .bind(user.sub, provider)
     .first<HuaweiConnectionRow>();
   if (!row) return json({ error: "HUAWEI_NOT_CONNECTED" }, 409);

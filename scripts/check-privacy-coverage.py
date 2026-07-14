@@ -51,6 +51,13 @@ INDIRECT_USER_RELATED_TABLES = {
     "shopping_checked",
 }
 
+# Admin-only audit/session rows can reference users, so account deletion must
+# cover them. They are intentionally not part of the user-facing GDPR export.
+EXPORT_EXCLUDED_TABLES = {
+    "admin_events",
+    "admin_sessions",
+}
+
 
 def schema_user_related_tables():
     schema = (ROOT / "db" / "schema.sql").read_text(encoding="utf-8")
@@ -109,7 +116,7 @@ def main():
         ensure_source_mentions(
             "export.ts",
             ROOT / "functions" / "api" / "export.ts",
-            EXPECTED_USER_RELATED_TABLES,
+            EXPECTED_USER_RELATED_TABLES - EXPORT_EXCLUDED_TABLES,
         )
     )
 

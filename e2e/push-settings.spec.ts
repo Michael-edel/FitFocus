@@ -1,26 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { mockApp, openApp } from './support/appHarness';
-
-async function openSettingsScreen(page: Page) {
-  const directSettingsButton = page.getByRole('button', { name: 'Настройки' }).last();
-  if (await directSettingsButton.isVisible().catch(() => false)) {
-    await directSettingsButton.evaluate((node) => {
-      (node as HTMLButtonElement).click();
-    });
-    return;
-  }
-
-  const moreButton = page.getByRole('button', { name: 'Ещё' });
-  if (await moreButton.isVisible().catch(() => false)) {
-    await moreButton.click();
-    await expect(page.getByText('Ещё разделы')).toBeVisible();
-  }
-
-  const settingsButton = page.getByRole('button', { name: 'Настройки' }).first();
-  await settingsButton.evaluate((node) => {
-    (node as HTMLButtonElement).click();
-  });
-}
 
 test.describe('push settings across target platforms', () => {
   test('renders correct push behavior for desktop, Android, iPhone Safari and iPhone PWA', async ({ page }, testInfo) => {
@@ -40,8 +19,7 @@ test.describe('push settings across target platforms', () => {
       },
     });
 
-    await openApp(page, '/');
-    await openSettingsScreen(page);
+    await openApp(page, '/#settings');
 
     await expect(page.getByText('Персонализируйте интерфейс. Часть функций будет добавлена позже.')).toBeVisible();
 

@@ -44,6 +44,11 @@ describe('security and privacy baseline', () => {
     expect(exportRoute).not.toContain('p256dh, auth');
     expect(exportRoute).not.toContain('SELECT * FROM support_feedback');
     expect(exportRoute).not.toContain('SELECT *\\n       FROM support_feedback');
+    expect(exportRoute).not.toContain('admin_note');
+    expect(exportRoute).not.toContain('assigned_admin_user_id');
+    expect(exportRoute).not.toContain('admin_sessions:');
+    expect(exportRoute).not.toContain('admin_events:');
+    expect(exportRoute).not.toContain('storage_key');
     expect(exportRoute).toContain('SELECT id, user_id, created_at, updated_at, category');
   });
 
@@ -62,17 +67,42 @@ describe('security and privacy baseline', () => {
   it('does not expose infrastructure diagnostics in user-facing API responses', () => {
     const pushStatus = read('functions/api/push/status.ts');
     const huaweiStatus = read('functions/api/wearable/huawei/status.ts');
+    const huaweiSync = read('functions/api/wearable/huawei/sync.ts');
     const huaweiStart = read('functions/api/wearable/huawei/start.ts');
     const checkout = read('functions/api/billing/checkout.ts');
     const supportMy = read('functions/api/support/feedback/my.ts');
+    const googleStart = read('functions/api/auth/google/start.ts');
+    const googleCallback = read('functions/api/auth/google/callback.ts');
+    const googleAuth = read('functions/api/auth/google.ts');
+    const appleStart = read('functions/api/auth/apple/start.ts');
+    const appleCallback = read('functions/api/auth/apple/callback.ts');
+    const authLib = read('functions/api/_lib/auth.ts');
+    const aiRoute = read('functions/api/ai.ts');
 
     expect(pushStatus).not.toContain('missing_config');
     expect(pushStatus).not.toContain('config_keys');
     expect(huaweiStatus).not.toContain('missingConfig');
+    expect(huaweiStatus).not.toContain('SELECT *');
+    expect(huaweiSync).not.toContain('SELECT *');
     expect(huaweiStart).not.toContain('missing: config.missing');
     expect(checkout).not.toContain('error instanceof Error ? error.message');
     expect(checkout).not.toContain('String(error)');
     expect(supportMy).not.toContain('SELECT *');
     expect(supportMy).not.toContain('...ticket');
+    expect(googleStart).not.toContain('Missing GOOGLE_CLIENT_ID');
+    expect(googleStart).not.toContain('Missing AUTH_JWT_SECRET');
+    expect(googleCallback).not.toContain('Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
+    expect(googleCallback).not.toContain('Missing AUTH_JWT_SECRET');
+    expect(googleAuth).not.toContain('Server missing GOOGLE_CLIENT_ID');
+    expect(googleAuth).not.toContain('Server missing AUTH_JWT_SECRET');
+    expect(googleAuth).not.toContain('Server missing DB binding');
+    expect(appleStart).not.toContain('Missing APPLE_CLIENT_ID');
+    expect(appleStart).not.toContain('Missing AUTH_JWT_SECRET');
+    expect(appleCallback).not.toContain('Missing APPLE_CLIENT_ID');
+    expect(appleCallback).not.toContain('Missing AUTH_JWT_SECRET');
+    expect(appleCallback).toContain('readFormDataRequest(request, OAUTH_FORM_BODY_LIMIT_BYTES)');
+    expect(appleCallback).not.toContain('request.formData()');
+    expect(authLib).not.toContain('отсутствует AUTH_JWT_SECRET');
+    expect(aiRoute).not.toContain('GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY)');
   });
 });

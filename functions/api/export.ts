@@ -4,9 +4,13 @@
 import { json, requireUser } from "./_lib/auth";
 import { requireDB } from "./_lib/db";
 import { safeJsonParse } from "./_lib/json";
+import { parseAttachmentsJson, type SupportAttachmentRecord } from "./_lib/support_attachments";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 type KvRow = { k: string; v: string; updated_at?: number; version?: number };
+type PublicSupportAttachment = Pick<SupportAttachmentRecord, "name" | "mime" | "size" | "kind" | "data_url">;
+type SupportFeedbackExportRow = Record<string, unknown> & { attachments_json?: string | null };
+type SupportMessageExportRow = Record<string, unknown> & { attachments_json?: string | null };
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -52,10 +56,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const weeklyMenuPortions = await allRows(db, "SELECT weekly_menu_id, portions_json, totals_json, updated_at FROM weekly_menu_portions WHERE user_id = ? ORDER BY updated_at DESC", userId);
   const shoppingChecked = await allRows(db, "SELECT scope_id, week_start, family_id, ingredient_name, checked, updated_at FROM shopping_checked WHERE scope_id = ? OR scope_id = ? ORDER BY updated_at DESC", `personal:${userId}`, userId);
   const familyShoppingChecked = await allRows(db, "SELECT scope_id, week_start, family_id, ingredient_name, checked, updated_at FROM shopping_checked WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT family_id FROM family_members WHERE user_id = ?) ORDER BY updated_at DESC", userId, userId);
-  const supportFeedback = await allRows(db, "SELECT id, user_id, created_at, updated_at, category, section, subject, message, steps_json, device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note, assigned_admin_user_id, resolved_at, closed_at, last_reply_at, last_reply_by FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ? ORDER BY created_at DESC", userId, userId);
-  const supportMessages = await allRows(db, "SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at FROM support_feedback_messages WHERE author_user_id = ? OR ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ? OR assigned_admin_user_id = ?) ORDER BY created_at ASC", userId, userId, userId);
-  const adminSessions = await allRows(db, "SELECT id, session_id, ip, user_agent, created_at, last_seen_at FROM admin_sessions WHERE admin_user_id = ? ORDER BY last_seen_at DESC", userId);
-  const adminEvents = await allRows(db, "SELECT id, admin_user_id, ts, action, target_user_id, meta_json FROM admin_events WHERE admin_user_id = ? OR target_user_id = ? ORDER BY ts DESC", userId, userId);
+  const supportFeedback = await allRows<SupportFeedbackExportRow>(db, "SELECT id, user_id, created_at, updated_at, category, section, subject, message, steps_json, device, browser, contact, app_version, status, priority, attachment_count, attachments_json, resolved_at, closed_at, last_reply_at, last_reply_by FROM support_feedback WHERE user_id = ? ORDER BY created_at DESC", userId);
+  const supportMessages = await allRows<SupportMessageExportRow>(db, "SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at FROM support_feedback_messages WHERE ticket_id IN (SELECT id FROM support_feedback WHERE user_id = ?) ORDER BY created_at ASC", userId);
 
   const payload = {
     generated_at: new Date().toISOString(),
@@ -86,10 +88,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     weekly_menu_portions: weeklyMenuPortions,
     shopping_checked: shoppingChecked,
     family_shopping_checked: familyShoppingChecked,
-    support_feedback: supportFeedback,
-    support_messages: supportMessages,
-    admin_sessions: adminSessions,
-    admin_events: adminEvents,
+    support_feedback: publicSupportFeedbackRows(supportFeedback),
+    support_messages: publicSupportMessageRows(supportMessages),
   };
 
   const date = new Date().toISOString().slice(0, 10);
@@ -107,6 +107,33 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
 function safeParse(s: string): unknown | null {
   return safeJsonParse(s);
+}
+
+function publicAttachments(value: unknown): PublicSupportAttachment[] {
+  return parseAttachmentsJson(value).map((attachment) => {
+    const record: PublicSupportAttachment = {
+      name: attachment.name,
+      mime: attachment.mime,
+      size: attachment.size,
+      kind: attachment.kind,
+    };
+    if (attachment.data_url) record.data_url = attachment.data_url;
+    return record;
+  });
+}
+
+function publicSupportFeedbackRows(rows: SupportFeedbackExportRow[]) {
+  return rows.map(({ attachments_json, ...row }) => ({
+    ...row,
+    attachments: publicAttachments(attachments_json),
+  }));
+}
+
+function publicSupportMessageRows(rows: SupportMessageExportRow[]) {
+  return rows.map(({ attachments_json, ...row }) => ({
+    ...row,
+    attachments: publicAttachments(attachments_json),
+  }));
 }
 
 async function allRows<T = Record<string, unknown>>(db: D1Database, sql: string, ...binds: unknown[]): Promise<T[]> {

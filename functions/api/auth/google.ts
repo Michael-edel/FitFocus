@@ -7,6 +7,8 @@ import { cookieSerialize, signSessionJwt } from "./_oauth";
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
 
+const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
+
 async function safeResponseJson(response: Response): Promise<JsonObject> {
   const parsed = await response.json().catch(() => null);
   return isJsonObject(parsed) ? parsed : {};
@@ -38,8 +40,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       env.VITE_GOOGLE_CLIENT_ID_LOCAL,
       env.VITE_GOOGLE_CLIENT_ID_PROD,
     ].filter(Boolean) as string[];
-    if (allowedAud.length === 0) return json({ error: "Server missing GOOGLE_CLIENT_ID (or *_LOCAL/PROD)" }, 500);
-    if (!env.AUTH_JWT_SECRET) return json({ error: "Server missing AUTH_JWT_SECRET" }, 500);
+    if (allowedAud.length === 0) return json(AUTH_UNAVAILABLE, 500);
+    if (!env.AUTH_JWT_SECRET) return json(AUTH_UNAVAILABLE, 500);
 
     // Validate token with Google (simple + reliable, no crypto libs needed).
     const tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential);
@@ -64,7 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     };
 
     const now = Math.floor(Date.now() / 1000);
-    if (!env.DB) return json({ error: "Server missing DB binding" }, 500);
+    if (!env.DB) return json(AUTH_UNAVAILABLE, 500);
     await ensureAuthSchema(env.DB);
 
     const sid = crypto.randomUUID();
