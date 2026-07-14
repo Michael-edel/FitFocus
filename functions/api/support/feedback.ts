@@ -52,6 +52,32 @@ type SupportMessageRow = {
   created_at: number;
 };
 
+const SUPPORT_TICKET_ADMIN_COLUMNS = [
+  "id",
+  "user_id",
+  "created_at",
+  "updated_at",
+  "category",
+  "section",
+  "subject",
+  "message",
+  "steps_json",
+  "device",
+  "browser",
+  "contact",
+  "app_version",
+  "status",
+  "priority",
+  "attachment_count",
+  "attachments_json",
+  "admin_note",
+  "assigned_admin_user_id",
+  "resolved_at",
+  "closed_at",
+  "last_reply_at",
+  "last_reply_by",
+].join(", ");
+
 function normalizeTicketStatus(status: string) {
   switch (status.trim()) {
     case "new":
@@ -335,7 +361,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const id = String(body.id || "").trim();
   if (!id) return json({ error: "BAD_REQUEST", message: "ticket id required" }, 400);
 
-  const current = await db.prepare(`SELECT * FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<SupportTicketAdminRow>();
+  const current = await db.prepare(`SELECT ${SUPPORT_TICKET_ADMIN_COLUMNS} FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<SupportTicketAdminRow>();
   if (!current) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
 
   const status = normalizeTicketStatus(String(body.status || ""));

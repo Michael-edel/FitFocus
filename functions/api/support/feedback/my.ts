@@ -215,7 +215,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error || "");
     if (msg.startsWith("FILE_TOO_LARGE:")) {
-      return json({ error: "BAD_REQUEST", message: `Файл ${msg.split(":")[1]} слишком большой. Прикрепите файл до 2 MB.` }, 400);
+      return json({ error: "BAD_REQUEST", message: "Файл слишком большой. Прикрепите файл до 2 MB." }, 400);
     }
     return json({ error: "BAD_REQUEST", message: "Не удалось обработать вложение" }, 400);
   }
