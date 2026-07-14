@@ -9,6 +9,53 @@ const REQUIRED_FEATURE_FLAGS: Flag[] = [
 
 type Flag = { key: string; enabled: number | boolean; rollout_percentage?: number };
 type SettingRow = { key: string; value: string };
+type JsonRecord = Record<string, unknown>;
+type AdminEventRow = {
+  id: string;
+  ts: number;
+  action: string;
+  admin_user_id: string | null;
+  admin_email: string | null;
+  target_user_id: string | null;
+  target_email: string | null;
+  meta_json: string | null;
+};
+
+const isJsonRecord = (value: unknown): value is JsonRecord =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const textFromUnknown = (value: unknown): string =>
+  typeof value === "string" || typeof value === "number" ? String(value) : "";
+
+const nullableTextFromUnknown = (value: unknown): string | null => {
+  const text = textFromUnknown(value).trim();
+  return text || null;
+};
+
+const numberFromUnknown = (value: unknown): number => {
+  const next = Number(value ?? 0);
+  return Number.isFinite(next) ? next : 0;
+};
+
+function normalizeAdminEvents(payload: unknown): AdminEventRow[] {
+  if (!isJsonRecord(payload) || !Array.isArray(payload.events)) return [];
+  return payload.events
+    .filter(isJsonRecord)
+    .map((row, index) => {
+      const ts = numberFromUnknown(row.ts);
+      const action = textFromUnknown(row.action).trim() || "unknown";
+      return {
+        id: textFromUnknown(row.id).trim() || `${action}-${ts}-${index}`,
+        ts,
+        action,
+        admin_user_id: nullableTextFromUnknown(row.admin_user_id),
+        admin_email: nullableTextFromUnknown(row.admin_email),
+        target_user_id: nullableTextFromUnknown(row.target_user_id),
+        target_email: nullableTextFromUnknown(row.target_email),
+        meta_json: nullableTextFromUnknown(row.meta_json),
+      };
+    });
+}
 
 function mergeRequiredFlags(flags: Flag[]) {
   const byKey = new Map<string, Flag>();
@@ -21,8 +68,7 @@ function mergeRequiredFlags(flags: Flag[]) {
 
 function getSettingValue(settings: SettingRow[], key: string, fallback = "") {
   const row = settings.find((s) => s.key === key);
-  const v: any = (row as any)?.value;
-  return typeof v === "string" ? v : (v ?? fallback);
+  return typeof row?.value === "string" ? row.value : fallback;
 }
 
 type Stats = {
@@ -376,7 +422,11 @@ function getPushSortLabel(sort: string) {
   return PUSH_SORT_OPTIONS.find((item) => item.value === sort)?.label || sort;
 }
 
-function asBool(v: any) { return v === true || v === 1 || v === "1"; }
+function asBool(v: unknown) { return v === true || v === 1 || v === "1"; }
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 function toMs(value: unknown): number | null {
   const n = Number(value);
@@ -429,7 +479,7 @@ export default function AdminScreen() {
   const [usersTotal, setUsersTotal] = useState(0);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [admins, setAdmins] = useState<UserRow[]>([]);
-  const [adminEvents, setAdminEvents] = useState<any[]>([]);
+  const [adminEvents, setAdminEvents] = useState<AdminEventRow[]>([]);
   const [adminEventQ, setAdminEventQ] = useState("");
   const [adminEventAction, setAdminEventAction] = useState("");
   const [adminEventFrom, setAdminEventFrom] = useState<string>("");
@@ -515,8 +565,8 @@ export default function AdminScreen() {
       if (adminEventTo) qs.set('to', adminEventTo);
       const r = await fetch(`/api/admin/admin_events?${qs.toString()}`, { credentials: 'include' });
       if (r.ok) {
-        const j = await r.json();
-        setAdminEvents(Array.isArray(j.events) ? j.events : []);
+        const payload: unknown = await r.json().catch(() => null);
+        setAdminEvents(normalizeAdminEvents(payload));
       }
     } catch {}
   };
@@ -597,8 +647,8 @@ export default function AdminScreen() {
       setSupportTicketReplyDraft("");
       setSupportTicketAssignDraft("");
       await loadSupportTickets();
-    } catch (e: any) {
-      setErr(e?.message || "Не удалось обновить обращение");
+    } catch (error) {
+      setErr(errorMessage(error, "Не удалось обновить обращение"));
     } finally {
       setSupportTicketSaving(false);
     }
@@ -665,8 +715,8 @@ export default function AdminScreen() {
       }
       setPushSendResult(payload as PushBroadcastResult);
       await loadAdminEvents();
-    } catch (e: any) {
-      setPushSendError(e?.message || "Не удалось отправить пуш-рассылку");
+    } catch (error) {
+      setPushSendError(errorMessage(error, "Не удалось отправить пуш-рассылку"));
     } finally {
       setPushSendBusy(false);
     }
@@ -709,8 +759,8 @@ export default function AdminScreen() {
       await loadSupportTickets();
       await loadAdminEvents();
       setFlagsDirty({});
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка загрузки");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка загрузки"));
     } finally {
       setLoading(false);
     }
@@ -738,8 +788,8 @@ export default function AdminScreen() {
       const j = await r.json();
       setUsers(Array.isArray(j?.users) ? j.users : []);
       setUsersTotal(Number(j?.total || 0));
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка загрузки пользователей");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка загрузки пользователей"));
     } finally {
       if (!silent) {
         setLoading(false);
@@ -761,8 +811,8 @@ export default function AdminScreen() {
       setRoles(Array.isArray(rj?.roles) ? rj.roles : []);
       setSessions(Array.isArray(rj?.sessions) ? rj.sessions : []);
       setSubscriptionPlanDraft((rj?.subscription?.plan === "pro" || rj?.subscription?.plan === "family" ? rj.subscription.plan : "free") as SubscriptionPlan);
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка загрузки пользователя");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка загрузки пользователя"));
     } finally {
       setLoading(false);
     }
@@ -782,8 +832,8 @@ export default function AdminScreen() {
       if (!r.ok) throw new Error("Не удалось сменить тариф");
       await loadUserDetails(selectedUserId);
       await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка смены тарифа");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка смены тарифа"));
     } finally {
       setLoading(false);
     }
@@ -802,8 +852,8 @@ export default function AdminScreen() {
       });
       if (!r.ok) throw new Error("Не удалось сохранить флаг");
       await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка сохранения");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка сохранения"));
     } finally {
       setLoading(false);
     }
@@ -829,8 +879,8 @@ export default function AdminScreen() {
       });
       if (!r.ok) throw new Error("Не удалось сохранить настройку");
       await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка сохранения");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка сохранения"));
     } finally {
       setLoading(false);
     }
@@ -862,8 +912,8 @@ export default function AdminScreen() {
       });
       if (!r.ok) throw new Error("Не удалось изменить роль");
       await loadUserDetails(selectedUserId);
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка роли");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка роли"));
     } finally {
       setLoading(false);
     }
@@ -881,8 +931,8 @@ export default function AdminScreen() {
       });
       if (!r.ok) throw new Error("Не удалось отозвать сессию");
       await loadUserDetails(selectedUserId);
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка сессии");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка сессии"));
     } finally {
       setLoading(false);
     }
@@ -894,8 +944,8 @@ export default function AdminScreen() {
       const r = await fetch("/api/logout_all", { method: "POST", credentials: "include" });
       if (!r.ok) throw new Error("Не удалось выйти со всех устройств");
       await loadAll();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка logout_all");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка logout_all"));
     } finally {
       setLoading(false);
     }
@@ -931,8 +981,8 @@ export default function AdminScreen() {
       setCreatedInviteCodes(codes);
       setInviteActionMsg(`Создано ${codes.length} invite-кодов для тестировщиков.`);
       await loadInvites();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка создания invite-кодов");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка создания invite-кодов"));
     } finally {
       setLoading(false);
       setInviteCreating(false);
@@ -953,8 +1003,8 @@ export default function AdminScreen() {
       if (!r.ok) throw new Error("Не удалось изменить статус invite");
       setInviteActionMsg(`${revoked ? "Отозван" : "Восстановлен"} код ${code}.`);
       await loadInvites();
-    } catch (e: any) {
-      setErr(e?.message || "Ошибка invite-кода");
+    } catch (error) {
+      setErr(errorMessage(error, "Ошибка invite-кода"));
     } finally {
       setLoading(false);
     }
@@ -1430,11 +1480,11 @@ export default function AdminScreen() {
               </div>
               {(() => {
                 const f = flags.find(x => x.key === "ai_budget_guard_enabled");
-                const enabled = (flagsDirty["ai_budget_guard_enabled"]?.enabled ?? (Number((f as any)?.enabled || 0) === 1));
+                const enabled = flagsDirty["ai_budget_guard_enabled"]?.enabled ?? asBool(f?.enabled);
                 return (
                   <button
                     onClick={() => {
-                      const currRollout = flagsDirty["ai_budget_guard_enabled"]?.rollout ?? Number((f as any)?.rollout_percentage ?? 100);
+                      const currRollout = flagsDirty["ai_budget_guard_enabled"]?.rollout ?? Number(f?.rollout_percentage ?? 100);
                       setFlagsDirty(d => ({ ...d, ai_budget_guard_enabled: { enabled: !enabled, rollout: currRollout } }));
                     }}
                     className={`px-4 py-2 rounded-2xl font-black ${enabled ? "bg-emerald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-slate-800/70 text-slate-200 border border-slate-700"}`}
@@ -1463,11 +1513,11 @@ export default function AdminScreen() {
               </div>
               {(() => {
                 const f = flags.find(x => x.key === "ai_emergency_fallback");
-                const enabled = (flagsDirty["ai_emergency_fallback"]?.enabled ?? (Number((f as any)?.enabled || 0) === 1));
+                const enabled = flagsDirty["ai_emergency_fallback"]?.enabled ?? asBool(f?.enabled);
                 return (
                   <button
                     onClick={() => {
-                      const currRollout = flagsDirty["ai_emergency_fallback"]?.rollout ?? Number((f as any)?.rollout_percentage ?? 100);
+                      const currRollout = flagsDirty["ai_emergency_fallback"]?.rollout ?? Number(f?.rollout_percentage ?? 100);
                       setFlagsDirty(d => ({ ...d, ai_emergency_fallback: { enabled: !enabled, rollout: currRollout } }));
                     }}
                     className={`px-4 py-2 rounded-2xl font-black ${enabled ? "bg-rose-500/15 text-rose-200 border border-rose-500/30" : "bg-slate-800/70 text-slate-200 border border-slate-700"}`}
@@ -1490,15 +1540,15 @@ export default function AdminScreen() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-          {[
+          {([
             { key: "ai_cost_input_per_1m_usd", label: "Input price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_INPUT_COST_PER_1M },
             { key: "ai_cost_output_per_1m_usd", label: "Output price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_OUTPUT_COST_PER_1M },
             { key: "ai_max_calls_per_user_day", label: "Calls / user / day", hint: "0 = без лимита" },
             { key: "ai_max_cost_per_user_day_usd", label: "Cost / user / day ($)", hint: "0 = без лимита" },
             { key: "ai_max_cost_total_day_usd", label: "Total cost / day ($)", hint: "0 = без лимита" },
             { key: "ai_on_limit_action", label: "On limit action", hint: "fallback или block" },
-          ].map((s) => {
-            const current = settingsDirty[s.key] ?? getSettingValue(settings, s.key, (s as any).defaultValue ?? "");
+          ] satisfies Array<{ key: string; label: string; hint: string; defaultValue?: string }>).map((s) => {
+            const current = settingsDirty[s.key] ?? getSettingValue(settings, s.key, s.defaultValue ?? "");
             return (
               <div key={s.key} className="rounded-3xl p-5 bg-slate-950/40 border border-slate-800">
                 <div className="text-slate-200 font-black">{s.label}</div>
