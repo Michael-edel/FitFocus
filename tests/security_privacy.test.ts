@@ -80,6 +80,8 @@ describe('security and privacy baseline', () => {
     const appleCallback = read('functions/api/auth/apple/callback.ts');
     const authLib = read('functions/api/_lib/auth.ts');
     const aiRoute = read('functions/api/ai.ts');
+    const logoutAll = read('functions/api/logout_all.ts');
+    const accountDelete = read('functions/api/account/delete.ts');
 
     expect(pushStatus).not.toContain('missing_config');
     expect(pushStatus).not.toContain('config_keys');
@@ -97,6 +99,10 @@ describe('security and privacy baseline', () => {
     expect(supportMy).not.toContain('...ticket');
     expect(read('functions/api/state.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
     expect(read('functions/api/profile.ts')).not.toContain('FORBIDDEN_KEYSPACE", key');
+    expect(logoutAll).not.toContain('e instanceof Error ? e.message');
+    expect(logoutAll).not.toContain('String(e)');
+    expect(accountDelete).not.toContain('return json({ ok: false, error: msg }');
+    expect(accountDelete).toContain('ACCOUNT_DELETE_FAILED');
     expect(googleStart).not.toContain('Missing GOOGLE_CLIENT_ID');
     expect(googleStart).not.toContain('Missing AUTH_JWT_SECRET');
     expect(googleCallback).not.toContain('Missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');

@@ -10,6 +10,24 @@ import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
+function publicDeleteError(error: unknown) {
+  if (error instanceof RequestBodyTooLargeError) {
+    return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+  }
+  const code = error instanceof Error ? error.message : "";
+  if (code === "UNAUTH" || code === "AUTH_CONFIG" || code === "DB_CONFIG") {
+    return json({ ok: false, error: "UNAUTH" }, 401);
+  }
+  if (code.includes("последнего администратора")) {
+    return json({
+      ok: false,
+      error: "ACCOUNT_DELETE_BLOCKED",
+      message: "Удаление аккаунта сейчас заблокировано. Обратитесь в поддержку.",
+    }, 409);
+  }
+  return json({ ok: false, error: "ACCOUNT_DELETE_FAILED" }, 500);
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const t0 = Date.now();
   try {
@@ -49,12 +67,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // Clear cookie on client side too
     h.append("Set-Cookie", "ff_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
     return json({ ok: true, scheduled_days: 30 }, 200, h);
-  } catch (e: unknown) {
-    if (e instanceof RequestBodyTooLargeError) {
-      return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
-    const msg = e instanceof Error ? e.message : "ERROR";
-    const code = msg.includes("последнего администратора") ? 409 : 401;
-    return json({ ok: false, error: msg }, code);
+  } catch (error: unknown) {
+    return publicDeleteError(error);
   }
 };
