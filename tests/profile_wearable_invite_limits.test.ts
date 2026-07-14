@@ -91,6 +91,42 @@ function makeDb(options: { betaAccess?: boolean } = {}) {
   };
 }
 
+async function putProfileBody(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });
+  const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as PutProfileContext['env'];
+  const context: PutProfileContext = {
+    request: new Request('https://fitfocus.test/api/profile', {
+      method: 'PUT',
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    env,
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return putProfile(context);
+}
+
+async function patchProfileBody(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });
+  const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as PatchProfileContext['env'];
+  const context: PatchProfileContext = {
+    request: new Request('https://fitfocus.test/api/profile', {
+      method: 'PATCH',
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    env,
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return patchProfile(context);
+}
+
 describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized profile PUT bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
@@ -116,6 +152,21 @@ describe('bounded JSON body guards on user routes', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(false);
   });
 
+  it('does not expose forbidden state item keys from profile PUT', async () => {
+    const db = makeDb({ betaAccess: true });
+    const response = await putProfileBody(db, {
+      name: 'User',
+      stateItems: [{ key: 'fitfocus_data_user-1_all_users', value: '[]' }],
+    });
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body).toMatchObject({ error: 'FORBIDDEN_KEYSPACE' });
+    expect(body).not.toHaveProperty('key');
+    expect(JSON.stringify(body)).not.toContain('fitfocus_data_user-1_all_users');
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('rejects oversized profile PATCH bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });
@@ -138,6 +189,21 @@ describe('bounded JSON body guards on user routes', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.batches).toHaveLength(0);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(false);
+  });
+
+  it('does not expose forbidden state item keys from profile PATCH', async () => {
+    const db = makeDb({ betaAccess: true });
+    const response = await patchProfileBody(db, {
+      name: 'User',
+      stateItems: [{ key: 'fitfocus_data_user-1_all_users', value: '[]' }],
+    });
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body).toMatchObject({ error: 'FORBIDDEN_KEYSPACE' });
+    expect(body).not.toHaveProperty('key');
+    expect(JSON.stringify(body)).not.toContain('fitfocus_data_user-1_all_users');
+    expect(db.batches).toHaveLength(0);
   });
 
   it('rejects oversized wearable sync bodies before writing', async () => {

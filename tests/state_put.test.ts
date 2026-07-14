@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestGet, onRequestPut } from '../functions/api/state';
+import { onRequestDelete, onRequestGet, onRequestPut } from '../functions/api/state';
 import { isAllowedStateKey } from '../functions/api/_lib/state_keyspace';
 type StatePutContext = Parameters<typeof onRequestPut>[0];
 type StateGetContext = Parameters<typeof onRequestGet>[0];
+type StateDeleteContext = Parameters<typeof onRequestDelete>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -119,6 +120,23 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string) {
   return onRequestGet(context);
 }
 
+async function deleteState(db: ReturnType<typeof makeDb>, key: string) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateDeleteContext['env'];
+  const context: StateDeleteContext = {
+    request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: { Cookie: `ff_session=${token}` },
+    }),
+    env,
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return onRequestDelete(context);
+}
+
 describe('/api/state PUT', () => {
   it('rejects legacy all-users snapshots from the remote state keyspace', async () => {
     expect(isAllowedStateKey('user-1', 'fitfocus_data_user-1_all_users')).toBe(false);
@@ -131,11 +149,23 @@ describe('/api/state PUT', () => {
     });
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'FORBIDDEN_KEYSPACE',
-      key: 'fitfocus_data_user-1_all_users',
-    });
+    const body = await response.json();
+    expect(body).toMatchObject({ error: 'FORBIDDEN_KEYSPACE' });
+    expect(body).not.toHaveProperty('key');
+    expect(JSON.stringify(body)).not.toContain('fitfocus_data_user-1_all_users');
     expect(db.batches).toHaveLength(0);
+  });
+
+  it('does not expose forbidden keyspace values in delete responses', async () => {
+    const db = makeDb();
+    const response = await deleteState(db, 'fitfocus_data_user-1_all_users');
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body).toMatchObject({ error: 'FORBIDDEN_KEYSPACE' });
+    expect(body).not.toHaveProperty('key');
+    expect(JSON.stringify(body)).not.toContain('fitfocus_data_user-1_all_users');
+    expect(db.runs).toHaveLength(0);
   });
 
   it('does not return legacy all-users snapshots during prefix hydration', async () => {

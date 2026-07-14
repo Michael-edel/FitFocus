@@ -93,7 +93,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     const key = String(it?.key || "");
     if (!key) continue;
     if (!isAllowedStateKey(user.sub, key)) {
-      return json({ error: "FORBIDDEN_KEYSPACE", key }, 403);
+      return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
     }
     const baseVersion = parseBaseVersion(it.baseVersion);
     if (baseVersion === null) {
@@ -156,7 +156,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   const key = url.searchParams.get("key");
   if (!key) return json({ error: "MISSING_KEY" }, 400);
   if (!isAllowedStateKey(user.sub, key)) {
-    return json({ error: "FORBIDDEN_KEYSPACE", key }, 403);
+    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
 
   const db = requireDB(env);

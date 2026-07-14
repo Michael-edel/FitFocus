@@ -191,7 +191,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
-    return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
+    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
@@ -263,7 +263,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   // Проверка keyspace для stateItems (закрытие P0 bypass)
   const forbiddenStateKey = validateStateItems(user.sub, stateItems);
   if (forbiddenStateKey) {
-    return json({ error: "FORBIDDEN_KEYSPACE", key: forbiddenStateKey }, 403);
+    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
   const updatedFields = Object.keys(patch);
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
