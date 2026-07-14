@@ -29,8 +29,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     );
 
     return json({ ok: true }, 200, headers);
-  } catch (e: unknown) {
-    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 401);
+  } catch {
+    return json({ ok: false, error: "UNAUTH" }, 401);
   }
 };
 
