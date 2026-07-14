@@ -1,16 +1,19 @@
 import type { UserProfile } from './types';
+import type { RegistrationData } from './RegistrationScreen';
 import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
+type UnknownRecord = Record<string, unknown>;
+type MeResponse = { user: ServerUser | null; hasAccess?: boolean };
 
 type AuthStateSetters = {
-  setGoogleMe: (user: any) => void;
+  setGoogleMe: (user: ServerUser | null) => void;
   setInviteError: (value: string | null) => void;
   setInviteChecking?: (value: boolean) => void;
   setRequireInvite?: (value: boolean) => void;
   setAuthState: (value: 'auth_choice' | 'register' | 'app') => void;
   setAllUsers: (value: UserProfile[]) => void;
-  setRegData: (updater: (prev: any) => any) => void;
+  setRegData: (updater: (prev: RegistrationData) => RegistrationData) => void;
   setCurrentUser?: (user: UserProfile | null) => void;
   setProfileSyncState?: (value: 'idle' | 'saving' | 'saved' | 'error') => void;
   setLastProfileSyncAt?: (value: number | null) => void;
@@ -42,6 +45,38 @@ type DeleteAccountParams = {
 };
 
 const LOGOUT_TIMEOUT_MS = 5_000;
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toServerUser = (value: unknown): ServerUser | null => {
+  if (!isRecord(value)) return null;
+  const roles = Array.isArray(value.roles) ? value.roles.map(String).filter(Boolean) : undefined;
+  return {
+    sub: typeof value.sub === 'string' ? value.sub : undefined,
+    email: typeof value.email === 'string' ? value.email : undefined,
+    name: typeof value.name === 'string' ? value.name : undefined,
+    picture: typeof value.picture === 'string' ? value.picture : undefined,
+    roles,
+  };
+};
+
+const toMeResponse = (value: unknown): MeResponse | null => {
+  if (!isRecord(value)) return null;
+  return {
+    user: toServerUser(value.user),
+    hasAccess: typeof value.hasAccess === 'boolean' ? value.hasAccess : undefined,
+  };
+};
+
+const readJsonRecord = async (response: Response): Promise<UnknownRecord | null> => {
+  try {
+    const value: unknown = await response.json();
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+};
 
 function scoreStoredProfile(profile: UserProfile, serverUser: ServerUser | null | undefined): number {
   let score = 0;
@@ -114,10 +149,10 @@ export function clearOAuthContinuationState(): void {
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
 
-  const readMe = async () => {
+  const readMe = async (): Promise<MeResponse | null> => {
     try {
       const r = await fetchFn(`/api/me?t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
-      if (r.ok) return await r.json();
+      if (r.ok) return toMeResponse(await r.json());
     } catch {}
     return null;
   };
@@ -126,7 +161,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     await unregisterAuthServiceWorkers();
   }
 
-  let me: any = await readMe();
+  let me = await readMe();
   if (!me?.user?.sub && params.continueAfterOAuth) {
     const delays = [150, 250, 400, 600, 900, 1200, 1600, 2200];
     for (const delay of delays) {
@@ -152,10 +187,10 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     clearAuthRecoveryReloadMarker();
     try {
       const pr = await fetchFn('/api/bootstrap', { credentials: 'include' });
-      const pj = await pr.json().catch(() => null);
+      const pj = await readJsonRecord(pr);
       if (pr.ok) {
         applyRemoteStateItems(pj?.items);
-        const profile = pj?.profile || null;
+        const profile = isRecord(pj?.profile) ? (pj.profile as unknown as UserProfile) : null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));
           await params.loginAsUser(profile, serverUser);
@@ -210,8 +245,8 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
   params.setInviteError(null);
   try {
     const r = await fetchFn(`/api/invite/validate?code=${encodeURIComponent(code)}`, { credentials: 'include' });
-    const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.valid) {
+    const j = await readJsonRecord(r);
+    if (!r.ok || j?.valid !== true) {
       params.setInviteError('Код приглашения недействителен или уже использован.');
       return false;
     }
@@ -285,8 +320,9 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
     });
 
     if (!r.ok) {
-      const j = await r.json().catch(() => null);
-      alert(j?.error ? `Ошибка удаления: ${j.error}` : 'Не удалось удалить аккаунт.');
+      const j = await readJsonRecord(r);
+      const error = typeof j?.error === 'string' ? j.error : null;
+      alert(error ? `Ошибка удаления: ${error}` : 'Не удалось удалить аккаунт.');
       return;
     }
   } catch {
