@@ -50,6 +50,7 @@ import {
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
+import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { toLocalDayKey as localDayKey } from './dateUtils';
@@ -149,11 +150,32 @@ declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
 
 
 // --- OAuth Sign-In helper (client-side only) ---
+type GoogleIdentityGlobal = {
+  accounts?: {
+    id?: unknown;
+  };
+};
+
 declare global {
   interface Window {
-    google?: any;
+    google?: GoogleIdentityGlobal;
   }
 }
+
+type ViteEnvLike = Record<string, string | boolean | undefined>;
+type MealPart = { name: string; qty?: string };
+type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
+type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
+
+const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
+  const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
+  return typeof finalY === 'number' && Number.isFinite(finalY) ? finalY : fallback;
+};
+
+const waitForDocumentFonts = async () => {
+  const ready = (document as FontReadyDocument).fonts?.ready;
+  if (ready) await ready;
+};
 
 // NOTE:
 // Не держим client_id как top-level const.
@@ -163,15 +185,17 @@ const getGoogleClientId = () => {
   // Vite normally provides import.meta.env, but in some setups (custom index.html/importmaps/CSP)
   // it may be empty. So we support a compile-time fallback via __VITE_* constants injected
   // in vite.config.ts.
-  const envAny = (import.meta as any)?.env || {};
-  const local =
+  const envAny = import.meta.env as ViteEnvLike;
+  const local = String(
     envAny.VITE_GOOGLE_CLIENT_ID_LOCAL ||
     __VITE_GOOGLE_CLIENT_ID_LOCAL__ ||
-    "";
-  const prod =
+    ""
+  );
+  const prod = String(
     envAny.VITE_GOOGLE_CLIENT_ID_PROD ||
     __VITE_GOOGLE_CLIENT_ID_PROD__ ||
-    "";
+    ""
+  );
 
   // Auto-pick based on origin so the same bundle works in dev and prod.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -277,16 +301,16 @@ function OAuthSignInButton({
 
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
 
-type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'>;
+type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'> & Partial<Pick<FoodItem, 'timestamp'>>;
 
 const MAX_DIARY_ITEMS = 500;
 const MAX_HISTORY_ITEMS = 500;
 
 const sanitizeFoodEntryForStorage = <T extends Partial<FoodItem>>(entry: T): T => {
-  const out: any = { ...entry };
+  const out: Partial<FoodItem> = { ...entry };
   if (typeof out.photo === 'string') delete out.photo;
   if (typeof out.photoThumb === 'string' && out.photoThumb.length > 120_000) delete out.photoThumb;
-  return out;
+  return out as T;
 };
 
 // Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
@@ -887,7 +911,7 @@ const App: React.FC = () => {
 
   const parseMealParts = useCallback((text: string) => {
     const raw = String(text || '').trim();
-    if (!raw) return [] as { name: string; qty?: string }[];
+    if (!raw) return [] as MealPart[];
 
     // Split by "+" (used in AI menu), also tolerate ";" as delimiter
     const parts = raw
@@ -901,7 +925,7 @@ const App: React.FC = () => {
 
     return parts.map((p) => {
       const mm = p.match(rx);
-      if (!mm) return { name: p } as any;
+      if (!mm) return { name: p };
       const name = (mm[1] || '').trim();
       const num = (mm[2] || '').replace(',', '.').trim();
       const unitRaw = (mm[3] || '').trim().toLowerCase();
@@ -1903,8 +1927,8 @@ const App: React.FC = () => {
       const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
       persistUser(updatedUser);
       void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
-    } catch (e: any) {
-      setWeeklyMenuError(e?.message || 'Не удалось сгенерировать меню на неделю.');
+    } catch {
+      setWeeklyMenuError('Не удалось сгенерировать меню на неделю.');
     } finally {
       setWeeklyMenuLoading(false);
     }
@@ -1976,9 +2000,10 @@ await ensurePdfInterFont(doc);
     });
     if (report.aiText) {
       doc.setFontSize(12);
-      doc.text("AI Интерпретация:", 14, (doc as any).lastAutoTable.finalY + 10);
+      const finalY = getAutoTableFinalY(doc, 90);
+      doc.text("AI Интерпретация:", 14, finalY + 10);
       doc.setFontSize(10);
-      doc.text(doc.splitTextToSize(report.aiText, 180), 14, (doc as any).lastAutoTable.finalY + 18);
+      doc.text(doc.splitTextToSize(report.aiText, 180), 14, finalY + 18);
     }
     doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
   };
@@ -2025,9 +2050,7 @@ await ensurePdfInterFont(doc);
     try {
       const html2canvasModule = await import('html2canvas');
       const html2canvas = html2canvasModule.default;
-      if ((document as any).fonts?.ready) {
-        await (document as any).fonts.ready;
-      }
+      await waitForDocumentFonts();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(card, {
@@ -2074,8 +2097,8 @@ await ensurePdfInterFont(doc);
       setWisShareNotice('success', 'Системная отправка недоступна — PNG скачан на устройство.');
       trackWisShareEvent('wis_share_success', { method: 'download', wis: weekly.wis });
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
-    } catch (error) {
-      const reason = String((error as any)?.message || error || 'unknown_error');
+    } catch (error: unknown) {
+      const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
       trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
@@ -2110,11 +2133,9 @@ await ensurePdfInterFont(doc);
 
     ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI).then(() => {
       setWeeklyReports(loadWeeklyReports(currentUser.id));
-    }).catch(err => {
-      const msg = String((err as any)?.message || err || "").toLowerCase();
+    }).catch((err: unknown) => {
       // В dev StrictMode/перезапусках это нормальные "мягкие" ситуации — не засоряем консоль
-      const soft = msg.includes("already in progress") || msg.includes("cooldown") || msg.includes("api key") || msg.includes("missing");
-      if (!soft) console.error("Weekly AI reporting failed", err);
+      if (!isSoftWeeklyAiError(err)) console.error("Weekly AI reporting failed", { code: "WEEKLY_AI_REPORT_FAILED" });
       aiReportGenerationRef.current = null; // Позволяем переповтор при следующем изменении
     });
   }, [currentUser?.id, weekly?.wis]); // Срабатывает только при смене юзера или изменении итогового балла
@@ -2468,9 +2489,9 @@ await ensurePdfInterFont(doc);
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
     if (!currentUser) return false;
     const usage = currentUser.usage || {};
-    if (type === 'aiFoodPhotoPerDay') return (usage.aiFoodPhotoCount || 0) < (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3);
-    if (type === 'aiCoachAdvicePerDay') return (usage.aiCoachCount || 0) < (PREMIUM_GATES.aiCoachAdvicePerDay[paywall.plan as 'free'] || 1);
-    return !!(PREMIUM_GATES[type] as any)[paywall.plan];
+    if (type === 'aiFoodPhotoPerDay') return (usage.aiFoodPhotoCount || 0) < (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan] || 3);
+    if (type === 'aiCoachAdvicePerDay') return (usage.aiCoachCount || 0) < (PREMIUM_GATES.aiCoachAdvicePerDay[paywall.plan] || 1);
+    return Boolean(PREMIUM_GATES[type][paywall.plan]);
   }, [currentUser, paywall.plan]);
 
   const incrementUsage = useCallback((key: keyof UsageStats) => {
@@ -2487,9 +2508,9 @@ await ensurePdfInterFont(doc);
 
   const addFoodToDiary = useCallback((item: FastLogItem) => {
     if (!currentUser) return;
-    const ts = (item as any).timestamp ?? new Date().toISOString();
+    const ts = item.timestamp ?? new Date().toISOString();
     // Keep photo in UI state (so user sees it immediately), but strip it from persisted localStorage payload to avoid quota issues.
-    const entryForState: any = { ...item, id: Date.now().toString(), timestamp: ts, mealType: (item as any).mealType ?? inferMealType(ts) };
+    const entryForState: FoodItem = { ...item, id: Date.now().toString(), timestamp: ts, mealType: item.mealType ?? inferMealType(ts) };
     const entryForStorage = sanitizeFoodEntryForStorage(entryForState);
 
     // Use functional update so rapid consecutive adds (e.g. multiple scans)
@@ -2509,7 +2530,7 @@ await ensurePdfInterFont(doc);
     const newHistory = [historyItem, ...foodHistory.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY_ITEMS);
     setFoodHistory(newHistory);
     safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(newHistory));
-    const hasAiPhoto = Boolean((item as any).photo || (item as any).photoThumb);
+    const hasAiPhoto = Boolean(item.photo || item.photoThumb);
     void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
       foodDiaryCount: foodDiary.length + 1,
       hasAiPhoto,
