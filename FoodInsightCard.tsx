@@ -16,8 +16,28 @@ type Props = {
   nonFood?: boolean;
 };
 
+type CalloutSide = 'left' | 'right';
+type CalloutPoint = { x: number; y: number };
+type CalloutMeta = CalloutPoint & { side: CalloutSide };
+type CalloutFix = { dx: number; dy: number; side?: CalloutSide };
+type CalloutIngredient = FoodIngredient & {
+  __idx: number;
+  __callout: CalloutMeta;
+  __anchor: CalloutPoint;
+};
+type TotalSelection = { __type: 'TOTAL' };
+type ActiveSelection = FoodIngredient | CalloutIngredient | TotalSelection;
+type IngredientBreakdown = { name: string; percent: number | null; kcal: number | null };
+type CssVarStyle = React.CSSProperties & { [key: `--ff-${string}`]: string };
+
+const isTotalSelection = (value: ActiveSelection | null): value is TotalSelection =>
+  Boolean(value && '__type' in value && value.__type === 'TOTAL');
+
+const isIngredientSelection = (value: ActiveSelection | null): value is FoodIngredient =>
+  Boolean(value) && !isTotalSelection(value);
+
 export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
-  const [active, setActive] = useState<any | null>(null);
+  const [active, setActive] = useState<ActiveSelection | null>(null);
   const [haloTheme, setHaloTheme] = useState<'light' | 'dark'>('light');
   const [focusMode, setFocusMode] = useState<boolean>(true);
   const [recipeLoading, setRecipeLoading] = useState(false);
@@ -25,11 +45,11 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const calloutRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const [calloutFix, setCalloutFix] = useState<Record<number, { dx: number; dy: number; side?: 'left' | 'right' }>>({});
+  const [calloutFix, setCalloutFix] = useState<Record<number, CalloutFix>>({});
 
   const plan: 'free' | 'pro' | 'family' = isPro ? 'pro' : 'free';
 
-  const callouts = useMemo(() => {
+  const callouts = useMemo<CalloutIngredient[]>(() => {
     if (nonFood) return [];
     const items = (insight?.ingredients || []).slice(0, 8);
     const n = items.length || 1;
@@ -83,14 +103,14 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
     const ings = Array.isArray(insight?.ingredients) ? insight.ingredients : [];
     if (nonFood || !totalCalories) return [];
     return ings
-      .filter((i: any) => i?.name)
-      .map((i: any) => {
+      .filter((i): i is FoodIngredient => Boolean(i?.name))
+      .map((i): IngredientBreakdown => {
         const pct = typeof i.percent === 'number' ? i.percent : Number(i.percent);
         const percent = Number.isFinite(pct) ? pct : null;
         const kcal = (percent != null && totalCalories != null) ? Math.round(totalCalories * (percent / 100)) : null;
         return { name: String(i.name), percent, kcal };
       })
-      .sort((a: any, b: any) => (b.percent ?? 0) - (a.percent ?? 0))
+      .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0))
       .slice(0, 8);
   }, [insight, totalCalories, nonFood]);
 
@@ -102,11 +122,11 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
     const stageRect = stage.getBoundingClientRect();
     if (!stageRect.width || !stageRect.height) return;
 
-    const next: Record<number, { dx: number; dy: number; side?: 'left' | 'right' }> = {};
+    const next: Record<number, CalloutFix> = {};
     let changed = false;
 
     for (const c of callouts) {
-      const idx = c.__idx as number;
+      const idx = c.__idx;
       const el = calloutRefs.current[idx];
       if (!el) continue;
 
@@ -125,8 +145,8 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
       if (top < pad) dy += (pad - top);
       if (bottom > stageRect.height - pad) dy -= (bottom - (stageRect.height - pad));
 
-      let side: 'left' | 'right' | undefined;
-      const baseSide = c.__callout?.side as ('left' | 'right' | undefined);
+      let side: CalloutSide | undefined;
+      const baseSide = c.__callout.side;
       const hasRightOverflow = right > stageRect.width - pad;
       const hasLeftOverflow = left < pad;
       if (baseSide === 'right' && hasRightOverflow && !hasLeftOverflow) side = 'left';
@@ -143,11 +163,12 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
   }, [callouts.length, photo, calloutFix, callouts]);
 
   const activeCallout = useMemo(() => {
-    return callouts.find(c => c.name === active?.name);
+    if (!isIngredientSelection(active)) return undefined;
+    return callouts.find(c => c.name === active.name);
   }, [active, callouts]);
 
   const activePos = useMemo(() => {
-    if (!active || active.__type === 'TOTAL') return null;
+    if (!isIngredientSelection(active)) return null;
     const ax = active.highlightArea?.x ?? activeCallout?.__anchor?.x;
     const ay = active.highlightArea?.y ?? activeCallout?.__anchor?.y;
     const cx = activeCallout?.__callout?.x;
@@ -159,13 +180,13 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
   const vectorAngleDeg = useMemo(() => {
     if (!activePos || typeof activePos.cx !== 'number' || typeof activePos.cy !== 'number') return -35;
     const dx = activePos.cx - activePos.ax;
-    const dy = activePos.ay - activePos.ay;
+    const dy = activePos.cy - activePos.ay;
     return (Math.atan2(dy, dx) * 180) / Math.PI;
   }, [activePos]);
 
   useEffect(() => {
     const img = imgRef.current;
-    if (!img || !active || active.__type === 'TOTAL') return;
+    if (!img || !isIngredientSelection(active)) return;
 
     const ha = active.highlightArea;
     const anchor = activeCallout?.__anchor;
@@ -227,6 +248,29 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
   }, [active, activeCallout, photo]);
 
   const hasRecipe = !nonFood && !!insight.recipe;
+  const activeIngredientName = isIngredientSelection(active) ? active.name : null;
+  const isIngredientActive = (ingredientName: string) => activeIngredientName === ingredientName;
+  const shouldDimIngredient = (ingredientName: string) => Boolean(active && activeIngredientName !== ingredientName);
+  const activeHighlight = isIngredientSelection(active) ? active.highlightArea : undefined;
+  const focusStyle: CssVarStyle | undefined = activePos && focusMode ? {
+    '--ff-focus-x': activePos.ax + '%',
+    '--ff-focus-y': activePos.ay + '%',
+  } : undefined;
+  const haloRadius = activeHighlight?.r ?? 6;
+  const haloStyle: CssVarStyle | undefined = isIngredientSelection(active) ? {
+    left: ((activeHighlight?.x ?? activeCallout?.__anchor?.x) ?? 50) + '%',
+    top: ((activeHighlight?.y ?? activeCallout?.__anchor?.y) ?? 50) + '%',
+    '--ff-halo-r': haloRadius + '%',
+    '--ff-halo-rx': (haloRadius * 1.25) + '%',
+    '--ff-halo-ry': (haloRadius * 0.95) + '%',
+    '--ff-halo-rot': vectorAngleDeg + 'deg',
+  } : undefined;
+  const vectorStyle: CssVarStyle | undefined = activePos && typeof activePos.cx === 'number' && typeof activePos.cy === 'number' ? {
+    left: activePos.ax + '%',
+    top: activePos.ay + '%',
+    '--ff-vector-ang': vectorAngleDeg + 'deg',
+    '--ff-vector-len': Math.min(42, Math.max(18, Math.hypot(activePos.cx - activePos.ax, activePos.cy - activePos.ay))) + '%',
+  } : undefined;
 
   return (
     <div className="ff-infocard">
@@ -240,47 +284,32 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
       <div 
         className={`ff-infocard__stage ${active && focusMode ? 'ff-infocard__stage--focus' : ''}`} 
         ref={stageRef}
-        style={activePos && focusMode ? {
-          ['--ff-focus-x' as any]: activePos.ax + '%',
-          ['--ff-focus-y' as any]: activePos.ay + '%',
-        } as any : undefined}
+        style={focusStyle}
       >
         <img ref={imgRef} className="ff-infocard__photo ff-infocard__photo--sharp" src={photo} alt={name} crossOrigin="anonymous" />
         <div className="ff-infocard__overlay" />
 
         <div className="ff-infocard__uiLayer">
           
-          {active && active.__type !== 'TOTAL' ? (
+          {haloStyle ? (
             <div
               className={`ff-infocard__haloArea ff-infocard__haloArea--oval ff-infocard__haloArea--${haloTheme}`}
-              style={{
-                left: ((active.highlightArea?.x ?? activeCallout?.__anchor?.x) ?? 50) + '%',
-                top: ((active.highlightArea?.y ?? activeCallout?.__anchor?.y) ?? 50) + '%',
-                ['--ff-halo-r' as any]: ((active.highlightArea?.r ?? 6)) + '%',
-                ['--ff-halo-rx' as any]: ((active.highlightArea?.r ?? 6) * 1.25) + '%',
-                ['--ff-halo-ry' as any]: ((active.highlightArea?.r ?? 6) * 0.95) + '%',
-                ['--ff-halo-rot' as any]: vectorAngleDeg + 'deg',
-              }}
+              style={haloStyle}
               aria-hidden="true"
             />
           ) : null}
 
-          {active && activePos && typeof activePos.cx === 'number' && typeof activePos.cy === 'number' ? (
+          {vectorStyle ? (
             <div
               className="ff-infocard__vector"
-              style={{
-                left: activePos.ax + '%',
-                top: activePos.ay + '%',
-                ['--ff-vector-ang' as any]: vectorAngleDeg + 'deg',
-                ['--ff-vector-len' as any]: Math.min(42, Math.max(18, Math.hypot(activePos.cx - activePos.ax, activePos.cy - activePos.ay))) + '%',
-              }}
+              style={vectorStyle}
               aria-hidden="true"
             />
           ) : null}
 
           <button
             type="button"
-            className={"ff-infocard__bubble ff-ui ff-infocard__bubbleBtn" + (active?.__type === 'TOTAL' ? " ff-infocard__bubbleBtn--active" : "")}
+            className={"ff-infocard__bubble ff-ui ff-infocard__bubbleBtn" + (isTotalSelection(active) ? " ff-infocard__bubbleBtn--active" : "")}
             onClick={() => setActive({ __type: 'TOTAL' })}
             aria-label={nonFood ? "Не еда — запись не учитывается в КБЖУ" : "Итого калорий — открыть детали"}
             title={nonFood ? "Запись не учитывается в КБЖУ" : "Нажми, чтобы увидеть детали расчёта"}
@@ -299,7 +328,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                 y1={c.__anchor.y}
                 x2={c.__callout.x}
                 y2={c.__callout.y}
-                strokeOpacity={active && active.name !== c.name ? 0.2 : 1}
+                strokeOpacity={shouldDimIngredient(c.name) ? 0.2 : 1}
                 style={{ transition: 'stroke-opacity 0.3s' }}
               />
             ))}
@@ -312,7 +341,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
               <button
                 key={c.__idx}
                 ref={(el) => { calloutRefs.current[c.__idx] = el; }}
-                className={`ff-infocard__callout ff-ui ff-infocard__callout--${side} ${active?.name === c.name ? 'ff-infocard__callout--active' : ''} ${active && focusMode && active.name !== c.name ? 'ff-infocard__callout--dim' : ''}`}
+                className={`ff-infocard__callout ff-ui ff-infocard__callout--${side} ${isIngredientActive(c.name) ? 'ff-infocard__callout--active' : ''} ${focusMode && shouldDimIngredient(c.name) ? 'ff-infocard__callout--dim' : ''}`}
                 style={{ 
                   left: c.__callout.x + '%', 
                   top: c.__callout.y + '%',
@@ -322,7 +351,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                 }}
                 onMouseEnter={() => setActive(c)}
                 onMouseLeave={() => setActive(null)}
-                onClick={() => setActive((cur) => (cur?.name === c.name ? null : c))}
+                onClick={() => setActive((cur) => (isIngredientSelection(cur) && cur.name === c.name ? null : c))}
                 type="button"
               >
                 <span className="ff-infocard__dot" />
@@ -365,11 +394,11 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
           </div>
         ) : (insight?.ingredients || []).slice(0, 8).map((it, idx) => (
           <button
-            className={`ff-infocard__ingredient ${active?.name === it.name ? 'ff-infocard__ingredient--active' : ''} ${active && focusMode && active.name !== it.name ? 'ff-infocard__ingredient--dim' : ''}`}
+            className={`ff-infocard__ingredient ${isIngredientActive(it.name) ? 'ff-infocard__ingredient--active' : ''} ${focusMode && shouldDimIngredient(it.name) ? 'ff-infocard__ingredient--dim' : ''}`}
             key={idx}
             onMouseEnter={() => setActive(it)}
             onMouseLeave={() => setActive(null)}
-            onClick={() => setActive((cur) => cur?.name === it.name ? null : it)}
+            onClick={() => setActive((cur) => isIngredientSelection(cur) && cur.name === it.name ? null : it)}
             type="button"
           >
             <span className="ff-infocard__ingredientName">{it.name}</span>
@@ -422,7 +451,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
 
       {active ? (
         <div className="ff-infocard__tooltip" role="dialog" aria-modal="true">
-          {active.__type === 'TOTAL' ? (
+          {isTotalSelection(active) ? (
             <>
               <div className="ff-infocard__tooltipTitle">{nonFood ? 'Не еда' : 'Итого калорий'}</div>
               {nonFood ? (
@@ -448,7 +477,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                 <div className="ff-infocard__tooltipRow">
                   Разбивка по ингредиентам:
                   <div className="ff-infocard__breakdown">
-                    {ingredientBreakdown.map((it: any) => (
+                    {ingredientBreakdown.map((it) => (
                       <div className="ff-infocard__breakdownRow" key={it.name}>
                         <span className="ff-infocard__breakdownName" title={it.name}>{it.name}</span>
                         <span className="ff-infocard__breakdownMeta">
@@ -501,7 +530,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                           <>
                             <div className="ff-infocard__recipeSub text-[10px] uppercase font-black text-slate-400 mt-3">Ингредиенты</div>
                             <ul className="ff-infocard__recipeList text-[12px] text-slate-300 mt-1">
-                              {recipe.ingredients.slice(0, 18).map((it: any, i: number) => (
+                              {recipe.ingredients.slice(0, 18).map((it, i) => (
                                 <li key={i} className="list-disc ml-4 flex items-start justify-between gap-4"><span className="min-w-0">{it.name}</span>{it.amount ? <span className="text-slate-500 whitespace-nowrap">{it.amount}</span> : null}</li>
                               ))}
                             </ul>
@@ -511,7 +540,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                           <>
                             <div className="ff-infocard__recipeSub text-[10px] uppercase font-black text-slate-400 mt-3">Шаги</div>
                             <ol className="ff-infocard__recipeSteps text-[12px] text-slate-300 mt-1">
-                              {recipe.steps.slice(0, 14).map((s: any) => (
+                              {recipe.steps.slice(0, 14).map((s) => (
                                 <li key={s.n} className="mb-2"><span className="font-black text-indigo-400 mr-1">{s.n}.</span> {s.text}{s.timeMin ? ` (${s.timeMin} мин)` : ''}</li>
                               ))}
                             </ol>
@@ -521,7 +550,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                           <>
                             <div className="ff-infocard__recipeSub text-[10px] uppercase font-black text-slate-400 mt-3">Советы</div>
                             <ul className="ff-infocard__recipeList text-[12px] text-slate-300 mt-1 italic">
-                              {recipe.tips.slice(0, 6).map((t: any, i: number) => (
+                              {recipe.tips.slice(0, 6).map((t, i) => (
                                 <li key={i} className="list-disc ml-4">{t}</li>
                               ))}
                             </ul>
@@ -536,10 +565,10 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                               const text =
                                 `Рецепт: ${recipe.title}\n\n` +
                                 (recipe.ingredients?.length
-                                  ? `Ингредиенты:\n- ` + recipe.ingredients.map((i: any) => `${i.name}${i.amount ? ` — ${i.amount}` : ''}`).join('\n- ') + '\n\n'
+                                  ? `Ингредиенты:\n- ` + recipe.ingredients.map((i) => `${i.name}${i.amount ? ` — ${i.amount}` : ''}`).join('\n- ') + '\n\n'
                                   : '') +
                                 (recipe.steps?.length
-                                  ? `Шаги:\n` + recipe.steps.map((s: any) => `${s.n}. ${s.text}${s.timeMin ? ` (${s.timeMin} мин)` : ''}`).join('\n') + '\n'
+                                  ? `Шаги:\n` + recipe.steps.map((s) => `${s.n}. ${s.text}${s.timeMin ? ` (${s.timeMin} мин)` : ''}`).join('\n') + '\n'
                                   : '');
 
                               try {
@@ -602,8 +631,8 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                               } else if (!r) {
                                 throw new Error("Не удалось распознать рецепт");
                               }
-                            } catch (e: any) {
-                              setRecipeErr(e?.message ? String(e.message) : 'Не удалось получить рецепт');
+                            } catch {
+                              setRecipeErr('Не удалось получить рецепт');
                             } finally {
                               setRecipeLoading(false);
                             }
