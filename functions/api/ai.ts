@@ -147,6 +147,13 @@ function jsonResponse(obj: unknown, status = 200, extraHeaders: Record<string,st
   });
 }
 
+function classifyAiFetchFailure(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "AbortError") return "AI_FETCH_ABORTED";
+  if (name === "TimeoutError") return "AI_FETCH_TIMEOUT";
+  return "AI_FETCH_FAILED";
+}
+
 function getGeminiUsage(data: GeminiResponse) {
   const usage = isJsonObject(data.usageMetadata) ? data.usageMetadata : {};
   const inputTokens = Number(usage.promptTokenCount || 0);
@@ -505,7 +512,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     latency = Date.now() - startedAt;
   } catch (error: unknown) {
     latency = Date.now() - startedAt;
-    const errorMessage = error instanceof Error ? error.message : String(error || "fetch_failed");
+    const errorCode = classifyAiFetchFailure(error);
 
     if (fallbackMode) {
       const profile = await loadUserProfile(env, String(user.sub));
@@ -518,7 +525,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         safeMode,
         requestJson: body,
         responseJson: fallback,
-        error: errorMessage,
+        error: errorCode,
         model: "fallback_fetch_failed",
         isFallback: true,
       });
@@ -534,7 +541,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
       });
     }
 
-    await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: errorMessage });
+    await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: errorCode });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);

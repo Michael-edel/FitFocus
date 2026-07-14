@@ -122,5 +122,8 @@ describe('security and privacy baseline', () => {
     expect(appleCallback).not.toContain('request.formData()');
     expect(authLib).not.toContain('отсутствует AUTH_JWT_SECRET');
     expect(aiRoute).not.toContain('GEMINI_API_KEY (или API_KEY/GOOGLE_API_KEY)');
+    expect(aiRoute).not.toContain('error instanceof Error ? error.message');
+    expect(aiRoute).not.toContain('String(error || "fetch_failed")');
+    expect(aiRoute).toContain('classifyAiFetchFailure');
   });
 });
