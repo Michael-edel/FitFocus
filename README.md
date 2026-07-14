@@ -28,7 +28,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 
 | Проверка | Результат |
 |---|---:|
-| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, service-worker push parsing, FoodInsightCard/PlanScreen/SettingsScreen/AdminScreen/AppWorkspace typing, privacy-check, E2E smoke и `README.md` |
+| Текущий пакет изменений | API auth/AI/export/Huawei/support/billing/state/profile/account/logout/support-attachments, camera/frontend errors, Gemini parsing/normalization, service-worker push parsing, FoodInsightCard/PlanScreen/SettingsScreen/AdminScreen/AppWorkspace/App typing, privacy-check, E2E smoke и `README.md` |
 | `npm run check:api-invariants` | пройдено |
 | `npm run check:auth-scope` | пройдено |
 | `npm run check:schema` | пройдено, 20 миграций / 30 таблиц |
@@ -71,6 +71,7 @@ FitFocus - PWA-приложение для питания, прогресса, �
 - Остальные явные `any` в `SettingsScreen.tsx` убраны: черновик UI-state из `localStorage` проходит через runtime-проверку JSON object, поля сахара крови сохраняются через тип `UserProfile`, а ошибка добавления фото прогресса больше не показывает raw exception text.
 - Явные `any` в `AdminScreen.tsx` убраны: admin audit events нормализуются по фактическим колонкам `/api/admin/admin_events`, feature flag/settings helpers типизированы, а catch-пути используют общий `unknown` helper для сообщений.
 - Явные `any` в `AppWorkspace.tsx` убраны: workspace shell получил типизированный контракт `AppWorkspaceData`, а callback-и настроек используют `UserProfile` и `Partial<UserProfile>`.
+- Явные `any` в `App.tsx` убраны: localStorage eviction, favorite recipes normalization, achievement counters, WIS PDF export и nutrition insight payload переведены на `unknown`, type guards и существующие доменные типы.
 - `check:privacy` явно различает таблицы, которые нужно очищать при удалении аккаунта, и admin-only таблицы, которые нельзя отдавать в пользовательском экспорте.
 - Production E2E smoke для PWA shell, onboarding и push settings синхронизирован с текущими экранами и моками.
 - README синхронизирован с текущими проверками: 20 миграций, 30 таблиц, 54 unit-файла и 220 тестов.
@@ -520,7 +521,7 @@ npx wrangler d1 migrations apply fitfocus --remote
 Примечание по последней серии правок:
 
 - Слой `storage`, часть domain/utils и большая часть unit/integration tests уже переведены с широких `any` на более узкие типы и typed context/env mocks.
-- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в крупных UI/runtime-файлах: `App.tsx`, PDF/helper-модулях и старых hooks; `SettingsScreen.tsx`, `AdminScreen.tsx` и `AppWorkspace.tsx` больше не содержат явных `any` по текущему grep.
+- Основной остаточный хвост сейчас сосредоточен не в API и не в tests, а в отдельных экранных компонентах, PDF/helper-модулях и старых hooks; `App.tsx`, `SettingsScreen.tsx`, `AdminScreen.tsx` и `AppWorkspace.tsx` больше не содержат явных `any` по текущему grep.
 
 ## Команды разработки
 

@@ -163,9 +163,15 @@ declare global {
 }
 
 type ViteEnvLike = Record<string, string | boolean | undefined>;
+type UnknownRecord = Record<string, unknown>;
 type MealPart = { name: string; qty?: string };
 type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
 
 const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
   const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
@@ -338,8 +344,8 @@ const evictLargeLocalStorage = () => {
         const arr = JSON.parse(localStorage.getItem(k) || '[]');
         if (!Array.isArray(arr)) continue;
         let changed = false;
-        const next = arr.map((it: any) => {
-          if (!it || typeof it !== 'object') return it;
+        const next = arr.map((it: unknown) => {
+          if (!isRecord(it)) return it;
           const copy = { ...it };
           if (typeof copy.photo === 'string' && copy.photo.length > 0) {
             delete copy.photo;
@@ -1439,9 +1445,9 @@ const App: React.FC = () => {
       return;
     }
     const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
-    const normalizeFavoriteRecipe = (item: any): FavoriteRecipe | null => {
-      if (!item || typeof item !== 'object') return null;
-      const rawRecipe = item.recipe && typeof item.recipe === 'object' ? item.recipe : null;
+    const normalizeFavoriteRecipe = (item: unknown): FavoriteRecipe | null => {
+      if (!isRecord(item)) return null;
+      const rawRecipe = isRecord(item.recipe) ? item.recipe : null;
       const toIngredient = (value: unknown): { name: string; amount?: string } | null => {
         if (typeof value === 'string') {
           const text = value.trim();
@@ -1476,6 +1482,13 @@ const App: React.FC = () => {
         if (fallbackArr.some(ingredientHasAmount)) return fallbackArr;
         return primaryArr.length ? primaryArr : fallbackArr;
       };
+      const toIsoDate = (value: unknown) => {
+        if (typeof value === 'string' || typeof value === 'number') {
+          const date = new Date(value);
+          if (Number.isFinite(date.getTime())) return date.toISOString();
+        }
+        return new Date().toISOString();
+      };
 
       const ingredientsSource = pickIngredientSource(item.ingredients, rawRecipe?.ingredients);
       const stepsSource = Array.isArray(rawRecipe?.steps)
@@ -1485,14 +1498,14 @@ const App: React.FC = () => {
           : [];
       const ingredients = ingredientsSource
         .map(toIngredient)
-        .filter(Boolean);
+        .filter(isPresent);
       const steps = stepsSource
-        .map((step: any, idx: number) => {
+        .map((step: unknown, idx: number) => {
           if (typeof step === 'string') {
             const text = step.trim();
             return text ? { n: idx + 1, text } : null;
           }
-          if (!step || typeof step !== 'object') return null;
+          if (!isRecord(step)) return null;
           const text = String(step.text || step.step || '').trim();
           if (!text) return null;
           const n = Number(step.n || idx + 1);
@@ -1505,7 +1518,7 @@ const App: React.FC = () => {
               : { timeMin: Number(timeMin) || undefined }),
           };
         })
-        .filter(Boolean);
+        .filter(isPresent);
       const recipe = {
         title: String(rawRecipe?.title || item.title || 'Рецепт'),
         servings: Number(rawRecipe?.servings ?? item.servings ?? 0) || undefined,
@@ -1517,7 +1530,7 @@ const App: React.FC = () => {
       return {
         id: String(item.id || globalThis.crypto?.randomUUID?.() || Date.now().toString()),
         title: String(item.title || recipe.title),
-        createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date(item.createdAt || Date.now()).toISOString(),
+        createdAt: typeof item.createdAt === 'string' ? item.createdAt : toIsoDate(item.createdAt),
         photo: typeof item.photo === 'string' ? item.photo : undefined,
         allergens: Array.isArray(item.allergens) ? item.allergens.map(String).filter(Boolean) : undefined,
         intolerances: Array.isArray(item.intolerances) ? item.intolerances.map(String).filter(Boolean) : undefined,
@@ -1532,7 +1545,7 @@ const App: React.FC = () => {
         return;
       }
       const parsed = JSON.parse(raw);
-      const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(Boolean) as FavoriteRecipe[] : [];
+      const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(isPresent) : [];
       setFavoriteRecipes(normalized);
       safeSetItem(key, JSON.stringify(normalized));
     } catch {
@@ -1886,7 +1899,7 @@ const App: React.FC = () => {
       latestWeight,
       measurementsCount: currentUser?.measurementsHistory?.length || 0,
       wisCount: weeklyReports.length,
-      shoppingCheckedCount: familyShopping?.items?.filter((item: any) => item.checked).length || 0,
+      shoppingCheckedCount: familyShopping?.items?.filter((item) => item.checked).length || 0,
       familyActive: !!cloudFamily,
       waterToday: !!todayHabits.water,
       sleepHours: typeof currentUser?.wearableSleepHoursLastNight === 'number' ? currentUser.wearableSleepHoursLastNight : null,
@@ -1972,7 +1985,7 @@ const App: React.FC = () => {
     return 0;
   }, [weekly, currentUser]);
 
-  const exportWeeklyPDF = async (report: any) => {
+  const exportWeeklyPDF = async (report: WeeklyStoredReport) => {
     const [{ default: jsPDF }, autoTableModule, { ensurePdfInterFont }] = await Promise.all([
   import('jspdf'),
   import('jspdf-autotable'),
@@ -3147,7 +3160,7 @@ const logWeight = useCallback(() => {
   const toggleFamilyShoppingItemWithAchievements = useCallback(async (name: string, checked: boolean) => {
     await toggleFamilyShoppingItem(name, checked);
     if (checked) {
-      const checkedCount = (familyShopping?.items || []).filter((item: any) => item.checked).length + 1;
+      const checkedCount = (familyShopping?.items || []).filter((item) => item.checked).length + 1;
       void checkAchievements('shopping_item_checked', { shoppingCheckedCount: checkedCount, familyActive: true });
     }
   }, [checkAchievements, familyShopping?.items, toggleFamilyShoppingItem]);
@@ -3302,7 +3315,7 @@ const logWeight = useCallback(() => {
       bulkRemoveSelectedFoods,
       deleteFoodEntry,
       deleteFoodPhoto,
-      openInsight: (item: any) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
+      openInsight: (item: FoodItem) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
       openEditFood,
       formatTime,
       mealTypeLabel,
