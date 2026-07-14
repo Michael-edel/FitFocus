@@ -25,6 +25,44 @@ type AiProxyConfig = JsonRecord;
 type AiProxyResponse = JsonRecord & {
   text: string;
 };
+type FoodPhotoIngredientResult = {
+  name: string;
+  percent: number;
+  amount?: string;
+};
+export type FoodPhotoAnalysisResult = {
+  name: string;
+  nonFood: boolean;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  ingredients: FoodPhotoIngredientResult[];
+  notes: string[];
+  portionGrams?: number;
+  modelConfidence?: number;
+};
+type RecipeDraftStepResult = {
+  n?: number;
+  text: string;
+  step?: string;
+  timeMin?: number;
+  time_minutes?: number;
+};
+export type EnhancedFoodPhotoAnalysisResult = FoodPhotoAnalysisResult & {
+  steps?: Array<string | RecipeDraftStepResult>;
+  tips?: string[];
+  allergens?: string[];
+  intolerances?: string[];
+  servings?: number;
+  timeMinutes?: number;
+  time_minutes?: number;
+};
+export type CoachAdviceResult = {
+  title: string;
+  advice: string;
+  bullets: string[];
+};
 type RuntimeGlobal = typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
   __ENV?: Record<string, string | undefined>;
@@ -59,6 +97,153 @@ function safeJsonObject(text: string | undefined, fallback: JsonRecord = {}): Js
   } catch {
     return fallback;
   }
+}
+
+function stringArray(value: unknown, maxItems = 20): string[] {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function optionalPositiveInteger(value: unknown): number | undefined {
+  const n = Math.round(finiteNumber(value));
+  return n > 0 ? n : undefined;
+}
+
+function normalizeFoodIngredient(rawItem: unknown): FoodPhotoIngredientResult | null {
+  const item = asRecord(rawItem);
+  const name = stringValue(item.name).trim();
+  if (!name) return null;
+  const percent = Math.max(0, Math.min(100, Math.round(finiteNumber(item.percent))));
+  const amount = optionalString(item.amount)?.trim();
+  return {
+    name,
+    percent,
+    ...(amount ? { amount } : {}),
+  };
+}
+
+export function normalizeFoodPhotoAnalysis(value: unknown): FoodPhotoAnalysisResult {
+  const record = asRecord(value);
+  const nonFood = record.nonFood === true;
+  const notes = stringArray(record.notes, 8);
+
+  if (nonFood) {
+    return {
+      name: stringValue(record.name).trim() || "Не еда",
+      nonFood: true,
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      ingredients: [],
+      notes: notes.length ? notes : ["Это не еда и не пищевой продукт. Запись не учитывается в КБЖУ."],
+    };
+  }
+
+  const modelConfidence = finiteNumber(record.modelConfidence);
+  return {
+    name: stringValue(record.name).trim() || "Блюдо",
+    nonFood: false,
+    calories: Math.max(0, Math.round(finiteNumber(record.calories))),
+    protein: Math.max(0, Math.round(finiteNumber(record.protein))),
+    fat: Math.max(0, Math.round(finiteNumber(record.fat))),
+    carbs: Math.max(0, Math.round(finiteNumber(record.carbs))),
+    ingredients: (Array.isArray(record.ingredients) ? record.ingredients : [])
+      .map(normalizeFoodIngredient)
+      .filter((item): item is FoodPhotoIngredientResult => Boolean(item))
+      .slice(0, 12),
+    notes,
+    portionGrams: optionalPositiveInteger(record.portionGrams),
+    modelConfidence: modelConfidence > 0 ? Math.max(0, Math.min(1, modelConfidence)) : undefined,
+  };
+}
+
+export function normalizeEnhancedFoodPhotoAnalysis(value: unknown): EnhancedFoodPhotoAnalysisResult {
+  const record = asRecord(value);
+  const base = normalizeFoodPhotoAnalysis(record);
+  const steps = (Array.isArray(record.steps) ? record.steps : [])
+    .map((rawStep, index): string | RecipeDraftStepResult | null => {
+      if (typeof rawStep === "string") {
+        const text = rawStep.trim();
+        return text ? text : null;
+      }
+      const step = asRecord(rawStep);
+      const text = (stringValue(step.text) || stringValue(step.step)).trim();
+      if (!text) return null;
+      const n = optionalPositiveInteger(step.n);
+      const timeMin = optionalPositiveInteger(step.timeMin);
+      const timeMinutesAlias = optionalPositiveInteger(step.time_minutes);
+      return {
+        ...(n ? { n } : { n: index + 1 }),
+        text,
+        step: text,
+        ...(timeMin ? { timeMin } : {}),
+        ...(timeMinutesAlias ? { time_minutes: timeMinutesAlias } : {}),
+      };
+    })
+    .filter((step): step is string | RecipeDraftStepResult => Boolean(step))
+    .slice(0, 30);
+  const servings = optionalPositiveInteger(record.servings);
+  const timeMinutes = optionalPositiveInteger(record.timeMinutes);
+  const timeMinutesAlias = optionalPositiveInteger(record.time_minutes);
+
+  return {
+    ...base,
+    ...(steps.length ? { steps } : {}),
+    tips: stringArray(record.tips, 12),
+    allergens: stringArray(record.allergens, 20),
+    intolerances: stringArray(record.intolerances, 20),
+    ...(servings ? { servings } : {}),
+    ...(timeMinutes ? { timeMinutes } : {}),
+    ...(timeMinutesAlias ? { time_minutes: timeMinutesAlias } : {}),
+  };
+}
+
+export function normalizeCoachAdvice(value: unknown): CoachAdviceResult {
+  const record = asRecord(value);
+  return {
+    title: stringValue(record.title).trim() || "Совет на сегодня",
+    advice: stringValue(record.advice).trim() || "Не удалось сформировать персональный совет. Попробуйте позже.",
+    bullets: stringArray(record.bullets, 8),
+  };
+}
+
+export function normalizeRecipe(value: unknown): Recipe {
+  const record = asRecord(value);
+  const ingredients = (Array.isArray(record.ingredients) ? record.ingredients : [])
+    .map((rawItem) => {
+      const item = asRecord(rawItem);
+      const name = stringValue(item.name).trim();
+      const amount = optionalString(item.amount)?.trim();
+      return name ? { name, ...(amount ? { amount } : {}) } : null;
+    })
+    .filter((item): item is { name: string; amount?: string } => Boolean(item))
+    .slice(0, 40);
+  const steps = (Array.isArray(record.steps) ? record.steps : [])
+    .map((rawStep, index) => {
+      const step = asRecord(rawStep);
+      const text = stringValue(step.text).trim();
+      if (!text) return null;
+      const timeMin = optionalPositiveInteger(step.timeMin);
+      return {
+        n: optionalPositiveInteger(step.n) ?? index + 1,
+        text,
+        ...(timeMin ? { timeMin } : {}),
+      };
+    })
+    .filter((step): step is { n: number; text: string; timeMin?: number } => Boolean(step))
+    .slice(0, 30);
+
+  return {
+    title: stringValue(record.title).trim() || "Рецепт",
+    servings: optionalPositiveInteger(record.servings),
+    timeMinutes: optionalPositiveInteger(record.timeMinutes),
+    ingredients,
+    steps,
+    tips: stringArray(record.tips, 12),
+  };
 }
 
 function isAiContent(value: unknown): value is AiContent {
@@ -560,7 +745,7 @@ export async function generateFamilyWeeklyMenu(
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
   const allProfiles = Array.from(uniqueById.values());
   const allPeople = allProfiles.map(p => {
-    const targets = p.aiPlan?.dailyKpi || calculateDailyTargets(p as any);
+    const targets = p.aiPlan?.dailyKpi || calculateDailyTargets(p);
     return {
       id: p.id,
       name: p.name,
@@ -689,35 +874,31 @@ const dietaryBlock = (() => {
     responseSchema: schema
   });
 
-  let obj: any = {};
-  try { obj = JSON.parse(res.text || "{}"); } catch { obj = {}; }
+  const obj = safeJsonObject(res.text);
 
   const daysRaw = Array.isArray(obj.days) ? obj.days : [];
-  const normMeal = (m: any): any => {
-    const base = String(m?.base || "").trim();
-    const portions = (m && typeof m.portions === "object" && m.portions) ? m.portions : {};
+  const normMeal = (mealValue: unknown): FamilyWeeklyMenuDay["breakfast"] => {
+    const meal = asRecord(mealValue);
+    const portions = asRecord(meal.portions);
     const normPortions: Record<string, string> = {};
     for (const p of people) {
-      normPortions[p.id] = String((portions as any)[p.id] || "").trim();
+      normPortions[p.id] = stringValue(portions[p.id]).trim();
     }
-    return { base, portions: normPortions };
+    return { base: stringValue(meal.base).trim(), portions: normPortions };
   };
 
   const normDays: FamilyWeeklyMenuDay[] = dayNames.map((dn, i) => {
-    const d: any = daysRaw[i] || {};
+    const d = asRecord(daysRaw[i]);
     return {
-      day: String(d?.day || dn),
-      breakfast: normMeal(d?.breakfast),
-      lunch: normMeal(d?.lunch),
-      dinner: normMeal(d?.dinner),
-      snack: normMeal(d?.snack),
+      day: stringValue(d.day) || dn,
+      breakfast: normMeal(d.breakfast),
+      lunch: normMeal(d.lunch),
+      dinner: normMeal(d.dinner),
+      snack: normMeal(d.snack),
     };
   });
 
-  const shoppingList = (Array.isArray(obj.shoppingList) ? obj.shoppingList : [])
-    .map((s: any) => String(s).trim())
-    .filter(Boolean)
-    .slice(0, 60);
+  const shoppingList = stringArray(obj.shoppingList, 60);
   const shoppingListItems = normalizeShoppingListItems(obj.shoppingListItems, shoppingList)
     .slice(0, 80);
 
@@ -754,35 +935,29 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
       responseSchema: schema
     });
 
-    try {
-      const robj: any = JSON.parse(rep.text || "{}");
-      const rdaysRaw = Array.isArray(robj.days) ? robj.days : [];
-      const rnormDays: FamilyWeeklyMenuDay[] = dayNames.map((dn, i) => {
-        const d: any = rdaysRaw[i] || {};
-        return {
-          day: String(d?.day || dn),
-          breakfast: normMeal(d?.breakfast),
-          lunch: normMeal(d?.lunch),
-          dinner: normMeal(d?.dinner),
-          snack: normMeal(d?.snack),
-        };
-      });
-      const rshoppingList = (Array.isArray(robj.shoppingList) ? robj.shoppingList : shoppingList)
-        .map((s: any) => String(s).trim())
-        .filter(Boolean)
-        .slice(0, 60);
-      const rshoppingListItems = (Array.isArray(robj.shoppingListItems) ? robj.shoppingListItems : shoppingListItems)
-        .map((it: any) => ({
-          name: String(it?.name || "").trim(),
-          grams: Math.max(0, Math.round(Number(it?.grams || 0))),
-        }))
-        .filter((it: any) => it.name && it.grams > 0)
-        .slice(0, 80);
-      return { prefs, days: rnormDays, shoppingList: rshoppingList, shoppingListItems: rshoppingListItems };
-    } catch {
-      // если ремонт не удался — возвращаем как есть (без падений)
-      return { prefs, days: normDays, shoppingList, shoppingListItems };
-    }
+    const robj = safeJsonObject(rep.text);
+    const rdaysRaw = Array.isArray(robj.days) ? robj.days : [];
+    const rnormDays: FamilyWeeklyMenuDay[] = dayNames.map((dn, i) => {
+      const d = asRecord(rdaysRaw[i]);
+      return {
+        day: stringValue(d.day) || dn,
+        breakfast: normMeal(d.breakfast),
+        lunch: normMeal(d.lunch),
+        dinner: normMeal(d.dinner),
+        snack: normMeal(d.snack),
+      };
+    });
+    const rshoppingList = stringArray(robj.shoppingList, 60);
+    const rshoppingListItems = normalizeShoppingListItems(
+      robj.shoppingListItems,
+      rshoppingList.length ? rshoppingList : shoppingList
+    ).slice(0, 80);
+    return {
+      prefs,
+      days: rnormDays,
+      shoppingList: rshoppingList.length ? rshoppingList : shoppingList,
+      shoppingListItems: rshoppingListItems.length ? rshoppingListItems : shoppingListItems,
+    };
   }
 
   return { prefs, days: normDays, shoppingList, shoppingListItems };
@@ -791,7 +966,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
 /**
  * Анализ фото еды с использованием Gemini Flash
  */
-export async function analyzeFoodPhoto(base64: string): Promise<any> {
+export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysisResult> {
   const response = await callAiProxy('gemini-2.5-flash', {
     parts: [
       {
@@ -830,25 +1005,11 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
       required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
     }
   });
-  const parsed = JSON.parse(response.text || "{}");
-  if (parsed?.nonFood === true) {
-    return {
-      ...parsed,
-      calories: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-      ingredients: [],
-      notes: Array.isArray(parsed.notes) && parsed.notes.length
-        ? parsed.notes
-        : ["Это не еда и не пищевой продукт. Запись не учитывается в КБЖУ."],
-    };
-  }
-  return parsed;
+  return normalizeFoodPhotoAnalysis(safeJsonObject(response.text));
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
-    export async function analyzeFoodPhotoEnhanced(base64: string): Promise<any> {
+    export async function analyzeFoodPhotoEnhanced(base64: string): Promise<EnhancedFoodPhotoAnalysisResult> {
       const schema = {
         type: "OBJECT",
         properties: {
@@ -899,13 +1060,13 @@ export async function analyzeFoodPhoto(base64: string): Promise<any> {
         responseSchema: schema,
       });
 
-      return JSON.parse(response.text || "{}");
+      return normalizeEnhancedFoodPhotoAnalysis(safeJsonObject(response.text));
     }
 
 /**
  * Получение персонального совета от AI коуча
  */
-export async function getCoachAdvice(data: any): Promise<any> {
+export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> {
   const response = await callAiProxy('gemini-2.5-flash', 
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Сахар крови трактуй так: низкий = не давать агрессивный дефицит и долгие голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка/клетчатки и равномерное распределение углеводов; не меняй калорийную цель, меняй состав и ритм питания. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
@@ -922,7 +1083,7 @@ export async function getCoachAdvice(data: any): Promise<any> {
       }
     }
   );
-  return JSON.parse(response.text || "{}");
+  return normalizeCoachAdvice(safeJsonObject(response.text));
 }
 
 /**
@@ -972,39 +1133,48 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     maxTasks: 5,
   } as const;
 
-  const isNonEmptyStr = (v: any) => typeof v === 'string' && v.trim().length > 0;
+  const isNonEmptyStr = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
   const clamp = (s: string, max: number) => {
     const t = (s ?? '').trim().replace(/\s+/g, ' ');
     if (t.length <= max) return t;
     return t.slice(0, Math.max(0, max - 1)).trimEnd() + '…';
   };
 
-  const normalizePlan = (p: any): AIPlan => {
-    const plan: any = p && typeof p === 'object' ? p : {};
+  const normalizePlan = (p: unknown): AIPlan => {
+    const plan = asRecord(p);
+    const dailyKpi = asRecord(plan.dailyKpi);
+    const mealTemplate = asRecord(plan.mealTemplate);
     const stripMealPrefix = (value: string, label: string) => {
       const raw = String(value || '').trim();
       if (!raw) return raw;
       const rx = new RegExp(`^${label}\\s*[:\\-–—]?\\s*`, 'i');
       return raw.replace(rx, '').trim();
     };
-    const out: any = {
-      title: clamp(String(plan.title || 'Ваш AI‑план'), LIMITS.title),
-      strategySummary: clamp(String(plan.strategySummary || ''), LIMITS.strategySummary),
-      weeklyFocus: clamp(String(plan.weeklyFocus || ''), LIMITS.weeklyFocus),
+    const normalizeTextList = (value: unknown, maxItems: number, maxLength: number): string[] =>
+      stringArray(value, maxItems)
+        .map((item) => clamp(item, maxLength))
+        .filter(isNonEmptyStr);
+
+    const out: AIPlan = {
+      title: clamp(stringValue(plan.title) || 'Ваш AI‑план', LIMITS.title),
+      strategySummary: clamp(stringValue(plan.strategySummary), LIMITS.strategySummary),
+      weeklyFocus: clamp(stringValue(plan.weeklyFocus), LIMITS.weeklyFocus),
       dailyKpi: {
-        calories: Number(plan?.dailyKpi?.calories ?? 0),
-        protein: Number(plan?.dailyKpi?.protein ?? 0),
-        fat: Number(plan?.dailyKpi?.fat ?? 0),
-        carbs: Number(plan?.dailyKpi?.carbs ?? 0),
+        calories: finiteNumber(dailyKpi.calories),
+        protein: finiteNumber(dailyKpi.protein),
+        fat: finiteNumber(dailyKpi.fat),
+        carbs: finiteNumber(dailyKpi.carbs),
       },
-      rules: Array.isArray(plan.rules) ? plan.rules.slice(0, LIMITS.maxRules).map((x: any) => clamp(String(x || ''), LIMITS.ruleItem)).filter(isNonEmptyStr) : [],
-      firstTasks: Array.isArray(plan.firstTasks) ? plan.firstTasks.slice(0, LIMITS.maxTasks).map((x: any) => clamp(String(x || ''), LIMITS.taskItem)).filter(isNonEmptyStr) : [],
+      rules: normalizeTextList(plan.rules, LIMITS.maxRules, LIMITS.ruleItem),
+      firstTasks: normalizeTextList(plan.firstTasks, LIMITS.maxTasks, LIMITS.taskItem),
       mealTemplate: {
-        breakfast: clamp(String(plan?.mealTemplate?.breakfast || ''), LIMITS.mealField),
-        lunch: clamp(String(plan?.mealTemplate?.lunch || ''), LIMITS.mealField),
-        dinner: clamp(String(plan?.mealTemplate?.dinner || ''), LIMITS.mealField),
-        snack: clamp(String(plan?.mealTemplate?.snack || ''), LIMITS.mealField),
-      }
+        breakfast: clamp(stringValue(mealTemplate.breakfast), LIMITS.mealField),
+        lunch: clamp(stringValue(mealTemplate.lunch), LIMITS.mealField),
+        dinner: clamp(stringValue(mealTemplate.dinner), LIMITS.mealField),
+        snack: clamp(stringValue(mealTemplate.snack), LIMITS.mealField),
+      },
+      createdAt: optionalString(plan.createdAt) || new Date().toISOString(),
+      model: optionalString(plan.model),
     };
 
     // Ensure minimum content (avoid empty fields)
@@ -1020,7 +1190,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     if (!isNonEmptyStr(out.mealTemplate.breakfast)) out.mealTemplate.breakfast = 'Каша/йогурт + фрукты + 1–2 яйца/творог.';
     if (!isNonEmptyStr(out.mealTemplate.lunch)) out.mealTemplate.lunch = 'Белок + гарнир + овощи (например, курица + рис/гречка + салат).';
     if (!isNonEmptyStr(out.mealTemplate.dinner)) out.mealTemplate.dinner = 'Белок + овощи (рыба/мясо/творог + овощи).';
-    return out as AIPlan;
+    return out;
   };
 
   const looksTooLong = (p: AIPlan) => {
@@ -1039,7 +1209,20 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 
   const basePrompt = `Ты — фитнес-коуч и нутрициолог.\nСоздай персональный план питания и активности для пользователя: ${JSON.stringify(user)}.\nЕсли у пользователя указаны давление, пульс, сахар крови, обхваты, фото прогресса, история замеров или медицинские ограничения, учитывай их при выборе нагрузки, темпа прогрессии, соли и восстановительных рекомендаций.\nСахар крови трактуй так: низкий = не давать агрессивный дефицит и длинные голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка и клетчатки, равномернее распределяй углеводы по дню; не меняй ккал-цель, меняй состав и ритм питания.\n\nФормат ответа:\n- Верни ТОЛЬКО валидный JSON без пояснений/markdown.\n- Строго по схеме AIPlan.\n- Будь очень кратким: strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- rules: 5–8 коротких пунктов. firstTasks: 3–5 коротких пунктов.\n- mealTemplate (breakfast/lunch/dinner/snack): 1 строка, максимум ~2 предложения каждое.\n`;
 
-  const repairPrompt = (badJson: any) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
+  const repairPrompt = (badJson: unknown) => `Ниже JSON плана, но он слишком длинный/"простыня".\nПерепиши его КОРОТКО и ЧИСТО.\n\nПравила:\n- Верни ТОЛЬКО валидный JSON (без текста, без markdown).\n- Сохрани смысл и числа (ккал/БЖУ), но укороти текст.\n- strategySummary 3–5 предложений, weeklyFocus 1–2 предложения.\n- mealTemplate — по 1 строке на приём пищи, максимум ~2 предложения.\n- rules максимум ${LIMITS.maxRules}, firstTasks максимум ${LIMITS.maxTasks}.\n\nВходной JSON: ${JSON.stringify(badJson)}\n`;
+
+  const applyFallbackKpi = (plan: AIPlan): AIPlan => {
+    const targets = calculateDailyTargets(user);
+    return {
+      ...plan,
+      dailyKpi: {
+        calories: plan.dailyKpi.calories > 0 ? plan.dailyKpi.calories : targets.calories,
+        protein: plan.dailyKpi.protein > 0 ? plan.dailyKpi.protein : targets.protein,
+        fat: plan.dailyKpi.fat > 0 ? plan.dailyKpi.fat : targets.fat,
+        carbs: plan.dailyKpi.carbs > 0 ? plan.dailyKpi.carbs : targets.carbs,
+      },
+    };
+  };
 
   // Attempt 1 (schema-enforced)
   const r1 = await callAiProxy('gemini-2.5-pro', basePrompt, 'personal_plan', {
@@ -1047,17 +1230,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     responseSchema: schema
   });
 
-  let parsed: any;
-  try { parsed = JSON.parse(r1.text || "{}"); } catch { parsed = {}; }
-  let plan = normalizePlan(parsed);
-
-  // FIX B: если модель вернула нули/пустые KPI, берём из профиля, чтобы не было "0 ккал".
-  const targets = calculateDailyTargets(user as any);
-  plan.dailyKpi = plan.dailyKpi || ({} as any);
-  if (!(plan.dailyKpi.calories > 0)) plan.dailyKpi.calories = targets.calories;
-  if (!(plan.dailyKpi.protein > 0)) plan.dailyKpi.protein = targets.protein;
-  if (!(plan.dailyKpi.fat > 0)) plan.dailyKpi.fat = targets.fat;
-  if (!(plan.dailyKpi.carbs > 0)) plan.dailyKpi.carbs = targets.carbs;
+  let plan = applyFallbackKpi(normalizePlan(safeJsonObject(r1.text)));
 
   // Attempt 2: repair if model returned huge strings
   if (looksTooLong(plan)) {
@@ -1065,9 +1238,8 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
       responseMimeType: "application/json",
       responseSchema: schema
     });
-    let parsed2: any;
-    try { parsed2 = JSON.parse(r2.text || "{}"); } catch { parsed2 = plan; }
-    plan = normalizePlan(parsed2);
+    const repaired = safeJsonObject(r2.text);
+    plan = applyFallbackKpi(normalizePlan(Object.keys(repaired).length ? repaired : plan));
   }
 
   return plan;
@@ -1076,7 +1248,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 /**
  * Объяснение причин плато и рекомендации
  */
-export async function generatePlateauExplanation(data: any): Promise<string> {
+export async function generatePlateauExplanation(data: unknown): Promise<string> {
   const response = await callAiProxy('gemini-2.5-flash', 
     `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
     'plateau'
@@ -1087,7 +1259,7 @@ export async function generatePlateauExplanation(data: any): Promise<string> {
 /**
  * Интерпретация еженедельных показателей прогресса
  */
-export async function getWeeklyIntelligenceInterpretation(data: any): Promise<string> {
+export async function getWeeklyIntelligenceInterpretation(data: unknown): Promise<string> {
   const response = await callAiProxy('gemini-2.5-flash', 
     `Интерпретируй еженедельные результаты пользователя: ${JSON.stringify(data)}. Напиши краткий мотивирующий анализ на 3-4 предложения.`,
     'wis_text'
@@ -1138,5 +1310,5 @@ export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
       required: ["title", "ingredients", "steps"]
     }
   });
-  return JSON.parse(response.text || "{}");
+  return normalizeRecipe(safeJsonObject(response.text));
 }
