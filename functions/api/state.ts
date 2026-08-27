@@ -196,8 +196,32 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (!isAllowedStateKey(user.sub, key)) {
     return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
+  const baseVersion = parseBaseVersion(url.searchParams.get("baseVersion"));
+  if (baseVersion === null) {
+    return json({ error: "BAD_BASE_VERSION", key }, 400);
+  }
 
   const db = requireDB(env);
-  await db.prepare("DELETE FROM user_kv WHERE user_id = ? AND k = ?").bind(user.sub, key).run();
+  const deleted = await db
+    .prepare("DELETE FROM user_kv WHERE user_id = ? AND k = ? AND (? = 0 OR version = ?)")
+    .bind(user.sub, key, baseVersion, baseVersion)
+    .run();
+
+  const deletedChanges = Number((deleted.meta as { changes?: number } | undefined)?.changes || 0);
+  if (baseVersion > 0 && !deletedChanges) {
+    const current = await db
+      .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
+      .bind(user.sub, key)
+      .first<{ v?: string; version?: number }>();
+    if (current && Number(current.version || 0) !== baseVersion) {
+      return json({
+        error: "KV_CONFLICT",
+        key,
+        value: current.v ?? "",
+        version: Number(current.version || 0),
+      }, 409);
+    }
+  }
+
   return json({ ok: true }, 200);
 };
