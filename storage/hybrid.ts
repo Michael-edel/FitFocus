@@ -23,6 +23,10 @@ type RemoteStateItem = {
   version?: number;
 };
 
+type PendingRemoteKVOperation =
+  | { type: 'put'; key: string; value: string; baseVersion?: number }
+  | { type: 'delete'; key: string };
+
 const REMOTE_STATE_PREFIXES = [
   STORAGE_KEYS.dataPrefix,
   "ff_gemini_cooldown_until",
@@ -31,10 +35,9 @@ const REMOTE_STATE_PREFIXES = [
   "ff_ai_feature_lastcall_v1:",
 ];
 
-const __kvQueue: KVItem[] = [];
-const __kvDeleteQueue: string[] = [];
-let __kvTimer: number | null = null;
-let __kvDeleteTimer: number | null = null;
+const __pendingRemoteKVOperations = new Map<string, PendingRemoteKVOperation>();
+let __remoteKVTimer: number | null = null;
+let __remoteKVSyncing = false;
 let __remoteAuthBlockedUntil = 0;
 const REMOTE_AUTH_BACKOFF_MS = 30_000;
 
@@ -98,90 +101,99 @@ function isRemoteStateItem(value: unknown): value is RemoteStateItem {
   return true;
 }
 
-function enqueueRemoteKVWrite(key: string, value: string) {
-  if (!shouldMirrorKey(key)) return;
-  if (isRemoteAuthBlocked()) return;
-
-  const existing = __kvQueue.find((item) => item.key === key);
-  if (existing) {
-    existing.value = value;
-    existing.baseVersion = getStoredVersion(key);
-  } else {
-    __kvQueue.push({ key, value, baseVersion: getStoredVersion(key) });
-  }
-
-  if (__kvTimer != null) return;
-  __kvTimer = window.setTimeout(async () => {
-    __kvTimer = null;
-    const batch = __kvQueue.splice(0, __kvQueue.length);
-    if (!batch.length) return;
-    try {
-      for (const item of batch) {
-        const r = await fetch('/api/state', {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: item.key, value: item.value, baseVersion: item.baseVersion ?? 0 }),
-        });
-        const payload = await r.json().catch(() => null);
-        if (r.ok) {
-          const serverItem = Array.isArray(payload?.items)
-            ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === item.key) ?? null
-            : null;
-          if (typeof serverItem?.version === 'number') {
-            setStoredVersion(item.key, serverItem.version);
-          }
-          continue;
-        }
-        if (r.status === 401 || r.status === 403) {
-          blockRemoteSyncAfterAuthFailure();
-          break;
-        }
-        if (r.status === 409 && payload?.key) {
-          const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
-          const currentValue = localStorage.getItem(item.key);
-          if (typeof currentValue === 'string' && currentValue === item.value && serverVersion) {
-            setStoredVersion(item.key, serverVersion);
-            continue;
-          }
-          if (typeof payload.value === 'string' && payload.key === item.key) {
-            await applyRemoteKVConflict(item.key, payload.value, serverVersion);
-          }
-        }
-      }
-    } catch {
-      // Best-effort mirror only. Next write will retry.
-    }
+function scheduleRemoteKVSync(): void {
+  if (__remoteKVTimer != null || __remoteKVSyncing) return;
+  __remoteKVTimer = window.setTimeout(() => {
+    __remoteKVTimer = null;
+    void flushRemoteKVOperations();
   }, 400);
 }
 
-function enqueueRemoteKVDelete(key: string) {
-  if (!shouldMirrorKey(key)) return;
-  if (isRemoteAuthBlocked()) return;
-  if (!__kvDeleteQueue.includes(key)) {
-    __kvDeleteQueue.push(key);
-  }
+async function flushRemoteKVOperations(): Promise<void> {
+  if (__remoteKVSyncing) return;
+  __remoteKVSyncing = true;
+  try {
+    while (__pendingRemoteKVOperations.size > 0) {
+      const batch = [...__pendingRemoteKVOperations.values()];
+      __pendingRemoteKVOperations.clear();
 
-  if (__kvDeleteTimer != null) return;
-  __kvDeleteTimer = window.setTimeout(async () => {
-    __kvDeleteTimer = null;
-    const batch = __kvDeleteQueue.splice(0, __kvDeleteQueue.length);
-    if (!batch.length) return;
-    try {
-      for (const k of batch) {
-        const response = await fetch(`/api/state?key=${encodeURIComponent(k)}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-        if (response.status === 401 || response.status === 403) {
-          blockRemoteSyncAfterAuthFailure();
-          break;
+      for (const operation of batch) {
+        try {
+          if (operation.type === 'put') {
+            const response = await fetch('/api/state', {
+              method: 'PUT',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: operation.key,
+                value: operation.value,
+                baseVersion: operation.baseVersion ?? 0,
+              }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (response.ok) {
+              const serverItem = Array.isArray(payload?.items)
+                ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === operation.key) ?? null
+                : null;
+              if (typeof serverItem?.version === 'number') {
+                setStoredVersion(operation.key, serverItem.version);
+              }
+              continue;
+            }
+            if (response.status === 401 || response.status === 403) {
+              blockRemoteSyncAfterAuthFailure();
+              return;
+            }
+            if (response.status === 409 && payload?.key) {
+              const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
+              const currentValue = localStorage.getItem(operation.key);
+              if (typeof currentValue === 'string' && currentValue === operation.value && serverVersion) {
+                setStoredVersion(operation.key, serverVersion);
+                continue;
+              }
+              if (typeof payload.value === 'string' && payload.key === operation.key) {
+                await applyRemoteKVConflict(operation.key, payload.value, serverVersion);
+              }
+            }
+            continue;
+          }
+
+          const response = await fetch(`/api/state?key=${encodeURIComponent(operation.key)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (response.status === 401 || response.status === 403) {
+            blockRemoteSyncAfterAuthFailure();
+            return;
+          }
+        } catch {
+          // Best-effort mirror only. A later local change will retry.
         }
       }
-    } catch {
-      // Best-effort mirror only. A later full sync can clean this up.
     }
-  }, 400);
+  } finally {
+    __remoteKVSyncing = false;
+    if (__pendingRemoteKVOperations.size > 0) {
+      scheduleRemoteKVSync();
+    }
+  }
+}
+
+function enqueueRemoteKVWrite(key: string, value: string) {
+  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
+  __pendingRemoteKVOperations.set(key, {
+    type: 'put',
+    key,
+    value,
+    baseVersion: getStoredVersion(key),
+  });
+  scheduleRemoteKVSync();
+}
+
+function enqueueRemoteKVDelete(key: string) {
+  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
+  __pendingRemoteKVOperations.set(key, { type: 'delete', key });
+  scheduleRemoteKVSync();
 }
 
 export function safeSetItem(key: string, value: string) {
