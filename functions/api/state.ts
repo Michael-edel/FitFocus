@@ -207,7 +207,8 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub, key, baseVersion, baseVersion)
     .run();
 
-  if (baseVersion > 0 && !Number(deleted.meta?.changes || 0)) {
+  const deletedChanges = Number((deleted.meta as { changes?: number } | undefined)?.changes || 0);
+  if (baseVersion > 0 && !deletedChanges) {
     const current = await db
       .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
       .bind(user.sub, key)
