@@ -106,7 +106,7 @@ import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
 import ShareWisCard from './components/ShareWisCard';
 import MacroBar from './components/MacroBar';
-import FoodDiaryGrouped from './FoodDiaryGrouped';
+import FoodDiaryGrouped, { formatLocalDayLabel } from './FoodDiaryGrouped';
 import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
