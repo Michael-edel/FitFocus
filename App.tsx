@@ -120,7 +120,6 @@ import {
   sidebarUtilityTabIds,
 } from './navigation';
 
-const PlansScreen = React.lazy(() => import('./PlansScreen'));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen'));
 const AdminScreen = React.lazy(() => import('./AdminScreen'));
 const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
@@ -150,19 +149,6 @@ const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
 const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
-type GoogleIdentityGlobal = {
-  accounts?: {
-    id?: unknown;
-  };
-};
-
-declare global {
-  interface Window {
-    google?: GoogleIdentityGlobal;
-  }
-}
-
-type ViteEnvLike = Record<string, string | boolean | undefined>;
 type UnknownRecord = Record<string, unknown>;
 type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
@@ -182,45 +168,6 @@ const waitForDocumentFonts = async () => {
   if (ready) await ready;
 };
 
-const getGoogleClientId = () => {
-  const envAny = import.meta.env as ViteEnvLike;
-  const local = String(envAny.VITE_GOOGLE_CLIENT_ID_LOCAL || __VITE_GOOGLE_CLIENT_ID_LOCAL__ || '');
-  const prod = String(envAny.VITE_GOOGLE_CLIENT_ID_PROD || __VITE_GOOGLE_CLIENT_ID_PROD__ || '');
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const isLocal =
-    origin.startsWith('http://localhost') ||
-    origin.startsWith('http://127.0.0.1') ||
-    origin.startsWith('http://0.0.0.0');
-  const picked = (isLocal ? local : prod).trim();
-  return !picked || picked.includes('CHANGE_ME') ? '' : picked;
-};
-
-function loadGoogleIdentityScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') return reject(new Error('No window'));
-    if (window.google?.accounts?.id) return resolve();
-
-    const existing = document.querySelector('script[data-gis="1"]') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('GIS load error')));
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.dataset.gis = '1';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('GIS load error'));
-    document.head.appendChild(script);
-  });
-}
-
-// Compile-time fallbacks injected by Vite (see vite.config.ts)
-declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
-declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
 
 
 
