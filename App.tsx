@@ -2742,7 +2742,6 @@ const logWeight = useCallback(() => {
         setInviteError={setInviteError}
         requireInvite={requireInvite}
         inviteChecking={inviteChecking}
-        bootstrapAuth={bootstrapAuth}
         onOpenVersionInfo={() => setVersionInfoOpen(true)}
       />
     </React.Suspense>
