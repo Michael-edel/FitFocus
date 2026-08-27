@@ -104,7 +104,6 @@ import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
 import ShareWisCard from './components/ShareWisCard';
 import VersionInfoModal from './VersionInfoModal';
-import OAuthSignInButton from './OAuthSignInButton';
 import {
   AppTabId,
   mobilePrimaryTabIds,
