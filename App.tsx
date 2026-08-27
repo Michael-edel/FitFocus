@@ -149,6 +149,25 @@ const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
 const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
+type UnknownRecord = Record<string, unknown>;
+type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
+type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
+
+const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
+  const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
+  return typeof finalY === 'number' && Number.isFinite(finalY) ? finalY : fallback;
+};
+
+const waitForDocumentFonts = async () => {
+  const ready = (document as FontReadyDocument).fonts?.ready;
+  if (ready) await ready;
+};
+
 
 
 
