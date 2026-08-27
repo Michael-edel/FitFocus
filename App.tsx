@@ -49,6 +49,7 @@ import {
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
+import { compressFoodPhoto } from './services/foodPhoto';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
@@ -288,101 +289,6 @@ const evictLargeLocalStorage = () => {
 
 
 
-// --- Image helpers: resize/crop/compress food photos to reduce storage ---
-
-type CompressedPhoto = { dataUrl: string; thumbUrl: string; base64: string };
-
-const loadImageElement = (file: File): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
-    img.src = url;
-  });
-};
-
-const compressFoodPhoto = async (
-  file: File,
-  opts?: { maxSide?: number; quality?: number; thumbSize?: number }
-): Promise<CompressedPhoto> => {
-  // iOS часто отдаёт HEIC/HEIF. Конвертируем в JPEG в браузере, чтобы дальше работать через canvas.
-  const lowerName = (file?.name || '').toLowerCase();
-  const isHeic = (file?.type || '').includes('heic') || (file?.type || '').includes('heif') || lowerName.endsWith('.heic') || lowerName.endsWith('.heif');
-  if (isHeic) {
-    // HEIC поддерживается нативно только в части браузеров.
-    // Если браузер не может декодировать файл сам, просим выбрать JPG/PNG или использовать камеру.
-    try {
-      await createImageBitmap(file);
-    } catch (e) {
-      alert('Фото в формате HEIC/HEIF. Пожалуйста, выберите JPG/PNG или нажмите «Снять» (камера), чтобы приложение само сделало JPEG.');
-      throw e;
-    }
-  }
-  const maxSide = opts?.maxSide ?? 768;
-  const quality = opts?.quality ?? 0.72;
-  const thumbSize = opts?.thumbSize ?? 140;
-
-  // Prefer createImageBitmap (fast), but fallback for environments where it fails (some Android tablets / WebViews)
-  let w0 = 0;
-  let h0 = 0;
-  const canvasSrc = document.createElement('canvas');
-  const ctxSrc = canvasSrc.getContext('2d');
-  if (!ctxSrc) throw new Error('No canvas context');
-
-  try {
-    const bitmap = await createImageBitmap(file);
-    w0 = bitmap.width;
-    h0 = bitmap.height;
-    canvasSrc.width = w0;
-    canvasSrc.height = h0;
-    ctxSrc.drawImage(bitmap, 0, 0);
-    // @ts-ignore - close exists in modern browsers
-    bitmap.close?.();
-  } catch {
-    const img = await loadImageElement(file);
-    w0 = img.naturalWidth || img.width;
-    h0 = img.naturalHeight || img.height;
-    canvasSrc.width = w0;
-    canvasSrc.height = h0;
-    ctxSrc.drawImage(img, 0, 0);
-  }
-
-  // Resize keeping aspect
-  const scale = Math.min(1, maxSide / Math.max(w0, h0));
-  const w = Math.max(1, Math.round(w0 * scale));
-  const h = Math.max(1, Math.round(h0 * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No canvas context');
-  ctx.drawImage(canvasSrc, 0, 0, w0, h0, 0, 0, w, h);
-
-  const dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-  // Thumb: center-crop square from the resized image
-  const thumb = document.createElement('canvas');
-  thumb.width = thumbSize;
-  thumb.height = thumbSize;
-  const tctx = thumb.getContext('2d');
-  if (!tctx) throw new Error('No canvas context');
-  const side = Math.min(w, h);
-  const sx = Math.floor((w - side) / 2);
-  const sy = Math.floor((h - side) / 2);
-  tctx.drawImage(canvas, sx, sy, side, side, 0, 0, thumbSize, thumbSize);
-  const thumbUrl = thumb.toDataURL('image/jpeg', Math.min(0.8, quality + 0.08));
-
-  const base64 = dataUrl.split(',')[1] || '';
-  return { dataUrl, thumbUrl, base64 };
-};
 
 
 const pickLessonForToday = (user: UserProfile, lessons: CourseLesson[]): CourseLesson | null => {
