@@ -60,6 +60,9 @@ jobs:
       - name: Domain strict typecheck
         run: npm run typecheck:domain-strict
 
+      - name: Storage strict typecheck
+        run: npm run typecheck:storage-strict
+
       - name: Build
         run: npm run build
 
