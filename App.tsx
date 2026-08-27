@@ -55,7 +55,7 @@ import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPor
 import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
-import { toLocalDayKey as localDayKey } from './dateUtils';
+import { formatTime, getDayKey, getWeekKey, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -249,37 +249,7 @@ const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
 ];
 
-function getDayKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
-function getWeekKey(d: Date): string {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  return `${date.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`;
-}
-
-function formatTime(tsIso: string): string {
-  const d = new Date(tsIso);
-  if (Number.isNaN(d.getTime())) return tsIso;
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function last7DayKeys(anchor: Date = new Date()): string[] {
-  const keys: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(anchor);
-    d.setDate(anchor.getDate() - i);
-    keys.push(getDayKey(d));
-  }
-  return keys;
-}
 
 const MacroBar: React.FC<{ label: string; current: number; target: number; color: string; unit?: string }> = React.memo(({ label, current, target, color, unit = 'г' }) => {
   const progress = Math.min(100, (current / (target || 1)) * 100);
