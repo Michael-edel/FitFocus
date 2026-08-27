@@ -9,7 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import type { FoodEntry, MealType } from './types';
-import { toLocalDayKey } from './dateUtils';
+import { toLocalDayKey as localDayKey } from './dateUtils';
 
 type FoodDiaryGroupedProps = {
   items: FoodEntry[];
