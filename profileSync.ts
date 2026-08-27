@@ -25,6 +25,14 @@ function withFetch(fetchImpl?: typeof fetch) {
 
 const PROFILE_SYNC_TIMEOUT_MS = 15_000;
 
+let profileSyncQueue: Promise<void> = Promise.resolve();
+
+function enqueueProfileSync(operation: () => Promise<void>): Promise<void> {
+  const queuedOperation = profileSyncQueue.then(operation, operation);
+  profileSyncQueue = queuedOperation.catch(() => undefined);
+  return queuedOperation;
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit | undefined, fetchImpl?: typeof fetch) {
   const fetchFn = withFetch(fetchImpl);
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -91,7 +99,7 @@ function buildRetryProfile(localProfile: UserProfile, serverProfile: UserProfile
   };
 }
 
-export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
+async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
@@ -168,7 +176,7 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
   }
 }
 
-export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: ProfileSyncDeps): Promise<void> {
+async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: ProfileSyncDeps): Promise<void> {
   if (!deps.currentUser) return;
 
   const nextUser = { ...deps.currentUser, ...patch } as UserProfile;
@@ -253,6 +261,14 @@ export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: Pro
       deps.suppressProfileSyncStateRef.current = false;
     }
   }
+}
+
+export function pushProfileToCloud(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
+  return enqueueProfileSync(() => pushProfileToCloudNow(profile, deps));
+}
+
+export function patchProfileInCloud(patch: Partial<UserProfile>, deps: ProfileSyncDeps): Promise<void> {
+  return enqueueProfileSync(() => patchProfileInCloudNow(patch, deps));
 }
 
 export async function syncAllLocalDataNow(deps: ProfileSyncDeps): Promise<void> {
