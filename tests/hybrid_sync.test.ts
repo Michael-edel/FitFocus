@@ -53,4 +53,25 @@ describe('hybrid storage remote mirror policy', () => {
       credentials: 'include',
     });
   });
+
+  it('retries a transient write failure without another local change', async () => {
+    const key = 'fitfocus_data_user-1_food:1';
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ key, value: 'saved', version: 1 }],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    safeSetItem(key, 'saved');
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
