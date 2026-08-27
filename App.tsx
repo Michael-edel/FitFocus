@@ -50,6 +50,7 @@ import {
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
 import { compressFoodPhoto } from './services/foodPhoto';
+import { MAX_DIARY_ITEMS, MAX_HISTORY_ITEMS, sanitizeFoodEntryForStorage, type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
@@ -223,18 +224,6 @@ declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
 
 
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
-
-type FastLogItem = Omit<FoodItem, 'id' | 'timestamp'> & Partial<Pick<FoodItem, 'timestamp'>>;
-
-const MAX_DIARY_ITEMS = 500;
-const MAX_HISTORY_ITEMS = 500;
-
-const sanitizeFoodEntryForStorage = <T extends Partial<FoodItem>>(entry: T): T => {
-  const out: Partial<FoodItem> = { ...entry };
-  if (typeof out.photo === 'string') delete out.photo;
-  if (typeof out.photoThumb === 'string' && out.photoThumb.length > 120_000) delete out.photoThumb;
-  return out as T;
-};
 
 
 
