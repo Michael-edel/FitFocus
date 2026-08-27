@@ -236,7 +236,7 @@ const currentBuildReleaseNote: ReleaseNote = {
   version: APP_VERSION_STRING,
   label: 'main',
   date: new Date(buildCommittedAt).toLocaleDateString('ru-RU'),
-  summary: BUILD_SOURCE.branch === 'main'
+  summary: String(BUILD_SOURCE.branch) === 'main'
     ? 'Сборка main обновляется автоматически при каждом пуше. Релизная версия продукта меняется отдельно, а ниже показаны номер текущей сборки, SHA, последние изменения и схема версионирования.'
     : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
   isCurrent: true,
