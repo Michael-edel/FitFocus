@@ -24,8 +24,8 @@ type RemoteStateItem = {
 };
 
 type PendingRemoteKVOperation =
-  | { type: 'put'; key: string; value: string; baseVersion?: number }
-  | { type: 'delete'; key: string };
+  | { type: 'put'; key: string; value: string; baseVersion?: number; retryCount?: number }
+  | { type: 'delete'; key: string; retryCount?: number };
 
 const REMOTE_STATE_PREFIXES = [
   STORAGE_KEYS.dataPrefix,
@@ -40,6 +40,9 @@ let __remoteKVTimer: number | null = null;
 let __remoteKVSyncing = false;
 let __remoteAuthBlockedUntil = 0;
 const REMOTE_AUTH_BACKOFF_MS = 30_000;
+const REMOTE_SYNC_DELAY_MS = 400;
+const REMOTE_SYNC_RETRY_DELAY_MS = 2_000;
+const MAX_REMOTE_SYNC_RETRIES = 3;
 
 export function shouldMirrorKey(key: string): boolean {
   if (key.endsWith('__ffv')) return false;
@@ -101,19 +104,28 @@ function isRemoteStateItem(value: unknown): value is RemoteStateItem {
   return true;
 }
 
-function scheduleRemoteKVSync(): void {
+function scheduleRemoteKVSync(delay = REMOTE_SYNC_DELAY_MS): void {
   if (__remoteKVTimer != null || __remoteKVSyncing) return;
   __remoteKVTimer = window.setTimeout(() => {
     __remoteKVTimer = null;
     void flushRemoteKVOperations();
-  }, 400);
+  }, delay);
+}
+
+function requeueAfterTransientFailure(operation: PendingRemoteKVOperation): boolean {
+  if (__pendingRemoteKVOperations.has(operation.key)) return false;
+  const retryCount = (operation.retryCount ?? 0) + 1;
+  if (retryCount > MAX_REMOTE_SYNC_RETRIES) return false;
+  __pendingRemoteKVOperations.set(operation.key, { ...operation, retryCount });
+  return true;
 }
 
 async function flushRemoteKVOperations(): Promise<void> {
   if (__remoteKVSyncing) return;
   __remoteKVSyncing = true;
+  let retryPending = false;
   try {
-    while (__pendingRemoteKVOperations.size > 0) {
+    while (__pendingRemoteKVOperations.size > 0 && !retryPending) {
       const batch = [...__pendingRemoteKVOperations.values()];
       __pendingRemoteKVOperations.clear();
 
@@ -144,6 +156,10 @@ async function flushRemoteKVOperations(): Promise<void> {
               blockRemoteSyncAfterAuthFailure();
               return;
             }
+            if (response.status === 429 || response.status >= 500) {
+              retryPending = requeueAfterTransientFailure(operation) || retryPending;
+              continue;
+            }
             if (response.status === 409 && payload?.key) {
               const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
               const currentValue = localStorage.getItem(operation.key);
@@ -166,15 +182,18 @@ async function flushRemoteKVOperations(): Promise<void> {
             blockRemoteSyncAfterAuthFailure();
             return;
           }
+          if (response.status === 429 || response.status >= 500) {
+            retryPending = requeueAfterTransientFailure(operation) || retryPending;
+          }
         } catch {
-          // Best-effort mirror only. A later local change will retry.
+          retryPending = requeueAfterTransientFailure(operation) || retryPending;
         }
       }
     }
   } finally {
     __remoteKVSyncing = false;
     if (__pendingRemoteKVOperations.size > 0) {
-      scheduleRemoteKVSync();
+      scheduleRemoteKVSync(retryPending ? REMOTE_SYNC_RETRY_DELAY_MS : REMOTE_SYNC_DELAY_MS);
     }
   }
 }
