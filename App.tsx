@@ -109,6 +109,7 @@ import MacroBar from './components/MacroBar';
 import FoodDiaryGrouped, { formatLocalDayLabel } from './FoodDiaryGrouped';
 import FoodEditModal from './FoodEditModal';
 import PaywallDialog from './PaywallDialog';
+import { formatGramsPretty, MealParts } from './mealPresentation';
 import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
@@ -163,7 +164,6 @@ declare global {
 
 type ViteEnvLike = Record<string, string | boolean | undefined>;
 type UnknownRecord = Record<string, unknown>;
-type MealPart = { name: string; qty?: string };
 type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
 
@@ -268,64 +268,6 @@ const App: React.FC = () => {
     date.setDate(date.getDate() + diff);
     return localDayKey(date);
   }, []);
-
-  const formatGramsPretty = useCallback((grams: number) => {
-    const g = Math.max(0, Math.round(Number(grams || 0)));
-    if (g >= 1000) return `${(g / 1000).toFixed(1)} кг`;
-    return `${g} г`;
-  }, []);
-
-  const parseMealParts = useCallback((text: string) => {
-    const raw = String(text || '').trim();
-    if (!raw) return [] as MealPart[];
-
-    // Split by "+" (used in AI menu), also tolerate ";" as delimiter
-    const parts = raw
-      .split(/\s*\+\s*|\s*;\s*/g)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    // Example supported formats:
-    // "Куриная грудка (150г)" / "Гречка 70 г" / "Яйца (3 шт)" / "Молоко - 200 мл"
-    const rx = /^(.+?)(?:\s*[—–-]\s*|\s*\()?(\d+(?:[\.,]\d+)?)\s*(кг|г|гр|мл|л|шт|порц|порции|порция)?\s*\)?\s*$/i;
-
-    return parts.map((p) => {
-      const mm = p.match(rx);
-      if (!mm) return { name: p };
-      const name = (mm[1] || '').trim();
-      const num = (mm[2] || '').replace(',', '.').trim();
-      const unitRaw = (mm[3] || '').trim().toLowerCase();
-
-      const unit =
-        unitRaw === 'гр' ? 'г' :
-        unitRaw;
-
-      const qty = unit ? `${num} ${unit}` : num;
-      return { name: name || p, qty };
-    });
-  }, []);
-
-  const MealParts = ({ value }: { value: string }) => {
-    const parts = parseMealParts(value);
-    const hasQty = parts.some(p => !!p.qty);
-    const hasMulti = parts.length > 1;
-
-    if (!value) return <span className="text-slate-500">—</span>;
-
-    // If it's a single plain string without qty, keep the compact one-line view
-    if (!hasQty && !hasMulti) return <span>{value}</span>;
-
-    return (
-      <div className="mt-1 space-y-1">
-        {parts.map((p, idx) => (
-          <div key={idx} className="flex items-start justify-between gap-3">
-            <span className="text-slate-200">{p.name}</span>
-            {p.qty ? <span className="text-slate-400 tabular-nums whitespace-nowrap">{p.qty}</span> : null}
-          </div>
-        ))}
-      </div>
-    );
-  };
 
   const mealTypeLabel = (t?: MealType) => {
     if (t === 'breakfast') return 'Завтрак';
