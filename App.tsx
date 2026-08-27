@@ -236,59 +236,6 @@ const sanitizeFoodEntryForStorage = <T extends Partial<FoodItem>>(entry: T): T =
   return out as T;
 };
 
-// Try to free localStorage space if quota is exceeded (remove heavy fields, keep newest history)
-const evictLargeLocalStorage = () => {
-  try {
-    const keys = Object.keys(localStorage);
-
-    // 1) Trim council chat history
-    for (const k of keys) {
-      if (!k.startsWith('fitfocus_data_') || !k.endsWith('_council_history')) continue;
-      try {
-        const arr = JSON.parse(localStorage.getItem(k) || '[]');
-        if (Array.isArray(arr) && arr.length > 30) {
-          localStorage.setItem(k, JSON.stringify(arr.slice(-30)));
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // 2) Remove full-size photos from diary (keep thumbnail only)
-    for (const k of keys) {
-      if (!k.startsWith('fitfocus_data_') || !k.endsWith('_diary')) continue;
-      try {
-        const arr = JSON.parse(localStorage.getItem(k) || '[]');
-        if (!Array.isArray(arr)) continue;
-        let changed = false;
-        const next = arr.map((it: unknown) => {
-          if (!isRecord(it)) return it;
-          const copy = { ...it };
-          if (typeof copy.photo === 'string' && copy.photo.length > 0) {
-            delete copy.photo;
-            changed = true;
-          }
-          if (typeof copy.photoThumb === 'string' && copy.photoThumb.length > 120_000) {
-            // thumbnails should be small; if not, drop it
-            delete copy.photoThumb;
-            changed = true;
-          }
-          return copy;
-        });
-        if (changed) {
-          localStorage.setItem(k, JSON.stringify(next));
-        }
-      } catch {
-        // ignore
-      }
-    }
-  } catch {
-    // ignore
-  }
-};
-
-
-
 
 
 const pickLessonForToday = (user: UserProfile, lessons: CourseLesson[]): CourseLesson | null => {
