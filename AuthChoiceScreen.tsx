@@ -1,14 +1,6 @@
 import React from 'react';
 import { Apple, ArrowRight, Cloud, Footprints, ShieldCheck, Sparkles, TrendingUp, Utensils, Watch } from 'lucide-react';
-
-type OAuthSignInButtonProps = {
-  onAuthed: () => void;
-  inviteCode?: string;
-  provider: 'google' | 'apple';
-  width?: number;
-  size?: 'large' | 'medium' | 'small';
-  text?: 'signin_with' | 'continue_with';
-};
+import OAuthSignInButton from './OAuthSignInButton';
 
 type IntroCard = {
   title: string;
@@ -59,7 +51,6 @@ type AuthChoiceScreenProps = {
   inviteChecking: boolean;
   bootstrapAuth: () => void;
   onOpenVersionInfo: () => void;
-  OAuthSignInButton: React.ComponentType<OAuthSignInButtonProps>;
 };
 
 export default function AuthChoiceScreen({
@@ -71,7 +62,6 @@ export default function AuthChoiceScreen({
   inviteChecking,
   bootstrapAuth,
   onOpenVersionInfo,
-  OAuthSignInButton,
 }: AuthChoiceScreenProps) {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
@@ -149,11 +139,7 @@ export default function AuthChoiceScreen({
           <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
             <OAuthSignInButton
               provider="google"
-              onAuthed={() => void bootstrapAuth()}
               inviteCode={inviteCode}
-              width={220}
-              size="medium"
-              text="continue_with"
             />
           </div>
           <div className="flex items-center justify-center">
