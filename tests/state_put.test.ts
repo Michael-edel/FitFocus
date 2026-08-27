@@ -64,7 +64,7 @@ function makeDb(options: { atomicWriteChanges?: number } = {}) {
             runs.push({ sql, binds: this.binds });
             const inputBinds = this.binds.slice(0, -4);
             const input = Array.from({ length: inputBinds.length / 3 }, (_, index) => ({
-              key: String(inputBinds[index * 3]),
+              k: String(inputBinds[index * 3]),
               version: String(inputBinds[index * 3]).endsWith('food:1') ? 2 : 1,
             }));
             const changes = options.atomicWriteChanges ?? input.length;
