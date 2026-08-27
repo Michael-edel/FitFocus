@@ -25,7 +25,7 @@ type RemoteStateItem = {
 
 type PendingRemoteKVOperation =
   | { type: 'put'; key: string; value: string; baseVersion?: number; retryCount?: number }
-  | { type: 'delete'; key: string; retryCount?: number };
+  | { type: 'delete'; key: string; baseVersion?: number; retryCount?: number };
 
 const REMOTE_STATE_PREFIXES = [
   STORAGE_KEYS.dataPrefix,
@@ -174,13 +174,28 @@ async function flushRemoteKVOperations(): Promise<void> {
             continue;
           }
 
-          const response = await fetch(`/api/state?key=${encodeURIComponent(operation.key)}`, {
+          const deleteParams = new URLSearchParams({
+            key: operation.key,
+            baseVersion: String(operation.baseVersion ?? 0),
+          });
+          const response = await fetch(`/api/state?${deleteParams}`, {
             method: 'DELETE',
             credentials: 'include',
           });
           if (response.status === 401 || response.status === 403) {
             blockRemoteSyncAfterAuthFailure();
             return;
+          }
+          if (response.status === 409) {
+            const payload = await response.json().catch(() => null);
+            if (typeof payload?.key === 'string' && typeof payload?.value === 'string') {
+              await applyRemoteKVConflict(
+                payload.key,
+                payload.value,
+                typeof payload.version === 'number' ? payload.version : undefined,
+              );
+            }
+            continue;
           }
           if (response.status === 429 || response.status >= 500) {
             retryPending = requeueAfterTransientFailure(operation) || retryPending;
@@ -209,9 +224,9 @@ function enqueueRemoteKVWrite(key: string, value: string) {
   scheduleRemoteKVSync();
 }
 
-function enqueueRemoteKVDelete(key: string) {
+function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
   if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  __pendingRemoteKVOperations.set(key, { type: 'delete', key });
+  __pendingRemoteKVOperations.set(key, { type: 'delete', key, baseVersion });
   scheduleRemoteKVSync();
 }
 
@@ -230,9 +245,10 @@ export function safeSetItem(key: string, value: string) {
 
 export function safeRemoveItem(key: string) {
   try {
+    const baseVersion = getStoredVersion(key);
     localStorage.removeItem(key);
     localStorage.removeItem(versionMetaKey(key));
-    enqueueRemoteKVDelete(key);
+    enqueueRemoteKVDelete(key, baseVersion);
   } catch {
     // ignore
   }
