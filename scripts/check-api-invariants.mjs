@@ -1004,13 +1004,18 @@ if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includ
 const stateRoute = read('functions/api/state.ts');
 assertIncludes(
   stateRoute,
-  'await db.batch(statements);',
-  'state put must write kv items through a single batch after validation',
+  'WITH input(k, v, base_version) AS (VALUES ',
+  'state put must stage all kv items in one atomic SQL write',
 );
 assertIncludes(
   stateRoute,
-  'const currentByKey = new Map<string, { value: string; version: number }>();',
-  'state put must stage current versions before writing',
+  'WHERE NOT EXISTS (SELECT 1 FROM conflict)',
+  'state put must reject the entire write when a concurrent version conflict exists',
+);
+assertIncludes(
+  stateRoute,
+  'RETURNING k, version',
+  'state put must return the database-assigned versions after an atomic write',
 );
 assertIncludes(
   stateRoute,
