@@ -6,6 +6,7 @@ import {
   ChevronDown,
   MoreHorizontal,
   Trash2,
+  Utensils,
   X,
 } from 'lucide-react';
 import type { FoodEntry, MealType } from './types';
@@ -27,7 +28,7 @@ type FoodDiaryGroupedProps = {
   onDayChange?: (dayKey: string) => void;
 };
 
-const formatLocalDayLabel = (dayKey: string) => {
+export const formatLocalDayLabel = (dayKey: string) => {
   if (!dayKey) return 'Без даты';
   const today = localDayKey(new Date());
   const yesterday = localDayKey(new Date(Date.now() - 86400000));
