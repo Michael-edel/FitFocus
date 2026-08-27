@@ -226,6 +226,23 @@ describe('/api/state PUT', () => {
     expect(db.batches).toHaveLength(0);
   });
 
+  it('rejects duplicate keys before attempting an atomic write', async () => {
+    const db = makeDb();
+    const response = await putState(db, {
+      items: [
+        { key: 'fitfocus_data_user-1_food:1', value: '{"first":true}', baseVersion: 1 },
+        { key: 'fitfocus_data_user-1_food:1', value: '{"second":true}', baseVersion: 1 },
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'DUPLICATE_KEY',
+      key: 'fitfocus_data_user-1_food:1',
+    });
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+  });
+
   it('returns KV_CONFLICT when the atomic write detects a concurrent update', async () => {
     const db = makeDb({ atomicWriteChanges: 0 });
     const response = await putState(db, {
