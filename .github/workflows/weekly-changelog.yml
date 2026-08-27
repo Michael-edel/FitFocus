@@ -39,19 +39,19 @@ jobs:
               .filter((item) => item.pull_request)
               .sort((a, b) => new Date(b.closed_at || b.updated_at) - new Date(a.closed_at || a.updated_at));
 
+            if (prs.length === 0) {
+              core.info(`No merged pull requests from ${sinceIso} to ${untilIso}; skipping issue creation.`);
+              return;
+            }
+
             const lines = [];
-            lines.push(`# Weekly changelog`);
+            lines.push('# Weekly changelog');
             lines.push(`Period: ${sinceIso} to ${untilIso}`);
             lines.push('');
-
-            if (prs.length === 0) {
-              lines.push('No merged pull requests were found for this period.');
-            } else {
-              lines.push('Merged pull requests:');
-              lines.push('');
-              for (const pr of prs) {
-                lines.push(`- [#${pr.number}](${pr.html_url}) ${pr.title}`);
-              }
+            lines.push('Merged pull requests:');
+            lines.push('');
+            for (const pr of prs) {
+              lines.push(`- [#${pr.number}](${pr.html_url}) ${pr.title}`);
             }
 
             lines.push('');
