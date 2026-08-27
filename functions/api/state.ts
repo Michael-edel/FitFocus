@@ -88,7 +88,6 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const t = nowMs();
   const normalizedItems: { key: string; value: string; baseVersion: number }[] = [];
-  const currentByKey = new Map<string, { value: string; version: number }>();
   for (const it of items) {
     const key = String(it?.key || "");
     if (!key) continue;
@@ -99,44 +98,83 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     if (baseVersion === null) {
       return json({ error: "BAD_BASE_VERSION", key }, 400);
     }
-    const normalized = {
+    normalizedItems.push({
       key,
       value: String(it.value ?? ""),
       baseVersion,
-    };
-    normalizedItems.push(normalized);
-    const current = await db
-      .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
-      .bind(user.sub, normalized.key)
-      .first<{ v?: string; version?: number }>();
-    const currentVersion = Number(current?.version || 0);
-    if (normalized.baseVersion > 0 && current && currentVersion !== normalized.baseVersion) {
-      return json({ error: "KV_CONFLICT", key: normalized.key, value: current?.v ?? "", version: currentVersion }, 409);
-    }
-    currentByKey.set(normalized.key, {
-      value: String(current?.v ?? ""),
-      version: currentVersion,
     });
   }
 
-  const statements = normalizedItems.map((it) => {
-    const current = currentByKey.get(it.key) || { value: "", version: 0 };
-    const nextVersion = current.version + 1;
-    return db
-      .prepare(
-        "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
-          "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
-      )
-      .bind(user.sub, it.key, it.value, t, nextVersion);
-  });
-  await db.batch(statements);
+  if (!normalizedItems.length) return json({ error: "NO_ITEMS" }, 400);
 
-  const results = normalizedItems.map((it) => ({
-    key: it.key,
-    version: (currentByKey.get(it.key)?.version || 0) + 1,
-  }));
+  // The preflight check gives the client the current value for ordinary conflicts.
+  // The write below repeats the version condition inside one SQL statement, so a
+  // concurrent write cannot slip in between this read and the update.
+  for (const item of normalizedItems) {
+    if (item.baseVersion === 0) continue;
+    const current = await db
+      .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
+      .bind(user.sub, item.key)
+      .first<{ v?: string; version?: number }>();
+    const currentVersion = Number(current?.version || 0);
+    if (current && currentVersion !== item.baseVersion) {
+      return json({ error: "KV_CONFLICT", key: item.key, value: current.v ?? "", version: currentVersion }, 409);
+    }
+  }
 
-  return json({ ok: true, items: results }, 200);
+  const values = normalizedItems.map(() => "(?, ?, ?)").join(", ");
+  const atomicWriteSql =
+    "WITH input(k, v, base_version) AS (VALUES " + values + "), " +
+    "conflict AS (" +
+      "SELECT 1 FROM input " +
+      "JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
+      "WHERE input.base_version > 0 AND current.version != input.base_version" +
+    ") " +
+    "INSERT INTO user_kv (user_id, k, v, updated_at, version) " +
+    "SELECT ?, input.k, input.v, ?, COALESCE(current.version, 0) + 1 " +
+    "FROM input " +
+    "LEFT JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
+    "WHERE NOT EXISTS (SELECT 1 FROM conflict) " +
+    "ON CONFLICT(user_id, k) DO UPDATE SET " +
+      "v = excluded.v, updated_at = excluded.updated_at, version = excluded.version " +
+    "RETURNING k, version";
+
+  const writeResult = await db
+    .prepare(atomicWriteSql)
+    .bind(
+      ...normalizedItems.flatMap((item) => [item.key, item.value, item.baseVersion]),
+      user.sub,
+      user.sub,
+      t,
+      user.sub,
+    )
+    .all<{ k: string; version: number }>();
+
+  const written = writeResult.results || [];
+  if (written.length !== normalizedItems.length) {
+    for (const item of normalizedItems) {
+      if (item.baseVersion === 0) continue;
+      const current = await db
+        .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
+        .bind(user.sub, item.key)
+        .first<{ v?: string; version?: number }>();
+      if (!current || Number(current.version || 0) !== item.baseVersion) {
+        return json({
+          error: "KV_CONFLICT",
+          key: item.key,
+          value: current?.v ?? "",
+          version: Number(current?.version || 0),
+        }, 409);
+      }
+    }
+    return json({ error: "KV_CONFLICT" }, 409);
+  }
+
+  const versionByKey = new Map(written.map((item) => [item.k, item.version]));
+  return json({
+    ok: true,
+    items: normalizedItems.map((item) => ({ key: item.key, version: versionByKey.get(item.key) })),
+  }, 200);
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
