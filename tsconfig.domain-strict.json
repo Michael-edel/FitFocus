@@ -5,6 +5,7 @@
     "strict": true
   },
   "include": [
-    "domain/**/*.ts"
+    "domain/**/*.ts",
+    "vite-env.d.ts"
   ]
 }
