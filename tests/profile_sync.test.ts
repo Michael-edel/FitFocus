@@ -31,12 +31,13 @@ describe('profile sync serialization', () => {
     const firstRequest = new Promise<void>((resolve) => {
       releaseFirstRequest = resolve;
     });
-    const fetchImpl = vi.fn(async () => {
-      if (fetchImpl.mock.calls.length === 1) {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
         await firstRequest;
       }
       return new Response(JSON.stringify({ profile }), { status: 200 });
-    }) as unknown as typeof fetch;
+    });
+    const fetchImpl = fetchMock as unknown as typeof fetch;
     vi.stubGlobal('window', {
       setTimeout: (handler: () => void, delay?: number) => setTimeout(handler, delay) as unknown as number,
       clearTimeout,
@@ -47,13 +48,13 @@ describe('profile sync serialization', () => {
     const patching = patchProfileInCloud({ name: 'New name' }, deps);
 
     await Promise.resolve();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     releaseFirstRequest?.();
     await saving;
     await patching;
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
   });
 });
