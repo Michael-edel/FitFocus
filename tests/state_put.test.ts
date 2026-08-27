@@ -33,7 +33,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { atomicWriteChanges?: number } = {}) {
+function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
   return {
@@ -83,7 +83,7 @@ function makeDb(options: { atomicWriteChanges?: number } = {}) {
         },
         async run() {
           runs.push({ sql, binds: this.binds });
-          return { success: true, meta: { changes: 1 } };
+          return { success: true, meta: { changes: options.deleteChanges ?? 1 } };
         },
       };
       return stmt;
@@ -130,11 +130,11 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string) {
   return onRequestGet(context);
 }
 
-async function deleteState(db: ReturnType<typeof makeDb>, key: string) {
+async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersion?: number) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateDeleteContext['env'];
   const context: StateDeleteContext = {
-    request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}`, {
+    request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}${baseVersion === undefined ? '' : `&baseVersion=${baseVersion}`}`, {
       method: 'DELETE',
       headers: { Cookie: `ff_session=${token}` },
     }),
@@ -176,6 +176,20 @@ describe('/api/state PUT', () => {
     expect(body).not.toHaveProperty('key');
     expect(JSON.stringify(body)).not.toContain('fitfocus_data_user-1_all_users');
     expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects stale state deletion and returns the newer server value', async () => {
+    const db = makeDb({ deleteChanges: 0 });
+    const response = await deleteState(db, 'fitfocus_data_user-1_food:1', 2);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'KV_CONFLICT',
+      key: 'fitfocus_data_user-1_food:1',
+      value: '{"ok":true}',
+      version: 1,
+    });
+    expect(db.runs.some((run) => run.sql.includes('version = ?'))).toBe(true);
   });
 
   it('does not return legacy all-users snapshots during prefix hydration', async () => {

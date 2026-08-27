@@ -48,7 +48,7 @@ describe('hybrid storage remote mirror policy', () => {
     await vi.advanceTimersByTimeAsync(400);
 
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch).toHaveBeenCalledWith(`/api/state?key=${encodeURIComponent(key)}`, {
+    expect(fetch).toHaveBeenCalledWith(`/api/state?key=${encodeURIComponent(key)}&baseVersion=0`, {
       method: 'DELETE',
       credentials: 'include',
     });
