@@ -108,6 +108,7 @@ import ShareWisCard from './components/ShareWisCard';
 import MacroBar from './components/MacroBar';
 import FoodDiaryGrouped, { formatLocalDayLabel } from './FoodDiaryGrouped';
 import FoodEditModal from './FoodEditModal';
+import PaywallDialog from './PaywallDialog';
 import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
@@ -2775,53 +2776,13 @@ const logWeight = useCallback(() => {
         </div>
       )}
       {paywall.isPaywallOpen && (
-        <React.Suspense fallback={<div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60"><div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 px-5 py-4 text-sm font-semibold text-slate-200"><Loader2 className="h-4 w-4 animate-spin text-indigo-400" />Загрузка тарифа...</div></div>}>
-            <PlansScreen
-            currentPlan={paywall.plan}
-            userId={currentUser?.id}
-            isAdmin={isAdmin}
-            onSelect={async (p) => {
-              if (!currentUser) return;
-              if (isAdmin && !isTestModeEnabled()) {
-                const r = await fetch('/api/admin/subscription', {
-                  method: 'POST',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ user_id: currentUser.id, plan: p }),
-                });
-                const j = await r.json().catch(() => null);
-                if (!r.ok) {
-                  alert(j?.error ? `Не удалось поменять тариф: ${j.error}` : 'Не удалось поменять тариф.');
-                  return;
-                }
-              }
-              persistUser({
-                ...currentUser,
-                plan: p,
-                planTier: p === 'free' ? 'free' : 'pro',
-                proUnlockedAt: p === 'free' ? undefined : new Date().toISOString(),
-              });
-              if (isTestModeEnabled()) {
-                setDevPlanOverride(p, currentUser.id);
-              }
-            }}
-            onCheckoutPlan={async (plan) => {
-              const r = await fetch('/api/billing/checkout', {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ plan }),
-              });
-              const j = await r.json().catch(() => null);
-              if (!r.ok) {
-                alert(j?.error ? `Не удалось открыть оплату: ${j.error}` : 'Не удалось открыть оплату.');
-                return null;
-              }
-              return typeof j?.url === 'string' ? j.url : null;
-            }}
-            onClose={paywall.closePaywall}
-          />
-        </React.Suspense>
+        <PaywallDialog
+          currentPlan={paywall.plan}
+          currentUser={currentUser}
+          isAdmin={isAdmin}
+          onPersistUser={persistUser}
+          onClose={paywall.closePaywall}
+        />
       )}
       
       {editFoodModal && (
