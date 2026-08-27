@@ -33,7 +33,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb() {
+function makeDb(options: { atomicWriteChanges?: number } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
   return {
@@ -60,6 +60,16 @@ function makeDb() {
           return null;
         },
         async all() {
+          if (sql.includes('INSERT INTO user_kv')) {
+            runs.push({ sql, binds: this.binds });
+            const inputBinds = this.binds.slice(0, -4);
+            const input = Array.from({ length: inputBinds.length / 3 }, (_, index) => ({
+              key: String(inputBinds[index * 3]),
+              version: String(inputBinds[index * 3]).endsWith('food:1') ? 2 : 1,
+            }));
+            const changes = options.atomicWriteChanges ?? input.length;
+            return { results: changes === 0 ? [] : input, meta: { changes } };
+          }
           if (sql.includes('SELECT role FROM user_roles')) return { results: [{ role: 'user' }] };
           if (sql.includes('FROM user_kv')) {
             return {
@@ -197,9 +207,22 @@ describe('/api/state PUT', () => {
         { key: 'fitfocus_data_user-1_food:3', version: 1 },
       ],
     });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
-    expect(db.batches).toHaveLength(1);
-    expect(db.batches[0]).toHaveLength(2);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('WITH input(k, v, base_version)'))).toBe(true);
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('returns KV_CONFLICT when the atomic write detects a concurrent update', async () => {
+    const db = makeDb({ atomicWriteChanges: 0 });
+    const response = await putState(db, {
+      key: 'fitfocus_data_user-1_food:1',
+      value: '{"next":1}',
+      baseVersion: 1,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'KV_CONFLICT' });
+    expect(db.runs.some((run) => run.sql.includes('WITH input(k, v, base_version)'))).toBe(true);
   });
 
   it('returns KV_CONFLICT without partial writes when a later item conflicts', async () => {
