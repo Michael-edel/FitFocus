@@ -88,12 +88,17 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
 
   const t = nowMs();
   const normalizedItems: { key: string; value: string; baseVersion: number }[] = [];
+  const seenKeys = new Set<string>();
   for (const it of items) {
     const key = String(it?.key || "");
     if (!key) continue;
     if (!isAllowedStateKey(user.sub, key)) {
       return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
     }
+    if (seenKeys.has(key)) {
+      return json({ error: "DUPLICATE_KEY", key }, 400);
+    }
+    seenKeys.add(key);
     const baseVersion = parseBaseVersion(it.baseVersion);
     if (baseVersion === null) {
       return json({ error: "BAD_BASE_VERSION", key }, 400);
