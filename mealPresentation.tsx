@@ -16,7 +16,7 @@ const parseMealParts = (text: string): MealPart[] => {
     .split(/\s*\+\s*|\s*;\s*/g)
     .map((part) => part.trim())
     .filter(Boolean);
-  const pattern = /^(.+?)(?:\s*[—–-]\s*|\s*\\()?(\d+(?:[\.,]\d+)?)\s*(кг|г|гр|мл|л|шт|порц|порции|порция)?\s*\)?\s*$/i;
+  const pattern = /^(.+?)(?:\s*[—–-]\s*|\s*\()?(\d+(?:[\.,]\d+)?)\s*(кг|г|гр|мл|л|шт|порц|порции|порция)?\s*\)?\s*$/i;
 
   return parts.map((part) => {
     const match = part.match(pattern);
