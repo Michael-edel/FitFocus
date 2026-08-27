@@ -107,6 +107,7 @@ import AppWorkspace from './AppWorkspace';
 import ShareWisCard from './components/ShareWisCard';
 import MacroBar from './components/MacroBar';
 import FoodDiaryGrouped, { formatLocalDayLabel } from './FoodDiaryGrouped';
+import FoodEditModal from './FoodEditModal';
 import VersionInfoModal from './VersionInfoModal';
 import {
   AppTabId,
@@ -2824,180 +2825,25 @@ const logWeight = useCallback(() => {
       )}
       
       {editFoodModal && (
-        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-slate-950/95 border border-slate-800 shadow-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-lg font-bold text-white">Корректировать блюдо</div>
-                <div className="text-xs text-slate-500 font-bold mt-1">Исправьте распознавание, КБЖУ, состав и приём пищи.</div>
-              </div>
-              <button onClick={() => setEditFoodModal(null)} className="p-2 rounded-xl hover:bg-slate-800/60">
-                <X className="w-5 h-5 text-slate-200" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-slate-300 mb-1">Название</div>
-                <input
-                  value={editFoodModal.name}
-                  onChange={(e) => setEditFoodModal({ ...editFoodModal, name: e.target.value })}
-                  className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40"
-                  placeholder="Например: манты свинина/говядина с манго-чили соусом"
-                />
-              </div>
-
-              <label className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={editFoodModal.nonFood}
-                  onChange={(e) => {
-                    const nonFood = e.target.checked;
-                    setEditFoodModal({
-                      ...editFoodModal,
-                      nonFood,
-                      ...(nonFood ? {
-                        calories: '0',
-                        protein: '0',
-                        fat: '0',
-                        carbs: '0',
-                        ingredientsText: '',
-                      } : {}),
-                    });
-                  }}
-                  className="mt-1 h-5 w-5 rounded-md accent-amber-400"
-                />
-                <span>
-                  <span className="block text-sm font-black text-amber-100">Это не еда</span>
-                  <span className="block text-xs font-medium text-amber-100/70 mt-1">
-                    Фото останется в дневнике как исправленная запись, но КБЖУ будут обнулены и не попадут в дневной итог. Если снимаете галочку, заполните КБЖУ или состав вручную.
-                  </span>
-                </span>
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Приём пищи</div>
-                  <select
-                    value={editFoodModal.mealType}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, mealType: e.target.value as MealType })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40"
-                  >
-                    <option value="breakfast">Завтрак</option>
-                    <option value="lunch">Обед</option>
-                    <option value="dinner">Ужин</option>
-                    <option value="snack">Перекус</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Дата и время</div>
-                  <input
-                    type="datetime-local"
-                    value={toLocalDT(editFoodModal.timestamp)}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, timestamp: fromLocalDT(e.target.value) })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Ккал</div>
-                  <input
-                    inputMode="decimal"
-                    value={editFoodModal.calories}
-                    disabled={editFoodModal.nonFood}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, calories: e.target.value })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 disabled:opacity-45"
-                  />
-                </div>
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Белки, г</div>
-                  <input
-                    inputMode="decimal"
-                    value={editFoodModal.protein}
-                    disabled={editFoodModal.nonFood}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, protein: e.target.value })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 disabled:opacity-45"
-                  />
-                </div>
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Жиры, г</div>
-                  <input
-                    inputMode="decimal"
-                    value={editFoodModal.fat}
-                    disabled={editFoodModal.nonFood}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, fat: e.target.value })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 disabled:opacity-45"
-                  />
-                </div>
-                <div>
-                  <div className="text-sm text-slate-300 mb-1">Углеводы, г</div>
-                  <input
-                    inputMode="decimal"
-                    value={editFoodModal.carbs}
-                    disabled={editFoodModal.nonFood}
-                    onChange={(e) => setEditFoodModal({ ...editFoodModal, carbs: e.target.value })}
-                    className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 disabled:opacity-45"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between gap-3 mb-1">
-                  <div className="text-sm text-slate-300">Состав</div>
-                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Название | % | примечание</div>
-                </div>
-                <textarea
-                  value={editFoodModal.ingredientsText}
-                  disabled={editFoodModal.nonFood}
-                  onChange={(e) => setEditFoodModal({ ...editFoodModal, ingredientsText: e.target.value })}
-                  className="w-full min-h-[128px] rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 font-mono text-sm disabled:opacity-45"
-                  placeholder={'Тесто (мука пшеничная, вода, соль) | 40\nФарш свинина/говядина | 35 | смешанный фарш\nЛук репчатый | 15\nМанго-чили соус | 10 | соус с упаковки'}
-                />
-              </div>
-
-              <div>
-                <div className="text-sm text-slate-300 mb-1">Заметки</div>
-                <textarea
-                  value={editFoodModal.notesText}
-                  onChange={(e) => setEditFoodModal({ ...editFoodModal, notesText: e.target.value })}
-                  className="w-full min-h-[86px] rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 text-sm"
-                  placeholder={'Фарш уточнён вручную: свинина + говядина.\nСоус уточнён по фото упаковки.'}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  onClick={() => setEditFoodModal(null)}
-                  className="px-4 py-2 rounded-2xl bg-slate-800/60 text-slate-100 border border-slate-700 hover:bg-slate-700/60"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={() => {
-                    const currentEntry = foodDiary.find((it) => it.id === editFoodModal.id);
-                    const patch = buildCorrectedFoodPatch(editFoodModal, currentEntry?.insight);
-                    updateFoodEntry(editFoodModal.id, patch);
-                    if (insightModal?.id === editFoodModal.id && patch.insight) {
-                      setInsightModal({
-                        ...insightModal,
-                        name: String(patch.name || insightModal.name),
-                        insight: patch.insight,
-                        nonFood: patch.nonFood === true,
-                      });
-                    }
-                    setEditFoodModal(null);
-                  }}
-                  className="px-4 py-2 rounded-2xl bg-violet-600 text-white hover:bg-violet-500"
-                >
-                  Сохранить
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <FoodEditModal
+          draft={editFoodModal}
+          onChange={setEditFoodModal}
+          onClose={() => setEditFoodModal(null)}
+          onSave={() => {
+            const currentEntry = foodDiary.find((item) => item.id === editFoodModal.id);
+            const patch = buildCorrectedFoodPatch(editFoodModal, currentEntry?.insight);
+            updateFoodEntry(editFoodModal.id, patch);
+            if (insightModal?.id === editFoodModal.id && patch.insight) {
+              setInsightModal({
+                ...insightModal,
+                name: String(patch.name || insightModal.name),
+                insight: patch.insight,
+                nonFood: patch.nonFood === true,
+              });
+            }
+            setEditFoodModal(null);
+          }}
+        />
       )}
 
 {insightModal && (
