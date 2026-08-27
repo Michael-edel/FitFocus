@@ -49,7 +49,6 @@ type AuthChoiceScreenProps = {
   setInviteError: (value: string | null) => void;
   requireInvite: boolean;
   inviteChecking: boolean;
-  bootstrapAuth: () => void;
   onOpenVersionInfo: () => void;
 };
 
@@ -60,7 +59,6 @@ export default function AuthChoiceScreen({
   setInviteError,
   requireInvite,
   inviteChecking,
-  bootstrapAuth,
   onOpenVersionInfo,
 }: AuthChoiceScreenProps) {
   return (
