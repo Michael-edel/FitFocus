@@ -57,6 +57,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Domain strict typecheck
+        run: npm run typecheck:domain-strict
+
       - name: Build
         run: npm run build
 
