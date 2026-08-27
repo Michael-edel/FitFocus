@@ -143,13 +143,6 @@ const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
 const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
-// Compile-time fallbacks injected by Vite (see vite.config.ts)
-declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
-declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
-
-
-
-// --- OAuth Sign-In helper (client-side only) ---
 type GoogleIdentityGlobal = {
   accounts?: {
     id?: unknown;
@@ -183,126 +176,49 @@ const waitForDocumentFonts = async () => {
   if (ready) await ready;
 };
 
-// NOTE:
-// Не держим client_id как top-level const.
-// При HMR/fast-refresh или при старте dev-сервера до появления env
-// могло "залипнуть" состояние с ошибкой. Читаем env внутри эффекта.
 const getGoogleClientId = () => {
-  // Vite normally provides import.meta.env, but in some setups (custom index.html/importmaps/CSP)
-  // it may be empty. So we support a compile-time fallback via __VITE_* constants injected
-  // in vite.config.ts.
   const envAny = import.meta.env as ViteEnvLike;
-  const local = String(
-    envAny.VITE_GOOGLE_CLIENT_ID_LOCAL ||
-    __VITE_GOOGLE_CLIENT_ID_LOCAL__ ||
-    ""
-  );
-  const prod = String(
-    envAny.VITE_GOOGLE_CLIENT_ID_PROD ||
-    __VITE_GOOGLE_CLIENT_ID_PROD__ ||
-    ""
-  );
-
-  // Auto-pick based on origin so the same bundle works in dev and prod.
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const local = String(envAny.VITE_GOOGLE_CLIENT_ID_LOCAL || __VITE_GOOGLE_CLIENT_ID_LOCAL__ || '');
+  const prod = String(envAny.VITE_GOOGLE_CLIENT_ID_PROD || __VITE_GOOGLE_CLIENT_ID_PROD__ || '');
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const isLocal =
-    origin.startsWith("http://localhost") ||
-    origin.startsWith("http://127.0.0.1") ||
-    origin.startsWith("http://0.0.0.0");
-
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://127.0.0.1') ||
+    origin.startsWith('http://0.0.0.0');
   const picked = (isLocal ? local : prod).trim();
-  if (!picked || picked.includes('CHANGE_ME')) return '';
-  return picked;
+  return !picked || picked.includes('CHANGE_ME') ? '' : picked;
 };
+
 function loadGoogleIdentityScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") return reject(new Error("No window"));
+    if (typeof window === 'undefined') return reject(new Error('No window'));
     if (window.google?.accounts?.id) return resolve();
 
     const existing = document.querySelector('script[data-gis="1"]') as HTMLScriptElement | null;
     if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("GIS load error")));
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error('GIS load error')));
       return;
     }
 
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.dataset.gis = "1";
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("GIS load error"));
-    document.head.appendChild(s);
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.gis = '1';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('GIS load error'));
+    document.head.appendChild(script);
   });
 }
 
-type OAuthProvider = 'google' | 'apple';
+// Compile-time fallbacks injected by Vite (see vite.config.ts)
+declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
+declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
 
-function OAuthSignInButton({
-  inviteCode,
-  provider,
-}: {
-  onAuthed: () => void;
-  inviteCode?: string;
-  provider: OAuthProvider;
-  width?: number;
-  size?: "large" | "medium" | "small";
-  text?: "signin_with" | "continue_with";
-}) {
-  // Why this approach:
-  // Browser-native OAuth sign-in flows differ across providers and browsers.
-  // Some providers or browser configs can block embedded identity flows.
-  // That produces "identity-credentials-get" errors and lost sign-ins.
-  // To work for *all* clients with no browser tweaking, we use a backend-driven OAuth2 redirect flow.
-  const [err, setErr] = React.useState<string | null>(null);
 
-  const authUrl = React.useMemo(() => {
-    const params = new URLSearchParams();
-    if (inviteCode) params.set("invite", inviteCode);
-    params.set("redirect", window.location.origin);
-    return `/api/auth/${provider}/start?${params.toString()}`;
-  }, [inviteCode, provider]);
 
-  const handleClick = React.useCallback(async (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    setErr(null);
-    try {
-      sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
-    } catch {}
-    try {
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((registration) => registration.unregister()));
-      }
-    } catch {
-      // Auth must continue even when the browser blocks service worker management.
-    }
-    window.location.assign(authUrl);
-  }, [authUrl]);
 
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <a
-        href={authUrl}
-        target="_top"
-        rel="noreferrer"
-        onClick={handleClick}
-        className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
-      >
-        {provider === 'google' ? (
-          <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
-        ) : (
-          <Apple size={16} className="text-white" />
-        )}
-        <span>{provider === 'google' ? 'Google профиль' : 'Apple профиль'}</span>
-      </a>
-
-      {err ? <div className="text-xs text-red-400 text-center max-w-[340px]">{err}</div> : null}
-    </div>
-  );
-}
-// --- end OAuth Sign-In helper ---
 
 
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
@@ -3386,7 +3302,6 @@ const logWeight = useCallback(() => {
         inviteChecking={inviteChecking}
         bootstrapAuth={bootstrapAuth}
         onOpenVersionInfo={() => setVersionInfoOpen(true)}
-        OAuthSignInButton={OAuthSignInButton}
       />
     </React.Suspense>
   );
