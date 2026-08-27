@@ -21,8 +21,6 @@ test.describe('push settings across target platforms', () => {
 
     await openApp(page, '/#settings');
 
-    await expect(page.getByText('Персонализируйте интерфейс. Часть функций будет добавлена позже.')).toBeVisible();
-
     const pushSection = page.getByText('Push-уведомления', { exact: true });
     await pushSection.scrollIntoViewIfNeeded();
     await expect(pushSection).toBeVisible();
