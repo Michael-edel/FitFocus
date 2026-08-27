@@ -31,7 +31,7 @@ describe('profile sync serialization', () => {
     const firstRequest = new Promise<void>((resolve) => {
       releaseFirstRequest = resolve;
     });
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => {
       if (fetchMock.mock.calls.length === 1) {
         await firstRequest;
       }
