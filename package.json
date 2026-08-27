@@ -21,7 +21,8 @@
     "check:privacy": "python scripts/check-privacy-coverage.py",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "migrate:local": "node -e \"console.log('Migrations run in browser on startup via storage/migrations.ts')\""
+    "migrate:local": "node -e \"console.log('Migrations run in browser on startup via storage/migrations.ts')\"",
+    "typecheck:domain-strict": "tsc --project tsconfig.domain-strict.json"
   },
   "dependencies": {
     "@google/genai": "^1.40.0",
