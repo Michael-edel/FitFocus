@@ -143,10 +143,6 @@ const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
 const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
-// Compile-time fallbacks injected by Vite (see vite.config.ts)
-declare const __VITE_GOOGLE_CLIENT_ID_LOCAL__: string | undefined;
-declare const __VITE_GOOGLE_CLIENT_ID_PROD__: string | undefined;
-
 type GoogleIdentityGlobal = {
   accounts?: {
     id?: unknown;
