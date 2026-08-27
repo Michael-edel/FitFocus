@@ -1842,16 +1842,19 @@ await ensurePdfInterFont(doc);
     const historyItem = { ...item };
     delete historyItem.photo;
     if (historyItem.insight) delete historyItem.insight.recipe;
-    const newHistory = [historyItem, ...foodHistory.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY_ITEMS);
-    setFoodHistory(newHistory);
-    safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(newHistory));
+    setFoodHistory((previousHistory) => {
+      const nextHistory = [historyItem, ...previousHistory.filter((history) => history.name !== item.name)]
+        .slice(0, MAX_HISTORY_ITEMS);
+      safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(nextHistory));
+      return nextHistory;
+    });
     const hasAiPhoto = Boolean(item.photo || item.photoThumb);
     void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
       foodDiaryCount: foodDiary.length + 1,
       hasAiPhoto,
     });
     return entryForState;
-  }, [checkAchievements, foodDiary.length, foodHistory, currentUser]);
+  }, [checkAchievements, foodDiary.length, currentUser]);
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!currentUser) return;
     setFoodDiary((prev) => {
