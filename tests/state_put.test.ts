@@ -243,6 +243,23 @@ describe('/api/state PUT', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
   });
 
+  it('rejects object values instead of coercing them into [object Object]', async () => {
+    const db = makeDb();
+    const response = await putState(db, {
+      key: 'fitfocus_data_user-1_food:1',
+      value: { calories: 400 },
+      baseVersion: 1,
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'BAD_VALUE',
+      key: 'fitfocus_data_user-1_food:1',
+    });
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+  });
+
   it('returns KV_CONFLICT when the atomic write detects a concurrent update', async () => {
     const db = makeDb({ atomicWriteChanges: 0 });
     const response = await putState(db, {

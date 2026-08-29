@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { callAiCouncil } from './geminiService';
 import { FoodEntry, UserHabit, UserProfile, CouncilResponse } from './types';
 import { safeRemoveItem, safeSetItem } from './storage/hybrid';
+import { errorMessage, isRecord, parseJson } from './safeJson';
 
 export type CouncilChatMsg = {
   id: string;
@@ -10,6 +11,16 @@ export type CouncilChatMsg = {
   createdAt: string;
   response?: CouncilResponse;
 };
+
+function isCouncilChatMessage(value: unknown): value is CouncilChatMsg {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    (value.role === 'user' || value.role === 'assistant') &&
+    typeof value.text === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
 
 type UseCouncilChatArgs = {
   currentUser: UserProfile | null;
@@ -37,8 +48,8 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        setCouncilMessages(Array.isArray(parsed) ? parsed : []);
+        const parsed = parseJson(raw);
+        setCouncilMessages(Array.isArray(parsed) ? parsed.filter(isCouncilChatMessage) : []);
       } else {
         setCouncilMessages([]);
       }
@@ -90,7 +101,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
     setCouncilLoading(true);
     setCouncilStage('router');
 
-    const timers: any[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
     timers.push(setTimeout(() => setCouncilStage((s) => (s === 'router' ? 'experts' : s)), 350));
     timers.push(setTimeout(() => setCouncilStage((s) => (s === 'experts' ? 'review' : s)), 900));
     timers.push(setTimeout(() => setCouncilStage((s) => (s === 'review' ? 'chairman' : s)), 1400));
@@ -105,8 +116,8 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
         response: r,
       };
       setCouncilMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      const msg = err?.message || 'Ошибка совета.';
+    } catch (err: unknown) {
+      const msg = errorMessage(err, 'Ошибка совета.');
       const assistantMsg: CouncilChatMsg = {
         id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
         role: 'assistant',

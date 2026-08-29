@@ -40,9 +40,9 @@ function isFeatureEnabledForActor(row: FeatureFlagRow, actorKey?: string | null)
 export async function loadFeatures(env: { DB?: D1Database }, actorKey?: string | null): Promise<FeatureMap> {
   if (!env.DB) return {};
   try {
-    const rows = await env.DB.prepare("SELECT key, enabled, rollout_percentage FROM feature_flags").all();
+    const rows = await env.DB.prepare("SELECT key, enabled, rollout_percentage FROM feature_flags").all<FeatureFlagRow>();
     const features: FeatureMap = {};
-    for (const r of (rows.results || []) as FeatureFlagRow[]) {
+    for (const r of rows.results || []) {
       const key = String(r.key || "");
       if (!key) continue;
       features[key] = isFeatureEnabledForActor(r, actorKey);

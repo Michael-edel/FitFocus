@@ -18,6 +18,11 @@ describe('security and privacy baseline', () => {
     expect(headers).toContain('Permissions-Policy:');
     expect(headers).toContain('Content-Security-Policy:');
     expect(headers).toContain("frame-ancestors 'none'");
+    expect(headers).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(headers).not.toContain('https://esm.sh');
+    expect(read('index.html')).not.toContain('type="importmap"');
+    expect(read('sw.ts')).toContain('precacheAndRoute(self.__WB_MANIFEST)');
+    expect(read('vite.config.ts')).not.toContain("injectionPoint: ''");
   });
 
   it('adds defensive headers to shared API JSON responses', async () => {
@@ -97,6 +102,7 @@ describe('security and privacy baseline', () => {
     expect(webhook).not.toContain('String(error)');
     expect(webhook).toContain('Webhook Error: invalid signature');
     expect(supportAdmin).not.toContain('SELECT *');
+    expect(supportAdmin).not.toContain('SELECT s.*');
     expect(supportMy).not.toContain('SELECT *');
     expect(supportMy).not.toContain('...ticket');
     expect(supportAdmin).not.toContain('startsWith("FILE_TOO_LARGE:")');

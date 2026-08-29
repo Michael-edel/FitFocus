@@ -104,6 +104,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
       return json({ error: "DUPLICATE_KEY", key }, 400);
     }
     seenKeys.add(key);
+    if (it.value !== undefined && it.value !== null && typeof it.value !== "string") {
+      return json({ error: "BAD_VALUE", key }, 400);
+    }
     const baseVersion = parseBaseVersion(it.baseVersion);
     if (baseVersion === null) {
       return json({ error: "BAD_BASE_VERSION", key }, 400);

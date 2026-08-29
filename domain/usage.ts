@@ -1,4 +1,5 @@
 import type { UsageCounters } from './types';
+import { isRecord, parseJson } from '../safeJson';
 
 const KEY = 'fitfocus_usage_counters_v1';
 
@@ -16,11 +17,14 @@ export function loadUsage(): UsageCounters {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { weekStart: nowWeek, recipes: 0 };
-    const parsed = JSON.parse(raw);
-    if (parsed?.weekStart !== nowWeek) return { weekStart: nowWeek, recipes: 0 };
+    const parsed = parseJson(raw);
+    if (!isRecord(parsed) || parsed.weekStart !== nowWeek) return { weekStart: nowWeek, recipes: 0 };
+    const recipes = typeof parsed.recipes === 'number' || typeof parsed.recipes === 'string'
+      ? Number(parsed.recipes)
+      : 0;
     return {
-      weekStart: String(parsed.weekStart),
-      recipes: Number(parsed.recipes) || 0,
+      weekStart: parsed.weekStart,
+      recipes: Number.isFinite(recipes) && recipes >= 0 ? recipes : 0,
     };
   } catch {
     return { weekStart: nowWeek, recipes: 0 };

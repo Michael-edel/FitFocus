@@ -50,7 +50,7 @@ export async function downloadProgressComparisonPdf(input: ProgressComparisonPdf
   doc.setFontSize(10);
   doc.setTextColor(...PDF_COLORS.muted);
   doc.text(`${input.fromLabel} → ${input.toLabel}`, 18, 57);
-  doc.text(`Всего фото: ${input.totalPhotos} • Всего замеров: ${input.totalMeasurements}`, 110, 57, { align: 'right' } as any);
+  doc.text(`Всего фото: ${input.totalPhotos} • Всего замеров: ${input.totalMeasurements}`, 110, 57, { align: 'right' });
   doc.setTextColor(...PDF_COLORS.ink);
 
   const cardY = 72;
@@ -93,8 +93,8 @@ export async function downloadProgressComparisonPdf(input: ProgressComparisonPdf
   autoTable(doc, {
     startY: 132,
     theme: 'plain',
-    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink as any },
-    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252] as any, textColor: PDF_COLORS.muted as any },
+    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink },
+    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252], textColor: PDF_COLORS.muted },
     head: [['Показатель', 'Изменение']],
     body: [
       ['Вес', formatDelta(input.fromWeight, input.toWeight, 'кг')],
@@ -120,7 +120,7 @@ export async function downloadProgressComparisonPdf(input: ProgressComparisonPdf
       ? 'Сравнение включает фото, чтобы прогресс был виден не только в цифрах.'
       : 'Добавьте фото прогресса, чтобы сравнение стало визуальным.'
   ].filter(Boolean).join(' ');
-  doc.text(summary, 18, 180, { maxWidth: 174 } as any);
+  doc.text(summary, 18, 180, { maxWidth: 174 });
   doc.setTextColor(...PDF_COLORS.ink);
 
   pdfFooter(doc, generatedAt);

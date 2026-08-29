@@ -1,9 +1,10 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { useModalDismissGestures } from './useModalDismissGestures';
+import type { UserProfile } from './types';
 
 type PlanIntroModalProps = {
-  currentUser: any;
+  currentUser: UserProfile | null;
   planError: string | null;
   open: boolean;
   onClose: () => void;

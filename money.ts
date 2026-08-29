@@ -20,7 +20,7 @@ const DEV_PLAN_SCOPE_PREFIX = "ff_dev_plan_override_scope_";
 
 export function isTestModeEnabled() {
   // Enabled in local dev automatically OR explicitly via env
-  return Boolean((import.meta as any).env?.DEV) || (import.meta as any).env?.VITE_TEST_MODE === "1";
+  return import.meta.env.DEV || import.meta.env.VITE_TEST_MODE === "1";
 }
 
 function keyForScope(userId?: string | null) {
@@ -46,7 +46,7 @@ export function getDevPlanOverride(userId?: string | null): TariffPlan | null {
 
 export function getEffectivePlan(realPlan: TariffPlan, userId?: string | null): TariffPlan {
   const override = getDevPlanOverride(userId);
-  if ((import.meta as any).env?.VITE_FORCE_MAX_PLAN === "1") return "family";
+  if (import.meta.env.VITE_FORCE_MAX_PLAN === "1") return "family";
   return override ?? realPlan;
 }
 

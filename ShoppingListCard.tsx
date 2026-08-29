@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import clsx from "clsx";
 import { groupShoppingItemsByDepartment } from "./shoppingDepartments";
+import { isRecord, parseJson } from "./safeJson";
 
 type ShoppingItem = {
   name: string;
@@ -29,19 +30,26 @@ function formatShoppingQty(grams: number) {
 }
 
 function asPayloadItem(raw: unknown): ShoppingListPayloadItem {
-  return raw && typeof raw === "object" ? raw as ShoppingListPayloadItem : {};
+  return isRecord(raw) ? raw : {};
 }
 
 function normalizeShoppingItem(raw: unknown): ShoppingItem | null {
   const item = asPayloadItem(raw);
-  const name = String(item.name || item.ingredient_name || "").trim();
+  const rawName = typeof item.name === "string" ? item.name : typeof item.ingredient_name === "string" ? item.ingredient_name : "";
+  const name = rawName.trim();
   if (!name) return null;
-  const grams = Math.max(0, Math.round(Number(item.grams || 0)));
+  const gramsValue = typeof item.grams === "number" || typeof item.grams === "string" ? Number(item.grams) : 0;
+  const grams = Number.isFinite(gramsValue) ? Math.max(0, Math.round(gramsValue)) : 0;
+  const rawDisplayQty = typeof item.display_qty === "string"
+    ? item.display_qty
+    : typeof item.displayQty === "string"
+      ? item.displayQty
+      : "";
   return {
     name,
     grams,
-    checked: Boolean(item.checked),
-    display_qty: String(item.display_qty || item.displayQty || "").trim() || formatShoppingQty(grams),
+    checked: item.checked === true,
+    display_qty: rawDisplayQty.trim() || formatShoppingQty(grams),
   };
 }
 
@@ -69,7 +77,12 @@ export default function ShoppingListCard({
       }
       const scopedKey = `fitfocus_data_${userId}_shopping_fallback_${weekStart}`;
       const raw = localStorage.getItem(scopedKey);
-      setFallbackChecked(raw ? JSON.parse(raw) : {});
+      const parsed = raw ? parseJson(raw) : null;
+      setFallbackChecked(
+        isRecord(parsed) && Object.values(parsed).every((value) => typeof value === "boolean")
+          ? parsed
+          : {},
+      );
     } catch {
       setFallbackChecked({});
     }
@@ -87,8 +100,12 @@ export default function ShoppingListCard({
     if (!weekStart) return;
     const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(weekStart)}`, { credentials: "include" });
     if (!res.ok) throw new Error(`shopping_list_http_${res.status}`);
-    const data = await res.json();
-    setItems((Array.isArray(data?.items) ? data.items : []).map(normalizeShoppingItem).filter(Boolean) as ShoppingItem[]);
+    const payload: unknown = await res.json().catch(() => null);
+    const data = isRecord(payload) ? payload : {};
+    const normalized = (Array.isArray(data.items) ? data.items : [])
+      .map(normalizeShoppingItem)
+      .filter((item): item is ShoppingItem => item !== null);
+    setItems(normalized);
   }, [weekStart]);
 
   useEffect(() => {

@@ -7,5 +7,5 @@ declare interface D1PreparedStatement {
   raw<T = unknown[]>(): Promise<T[]>;
 }
 declare interface D1Database { prepare(query: string): D1PreparedStatement; batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>; }
-declare type PagesFunction<Env = any> = (context: { request: Request; env: Env; params?: Record<string, string>; data?: unknown; waitUntil?: (p: Promise<unknown>) => void; next?: () => Promise<Response>; }) => any;
-declare module '@cloudflare/workers-types' { export type PagesFunction<Env = any> = globalThis.PagesFunction<Env>; }
+declare type PagesFunction<Env = unknown> = (context: { request: Request; env: Env; params?: Record<string, string>; data?: unknown; waitUntil?: (p: Promise<unknown>) => void; next?: () => Promise<Response>; }) => Response | Promise<Response>;
+declare module '@cloudflare/workers-types' { export type PagesFunction<Env = unknown> = globalThis.PagesFunction<Env>; }

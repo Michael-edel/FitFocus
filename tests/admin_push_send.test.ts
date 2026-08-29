@@ -54,6 +54,7 @@ type Row = {
   current_period_end: number | null;
   profile_json: string;
   roles_csv: string;
+  active_family_ids?: string | null;
 };
 
 function makeDb(rows: Row[] = []) {
@@ -178,6 +179,7 @@ const rows: Row[] = [
       familyMembers: [{ familyId: 'family-1', isActive: true }],
     }),
     roles_csv: 'family_parent,user',
+    active_family_ids: 'family-1',
   },
   {
     id: 'sub-3',

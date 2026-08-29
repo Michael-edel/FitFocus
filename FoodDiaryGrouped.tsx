@@ -12,7 +12,7 @@ import {
 import type { FoodEntry, MealType } from './types';
 import { toLocalDayKey as localDayKey } from './dateUtils';
 
-type FoodDiaryGroupedProps = {
+export type FoodDiaryGroupedProps = {
   items: FoodEntry[];
   selectedIds: Set<string>;
   toggleSelected: (id: string) => void;
@@ -22,7 +22,7 @@ type FoodDiaryGroupedProps = {
   deletePhoto: (id: string) => void;
   openInsight: (item: FoodEntry) => void;
   openEdit: (item: FoodEntry) => void;
-  formatTime: (t: number) => string;
+  formatTime: (t: string) => string;
   mealTypeLabel: (m: MealType) => string;
   activeDayKey?: string;
   onDayChange?: (dayKey: string) => void;

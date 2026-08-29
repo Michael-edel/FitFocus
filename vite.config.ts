@@ -63,7 +63,6 @@ export default defineConfig(({ mode }) => {
         filename: 'sw.ts',
         devOptions: { enabled: false },
         injectManifest: {
-          injectionPoint: '',
           globPatterns: ['**/*.{js,css,html,ico,svg,png,webmanifest,woff2}'],
         },
         workbox: {

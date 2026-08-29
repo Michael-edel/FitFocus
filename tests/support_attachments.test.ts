@@ -4,6 +4,8 @@ import {
   buildAttachmentRoute,
   fileToAttachment,
   inlineAttachmentBytes,
+  isSafeInlineAttachmentMime,
+  normalizeAttachmentMime,
   parseAttachmentsJson,
   SupportAttachmentTooLargeError,
 } from '../functions/api/_lib/support_attachments';
@@ -27,6 +29,12 @@ describe('support attachment helpers', () => {
     expect(records[0]).toMatchObject({ name: 'photo.png', kind: 'photo', storage_key: 'support/t/00-photo.png' });
     expect(records[1]).toMatchObject({ name: 'note.txt', kind: 'file' });
     expect(records[2]).toMatchObject({ name: 'attachment', kind: 'file' });
+  });
+
+  it('keeps unsafe MIME types out of inline rendering', () => {
+    expect(normalizeAttachmentMime(' TEXT/HTML; charset=utf-8 ')).toBe('application/octet-stream');
+    expect(isSafeInlineAttachmentMime('text/html')).toBe(false);
+    expect(isSafeInlineAttachmentMime('image/png')).toBe(true);
   });
 
   it('decodes inline attachment bytes', () => {

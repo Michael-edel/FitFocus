@@ -10,6 +10,12 @@ PUSH_VAPID_PUBLIC_KEY=CHANGE_ME_VAPID_PUBLIC_KEY
 PUSH_VAPID_PRIVATE_KEY=CHANGE_ME_VAPID_PRIVATE_KEY
 PUSH_VAPID_SUBJECT=mailto:support@example.com
 
+# OpenAI GPT-5.6 Luna (server-only; never expose this key to the browser)
+OPENAI_API_KEY=CHANGE_ME_OPENAI_API_KEY
+
+# Legacy Gemini compatibility for old browser sessions (optional)
+# GEMINI_API_KEY=CHANGE_ME_GEMINI_API_KEY
+
 # Scheduled cleanup endpoint. Use the same value in Cloudflare Pages env var
 # CRON_SECRET and GitHub repository secret FITFOCUS_CLEANUP_SECRET.
 CRON_SECRET=CHANGE_ME_LONG_RANDOM_CLEANUP_SECRET

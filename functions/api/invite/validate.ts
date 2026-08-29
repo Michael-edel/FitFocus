@@ -1,7 +1,9 @@
-// /api/invite/validate?code=XXXX
-// Public endpoint to validate beta invite code (no auth)
+// /api/invite/validate
+// POST { code: "XXXX" }; the code stays in the request body instead of the URL.
 import { json } from "../_lib/auth";
 import { requireDB, nowMs, toApiError } from "../_lib/db";
+import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { asString } from "../_lib/json";
 
 type Env = { DB: D1Database };
 type InviteCodeRow = {
@@ -14,11 +16,17 @@ type InviteCodeRow = {
   revoked?: number | null;
 };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const db = requireDB(env);
-    const url = new URL(request.url);
-    const code = String(url.searchParams.get("code") || "").trim();
+    let body;
+    try {
+      body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) return json({ valid: false, error: "PAYLOAD_TOO_LARGE" }, 413);
+      throw error;
+    }
+    const code = asString(body?.code).trim();
     if (!code) return json({ valid: false, error: "BAD_REQUEST" }, 400);
 
     const now = Math.floor(nowMs() / 1000);
@@ -33,7 +41,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(code)
       .first<InviteCodeRow>();
 
-    if (!row) return json({ valid: false }, 404);
+    // Do not distinguish a missing code from an invalid one: this endpoint is
+    // intentionally only a yes/no preflight for the registration screen.
+    if (!row) return json({ valid: false }, 200);
     const revoked = Number(row.revoked || 0) === 1;
     const expired = row.expires_at != null && Number(row.expires_at) <= now;
     const maxUses = row.max_uses == null ? 1 : Number(row.max_uses);
@@ -42,17 +52,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
     const valid = !revoked && !expired && !exhausted;
 
-    return json(
-      {
-        valid,
-        code: row.code,
-        note: row.note ?? null,
-        expiresAt: row.expires_at ?? null,
-        remainingUses: Math.max(0, maxUses - uses),
-        revoked,
-      },
-      valid ? 200 : 200
-    );
+    return json({ valid }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
     return json({ valid: false, error: apiErr }, 400);

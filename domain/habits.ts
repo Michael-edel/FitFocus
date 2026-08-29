@@ -9,6 +9,13 @@ export const defaultHabits = {
   sleep: false,
 };
 
+type DailyHabitState = {
+  water: boolean;
+  steps: boolean;
+  breakfast: boolean;
+  sleep: boolean;
+};
+
 export function getTodayKey() {
   return toLocalDayKey(new Date());
 }
@@ -29,7 +36,7 @@ export function toggleHabit(profile: UserProfile, habit: keyof typeof defaultHab
   };
 }
 
-export function calculateStreak(habits: Record<string, any> | undefined, habitKey: string): number {
+export function calculateStreak(habits: Record<string, DailyHabitState> | undefined, habitKey: keyof DailyHabitState): number {
   if (!habits) return 0;
   const dates = Object.keys(habits).sort().reverse();
   let streak = 0;

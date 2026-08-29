@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { UserProfile } from './types';
+import { isUserProfilePayload } from './profileValidation';
 import {
   applyRemoteStateItems,
   collectLocalStateItems,
@@ -72,17 +73,13 @@ function isJsonRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function readUserProfile(value: unknown): UserProfile | null {
+  return isUserProfilePayload(value) ? value : null;
+}
+
 async function readJsonRecord(response: Response): Promise<JsonRecord | null> {
   const payload: unknown = await response.json().catch(() => null);
   return isJsonRecord(payload) ? payload : null;
-}
-
-function readUserProfile(value: unknown): UserProfile | null {
-  if (!isJsonRecord(value)) return null;
-  if (typeof value.id !== 'string' || typeof value.name !== 'string') return null;
-  if (typeof value.weight !== 'number' || typeof value.height !== 'number' || typeof value.age !== 'number') return null;
-  if (!Array.isArray(value.weightHistory) || !Array.isArray(value.familyMembers)) return null;
-  return value as unknown as UserProfile;
 }
 
 async function readApiErrorMessage(response: Response, fallback: string): Promise<string> {
@@ -102,7 +99,7 @@ async function handleProfileConflict(
   deps: ProfileSyncDeps,
 ): Promise<UserProfile | null> {
   const payload = await readJsonRecord(response);
-  const serverProfile = readUserProfile(payload?.profile);
+  const serverProfile = isUserProfilePayload(payload?.profile) ? payload.profile : null;
   if (!serverProfile) return null;
   deps.setProfileSyncNote?.('Обнаружен конфликт версий. Облачные данные сохранены, автоматическая перезапись остановлена.');
   return serverProfile;

@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { toLocalDayKey } from './dateUtils';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
+import { isRecord, parseJson } from './safeJson';
 
 type ProgressArchiveScreenProps = {
   currentUser: UserProfile | null;
@@ -86,12 +87,13 @@ export default function ProgressArchiveScreen({
         setOpenSections(defaultOpenSections());
         return;
       }
-      const parsed = JSON.parse(raw) as Partial<Record<ArchiveSectionKey, boolean>>;
+      const parsedValue = parseJson(raw);
+      const parsed = isRecord(parsedValue) ? parsedValue : {};
       setOpenSections({
-        gallery: typeof parsed.gallery === 'boolean' ? parsed.gallery : false,
-        compare: typeof parsed.compare === 'boolean' ? parsed.compare : false,
-        trend: typeof parsed.trend === 'boolean' ? parsed.trend : false,
-        timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : false,
+        gallery: parsed.gallery === true,
+        compare: parsed.compare === true,
+        trend: parsed.trend === true,
+        timeline: parsed.timeline === true,
       });
     } catch {
       archiveSkipSaveRef.current = true;

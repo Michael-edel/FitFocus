@@ -9,6 +9,7 @@ import { MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT,
 import { clearAiCache } from './geminiService';
 import ProfileDetailsSection from './components/ProfileDetailsSection';
 import { ensurePWAStarted } from './pwa';
+import { isUserProfilePayload } from './profileValidation';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -202,6 +203,7 @@ type PushDeliveryFailure = {
 
 const isJsonRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
 
 const readJsonRecord = async (response: Response): Promise<JsonRecord | null> => {
   try {
@@ -530,7 +532,7 @@ export default function SettingsScreen({
         credentials: 'include',
         headers: { Accept: 'application/json' },
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok || !payload) {
         throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось проверить Huawei Health.');
       }
@@ -621,12 +623,12 @@ export default function SettingsScreen({
           credentials: 'include',
           headers: { Accept: 'application/json' },
         });
-        const payload = await response.json().catch(() => null);
+        const payload = await readJsonRecord(response);
         if (!response.ok) {
           throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось отключить Huawei Health.');
         }
-        if (payload?.profile && onChangeUser) {
-          onChangeUser(payload.profile as UserProfile);
+        if (isUserProfilePayload(payload?.profile) && onChangeUser) {
+          onChangeUser(payload.profile);
         } else {
           await onPatchUser({ wearableEnabled: false });
         }
@@ -664,7 +666,7 @@ export default function SettingsScreen({
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ timezone, date }),
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok || !payload) {
         const message = payload?.error === 'HUAWEI_NOT_CONNECTED'
           ? 'Huawei Health ещё не подключён.'
@@ -675,8 +677,8 @@ export default function SettingsScreen({
               : 'Не удалось синхронизировать Huawei Health.';
         throw new Error(message);
       }
-      if (payload.profile && onChangeUser) {
-        onChangeUser(payload.profile as UserProfile);
+      if (isUserProfilePayload(payload?.profile) && onChangeUser) {
+        onChangeUser(payload.profile);
       }
       const count = Array.isArray(payload.updatedFields) ? payload.updatedFields.length : 0;
       setHuaweiNotice(`Huawei Health синхронизирован: обновлено полей ${count}.`);
@@ -700,7 +702,7 @@ export default function SettingsScreen({
         credentials: 'include',
         headers: { Accept: 'application/json' },
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok || !payload || typeof payload.token !== 'string') {
         throw new Error(payload?.error === 'UNAUTH'
           ? 'Сначала войдите в аккаунт FitFocus.'

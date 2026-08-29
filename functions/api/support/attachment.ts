@@ -4,7 +4,9 @@ import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import {
   type SupportAttachmentBucket,
+  isSafeInlineAttachmentMime,
   inlineAttachmentBytes,
+  normalizeAttachmentMime,
   parseAttachmentsJson,
   type SupportAttachmentRecord,
 } from "../_lib/support_attachments";
@@ -14,15 +16,18 @@ type SupportTicketOwnerRow = { id: string; user_id: string; attachments_json?: s
 type SupportMessageAttachmentRow = { attachments_json?: string | null };
 
 function safeFileName(name: string) {
-  return name.replace(/["\\]/g, "_").slice(0, 120) || "attachment";
+  return name.replace(/["\\\r\n]/g, "_").slice(0, 120) || "attachment";
 }
 
 function attachmentHeaders(attachment: SupportAttachmentRecord, fileName: string) {
   const headers = new Headers();
-  headers.set("content-type", attachment.mime || "application/octet-stream");
-  headers.set("content-disposition", `inline; filename="${safeFileName(fileName)}"`);
+  const mime = normalizeAttachmentMime(attachment.mime);
+  const inline = isSafeInlineAttachmentMime(mime);
+  headers.set("content-type", inline ? mime : "application/octet-stream");
+  headers.set("content-disposition", `${inline ? "inline" : "attachment"}; filename="${safeFileName(fileName)}"`);
   headers.set("cache-control", "private, no-store");
   headers.set("x-content-type-options", "nosniff");
+  headers.set("content-security-policy", "default-src 'none'; sandbox");
   return headers;
 }
 
@@ -86,7 +91,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const stored = await env.SUPPORT_ATTACHMENTS.get(attachment.storage_key);
     if (!stored) return json({ error: "NOT_FOUND", message: "attachment not found" }, 404);
     const headers = attachmentHeaders(attachment, attachment.name);
-    stored.writeHttpMetadata?.(headers);
     const etag = stored.httpEtag;
     if (etag) headers.set("etag", etag);
     return new Response(stored.body, { status: 200, headers });

@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, ImageUp, LifeBuoy, Loader2, Mic, Paperclip, Send, Square, Trash2, Video } from 'lucide-react';
 import type { UserProfile } from './types';
 import { BUILD_SHORT_LABEL } from './versioning';
+import { isRecord } from './safeJson';
 
 type AttachmentDraft = {
   file: File;
@@ -140,7 +141,19 @@ function requiredFieldsMessage(fields: string[]) {
 }
 
 function objectPayload(payload: unknown): Record<string, unknown> {
-  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+  return isRecord(payload) ? payload : {};
+}
+
+function isSupportTicket(value: unknown): value is SupportTicket {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.created_at === 'number'
+    && typeof value.updated_at === 'number'
+    && typeof value.category === 'string'
+    && typeof value.message === 'string'
+    && typeof value.status === 'string'
+    && typeof value.priority === 'string'
+    && typeof value.attachment_count === 'number';
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -262,8 +275,10 @@ export default function SupportScreen({ currentUser }: Props) {
     try {
       const response = await fetch('/api/support/feedback/my', { credentials: 'include' });
       if (!response.ok) return;
-      const json = await response.json().catch(() => null);
-      const nextTickets = Array.isArray(json?.tickets) ? json.tickets : [];
+      const json: unknown = await response.json().catch(() => null);
+      const nextTickets = isRecord(json) && Array.isArray(json.tickets)
+        ? json.tickets.filter(isSupportTicket)
+        : [];
       setTickets(nextTickets);
       const nextSelectedId = preserveSelection ? (selectedTicketId || nextTickets[0]?.id || null) : (nextTickets[0]?.id || null);
       setSelectedTicketId(nextSelectedId);
@@ -276,8 +291,8 @@ export default function SupportScreen({ currentUser }: Props) {
     if (!ticketId) return;
     const response = await fetch(`/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, { credentials: 'include' });
     if (!response.ok) return;
-    const json = await response.json().catch(() => null);
-    setSelectedTicket(json?.ticket || null);
+    const json: unknown = await response.json().catch(() => null);
+    setSelectedTicket(isRecord(json) && isSupportTicket(json.ticket) ? json.ticket : null);
   }, []);
 
   React.useEffect(() => {
@@ -490,7 +505,7 @@ export default function SupportScreen({ currentUser }: Props) {
         credentials: 'include',
         body: form,
       });
-      const json = await response.json().catch(() => null);
+      const json: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(supportSubmitErrorMessage(response.status, json));
       }
@@ -535,11 +550,11 @@ export default function SupportScreen({ currentUser }: Props) {
         credentials: 'include',
         body: form,
       });
-      const json = await response.json().catch(() => null);
+      const json: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(supportReplyErrorMessage(response.status, json));
       }
-      setSelectedTicket(json?.ticket || null);
+      setSelectedTicket(isRecord(json) && isSupportTicket(json.ticket) ? json.ticket : null);
       setReplyMessage('');
       replyAttachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
       setReplyAttachments([]);

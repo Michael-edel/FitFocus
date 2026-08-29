@@ -1,10 +1,13 @@
 import React from 'react';
 import { Camera, Plus, Search, Utensils } from 'lucide-react';
 import type { FoodEntry, FoodItem, MealType } from './types';
+import type { FastLogItem } from './storage/foodDiary';
+import type { MacroBarProps } from './components/MacroBar';
+import type { FoodDiaryGroupedProps } from './FoodDiaryGrouped';
 
 const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
 
-type SearchResult = { name: string; calories: number };
+type SearchResult = FastLogItem;
 
 type NutritionScreenProps = {
   cameraOpen: boolean;
@@ -19,7 +22,7 @@ type NutritionScreenProps = {
   showSearchResults: boolean;
   setShowSearchResults: (value: boolean) => void;
   searchResults: SearchResult[];
-  addFoodToDiary: (item: any) => void;
+  addFoodToDiary: (item: FastLogItem) => void;
   foodDiary: FoodItem[];
   selectedFoodIds: Set<string>;
   toggleFoodSelected: (id: string) => void;
@@ -36,8 +39,8 @@ type NutritionScreenProps = {
   activeDiaryDayLabel?: string;
   onDiaryDayChange?: (dayKey: string) => void;
   targets: { calories: number; protein: number; fat: number; carbs: number };
-  MacroBarComponent: React.ComponentType<any>;
-  FoodDiaryGroupedComponent: React.ComponentType<any>;
+  MacroBarComponent: React.ComponentType<MacroBarProps>;
+  FoodDiaryGroupedComponent: React.ComponentType<FoodDiaryGroupedProps>;
 };
 
 export default function NutritionScreen({

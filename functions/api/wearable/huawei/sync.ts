@@ -5,6 +5,7 @@ import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
+import { writeProfileCas } from "../../_lib/profile_cas";
 import { loadActivePlan } from "../../_lib/plans";
 import {
   decryptHuaweiAccessToken,
@@ -36,6 +37,13 @@ function readStringField(body: unknown, key: string): string | undefined {
   if (!isJsonObject(body)) return undefined;
   const value = body[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function parseBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) return 0;
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function changedFields(snapshot: {
@@ -107,6 +115,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const timezone = readStringField(body, "timezone");
   const date = readStringField(body, "date");
+  const hasExplicitBaseVersion = isJsonObject(body) && Object.prototype.hasOwnProperty.call(body, "baseVersion");
+  const requestedBaseVersion = parseBaseVersion(isJsonObject(body) ? body.baseVersion : undefined);
+  if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const snapshot = await fetchHuaweiDailySnapshot(env, request, accessToken, { timezone, date });
   const updatedFields = changedFields(snapshot);
   if (!updatedFields.length) {
@@ -117,7 +128,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const timestamp = new Date(now).toISOString();
   const current = await loadProfile(db, user.sub);
   const currentProfile = current.profile;
-  const version = current.version + 1;
+  if (hasExplicitBaseVersion && requestedBaseVersion !== current.version) {
+    return json({ error: "PROFILE_CONFLICT", profile: withProtectedFields(user, { ...currentProfile, version: current.version }), version: current.version }, 409);
+  }
+  const expectedVersion = hasExplicitBaseVersion ? requestedBaseVersion : current.version;
+  const version = expectedVersion + 1;
   const plan = await loadActivePlan(db, user.sub);
   const nextProfile = withProtectedFields(user, {
     ...currentProfile,
@@ -135,13 +150,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ...(typeof snapshot.pulse === "number" && snapshot.pulse > 0 ? { restingPulse: snapshot.pulse, restingPulseMeasuredAt: timestamp } : {}),
   });
 
-  await db
-    .prepare(
-      "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
-    )
-    .bind(user.sub, JSON.stringify(nextProfile), now, version)
-    .run();
+  const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
+  if (!profileWritten) {
+    const latest = await loadProfile(db, user.sub);
+    return json({
+      error: "PROFILE_CONFLICT",
+      profile: withProtectedFields(user, { ...latest.profile, version: latest.version }),
+      version: latest.version,
+    }, 409);
+  }
 
   await db
     .prepare("UPDATE wearable_connections SET last_sync_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?")

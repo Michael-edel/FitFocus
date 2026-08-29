@@ -12,13 +12,14 @@ import {
   migrateLegacyAccountByEmail as migrateLegacyAccountByEmailShared,
   withProtectedFields as withProtectedFieldsShared,
 } from "./_lib/legacy_sync";
+import { writeProfileCas } from "./_lib/profile_cas";
+export { writeProfileCas } from "./_lib/profile_cas";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const PROFILE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
 type ProfileUser = { sub: string; email?: string; name?: string; picture?: string };
 type StateItem = { key: string; value: string; baseVersion: number };
-type StateConflict = { key: string; value: string; version: number };
 
 const EDITABLE_PROFILE_FIELDS = new Set([
   'name',
@@ -148,67 +149,6 @@ function conflictResponse(user: ProfileUser, profile: JsonObject | null, version
   return json({ error: 'PROFILE_CONFLICT', profile: serverProfile, version }, 409);
 }
 
-function changedRows(result: { meta?: { changes?: number } | null; changes?: number } | null | undefined): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
-
-/**
- * The profile version check must be part of the write itself. A read followed
- * by an unconditional upsert allows two devices to commit the same version.
- */
-export async function writeProfileCas(
-  db: D1Database,
-  userId: string,
-  profile: JsonObject,
-  expectedVersion: number,
-  updatedAt: number,
-): Promise<boolean> {
-  const profileJson = JSON.stringify(profile);
-  const statement = expectedVersion === 0
-    ? db.prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id) DO NOTHING"
-      ).bind(userId, profileJson, updatedAt, Number(profile.version || 1))
-    : db.prepare(
-        "UPDATE user_profiles SET profile_json = ?, updated_at = ?, version = ? " +
-          "WHERE user_id = ? AND version = ?"
-      ).bind(profileJson, updatedAt, Number(profile.version || expectedVersion + 1), userId, expectedVersion);
-
-  return changedRows(await statement.run()) === 1;
-}
-
-async function writeStateItemsCas(
-  db: D1Database,
-  userId: string,
-  stateItems: StateItem[],
-  updatedAt: number,
-): Promise<StateConflict | null> {
-  if (!stateItems.length) return null;
-
-  const results = await db.batch(stateItems.map((item) => item.baseVersion === 0
-    ? db.prepare(
-        "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
-          "ON CONFLICT(user_id, k) DO NOTHING"
-      ).bind(userId, item.key, item.value, updatedAt, 1)
-    : db.prepare(
-        "UPDATE user_kv SET v = ?, updated_at = ?, version = ? " +
-          "WHERE user_id = ? AND k = ? AND version = ?"
-      ).bind(item.value, updatedAt, item.baseVersion + 1, userId, item.key, item.baseVersion)));
-
-  const conflictIndex = results.findIndex((result) => changedRows(result) === 0);
-  if (conflictIndex < 0) return null;
-
-  const item = stateItems[conflictIndex];
-  const current = await db.prepare(
-    "SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1"
-  ).bind(userId, item.key).first<{ v?: string; version?: number }>();
-  return {
-    key: item.key,
-    value: String(current?.v ?? ""),
-    version: Number(current?.version || 0),
-  };
-}
-
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -260,6 +200,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
+  if (stateItems.length) {
+    return json({ error: "STATE_ITEMS_USE_STATE_ENDPOINT" }, 400);
+  }
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const currentMeta = await loadProfileMeta(db, user.sub);
@@ -286,10 +229,6 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   if (!profileWritten) {
     const latest = await loadProfileMeta(db, user.sub);
     return conflictResponse(user, latest.profile, latest.version);
-  }
-  const stateConflict = await writeStateItemsCas(db, user.sub, stateItems, t);
-  if (stateConflict) {
-    return json({ error: "KV_CONFLICT", key: stateConflict.key, value: stateConflict.value, version: stateConflict.version }, 409);
   }
 
   return json({ profile, updatedFields: Object.keys(patch), stateItems: stateItems.length, mode: 'replace', version: nextVersion }, 200);
@@ -324,6 +263,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (forbiddenStateKey) {
     return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
+  if (stateItems.length) {
+    return json({ error: "STATE_ITEMS_USE_STATE_ENDPOINT" }, 400);
+  }
   const updatedFields = Object.keys(patch);
   if (!updatedFields.length) return json({ error: 'EMPTY_PATCH' }, 400);
 
@@ -347,10 +289,6 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (!profileWritten) {
     const latest = await loadProfileMeta(db, user.sub);
     return conflictResponse(user, latest.profile, latest.version);
-  }
-  const stateConflict = await writeStateItemsCas(db, user.sub, stateItems, t);
-  if (stateConflict) {
-    return json({ error: "KV_CONFLICT", key: stateConflict.key, value: stateConflict.value, version: stateConflict.version }, 409);
   }
 
   return json({ profile, updatedFields, stateItems: stateItems.length, mode: 'patch', version: nextVersion }, 200);

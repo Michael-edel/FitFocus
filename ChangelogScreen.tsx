@@ -3,6 +3,7 @@ import { BadgeInfo, CalendarDays, CheckCircle2, History, Sparkles } from 'lucide
 import { BUILD_SOURCE } from './build-info.generated';
 import { formatReleaseTitle, localizeCommitSubject, releaseNotes } from './releaseNotes';
 import { APP_VERSION_STRING, APP_VERSION_UI_LABEL, versioningLayers, versioningRules } from './versioning';
+import { isRecord, parseJson } from './safeJson';
 
 type GitHubCommitItem = {
   sha: string;
@@ -42,6 +43,26 @@ function getCommitSubject(message?: string): string {
     .trim();
 }
 
+function isMainBuildEntry(value: unknown): value is MainBuildEntry {
+  return isRecord(value)
+    && typeof value.sha === 'string'
+    && typeof value.shortSha === 'string'
+    && typeof value.committedAt === 'string'
+    && (typeof value.sequence === 'number' || value.sequence === null)
+    && typeof value.descriptionRu === 'string'
+    && typeof value.isCurrent === 'boolean';
+}
+
+function isGitHubCommitItem(value: unknown): value is GitHubCommitItem {
+  if (!isRecord(value) || typeof value.sha !== 'string') return false;
+  if (value.commit !== undefined && !isRecord(value.commit)) return false;
+  const commit = isRecord(value.commit) ? value.commit : null;
+  if (commit?.message !== undefined && typeof commit.message !== 'string') return false;
+  if (commit?.author !== undefined && !isRecord(commit.author)) return false;
+  const author = isRecord(commit?.author) ? commit.author : null;
+  return author?.date === undefined || typeof author.date === 'string';
+}
+
 function buildFallbackEntries(): MainBuildEntry[] {
   const baseCount = BUILD_SOURCE.commitCount > 0 ? BUILD_SOURCE.commitCount : null;
   return (BUILD_SOURCE.recentBuilds || []).map((build, index) => ({
@@ -58,10 +79,11 @@ function readCachedEntries(): MainBuildEntry[] | null {
   try {
     const raw = window.localStorage.getItem(BUILD_HISTORY_CACHE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { savedAt?: number; entries?: MainBuildEntry[] };
-    if (!parsed?.savedAt || !Array.isArray(parsed.entries)) return null;
+    const parsed = parseJson(raw);
+    if (!isRecord(parsed) || typeof parsed.savedAt !== 'number' || !Array.isArray(parsed.entries)) return null;
     if (Date.now() - parsed.savedAt > BUILD_HISTORY_CACHE_TTL_MS) return null;
-    return parsed.entries;
+    const entries = parsed.entries.filter(isMainBuildEntry);
+    return entries.length === parsed.entries.length ? entries : null;
   } catch {
     return null;
   }
@@ -98,7 +120,10 @@ async function fetchMainBuildEntries(signal: AbortSignal): Promise<MainBuildEntr
   }
 
   const totalCommits = parseLastPage(countResponse.headers.get('link'));
-  const commits = (await commitsResponse.json()) as GitHubCommitItem[];
+  const rawCommits: unknown = await commitsResponse.json().catch(() => null);
+  if (!Array.isArray(rawCommits)) throw new Error('Invalid GitHub build history response');
+  const commits = rawCommits.filter(isGitHubCommitItem);
+  if (commits.length !== rawCommits.length) throw new Error('Invalid GitHub build history response');
 
   return commits
     .map((item, index) => {

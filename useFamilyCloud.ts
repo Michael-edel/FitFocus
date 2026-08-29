@@ -1,7 +1,64 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { FamilyWeeklyMenu, UserProfile } from './types';
+import { errorMessage, isRecord, parseJson, responseErrorMessage } from './safeJson';
 
-type FamilyShoppingState = { week_start: string; items: { name: string; grams: number; checked?: boolean }[] } | null;
+export type CloudFamily = {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  created_at?: number;
+};
+
+export type CloudFamilyMember = {
+  user_id: string;
+  role?: string | null;
+  status?: string | null;
+  sex?: string | null;
+  age?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  activity?: number | null;
+  goal?: string | null;
+  created_at?: number;
+  updated_at?: number;
+  restrictions_json?: string | null;
+  name?: string | null;
+  email?: string | null;
+  dietary?: {
+    allergens?: unknown[];
+    intolerances?: unknown[];
+    excludedFoods?: unknown[];
+  } | null;
+  exclusions?: string | null;
+};
+
+type FamilyShoppingItem = { name: string; grams: number; checked?: boolean };
+type FamilyShoppingState = { week_start: string; items: FamilyShoppingItem[] } | null;
+
+function isCloudFamily(value: unknown): value is CloudFamily {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string' && typeof value.owner_user_id === 'string';
+}
+
+function isCloudFamilyMember(value: unknown): value is CloudFamilyMember {
+  return isRecord(value) && typeof value.user_id === 'string';
+}
+
+function isFamilyMenuMeal(value: unknown): value is FamilyWeeklyMenu['days'][number]['breakfast'] {
+  if (!isRecord(value) || typeof value.base !== 'string' || !isRecord(value.portions)) return false;
+  return Object.values(value.portions).every((portion) => typeof portion === 'string');
+}
+
+function isFamilyWeeklyMenu(value: unknown): value is FamilyWeeklyMenu {
+  if (!isRecord(value) || !isRecord(value.prefs) || !Array.isArray(value.days) || !Array.isArray(value.shoppingList)) return false;
+  return value.days.every((day) => {
+    if (!isRecord(day) || typeof day.day !== 'string') return false;
+    return ['breakfast', 'lunch', 'dinner', 'snack'].every((key) => isFamilyMenuMeal(day[key]));
+  });
+}
+
+function isFamilyShoppingItem(value: unknown): value is FamilyShoppingItem {
+  return isRecord(value) && typeof value.name === 'string' && Number.isFinite(Number(value.grams)) && (value.checked === undefined || typeof value.checked === 'boolean');
+}
 
 type UseFamilyCloudParams = {
   currentUser: UserProfile | null;
@@ -17,8 +74,8 @@ export function useFamilyCloud({
   setPlanScope,
   weekStartISO,
 }: UseFamilyCloudParams) {
-  const [cloudFamily, setCloudFamily] = useState<any | null>(null);
-  const [cloudFamilyMembers, setCloudFamilyMembers] = useState<any[]>([]);
+  const [cloudFamily, setCloudFamily] = useState<CloudFamily | null>(null);
+  const [cloudFamilyMembers, setCloudFamilyMembers] = useState<CloudFamilyMember[]>([]);
   const [cloudFamilyLoading, setCloudFamilyLoading] = useState(false);
   const [cloudFamilyError, setCloudFamilyError] = useState<string | null>(null);
 
@@ -48,32 +105,22 @@ export function useFamilyCloud({
         fetch('/api/family', { credentials: 'include' }),
         fetch(`/api/family/menu?week=${encodeURIComponent(week)}`, { credentials: 'include' }),
       ]);
-      const data = await familyRes.json().catch(() => ({}));
-      if (!familyRes.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось загрузить семью');
-      setCloudFamily(data.family || null);
-      setCloudFamilyMembers(Array.isArray(data.members) ? data.members : []);
-      const menuData = await menuRes.json().catch(() => ({}));
-      const serverMenu = menuData?.shared?.menu && typeof menuData.shared.menu === 'object' ? menuData.shared.menu : null;
-      const looksLikeFamilyWeeklyMenu =
-        !!serverMenu &&
-        typeof serverMenu === 'object' &&
-        Array.isArray((serverMenu as any).days) &&
-        typeof (serverMenu as any).prefs === 'object' &&
-        Array.isArray((serverMenu as any).shoppingList) &&
-        (serverMenu as any).days.every((day: any) =>
-          day &&
-          typeof day === 'object' &&
-          ['breakfast', 'lunch', 'dinner', 'snack'].every((mealKey) => {
-            const meal = day[mealKey];
-            return meal && typeof meal === 'object' && typeof meal.base === 'string' && typeof meal.portions === 'object';
-          })
-        );
-      setCloudFamilyMenu(looksLikeFamilyWeeklyMenu ? (serverMenu as FamilyWeeklyMenu) : null);
-      if (data.family && planScope !== 'family') {
+      const rawData: unknown = await familyRes.json().catch(() => null);
+      const data = isRecord(rawData) ? rawData : {};
+      if (!familyRes.ok) throw new Error(responseErrorMessage(data, 'Не удалось загрузить семью'));
+      const nextFamily = isCloudFamily(data.family) ? data.family : null;
+      setCloudFamily(nextFamily);
+      setCloudFamilyMembers(Array.isArray(data.members) ? data.members.filter(isCloudFamilyMember) : []);
+      const rawMenuData: unknown = await menuRes.json().catch(() => null);
+      const menuData = isRecord(rawMenuData) ? rawMenuData : {};
+      const shared = isRecord(menuData.shared) ? menuData.shared : null;
+      const serverMenu = shared?.menu;
+      setCloudFamilyMenu(isFamilyWeeklyMenu(serverMenu) ? serverMenu : null);
+      if (nextFamily && planScope !== 'family') {
         setPlanScope('family');
       }
-    } catch (e: any) {
-      setCloudFamilyError(e?.message || 'Ошибка');
+    } catch (e: unknown) {
+      setCloudFamilyError(errorMessage(e, 'Ошибка'));
       setCloudFamily(null);
       setCloudFamilyMembers([]);
       setCloudFamilyMenu(null);
@@ -88,9 +135,12 @@ export function useFamilyCloud({
       setFamilyShoppingLoading(true);
       const week = weekStartISO();
       const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(week)}&family_id=${encodeURIComponent(cloudFamily.id)}`, { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Не удалось загрузить список покупок семьи');
-      setFamilyShopping({ week_start: data.week_start, items: data.items || [] });
+      const rawData: unknown = await res.json().catch(() => null);
+      const data = isRecord(rawData) ? rawData : {};
+      if (!res.ok) throw new Error(responseErrorMessage(data, 'Не удалось загрузить список покупок семьи'));
+      const items = Array.isArray(data.items) ? data.items.filter(isFamilyShoppingItem).map((item) => ({ ...item, grams: Number(item.grams) })) : [];
+      const weekStart = typeof data.week_start === 'string' ? data.week_start : week;
+      setFamilyShopping({ week_start: weekStart, items });
     } catch {
       setFamilyShopping(null);
     } finally {
@@ -117,8 +167,8 @@ export function useFamilyCloud({
           family_id: cloudFamily.id,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить список покупок');
+      const rawData: unknown = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(responseErrorMessage(rawData, 'Не удалось обновить список покупок'));
     } catch (e) {
       setFamilyShopping((prev) => prev ? ({
         ...prev,
@@ -131,33 +181,35 @@ export function useFamilyCloud({
   const createFamilyCloud = useCallback(async () => {
     const name = (familyNameDraft || 'Моя семья').trim().slice(0, 60);
     const res = await fetch('/api/family', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать семью');
+    const rawData: unknown = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(responseErrorMessage(rawData, 'Не удалось создать семью'));
     await loadCloudFamily();
   }, [familyNameDraft, loadCloudFamily]);
 
   const makeInviteCode = useCallback(async () => {
     const res = await fetch('/api/family/invite', { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось создать приглашение');
-    setFamilyInviteCode(String(data.code || ''));
-    return String(data.code || '');
+    const rawData: unknown = await res.json().catch(() => null);
+    const data = isRecord(rawData) ? rawData : {};
+    if (!res.ok) throw new Error(responseErrorMessage(data, 'Не удалось создать приглашение'));
+    const code = typeof data.code === 'string' ? data.code : '';
+    setFamilyInviteCode(code);
+    return code;
   }, []);
 
   const joinFamilyCloud = useCallback(async () => {
     const code = (familyJoinCode || '').trim();
     if (!code) return;
     const res = await fetch('/api/family/join', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось присоединиться');
+    const rawData: unknown = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(responseErrorMessage(rawData, 'Не удалось присоединиться'));
     setFamilyJoinCode('');
     await loadCloudFamily();
   }, [familyJoinCode, loadCloudFamily]);
 
   const updateMyFamilyGoal = useCallback(async (goal: 'LOSS' | 'MAINTAIN') => {
     const res = await fetch('/api/family/member', { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось обновить цель');
+    const rawData: unknown = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(responseErrorMessage(rawData, 'Не удалось обновить цель'));
     await loadCloudFamily();
   }, [loadCloudFamily]);
 
@@ -165,8 +217,8 @@ export function useFamilyCloud({
     if (!cloudFamily?.id) return;
     const week = weekStartISO();
     const res = await fetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, { method: 'POST', credentials: 'include' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось сгенерировать семейное меню');
+    const rawData: unknown = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(responseErrorMessage(rawData, 'Не удалось сгенерировать семейное меню'));
     await loadFamilyShopping();
     await loadCloudFamily();
   }, [cloudFamily?.id, weekStartISO, loadFamilyShopping, loadCloudFamily]);

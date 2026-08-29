@@ -100,6 +100,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       OR CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.weight') END IS NOT NULL
       OR CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.restingPulse') END IS NOT NULL
       OR CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodGlucoseMmolL') END IS NOT NULL
+      OR CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodPressureSystolic') END IS NOT NULL
+      OR CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodPressureDiastolic') END IS NOT NULL
     )`);
   } else if (measurements === "no") {
     where.push(`(
@@ -107,6 +109,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       AND CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.weight') END IS NULL
       AND CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.restingPulse') END IS NULL
       AND CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodGlucoseMmolL') END IS NULL
+      AND CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodPressureSystolic') END IS NULL
+      AND CASE WHEN json_valid(p.profile_json) THEN json_extract(p.profile_json, '$.bloodPressureDiastolic') END IS NULL
     )`);
   }
 

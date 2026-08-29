@@ -6,7 +6,18 @@ import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
 const APP_TITLE = 'FitFocus';
 const APP_ICON = '/icon.svg';
-const sw = self as unknown as ServiceWorkerGlobalScope;
+type WorkboxManifestEntry = string | { url: string; revision?: string | null };
+type WorkboxServiceWorkerScope = ServiceWorkerGlobalScope & {
+  __WB_MANIFEST: WorkboxManifestEntry[];
+};
+declare global {
+  // Vite's service-worker build types `self` as Window in the main tsconfig.
+  interface Window {
+    __WB_MANIFEST: WorkboxManifestEntry[];
+  }
+}
+
+const sw = self as unknown as WorkboxServiceWorkerScope;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -98,7 +109,7 @@ const parsePushPayload = (event: PushEvent): PushNotificationPayload => {
 
 clientsClaim();
 cleanupOutdatedCaches();
-precacheAndRoute([]);
+precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(
   ({ request }) => request.mode === 'navigate',
@@ -167,5 +178,28 @@ sw.addEventListener('notificationclick', (event) => {
 });
 
 sw.addEventListener('pushsubscriptionchange', (event) => {
-  event.waitUntil(Promise.resolve());
+  type PushSubscriptionChangeEventLike = ExtendableEvent & {
+    newSubscription?: PushSubscription | null;
+  };
+
+  const change = event as PushSubscriptionChangeEventLike;
+  event.waitUntil((async () => {
+    let subscription = change.newSubscription || null;
+    if (!subscription) {
+      subscription = await sw.registration.pushManager.getSubscription().catch(() => null);
+    }
+
+    if (subscription) {
+      await fetch(new URL('/api/push/subscribe', sw.location.origin), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      return;
+    }
+
+    const clients = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    await Promise.all(clients.map((client) => client.postMessage({ type: 'FITFOCUS_PUSH_RESUBSCRIBE' })));
+  })().catch(() => undefined));
 });

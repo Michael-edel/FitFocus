@@ -1,9 +1,10 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { useModalDismissGestures } from '../useModalDismissGestures';
+import type { AIPlan } from '../types';
 
 type PlanIntroModalProps = {
-  plan: any;
+  plan: AIPlan | null;
   planError?: string | null;
   onClose: () => void;
   onOpenPlan: () => void;
@@ -56,7 +57,7 @@ export default function PlanIntroModal({
           <div className="p-4 rounded-[1.8rem] bg-slate-900/30 border border-slate-800">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Первые шаги</p>
             <div className="mt-2 space-y-2">
-              {(plan.firstTasks || []).slice(0, 3).map((t: string, i: number) => (
+              {plan.firstTasks.slice(0, 3).map((t, i) => (
                 <div key={i} className="text-sm font-bold text-slate-200">
                   • {t}
                 </div>

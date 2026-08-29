@@ -73,6 +73,7 @@ type PushRecipientRow = {
   current_period_end: number | null;
   profile_json: string | null;
   roles_csv: string | null;
+  active_family_ids?: string | null;
 };
 
 type ParsedProfile = JsonObject;
@@ -85,7 +86,10 @@ type Recipient = PushRecipientRow & {
   plan: string;
   subscriptionStatus: string;
   active: boolean;
+  familyIds: string[];
 };
+
+const PUSH_SEND_CONCURRENCY = 8;
 
 function toText(value: unknown, fallback = "") {
   return asString(value, fallback);
@@ -103,6 +107,13 @@ function parseProfile(profileJson: unknown): ParsedProfile {
 }
 
 function asRoles(value: unknown): string[] {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function asFamilyIds(value: unknown): string[] {
   return String(value || "")
     .split(",")
     .map((item) => item.trim())
@@ -145,6 +156,7 @@ function getRecipient(row: PushRecipientRow): Recipient {
   const plan = getPlan(profile, row.subscription_plan);
   const subscriptionStatus = getSubscriptionStatus(profile, row.subscription_status);
   const active = asBoolean(row.is_active) && !row.deleted_at;
+  const familyIds = asFamilyIds(row.active_family_ids);
   return {
     ...row,
     profile,
@@ -154,6 +166,7 @@ function getRecipient(row: PushRecipientRow): Recipient {
     plan,
     subscriptionStatus,
     active,
+    familyIds,
   };
 }
 
@@ -207,16 +220,7 @@ function matchesSegment(recipient: Recipient, segment: SegmentInput, userIds: Se
   if (role !== "all" && !recipient.roles.includes(role)) return false;
 
   const familyId = toText(segment.familyId);
-  if (familyId) {
-    const familyMembers = Array.isArray(recipient.profile.familyMembers) ? recipient.profile.familyMembers : [];
-    const inFamily = familyMembers.some((member) => {
-      if (!isJsonObject(member)) return false;
-      const memberFamilyId = String(member.familyId || member.family_id || "").trim();
-      const memberActive = member.isActive === true || member.is_active === 1 || member.status === "active";
-      return memberFamilyId === familyId && memberActive;
-    });
-    if (!inFamily) return false;
-  }
+  if (familyId && !recipient.familyIds.includes(familyId)) return false;
 
   const device = toText(segment.device, "all").toLowerCase();
   if (device !== "all" && recipient.device.toLowerCase() !== device) return false;
@@ -324,21 +328,49 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       u.deleted_at,
       u.deletion_scheduled_at,
       u.is_active,
-      s.plan AS subscription_plan,
-      s.status AS subscription_status,
-      s.current_period_end,
+      COALESCE((
+        SELECT s.plan
+        FROM subscriptions s
+        WHERE s.user_id = u.id
+          AND s.status IN ('active', 'trialing')
+          AND (s.current_period_end IS NULL OR s.current_period_end > ?)
+        ORDER BY s.updated_at DESC
+        LIMIT 1
+      ), 'free') AS subscription_plan,
+      COALESCE((
+        SELECT s.status
+        FROM subscriptions s
+        WHERE s.user_id = u.id
+          AND s.status IN ('active', 'trialing')
+          AND (s.current_period_end IS NULL OR s.current_period_end > ?)
+        ORDER BY s.updated_at DESC
+        LIMIT 1
+      ), 'inactive') AS subscription_status,
+      (
+        SELECT s.current_period_end
+        FROM subscriptions s
+        WHERE s.user_id = u.id
+          AND s.status IN ('active', 'trialing')
+          AND (s.current_period_end IS NULL OR s.current_period_end > ?)
+        ORDER BY s.updated_at DESC
+        LIMIT 1
+      ) AS current_period_end,
       p.profile_json,
-      GROUP_CONCAT(DISTINCT ur.role) AS roles_csv
+      GROUP_CONCAT(DISTINCT ur.role) AS roles_csv,
+      (
+        SELECT GROUP_CONCAT(DISTINCT fm.family_id)
+        FROM family_members fm
+        WHERE fm.user_id = ps.user_id AND fm.status = 'active' AND fm.is_active = 1
+      ) AS active_family_ids
     FROM push_subscriptions ps
     JOIN users u ON u.id = ps.user_id
-    LEFT JOIN subscriptions s ON s.user_id = u.id
     LEFT JOIN user_profiles p ON p.user_id = u.id
     LEFT JOIN user_roles ur ON ur.user_id = u.id
     WHERE ps.enabled = 1
     GROUP BY ps.id
     ORDER BY ps.updated_at DESC
   `;
-  const { results } = await db.prepare(query).all<PushRecipientRow>();
+  const { results } = await db.prepare(query).bind(nowMs(), nowMs(), nowMs()).all<PushRecipientRow>();
   const allRecipients = (results || []).map((row) => getRecipient(row));
   const matchedRecipients = allRecipients.filter((recipient) => matchesSegment(recipient, segment, userIds));
   sortRecipients(matchedRecipients, sort);
@@ -444,15 +476,29 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const failures: Array<{ id: string; status: number | null; message: string; removed: boolean }> = [];
   const statements: D1PreparedStatement[] = [];
 
-  for (const recipient of selectedRecipients) {
-    try {
-      await sendPushNotification(env, recipient, payload);
-      statements.push(
-        db.prepare("UPDATE push_subscriptions SET last_sent_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
-          .bind(nowMs(), nowMs(), recipient.id),
-      );
-      sent += 1;
-    } catch (error) {
+  for (let start = 0; start < selectedRecipients.length; start += PUSH_SEND_CONCURRENCY) {
+    const batch = selectedRecipients.slice(start, start + PUSH_SEND_CONCURRENCY);
+    const deliveries = await Promise.all(batch.map(async (recipient) => {
+      try {
+        await sendPushNotification(env, recipient, payload);
+        return { recipient, error: null };
+      } catch (error) {
+        return { recipient, error };
+      }
+    }));
+
+    for (const delivery of deliveries) {
+      const { recipient, error } = delivery;
+      if (!error) {
+        const sentAt = nowMs();
+        statements.push(
+          db.prepare("UPDATE push_subscriptions SET last_sent_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
+            .bind(sentAt, sentAt, recipient.id),
+        );
+        sent += 1;
+        continue;
+      }
+
       failed += 1;
       const details = pushErrorDetails(error);
       const removedSubscription = isGoneError(error);
@@ -465,9 +511,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         statements.push(db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(recipient.id));
         removed += 1;
       } else {
+        const updatedAt = nowMs();
         statements.push(
           db.prepare("UPDATE push_subscriptions SET last_error = ?, updated_at = ? WHERE id = ?")
-            .bind(details.message, nowMs(), recipient.id),
+            .bind(details.message, updatedAt, recipient.id),
         );
       }
     }

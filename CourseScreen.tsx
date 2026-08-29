@@ -1,9 +1,9 @@
 import React from 'react';
 import { CheckCircle } from 'lucide-react';
-import { CourseLesson } from './types';
+import type { CourseLesson, UserProfile } from './types';
 
 type CourseScreenProps = {
-  currentUser: any;
+  currentUser: UserProfile | null;
   courseLibrary: CourseLesson[] | null;
   lessons: CourseLesson[];
   setCurrentLesson: React.Dispatch<React.SetStateAction<CourseLesson | null>>;

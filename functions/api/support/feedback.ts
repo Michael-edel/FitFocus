@@ -231,7 +231,11 @@ async function appendSupportMessage(
 
 async function ticketRowForAdmin(db: D1Database, id: string) {
   return db.prepare(
-    `SELECT s.*, u.email as user_email, u.name as user_name
+    `SELECT s.id, s.user_id, s.created_at, s.updated_at, s.category, s.section, s.subject, s.message,
+            s.steps_json, s.device, s.browser, s.contact, s.app_version, s.status, s.priority,
+            s.attachment_count, s.attachments_json, s.admin_note, s.assigned_admin_user_id,
+            s.resolved_at, s.closed_at, s.last_reply_at, s.last_reply_by,
+            u.email as user_email, u.name as user_name
      FROM support_feedback s
      LEFT JOIN users u ON u.id = s.user_id
      WHERE s.id = ?
@@ -239,7 +243,7 @@ async function ticketRowForAdmin(db: D1Database, id: string) {
   ).bind(id).first<SupportTicketAdminRow>();
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>>[0]) {
   let user;
   try {
     user = await requireUser(request, env);
@@ -329,6 +333,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ticket_id: ticketId,
     attachment_count: attachments.length,
   });
+}
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  try {
+    return await handleSupportPost(context);
+  } catch {
+    return json({ error: "SERVER_ERROR", public_message: "Не удалось отправить обращение. Попробуйте ещё раз позже." }, 500);
+  }
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
