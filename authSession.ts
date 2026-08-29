@@ -1,6 +1,7 @@
 import type { UserProfile } from './types';
 import type { RegistrationData } from './RegistrationScreen';
 import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
+import { isUserProfilePayload } from './profileValidation';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 type UnknownRecord = Record<string, unknown>;
@@ -106,16 +107,6 @@ function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null
   return [...targeted].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
 }
 
-async function unregisterAuthServiceWorkers(): Promise<void> {
-  try {
-    if (!('serviceWorker' in navigator)) return;
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
-  } catch {
-    // Auth recovery must keep going even when the browser blocks SW management.
-  }
-}
-
 function authRecoveryReloadKey() {
   return 'fitfocus.auth.oauth-recovery-reloaded.v1';
 }
@@ -158,10 +149,6 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     return null;
   };
 
-  if (params.continueAfterOAuth) {
-    await unregisterAuthServiceWorkers();
-  }
-
   let me = await readMe();
   if (!me?.user?.sub && params.continueAfterOAuth) {
     const delays = [150, 250, 400, 600, 900, 1200, 1600, 2200];
@@ -191,7 +178,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       const pj = await readJsonRecord(pr);
       if (pr.ok) {
         applyRemoteStateItems(pj?.items);
-        const profile = isRecord(pj?.profile) ? (pj.profile as unknown as UserProfile) : null;
+        const profile = isUserProfilePayload(pj?.profile) ? pj.profile : null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));
           await params.loginAsUser(profile, serverUser);
@@ -245,7 +232,12 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
   params.setInviteChecking?.(true);
   params.setInviteError(null);
   try {
-    const r = await fetchFn(`/api/invite/validate?code=${encodeURIComponent(code)}`, { credentials: 'include' });
+    const r = await fetchFn('/api/invite/validate', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ code }),
+    });
     const j = await readJsonRecord(r);
     if (!r.ok || j?.valid !== true) {
       params.setInviteError('Код приглашения недействителен или уже использован.');

@@ -1,4 +1,5 @@
 import { WeeklyIntelligenceResult } from "./weeklyIntelligence";
+import { isRecord, parseJson } from "./safeJson";
 
 export interface WeeklyStoredReport {
   weekKey: string; // YYYY-WW
@@ -7,16 +8,8 @@ export interface WeeklyStoredReport {
   aiText?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function safeJsonParse(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  return parseJson(text);
 }
 
 /**
@@ -63,10 +56,25 @@ export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
     const key = storageKey(userId);
     const raw = localStorage.getItem(key);
     const parsed = raw ? safeJsonParse(raw) : [];
-    return Array.isArray(parsed) ? parsed as WeeklyStoredReport[] : [];
+    return Array.isArray(parsed) ? parsed.filter(isWeeklyStoredReport) : [];
   } catch {
     return [];
   }
+}
+
+function isWeeklyIntelligenceResult(value: unknown): value is WeeklyIntelligenceResult {
+  if (!isRecord(value)) return false;
+  return [value.wis, value.weightDelta7, value.weightDelta30, value.compliance, value.adaptationIndex]
+    .every((item) => typeof item === 'number' && Number.isFinite(item))
+    && (value.status === 'excellent' || value.status === 'stable' || value.status === 'adjust' || value.status === 'critical');
+}
+
+function isWeeklyStoredReport(value: unknown): value is WeeklyStoredReport {
+  return isRecord(value)
+    && typeof value.weekKey === 'string'
+    && typeof value.createdAt === 'string'
+    && isWeeklyIntelligenceResult(value.data)
+    && (value.aiText === undefined || typeof value.aiText === 'string');
 }
 
 function saveWeeklyReports(userId: string, reports: WeeklyStoredReport[]) {

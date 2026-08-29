@@ -7,10 +7,12 @@ import {
   chooseAndSaveBackupHandle,
   supportsFileSystemAccessApi,
   writeBackupToHandle,
+  restoreFromFile,
+  type BackupFileHandle,
 } from './backup';
 
 export function useBackupAutosave() {
-  const backupHandleRef = useRef<any>(null);
+  const backupHandleRef = useRef<BackupFileHandle | null>(null);
   const [autosaveEnabled, setAutosaveEnabled] = useState(false);
 
   useEffect(() => {
@@ -48,13 +50,12 @@ export function useBackupAutosave() {
 
   const onImportBackup = useCallback(async (file: File) => {
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!parsed || parsed.version !== 1 || typeof parsed.localStorage !== 'object') {
+      const parsed = await restoreFromFile(file);
+      const result = applyBackupPayload(parsed);
+      if (!result.ok) {
         alert('Файл не похож на резервную копию FitFocus.');
         return;
       }
-      applyBackupPayload(parsed);
       window.location.reload();
     } catch {
       alert('Не удалось прочитать JSON.');

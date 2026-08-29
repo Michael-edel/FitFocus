@@ -28,6 +28,7 @@ import { WeightTrendChart } from './charts';
 import { toLocalDayKey } from './dateUtils';
 import { normalizeWearableSyncSnapshot } from './wearableSync';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
+import { isRecord, parseJson } from './safeJson';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
@@ -154,23 +155,19 @@ const parseNumber = (value: unknown) => {
 };
 
 const parseWearableJson = (text: string): WearableImportPayload | null => {
-  try {
-    const raw = JSON.parse(text);
-    const obj = normalizeWearableSyncSnapshot(raw);
-    if (!obj) return null;
-    return {
-      provider: obj.provider,
-      stepsToday: obj.stepsToday,
-      activeMinutesToday: obj.activeMinutesToday,
-      sleepHoursLastNight: obj.sleepHoursLastNight,
-      weight: obj.weight,
-      pulse: obj.pulse,
-      bloodGlucoseMmolL: obj.bloodGlucoseMmolL,
-      date: obj.date || obj.metricsUpdatedAt,
-    };
-  } catch {
-    return null;
-  }
+  const raw = parseJson(text);
+  const obj = normalizeWearableSyncSnapshot(raw);
+  if (!obj) return null;
+  return {
+    provider: obj.provider,
+    stepsToday: obj.stepsToday,
+    activeMinutesToday: obj.activeMinutesToday,
+    sleepHoursLastNight: obj.sleepHoursLastNight,
+    weight: obj.weight,
+    pulse: obj.pulse,
+    bloodGlucoseMmolL: obj.bloodGlucoseMmolL,
+    date: obj.date || obj.metricsUpdatedAt,
+  };
 };
 
 const parseWearableCsv = (text: string): WearableImportPayload | null => {
@@ -344,7 +341,8 @@ export default function ProgressScreen({
       uiSkipSaveRef.current = true;
       const raw = window.localStorage.getItem(storageKey);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<ProgressUiState>;
+      const parsedValue = parseJson(raw);
+      const parsed = isRecord(parsedValue) ? parsedValue : {};
       setSelectedMetric(
         parsed.selectedMetric === 'weight' ||
         parsed.selectedMetric === 'waistCm' ||

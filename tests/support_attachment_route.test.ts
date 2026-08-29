@@ -32,7 +32,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(ticketOwner = 'user-1') {
+function makeDb(ticketOwner = 'user-1', mime = 'text/plain') {
   return {
     prepare(sql: string) {
       return {
@@ -46,7 +46,7 @@ function makeDb(ticketOwner = 'user-1') {
           if (sql.includes('FROM support_feedback_messages')) {
             return {
               attachments_json: JSON.stringify([
-                { name: 'voice.txt', mime: 'text/plain', size: 5, storage_key: 'support/ticket-1/00-voice.txt' },
+                { name: 'voice.txt', mime, size: 5, storage_key: 'support/ticket-1/00-voice.txt' },
               ]),
             };
           }
@@ -64,7 +64,7 @@ function makeDb(ticketOwner = 'user-1') {
   };
 }
 
-function makeContext(userId: string, ticketOwner = 'user-1') {
+function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain') {
   return async () => {
     const token = await signJwt({ sub: userId, sid: 'sid-1' });
     const request = new Request('https://fitfocus.test/api/support/attachment?id=ticket-1&messageId=message-1&index=0', {
@@ -88,7 +88,7 @@ function makeContext(userId: string, ticketOwner = 'user-1') {
       request,
       env: {
         AUTH_JWT_SECRET: SECRET,
-        DB: makeDb(ticketOwner) as unknown as D1Database,
+        DB: makeDb(ticketOwner, mime) as unknown as D1Database,
         SUPPORT_ATTACHMENTS: bucket as SupportAttachmentBucket,
       },
       params: {},
@@ -115,5 +115,14 @@ describe('/api/support/attachment', () => {
     expect(response.status).toBe(403);
     const body = await response.json() as SupportAttachmentBody;
     expect(body.error).toBe('FORBIDDEN');
+  });
+
+  it('downloads unsafe content types instead of rendering them inline', async () => {
+    const response = await makeContext('user-1', 'user-1', 'text/html')();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/octet-stream');
+    expect(response.headers.get('content-disposition')).toMatch(/^attachment;/);
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
   });
 });

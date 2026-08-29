@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { Loader2 } from 'lucide-react';
+import type { CloudFamily, CloudFamilyMember } from './useFamilyCloud';
 
 type FamilyShoppingItem = {
   name: string;
@@ -14,8 +15,8 @@ type FamilyShopping = {
 } | null;
 
 type FamilyScreenProps = {
-  cloudFamily: any | null;
-  cloudFamilyMembers: any[];
+  cloudFamily: CloudFamily | null;
+  cloudFamilyMembers: CloudFamilyMember[];
   cloudFamilyLoading: boolean;
   cloudFamilyError: string | null;
   setCloudFamilyError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -37,13 +38,13 @@ type FamilyScreenProps = {
   formatGramsPretty: (grams: number) => string;
 };
 
-function collectFamilyRestrictions(member: any): string[] {
+function collectFamilyRestrictions(member: CloudFamilyMember): string[] {
   const dietary = member?.dietary || {};
   return [
     ...(Array.isArray(dietary.allergens) ? dietary.allergens : []),
     ...(Array.isArray(dietary.intolerances) ? dietary.intolerances : []),
     ...(Array.isArray(dietary.excludedFoods) ? dietary.excludedFoods : []),
-    ...String(member?.exclusions || '')
+    ...String(member.exclusions || '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
@@ -233,7 +234,7 @@ export default function FamilyScreen({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {cloudFamilyMembers.map((m: any, i: number) => {
+              {cloudFamilyMembers.map((m, i) => {
                 const restrictions = collectFamilyRestrictions(m);
 
                 return (

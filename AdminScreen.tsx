@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip, Send, Filter } from "lucide-react";
+import { parseJson } from "./safeJson";
 
-const DEFAULT_AI_INPUT_COST_PER_1M = "0.30";
-const DEFAULT_AI_OUTPUT_COST_PER_1M = "2.50";
+const DEFAULT_AI_INPUT_COST_PER_1M = "0.20";
+const DEFAULT_AI_OUTPUT_COST_PER_1M = "1.20";
 const REQUIRED_FEATURE_FLAGS: Flag[] = [
   { key: "achievements_enabled", enabled: 1, rollout_percentage: 100 },
 ];
@@ -36,6 +37,30 @@ const numberFromUnknown = (value: unknown): number => {
   const next = Number(value ?? 0);
   return Number.isFinite(next) ? next : 0;
 };
+
+const readJsonRecord = async (response: Response): Promise<JsonRecord> => {
+  const payload: unknown = await response.json().catch(() => null);
+  return isJsonRecord(payload) ? payload : {};
+};
+
+function isAiLog(value: unknown): value is AiLog {
+  if (!isJsonRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.user_id === "string"
+    && typeof value.ts === "number"
+    && typeof value.feature === "string"
+    && typeof value.status === "number"
+    && typeof value.latency_ms === "number"
+    && typeof value.safe_mode === "number";
+}
+
+function isInviteRow(value: unknown): value is InviteRow {
+  if (!isJsonRecord(value)) return false;
+  return typeof value.code === "string"
+    && typeof value.max_uses === "number"
+    && typeof value.uses === "number"
+    && typeof value.revoked === "number";
+}
 
 function normalizeAdminEvents(payload: unknown): AdminEventRow[] {
   if (!isJsonRecord(payload) || !Array.isArray(payload.events)) return [];
@@ -382,6 +407,76 @@ type PushBroadcastResult = {
   payload?: { title?: string; body?: string; url?: string; tag?: string };
 };
 
+function isUserRow(value: unknown): value is UserRow {
+  return isJsonRecord(value) && typeof value.id === "string";
+}
+
+function isSettingRow(value: unknown): value is SettingRow {
+  return isJsonRecord(value) && typeof value.key === "string" && typeof value.value === "string";
+}
+
+function isFlag(value: unknown): value is Flag {
+  return isJsonRecord(value)
+    && typeof value.key === "string"
+    && (typeof value.enabled === "boolean" || typeof value.enabled === "number")
+    && (value.rollout_percentage === undefined || typeof value.rollout_percentage === "number");
+}
+
+function isSupportTicketRow(value: unknown): value is SupportTicketRow {
+  return isJsonRecord(value)
+    && typeof value.id === "string"
+    && typeof value.user_id === "string"
+    && typeof value.created_at === "number"
+    && typeof value.updated_at === "number"
+    && typeof value.category === "string"
+    && typeof value.message === "string"
+    && typeof value.status === "string"
+    && typeof value.priority === "string"
+    && typeof value.attachment_count === "number";
+}
+
+function isUserDetail(value: unknown): value is UserDetail {
+  if (!isJsonRecord(value) || !isJsonRecord(value.user) || !isJsonRecord(value.profile)) return false;
+  return typeof value.user.id === "string"
+    && Array.isArray(value.roles)
+    && value.roles.every((role) => typeof role === "string")
+    && Array.isArray(value.sessions)
+    && value.sessions.every((session) => isJsonRecord(session) && typeof session.id === "string")
+    && (value.family === null || isJsonRecord(value.family))
+    && (value.subscription === null || isJsonRecord(value.subscription));
+}
+
+function isPushBroadcastResult(value: unknown): value is PushBroadcastResult {
+  if (!isJsonRecord(value)) return false;
+  return value.ok === true
+    && typeof value.dry_run === "boolean"
+    && typeof value.total_candidates === "number"
+    && typeof value.matched === "number"
+    && typeof value.selected === "number"
+    && typeof value.limit === "number"
+    && typeof value.offset === "number";
+}
+
+function hasFiniteNumberFields(value: JsonRecord, fields: string[]): boolean {
+  return fields.every((field) => typeof value[field] === "number" && Number.isFinite(value[field]));
+}
+
+function isStats(value: unknown): value is Stats {
+  if (!isJsonRecord(value) || !isJsonRecord(value.totals) || !isJsonRecord(value.today)) return false;
+  return hasFiniteNumberFields(value.totals, [
+    "users", "active_sessions", "pro_active", "family_active", "deleted_users", "inactive_users",
+    "family_members_active", "profiles_with_measurements", "profiles_with_glucose",
+    "profiles_with_wearable", "profiles_with_progress_photos", "profiles_with_family_members",
+  ]) && typeof value.today.day === "string" && hasFiniteNumberFields(value.today, ["ai_calls", "meals_logged"]);
+}
+
+function isAiCost(value: unknown): value is AiCost {
+  if (!isJsonRecord(value) || !isJsonRecord(value.today) || !isJsonRecord(value.last_7d) || !Array.isArray(value.top_users_7d)) return false;
+  return hasFiniteNumberFields(value.today, ["day_start_ms", "calls", "errors", "tokens", "cost_usd", "fallback_calls", "fallback_pct", "avg_latency_ms"])
+    && hasFiniteNumberFields(value.last_7d, ["from_ms", "calls", "tokens", "cost_usd", "fallback_calls", "fallback_pct"])
+    && value.top_users_7d.every((item) => isJsonRecord(item) && typeof item.user_id === "string");
+}
+
 const PUSH_URL_OPTIONS = [
   { value: "/", label: "Главная / обзор" },
   { value: "/#dashboard", label: "Обзор" },
@@ -549,8 +644,8 @@ export default function AdminScreen() {
       if (aiLogFeature) qs.set('feature', aiLogFeature);
       const r = await fetch(`/api/admin/ai_logs?${qs.toString()}`, { credentials: 'include' });
       if (r.ok) {
-        const j = await r.json();
-        setAiLogs(Array.isArray(j.logs) ? j.logs : []);
+        const j = await readJsonRecord(r);
+        setAiLogs(Array.isArray(j.logs) ? j.logs.filter(isAiLog) : []);
       }
     } catch {}
   };
@@ -575,8 +670,8 @@ export default function AdminScreen() {
     try {
       const r = await fetch("/api/admin/invites?limit=100", { credentials: "include" });
       if (r.ok) {
-        const j = await r.json();
-        setInvites(Array.isArray(j?.invites) ? j.invites : []);
+        const j = await readJsonRecord(r);
+        setInvites(Array.isArray(j.invites) ? j.invites.filter(isInviteRow) : []);
       }
     } catch {}
   };
@@ -584,8 +679,10 @@ export default function AdminScreen() {
   const parseSupportSteps = (value: unknown) => {
     if (!value) return [] as string[];
     try {
-      const parsed = JSON.parse(String(value));
-      return Array.isArray(parsed) ? parsed.map((step) => String(step)).filter(Boolean) : [];
+      const parsed = parseJson(String(value));
+      return Array.isArray(parsed)
+        ? parsed.filter((step): step is string => typeof step === "string").map((step) => step.trim()).filter(Boolean)
+        : [];
     } catch {
       return [];
     }
@@ -599,8 +696,8 @@ export default function AdminScreen() {
       if (supportStatusFilter !== "all") qs.set("status", supportStatusFilter);
       const r = await fetch(`/api/support/feedback?${qs.toString()}`, { credentials: "include" });
       if (!r.ok) return;
-      const j = await r.json();
-      setSupportTickets(Array.isArray(j?.tickets) ? j.tickets : []);
+      const j = await readJsonRecord(r);
+      setSupportTickets(Array.isArray(j.tickets) ? j.tickets.filter(isSupportTicketRow) : []);
     } catch {}
   };
 
@@ -609,8 +706,8 @@ export default function AdminScreen() {
     try {
       const r = await fetch(`/api/support/feedback?id=${encodeURIComponent(ticketId)}`, { credentials: "include" });
       if (!r.ok) return;
-      const j = await r.json();
-      setSelectedSupportTicket(j?.ticket ? j.ticket : null);
+      const j = await readJsonRecord(r);
+      setSelectedSupportTicket(isSupportTicketRow(j.ticket) ? j.ticket : null);
     } catch {}
   };
 
@@ -641,9 +738,9 @@ export default function AdminScreen() {
           assign_to: supportTicketAssignDraft || undefined,
         }),
       });
-      const j = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(j?.message || j?.error || "Не удалось обновить обращение");
-      setSelectedSupportTicket(j?.ticket || null);
+      const j = await readJsonRecord(r);
+      if (!r.ok) throw new Error(typeof j.message === "string" ? j.message : typeof j.error === "string" ? j.error : "Не удалось обновить обращение");
+      setSelectedSupportTicket(isSupportTicketRow(j.ticket) ? j.ticket : null);
       setSupportTicketReplyDraft("");
       setSupportTicketAssignDraft("");
       await loadSupportTickets();
@@ -709,11 +806,14 @@ export default function AdminScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPushBroadcastBody(dryRun)),
       });
-      const payload = await response.json().catch(() => null);
+      const payload = await readJsonRecord(response);
       if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || "Не удалось отправить пуш-рассылку");
+        throw new Error(typeof payload.message === "string" ? payload.message : typeof payload.error === "string" ? payload.error : "Не удалось отправить пуш-рассылку");
       }
-      setPushSendResult(payload as PushBroadcastResult);
+      if (!isPushBroadcastResult(payload)) {
+        throw new Error("Сервер вернул некорректный результат рассылки");
+      }
+      setPushSendResult(payload);
       await loadAdminEvents();
     } catch (error) {
       setPushSendError(errorMessage(error, "Не удалось отправить пуш-рассылку"));
@@ -740,18 +840,20 @@ export default function AdminScreen() {
       if (!c.ok) throw new Error("Нет доступа к /api/admin/ai-cost (нужна роль admin)");
       if (!st.ok) throw new Error("Нет доступа к /api/admin/settings (нужна роль admin)");
       if (!i.ok) throw new Error("Нет доступа к /api/admin/invites (нужна роль admin)");
-      const sj = await s.json();
-      const fj = await f.json();
-      const aj = await a.json();
-      const cj = await c.json();
-      const stj = await st.json();
-      const ij = await i.json();
-      setStats(sj?.stats || null);
-      setAiCost(cj || null);
-      setFlags(mergeRequiredFlags(Array.isArray(fj?.flags) ? fj.flags : []));
-      setAdmins(Array.isArray(aj?.admins) ? aj.admins : []);
-      setSettings(Array.isArray(stj?.settings) ? stj.settings : []);
-      setInvites(Array.isArray(ij?.invites) ? ij.invites : []);
+      const [sj, fj, aj, cj, stj, ij] = await Promise.all([
+        readJsonRecord(s),
+        readJsonRecord(f),
+        readJsonRecord(a),
+        readJsonRecord(c),
+        readJsonRecord(st),
+        readJsonRecord(i),
+      ]);
+      setStats(isStats(sj.stats) ? sj.stats : null);
+      setAiCost(isAiCost(cj) ? cj : null);
+      setFlags(mergeRequiredFlags(Array.isArray(fj.flags) ? fj.flags.filter(isFlag) : []));
+      setAdmins(Array.isArray(aj.admins) ? aj.admins.filter(isUserRow) : []);
+      setSettings(Array.isArray(stj.settings) ? stj.settings.filter(isSettingRow) : []);
+      setInvites(Array.isArray(ij.invites) ? ij.invites.filter(isInviteRow) : []);
       setSettingsDirty({});
       setInviteActionMsg(null);
       setCreatedInviteCodes([]);
@@ -785,9 +887,9 @@ export default function AdminScreen() {
       qs.set("limit", String(userListLimit));
       const r = await fetch(`/api/admin/users?${qs.toString()}`, { credentials: "include" });
       if (!r.ok) throw new Error("Список пользователей недоступен (нужна роль admin)");
-      const j = await r.json();
-      setUsers(Array.isArray(j?.users) ? j.users : []);
-      setUsersTotal(Number(j?.total || 0));
+      const j = await readJsonRecord(r);
+      setUsers(Array.isArray(j.users) ? j.users.filter(isUserRow) : []);
+      setUsersTotal(numberFromUnknown(j.total));
     } catch (error) {
       setErr(errorMessage(error, "Ошибка загрузки пользователей"));
     } finally {
@@ -806,11 +908,12 @@ export default function AdminScreen() {
     try {
       const rr = await fetch(`/api/admin/user_detail?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
       if (!rr.ok) throw new Error("Нет доступа к карточке пользователя");
-      const rj = await rr.json();
-      setSelectedUserDetail(rj as UserDetail);
-      setRoles(Array.isArray(rj?.roles) ? rj.roles : []);
-      setSessions(Array.isArray(rj?.sessions) ? rj.sessions : []);
-      setSubscriptionPlanDraft((rj?.subscription?.plan === "pro" || rj?.subscription?.plan === "family" ? rj.subscription.plan : "free") as SubscriptionPlan);
+      const rj = await readJsonRecord(rr);
+      if (!isUserDetail(rj)) throw new Error("Сервер вернул некорректную карточку пользователя");
+      setSelectedUserDetail(rj);
+      setRoles(rj.roles.filter((role): role is string => typeof role === "string"));
+      setSessions(rj.sessions);
+      setSubscriptionPlanDraft(rj.subscription?.plan === "pro" || rj.subscription?.plan === "family" ? rj.subscription.plan : "free");
     } catch (error) {
       setErr(errorMessage(error, "Ошибка загрузки пользователя"));
     } finally {
@@ -973,10 +1076,11 @@ export default function AdminScreen() {
           expires_at: Number.isFinite(expiresAt as number) ? expiresAt : null,
         }),
       });
-      const j = await r.json().catch(() => null);
-      const codes = Array.isArray(j?.codes) ? j.codes.map((code: unknown) => String(code)).filter(Boolean) : [];
+      const j = await readJsonRecord(r);
+      const codes = Array.isArray(j.codes) ? j.codes.filter((code): code is string => typeof code === "string").map((code) => code.trim()).filter(Boolean) : [];
       if (!r.ok || !codes.length) {
-        throw new Error(j?.error?.code || j?.error?.message || "Не удалось создать invite");
+        const error = isJsonRecord(j.error) ? j.error : {};
+        throw new Error(typeof error.code === "string" ? error.code : typeof error.message === "string" ? error.message : "Не удалось создать invite");
       }
       setCreatedInviteCodes(codes);
       setInviteActionMsg(`Создано ${codes.length} invite-кодов для тестировщиков.`);
@@ -1541,8 +1645,8 @@ export default function AdminScreen() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           {([
-            { key: "ai_cost_input_per_1m_usd", label: "Input price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_INPUT_COST_PER_1M },
-            { key: "ai_cost_output_per_1m_usd", label: "Output price / 1M tokens ($)", hint: "Gemini 2.5 Flash Standard", defaultValue: DEFAULT_AI_OUTPUT_COST_PER_1M },
+            { key: "ai_cost_input_per_1m_usd", label: "Input price / 1M tokens ($)", hint: "GPT-5.6 Luna", defaultValue: DEFAULT_AI_INPUT_COST_PER_1M },
+            { key: "ai_cost_output_per_1m_usd", label: "Output price / 1M tokens ($)", hint: "GPT-5.6 Luna", defaultValue: DEFAULT_AI_OUTPUT_COST_PER_1M },
             { key: "ai_max_calls_per_user_day", label: "Calls / user / day", hint: "0 = без лимита" },
             { key: "ai_max_cost_per_user_day_usd", label: "Cost / user / day ($)", hint: "0 = без лимита" },
             { key: "ai_max_cost_total_day_usd", label: "Total cost / day ($)", hint: "0 = без лимита" },

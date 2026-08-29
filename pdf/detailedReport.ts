@@ -5,7 +5,7 @@ import { Gender, Goal } from '../types';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 import { ensurePdfInterFont } from './font';
 import { toLocalDayKey } from '../dateUtils';
-import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle, pdfHeader, pdfPaintBackground } from './theme';
+import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle, pdfHeader, pdfPaintBackground, pdfLastAutoTableY } from './theme';
 import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, resolveBloodGlucose, weekRangeISO } from './metrics';
 
 type Targets = { calories: number; protein: number; fat: number; carbs: number };
@@ -154,7 +154,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   habits.slice(0, 4).forEach(h => {
     // Note: UserHabit doesn't store full weekHistory in types.ts.
     // We infer consistency from streak for visualization or assume extended data is passed.
-    const weekDone = (h as any).weekHistory?.filter((d: any) => d).length ?? (h.streak > 7 ? 7 : h.streak);
+    const weekDone = Math.min(7, Math.max(0, h.streak));
     const todayDone = h.lastCompletedDate === todayKey;
 
     let color: number[] = [239, 68, 68]; // red
@@ -267,7 +267,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
     }),
   });
 
-  const afterTableY = (doc as any).lastAutoTable.finalY + 10;
+  const afterTableY = pdfLastAutoTableY(doc, 68) + 10;
   drawWeightTrend(doc, user, 14, afterTableY, 182, 44);
 
   // Habits section
@@ -286,7 +286,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   });
 
   // Clinical conclusion
-  const finalTableY = (doc as any).lastAutoTable.finalY + 10;
+  const finalTableY = pdfLastAutoTableY(doc, afterChartY + 4) + 10;
   if (finalTableY > 230) doc.addPage();
   const concY = finalTableY > 230 ? 40 : finalTableY;
   

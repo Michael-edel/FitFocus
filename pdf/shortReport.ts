@@ -71,10 +71,10 @@ export async function downloadShortHealthReportPdf(opts: {
   autoTable(doc, {
     startY: 112,
     theme: 'plain',
-    tableLineColor: PDF_COLORS.line as any,
+    tableLineColor: PDF_COLORS.line,
     tableLineWidth: 0.2,
-    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink as any },
-    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252] as any, textColor: PDF_COLORS.muted as any },
+    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink },
+    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252], textColor: PDF_COLORS.muted },
     head: [['Показатель', 'Значение']],
     body: [
       ['Текущий вес', `${user.weight} кг`],
@@ -100,7 +100,7 @@ export async function downloadShortHealthReportPdf(opts: {
     protDiff < -15 ? `Белок ниже цели примерно на ${Math.abs(protDiff)} г/день — добавьте 1–2 белковых порции.` : 'Белок в норме или близко к цели.',
     compl.pct < 50 ? 'Привычки выполняются нерегулярно — выберите 1 привычку и закрепите её 7 дней.' : 'Привычки в хорошем темпе — продолжайте.',
   ].join(' ');
-  doc.text(rec, 18, 173, { maxWidth: 174 } as any);
+  doc.text(rec, 18, 173, { maxWidth: 174 });
   doc.setTextColor(...PDF_COLORS.ink);
 
   pdfFooter(doc, generatedAt);

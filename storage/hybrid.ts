@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from "./keys";
+import { isRecord, parseJson } from '../safeJson';
 
 type KVItem = { key: string; value: string; baseVersion?: number };
 type ProfileLike = {
@@ -16,6 +17,10 @@ type ProfileLike = {
   usage?: unknown;
   plan?: unknown;
 };
+
+function isProfileLike(value: unknown): value is ProfileLike {
+  return isRecord(value) && typeof value.id === 'string' && value.id.trim().length > 0;
+}
 
 type RemoteStateItem = {
   key: string;
@@ -168,7 +173,8 @@ async function flushRemoteKVOperations(): Promise<void> {
                 baseVersion: operation.baseVersion ?? 0,
               }),
             });
-            const payload = await response.json().catch(() => null);
+            const rawPayload: unknown = await response.json().catch(() => null);
+            const payload = isRecord(rawPayload) ? rawPayload : {};
             if (response.ok) {
               const serverItem = Array.isArray(payload?.items)
                 ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === operation.key) ?? null
@@ -213,7 +219,8 @@ async function flushRemoteKVOperations(): Promise<void> {
             return;
           }
           if (response.status === 409) {
-            const payload = await response.json().catch(() => null);
+            const rawPayload: unknown = await response.json().catch(() => null);
+            const payload = isRecord(rawPayload) ? rawPayload : {};
             if (typeof payload?.key === 'string' && typeof payload?.value === 'string') {
               await applyRemoteKVConflict(
                 payload.key,
@@ -338,7 +345,7 @@ export function renameLocalStoragePrefix(oldPrefix: string, newPrefix: string) {
 
 export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: unknown[]) {
   if (!ownerUserId) return;
-  safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(normalizeUserProfiles(next as ProfileLike[])));
+  safeSetItem(allUsersStorageKey(ownerUserId), JSON.stringify(normalizeUserProfiles(next.filter(isProfileLike))));
 }
 
 export function readStoredAllUsersSnapshotForUser<T = unknown>(ownerUserId: string | null | undefined): T[] | null {
@@ -346,9 +353,10 @@ export function readStoredAllUsersSnapshotForUser<T = unknown>(ownerUserId: stri
   try {
     const raw = localStorage.getItem(allUsersStorageKey(ownerUserId));
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const parsed = parseJson(raw);
     if (!Array.isArray(parsed) || !parsed.length) return null;
-    return normalizeUserProfiles(parsed as ProfileLike[]) as T[];
+    const profiles = parsed.filter(isProfileLike);
+    return profiles.length ? normalizeUserProfiles(profiles) as T[] : null;
   } catch {
     return null;
   }
@@ -367,9 +375,10 @@ export function readStoredAllUsersSnapshot<T = unknown>(): T[] | null {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      const parsed = JSON.parse(raw);
+      const parsed = parseJson(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        combined.push(...normalizeUserProfiles(parsed as ProfileLike[]));
+        const profiles = parsed.filter(isProfileLike);
+        combined.push(...normalizeUserProfiles(profiles));
       }
     } catch {}
   }

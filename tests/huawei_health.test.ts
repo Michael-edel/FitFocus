@@ -201,7 +201,7 @@ describe('Huawei Health integration', () => {
         wearableStepsToday: 4321,
       },
     });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('UPDATE user_profiles SET profile_json'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('UPDATE wearable_connections SET last_sync_at'))).toBe(true);
   });
 

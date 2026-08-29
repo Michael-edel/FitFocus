@@ -3,9 +3,10 @@
 // that a native iOS HealthKit bridge can store in Keychain.
 
 import { requireUser, json } from "../_lib/auth";
+import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
 
-type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 type MobileSessionPayload = {
   v: number;
   sub: string;
@@ -47,6 +48,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     user = await requireUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
+  }
+
+  try {
+    await requireBetaAccess(env, user);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
   }
 
   if (!env.AUTH_JWT_SECRET) return json({ error: "AUTH_CONFIG" }, 500);

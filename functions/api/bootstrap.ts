@@ -3,13 +3,14 @@
 // Returns: { user, profile, kv }
 
 import { requireUser, json } from "./_lib/auth";
+import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { migrateLegacyAccountByEmail, withProtectedFields } from "./_lib/legacy_sync";
 import { safeJsonParseObject, type JsonObject } from "./_lib/json";
 import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATION_VERSION } from "../../versioning";
 
-type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -18,6 +19,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     user = await requireUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
+  }
+
+  try {
+    await requireBetaAccess(env, user);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);

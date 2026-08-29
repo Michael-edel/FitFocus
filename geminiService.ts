@@ -1,4 +1,5 @@
 import type { Type } from "@google/genai";
+import { AI_DEFAULT_MODEL, getAiFallbackModels } from "./aiModels";
 import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodItem, UserHabit, WeeklyMenu, FamilyWeeklyMenu, FamilyMenuPrefs, FamilyWeeklyMenuDay } from "./types";
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
@@ -396,10 +397,20 @@ async function callAiProxy(
   // 1) пробуем основную модель
   let { res, data } = await doReq(model);
 
-  // 2) если нет доступа/модель не найдена — фолбэк на стабильные модели
-  if (!res.ok && (res.status === 403 || res.status === 404)) {
-    const fallback = model.toLowerCase().includes("pro") ? "gemini-2.5-pro" : "gemini-2.5-flash";
-    ({ res, data } = await doReq(fallback));
+  // 2) если модель недоступна — пробуем следующие стабильные модели, не повторяя тот же ID
+  const errorText = () => {
+    const error = asRecord(data.error);
+    return [stringValue(data.message), stringValue(data.error), stringValue(error.message)].join(" ").toLowerCase();
+  };
+  const isModelAvailabilityError = () =>
+    res.status === 404 ||
+    ((res.status === 400 || res.status === 403) && /model|not found|not supported|unsupported|does not exist|permission|access/.test(errorText()));
+
+  if (!res.ok && isModelAvailabilityError()) {
+    for (const fallback of getAiFallbackModels(model)) {
+      ({ res, data } = await doReq(fallback));
+      if (res.ok || !isModelAvailabilityError()) break;
+    }
   }
 
   if (!res.ok) {
@@ -457,7 +468,7 @@ export async function callAiCouncil(
   habits: UserHabit[]
 ): Promise<CouncilResponse> {
   const callModel = async (prompt: string, role: AIAgentRole) => {
-    const res = await callAiProxy('gemini-2.5-flash', prompt, `council_${role}`);
+    const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, `council_${role}`);
     return res.text || '';
   };
 
@@ -504,6 +515,16 @@ export type AiLastStatus = {
   stale?: boolean;
 };
 
+const isAiStatusSource = (value: unknown): value is AiStatusSource =>
+  value === 'live'
+  || value === 'cache'
+  || value === 'stale-cache'
+  || value === 'fallback'
+  || value === 'cooldown-cache'
+  || value === 'cooldown-stale-cache'
+  || value === 'cooldown-fallback'
+  || value === 'error';
+
 const recordAiStatus = (s: AiLastStatus) => {
   try {
     localStorage.setItem(LS_STATUS_KEY(), JSON.stringify(s));
@@ -514,7 +535,19 @@ export const readAiStatus = (): AiLastStatus | null => {
   try {
     const raw = localStorage.getItem(LS_STATUS_KEY());
     if (!raw) return null;
-    return JSON.parse(raw) as AiLastStatus;
+    const parsed = safeJsonObject(raw);
+    if (typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts) || typeof parsed.feature !== 'string' || !isAiStatusSource(parsed.source)) {
+      return null;
+    }
+    return {
+      ts: parsed.ts,
+      feature: parsed.feature,
+      source: parsed.source,
+      ...(typeof parsed.reason === 'string' ? { reason: parsed.reason } : {}),
+      ...(typeof parsed.cooldownUntil === 'number' ? { cooldownUntil: parsed.cooldownUntil } : {}),
+      ...(typeof parsed.cacheTs === 'number' ? { cacheTs: parsed.cacheTs } : {}),
+      ...(typeof parsed.stale === 'boolean' ? { stale: parsed.stale } : {}),
+    };
   } catch { return null; }
 };
 
@@ -611,7 +644,11 @@ export const setLastAiAction = (action: { feature: string; type: string; userId:
 export const getLastAiAction = (): { feature: string; type: string; userId: string } | null => {
   try {
     const raw = localStorage.getItem(LS_LAST_ACTION_KEY());
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = safeJsonObject(raw);
+    return typeof parsed.feature === 'string' && typeof parsed.type === 'string' && typeof parsed.userId === 'string'
+      ? { feature: parsed.feature, type: parsed.type, userId: parsed.userId }
+      : null;
   } catch { return null; }
 };
 
@@ -676,7 +713,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 - shoppingList: общий список покупок на неделю, 15–30 пунктов, кратко.
 - shoppingListItems: агрегированный список покупок с весом в граммах на неделю. Формат: [{name, grams}]. Названия строго на русском.`;
 
-  const res = await callAiProxy("gemini-2.5-flash", prompt, "weekly_menu", {
+  const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "weekly_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -869,7 +906,7 @@ const dietaryBlock = (() => {
 
   const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
 
-  const res = await callAiProxy("gemini-2.5-flash", prompt, "family_menu", {
+  const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "family_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -930,7 +967,7 @@ const dietaryBlock = (() => {
 ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
 `;
 
-    const rep = await callAiProxy("gemini-2.5-flash", repairPrompt, "family_menu_repair", {
+    const rep = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt, "family_menu_repair", {
       responseMimeType: "application/json",
       responseSchema: schema
     });
@@ -967,7 +1004,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
  * Анализ фото еды с использованием Gemini Flash
  */
 export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysisResult> {
-  const response = await callAiProxy('gemini-2.5-flash', {
+  const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       {
         inlineData: {
@@ -1045,7 +1082,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
 - Дай modelConfidence от 0 до 1
 Верни строго JSON по схеме.`;
 
-      const response = await callAiProxy("gemini-2.5-flash", {
+      const response = await callAiProxy(AI_DEFAULT_MODEL, {
         parts: [
           {
             inlineData: {
@@ -1067,7 +1104,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
  * Получение персонального совета от AI коуча
  */
 export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> {
-  const response = await callAiProxy('gemini-2.5-flash', 
+  const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Сахар крови трактуй так: низкий = не давать агрессивный дефицит и долгие голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка/клетчатки и равномерное распределение углеводов; не меняй калорийную цель, меняй состав и ритм питания. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
     {
@@ -1225,7 +1262,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   };
 
   // Attempt 1 (schema-enforced)
-  const r1 = await callAiProxy('gemini-2.5-pro', basePrompt, 'personal_plan', {
+  const r1 = await callAiProxy(AI_DEFAULT_MODEL, basePrompt, 'personal_plan', {
     responseMimeType: "application/json",
     responseSchema: schema
   });
@@ -1234,7 +1271,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 
   // Attempt 2: repair if model returned huge strings
   if (looksTooLong(plan)) {
-    const r2 = await callAiProxy('gemini-2.5-pro', repairPrompt(plan), 'personal_plan', {
+    const r2 = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt(plan), 'personal_plan', {
       responseMimeType: "application/json",
       responseSchema: schema
     });
@@ -1249,7 +1286,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
  * Объяснение причин плато и рекомендации
  */
 export async function generatePlateauExplanation(data: unknown): Promise<string> {
-  const response = await callAiProxy('gemini-2.5-flash', 
+  const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
     'plateau'
   );
@@ -1260,7 +1297,7 @@ export async function generatePlateauExplanation(data: unknown): Promise<string>
  * Интерпретация еженедельных показателей прогресса
  */
 export async function getWeeklyIntelligenceInterpretation(data: unknown): Promise<string> {
-  const response = await callAiProxy('gemini-2.5-flash', 
+  const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Интерпретируй еженедельные результаты пользователя: ${JSON.stringify(data)}. Напиши краткий мотивирующий анализ на 3-4 предложения.`,
     'wis_text'
   );
@@ -1271,7 +1308,7 @@ export async function getWeeklyIntelligenceInterpretation(data: unknown): Promis
  * Генерация рецепта по изображению
  */
 export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
-  const response = await callAiProxy('gemini-2.5-flash', {
+  const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
       { text: 'Напиши пошаговый рецепт этого блюда на русском. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк). Для каждого ингредиента указывай amount как короткую измеримую строку: например "200 г", "1 шт.", "150 мл", "1 ст. л.". Если точный вес по фото неизвестен, дай реалистичную оценку, но не оставляй amount пустым без необходимости.' }

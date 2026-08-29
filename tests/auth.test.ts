@@ -84,4 +84,11 @@ describe('auth audience scope', () => {
 
     expect(user.sub).toBe('user-1');
   });
+
+  it('treats malformed JWT bytes as an unauthenticated request', async () => {
+    await expect(requireUser(
+      new Request('https://fitfocus.test/api/me', { headers: { Authorization: 'Bearer a.%%%.b' } }),
+      { AUTH_JWT_SECRET: SECRET, DB: makeDb() },
+    )).rejects.toThrow('UNAUTH');
+  });
 });

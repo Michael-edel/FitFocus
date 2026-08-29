@@ -8,23 +8,25 @@ import { requireDB, nowMs } from "../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
+import { writeProfileCas } from "../_lib/profile_cas";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "../_lib/json";
 import { toLocalDayKey } from "../../../dateUtils";
 import { normalizeWearableSyncSnapshot, resolveWearableLocalDayKey, resolveWearableSyncTimestamp } from "../../../wearableSync";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
-async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: JsonObject | null; version: number }> {
+async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profile: JsonObject | null; version: number; exists: boolean }> {
   const row = await db
     .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
 
-  if (!row?.profile_json) return { profile: null, version: 0 };
+  if (!row) return { profile: null, version: 0, exists: false };
   const parsed = safeJsonParseObject(String(row.profile_json));
   return {
     profile: parsed,
     version: Number(row.version || 1),
+    exists: true,
   };
 }
 
@@ -99,14 +101,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const currentMeta = await loadProfileMeta(db, user.sub);
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
-  if (currentMeta.profile && baseVersion > 0 && currentMeta.version !== baseVersion) {
+  const hasExplicitBaseVersion = Object.prototype.hasOwnProperty.call(body, "baseVersion");
+  if (hasExplicitBaseVersion && ((currentMeta.exists && currentMeta.version !== baseVersion) || (!currentMeta.exists && baseVersion !== 0))) {
     return conflictResponse(user, currentMeta.profile, currentMeta.version);
   }
 
   const currentProfile = currentMeta.profile ?? {};
+  // Legacy bridges may omit baseVersion. They still get a CAS write against
+  // the version read above, so they cannot overwrite a concurrent edit.
+  const expectedVersion = hasExplicitBaseVersion ? baseVersion : currentMeta.version;
   const serverPlan = await loadActivePlan(db, user.sub);
   const now = nowMs();
-  const nextVersion = (currentMeta.version || 0) + 1;
+  const nextVersion = expectedVersion + 1;
   const timestamp = resolveWearableSyncTimestamp(payload, new Date().toISOString());
   const localDayKey = resolveWearableLocalDayKey(payload, timestamp);
   const wearableMetricsDayKey = localDayKey || toLocalDayKey(timestamp);
@@ -138,13 +144,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       : {}),
   });
 
-  await db
-    .prepare(
-      "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
-    )
-    .bind(user.sub, JSON.stringify(nextProfile), now, nextVersion)
-    .run();
+  const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
+  if (!profileWritten) {
+    const latest = await loadProfileMeta(db, user.sub);
+    return conflictResponse(user, latest.profile || {}, latest.version);
+  }
 
   return json(
     {

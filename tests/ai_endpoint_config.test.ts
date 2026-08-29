@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { onRequestPost } from '../functions/api/ai';
 type AiPostContext = Parameters<typeof onRequestPost>[0];
 type AiErrorBody = { error?: { code?: string; message?: string } };
@@ -68,30 +68,103 @@ function makeDb() {
   };
 }
 
-async function postAi(db: ReturnType<typeof makeDb>) {
+async function postAi(
+  db: ReturnType<typeof makeDb>,
+  options: { body?: Record<string, unknown>; env?: Record<string, unknown> } = {},
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: AiPostContext = {
     request: new Request('https://fitfocus.test/api/ai', {
       method: 'POST',
       headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feature: 'coach', contents: 'hello' }),
+      body: JSON.stringify(options.body ?? { feature: 'coach', contents: 'hello' }),
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, GEMINI_API_KEY: '' },
+    env: {
+      AUTH_JWT_SECRET: SECRET,
+      DB: db as unknown as D1Database,
+      GEMINI_API_KEY: '',
+      ...options.env,
+    },
   };
   return onRequestPost(context);
 }
 
 describe('/api/ai server configuration', () => {
-  it('does not mutate strict rate-limit buckets when Gemini API key is missing', async () => {
+  it('does not mutate strict rate-limit buckets when OpenAI API key is missing', async () => {
     const db = makeDb();
     const response = await postAi(db);
     const body = await response.json() as AiErrorBody;
 
     expect(response.status).toBe(500);
     expect(body.error?.code).toBe('AI_UNAVAILABLE');
-    expect(body.error?.message).not.toContain('GEMINI_API_KEY');
+    expect(body.error?.message).not.toContain('OPENAI_API_KEY');
     expect(db.prepared.some((stmt) => stmt.sql.includes('FROM subscriptions'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('ai_rate_limits'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('usage_daily'))).toBe(false);
+  });
+
+  it('sends Luna requests through OpenAI Responses API and preserves structured output', async () => {
+    const db = makeDb();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.openai.com/v1/responses');
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer test-openai-key');
+
+      const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(requestBody.model).toBe('gpt-5.6-luna');
+      expect(requestBody.store).toBe(false);
+      expect(requestBody.input).toEqual([
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello' }],
+        },
+      ]);
+
+      const text = requestBody.text as { format?: Record<string, unknown> };
+      expect(text.format?.type).toBe('json_schema');
+      expect(text.format?.strict).toBe(true);
+      expect(text.format?.schema).toEqual({
+        type: 'object',
+        properties: { answer: { type: 'string' } },
+        required: ['answer'],
+        additionalProperties: false,
+      });
+
+      return new Response(JSON.stringify({
+        id: 'resp_test',
+        model: 'gpt-5.6-luna',
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: '{"answer":"ok"}' }],
+        }],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await postAi(db, {
+        body: {
+          feature: 'coach',
+          model: 'gpt-5.6-luna',
+          contents: 'hello',
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'OBJECT',
+              properties: { answer: { type: 'STRING' } },
+            },
+          },
+        },
+        env: { OPENAI_API_KEY: 'test-openai-key' },
+      });
+      const body = await response.json() as { text?: string };
+
+      expect(response.status).toBe(200);
+      expect(body.text).toBe('{"answer":"ok"}');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AchievementDefinition } from './achievements/catalog';
 import type { AchievementEvaluationContext } from './achievements/engine';
+import { isRecord, parseJson, responseErrorMessage } from './safeJson';
 
 export type UnlockedAchievement = {
   key: string;
@@ -42,10 +43,38 @@ type PendingAchievementCheck = {
   resolvers: Array<(value: AchievementDefinition[]) => void>;
 };
 
+function isAchievementDefinition(value: unknown): value is AchievementDefinition {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.key === 'string' &&
+    typeof value.tier === 'string' &&
+    typeof value.category === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.description === 'string'
+  );
+}
+
+function toUnlockedAchievement(value: unknown): UnlockedAchievement | null {
+  if (!isRecord(value) || typeof value.key !== 'string') return null;
+  const unlockedAt = Number(value.unlocked_at);
+  if (!Number.isFinite(unlockedAt)) return null;
+  return {
+    key: value.key,
+    unlocked_at: unlockedAt,
+    tier: typeof value.tier === 'string' ? value.tier : '',
+    source: typeof value.source === 'string' ? value.source : null,
+    created_at: Number.isFinite(Number(value.created_at)) ? Number(value.created_at) : undefined,
+  };
+}
+
 function readCounters(userId: string): Record<string, number> {
   try {
     const raw = localStorage.getItem(`${COUNTER_PREFIX}${userId}`);
-    return raw ? JSON.parse(raw) : {};
+    const parsed = raw ? parseJson(raw) : null;
+    if (!isRecord(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+    ) as Record<string, number>;
   } catch {
     return {};
   }
@@ -90,9 +119,9 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     setLoading(true);
     try {
       const res = await fetch('/api/achievements', { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || data?.error || 'ACHIEVEMENTS_LOAD_FAILED');
-      const nextEnabled = data?.enabled !== false;
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(responseErrorMessage(data, 'ACHIEVEMENTS_LOAD_FAILED'));
+      const nextEnabled = !isRecord(data) || data.enabled !== false;
       setEnabled(nextEnabled);
       if (!nextEnabled) {
         setCatalog([]);
@@ -100,8 +129,8 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
         setNewlyUnlocked([]);
         return;
       }
-      setCatalog(Array.isArray(data.catalog) ? data.catalog : []);
-      setUnlocked(Array.isArray(data.unlocked) ? data.unlocked : []);
+      setCatalog(isRecord(data) && Array.isArray(data.catalog) ? data.catalog.filter(isAchievementDefinition) : []);
+      setUnlocked(isRecord(data) && Array.isArray(data.unlocked) ? data.unlocked.map(toUnlockedAchievement).filter((item): item is UnlockedAchievement => item !== null) : []);
     } catch {
       setEnabled(true);
       setCatalog([]);
@@ -158,34 +187,34 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
       if (!res.ok) return [];
-      if (data?.enabled === false) {
+      if (isRecord(data) && data.enabled === false) {
         setEnabled(false);
         setCatalog([]);
         setUnlocked([]);
         setNewlyUnlocked([]);
         return [];
       }
-      const nextCatalog = Array.isArray(data.catalog) ? data.catalog : catalog;
-      const nextUnlocked = Array.isArray(data.newlyUnlocked) ? data.newlyUnlocked : [];
+      const nextCatalog = isRecord(data) && Array.isArray(data.catalog)
+        ? data.catalog.filter(isAchievementDefinition)
+        : catalog;
+      const rawNewlyUnlocked = isRecord(data) && Array.isArray(data.newlyUnlocked) ? data.newlyUnlocked : [];
+      const nextUnlocked = rawNewlyUnlocked
+        .map((item) => toUnlockedAchievement(item))
+        .filter((item): item is UnlockedAchievement => item !== null);
+      const nextDefinitions = rawNewlyUnlocked.filter(isAchievementDefinition);
       setCatalog(nextCatalog);
       if (nextUnlocked.length) {
         setUnlocked((prev) => {
           const seen = new Set(prev.map((item) => item.key));
           const additions = nextUnlocked
-            .filter((item: any) => item?.key && !seen.has(item.key))
-            .map((item: any) => ({
-              key: String(item.key),
-              unlocked_at: Number(item.unlocked_at || Date.now()),
-              tier: String(item.tier || ''),
-              source: item.source ? String(item.source) : null,
-          }));
+            .filter((item) => !seen.has(item.key));
           return [...additions, ...prev];
         });
-        setNewlyUnlocked((prev) => [...prev, ...nextUnlocked]);
+        setNewlyUnlocked((prev) => [...prev, ...nextDefinitions]);
       }
-      return nextUnlocked;
+      return nextDefinitions;
     } catch {
       return [];
     }

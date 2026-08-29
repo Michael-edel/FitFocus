@@ -1,16 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGeminiTimeoutMs, resolveGeminiModel } from '../functions/api/ai';
+import {
+  isGeminiModelAvailabilityError,
+  normalizeGeminiTimeoutMs,
+  resolveGeminiFallbackModels,
+  resolveGeminiModel,
+} from '../functions/api/ai';
 
 describe('resolveGeminiModel', () => {
   it('keeps server-supported Gemini models', () => {
     expect(resolveGeminiModel('gemini-2.5-flash')).toBe('gemini-2.5-flash');
     expect(resolveGeminiModel('gemini-2.5-pro')).toBe('gemini-2.5-pro');
+    expect(resolveGeminiModel('gpt-5.6-luna')).toBe('gpt-5.6-luna');
   });
 
-  it('falls back to the default model for unknown or blank input', () => {
-    expect(resolveGeminiModel('gemini-expensive-preview')).toBe('gemini-2.5-flash');
-    expect(resolveGeminiModel('   ')).toBe('gemini-2.5-flash');
-    expect(resolveGeminiModel(undefined)).toBe('gemini-2.5-flash');
+  it('falls back to Luna for unknown or blank input', () => {
+    expect(resolveGeminiModel('gemini-expensive-preview')).toBe('gpt-5.6-luna');
+    expect(resolveGeminiModel('   ')).toBe('gpt-5.6-luna');
+    expect(resolveGeminiModel(undefined)).toBe('gpt-5.6-luna');
+  });
+
+  it('provides a different stable model for each supported model failure', () => {
+    expect(resolveGeminiFallbackModels('gemini-2.5-pro')).toEqual([
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ]);
+    expect(resolveGeminiFallbackModels('gemini-2.5-flash')).toEqual(['gemini-2.5-flash-lite']);
+    expect(resolveGeminiFallbackModels('gemini-2.5-flash-lite')).toEqual(['gemini-2.5-flash']);
+  });
+});
+
+describe('isGeminiModelAvailabilityError', () => {
+  it('recognizes an unavailable model without treating every 400 as a model error', () => {
+    expect(isGeminiModelAvailabilityError(404, {})).toBe(true);
+    expect(isGeminiModelAvailabilityError(400, { error: { message: 'model not found' } })).toBe(true);
+    expect(isGeminiModelAvailabilityError(400, { error: { message: 'invalid input' } })).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { isTestModeEnabled, setDevPlanOverride } from './money';
 import type { TariffPlan, UserProfile } from './types';
+import { isRecord } from './safeJson';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 
@@ -30,9 +31,10 @@ export default function PaywallDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.id, plan }),
       });
-      const payload = await response.json().catch(() => null);
+      const rawPayload: unknown = await response.json().catch(() => null);
+      const payload = isRecord(rawPayload) ? rawPayload : {};
       if (!response.ok) {
-        alert(payload?.error ? `Не удалось поменять тариф: ${payload.error}` : 'Не удалось поменять тариф.');
+        alert(typeof payload.error === 'string' ? `Не удалось поменять тариф: ${payload.error}` : 'Не удалось поменять тариф.');
         return;
       }
     }
@@ -56,12 +58,13 @@ export default function PaywallDialog({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan }),
     });
-    const payload = await response.json().catch(() => null);
+    const rawPayload: unknown = await response.json().catch(() => null);
+    const payload = isRecord(rawPayload) ? rawPayload : {};
     if (!response.ok) {
-      alert(payload?.error ? `Не удалось открыть оплату: ${payload.error}` : 'Не удалось открыть оплату.');
+      alert(typeof payload.error === 'string' ? `Не удалось открыть оплату: ${payload.error}` : 'Не удалось открыть оплату.');
       return null;
     }
-    return typeof payload?.url === 'string' ? payload.url : null;
+    return typeof payload.url === 'string' ? payload.url : null;
   };
 
   return (

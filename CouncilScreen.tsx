@@ -281,15 +281,16 @@ export default function CouncilScreen({
                   </div>
 
                   <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-                    {[
+                    {([
                       { id: 'router', label: 'Маршрут' },
                       { id: 'experts', label: 'Эксперты' },
                       { id: 'review', label: 'Проверка' },
                       { id: 'chairman', label: 'Синтез' },
-                    ].map((s) => {
+                    ] as const).map((s) => {
                       const order = ['router', 'experts', 'review', 'chairman'] as const;
-                      const curIdx = order.indexOf(councilStage === 'idle' ? 'router' : councilStage as any);
-                      const myIdx = order.indexOf(s.id as any);
+                      const currentStage = councilStage === 'idle' ? 'router' : councilStage;
+                      const curIdx = order.indexOf(currentStage);
+                      const myIdx = order.indexOf(s.id);
                       const done = myIdx < curIdx;
                       const active = myIdx === curIdx;
                       return (

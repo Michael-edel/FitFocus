@@ -32,11 +32,42 @@ export type SupportAttachmentRecord = {
 
 const INLINE_ATTACHMENT_LIMIT = 2 * 1024 * 1024;
 
+const SAFE_INLINE_MIME_TYPES = new Set([
+  "image/avif",
+  "image/bmp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "text/plain",
+]);
+
 export class SupportAttachmentTooLargeError extends Error {
   constructor() {
     super("SUPPORT_ATTACHMENT_TOO_LARGE");
     this.name = "SupportAttachmentTooLargeError";
   }
+}
+
+export function normalizeAttachmentMime(value: unknown): string {
+  const mime = String(value || "").trim().toLowerCase();
+  return mime && /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(mime)
+    ? mime
+    : "application/octet-stream";
+}
+
+export function isSafeInlineAttachmentMime(mime: string): boolean {
+  return SAFE_INLINE_MIME_TYPES.has(normalizeAttachmentMime(mime));
 }
 
 function isSupportAttachmentKind(value: unknown): value is SupportAttachmentKind {
@@ -92,7 +123,7 @@ export function parseAttachmentsJson(value: unknown): SupportAttachmentRecord[] 
     .map((item) => {
       if (!isJsonObject(item)) return null;
       const name = asString(item.name, "attachment");
-      const mime = asString(item.mime, "application/octet-stream");
+      const mime = normalizeAttachmentMime(item.mime);
       const kind = isSupportAttachmentKind(item.kind) ? item.kind : kindFromMime(mime);
       const size = asFiniteNumber(item.size);
       const record: SupportAttachmentRecord = {
@@ -125,7 +156,7 @@ export async function fileToAttachment(
 
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
-  const mime = file.type || "application/octet-stream";
+  const mime = normalizeAttachmentMime(file.type);
   const kind = kindFromMime(mime);
   const baseName = sanitizeFileName(file.name || "attachment");
   const name = file.name || "attachment";
@@ -156,7 +187,10 @@ export async function fileToAttachment(
         storage_key: storageKey,
       };
     } catch {
-      // Fallback to inline storage below.
+      // Inline D1 storage is limited; do not turn an R2 outage into a huge row.
+      if (file.size > INLINE_ATTACHMENT_LIMIT) {
+        throw new SupportAttachmentTooLargeError();
+      }
     }
   }
 

@@ -54,7 +54,7 @@ const drawImageCard = (doc: jsPDF, x: number, y: number, w: number, h: number, i
     doc.setFont('Inter', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(...PDF_COLORS.muted);
-    doc.text('Нет фото', x + w / 2, y + h / 2, { align: 'center', baseline: 'middle' } as any);
+    doc.text('Нет фото', x + w / 2, y + h / 2, { align: 'center', baseline: 'middle' });
     return;
   }
 
@@ -66,12 +66,12 @@ const drawImageCard = (doc: jsPDF, x: number, y: number, w: number, h: number, i
     const ix = x + (w - iw) / 2;
     const iy = y + (h - ih) / 2;
     const format = image.startsWith('data:image/png') ? 'PNG' : image.startsWith('data:image/webp') ? 'WEBP' : 'JPEG';
-    doc.addImage(image, format as any, ix, iy, iw, ih);
+    doc.addImage(image, format, ix, iy, iw, ih);
   } catch {
     doc.setFont('Inter', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(...PDF_COLORS.muted);
-    doc.text('Фото не удалось встроить', x + w / 2, y + h / 2, { align: 'center', baseline: 'middle' } as any);
+    doc.text('Фото не удалось встроить', x + w / 2, y + h / 2, { align: 'center', baseline: 'middle' });
   }
 };
 
@@ -107,7 +107,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   doc.text(`Период: ${input.startLabel} → ${input.endLabel}`, 18, 57);
   doc.text(`Фото: ${input.totalPhotos} • Замеры: ${input.totalMeasurements} • Wearable: ${input.wearableLabel}`, 18, 62);
   if (bloodGlucoseLabel) {
-    doc.text(`Сахар: ${bloodGlucoseLabel}`, 18, 67, { maxWidth: 174 } as any);
+    doc.text(`Сахар: ${bloodGlucoseLabel}`, 18, 67, { maxWidth: 174 });
   }
   doc.setTextColor(...PDF_COLORS.ink);
 
@@ -123,7 +123,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
     doc.setFont('Inter', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(...PDF_COLORS.muted);
-    doc.text(detail, x + 5, y + 14, { maxWidth: metricW - 10 } as any);
+    doc.text(detail, x + 5, y + 14, { maxWidth: metricW - 10 });
     doc.setTextColor(...PDF_COLORS.ink);
     doc.setFont('Inter', 'bold');
     doc.setFontSize(11);
@@ -144,7 +144,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   doc.setFont('Inter', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...PDF_COLORS.muted);
-  doc.text(input.summary, 18, 124, { maxWidth: 174 } as any);
+  doc.text(input.summary, 18, 124, { maxWidth: 174 });
   doc.setTextColor(...PDF_COLORS.ink);
 
   drawImageCard(doc, 18, 130, 79, 52, input.startPhoto);
@@ -162,8 +162,8 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   autoTable(doc, {
     startY: 216,
     theme: 'plain',
-    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink as any },
-    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252] as any, textColor: PDF_COLORS.muted as any },
+    styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink },
+    headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252], textColor: PDF_COLORS.muted },
     head: [['Показатель', 'Изменение']],
     body: [
       ['Вес', formatDelta(startWeight, endWeight, 'кг')],
@@ -188,7 +188,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
     ].filter(Boolean).join(' • ') || 'Нет дополнительных данных',
     18,
     266,
-    { maxWidth: 174 } as any,
+    { maxWidth: 174 },
   );
   doc.setTextColor(...PDF_COLORS.ink);
 
@@ -200,8 +200,8 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
     autoTable(doc, {
       startY: 46,
       theme: 'plain',
-      styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink as any },
-      headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252] as any, textColor: PDF_COLORS.muted as any },
+      styles: { font: 'Inter', fontStyle: 'normal', fontSize: 10, cellPadding: 2, textColor: PDF_COLORS.ink },
+      headStyles: { font: 'Inter', fontStyle: 'bold', fillColor: [248, 250, 252], textColor: PDF_COLORS.muted },
       head: [['Дата', 'Тип', 'Событие']],
       body: remainingTimeline.map((item) => [item.date, item.title, item.detail]),
     });

@@ -103,6 +103,7 @@ import { useDeleteUserProfile } from './useDeleteUserProfile';
 import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
+import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
 import ShareWisCard from './components/ShareWisCard';
@@ -156,6 +157,9 @@ type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isBooleanRecord = (value: unknown): value is Record<string, boolean> =>
+  isRecord(value) && Object.values(value).every((item) => typeof item === 'boolean');
 
 const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
 
@@ -643,8 +647,21 @@ const App: React.FC = () => {
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') setSettings(parsed as AppSettings);
+        const parsed = parseJson(raw);
+        if (
+          isRecord(parsed)
+          && (parsed.theme === 'dark' || parsed.theme === 'light' || parsed.theme === 'violet' || parsed.theme === 'calm' || parsed.theme === 'premium')
+          && parsed.language === 'ru'
+          && typeof parsed.soundEnabled === 'boolean'
+          && typeof parsed.musicEnabled === 'boolean'
+        ) {
+          setSettings({
+            theme: parsed.theme,
+            language: 'ru',
+            soundEnabled: parsed.soundEnabled,
+            musicEnabled: parsed.musicEnabled,
+          });
+        }
         safeSetItem(key, raw);
       } else {
         safeSetItem(key, JSON.stringify(settings));
@@ -794,7 +811,7 @@ const App: React.FC = () => {
         setFavoriteRecipes([]);
         return;
       }
-      const parsed = JSON.parse(raw);
+      const parsed = parseJson(raw);
       const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(isPresent) : [];
       setFavoriteRecipes(normalized);
       safeSetItem(key, JSON.stringify(normalized));
@@ -905,9 +922,10 @@ const App: React.FC = () => {
         return;
       }
       try {
-        const parsed = JSON.parse(raw) as { query?: string; open?: boolean };
-        setSearchQuery(typeof parsed.query === 'string' ? parsed.query : '');
-        setShowSearchResults(!!parsed.open);
+        const parsed = parseJson(raw);
+        const record = isRecord(parsed) ? parsed : {};
+        setSearchQuery(typeof record.query === 'string' ? record.query : '');
+        setShowSearchResults(record.open === true);
       } catch {
         setSearchQuery(raw);
         setShowSearchResults(false);
@@ -996,17 +1014,12 @@ const App: React.FC = () => {
         setFamilyMenuPrefsOpen(false);
         return;
       }
-      const parsed = JSON.parse(raw) as Partial<{
-        planIntroOpen: boolean;
-        planRulesExpanded: boolean;
-        planScope: 'personal' | 'family';
-        familyMenuPrefsOpen: boolean;
-        planWeekExpanded: Record<string, boolean>;
-      }>;
-      setPlanIntroOpen(!!parsed.planIntroOpen);
-      setPlanRulesExpanded(!!parsed.planRulesExpanded);
-      setPlanScope(parsed.planScope === 'family' ? 'family' : 'personal');
-      setFamilyMenuPrefsOpen(!!parsed.familyMenuPrefsOpen);
+      const parsed = parseJson(raw);
+      const record = isRecord(parsed) ? parsed : {};
+      setPlanIntroOpen(record.planIntroOpen === true);
+      setPlanRulesExpanded(record.planRulesExpanded === true);
+      setPlanScope(record.planScope === 'family' ? 'family' : 'personal');
+      setFamilyMenuPrefsOpen(record.familyMenuPrefsOpen === true);
     } catch {
       planUiSkipSaveRef.current = true;
       setPlanIntroOpen(false);
@@ -1027,7 +1040,8 @@ const App: React.FC = () => {
       if (raw) {
         safeSetItem(newKey, raw);
       }
-      setPlanTaskDone(raw ? JSON.parse(raw) : {});
+      const parsed = raw ? parseJson(raw) : null;
+      setPlanTaskDone(isBooleanRecord(parsed) ? parsed : {});
     } catch {
       setPlanTaskDone({});
     }
@@ -1051,10 +1065,8 @@ const App: React.FC = () => {
       planUiSkipSaveRef.current = true;
       const raw = localStorage.getItem(planUiStorageKey);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<{
-        planWeekExpanded: Record<string, boolean>;
-      }>;
-      const storedWeek = parsed.planWeekExpanded && typeof parsed.planWeekExpanded === 'object' ? parsed.planWeekExpanded : {};
+      const parsed = parseJson(raw);
+      const storedWeek = isRecord(parsed) && isBooleanRecord(parsed.planWeekExpanded) ? parsed.planWeekExpanded : {};
       const days = currentUser?.aiPlan?.weeklyMenu?.days ?? [];
       if (!days.length) {
         setPlanWeekExpanded(storedWeek);
@@ -1958,7 +1970,23 @@ await ensurePdfInterFont(doc);
       try {
         const raw = localStorage.getItem(courseUiStorageKey);
         if (raw) {
-          savedCourseUi = JSON.parse(raw) as CourseUiState;
+          const parsed = parseJson(raw);
+          if (
+            isRecord(parsed)
+            && (typeof parsed.lessonId === 'string' || parsed.lessonId === null)
+            && typeof parsed.isLessonViewOpen === 'boolean'
+            && typeof parsed.isQuizActive === 'boolean'
+            && (typeof parsed.selectedQuizOptionId === 'string' || parsed.selectedQuizOptionId === null)
+          ) {
+            const lessonId = typeof parsed.lessonId === 'string' ? parsed.lessonId : null;
+            const selectedQuizOptionId = typeof parsed.selectedQuizOptionId === 'string' ? parsed.selectedQuizOptionId : null;
+            savedCourseUi = {
+              lessonId,
+              isLessonViewOpen: parsed.isLessonViewOpen,
+              isQuizActive: parsed.isQuizActive,
+              selectedQuizOptionId,
+            };
+          }
         }
       } catch {
         savedCourseUi = null;
@@ -2030,8 +2058,8 @@ await ensurePdfInterFont(doc);
       try {
         const r = await fetch('/api/env', { credentials: 'include' });
         if (!r.ok) return;
-        const j = await r.json().catch(() => null);
-        if (j && typeof j.requireInvite === 'boolean') setRequireInvite(!!j.requireInvite);
+        const raw = await r.json().catch(() => null) as unknown;
+        if (isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
       } catch {}
     })();
   }, []);

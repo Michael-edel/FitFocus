@@ -23,14 +23,6 @@ export default function OAuthSignInButton({ inviteCode, provider }: OAuthSignInB
     try {
       sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
     } catch {}
-    try {
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((registration) => registration.unregister()));
-      }
-    } catch {
-      // Auth must continue even when the browser blocks service worker management.
-    }
     window.location.assign(authUrl);
   }, [authUrl]);
 

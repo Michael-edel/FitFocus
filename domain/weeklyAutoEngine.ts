@@ -1,4 +1,5 @@
 import { WeeklyIntelligenceResult } from "./weeklyIntelligence";
+import { isRecord, parseJson } from "../safeJson";
 
 export interface WeeklyStoredReport {
   weekKey: string; // YYYY-WW
@@ -29,7 +30,10 @@ const inFlightKey = (userId: string) => `ff_weekly_ai_inflight_${userId}`;
 function getInFlight(userId: string) {
   try {
     const raw = localStorage.getItem(inFlightKey(userId));
-    return raw ? (JSON.parse(raw) as { weekKey: string; startedAt: number }) : null;
+    const parsed = raw ? parseJson(raw) : null;
+    return isRecord(parsed) && typeof parsed.weekKey === 'string' && typeof parsed.startedAt === 'number'
+      ? { weekKey: parsed.weekKey, startedAt: parsed.startedAt }
+      : null;
   } catch {
     return null;
   }
@@ -46,10 +50,26 @@ function clearInFlight(userId: string) {
 export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
   try {
     const raw = localStorage.getItem(storageKey(userId));
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? parseJson(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(isWeeklyStoredReport) : [];
   } catch {
     return [];
   }
+}
+
+function isWeeklyIntelligenceResult(value: unknown): value is WeeklyIntelligenceResult {
+  if (!isRecord(value)) return false;
+  return [value.wis, value.weightDelta7, value.weightDelta30, value.compliance, value.adaptationIndex]
+    .every((item) => typeof item === 'number' && Number.isFinite(item))
+    && (value.status === 'excellent' || value.status === 'stable' || value.status === 'adjust' || value.status === 'critical');
+}
+
+function isWeeklyStoredReport(value: unknown): value is WeeklyStoredReport {
+  return isRecord(value)
+    && typeof value.weekKey === 'string'
+    && typeof value.createdAt === 'string'
+    && isWeeklyIntelligenceResult(value.data)
+    && (value.aiText === undefined || typeof value.aiText === 'string');
 }
 
 function saveWeeklyReports(userId: string, reports: WeeklyStoredReport[]) {
@@ -116,7 +136,7 @@ export async function ensureWeeklyReportWithAI(
     return { report: newReport, isNew: true };
   } catch (err) {
     // Не ставим cooldown для "мягких" ситуаций (дубль/нет ключа и т.п.)
-    const msg = String((err as any)?.message || err || "").toLowerCase();
+    const msg = (err instanceof Error ? err.message : String(err || "")).toLowerCase();
     const soft = msg.includes("already in progress") || msg.includes("api key") || msg.includes("key") || msg.includes("missing");
     if (!soft) {
       localStorage.setItem(lastAttemptKey(userId), String(Date.now()));

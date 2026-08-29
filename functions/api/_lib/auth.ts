@@ -82,17 +82,21 @@ function parseJwtPayload(token: string): SessionPayload | null {
 }
 
 export async function verifySessionJwt(token: string, secret: string): Promise<SessionPayload | null> {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [h, p, sig] = parts;
-  const data = `${h}.${p}`;
-  const ok = await hmacVerify(data, sig, secret);
-  if (!ok) return null;
-  const payload = parseJwtPayload(token);
-  if (!payload) return null;
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && now > payload.exp) return null;
-  return payload;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const [h, p, sig] = parts;
+    const data = `${h}.${p}`;
+    const ok = await hmacVerify(data, sig, secret);
+    if (!ok) return null;
+    const payload = parseJwtPayload(token);
+    if (!payload) return null;
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && now > payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function requireUser(

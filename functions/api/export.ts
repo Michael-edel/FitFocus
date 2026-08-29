@@ -2,11 +2,12 @@
 // GDPR-style export of user data stored in D1.
 
 import { json, requireUser } from "./_lib/auth";
+import { requireBetaAccess } from "./_lib/access";
 import { requireDB } from "./_lib/db";
 import { safeJsonParse } from "./_lib/json";
 import { parseAttachmentsJson, type SupportAttachmentRecord } from "./_lib/support_attachments";
 
-type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
+type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 type KvRow = { k: string; v: string; updated_at?: number; version?: number };
 type PublicSupportAttachment = Pick<SupportAttachmentRecord, "name" | "mime" | "size" | "kind" | "data_url">;
 type SupportFeedbackExportRow = Record<string, unknown> & { attachments_json?: string | null };
@@ -18,6 +19,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     user = await requireUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
+  }
+
+  try {
+    await requireBetaAccess(env, user);
+  } catch {
+    return json({ error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);

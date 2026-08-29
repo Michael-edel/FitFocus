@@ -15,7 +15,7 @@ import {
   Share2,
   TrendingUp,
 } from 'lucide-react';
-import { Goal, type FoodItem, type UserProfile } from './types';
+import { Goal, type FoodItem, type NutritionIntake, type UserProfile } from './types';
 import FoodStreakCard from './components/FoodStreakCard';
 import AchievementsPanel from './components/AchievementsPanel';
 import type { AchievementDefinition } from './achievements/catalog';
@@ -50,8 +50,8 @@ type DashboardScreenProps = {
   currentUser: UserProfile | null;
   paywallPlan: string;
   canUsePro: boolean;
-  dailyStats: any;
-  targets: any;
+  dailyStats: NutritionIntake;
+  targets: NutritionIntake;
   weightHistory: UserProfile['weightHistory'];
   dailyHabits: UserProfile['dailyHabits'];
   foodDiary: FoodItem[];

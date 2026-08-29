@@ -1,13 +1,14 @@
 import React from 'react';
 import { Award, ChevronLeft } from 'lucide-react';
 import { useModalDismissGestures } from '../useModalDismissGestures';
+import type { CourseLesson, LessonQuizOption } from '../types';
 
 type LessonModalProps = {
-  lesson: any;
+  lesson: CourseLesson | null;
   isQuizActive: boolean;
-  selectedQuizOption: any;
+  selectedQuizOption: LessonQuizOption | null;
   onClose: () => void;
-  onSelectOption: (opt: any) => void;
+  onSelectOption: (opt: LessonQuizOption) => void;
   onQuizSubmit: () => void;
   onMarkRead: () => void;
 };
@@ -38,7 +39,7 @@ export default function LessonModal({
 
             <header className="space-y-4 text-left">
               <div className="flex gap-2">
-                {(lesson.tags || []).map((t: string) => (
+                {(lesson.tags || []).map((t) => (
                   <span
                     key={t}
                     className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-500/20"
@@ -51,7 +52,7 @@ export default function LessonModal({
             </header>
 
             <div className="space-y-8 text-xl text-slate-400 leading-relaxed font-medium text-left">
-              {(lesson.content || []).map((p: string, i: number) => (
+              {(lesson.content || []).map((p, i) => (
                 <p key={i}>{p}</p>
               ))}
             </div>
@@ -79,7 +80,7 @@ export default function LessonModal({
             <h2 className="text-4xl font-black text-slate-100">{lesson.quiz?.question}</h2>
 
             <div className="grid gap-4">
-              {(lesson.quiz?.options || []).map((o: any) => (
+              {(lesson.quiz?.options || []).map((o) => (
                 <button
                   key={o.id}
                   onClick={() => onSelectOption(o)}

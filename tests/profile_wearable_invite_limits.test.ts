@@ -167,6 +167,19 @@ describe('bounded JSON body guards on user routes', () => {
     expect(db.batches).toHaveLength(0);
   });
 
+  it('rejects legacy profile stateItems before writing the profile', async () => {
+    const db = makeDb({ betaAccess: true });
+    const response = await putProfileBody(db, {
+      name: 'User',
+      stateItems: [{ key: 'fitfocus_data_user-1_food:1', value: '{}', baseVersion: 0 }],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'STATE_ITEMS_USE_STATE_ENDPOINT' });
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(false);
+  });
+
   it('rejects oversized profile PATCH bodies before writing', async () => {
     const db = makeDb({ betaAccess: true });
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com' });

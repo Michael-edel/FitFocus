@@ -7,7 +7,7 @@ export type BackupPayload = {
   localStorage: Record<string, string>;
 };
 
-type BackupFileHandle = {
+export type BackupFileHandle = {
   createWritable(): Promise<{
     write(data: string): Promise<void>;
     close(): Promise<void>;

@@ -5,6 +5,7 @@ import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
 import { persistAllUsersSnapshot } from './storage/hybrid';
 import { Goal, type UserProfile } from './types';
+import { isRecord } from './safeJson';
 
 type RegDataLike = {
   name: string;
@@ -26,6 +27,8 @@ type RegDataLike = {
   hipsCm?: number;
   lossDeficit?: number;
   gainSurplus?: number;
+  riskAckLoss?: boolean;
+  riskAckGain?: boolean;
 };
 
 function deriveTargetWeight(weight: number, goal: UserProfile['goal']): number {
@@ -74,7 +77,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       const limit = deps.regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
       const val = deps.regData.goal === Goal.LOSS ? Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT) : Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS);
       const isAggressive = (deps.regData.goal === Goal.LOSS && val > limit) || (deps.regData.goal === Goal.GAIN && val > limit);
-      const ack = (deps.regData as any).riskAckLoss || (deps.regData as any).riskAckGain;
+      const ack = deps.regData.riskAckLoss || deps.regData.riskAckGain;
       if (isAggressive && !ack) {
         deps.setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
         return;
@@ -132,8 +135,8 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     }],
     lossDeficit: Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT),
     gainSurplus: Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS),
-    riskAcknowledgedLoss: !!(deps.regData as any).riskAckLoss,
-    riskAcknowledgedGain: !!(deps.regData as any).riskAckGain,
+    riskAcknowledgedLoss: !!deps.regData.riskAckLoss,
+    riskAcknowledgedGain: !!deps.regData.riskAckGain,
     weightHistory: [{ date: toLocalDayKey(new Date()), weight: deps.regData.weight }],
     progressPhotos: [],
     tasks: [],
@@ -167,9 +170,10 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       });
-      const rj = await rr.json().catch(() => null);
-      if (!rr.ok || rj?.ok !== true) {
-        deps.setPlanError(rj?.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
+      const rawRedeemResponse: unknown = await rr.json().catch(() => null);
+      const redeemResponse = isRecord(rawRedeemResponse) ? rawRedeemResponse : {};
+      if (!rr.ok || redeemResponse.ok !== true) {
+        deps.setPlanError(redeemResponse.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
         return;
       }
     } catch {
@@ -186,16 +190,19 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUser),
     });
-    const pj = await r.json().catch(() => null);
+    const rawProfileResponse: unknown = await r.json().catch(() => null);
+    const profileResponse = isRecord(rawProfileResponse) ? rawProfileResponse : {};
     if (!r.ok) {
       deps.setPlanError(
-        pj?.error === 'ACCESS_REQUIRED'
+        profileResponse.error === 'ACCESS_REQUIRED'
           ? 'Сервер не разрешил облачное сохранение. Проверьте beta-доступ и повторите вход через Google.'
           : 'Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.',
       );
       return;
     }
-    if (pj?.profile) newUser = pj.profile;
+    if (isRecord(profileResponse.profile) && typeof profileResponse.profile.version === 'number') {
+      newUser = { ...newUser, version: profileResponse.profile.version };
+    }
   } catch {
     deps.setPlanError('Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.');
     return;

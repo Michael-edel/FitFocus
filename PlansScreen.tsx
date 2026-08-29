@@ -25,7 +25,7 @@ export default function PlansScreen({
   };
 
   const [checkoutPlan, setCheckoutPlan] = useState<null | 'pro' | 'family'>(null);
-  const devEnabled = (import.meta as any).env?.DEV || (import.meta as any).env?.VITE_TEST_MODE === "1";
+  const devEnabled = import.meta.env.DEV || import.meta.env.VITE_TEST_MODE === "1";
   const currentOverride = devEnabled ? getDevPlanOverride(userId) : null;
   const dismissGestures = useModalDismissGestures(() => {
     if (checkoutPlan) {

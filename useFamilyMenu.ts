@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { FamilyWeeklyMenu, UserProfile } from './types';
 import { persistAllUsersSnapshot, safeSetItem } from './storage/hybrid';
+import { errorMessage, isRecord, parseJson, responseErrorMessage } from './safeJson';
 
 type FamilyMenuPrefs = {
   includeIds: string[];
@@ -8,6 +9,10 @@ type FamilyMenuPrefs = {
   budgetPerWeek: string;
   currency: string;
 };
+
+function isCookingMode(value: unknown): value is FamilyMenuPrefs['cookingMode'] {
+  return value === 'all_meals' || value === 'once_per_day';
+}
 
 type UseFamilyMenuParams = {
   allUsers: UserProfile[];
@@ -51,17 +56,20 @@ export function useFamilyMenu({
     const newPrefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
     try {
       const raw = localStorage.getItem(newPrefsKey);
-      const saved = raw ? JSON.parse(raw) : null;
+      const saved = raw ? parseJson(raw) : null;
       if (raw) safeSetItem(newPrefsKey, raw);
-      const fromStore = saved && typeof saved === 'object' ? saved : null;
-      const baseInclude = (saved?.includeIds?.length ? saved.includeIds : (fromStore?.includeIds?.length ? fromStore.includeIds : []));
-      const includeIds = baseInclude.length ? baseInclude : allUsers.map(u => u.id);
+      const fromStore = isRecord(saved) ? saved : {};
+      const storedIncludeIds = Array.isArray(fromStore.includeIds)
+        ? fromStore.includeIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+        : [];
+      const includeIds = storedIncludeIds.length ? storedIncludeIds : allUsers.map(u => u.id);
+      const storedMode = isCookingMode(fromStore.cookingMode) ? fromStore.cookingMode : undefined;
       setFamilyMenuPrefs(prev => ({
         ...prev,
         includeIds,
-        cookingMode: (saved?.cookingMode || fromStore?.cookingMode || prev.cookingMode) as any,
-        budgetPerWeek: String(saved?.budgetPerWeek ?? fromStore?.budgetPerWeek ?? prev.budgetPerWeek ?? ''),
-        currency: String(saved?.currency ?? fromStore?.currency ?? prev.currency ?? 'KZT'),
+        cookingMode: storedMode || prev.cookingMode,
+        budgetPerWeek: String(fromStore.budgetPerWeek ?? prev.budgetPerWeek ?? ''),
+        currency: String(fromStore.currency ?? prev.currency ?? 'KZT'),
       }));
     } catch {}
   }, [allUsers, currentUser?.id]);
@@ -110,8 +118,8 @@ export function useFamilyMenu({
             menu: familyWeeklyMenu,
           }),
         });
-        const menuData = await menuRes.json().catch(() => ({}));
-        if (!menuRes.ok) throw new Error(menuData?.error?.message || menuData?.error || 'Не удалось сохранить семейное меню на сервере');
+        const menuData: unknown = await menuRes.json().catch(() => null);
+        if (!menuRes.ok) throw new Error(responseErrorMessage(menuData, 'Не удалось сохранить семейное меню на сервере'));
         setCloudFamilyMenu(familyWeeklyMenu);
       }
 
@@ -127,13 +135,13 @@ export function useFamilyMenu({
             items: familyWeeklyMenu.shoppingListItems,
           }),
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error?.message || data?.error || 'Не удалось синхронизировать семейный список покупок');
+        const data: unknown = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(responseErrorMessage(data, 'Не удалось синхронизировать семейный список покупок'));
         await loadFamilyShopping();
       }
       await loadCloudFamily();
-    } catch (e: any) {
-      setFamilyMenuError(e?.message || 'Не удалось сгенерировать семейное меню на неделю.');
+    } catch (e: unknown) {
+      setFamilyMenuError(errorMessage(e, 'Не удалось сгенерировать семейное меню на неделю.'));
     } finally {
       setFamilyMenuLoading(false);
     }

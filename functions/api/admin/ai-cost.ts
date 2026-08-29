@@ -31,7 +31,14 @@ function startOfUtcDayMs(d = new Date()) {
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // Validate session + ensure RBAC admin (reads from user_roles)
-  await requireAdminRequest(request, env);
+  try {
+    await requireAdminRequest(request, env);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "FORBIDDEN") return json({ error: "FORBIDDEN" }, 403);
+    if (code === "AUTH_CONFIG" || code === "DB_CONFIG") return json({ error: "SERVER_CONFIG" }, 500);
+    return json({ error: "UNAUTH" }, 401);
+  }
 
   const db = requireDB(env);
   const now = Date.now();

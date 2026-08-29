@@ -6,6 +6,14 @@ import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
+import {
+  AI_ALLOWED_MODELS,
+  AI_DEFAULT_MODEL,
+  GEMINI_ALLOWED_MODELS,
+  getAiFallbackModels,
+} from "../../aiModels";
+
+type JsonRecord = JsonObject;
 
 
 /**
@@ -19,7 +27,8 @@ import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } fro
 
 export interface Env {
   DB?: D1Database;
-  GEMINI_API_KEY: string;
+  OPENAI_API_KEY?: string;
+  GEMINI_API_KEY?: string;
   FITFOCUS_KV?: {
     get(key: string, options?: { type?: "text" | "json" | "arrayBuffer" | "stream" }): Promise<unknown>;
     put(key: string, value: string, options?: { expirationTtl?: number }): Promise<unknown>;
@@ -71,6 +80,10 @@ type GeminiResponse = JsonObject & {
   error?: string | { message?: string };
 };
 
+type OpenAiInputPart =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string; detail: "auto" };
+
 type AiEventArgs = {
   userId: string;
   feature: string;
@@ -113,10 +126,10 @@ const EMPTY_USAGE_RECORD: UsageRecord = {
   lastTs: 0,
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-const ALLOWED_GEMINI_MODELS = new Set([
-  DEFAULT_GEMINI_MODEL,
-  "gemini-2.5-pro",
+const DEFAULT_GEMINI_MODEL = AI_DEFAULT_MODEL;
+const ALLOWED_GEMINI_MODELS = new Set<string>([
+  ...AI_ALLOWED_MODELS,
+  ...GEMINI_ALLOWED_MODELS,
 ]);
 const DEFAULT_GEMINI_TIMEOUT_MS = 30_000;
 const MIN_GEMINI_TIMEOUT_MS = 1_000;
@@ -125,6 +138,10 @@ const MAX_GEMINI_TIMEOUT_MS = 60_000;
 export function resolveGeminiModel(value: unknown): string {
   const model = String(value || "").trim();
   return ALLOWED_GEMINI_MODELS.has(model) ? model : DEFAULT_GEMINI_MODEL;
+}
+
+export function resolveGeminiFallbackModels(model: string): string[] {
+  return getAiFallbackModels(model);
 }
 
 export function normalizeGeminiTimeoutMs(value: unknown): number {
@@ -156,9 +173,10 @@ function classifyAiFetchFailure(error: unknown): string {
 
 function getGeminiUsage(data: GeminiResponse) {
   const usage = isJsonObject(data.usageMetadata) ? data.usageMetadata : {};
-  const inputTokens = Number(usage.promptTokenCount || 0);
-  const outputTokens = Number(usage.candidatesTokenCount || 0);
-  const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens || 0);
+  const openAiUsage = isJsonObject(data.usage) ? data.usage : {};
+  const inputTokens = Number(usage.promptTokenCount || openAiUsage.input_tokens || 0);
+  const outputTokens = Number(usage.candidatesTokenCount || openAiUsage.output_tokens || 0);
+  const totalTokens = Number(usage.totalTokenCount || openAiUsage.total_tokens || inputTokens + outputTokens || 0);
   return { inputTokens, outputTokens, totalTokens };
 }
 
@@ -170,6 +188,18 @@ function getGeminiErrorMessage(error: GeminiResponse["error"], fallback: string)
   if (typeof error === "string" && error.trim()) return error;
   if (isJsonObject(error) && typeof error.message === "string" && error.message.trim()) return error.message;
   return fallback;
+}
+
+export function isGeminiModelAvailabilityError(status: number, data: GeminiResponse): boolean {
+  if (status === 404) return true;
+  if (status !== 400 && status !== 403) return false;
+
+  const errorText = [
+    getGeminiErrorMessage(data.error, ""),
+    typeof data.message === "string" ? data.message : "",
+  ].join(" ").toLowerCase();
+
+  return /model|not found|not supported|unsupported|does not exist|permission|access/.test(errorText);
 }
 
 function getSettingNumberOrDefault(settings: Record<string, string>, key: string, fallback: number) {
@@ -226,6 +256,95 @@ function normalizeContents(input: unknown): GeminiContent[] {
   if (single) return [single];
 
   return [];
+}
+
+function normalizeOpenAiSchema(value: unknown): JsonRecord | null {
+  if (!isJsonObject(value)) return null;
+
+  const rawType = typeof value.type === "string" ? value.type.toLowerCase() : "";
+  if (rawType === "object") {
+    const rawProperties = isJsonObject(value.properties) ? value.properties : {};
+    const properties: JsonRecord = {};
+    for (const [name, property] of Object.entries(rawProperties)) {
+      const normalized = normalizeOpenAiSchema(property);
+      if (normalized) properties[name] = normalized;
+    }
+
+    const result: JsonRecord = {
+      type: "object",
+      properties,
+      required: Object.keys(properties),
+      additionalProperties: false,
+    };
+    if (typeof value.description === "string") result.description = value.description;
+    return result;
+  }
+
+  if (rawType === "array") {
+    const result: JsonRecord = { type: "array" };
+    const items = normalizeOpenAiSchema(value.items);
+    if (items) result.items = items;
+    if (typeof value.description === "string") result.description = value.description;
+    return result;
+  }
+
+  const result: JsonRecord = { ...value };
+  if (rawType) result.type = rawType;
+  return result;
+}
+
+function normalizeOpenAiInput(input: unknown): JsonRecord[] {
+  const contents = normalizeContents(input);
+  return contents.flatMap((content) => {
+    const parts: OpenAiInputPart[] = [];
+    for (const part of content.parts) {
+      if ("text" in part && typeof part.text === "string") {
+        parts.push({ type: "input_text", text: part.text });
+        continue;
+      }
+
+      if ("inlineData" in part) {
+        const { mimeType, data } = part.inlineData;
+        if (mimeType && data) {
+          const imageUrl = data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`;
+          parts.push({ type: "input_image", image_url: imageUrl, detail: "auto" });
+        }
+      }
+    }
+
+    if (!parts.length) return [];
+    return [{ role: content.role === "model" ? "assistant" : "user", content: parts }];
+  });
+}
+
+function buildOpenAiPayload(payload: JsonRecord, model: string): JsonRecord {
+  const generationConfig = isJsonObject(payload.generationConfig) ? payload.generationConfig : {};
+  const request: JsonRecord = {
+    model,
+    input: normalizeOpenAiInput(payload.contents),
+    store: false,
+  };
+
+  const maxOutputTokens = Number(generationConfig.maxOutputTokens || 0);
+  if (Number.isFinite(maxOutputTokens) && maxOutputTokens > 0) {
+    request.max_output_tokens = Math.floor(maxOutputTokens);
+  }
+
+  const schema = normalizeOpenAiSchema(generationConfig.responseSchema);
+  if (schema) {
+    request.text = {
+      format: {
+        type: "json_schema",
+        name: "fitfocus_response",
+        strict: true,
+        schema,
+      },
+    };
+  } else if (generationConfig.responseMimeType === "application/json") {
+    request.text = { format: { type: "json_object" } };
+  }
+
+  return request;
 }
 
 async function sha256Hex(input: string) {
@@ -338,8 +457,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const maxCallsPerUserDay = Math.max(0, Math.floor(getSettingNumber(settings, "ai_max_calls_per_user_day", 0)));
   const maxCostPerUserDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_per_user_day_usd", 0));
   const maxCostTotalDay = Math.max(0, getSettingNumber(settings, "ai_max_cost_total_day_usd", 0));
-  const inputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_input_per_1m_usd", 0.30));
-  const outputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_output_per_1m_usd", 2.50));
+  const inputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_input_per_1m_usd", 0.20));
+  const outputCostPerMillion = Math.max(0, getSettingNumberOrDefault(settings, "ai_cost_output_per_1m_usd", 1.20));
 
   // UTC day start (ms)
   const now = Date.now();
@@ -391,11 +510,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
         return jsonV({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
       }
     } catch {
-      // never break product if guard check fails
+      // Do not call the paid provider when the server cannot verify the budget.
+      return jsonV({ error: "AI_BUDGET_UNAVAILABLE", message: "Сервис AI временно недоступен. Попробуйте позже." }, 503);
     }
   }
 
-  const apiKey = env.GEMINI_API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).GOOGLE_API_KEY;
+  const model = resolveGeminiModel(body?.model);
+  const usesOpenAiModel = model.startsWith("gpt-");
+  const openAiApiKey = String(env.OPENAI_API_KEY || "").trim();
+  const geminiApiKey = env.GEMINI_API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).API_KEY || (env as Env & { API_KEY?: string; GOOGLE_API_KEY?: string }).GOOGLE_API_KEY;
+  const apiKey = usesOpenAiModel ? openAiApiKey : geminiApiKey;
   const kv = env.FITFOCUS_KV;
   const identity = String(user?.sub || "");
 
@@ -458,8 +582,10 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     }
   }
 
-  const model = resolveGeminiModel(body?.model);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  let effectiveModel = model;
+  let url = usesOpenAiModel
+    ? "https://api.openai.com/v1/responses"
+    : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(effectiveModel)}:generateContent`;
 
   const { feature: _drop, model: _model, ...payload } = body ?? {};
   const payloadToSend: Record<string, unknown> = (payload && typeof payload === "object") ? { ...payload } : {};
@@ -492,6 +618,10 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     payloadToSend.contents = normalized;
   }
 
+  const upstreamPayload = usesOpenAiModel
+    ? buildOpenAiPayload(payloadToSend, model)
+    : payloadToSend;
+
   let geminiResp: Response | null = null;
   let data: GeminiResponse = {};
   let latency = 0;
@@ -501,14 +631,35 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   try {
     timeoutId = setTimeout(() => controller.abort(), geminiTimeoutMs);
-    geminiResp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(payloadToSend),
-      signal: controller.signal,
-    });
+    const requestGemini = async (requestUrl: string) => {
+      const response = await fetch(requestUrl, {
+        method: "POST",
+        headers: usesOpenAiModel
+          ? { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }
+          : { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(upstreamPayload),
+        signal: controller.signal,
+      });
+      const rawGeminiData: unknown = await response.json().catch(() => null);
+      return { response, data: isJsonObject(rawGeminiData) ? rawGeminiData as GeminiResponse : {} };
+    };
 
-    data = await geminiResp.json().catch(() => ({}));
+    const firstAttempt = await requestGemini(url);
+    geminiResp = firstAttempt.response;
+    data = firstAttempt.data;
+
+    // A model may be enabled for one API project but unavailable for another.
+    // Retry only model-availability errors; malformed prompts must remain visible.
+    if (isGeminiModelAvailabilityError(geminiResp.status, data)) {
+      for (const fallbackModel of getAiFallbackModels(model)) {
+        effectiveModel = fallbackModel;
+        url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(effectiveModel)}:generateContent`;
+        const retry = await requestGemini(url);
+        geminiResp = retry.response;
+        data = retry.data;
+        if (!isGeminiModelAvailabilityError(geminiResp.status, data)) break;
+      }
+    }
     latency = Date.now() - startedAt;
   } catch (error: unknown) {
     latency = Date.now() - startedAt;
@@ -553,7 +704,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   // Gemini API обычно возвращает: candidates[].content.parts[].text
   const extractedText = extractTextFromGemini(data);
   // Fallback on quota/5xx: return a deterministic plan instead of breaking the product.
-  if (fallbackMode && shouldFallback(geminiResp!.status)) {
+  if (fallbackMode && (shouldFallback(geminiResp!.status) || isGeminiModelAvailabilityError(geminiResp!.status, data))) {
     const profile = await loadUserProfile(env, String(user.sub));
     const fallback = buildFallback(feature, profile);
     await logAiEvent(env, {
@@ -597,7 +748,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     requestJson: body,
     responseJson: { text: extractedText },
     error: geminiResp.status >= 400 ? getGeminiErrorMessage(data.error, "") || null : null,
-    model,
+      model: effectiveModel,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
@@ -627,6 +778,17 @@ function extractTextFromGemini(data: GeminiResponse): string {
         for (const part of p) {
           if (typeof part?.text === 'string') parts.push(part.text);
         }
+      }
+    }
+  }
+
+  const output = data.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (!isJsonObject(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
+      for (const content of item.content) {
+        if (!isJsonObject(content) || content.type !== "output_text") continue;
+        if (typeof content.text === "string") parts.push(content.text);
       }
     }
   }
