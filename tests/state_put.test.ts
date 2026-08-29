@@ -90,7 +90,7 @@ function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number }
     },
     async batch(stmts: Array<{ sql: string; binds: unknown[] }>) {
       batches.push(stmts.map((stmt) => ({ sql: stmt.sql, binds: stmt.binds })));
-      return stmts.map(() => ({ success: true }));
+      return stmts.map(() => ({ success: true, meta: { changes: 1 } }));
     },
   };
 }

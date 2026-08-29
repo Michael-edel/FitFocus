@@ -41,6 +41,7 @@ type DeleteAccountParams = {
   googleSub?: string | null;
   confirmFn?: (message: string) => string | null;
   fetchImpl?: typeof fetch;
+  clearLocalData?: () => void | Promise<void>;
   onLogout: () => void | Promise<void>;
 };
 
@@ -330,5 +331,6 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
     return;
   }
 
+  await params.clearLocalData?.();
   await params.onLogout();
 }
