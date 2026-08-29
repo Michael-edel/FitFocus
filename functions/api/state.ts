@@ -12,6 +12,7 @@ import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 type StatePutItem = { key: unknown; value: unknown; baseVersion?: unknown };
+type D1WriteResult = { meta?: { changes?: number } | null; changes?: number };
 
 function parseBaseVersion(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
@@ -20,6 +21,10 @@ function parseBaseVersion(value: unknown): number | null {
   const parsedBaseVersion = Number(value);
   if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
   return parsedBaseVersion;
+}
+
+function changedRows(result: D1WriteResult | null | undefined): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -116,14 +121,16 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   // The write below repeats the version condition inside one SQL statement, so a
   // concurrent write cannot slip in between this read and the update.
   for (const item of normalizedItems) {
-    if (item.baseVersion === 0) continue;
     const current = await db
       .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
       .bind(user.sub, item.key)
       .first<{ v?: string; version?: number }>();
     const currentVersion = Number(current?.version || 0);
-    if (current && currentVersion !== item.baseVersion) {
-      return json({ error: "KV_CONFLICT", key: item.key, value: current.v ?? "", version: currentVersion }, 409);
+    if (
+      (item.baseVersion > 0 && (!current || currentVersion !== item.baseVersion)) ||
+      (item.baseVersion === 0 && current)
+    ) {
+      return json({ error: "KV_CONFLICT", key: item.key, value: current?.v ?? "", version: currentVersion }, 409);
     }
   }
 
@@ -132,8 +139,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     "WITH input(k, v, base_version) AS (VALUES " + values + "), " +
     "conflict AS (" +
       "SELECT 1 FROM input " +
-      "JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
-      "WHERE input.base_version > 0 AND current.version != input.base_version" +
+      "LEFT JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
+      "WHERE (input.base_version = 0 AND current.version IS NOT NULL) " +
+        "OR (input.base_version > 0 AND (current.version IS NULL OR current.version != input.base_version))" +
     ") " +
     "INSERT INTO user_kv (user_id, k, v, updated_at, version) " +
     "SELECT ?, input.k, input.v, ?, COALESCE(current.version, 0) + 1 " +
@@ -158,17 +166,20 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const written = writeResult.results || [];
   if (written.length !== normalizedItems.length) {
     for (const item of normalizedItems) {
-      if (item.baseVersion === 0) continue;
       const current = await db
         .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
         .bind(user.sub, item.key)
         .first<{ v?: string; version?: number }>();
-      if (!current || Number(current.version || 0) !== item.baseVersion) {
+      const currentVersion = Number(current?.version || 0);
+      if (
+        (item.baseVersion > 0 && (!current || currentVersion !== item.baseVersion)) ||
+        (item.baseVersion === 0 && current)
+      ) {
         return json({
           error: "KV_CONFLICT",
           key: item.key,
           value: current?.v ?? "",
-          version: Number(current?.version || 0),
+          version: currentVersion,
         }, 409);
       }
     }

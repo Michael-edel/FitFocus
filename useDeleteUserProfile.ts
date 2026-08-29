@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { UserProfile } from './types';
-import { persistAllUsersSnapshot, safeRemoveItem } from './storage/hybrid';
+import { clearLocalUserData, persistAllUsersSnapshot } from './storage/hybrid';
 
 type UseDeleteUserProfileParams = {
   currentUserId: string | null | undefined;
@@ -16,11 +16,7 @@ export function useDeleteUserProfile({
   setCurrentUser,
 }: UseDeleteUserProfileParams) {
   return useCallback((userId: string) => {
-    const prefix = `fitfocus_data_${userId}_`;
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) safeRemoveItem(k);
-    }
+    clearLocalUserData(userId);
 
     setAllUsers(prev => {
       const next = prev.filter(u => u.id !== userId);

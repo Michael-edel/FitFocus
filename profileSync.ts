@@ -1,8 +1,16 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { UserProfile } from './types';
-import { collectLocalStateItems, persistAllUsersSnapshot, readStoredAllUsersSnapshotForUser } from './storage/hybrid';
+import {
+  applyRemoteStateItems,
+  collectLocalStateItems,
+  persistAllUsersSnapshot,
+  readStoredAllUsersSnapshotForUser,
+  rememberRemoteStateVersion,
+} from './storage/hybrid';
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
+type LocalStateItem = { key: string; value: string; baseVersion?: number };
+type JsonRecord = Record<string, unknown>;
 
 type ProfileSyncDeps = {
   currentUser: UserProfile | null;
@@ -60,11 +68,28 @@ function isAccessDeniedStatus(status: number) {
   return status === 401 || status === 403;
 }
 
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function readJsonRecord(response: Response): Promise<JsonRecord | null> {
+  const payload: unknown = await response.json().catch(() => null);
+  return isJsonRecord(payload) ? payload : null;
+}
+
+function readUserProfile(value: unknown): UserProfile | null {
+  if (!isJsonRecord(value)) return null;
+  if (typeof value.id !== 'string' || typeof value.name !== 'string') return null;
+  if (typeof value.weight !== 'number' || typeof value.height !== 'number' || typeof value.age !== 'number') return null;
+  if (!Array.isArray(value.weightHistory) || !Array.isArray(value.familyMembers)) return null;
+  return value as unknown as UserProfile;
+}
+
 async function readApiErrorMessage(response: Response, fallback: string): Promise<string> {
-  const payload = await response.json().catch(() => null);
+  const payload = await readJsonRecord(response);
   const message = typeof payload?.message === 'string' && payload.message.trim()
     ? payload.message.trim()
-    : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+    : isJsonRecord(payload?.error) && typeof payload.error.message === 'string' && payload.error.message.trim()
       ? payload.error.message.trim()
       : typeof payload?.error === 'string' && payload.error.trim()
         ? payload.error.trim()
@@ -76,35 +101,43 @@ async function handleProfileConflict(
   response: Response,
   deps: ProfileSyncDeps,
 ): Promise<UserProfile | null> {
-  const payload = await response.json().catch(() => null);
-  const serverProfile = payload?.profile as UserProfile | undefined;
+  const payload = await readJsonRecord(response);
+  const serverProfile = readUserProfile(payload?.profile);
   if (!serverProfile) return null;
-  if (deps.suppressNextFullProfileSyncRef) {
-    deps.suppressNextFullProfileSyncRef.current = true;
-  }
-  if (deps.suppressProfileSyncStateRef) {
-    deps.suppressProfileSyncStateRef.current = true;
-  }
-  deps.setProfileSyncNote?.('Обнаружен конфликт версий. Обновляем данные и повторяем синхронизацию.');
-  deps.persistUser(serverProfile);
-  await deps.loginAsUser(serverProfile);
+  deps.setProfileSyncNote?.('Обнаружен конфликт версий. Облачные данные сохранены, автоматическая перезапись остановлена.');
   return serverProfile;
 }
 
-function buildRetryProfile(localProfile: UserProfile, serverProfile: UserProfile): UserProfile {
-  return {
-    ...serverProfile,
-    ...localProfile,
-    version: serverProfile.version ?? localProfile.version ?? 0,
-  };
+async function syncStateItemsToCloud(items: LocalStateItem[], fetchImpl?: typeof fetch): Promise<boolean> {
+  if (!items.length) return true;
+  const response = await fetchWithTimeout('/api/state', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  }, fetchImpl);
+  const payload = await readJsonRecord(response);
+  if (response.ok) {
+    if (Array.isArray(payload?.items)) {
+      for (const item of payload.items) {
+        if (!isJsonRecord(item) || typeof item.key !== 'string' || typeof item.version !== 'number') continue;
+        rememberRemoteStateVersion(item.key, item.version);
+      }
+    }
+    return true;
+  }
+  if (response.status === 409 && typeof payload?.key === 'string' && typeof payload.value === 'string') {
+    applyRemoteStateItems([{ key: payload.key, value: payload.value, version: typeof payload.version === 'number' ? payload.version : undefined }]);
+  }
+  return false;
 }
 
 async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
-    const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
-    const body = { ...profile, baseVersion: profile.version ?? 0, stateItems };
+    const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
+    const body = { ...profile, baseVersion: profile.version ?? 0 };
     const r = await fetchWithTimeout('/api/profile', {
       method: 'PUT',
       credentials: 'include',
@@ -119,40 +152,22 @@ async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
-        const retryProfile = buildRetryProfile(profile, serverProfile);
-        const retry = await fetchWithTimeout('/api/profile', {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...retryProfile, baseVersion: serverProfile.version ?? 0, stateItems }),
-        }, deps.fetchImpl);
-        const retryPayload = await retry.json().catch(() => null);
-        if (retry.ok && retryPayload?.profile) {
-          if (deps.suppressNextFullProfileSyncRef) {
-            deps.suppressNextFullProfileSyncRef.current = true;
-          }
-          if (deps.suppressProfileSyncStateRef) {
-            deps.suppressProfileSyncStateRef.current = true;
-          }
-          deps.persistUser(retryPayload.profile as UserProfile);
-          deps.setProfileSyncState('saved');
-          deps.setLastProfileSyncAt(Date.now());
-          return;
-        }
+        deps.setProfileSyncState('error');
+        return;
       }
     }
-    const payload = await r.json().catch(() => null);
+    const payload = await readJsonRecord(r);
     if (!r.ok) {
       const message = typeof payload?.message === 'string' && payload.message.trim()
         ? payload.message.trim()
-        : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+        : isJsonRecord(payload?.error) && typeof payload.error.message === 'string' && payload.error.message.trim()
           ? payload.error.message.trim()
           : typeof payload?.error === 'string' && payload.error.trim()
             ? payload.error.trim()
             : 'PROFILE_SYNC_FAILED';
       throw new Error(message);
     }
-    const serverProfile = payload?.profile as UserProfile | undefined;
+    const serverProfile = readUserProfile(payload?.profile);
     if (serverProfile) {
       if (deps.suppressNextFullProfileSyncRef) {
         deps.suppressNextFullProfileSyncRef.current = true;
@@ -161,6 +176,11 @@ async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps
         deps.suppressProfileSyncStateRef.current = true;
       }
       deps.persistUser(serverProfile);
+    }
+    if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+      deps.setProfileSyncNote?.('Профиль сохранён, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
+      deps.setProfileSyncState('error');
+      return;
     }
     deps.setProfileSyncState('saved');
     deps.setProfileSyncNote?.('Синхронизировано с облаком.');
@@ -191,12 +211,12 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
-    const stateItems = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
+    const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
     const r = await fetchWithTimeout('/api/profile', {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0, stateItems }),
+      body: JSON.stringify({ ...patch, baseVersion: deps.currentUser.version ?? 0 }),
     }, deps.fetchImpl);
     if (isAccessDeniedStatus(r.status)) {
       deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
@@ -206,40 +226,47 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
-        const retryProfile = buildRetryProfile(nextUser, serverProfile);
         const retry = await fetchWithTimeout('/api/profile', {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...retryProfile, ...patch, baseVersion: serverProfile.version ?? 0, stateItems }),
+          body: JSON.stringify({ ...patch, baseVersion: serverProfile.version ?? 0 }),
         }, deps.fetchImpl);
-        const retryPayload = await retry.json().catch(() => null);
-        if (retry.ok && retryPayload?.profile) {
+        const retryPayload = await readJsonRecord(retry);
+        const retryProfile = readUserProfile(retryPayload?.profile);
+        if (retry.ok && retryProfile) {
           if (deps.suppressNextFullProfileSyncRef) {
             deps.suppressNextFullProfileSyncRef.current = true;
           }
           if (deps.suppressProfileSyncStateRef) {
             deps.suppressProfileSyncStateRef.current = true;
           }
-          deps.persistUser(retryPayload.profile as UserProfile);
+          deps.persistUser(retryProfile);
+          if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+            deps.setProfileSyncNote?.('Изменение профиля сохранено, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
+            deps.setProfileSyncState('error');
+            return;
+          }
           deps.setProfileSyncState('saved');
           deps.setLastProfileSyncAt(Date.now());
           return;
         }
+        deps.setProfileSyncState('error');
+        return;
       }
     }
-    const payload = await r.json().catch(() => null);
+    const payload = await readJsonRecord(r);
     if (!r.ok) {
       const message = typeof payload?.message === 'string' && payload.message.trim()
         ? payload.message.trim()
-        : typeof payload?.error?.message === 'string' && payload.error.message.trim()
+        : isJsonRecord(payload?.error) && typeof payload.error.message === 'string' && payload.error.message.trim()
           ? payload.error.message.trim()
           : typeof payload?.error === 'string' && payload.error.trim()
             ? payload.error.trim()
             : 'PROFILE_PATCH_FAILED';
       throw new Error(message);
     }
-    const serverProfile = payload?.profile as UserProfile | undefined;
+    const serverProfile = readUserProfile(payload?.profile);
     if (serverProfile) {
       if (deps.suppressNextFullProfileSyncRef) {
         deps.suppressNextFullProfileSyncRef.current = true;
@@ -248,6 +275,11 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
         deps.suppressProfileSyncStateRef.current = true;
       }
       deps.persistUser(serverProfile);
+    }
+    if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+      deps.setProfileSyncNote?.('Изменение профиля сохранено, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
+      deps.setProfileSyncState('error');
+      return;
     }
     deps.setProfileSyncState('saved');
     deps.setProfileSyncNote?.('Синхронизировано с облаком.');
@@ -288,9 +320,10 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
     if (!pr.ok) {
       throw new Error(await readApiErrorMessage(pr, 'PROFILE_LOAD_FAILED'));
     }
-    const pj = await pr.json();
-    const profile = pj?.profile as UserProfile | null;
-    if (!profile) return;
+    const payload = await readJsonRecord(pr);
+    if (payload?.profile === null || payload?.profile === undefined) return;
+    const profile = readUserProfile(payload.profile);
+    if (!profile) throw new Error('PROFILE_INVALID_RESPONSE');
     if (deps.suppressNextFullProfileSyncRef) {
       deps.suppressNextFullProfileSyncRef.current = true;
     }

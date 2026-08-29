@@ -73,6 +73,7 @@ import { buildFallbackAiPlan } from './aiPlanFallback';
 import { buildCorrectedFoodPatch, buildFoodCorrectionDraft, type FoodCorrectionDraft } from './foodCorrection';
 import {
   collectLocalStateItems,
+  clearLocalUserData,
   persistAllUsersSnapshot,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
@@ -1443,11 +1444,16 @@ await ensurePdfInterFont(doc);
   }), [googleMe?.sub]);
 
   const deleteAccount = useCallback(async () => {
+    const deletedUserId = googleMe?.sub ?? currentUser?.id ?? null;
     await deleteAccountSession({
       googleSub: googleMe?.sub,
+      clearLocalData: deletedUserId ? () => {
+        clearLocalUserData(deletedUserId);
+        setAllUsers(prev => prev.filter(user => user.id !== deletedUserId));
+      } : undefined,
       onLogout: logout,
     });
-  }, [googleMe?.sub, logout]);
+  }, [currentUser?.id, googleMe?.sub, logout, setAllUsers]);
 
   const loginAsUser = useCallback(async (
     user: UserProfile,

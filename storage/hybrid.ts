@@ -44,6 +44,32 @@ const REMOTE_SYNC_DELAY_MS = 400;
 const REMOTE_SYNC_RETRY_DELAY_MS = 2_000;
 const MAX_REMOTE_SYNC_RETRIES = 3;
 
+const USER_SCOPED_KEY_PREFIXES = [
+  'fitfocus.nutrition.selected-day.v1:',
+  'fitfocus.nutrition.camera-facing.v1:',
+  'fitfocus.dashboard.new-weight.v1:',
+  'fitfocus.dashboard.pdf-include-meal-log.v1:',
+  'fitfocus.dashboard.mobile-more-open.v1:',
+  'fitfocus.course.ui.v1:',
+  'fitfocus.plan.ui.v1:',
+  'fitfocus.plan.active-day.v1:',
+  'fitfocus.progress.ui.v1:',
+  'fitfocus.progress-archive.sections.v1:',
+  'fitfocus.settings.ui.v1:',
+  'fitfocus.nutrition.search.v1:',
+  'fitfocus.analytics.sent.v1:',
+  'fitfocus.achievements.counters.v1:',
+];
+
+function isLocalUserKey(key: string, userId: string): boolean {
+  const dataPrefix = `${STORAGE_KEYS.dataPrefix}${userId}_`;
+  if (key.startsWith(dataPrefix)) return true;
+  if (key.startsWith(`ff_last_weekly_ai_attempt_${userId}`)) return true;
+  if (key.startsWith(`ff_weekly_ai_inflight_${userId}`)) return true;
+  if (key.startsWith(`ff_dev_plan_override_scope_${userId}`)) return true;
+  return USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`);
+}
+
 export function shouldMirrorKey(key: string): boolean {
   if (key.endsWith('__ffv')) return false;
   if (key.endsWith('_all_users')) return false;
@@ -252,6 +278,30 @@ export function safeRemoveItem(key: string) {
   } catch {
     // ignore
   }
+}
+
+/** Remove only browser-local data owned by one account; never enqueue remote deletes. */
+export function clearLocalUserData(userId: string | null | undefined): number {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return 0;
+
+  const keysToRemove: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      const baseKey = key.endsWith('__ffv') ? key.slice(0, -'__ffv'.length) : key;
+      if (isLocalUserKey(baseKey, normalizedUserId)) keysToRemove.push(key);
+    }
+
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+      if (!key.endsWith('__ffv')) localStorage.removeItem(versionMetaKey(key));
+    }
+  } catch {
+    // Best effort: storage can be unavailable or quota-restricted in private mode.
+  }
+  return keysToRemove.length;
 }
 
 export function allUsersStorageKey(userId?: string | null) {

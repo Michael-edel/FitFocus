@@ -16,6 +16,10 @@ import {
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const PROFILE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
+type ProfileUser = { sub: string; email?: string; name?: string; picture?: string };
+type StateItem = { key: string; value: string; baseVersion: number };
+type StateConflict = { key: string; value: string; version: number };
+
 const EDITABLE_PROFILE_FIELDS = new Set([
   'name',
   'gender',
@@ -81,20 +85,22 @@ function sanitizePatch(input: unknown): JsonObject {
   return patch;
 }
 
-function sanitizeStateItems(input: unknown): { key: string; value: string }[] {
+function sanitizeStateItems(input: unknown): StateItem[] {
   if (!Array.isArray(input)) return [];
-  const items: { key: string; value: string }[] = [];
+  const items: StateItem[] = [];
   for (const entry of input) {
     if (!isJsonObject(entry)) continue;
     const key = typeof entry.key === 'string' ? entry.key : '';
     const value = typeof entry.value === 'string' ? entry.value : '';
+    const baseVersion = parseBaseVersion(entry.baseVersion);
     if (!key) continue;
-    items.push({ key, value });
+    if (baseVersion === null) continue;
+    items.push({ key, value, baseVersion });
   }
   return items;
 }
 
-function validateStateItems(userId: string, stateItems: { key: string; value: string }[]) {
+function validateStateItems(userId: string, stateItems: StateItem[]) {
   for (const item of stateItems) {
     if (!isAllowedStateKey(userId, item.key)) {
       return item.key;
@@ -137,9 +143,70 @@ async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profil
   };
 }
 
-function conflictResponse(user: { sub: string; email?: string; name?: string; picture?: string }, profile: JsonObject, version: number) {
+function conflictResponse(user: ProfileUser, profile: JsonObject | null, version: number) {
   const serverProfile = withProtectedFieldsShared(user, { ...profile, version });
   return json({ error: 'PROFILE_CONFLICT', profile: serverProfile, version }, 409);
+}
+
+function changedRows(result: { meta?: { changes?: number } | null; changes?: number } | null | undefined): number {
+  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+}
+
+/**
+ * The profile version check must be part of the write itself. A read followed
+ * by an unconditional upsert allows two devices to commit the same version.
+ */
+export async function writeProfileCas(
+  db: D1Database,
+  userId: string,
+  profile: JsonObject,
+  expectedVersion: number,
+  updatedAt: number,
+): Promise<boolean> {
+  const profileJson = JSON.stringify(profile);
+  const statement = expectedVersion === 0
+    ? db.prepare(
+        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(user_id) DO NOTHING"
+      ).bind(userId, profileJson, updatedAt, Number(profile.version || 1))
+    : db.prepare(
+        "UPDATE user_profiles SET profile_json = ?, updated_at = ?, version = ? " +
+          "WHERE user_id = ? AND version = ?"
+      ).bind(profileJson, updatedAt, Number(profile.version || expectedVersion + 1), userId, expectedVersion);
+
+  return changedRows(await statement.run()) === 1;
+}
+
+async function writeStateItemsCas(
+  db: D1Database,
+  userId: string,
+  stateItems: StateItem[],
+  updatedAt: number,
+): Promise<StateConflict | null> {
+  if (!stateItems.length) return null;
+
+  const results = await db.batch(stateItems.map((item) => item.baseVersion === 0
+    ? db.prepare(
+        "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
+          "ON CONFLICT(user_id, k) DO NOTHING"
+      ).bind(userId, item.key, item.value, updatedAt, 1)
+    : db.prepare(
+        "UPDATE user_kv SET v = ?, updated_at = ?, version = ? " +
+          "WHERE user_id = ? AND k = ? AND version = ?"
+      ).bind(item.value, updatedAt, item.baseVersion + 1, userId, item.key, item.baseVersion)));
+
+  const conflictIndex = results.findIndex((result) => changedRows(result) === 0);
+  if (conflictIndex < 0) return null;
+
+  const item = stateItems[conflictIndex];
+  const current = await db.prepare(
+    "SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1"
+  ).bind(userId, item.key).first<{ v?: string; version?: number }>();
+  return {
+    key: item.key,
+    value: String(current?.v ?? ""),
+    version: Number(current?.version || 0),
+  };
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -200,7 +267,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     await migrateLegacyAccountByEmailShared(db, user);
   }
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
-  if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
+  if (refreshedMeta.profile && (baseVersion === 0 || refreshedMeta.version !== baseVersion)) {
     return conflictResponse(user, refreshedMeta.profile, refreshedMeta.version);
   }
   const directPlan = await loadActivePlanShared(db, user.sub);
@@ -215,23 +282,15 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   });
 
   const t = nowMs();
-  const statements = [
-    db
-      .prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
-      )
-      .bind(user.sub, JSON.stringify(profile), t, nextVersion),
-    ...stateItems.map((it) =>
-      db
-        .prepare(
-          "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
-            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
-        )
-        .bind(user.sub, it.key, it.value, t, nextVersion)
-    ),
-  ];
-  await db.batch(statements);
+  const profileWritten = await writeProfileCas(db, user.sub, profile, baseVersion, t);
+  if (!profileWritten) {
+    const latest = await loadProfileMeta(db, user.sub);
+    return conflictResponse(user, latest.profile, latest.version);
+  }
+  const stateConflict = await writeStateItemsCas(db, user.sub, stateItems, t);
+  if (stateConflict) {
+    return json({ error: "KV_CONFLICT", key: stateConflict.key, value: stateConflict.value, version: stateConflict.version }, 409);
+  }
 
   return json({ profile, updatedFields: Object.keys(patch), stateItems: stateItems.length, mode: 'replace', version: nextVersion }, 200);
 };
@@ -275,7 +334,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
-  if (refreshedMeta.profile && baseVersion > 0 && refreshedMeta.version !== baseVersion) {
+  if (refreshedMeta.profile && (baseVersion === 0 || refreshedMeta.version !== baseVersion)) {
     return conflictResponse(user, refreshedMeta.profile, refreshedMeta.version);
   }
   const directPlan = await loadActivePlanShared(db, user.sub);
@@ -284,23 +343,15 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const profile = withProtectedFieldsShared(user, { ...(refreshedMeta.profile ?? {}), ...patch, plan: effectivePlan, version: nextVersion });
 
   const t = nowMs();
-  const statements = [
-    db
-      .prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
-      )
-      .bind(user.sub, JSON.stringify(profile), t, nextVersion),
-    ...stateItems.map((it) =>
-      db
-        .prepare(
-          "INSERT INTO user_kv (user_id, k, v, updated_at, version) VALUES (?, ?, ?, ?, ?) " +
-            "ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version"
-        )
-        .bind(user.sub, it.key, it.value, t, nextVersion)
-    ),
-  ];
-  await db.batch(statements);
+  const profileWritten = await writeProfileCas(db, user.sub, profile, baseVersion, t);
+  if (!profileWritten) {
+    const latest = await loadProfileMeta(db, user.sub);
+    return conflictResponse(user, latest.profile, latest.version);
+  }
+  const stateConflict = await writeStateItemsCas(db, user.sub, stateItems, t);
+  if (stateConflict) {
+    return json({ error: "KV_CONFLICT", key: stateConflict.key, value: stateConflict.value, version: stateConflict.version }, 409);
+  }
 
   return json({ profile, updatedFields, stateItems: stateItems.length, mode: 'patch', version: nextVersion }, 200);
 };
