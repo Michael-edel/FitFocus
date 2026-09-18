@@ -85,8 +85,27 @@ export function parsePushSubscription(payload: PushSubscriptionPayload | null | 
   const p256dh = String(payload?.keys?.p256dh || "").trim();
   const auth = String(payload?.keys?.auth || "").trim();
   const contentEncoding = "aes128gcm";
-  if (!endpoint || !p256dh || !auth) return null;
+  if (!isAllowedPushEndpoint(endpoint) || !p256dh || !auth) return null;
   return { endpoint, p256dh, auth, contentEncoding };
+}
+
+const PUSH_SERVICE_HOSTS = [
+  "fcm.googleapis.com",
+  "push.services.mozilla.com",
+  "updates.push.services.mozilla.com",
+  "web.push.apple.com",
+];
+
+export function isAllowedPushEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    if (url.port && url.port !== "443") return false;
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    return PUSH_SERVICE_HOSTS.includes(host) || host.endsWith(".notify.windows.com");
+  } catch {
+    return false;
+  }
 }
 
 export function hasPushConfig(env: PushEnv): boolean {
@@ -293,6 +312,7 @@ export async function sendPushNotification(
   payload: Record<string, unknown>,
 ) {
   if (getPushConfigError(env)) throw new Error("PUSH_CONFIG");
+  if (!isAllowedPushEndpoint(subscription.endpoint)) throw new Error("PUSH_ENDPOINT");
   const encrypted = await encryptPushPayload(subscription, payload);
   const response = await fetch(subscription.endpoint, {
     method: "POST",

@@ -186,7 +186,7 @@ export const onRequestGet: PagesFunction<{
       .run();
 
     const sessionJwt = await signSessionJwt(
-      { v: 2, sub: user.sub, sid, email: user.email, name: user.name, picture: user.picture, iat: now },
+      { v: 2, sub: user.sub, sid, email: user.email, email_verified: user.email_verified, name: user.name, picture: user.picture, iat: now },
       env.AUTH_JWT_SECRET,
       ttl
     );

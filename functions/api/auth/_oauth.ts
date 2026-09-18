@@ -74,8 +74,10 @@ export async function verifyState(
     if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
     if (issuedAt > now + 60_000) return null;
     if (now - issuedAt > maxAgeMs) return null;
-    const expectedNonce = opts.expectedNonce ? String(opts.expectedNonce) : "";
-    if (expectedNonce && String(parsed.n || "") !== expectedNonce) return null;
+    if (Object.prototype.hasOwnProperty.call(opts, "expectedNonce")) {
+      const expectedNonce = String(opts.expectedNonce || "");
+      if (!expectedNonce || String(parsed.n || "") !== expectedNonce) return null;
+    }
     return parsed;
   } catch {
     return null;

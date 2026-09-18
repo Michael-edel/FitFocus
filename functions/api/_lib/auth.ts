@@ -3,13 +3,14 @@ import { isJsonObject, safeJsonParseObject, type JsonObject } from "./json";
 
 export const API_SCHEMA_VERSION = 3;
 
-export type SessionUser = { sub: string; sid: string; email?: string; name?: string; picture?: string; roles: string[] };
+export type SessionUser = { sub: string; sid: string; email?: string; emailVerified: boolean; name?: string; picture?: string; roles: string[] };
 type SessionPayload = JsonObject & {
   sub?: string;
   sid?: string;
   aud?: string;
   exp?: number;
   email?: string;
+  email_verified?: boolean;
   name?: string;
   picture?: string;
 };
@@ -159,6 +160,7 @@ export async function requireUser(
     sub: payload.sub,
     sid,
     email: payload.email,
+    emailVerified: payload.email_verified === true,
     name: payload.name,
     picture: payload.picture,
     roles,

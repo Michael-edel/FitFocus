@@ -135,9 +135,10 @@ export const onRequest: PagesFunction<{
     const tokenEmail = String(idPayload.email || "");
     const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";
     const verifiedTokenEmail = tokenEmailVerified ? tokenEmail : "";
-    const formEmail = String(appleUserJson?.email || "");
     const appleName = buildAppleName(appleUserJson);
-    const nextEmail = tokenEmail || formEmail || String(existing?.email || "");
+    // Apple's form field is browser-supplied and is not identity evidence. Only
+    // a verified ID-token email may replace the account email.
+    const nextEmail = verifiedTokenEmail || String(existing?.email || "");
     const nextName =
       appleName ||
       String(existing?.name || "").trim() ||
@@ -208,7 +209,7 @@ export const onRequest: PagesFunction<{
       .run();
 
     const sessionJwt = await signSessionJwt(
-      { v: 2, sub: appleSub, sid, email: nextEmail, name: nextName, picture: nextPicture, iat: now },
+      { v: 2, sub: appleSub, sid, email: nextEmail, email_verified: Boolean(verifiedTokenEmail), name: nextName, picture: nextPicture, iat: now },
       env.AUTH_JWT_SECRET,
       ttl
     );

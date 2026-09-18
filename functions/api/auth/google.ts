@@ -133,6 +133,7 @@ await env.DB.prepare(
         sub: user.sub,
         sid,
         email: user.email,
+        email_verified: user.email_verified,
         name: user.name,
         picture: user.picture,
         iat: now,

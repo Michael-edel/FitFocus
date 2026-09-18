@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sendPushNotification } from '../functions/api/_lib/push';
+import { isAllowedPushEndpoint, sendPushNotification } from '../functions/api/_lib/push';
 
 function b64url(bytes: Uint8Array): string {
   let binary = '';
@@ -47,7 +47,7 @@ async function makeSubscription() {
   const auth = new Uint8Array(16);
   crypto.getRandomValues(auth);
   return {
-    endpoint: 'https://push.example/send/1',
+    endpoint: 'https://fcm.googleapis.com/fcm/send/1',
     p256dh: b64url(publicKey),
     auth: b64url(auth),
     content_encoding: 'aes128gcm',
@@ -73,7 +73,7 @@ describe('Worker-compatible web push sender', () => {
     expect(response.status).toBe(201);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://push.example/send/1');
+    expect(url).toBe('https://fcm.googleapis.com/fcm/send/1');
     expect(init?.method).toBe('POST');
     expect(init?.headers).toMatchObject({
       TTL: '604800',
@@ -84,5 +84,18 @@ describe('Worker-compatible web push sender', () => {
     expect(String((init?.headers as Record<string, string>).Authorization)).toMatch(/^vapid t=.+, k=.+/);
     expect(init?.body).toBeInstanceOf(ArrayBuffer);
     expect((init?.body as ArrayBuffer).byteLength).toBeGreaterThan(86);
+  });
+
+  it('rejects endpoints outside known browser push services', async () => {
+    expect(isAllowedPushEndpoint('https://fcm.googleapis.com/fcm/send/1')).toBe(true);
+    expect(isAllowedPushEndpoint('https://push-wns.notify.windows.com/w/token')).toBe(true);
+    expect(isAllowedPushEndpoint('https://127.0.0.1/internal')).toBe(false);
+    expect(isAllowedPushEndpoint('https://fcm.googleapis.com.attacker.test/push')).toBe(false);
+
+    await expect(sendPushNotification(
+      await makeVapidEnv(),
+      { ...(await makeSubscription()), endpoint: 'https://127.0.0.1/internal' },
+      { title: 'FitFocus' },
+    )).rejects.toThrow('PUSH_ENDPOINT');
   });
 });

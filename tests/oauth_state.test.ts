@@ -26,4 +26,10 @@ describe('verifyState', () => {
     await expect(verifyState('not-base64.signature', SECRET, { expectedNonce: 'nonce-1', nowMs: NOW_MS })).resolves.toBeNull();
     await expect(verifyState(`${state}.extra`, SECRET, { expectedNonce: 'nonce-1', nowMs: NOW_MS })).resolves.toBeNull();
   });
+
+  it('rejects a signed state when the expected nonce cookie is missing', async () => {
+    const state = await makeState({ r: '/dashboard' });
+
+    await expect(verifyState(state, SECRET, { expectedNonce: null, nowMs: NOW_MS })).resolves.toBeNull();
+  });
 });

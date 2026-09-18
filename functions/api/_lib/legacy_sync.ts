@@ -122,8 +122,11 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
 
 export async function migrateLegacyAccountByEmail(
   db: D1Database,
-  user: { sub: string; email?: string; name?: string; picture?: string },
+  user: { sub: string; email?: string; emailVerified?: boolean; name?: string; picture?: string },
 ): Promise<Record<string, unknown> | null> {
+  // Email-based ownership transfer is allowed only when the identity provider
+  // verified this email in the current signed session.
+  if (!user.emailVerified) return null;
   const legacy = await loadLegacyProfileByEmail(db, user.email || "");
   if (!legacy || legacy.userId === user.sub) return null;
 

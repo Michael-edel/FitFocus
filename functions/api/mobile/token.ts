@@ -12,6 +12,7 @@ type MobileSessionPayload = {
   sub: string;
   sid: string;
   email?: string;
+  email_verified?: boolean;
   name?: string;
   picture?: string;
   aud?: "mobile";
@@ -71,7 +72,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const token = await signSessionJwt(
-    { v: 2, sub: user.sub, sid: user.sid, email: user.email, name: user.name, picture: user.picture, aud: "mobile", iat: now },
+    { v: 2, sub: user.sub, sid: user.sid, email: user.email, email_verified: user.emailVerified, name: user.name, picture: user.picture, aud: "mobile", iat: now },
     env.AUTH_JWT_SECRET,
     ttl
   );
