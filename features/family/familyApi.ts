@@ -1,4 +1,5 @@
 import { isRecord, responseErrorMessage } from '../../safeJson';
+import { fetchWithResilience } from '../../services/httpClient';
 import type { FamilyWeeklyMenu } from '../../types';
 
 export type CloudFamily = {
@@ -80,10 +81,15 @@ function requestOptions(method = 'GET', body?: unknown): RequestInit {
   };
 }
 
+function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const method = (init.method ?? 'GET').toUpperCase();
+  return fetchWithResilience(input, init, { retries: method === 'GET' ? 1 : 0 });
+}
+
 export async function loadFamilyContext(week: string): Promise<FamilyContext> {
   const [familyResponse, menuResponse] = await Promise.all([
-    fetch('/api/family', requestOptions()),
-    fetch(`/api/family/menu?week=${encodeURIComponent(week)}`, requestOptions()),
+    apiFetch('/api/family', requestOptions()),
+    apiFetch(`/api/family/menu?week=${encodeURIComponent(week)}`, requestOptions()),
   ]);
   const rawFamily = await responseJson(familyResponse);
   const familyData = isRecord(rawFamily) ? rawFamily : {};
@@ -101,7 +107,7 @@ export async function loadFamilyContext(week: string): Promise<FamilyContext> {
 }
 
 export async function loadFamilyShopping(week: string, familyId: string): Promise<FamilyShoppingState> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/shopping/list?week=${encodeURIComponent(week)}&family_id=${encodeURIComponent(familyId)}`,
     requestOptions(),
   );
@@ -120,7 +126,7 @@ export async function setFamilyShoppingItem(
   ingredientName: string,
   checked: boolean,
 ): Promise<void> {
-  const response = await fetch('/api/shopping/check', requestOptions('PATCH', {
+  const response = await apiFetch('/api/shopping/check', requestOptions('PATCH', {
     week_start: week,
     ingredient_name: ingredientName,
     checked,
@@ -131,13 +137,13 @@ export async function setFamilyShoppingItem(
 }
 
 export async function createFamily(name: string): Promise<void> {
-  const response = await fetch('/api/family', requestOptions('POST', { name }));
+  const response = await apiFetch('/api/family', requestOptions('POST', { name }));
   const data = await responseJson(response);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось создать семью'));
 }
 
 export async function createFamilyInvite(): Promise<string> {
-  const response = await fetch('/api/family/invite', requestOptions('POST'));
+  const response = await apiFetch('/api/family/invite', requestOptions('POST'));
   const rawData = await responseJson(response);
   const data = isRecord(rawData) ? rawData : {};
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось создать приглашение'));
@@ -145,25 +151,25 @@ export async function createFamilyInvite(): Promise<string> {
 }
 
 export async function joinFamily(code: string): Promise<void> {
-  const response = await fetch('/api/family/join', requestOptions('POST', { code }));
+  const response = await apiFetch('/api/family/join', requestOptions('POST', { code }));
   const data = await responseJson(response);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось присоединиться'));
 }
 
 export async function updateFamilyGoal(goal: 'LOSS' | 'MAINTAIN'): Promise<void> {
-  const response = await fetch('/api/family/member', requestOptions('PATCH', { goal }));
+  const response = await apiFetch('/api/family/member', requestOptions('PATCH', { goal }));
   const data = await responseJson(response);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось обновить цель'));
 }
 
 export async function generateFamilyMenu(week: string): Promise<void> {
-  const response = await fetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, requestOptions('POST'));
+  const response = await apiFetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, requestOptions('POST'));
   const data = await responseJson(response);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось сгенерировать семейное меню'));
 }
 
 export async function saveFamilyMenu(week: string, menu: FamilyWeeklyMenu): Promise<void> {
-  const response = await fetch('/api/family/menu', requestOptions('POST', { weekStart: week, menu }));
+  const response = await apiFetch('/api/family/menu', requestOptions('POST', { weekStart: week, menu }));
   const data = await responseJson(response);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось сохранить семейное меню на сервере'));
 }
@@ -173,7 +179,7 @@ export async function saveFamilyShoppingItems(
   familyId: string,
   items: NonNullable<FamilyWeeklyMenu['shoppingListItems']>,
 ): Promise<void> {
-  const response = await fetch('/api/weekly_menu/items', requestOptions('POST', {
+  const response = await apiFetch('/api/weekly_menu/items', requestOptions('POST', {
     week_start: week,
     family_id: familyId,
     items,
