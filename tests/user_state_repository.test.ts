@@ -41,9 +41,17 @@ describe('UserStateRepository', () => {
 
   it('persists JSON through the cloud-mirrored storage layer', async () => {
     const repository = new UserStateRepository('user-1');
-    repository.writeJson('diary', [{ id: 'meal-1' }]);
+    repository.writeJson('diary', [{
+      id: 'meal-1',
+      name: 'Овсянка',
+      calories: 350,
+      protein: 12,
+      fat: 8,
+      carbs: 54,
+      timestamp: '2026-10-06T08:00:00.000Z',
+    }]);
 
-    expect(localStorage.getItem('fitfocus_data_user-1_diary')).toBe('[{"id":"meal-1"}]');
+    expect(localStorage.getItem('fitfocus_data_user-1_diary')).toContain('"id":"meal-1"');
     await vi.advanceTimersByTimeAsync(400);
     expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));
   });

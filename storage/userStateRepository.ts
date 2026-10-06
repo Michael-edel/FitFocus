@@ -1,5 +1,9 @@
 import { parseJson } from '../safeJson';
+import type { CoachAdviceResult } from '../geminiService';
+import type { AppSettings, FavoriteRecipe, FoodItem } from '../types';
+import type { WeeklyStoredReport } from '../weeklyAutoEngine';
 import { safeRemoveItem, safeSetItem } from './hybrid';
+import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
 
 export type UserStateKey =
@@ -9,6 +13,15 @@ export type UserStateKey =
   | 'weekly_reports'
   | 'last_coach_card'
   | 'settings';
+
+export type UserStateValue = {
+  diary: FoodItem[];
+  history: FastLogItem[];
+  favorite_recipes: FavoriteRecipe[];
+  weekly_reports: WeeklyStoredReport[];
+  last_coach_card: CoachAdviceResult | null;
+  settings: AppSettings;
+};
 
 export function userStateStorageKey(userId: string, stateKey: UserStateKey): string {
   return `${STORAGE_KEYS.dataPrefix}${userId}_${stateKey}`;
@@ -36,7 +49,7 @@ export class UserStateRepository {
     }
   }
 
-  writeJson(stateKey: UserStateKey, value: unknown): void {
+  writeJson<K extends UserStateKey>(stateKey: K, value: UserStateValue[K]): void {
     safeSetItem(this.key(stateKey), JSON.stringify(value));
   }
 
