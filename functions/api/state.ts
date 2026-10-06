@@ -9,26 +9,33 @@ import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 import { normalizeStateWrite, parseStateBaseVersion } from './_lib/state_write';
 import { deleteStateItem, writeStateItems } from './_lib/state_store';
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
+
+function respond(requestId: string, body: unknown, status: number): Response {
+  logApiEvent('state.response', { requestId, status });
+  return withRequestId(json(body, status), requestId);
+}
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
   try {
     await requireBetaAccess(env, user);
   } catch {
-    return json({ error: "ACCESS_REQUIRED" }, 403);
+    return respond(requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
 
   const url = new URL(request.url);
   const prefix = url.searchParams.get("prefix") || "";
   if (!isAllowedStatePrefix(user.sub, prefix)) {
-    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
+    return respond(requestId, { error: "FORBIDDEN_KEYSPACE" }, 403);
   }
 
   const db = requireDB(env);
@@ -40,20 +47,21 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const items = (results || [])
     .filter((r) => typeof r.k === "string" && isAllowedStateKey(user.sub, r.k))
     .map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
-  return json({ items }, 200);
+  return respond(requestId, { items }, 200);
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
   try {
     await requireBetaAccess(env, user);
   } catch {
-    return json({ error: "ACCESS_REQUIRED" }, 403);
+    return respond(requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);
@@ -62,15 +70,16 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
     body = await readJsonRequest(request, STATE_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
     if (err instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+        return respond(requestId, { error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
     }
     throw err;
   }
-  if (!body) return json({ error: "BAD_JSON" }, 400);
+  if (!body) return respond(requestId, { error: "BAD_JSON" }, 400);
 
   const stateWrite = normalizeStateWrite(body, user.sub);
   if (stateWrite.ok === false) {
-    return json(
+    return respond(
+      requestId,
       stateWrite.key ? { error: stateWrite.error, key: stateWrite.key } : { error: stateWrite.error },
       stateWrite.error === 'FORBIDDEN_KEYSPACE' ? 403 : 400,
     );
@@ -80,37 +89,38 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const t = nowMs();
 
   const written = await writeStateItems(db, user.sub, normalizedItems, t);
-  if (written.ok === false) return json({ error: 'KV_CONFLICT', ...written.conflict }, 409);
-  return json({ ok: true, items: written.items }, 200);
+  if (written.ok === false) return respond(requestId, { error: 'KV_CONFLICT', ...written.conflict }, 409);
+  return respond(requestId, { ok: true, items: written.items }, 200);
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
   try {
     await requireBetaAccess(env, user);
   } catch {
-    return json({ error: "ACCESS_REQUIRED" }, 403);
+    return respond(requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
 
   const url = new URL(request.url);
   const key = url.searchParams.get("key");
-  if (!key) return json({ error: "MISSING_KEY" }, 400);
+  if (!key) return respond(requestId, { error: "MISSING_KEY" }, 400);
   if (!isAllowedStateKey(user.sub, key)) {
-    return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
+    return respond(requestId, { error: "FORBIDDEN_KEYSPACE" }, 403);
   }
   const baseVersion = parseStateBaseVersion(url.searchParams.get("baseVersion"));
   if (baseVersion === null) {
-    return json({ error: "BAD_BASE_VERSION", key }, 400);
+    return respond(requestId, { error: "BAD_BASE_VERSION", key }, 400);
   }
 
   const db = requireDB(env);
   const conflict = await deleteStateItem(db, user.sub, key, baseVersion);
-  if (conflict) return json({ error: 'KV_CONFLICT', ...conflict }, 409);
+  if (conflict) return respond(requestId, { error: 'KV_CONFLICT', ...conflict }, 409);
 
-  return json({ ok: true }, 200);
+  return respond(requestId, { ok: true }, 200);
 };

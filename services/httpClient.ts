@@ -23,6 +23,14 @@ function isSafeMethod(method: string) {
   return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 }
 
+function requestIdFor(headersInit: HeadersInit | undefined): { headers: Headers; requestId: string } {
+  const headers = new Headers(headersInit);
+  const existing = headers.get('X-Request-ID')?.trim();
+  const requestId = existing || `web-${crypto.randomUUID()}`;
+  headers.set('X-Request-ID', requestId);
+  return { headers, requestId };
+}
+
 function wait(delayMs: number) {
   if (delayMs <= 0) return Promise.resolve();
   return new Promise<void>((resolve) => globalThis.setTimeout(resolve, delayMs));
@@ -43,12 +51,13 @@ export async function fetchWithResilience(
   const retries = isSafeMethod(method) ? Math.max(0, options.retries ?? 0) : 0;
   const timeoutMs = Math.max(1, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const retryDelayMs = Math.max(0, options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+  const { headers } = requestIdFor(init.headers);
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetchImpl(input, { ...init, signal: controller.signal });
+      const response = await fetchImpl(input, { ...init, headers, signal: controller.signal });
       if (response.status < 500 || attempt === retries) return response;
     } catch (error: unknown) {
       const timedOut = controller.signal.aborted;
