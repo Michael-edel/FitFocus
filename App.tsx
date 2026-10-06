@@ -104,6 +104,7 @@ import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
+import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -375,64 +376,11 @@ const App: React.FC = () => {
   });
   
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
-  const selectedDiaryDayStorageKey = useMemo(
-    () => `fitfocus.nutrition.selected-day.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const selectedDiaryDaySkipSaveRef = useRef(false);
-  const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState<string>('');
-  useEffect(() => {
-    try {
-      const todayKey = localDayKey(new Date()) || '';
-      const savedKey = localStorage.getItem(selectedDiaryDayStorageKey) || '';
-      selectedDiaryDaySkipSaveRef.current = true;
-      setSelectedDiaryDayKey(savedKey === todayKey ? savedKey : '');
-    } catch {
-      selectedDiaryDaySkipSaveRef.current = true;
-      setSelectedDiaryDayKey('');
-    }
-  }, [selectedDiaryDayStorageKey]);
-  useEffect(() => {
-    if (selectedDiaryDaySkipSaveRef.current) {
-      selectedDiaryDaySkipSaveRef.current = false;
-      return;
-    }
-    try {
-      if (selectedDiaryDayKey) {
-        localStorage.setItem(selectedDiaryDayStorageKey, selectedDiaryDayKey);
-      } else {
-        localStorage.removeItem(selectedDiaryDayStorageKey);
-      }
-    } catch {
-      // ignore storage issues
-    }
-  }, [selectedDiaryDayKey, selectedDiaryDayStorageKey]);
-  const diaryDayKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const item of foodDiary) {
-      const key = localDayKey(item.timestamp);
-      if (key) keys.add(key);
-    }
-    return Array.from(keys).sort((a, b) => (a < b ? 1 : -1));
-  }, [foodDiary]);
-  const resolvedDiaryDayKey = useMemo(() => {
-    const todayKey = localDayKey(new Date()) || '';
-    if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
-    if (diaryDayKeys.includes(todayKey)) return todayKey;
-    return diaryDayKeys[0] || todayKey;
-  }, [diaryDayKeys, selectedDiaryDayKey]);
-  const selectedDiaryStats = useMemo(() => {
-    if (!resolvedDiaryDayKey) {
-      return { calories: 0, protein: 0, fat: 0, carbs: 0 };
-    }
-    const dayEntries = foodDiary.filter((item) => localDayKey(item.timestamp) === resolvedDiaryDayKey);
-    return dayEntries.reduce((acc, item) => ({
-      calories: acc.calories + (item.calories || 0),
-      protein: acc.protein + (item.protein || 0),
-      fat: acc.fat + (item.fat || 0),
-      carbs: acc.carbs + (item.carbs || 0),
-    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
-  }, [foodDiary, resolvedDiaryDayKey]);
+  const {
+    setSelectedDiaryDayKey,
+    resolvedDiaryDayKey,
+    selectedDiaryStats,
+  } = useDiaryDaySelection(currentUser?.id, foodDiary);
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
