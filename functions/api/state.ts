@@ -5,23 +5,13 @@
 import { requireUser, json } from "./_lib/auth";
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
-import { isJsonObject } from "./_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
+import { normalizeStateWrite, parseStateBaseVersion } from './_lib/state_write';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
-type StatePutItem = { key: unknown; value: unknown; baseVersion?: unknown };
 type D1WriteResult = { meta?: { changes?: number } | null; changes?: number };
-
-function parseBaseVersion(value: unknown): number | null {
-  if (value === undefined || value === null) return 0;
-  if (typeof value === "string" && value.trim() === "") return 0;
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  const parsedBaseVersion = Number(value);
-  if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
-  return parsedBaseVersion;
-}
 
 function changedRows(result: D1WriteResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
@@ -83,42 +73,16 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   }
   if (!body) return json({ error: "BAD_JSON" }, 400);
 
-  const items: StatePutItem[] = isJsonObject(body) && Array.isArray(body.items)
-    ? body.items.map((item) => (isJsonObject(item) ? { key: item.key, value: item.value, baseVersion: item.baseVersion } : { key: null, value: null }))
-    : isJsonObject(body) && body.key
-      ? [{ key: body.key, value: body.value ?? "", baseVersion: body.baseVersion }]
-      : [];
-
-  if (!items.length) return json({ error: "NO_ITEMS" }, 400);
-
-  const t = nowMs();
-  const normalizedItems: { key: string; value: string; baseVersion: number }[] = [];
-  const seenKeys = new Set<string>();
-  for (const it of items) {
-    const key = String(it?.key || "");
-    if (!key) continue;
-    if (!isAllowedStateKey(user.sub, key)) {
-      return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
-    }
-    if (seenKeys.has(key)) {
-      return json({ error: "DUPLICATE_KEY", key }, 400);
-    }
-    seenKeys.add(key);
-    if (it.value !== undefined && it.value !== null && typeof it.value !== "string") {
-      return json({ error: "BAD_VALUE", key }, 400);
-    }
-    const baseVersion = parseBaseVersion(it.baseVersion);
-    if (baseVersion === null) {
-      return json({ error: "BAD_BASE_VERSION", key }, 400);
-    }
-    normalizedItems.push({
-      key,
-      value: String(it.value ?? ""),
-      baseVersion,
-    });
+  const stateWrite = normalizeStateWrite(body, user.sub);
+  if (stateWrite.ok === false) {
+    return json(
+      stateWrite.key ? { error: stateWrite.error, key: stateWrite.key } : { error: stateWrite.error },
+      stateWrite.error === 'FORBIDDEN_KEYSPACE' ? 403 : 400,
+    );
   }
 
-  if (!normalizedItems.length) return json({ error: "NO_ITEMS" }, 400);
+  const normalizedItems = stateWrite.items;
+  const t = nowMs();
 
   // The preflight check gives the client the current value for ordinary conflicts.
   // The write below repeats the version condition inside one SQL statement, so a
@@ -215,7 +179,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (!isAllowedStateKey(user.sub, key)) {
     return json({ error: "FORBIDDEN_KEYSPACE" }, 403);
   }
-  const baseVersion = parseBaseVersion(url.searchParams.get("baseVersion"));
+  const baseVersion = parseStateBaseVersion(url.searchParams.get("baseVersion"));
   if (baseVersion === null) {
     return json({ error: "BAD_BASE_VERSION", key }, 400);
   }
