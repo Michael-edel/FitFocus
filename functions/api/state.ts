@@ -8,15 +8,10 @@ import { requireDB, nowMs } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
 import { normalizeStateWrite, parseStateBaseVersion } from './_lib/state_write';
+import { deleteStateItem, writeStateItems } from './_lib/state_store';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
-type D1WriteResult = { meta?: { changes?: number } | null; changes?: number };
-
-function changedRows(result: D1WriteResult | null | undefined): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
-
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -84,80 +79,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const normalizedItems = stateWrite.items;
   const t = nowMs();
 
-  // The preflight check gives the client the current value for ordinary conflicts.
-  // The write below repeats the version condition inside one SQL statement, so a
-  // concurrent write cannot slip in between this read and the update.
-  for (const item of normalizedItems) {
-    const current = await db
-      .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
-      .bind(user.sub, item.key)
-      .first<{ v?: string; version?: number }>();
-    const currentVersion = Number(current?.version || 0);
-    if (
-      (item.baseVersion > 0 && (!current || currentVersion !== item.baseVersion)) ||
-      (item.baseVersion === 0 && current)
-    ) {
-      return json({ error: "KV_CONFLICT", key: item.key, value: current?.v ?? "", version: currentVersion }, 409);
-    }
-  }
-
-  const values = normalizedItems.map(() => "(?, ?, ?)").join(", ");
-  const atomicWriteSql =
-    "WITH input(k, v, base_version) AS (VALUES " + values + "), " +
-    "conflict AS (" +
-      "SELECT 1 FROM input " +
-      "LEFT JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
-      "WHERE (input.base_version = 0 AND current.version IS NOT NULL) " +
-        "OR (input.base_version > 0 AND (current.version IS NULL OR current.version != input.base_version))" +
-    ") " +
-    "INSERT INTO user_kv (user_id, k, v, updated_at, version) " +
-    "SELECT ?, input.k, input.v, ?, COALESCE(current.version, 0) + 1 " +
-    "FROM input " +
-    "LEFT JOIN user_kv current ON current.user_id = ? AND current.k = input.k " +
-    "WHERE NOT EXISTS (SELECT 1 FROM conflict) " +
-    "ON CONFLICT(user_id, k) DO UPDATE SET " +
-      "v = excluded.v, updated_at = excluded.updated_at, version = excluded.version " +
-    "RETURNING k, version";
-
-  const writeResult = await db
-    .prepare(atomicWriteSql)
-    .bind(
-      ...normalizedItems.flatMap((item) => [item.key, item.value, item.baseVersion]),
-      user.sub,
-      user.sub,
-      t,
-      user.sub,
-    )
-    .all<{ k: string; version: number }>();
-
-  const written = writeResult.results || [];
-  if (written.length !== normalizedItems.length) {
-    for (const item of normalizedItems) {
-      const current = await db
-        .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
-        .bind(user.sub, item.key)
-        .first<{ v?: string; version?: number }>();
-      const currentVersion = Number(current?.version || 0);
-      if (
-        (item.baseVersion > 0 && (!current || currentVersion !== item.baseVersion)) ||
-        (item.baseVersion === 0 && current)
-      ) {
-        return json({
-          error: "KV_CONFLICT",
-          key: item.key,
-          value: current?.v ?? "",
-          version: currentVersion,
-        }, 409);
-      }
-    }
-    return json({ error: "KV_CONFLICT" }, 409);
-  }
-
-  const versionByKey = new Map(written.map((item) => [item.k, item.version]));
-  return json({
-    ok: true,
-    items: normalizedItems.map((item) => ({ key: item.key, version: versionByKey.get(item.key) })),
-  }, 200);
+  const written = await writeStateItems(db, user.sub, normalizedItems, t);
+  if (written.ok === false) return json({ error: 'KV_CONFLICT', ...written.conflict }, 409);
+  return json({ ok: true, items: written.items }, 200);
 };
 
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
@@ -185,26 +109,8 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const deleted = await db
-    .prepare("DELETE FROM user_kv WHERE user_id = ? AND k = ? AND (? = 0 OR version = ?)")
-    .bind(user.sub, key, baseVersion, baseVersion)
-    .run();
-
-  const deletedChanges = Number((deleted.meta as { changes?: number } | undefined)?.changes || 0);
-  if (baseVersion > 0 && !deletedChanges) {
-    const current = await db
-      .prepare("SELECT v, version FROM user_kv WHERE user_id = ? AND k = ? LIMIT 1")
-      .bind(user.sub, key)
-      .first<{ v?: string; version?: number }>();
-    if (current && Number(current.version || 0) !== baseVersion) {
-      return json({
-        error: "KV_CONFLICT",
-        key,
-        value: current.v ?? "",
-        version: Number(current.version || 0),
-      }, 409);
-    }
-  }
+  const conflict = await deleteStateItem(db, user.sub, key, baseVersion);
+  if (conflict) return json({ error: 'KV_CONFLICT', ...conflict }, 409);
 
   return json({ ok: true }, 200);
 };
