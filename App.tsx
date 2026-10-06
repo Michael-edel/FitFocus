@@ -103,6 +103,8 @@ import { useDeleteUserProfile } from './useDeleteUserProfile';
 import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
+import { useProfilePersistence } from './features/profile/useProfilePersistence';
+import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
@@ -261,6 +263,10 @@ const App: React.FC = () => {
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
+  const userStateRepository = useMemo(
+    () => (currentUser?.id ? new UserStateRepository(currentUser.id) : null),
+    [currentUser?.id],
+  );
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
@@ -642,39 +648,24 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(() => ({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false }));
 
   useEffect(() => {
-    if (!currentUser?.id) return;
-    const key = `fitfocus_data_${currentUser.id}_settings`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = parseJson(raw);
-        if (
-          isRecord(parsed)
-          && (parsed.theme === 'dark' || parsed.theme === 'light' || parsed.theme === 'violet' || parsed.theme === 'calm' || parsed.theme === 'premium')
-          && parsed.language === 'ru'
-          && typeof parsed.soundEnabled === 'boolean'
-          && typeof parsed.musicEnabled === 'boolean'
-        ) {
-          setSettings({
-            theme: parsed.theme,
-            language: 'ru',
-            soundEnabled: parsed.soundEnabled,
-            musicEnabled: parsed.musicEnabled,
-          });
-        }
-        safeSetItem(key, raw);
-      } else {
-        safeSetItem(key, JSON.stringify(settings));
-      }
-    } catch {}
-  }, [currentUser?.id]);
+    if (!userStateRepository) return;
+    const stored = userStateRepository.readJson<AppSettings | null>('settings', null, (value): value is AppSettings =>
+      isRecord(value)
+      && (value.theme === 'dark' || value.theme === 'light' || value.theme === 'violet' || value.theme === 'calm' || value.theme === 'premium')
+      && value.language === 'ru'
+      && typeof value.soundEnabled === 'boolean'
+      && typeof value.musicEnabled === 'boolean',
+    );
+    if (stored) {
+      setSettings(stored);
+    } else {
+      userStateRepository.writeJson('settings', settings);
+    }
+  }, [currentUser?.id, userStateRepository]);
 
   useEffect(() => {
-    try {
-      if (!currentUser?.id) return;
-      safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
-    } catch {}
-  }, [settings, currentUser?.id]);
+    userStateRepository?.writeJson('settings', settings);
+  }, [settings, userStateRepository]);
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
   const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {
@@ -711,7 +702,6 @@ const App: React.FC = () => {
       setFavoriteRecipes([]);
       return;
     }
-    const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
     const normalizeFavoriteRecipe = (item: unknown): FavoriteRecipe | null => {
       if (!isRecord(item)) return null;
       const rawRecipe = isRecord(item.recipe) ? item.recipe : null;
@@ -805,28 +795,17 @@ const App: React.FC = () => {
         recipe,
       };
     };
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
-        setFavoriteRecipes([]);
-        return;
-      }
-      const parsed = parseJson(raw);
-      const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(isPresent) : [];
-      setFavoriteRecipes(normalized);
-      safeSetItem(key, JSON.stringify(normalized));
-    } catch {
-      setFavoriteRecipes([]);
-    }
-  }, [currentUser?.id]);
+    if (!userStateRepository) return;
+    const stored = userStateRepository.readJson<unknown[]>('favorite_recipes', [], Array.isArray);
+    const normalized = stored.map(normalizeFavoriteRecipe).filter(isPresent);
+    setFavoriteRecipes(normalized);
+    userStateRepository.writeJson('favorite_recipes', normalized);
+  }, [currentUser?.id, userStateRepository]);
 
   const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
     setFavoriteRecipes(next);
-    if (!currentUser?.id) return;
-    try {
-      safeSetItem(`fitfocus_data_${currentUser.id}_favorite_recipes`, JSON.stringify(next));
-    } catch {}
-  }, [currentUser?.id]);
+    userStateRepository?.writeJson('favorite_recipes', next);
+  }, [userStateRepository]);
 
   const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
     persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
@@ -1122,22 +1101,15 @@ const App: React.FC = () => {
   const lastAutoCloudSyncAttemptAtRef = useRef(0);
   const CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS = 60_000;
 
-  const persistUser = useCallback((updated: UserProfile) => {
-    setCurrentUser(updated);
-    if (!suppressProfileSyncStateRef.current) {
-      setProfileSyncState('saving');
-    }
-    if (googleMe?.sub && !suppressNextFullProfileSyncRef.current) {
-      hasPendingProfileChangesRef.current = true;
-    }
-    setAllUsers(prev => {
-      const found = prev.some(u => u.id === updated.id);
-      const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
-      const normalized = normalizeUserProfiles(next);
-      persistAllUsersSnapshot(updated.id, normalized);
-      return normalized;
-    });
-  }, [googleMe?.sub, persistAllUsersSnapshot]);
+  const persistUser = useProfilePersistence({
+    googleSubject: googleMe?.sub,
+    suppressNextFullProfileSyncRef,
+    suppressProfileSyncStateRef,
+    hasPendingProfileChangesRef,
+    setCurrentUser,
+    setAllUsers,
+    setProfileSyncState,
+  });
 
   const buildAchievementContext = useCallback((): AchievementEvaluationContext => {
     const weightHistory = currentUser?.weightHistory || [];
@@ -1781,10 +1753,10 @@ await ensurePdfInterFont(doc);
   }, [currentUser, persistUser]);
 
   const persistFoodDiary = useCallback((nextDiary: FoodItem[]) => {
-    if (!currentUser) return;
+    if (!userStateRepository) return;
     const nextStorage = (nextDiary || []).map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS);
-    safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
-  }, [currentUser?.id]);
+    userStateRepository.writeJson('diary', nextStorage);
+  }, [userStateRepository]);
 
   const addFoodToDiary = useCallback((item: FastLogItem) => {
     if (!currentUser) return;
@@ -1799,7 +1771,7 @@ await ensurePdfInterFont(doc);
       const prevArr = prev || [];
       const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
       const nextStorage = [entryForStorage, ...prevArr.map(sanitizeFoodEntryForStorage)].slice(0, MAX_DIARY_ITEMS);
-      safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
+      userStateRepository?.writeJson('diary', nextStorage);
       const nextDayKey = localDayKey(ts);
       if (nextDayKey) setSelectedDiaryDayKey(nextDayKey);
       return nextState;
@@ -1810,7 +1782,7 @@ await ensurePdfInterFont(doc);
     setFoodHistory((previousHistory) => {
       const nextHistory = [historyItem, ...previousHistory.filter((history) => history.name !== item.name)]
         .slice(0, MAX_HISTORY_ITEMS);
-      safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(nextHistory));
+      userStateRepository?.writeJson('history', nextHistory);
       return nextHistory;
     });
     const hasAiPhoto = Boolean(item.photo || item.photoThumb);
@@ -1819,7 +1791,7 @@ await ensurePdfInterFont(doc);
       hasAiPhoto,
     });
     return entryForState;
-  }, [checkAchievements, foodDiary.length, currentUser]);
+  }, [checkAchievements, foodDiary.length, currentUser, userStateRepository]);
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!currentUser) return;
     setFoodDiary((prev) => {
@@ -2165,7 +2137,7 @@ const logWeight = useCallback(() => {
         today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
       });
       setCoachCard(advice); incrementUsage('aiCoachCount');
-      safeSetItem(`fitfocus_data_${currentUser.id}_last_coach_card`, JSON.stringify(advice));
+      userStateRepository?.writeJson('last_coach_card', advice);
       void checkAchievements('ai_coach_success');
     } catch (e) { console.error(e); } finally { setCoachLoading(false); }
   };
