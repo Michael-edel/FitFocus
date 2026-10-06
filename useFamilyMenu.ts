@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { FamilyWeeklyMenu, UserProfile } from './types';
 import { persistAllUsersSnapshot, safeSetItem } from './storage/hybrid';
-import { errorMessage, isRecord, parseJson, responseErrorMessage } from './safeJson';
+import { errorMessage, isRecord, parseJson } from './safeJson';
+import { saveFamilyMenu, saveFamilyShoppingItems } from './features/family/familyApi';
 
 type FamilyMenuPrefs = {
   includeIds: string[];
@@ -109,34 +110,13 @@ export function useFamilyMenu({
 
       if (cloudFamily?.id) {
         const week = weekStartISO();
-        const menuRes = await fetch('/api/family/menu', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            weekStart: week,
-            menu: familyWeeklyMenu,
-          }),
-        });
-        const menuData: unknown = await menuRes.json().catch(() => null);
-        if (!menuRes.ok) throw new Error(responseErrorMessage(menuData, 'Не удалось сохранить семейное меню на сервере'));
+        await saveFamilyMenu(week, familyWeeklyMenu);
         setCloudFamilyMenu(familyWeeklyMenu);
       }
 
       if (cloudFamily?.id && Array.isArray(familyWeeklyMenu.shoppingListItems) && familyWeeklyMenu.shoppingListItems.length) {
         const week = weekStartISO();
-        const res = await fetch('/api/weekly_menu/items', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            week_start: week,
-            family_id: cloudFamily.id,
-            items: familyWeeklyMenu.shoppingListItems,
-          }),
-        });
-        const data: unknown = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(responseErrorMessage(data, 'Не удалось синхронизировать семейный список покупок'));
+        await saveFamilyShoppingItems(week, cloudFamily.id, familyWeeklyMenu.shoppingListItems);
         await loadFamilyShopping();
       }
       await loadCloudFamily();

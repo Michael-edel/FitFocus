@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { Loader2 } from 'lucide-react';
-import type { CloudFamily, CloudFamilyMember } from './useFamilyCloud';
+import type { CloudFamily, CloudFamilyMember } from './features/family/familyApi';
 
 type FamilyShoppingItem = {
   name: string;
