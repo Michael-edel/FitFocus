@@ -106,6 +106,7 @@ import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
+import { buildCoachAdviceRequest } from './features/ai/coachAdvice';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -2008,40 +2009,24 @@ const logWeight = useCallback(() => {
     });
   }, [checkAchievements, currentUser, newWeight, persistUser]);
 
-  const handleGetCoachAdvice = async () => {
+  const handleGetCoachAdvice = useCallback(async () => {
     if (!currentUser) return;
     if (!checkLimit('aiCoachAdvicePerDay')) return paywall.openPaywall();
-    // Remember last action for "Retry" button
     setLastAiAction({ feature: 'coach_advice', type: 'coach', userId: currentUser.id });
     setCoachLoading(true);
     try {
       const todayKey = getTodayKey();
-      const todayHabits = currentUser.dailyHabits?.[todayKey] || {};
-      const habitsDone = Object.values(todayHabits).filter(Boolean).length;
-      const advice = await getCoachAdvice({
-        user: {
-          name: currentUser.name,
-          goal: currentUser.goal,
-          caloriesTarget: targets.calories,
-          proteinTarget: targets.protein,
-          fatTarget: targets.fat,
-          carbsTarget: targets.carbs,
-          adaptationMultiplier: currentUser.adaptationMultiplier,
-          bloodPressureSystolic: currentUser.bloodPressureSystolic,
-          bloodPressureDiastolic: currentUser.bloodPressureDiastolic,
-          restingPulse: currentUser.restingPulse,
-          waistCm: currentUser.waistCm,
-          chestCm: currentUser.chestCm,
-          hipsCm: currentUser.hipsCm,
-          medicalRestrictions: currentUser.medicalRestrictions,
-        },
-        today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
-      });
+      const advice = await getCoachAdvice(buildCoachAdviceRequest(
+        currentUser,
+        targets,
+        dailyStats,
+        currentUser.dailyHabits?.[todayKey],
+      ));
       setCoachCard(advice); incrementUsage('aiCoachCount');
       userStateRepository?.writeJson('last_coach_card', advice);
       void checkAchievements('ai_coach_success');
     } catch (e) { console.error(e); } finally { setCoachLoading(false); }
-  };
+  }, [checkAchievements, checkLimit, currentUser, dailyStats, incrementUsage, paywall, targets, userStateRepository]);
 
   const handleAiRetry = useCallback(async (opts?: { force?: boolean }) => {
     const last = (() => { try { return getLastAiAction(); } catch { return null; } })();
