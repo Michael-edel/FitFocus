@@ -8,6 +8,7 @@ import {
   readStoredAllUsersSnapshotForUser,
   rememberRemoteStateVersion,
 } from './storage/hybrid';
+import { HttpRequestError, fetchWithResilience } from './services/httpClient';
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 type LocalStateItem = { key: string; value: string; baseVersion?: number };
@@ -28,10 +29,6 @@ type ProfileSyncDeps = {
   suppressProfileSyncStateRef?: MutableRefObject<boolean>;
 };
 
-function withFetch(fetchImpl?: typeof fetch) {
-  return fetchImpl ?? fetch;
-}
-
 const PROFILE_SYNC_TIMEOUT_MS = 15_000;
 
 let profileSyncQueue: Promise<void> = Promise.resolve();
@@ -42,26 +39,17 @@ function enqueueProfileSync(operation: () => Promise<void>): Promise<void> {
   return queuedOperation;
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit | undefined, fetchImpl?: typeof fetch) {
-  const fetchFn = withFetch(fetchImpl);
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(new Error('PROFILE_SYNC_TIMEOUT')), PROFILE_SYNC_TIMEOUT_MS)
-    : null;
+async function fetchProfileApi(input: RequestInfo | URL, init: RequestInit | undefined, fetchImpl?: typeof fetch) {
   try {
-    return await fetchFn(input, {
-      ...(init || {}),
-      signal: controller?.signal,
+    return await fetchWithResilience(input, init, {
+      timeoutMs: PROFILE_SYNC_TIMEOUT_MS,
+      fetchImpl,
     });
   } catch (error) {
-    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'PROFILE_SYNC_TIMEOUT')) {
+    if (error instanceof HttpRequestError && error.kind === 'timeout') {
       throw new Error('Сервер слишком долго отвечает. Проверьте сеть и повторите синхронизацию.');
     }
     throw error;
-  } finally {
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-    }
   }
 }
 
@@ -107,7 +95,7 @@ async function handleProfileConflict(
 
 async function syncStateItemsToCloud(items: LocalStateItem[], fetchImpl?: typeof fetch): Promise<boolean> {
   if (!items.length) return true;
-  const response = await fetchWithTimeout('/api/state', {
+  const response = await fetchProfileApi('/api/state', {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -135,7 +123,7 @@ async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps
   try {
     const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
     const body = { ...profile, baseVersion: profile.version ?? 0 };
-    const r = await fetchWithTimeout('/api/profile', {
+    const r = await fetchProfileApi('/api/profile', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -209,7 +197,7 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
   deps.setProfileSyncState('saving');
   try {
     const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
-    const r = await fetchWithTimeout('/api/profile', {
+    const r = await fetchProfileApi('/api/profile', {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -223,7 +211,7 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
     if (r.status === 409) {
       const serverProfile = await handleProfileConflict(r, deps);
       if (serverProfile) {
-        const retry = await fetchWithTimeout('/api/profile', {
+        const retry = await fetchProfileApi('/api/profile', {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -308,7 +296,7 @@ export async function syncAllLocalDataNow(deps: ProfileSyncDeps): Promise<void> 
 export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> {
   if (!deps.currentUser) return;
   try {
-    const pr = await fetchWithTimeout('/api/profile', { credentials: 'include' }, deps.fetchImpl);
+    const pr = await fetchProfileApi('/api/profile', { credentials: 'include' }, deps.fetchImpl);
     if (isAccessDeniedStatus(pr.status)) {
       deps.setProfileSyncNote?.('Облачная синхронизация недоступна для этой сессии.');
       deps.setProfileSyncState('idle');

@@ -12,14 +12,20 @@ import {
   withProtectedFields as withProtectedFieldsShared,
 } from "./_lib/legacy_sync";
 import { loadStoredProfile, writeProfile, type ProfileWriteOutcome, type ProfileWriteUser } from './_lib/profile_write';
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 export { writeProfileCas } from "./_lib/profile_cas";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const PROFILE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
-function profileWriteResponse(result: ProfileWriteOutcome): Response {
+function respond(requestId: string, body: unknown, status: number): Response {
+  logApiEvent('profile.response', { requestId, status });
+  return withRequestId(json(body, status), requestId);
+}
+
+function profileWriteResponse(requestId: string, result: ProfileWriteOutcome): Response {
   if (result.kind === 'saved') {
-    return json({
+    return respond(requestId, {
       profile: result.profile,
       updatedFields: result.updatedFields,
       stateItems: result.stateItems,
@@ -28,12 +34,12 @@ function profileWriteResponse(result: ProfileWriteOutcome): Response {
     }, 200);
   }
   if (result.kind === 'conflict') {
-    return json({ error: 'PROFILE_CONFLICT', profile: result.profile, version: result.version }, 409);
+    return respond(requestId, { error: 'PROFILE_CONFLICT', profile: result.profile, version: result.version }, 409);
   }
-  if (result.kind === 'forbidden-keyspace') return json({ error: 'FORBIDDEN_KEYSPACE' }, 403);
-  if (result.kind === 'state-items-not-supported') return json({ error: 'STATE_ITEMS_USE_STATE_ENDPOINT' }, 400);
-  if (result.kind === 'empty-patch') return json({ error: 'EMPTY_PATCH' }, 400);
-  return json({ error: 'BAD_BASE_VERSION' }, 400);
+  if (result.kind === 'forbidden-keyspace') return respond(requestId, { error: 'FORBIDDEN_KEYSPACE' }, 403);
+  if (result.kind === 'state-items-not-supported') return respond(requestId, { error: 'STATE_ITEMS_USE_STATE_ENDPOINT' }, 400);
+  if (result.kind === 'empty-patch') return respond(requestId, { error: 'EMPTY_PATCH' }, 400);
+  return respond(requestId, { error: 'BAD_BASE_VERSION' }, 400);
 }
 
 async function handleProfileWrite(
@@ -41,66 +47,70 @@ async function handleProfileWrite(
   db: D1Database,
   user: ProfileWriteUser,
   mode: 'replace' | 'patch',
+  requestId: string,
 ): Promise<Response> {
   let body: unknown = null;
   try {
     body = await readJsonRequest(request, PROFILE_JSON_BODY_LIMIT_BYTES);
   } catch (err) {
     if (err instanceof RequestBodyTooLargeError) {
-      return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413);
+      return respond(requestId, { error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413);
     }
     throw err;
   }
-  if (!isJsonObject(body)) return json({ error: 'BAD_JSON' }, 400);
-  return profileWriteResponse(await writeProfile(db, user, body, mode));
+  if (!isJsonObject(body)) return respond(requestId, { error: 'BAD_JSON' }, 400);
+  return profileWriteResponse(requestId, await writeProfile(db, user, body, mode));
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return respond(requestId, { error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
   const profile = await loadStoredProfile(db, user.sub);
   if (!profile) {
     const migrated = await migrateLegacyAccountByEmailShared(db, user);
-    if (!migrated) return json({ profile: null }, 200);
-    return json({ profile: migrated }, 200);
+    if (!migrated) return respond(requestId, { profile: null }, 200);
+    return respond(requestId, { profile: migrated }, 200);
   }
   const serverPlan = await loadActivePlanShared(db, user.sub);
   const effectivePlan = serverPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : serverPlan;
-  return json({ profile: withProtectedFieldsShared(user, { ...profile, plan: effectivePlan }) }, 200);
+  return respond(requestId, { profile: withProtectedFieldsShared(user, { ...profile, plan: effectivePlan }) }, 200);
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return respond(requestId, { error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  return handleProfileWrite(request, db, user, 'replace');
+  return handleProfileWrite(request, db, user, 'replace', requestId);
 };
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
 
-  try { await requireBetaAccess(env, user); } catch { return json({ error: "ACCESS_REQUIRED" }, 403); }
+  try { await requireBetaAccess(env, user); } catch { return respond(requestId, { error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  return handleProfileWrite(request, db, user, 'patch');
+  return handleProfileWrite(request, db, user, 'patch', requestId);
 };

@@ -147,6 +147,7 @@ describe('bounded JSON body guards on user routes', () => {
     const response = await putProfile(context);
 
     expect(response.status).toBe(413);
+    expect(response.headers.get('X-Request-ID')).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.batches).toHaveLength(0);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(false);
