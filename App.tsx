@@ -50,7 +50,7 @@ import {
 import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
 import { compressFoodPhoto } from './services/foodPhoto';
-import { MAX_DIARY_ITEMS, MAX_HISTORY_ITEMS, sanitizeFoodEntryForStorage, type FastLogItem } from './storage/foodDiary';
+import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
@@ -105,6 +105,7 @@ import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
+import { useFoodDiary } from './features/diary/useFoodDiary';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -275,6 +276,7 @@ const App: React.FC = () => {
   const isAdmin = !!googleMe?.roles?.includes('admin');
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
+  const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
   const {
     cloudFamily,
     cloudFamilyMembers,
@@ -375,7 +377,6 @@ const App: React.FC = () => {
     setCurrentUser,
   });
   
-  const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
   const {
     setSelectedDiaryDayKey,
     resolvedDiaryDayKey,
@@ -1090,6 +1091,22 @@ const App: React.FC = () => {
 
   const achievements = useAchievements({ userId: currentUser?.id, getContext: buildAchievementContext });
   const checkAchievements = achievements.checkAchievements;
+  const {
+    persistFoodDiary,
+    addFoodToDiary,
+    updateFoodEntry,
+    deleteFoodPhoto,
+    deleteFoodEntry,
+  } = useFoodDiary({
+    userId: currentUser?.id,
+    repository: userStateRepository,
+    foodDiary,
+    setFoodDiary,
+    inferMealType,
+    setFoodHistory,
+    setSelectedDiaryDayKey,
+    checkAchievements,
+  });
   const achievementBootstrapUserRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1699,70 +1716,6 @@ await ensurePdfInterFont(doc);
     const nextUsage = { ...currentUser.usage, [key]: (Number(currentUser.usage?.[key as keyof UsageStats]) || 0) + 1 };
     persistUser({ ...currentUser, usage: nextUsage });
   }, [currentUser, persistUser]);
-
-  const persistFoodDiary = useCallback((nextDiary: FoodItem[]) => {
-    if (!userStateRepository) return;
-    const nextStorage = (nextDiary || []).map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS);
-    userStateRepository.writeJson('diary', nextStorage);
-  }, [userStateRepository]);
-
-  const addFoodToDiary = useCallback((item: FastLogItem) => {
-    if (!currentUser) return;
-    const ts = item.timestamp ?? new Date().toISOString();
-    // Keep photo in UI state (so user sees it immediately), but strip it from persisted localStorage payload to avoid quota issues.
-    const entryForState: FoodItem = { ...item, id: Date.now().toString(), timestamp: ts, mealType: item.mealType ?? inferMealType(ts) };
-    const entryForStorage = sanitizeFoodEntryForStorage(entryForState);
-
-    // Use functional update so rapid consecutive adds (e.g. multiple scans)
-    // don't overwrite previous entries because of stale closures.
-    setFoodDiary((prev) => {
-      const prevArr = prev || [];
-      const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
-      const nextStorage = [entryForStorage, ...prevArr.map(sanitizeFoodEntryForStorage)].slice(0, MAX_DIARY_ITEMS);
-      userStateRepository?.writeJson('diary', nextStorage);
-      const nextDayKey = localDayKey(ts);
-      if (nextDayKey) setSelectedDiaryDayKey(nextDayKey);
-      return nextState;
-    });
-    const historyItem = { ...item };
-    delete historyItem.photo;
-    if (historyItem.insight) delete historyItem.insight.recipe;
-    setFoodHistory((previousHistory) => {
-      const nextHistory = [historyItem, ...previousHistory.filter((history) => history.name !== item.name)]
-        .slice(0, MAX_HISTORY_ITEMS);
-      userStateRepository?.writeJson('history', nextHistory);
-      return nextHistory;
-    });
-    const hasAiPhoto = Boolean(item.photo || item.photoThumb);
-    void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
-      foodDiaryCount: foodDiary.length + 1,
-      hasAiPhoto,
-    });
-    return entryForState;
-  }, [checkAchievements, foodDiary.length, currentUser, userStateRepository]);
-  const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
-    if (!currentUser) return;
-    setFoodDiary((prev) => {
-      const next = (prev || []).map(it => (it.id === id ? { ...it, ...patch } : it));
-      persistFoodDiary(next);
-      const updated = next.find((it) => it.id === id);
-      if (updated?.timestamp) setSelectedDiaryDayKey(localDayKey(updated.timestamp));
-      return next;
-    });
-  }, [currentUser, persistFoodDiary]);
-
-  const deleteFoodPhoto = useCallback((id: string) => {
-    updateFoodEntry(id, { photo: undefined, photoThumb: undefined });
-  }, [updateFoodEntry]);
-
-  const deleteFoodEntry = useCallback((id: string) => {
-    if (!currentUser) return;
-    setFoodDiary((prev) => {
-      const next = (prev || []).filter(it => it.id !== id);
-      persistFoodDiary(next);
-      return next;
-    });
-  }, [currentUser, persistFoodDiary]);
 
   const {
     selectedFoodIds,
