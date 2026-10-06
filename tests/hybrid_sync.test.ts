@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { safeRemoveItem, safeSetItem, shouldMirrorKey } from '../storage/hybrid';
+import {
+  REMOTE_KV_OUTBOX_STORAGE_KEY,
+  safeRemoveItem,
+  safeSetItem,
+  shouldMirrorKey,
+} from '../storage/hybrid';
 
 function createLocalStorage(): Storage {
   const values = new Map<string, string>();
@@ -73,5 +78,23 @@ describe('hybrid storage remote mirror policy', () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a transiently failed operation in durable browser storage until it succeeds', async () => {
+    const key = 'fitfocus_data_user-1_food:1';
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{ key, value: 'saved', version: 1 }],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    safeSetItem(key, 'saved');
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY)).toContain(key);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY)).toBeNull();
   });
 });

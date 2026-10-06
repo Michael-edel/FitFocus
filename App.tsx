@@ -78,6 +78,7 @@ import {
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
   renameLocalStoragePrefix,
+  resumeRemoteKVSync,
   safeRemoveItem,
   safeSetItem,
 } from './storage/hybrid';
@@ -337,6 +338,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setAiStorageScope(currentUser?.id ?? null);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (currentUser?.id) resumeRemoteKVSync();
   }, [currentUser?.id]);
 
   useEffect(() => {

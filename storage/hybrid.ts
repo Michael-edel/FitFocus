@@ -44,10 +44,11 @@ const __pendingRemoteKVOperations = new Map<string, PendingRemoteKVOperation>();
 let __remoteKVTimer: number | null = null;
 let __remoteKVSyncing = false;
 let __remoteAuthBlockedUntil = 0;
+let __remoteOutboxHydrated = false;
 const REMOTE_AUTH_BACKOFF_MS = 30_000;
 const REMOTE_SYNC_DELAY_MS = 400;
 const REMOTE_SYNC_RETRY_DELAY_MS = 2_000;
-const MAX_REMOTE_SYNC_RETRIES = 3;
+export const REMOTE_KV_OUTBOX_STORAGE_KEY = 'fitfocus.remote-kv-outbox.v1';
 
 const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.nutrition.selected-day.v1:',
@@ -135,7 +136,62 @@ function isRemoteStateItem(value: unknown): value is RemoteStateItem {
   return true;
 }
 
+function isPendingRemoteKVOperation(value: unknown): value is PendingRemoteKVOperation {
+  if (!isRecord(value) || typeof value.key !== 'string' || !value.key) return false;
+  const baseVersion = value.baseVersion;
+  const retryCount = value.retryCount;
+  if (baseVersion !== undefined && (typeof baseVersion !== 'number' || !Number.isInteger(baseVersion) || baseVersion < 0)) return false;
+  if (retryCount !== undefined && (typeof retryCount !== 'number' || !Number.isInteger(retryCount) || retryCount < 0)) return false;
+  if (value.type === 'put') return typeof value.value === 'string';
+  return value.type === 'delete';
+}
+
+function hydrateRemoteOutbox() {
+  if (__remoteOutboxHydrated) return;
+  __remoteOutboxHydrated = true;
+  try {
+    const raw = localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY);
+    const parsed = raw ? parseJson(raw) : null;
+    if (!Array.isArray(parsed)) return;
+    for (const operation of parsed) {
+      if (isPendingRemoteKVOperation(operation) && shouldMirrorKey(operation.key)) {
+        __pendingRemoteKVOperations.set(operation.key, operation);
+      }
+    }
+  } catch {
+    // Browser storage may be unavailable in private mode.
+  }
+}
+
+function persistRemoteOutbox() {
+  try {
+    if (__pendingRemoteKVOperations.size === 0) {
+      localStorage.removeItem(REMOTE_KV_OUTBOX_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(
+      REMOTE_KV_OUTBOX_STORAGE_KEY,
+      JSON.stringify([...__pendingRemoteKVOperations.values()]),
+    );
+  } catch {
+    // The primary local write still succeeds even if the durable queue cannot be stored.
+  }
+}
+
+function setPendingRemoteKVOperation(operation: PendingRemoteKVOperation) {
+  hydrateRemoteOutbox();
+  __pendingRemoteKVOperations.set(operation.key, operation);
+  persistRemoteOutbox();
+}
+
+function completeRemoteKVOperation(operation: PendingRemoteKVOperation) {
+  if (__pendingRemoteKVOperations.get(operation.key) !== operation) return;
+  __pendingRemoteKVOperations.delete(operation.key);
+  persistRemoteOutbox();
+}
+
 function scheduleRemoteKVSync(delay = REMOTE_SYNC_DELAY_MS): void {
+  hydrateRemoteOutbox();
   if (__remoteKVTimer != null || __remoteKVSyncing) return;
   __remoteKVTimer = window.setTimeout(() => {
     __remoteKVTimer = null;
@@ -143,24 +199,22 @@ function scheduleRemoteKVSync(delay = REMOTE_SYNC_DELAY_MS): void {
   }, delay);
 }
 
-function requeueAfterTransientFailure(operation: PendingRemoteKVOperation): boolean {
-  if (__pendingRemoteKVOperations.has(operation.key)) return false;
-  const retryCount = (operation.retryCount ?? 0) + 1;
-  if (retryCount > MAX_REMOTE_SYNC_RETRIES) return false;
-  __pendingRemoteKVOperations.set(operation.key, { ...operation, retryCount });
+function retryRemoteKVOperation(operation: PendingRemoteKVOperation): boolean {
+  if (__pendingRemoteKVOperations.get(operation.key) !== operation) return false;
+  setPendingRemoteKVOperation({ ...operation, retryCount: (operation.retryCount ?? 0) + 1 });
   return true;
 }
 
 async function flushRemoteKVOperations(): Promise<void> {
-  if (__remoteKVSyncing) return;
+  hydrateRemoteOutbox();
+  if (__remoteKVSyncing || isRemoteAuthBlocked()) return;
   __remoteKVSyncing = true;
   let retryPending = false;
   try {
-    while (__pendingRemoteKVOperations.size > 0 && !retryPending) {
-      const batch = [...__pendingRemoteKVOperations.values()];
-      __pendingRemoteKVOperations.clear();
+    const batch = [...__pendingRemoteKVOperations.values()];
 
-      for (const operation of batch) {
+    for (const operation of batch) {
+      if (__pendingRemoteKVOperations.get(operation.key) !== operation) continue;
         try {
           if (operation.type === 'put') {
             const response = await fetch('/api/state', {
@@ -182,6 +236,7 @@ async function flushRemoteKVOperations(): Promise<void> {
               if (typeof serverItem?.version === 'number') {
                 setStoredVersion(operation.key, serverItem.version);
               }
+              completeRemoteKVOperation(operation);
               continue;
             }
             if (response.status === 401 || response.status === 403) {
@@ -189,7 +244,7 @@ async function flushRemoteKVOperations(): Promise<void> {
               return;
             }
             if (response.status === 429 || response.status >= 500) {
-              retryPending = requeueAfterTransientFailure(operation) || retryPending;
+              retryPending = retryRemoteKVOperation(operation) || retryPending;
               continue;
             }
             if (response.status === 409 && payload?.key) {
@@ -197,12 +252,14 @@ async function flushRemoteKVOperations(): Promise<void> {
               const currentValue = localStorage.getItem(operation.key);
               if (typeof currentValue === 'string' && currentValue === operation.value && serverVersion) {
                 setStoredVersion(operation.key, serverVersion);
+                completeRemoteKVOperation(operation);
                 continue;
               }
               if (typeof payload.value === 'string' && payload.key === operation.key) {
                 await applyRemoteKVConflict(operation.key, payload.value, serverVersion);
               }
             }
+            completeRemoteKVOperation(operation);
             continue;
           }
 
@@ -228,19 +285,21 @@ async function flushRemoteKVOperations(): Promise<void> {
                 typeof payload.version === 'number' ? payload.version : undefined,
               );
             }
+            completeRemoteKVOperation(operation);
             continue;
           }
           if (response.status === 429 || response.status >= 500) {
-            retryPending = requeueAfterTransientFailure(operation) || retryPending;
+            retryPending = retryRemoteKVOperation(operation) || retryPending;
+            continue;
           }
+          completeRemoteKVOperation(operation);
         } catch {
-          retryPending = requeueAfterTransientFailure(operation) || retryPending;
+          retryPending = retryRemoteKVOperation(operation) || retryPending;
         }
-      }
     }
   } finally {
     __remoteKVSyncing = false;
-    if (__pendingRemoteKVOperations.size > 0) {
+    if (__pendingRemoteKVOperations.size > 0 && !isRemoteAuthBlocked()) {
       scheduleRemoteKVSync(retryPending ? REMOTE_SYNC_RETRY_DELAY_MS : REMOTE_SYNC_DELAY_MS);
     }
   }
@@ -248,7 +307,7 @@ async function flushRemoteKVOperations(): Promise<void> {
 
 function enqueueRemoteKVWrite(key: string, value: string) {
   if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  __pendingRemoteKVOperations.set(key, {
+  setPendingRemoteKVOperation({
     type: 'put',
     key,
     value,
@@ -259,8 +318,16 @@ function enqueueRemoteKVWrite(key: string, value: string) {
 
 function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
   if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  __pendingRemoteKVOperations.set(key, { type: 'delete', key, baseVersion });
+  setPendingRemoteKVOperation({ type: 'delete', key, baseVersion });
   scheduleRemoteKVSync();
+}
+
+/** Resume durable state syncing after the authenticated browser session is ready. */
+export function resumeRemoteKVSync(): void {
+  hydrateRemoteOutbox();
+  if (__pendingRemoteKVOperations.size > 0 && !isRemoteAuthBlocked()) {
+    scheduleRemoteKVSync(0);
+  }
 }
 
 export function safeSetItem(key: string, value: string) {
