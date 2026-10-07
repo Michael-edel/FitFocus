@@ -7,6 +7,7 @@ import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 type MutationResult = { meta?: { changes?: number }; changes?: number };
@@ -15,7 +16,7 @@ function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminSessionsGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -41,7 +42,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({ sessions: results || [] });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminSessionsPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -83,3 +84,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   return json({ ok: true });
 };
+
+async function trace(context: Parameters<PagesFunction<Env>>[0], event: string, handler: PagesFunction<Env>) {
+  const response = await handler(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent(event, { requestId, status: response.status });
+  return withRequestId(response, requestId);
+}
+
+/** Keeps session IDs, target users, IP addresses, and user agents out of telemetry. */
+export const onRequestGet: PagesFunction<Env> = (context) => trace(context, 'admin.sessions.get.response', handleAdminSessionsGet);
+export const onRequestPost: PagesFunction<Env> = (context) => trace(context, 'admin.sessions.post.response', handleAdminSessionsPost);
