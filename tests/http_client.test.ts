@@ -25,4 +25,13 @@ describe('HTTP client', () => {
     })).rejects.toMatchObject({ kind: 'network' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('adds a correlation ID when the caller did not provide one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+
+    await fetchWithResilience('/api/shopping/list', {}, { fetchImpl: fetchMock });
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('X-Request-ID')).toMatch(/^web-/);
+  });
 });
