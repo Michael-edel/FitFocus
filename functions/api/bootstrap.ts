@@ -7,23 +7,29 @@ import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { loadCurrentProfile } from './_lib/profile_read';
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATION_VERSION } from "../../versioning";
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 
+function respond(requestId: string, body: unknown, status: number): Response {
+  logApiEvent('bootstrap.response', { requestId, status });
+  return withRequestId(json(body, status), requestId);
+}
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   let user;
   try {
     user = await requireUser(request, env);
   } catch {
-    return json({ error: "UNAUTH" }, 401);
+    return respond(requestId, { error: "UNAUTH" }, 401);
   }
 
   try {
     await requireBetaAccess(env, user);
   } catch {
-    return json({ error: "ACCESS_REQUIRED" }, 403);
+    return respond(requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);
@@ -40,7 +46,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const features = await loadFeatures(env, String(user.sub));
 
-  return json({
+  return respond(requestId, {
     schema_version: API_SCHEMA_VERSION,
     app_version: APP_VERSION_LABEL,
     data_schema_version: DATA_SCHEMA_VERSION,

@@ -98,6 +98,7 @@ describe('beta access route boundaries', () => {
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toMatchObject({ error: 'ACCESS_REQUIRED' });
     }
+    expect(bootstrapResponse.headers.get('X-Request-ID')).toBeTruthy();
 
     expect(db.queries.filter((sql) => sql.includes('SELECT profile_json') || sql.includes('SELECT k, v') || sql.includes('SELECT id, email'))).toHaveLength(0);
   });

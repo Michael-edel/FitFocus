@@ -2,6 +2,7 @@ import type { UserProfile } from './types';
 import type { RegistrationData } from './RegistrationScreen';
 import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
 import { isUserProfilePayload } from './profileValidation';
+import { fetchWithResilience } from './services/httpClient';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 type UnknownRecord = Record<string, unknown>;
@@ -174,7 +175,11 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   if (serverUser?.sub) {
     clearAuthRecoveryReloadMarker();
     try {
-      const pr = await fetchFn('/api/bootstrap', { credentials: 'include' });
+      const pr = await fetchWithResilience('/api/bootstrap', { credentials: 'include' }, {
+        retries: 1,
+        retryDelayMs: 250,
+        fetchImpl: fetchFn,
+      });
       const pj = await readJsonRecord(pr);
       if (pr.ok) {
         applyRemoteStateItems(pj?.items);
