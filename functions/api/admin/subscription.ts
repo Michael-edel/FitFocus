@@ -8,6 +8,7 @@ import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -17,7 +18,7 @@ function normalizePlan(value: unknown): "free" | "pro" | "family" | null {
   return null;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminSubscriptionPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -88,4 +89,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     user_id: userId,
     plan,
   });
+};
+
+/** Emits only status so manual plan changes and payment-related fields remain private. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleAdminSubscriptionPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.subscription.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
