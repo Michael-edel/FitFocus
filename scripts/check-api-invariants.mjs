@@ -527,15 +527,18 @@ assertIncludes(
   'admin ai logs must return 401 for unauthenticated requests',
 );
 
-const adminEventsRoute = read('functions/api/admin/admin_events.ts');
+const adminEvents = [
+  read('functions/api/admin/admin_events.ts'),
+  read('functions/api/_lib/admin_event_read.ts'),
+].join('\n');
 assertIncludes(
-  adminEventsRoute,
-  'toInt(url.searchParams.get("limit"), 50)',
+  adminEvents,
+  "boundedInt(searchParams.get('limit'), 50, 1, 500)",
   'admin events must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
-  adminEventsRoute,
-  'toInt(url.searchParams.get("offset"), 0)',
+  adminEvents,
+  "boundedInt(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)",
   'admin events must parse invalid offset values through a finite fallback',
 );
 

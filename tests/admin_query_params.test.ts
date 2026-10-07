@@ -77,7 +77,7 @@ function makeDb() {
 
 async function adminRequest(url: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
-  return new Request(url, { headers: { Cookie: `ff_session=${token}` } });
+  return new Request(url, { headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'admin-events-test-01' } });
 }
 
 function pagesContext(request: Request, db: ReturnType<typeof makeDb>) {
@@ -101,6 +101,7 @@ describe('admin query params', () => {
     ));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('admin-events-test-01');
     expect(await response.json()).toMatchObject({ limit: 50, offset: 0 });
     const query = db.allCalls.find((call) => call.sql.includes('FROM admin_events e'));
     expect(query?.binds.slice(-2)).toEqual([50, 0]);
