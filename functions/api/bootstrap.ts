@@ -7,6 +7,7 @@ import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
 import { loadCurrentProfile } from './_lib/profile_read';
+import { readStateItems } from './_lib/state_read';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATION_VERSION } from "../../versioning";
 
@@ -38,11 +39,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   // Load KV only for this user's fitfocus_data prefix
   const prefix = `fitfocus_data_${user.sub}_`;
-  const { results } = await db
-    .prepare("SELECT k, v, version, updated_at FROM user_kv WHERE user_id = ? AND k LIKE ?")
-    .bind(user.sub, prefix + "%")
-    .all<{ k: string; v: string; version?: number; updated_at?: number }>();
-  const items = (results || []).map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
+  const items = await readStateItems(db, user.sub, prefix);
 
   const features = await loadFeatures(env, String(user.sub));
 

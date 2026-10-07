@@ -7,6 +7,7 @@ import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isAllowedStateKey, isAllowedStatePrefix } from "./_lib/state_keyspace";
+import { readStateItems } from './_lib/state_read';
 import { normalizeStateWrite, parseStateBaseVersion } from './_lib/state_write';
 import { deleteStateItem, writeStateItems } from './_lib/state_store';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
@@ -39,14 +40,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const { results } = await db
-    .prepare("SELECT k, v, version, updated_at FROM user_kv WHERE user_id = ? AND k LIKE ?")
-    .bind(user.sub, prefix + "%")
-    .all();
-
-  const items = (results || [])
-    .filter((r) => typeof r.k === "string" && isAllowedStateKey(user.sub, r.k))
-    .map((r) => ({ key: r.k, value: r.v, version: r.version, updated_at: r.updated_at }));
+  const items = await readStateItems(db, user.sub, prefix);
   return respond(requestId, { items }, 200);
 };
 
