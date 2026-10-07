@@ -6,6 +6,7 @@ import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
 import { buildOpenAiProviderPayload, normalizeAiContents } from './_lib/ai_provider_payload';
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
 import {
@@ -259,7 +260,7 @@ async function logUsage(
   }
 }
 
-export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
+async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   const startedAt = Date.now();
 
   // Enterprise Layer: require authenticated user (server-driven)
@@ -631,4 +632,12 @@ function extractTextFromGemini(data: GeminiResponse): string {
 
   if (!parts.length && typeof data.output_text === 'string') return data.output_text;
   return parts.join('\n').trim();
+}
+
+/** Adds a correlation identifier to every AI response without logging user content. */
+export async function onRequestPost(context: { request: Request; env: Env }) {
+  const response = await handleAiPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('ai.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 }
