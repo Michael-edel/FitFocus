@@ -116,6 +116,7 @@ import { useCourseUiState } from './features/course/useCourseUiState';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
+import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -729,7 +730,7 @@ const App: React.FC = () => {
   );
   const planUiSkipSaveRef = useRef(false);
   const [planIntroOpen, setPlanIntroOpen] = useState(false);
-  const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
+  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(currentUser?.id);
   const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
   const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
   const [versionInfoOpen, setVersionInfoOpen] = useState(false);
@@ -759,29 +760,6 @@ const App: React.FC = () => {
       setFamilyMenuPrefsOpen(false);
     }
   }, [planUiStorageKey]);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setPlanTaskDone({});
-      return;
-    }
-    try {
-      const newKey = `fitfocus_data_${currentUser.id}_plan_task_done`;
-      const raw = localStorage.getItem(newKey);
-      if (raw) {
-        safeSetItem(newKey, raw);
-      }
-      const parsed = raw ? parseJson(raw) : null;
-      setPlanTaskDone(isBooleanRecord(parsed) ? parsed : {});
-    } catch {
-      setPlanTaskDone({});
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    safeSetItem(`fitfocus_data_${currentUser.id}_plan_task_done`, JSON.stringify(planTaskDone));
-  }, [currentUser?.id, planTaskDone]);
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
