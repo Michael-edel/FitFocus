@@ -4,6 +4,7 @@ import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 type CountRow = { c?: number };
@@ -25,7 +26,7 @@ function todayKey() {
   return `${y}-${m}-${day}`;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminStats: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -163,4 +164,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       },
     },
   });
+};
+
+/** Correlates the admin health dashboard without logging any user or metric payload. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleAdminStats(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.stats.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
