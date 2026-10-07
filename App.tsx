@@ -52,7 +52,7 @@ import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, AppSettings, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -112,6 +112,7 @@ import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
+import { useCourseUiState } from './features/course/useCourseUiState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -190,13 +191,6 @@ const waitForDocumentFonts = async () => {
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
 
 
-
-const pickLessonForToday = (user: UserProfile, lessons: CourseLesson[]): CourseLesson | null => {
-  if (!lessons.length) return null;
-  const completedIds = user.courseProgress?.completedLessonIds || [];
-  const nextLesson = lessons.find(l => !completedIds.includes(l.id));
-  return nextLesson || lessons[0];
-};
 
 const PREMIUM_GATES = {
   aiFoodPhotoPerDay: { free: 3, pro: Infinity, family: Infinity },
@@ -495,24 +489,20 @@ const App: React.FC = () => {
     }
   }, [dashboardWeightStorageKey, newWeight]);
   
-  type CourseUiState = {
-    lessonId: string | null;
-    isLessonViewOpen: boolean;
-    isQuizActive: boolean;
-    selectedQuizOptionId: string | null;
-  };
-
-  const courseUiStorageKey = useMemo(
-    () => (currentUser?.id ? `fitfocus.course.ui.v1:${currentUser.id}` : null),
-    [currentUser?.id],
-  );
-  const courseUiHydratedKeyRef = useRef<string | null>(null);
-
-  const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
-  const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
-  const [isQuizActive, setIsQuizActive] = useState(false);
-  const [selectedQuizOption, setSelectedQuizOption] = useState<LessonQuizOption | null>(null);
   const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
+  const {
+    currentLesson,
+    setCurrentLesson,
+    isLessonViewOpen,
+    setIsLessonViewOpen,
+    isQuizActive,
+    setIsQuizActive,
+    selectedQuizOption,
+    setSelectedQuizOption,
+  } = useCourseUiState({
+    currentUser,
+    courseLibrary,
+  });
 
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
@@ -1683,74 +1673,6 @@ await ensurePdfInterFont(doc);
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!currentUser || !courseLibrary) return;
-    if (!courseUiStorageKey) return;
-
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) {
-      let savedCourseUi: CourseUiState | null = null;
-      try {
-        const raw = localStorage.getItem(courseUiStorageKey);
-        if (raw) {
-          const parsed = parseJson(raw);
-          if (
-            isRecord(parsed)
-            && (typeof parsed.lessonId === 'string' || parsed.lessonId === null)
-            && typeof parsed.isLessonViewOpen === 'boolean'
-            && typeof parsed.isQuizActive === 'boolean'
-            && (typeof parsed.selectedQuizOptionId === 'string' || parsed.selectedQuizOptionId === null)
-          ) {
-            const lessonId = typeof parsed.lessonId === 'string' ? parsed.lessonId : null;
-            const selectedQuizOptionId = typeof parsed.selectedQuizOptionId === 'string' ? parsed.selectedQuizOptionId : null;
-            savedCourseUi = {
-              lessonId,
-              isLessonViewOpen: parsed.isLessonViewOpen,
-              isQuizActive: parsed.isQuizActive,
-              selectedQuizOptionId,
-            };
-          }
-        }
-      } catch {
-        savedCourseUi = null;
-      }
-
-      const savedLesson = savedCourseUi?.lessonId ? courseLibrary.find((lesson) => lesson.id === savedCourseUi.lessonId) || null : null;
-      const nextLesson = savedLesson || pickLessonForToday(currentUser, courseLibrary);
-      if (nextLesson) {
-        setCurrentLesson(nextLesson);
-      }
-      setIsLessonViewOpen(Boolean(savedCourseUi?.isLessonViewOpen));
-      setIsQuizActive(Boolean(savedCourseUi?.isQuizActive));
-      if (nextLesson?.quiz && savedCourseUi?.selectedQuizOptionId) {
-        setSelectedQuizOption(nextLesson.quiz.options.find((option) => option.id === savedCourseUi.selectedQuizOptionId) || null);
-      } else {
-        setSelectedQuizOption(null);
-      }
-      courseUiHydratedKeyRef.current = courseUiStorageKey;
-      return;
-    }
-
-    if (currentLesson) return;
-    const nextLesson = pickLessonForToday(currentUser, courseLibrary);
-    if (nextLesson) setCurrentLesson(nextLesson);
-  }, [currentUser, courseLibrary, currentLesson, courseUiStorageKey]);
-
-  useEffect(() => {
-    if (!courseUiStorageKey) return;
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) return;
-    const payload: CourseUiState = {
-      lessonId: currentLesson?.id || null,
-      isLessonViewOpen,
-      isQuizActive,
-      selectedQuizOptionId: selectedQuizOption?.id || null,
-    };
-    try {
-      localStorage.setItem(courseUiStorageKey, JSON.stringify(payload));
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
 
   useEffect(() => {
     if (!googleMe?.sub || !currentUser) return;
