@@ -3,10 +3,11 @@
 // re-authentication in the Google/Apple OAuth callbacks.
 
 import { json } from "../_lib/auth";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
-export const onRequestPost: PagesFunction<Env> = async () => {
+const handleAccountRestorePost: PagesFunction<Env> = async () => {
   return json(
     {
       ok: false,
@@ -16,4 +17,12 @@ export const onRequestPost: PagesFunction<Env> = async () => {
     },
     409,
   );
+};
+
+/** Correlates the re-authentication-only restore response without session data. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleAccountRestorePost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('account.restore.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

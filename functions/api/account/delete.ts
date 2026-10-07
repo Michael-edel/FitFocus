@@ -7,6 +7,7 @@ import { requireDB } from "../_lib/db";
 import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, softDeleteAccount } from "../_lib/account_delete";
 import { asString } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -28,7 +29,7 @@ function publicDeleteError(error: unknown) {
   return json({ ok: false, error: "ACCOUNT_DELETE_FAILED" }, 500);
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleAccountDeletePost: PagesFunction<Env> = async ({ request, env }) => {
   const t0 = Date.now();
   try {
     const user = await requireUser(request, env);
@@ -70,4 +71,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (error: unknown) {
     return publicDeleteError(error);
   }
+};
+
+/** Correlates account deletion outcomes without logging identity or deletion details. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleAccountDeletePost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('account.delete.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
