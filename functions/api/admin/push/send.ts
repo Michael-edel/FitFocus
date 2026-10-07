@@ -7,6 +7,7 @@ import { requireRole } from "../../_lib/rbac";
 import { requireAdminRequest } from "../../_lib/admin_guard";
 import { buildAdminEventStatement } from "../../_lib/admin_audit";
 import { buildPushPayload, normalizePushBrowserLabel, normalizePushDeviceLabel, sendPushNotification } from "../../_lib/push";
+import { selectPushRecipients } from '../../_lib/push_recipient_selection';
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 
@@ -371,11 +372,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ORDER BY ps.updated_at DESC
   `;
   const { results } = await db.prepare(query).bind(nowMs(), nowMs(), nowMs()).all<PushRecipientRow>();
-  const allRecipients = (results || []).map((row) => getRecipient(row));
-  const matchedRecipients = allRecipients.filter((recipient) => matchesSegment(recipient, segment, userIds));
-  sortRecipients(matchedRecipients, sort);
-
-  const selectedRecipients = matchedRecipients.slice(offset, offset + limit);
+  const { allRecipients, matchedRecipients, selectedRecipients } = selectPushRecipients(results || [], segment, userIds, sort, offset, limit);
   const actions = Array.isArray(body?.actions)
     ? body.actions
         .filter((item): item is JsonObject => isJsonObject(item))
