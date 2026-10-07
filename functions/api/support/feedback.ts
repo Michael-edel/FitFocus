@@ -2,8 +2,9 @@ import { json, requireUser } from "../_lib/auth";
 import { requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { normalizeTicketStatus, readSupportTicketForAdmin, updateSupportTicket, type SupportTicketAdminRow } from '../_lib/support_ticket_admin';
+import { normalizeTicketStatus, updateSupportTicket } from '../_lib/support_ticket_admin';
 import { createSupportTicket } from '../_lib/support_ticket_create';
+import { listAdminSupportTickets, readAdminSupportTicketDetail } from '../_lib/support_ticket_admin_read';
 import {
   readFormDataRequest,
   readJsonRequest,
@@ -11,27 +12,9 @@ import {
   SMALL_JSON_BODY_LIMIT_BYTES,
   SUPPORT_FORM_BODY_LIMIT_BYTES,
 } from "../_lib/request_body";
-import {
-  attachmentResponseUrl,
-  fileToAttachment,
-  parseAttachmentsJson,
-  SupportAttachmentTooLargeError,
-  type SupportAttachmentBucket,
-  type SupportAttachmentRecord,
-} from "../_lib/support_attachments";
+import { fileToAttachment, SupportAttachmentTooLargeError, type SupportAttachmentBucket, type SupportAttachmentRecord } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
-
-type SupportMessageRow = {
-  id: string;
-  ticket_id: string;
-  author_user_id: string;
-  author_role: "user" | "admin";
-  message: string;
-  attachment_count: number;
-  attachments_json?: string | null;
-  created_at: number;
-};
 
 function toInt(value: unknown, fallback: number) {
   const n = Number(value);
@@ -101,28 +84,6 @@ function supportValidationError(fields: string[]) {
     public_message: "Заполните обязательные поля.",
     fields,
   }, 400);
-}
-
-function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
-  return records.map((attachment, index) => ({
-    ...attachment,
-    data_url: attachment.data_url || attachmentResponseUrl(scope.ticketId, index, scope.messageId),
-  }));
-}
-
-async function loadMessageThread(db: D1Database, ticketId: string) {
-  const { results } = await db.prepare(
-    `SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
-     FROM support_feedback_messages
-     WHERE ticket_id = ?
-     ORDER BY created_at ASC`
-  ).bind(ticketId).all<SupportMessageRow>();
-
-  return (results || []).map((row) => ({
-    ...row,
-    attachment_count: Number(row.attachment_count || 0),
-    attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId, messageId: row.id }),
-  }));
 }
 
 async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>>[0]) {
@@ -245,16 +206,10 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   if (result.kind === 'invalid') return json({ error: result.error, message: result.message }, 400);
   if (result.kind === 'not-found') return json({ error: 'NOT_FOUND', message: 'ticket not found' }, 404);
 
-  const ticket = await readSupportTicketForAdmin(db, result.ticketId);
-  const messages = await loadMessageThread(db, result.ticketId);
+  const ticket = await readAdminSupportTicketDetail(db, result.ticketId);
   return json({
     ok: true,
-    ticket: ticket ? {
-      ...ticket,
-      attachment_count: Number(ticket.attachment_count || 0),
-      attachments: mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: result.ticketId }),
-      messages,
-    } : null,
+    ticket,
   });
 };
 
@@ -280,42 +235,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const status = normalizeTicketStatus(String(url.searchParams.get("status") || ""));
 
   if (id) {
-    const row = await readSupportTicketForAdmin(db, id);
-    if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+    const ticket = await readAdminSupportTicketDetail(db, id);
+    if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
     return json({
-      ticket: {
-        ...row,
-        attachment_count: Number(row.attachment_count || 0),
-        attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId: row.id }),
-        messages: await loadMessageThread(db, row.id),
-      },
+      ticket,
     });
   }
-
-  const filters: string[] = [];
-  const binds: unknown[] = [];
-  if (status) {
-    filters.push(`s.status = ?`);
-    binds.push(status);
-  }
-
-  const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-  const query = `
-    SELECT s.id, s.user_id, s.created_at, s.updated_at, s.category, s.section, s.subject, s.message,
-           s.steps_json, s.device, s.browser, s.contact, s.app_version, s.status, s.priority,
-           s.attachment_count, s.assigned_admin_user_id, s.resolved_at, s.closed_at, s.last_reply_at, s.last_reply_by,
-           u.email as user_email, u.name as user_name
-    FROM support_feedback s
-    LEFT JOIN users u ON u.id = s.user_id
-    ${whereClause}
-    ORDER BY COALESCE(s.last_reply_at, s.updated_at, s.created_at) DESC
-    LIMIT ?`;
-
-  const { results } = await db.prepare(query).bind(...binds, limit).all<SupportTicketAdminRow>();
   return json({
-    tickets: (results || []).map((row) => ({
-      ...row,
-      attachment_count: Number(row.attachment_count || 0),
-    })),
+    tickets: await listAdminSupportTickets(db, status, limit),
   });
 };

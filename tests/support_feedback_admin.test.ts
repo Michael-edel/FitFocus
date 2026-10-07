@@ -79,7 +79,7 @@ function makeDb(options: { updateChanges?: number; messageInsertChanges?: number
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-admin', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('SELECT is_active, deleted_at FROM users')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('FROM support_feedback') && sql.includes('WHERE id = ?')) return currentTicket;
+          if (sql.includes('FROM support_feedback') && (sql.includes('WHERE id = ?') || sql.includes('WHERE s.id = ?'))) return currentTicket;
           return null;
         },
         async all() {
@@ -222,6 +222,18 @@ describe('admin support ticket updates', () => {
     expect(res.status).toBe(200);
     const query = db.allCalls.find((call) => call.sql.includes('FROM support_feedback s'));
     expect(query?.binds.at(-1)).toBe(20);
+  });
+
+  it('loads an individual ticket through the shared admin read use case', async () => {
+    const db = makeDb();
+
+    const res = await getTickets(db, '?id=ticket-1');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ticket: { id: 'ticket-1', attachment_count: 0, messages: [] },
+    });
+    expect(db.allCalls.some((call) => call.sql.includes('FROM support_feedback_messages'))).toBe(true);
   });
 
   it('rejects invalid statuses before writing', async () => {

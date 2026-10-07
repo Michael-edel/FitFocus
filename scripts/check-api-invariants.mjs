@@ -236,7 +236,10 @@ assertIncludes(
 );
 
 const userSupport = read('functions/api/support/feedback/my.ts');
-const adminSupport = read('functions/api/support/feedback.ts');
+const adminSupport = [
+  read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_ticket_admin_read.ts'),
+].join('\n');
 assertIncludes(
   userSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
@@ -728,6 +731,7 @@ assertIncludes(
 const supportFeedback = [
   read('functions/api/support/feedback.ts'),
   read('functions/api/_lib/support_ticket_admin.ts'),
+  read('functions/api/_lib/support_ticket_admin_read.ts'),
 ].join('\n');
 assertIncludes(
   supportFeedback,
