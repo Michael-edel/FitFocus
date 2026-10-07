@@ -50,6 +50,15 @@ describe('profile write use case', () => {
     })).toEqual({ name: 'Анна', weight: 63 });
   });
 
+  it('normalizes critical health fields and rejects out-of-range values', () => {
+    expect(sanitizeProfilePatch({
+      weight: '63.5',
+      wearableEnabled: '1',
+      restingPulse: 900,
+      name: '  Анна  ',
+    })).toEqual({ weight: 63.5, wearableEnabled: true, name: 'Анна' });
+  });
+
   it('writes a versioned patch with server-owned identity and plan', async () => {
     const db = makeDb({
       userId: 'user-1',

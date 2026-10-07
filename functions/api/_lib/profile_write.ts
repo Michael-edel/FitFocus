@@ -6,6 +6,7 @@ import {
 } from './legacy_sync';
 import { loadActivePlan, loadActivePlanByEmail } from './plans';
 import { writeProfileCas } from './profile_cas';
+import { normalizeProfileRecord } from './profile_contract';
 import { isAllowedStateKey } from './state_keyspace';
 
 export type ProfileWriteUser = {
@@ -90,7 +91,7 @@ export function sanitizeProfilePatch(input: unknown): JsonObject {
     if (!EDITABLE_PROFILE_FIELDS.has(key)) continue;
     patch[key] = value;
   }
-  return patch;
+  return normalizeProfileRecord(patch);
 }
 
 function parseBaseVersion(value: unknown): number | null {
@@ -124,8 +125,9 @@ async function loadProfileMeta(db: D1Database, userId: string): Promise<ProfileM
     .first<{ profile_json?: string; version?: number }>();
 
   if (!row?.profile_json) return { profile: null, version: 0 };
+  const parsed = safeJsonParseObject(String(row.profile_json));
   return {
-    profile: safeJsonParseObject(String(row.profile_json)),
+    profile: parsed ? normalizeProfileRecord(parsed) : null,
     version: Number(row.version || 1),
   };
 }
