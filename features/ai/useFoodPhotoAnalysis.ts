@@ -17,6 +17,18 @@ type CompressedPhoto = {
   base64: string;
 };
 
+/** Treats an unknown quota as unavailable, while preserving explicit unlimited plans. */
+export function getRemainingFoodPhotoScans(
+  allowance: number | undefined,
+  usedScans: number | undefined,
+): number {
+  if (allowance === Infinity) return Infinity;
+  if (!Number.isFinite(allowance) || allowance <= 0) return 0;
+
+  const used = typeof usedScans === 'number' && usedScans > 0 ? usedScans : 0;
+  return Math.max(0, allowance - used);
+}
+
 export function buildFoodInsight(result: FoodPhotoAnalysisResult): FoodInsight {
   const nonFood = result.nonFood === true;
   return {
@@ -74,12 +86,13 @@ export async function processFoodPhotoFiles({
   logError = console.error,
 }: FoodPhotoAnalysisRunParams): Promise<number> {
   if (!userId || !files.length) return 0;
-  if (remainingScans <= 0) {
+  const unlimited = remainingScans === Infinity;
+  if (!unlimited && (!Number.isFinite(remainingScans) || remainingScans <= 0)) {
     openPaywall();
     return 0;
   }
 
-  const batch = files.slice(0, Number.isFinite(remainingScans) ? remainingScans : files.length);
+  const batch = unlimited ? files : files.slice(0, Math.floor(remainingScans));
   let processed = 0;
   setScanning(true);
   try {

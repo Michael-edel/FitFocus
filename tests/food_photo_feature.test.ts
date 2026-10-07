@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFoodInsight,
+  getRemainingFoodPhotoScans,
   processFoodPhotoFiles,
 } from '../features/ai/useFoodPhotoAnalysis';
 import type { FoodPhotoAnalysisResult } from '../geminiService';
@@ -75,6 +76,32 @@ describe('food photo feature', () => {
       userId: 'user-1',
       files: [{ name: 'one.jpg' }] as File[],
       remainingScans: 0,
+      openPaywall: () => calls.push('paywall'),
+      setScanning: () => calls.push('scanning'),
+      compressPhoto: async () => {
+        calls.push('compress');
+        return { dataUrl: '', thumbUrl: '', base64: '' };
+      },
+      analyzePhoto: async () => analysis,
+      addFoodToDiary: () => undefined,
+      incrementUsage: () => calls.push('usage'),
+      showInsight: () => calls.push('insight'),
+    })).resolves.toBe(0);
+
+    expect(calls).toEqual(['paywall']);
+  });
+
+  it('fails closed for unknown or malformed quota values', async () => {
+    expect(getRemainingFoodPhotoScans(undefined, 0)).toBe(0);
+    expect(getRemainingFoodPhotoScans(Number.NaN, 0)).toBe(0);
+    expect(getRemainingFoodPhotoScans(3, Infinity)).toBe(0);
+    expect(getRemainingFoodPhotoScans(Infinity, 99)).toBe(Infinity);
+
+    const calls: string[] = [];
+    await expect(processFoodPhotoFiles({
+      userId: 'user-1',
+      files: [{ name: 'one.jpg' }] as File[],
+      remainingScans: Number.NaN,
       openPaywall: () => calls.push('paywall'),
       setScanning: () => calls.push('scanning'),
       compressPhoto: async () => {

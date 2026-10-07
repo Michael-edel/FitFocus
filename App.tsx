@@ -106,7 +106,7 @@ import { useProfilePersistence } from './features/profile/useProfilePersistence'
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
-import { useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
+import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1722,8 +1722,7 @@ await ensurePdfInterFont(doc);
   const remainingPhotoScans = useMemo(() => {
     if (!currentUser) return 0;
     const allowance = PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan];
-    if (!Number.isFinite(allowance)) return Infinity;
-    return Math.max(0, allowance - (currentUser.usage?.aiFoodPhotoCount || 0));
+    return getRemainingFoodPhotoScans(allowance, currentUser.usage?.aiFoodPhotoCount);
   }, [currentUser, paywall.plan]);
 
   const processPhotoFiles = useFoodPhotoAnalysis({
