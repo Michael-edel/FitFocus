@@ -334,7 +334,10 @@ assertOrder(
   'AI rate controls must check exhausted daily quota before burst mutation',
 );
 
-const aiEndpoint = read('functions/api/ai.ts');
+const aiEndpoint = [
+  read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_provider_request.ts'),
+].join('\n');
 assertIncludes(
   aiEndpoint,
   'const ALLOWED_GEMINI_MODELS = new Set',

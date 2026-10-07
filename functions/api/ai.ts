@@ -6,6 +6,14 @@ import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
 import { buildOpenAiProviderPayload, normalizeAiContents } from './_lib/ai_provider_payload';
+import {
+  classifyAiFetchFailure,
+  getAiProviderErrorMessage,
+  isGeminiModelAvailabilityError,
+  normalizeGeminiTimeoutMs,
+  requestAiProvider,
+  type AiProviderResponse,
+} from './_lib/ai_provider_request';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
@@ -17,7 +25,9 @@ import {
 } from "../../aiModels";
 
 type JsonRecord = JsonObject;
+type GeminiResponse = AiProviderResponse;
 export { buildFallbackAdvice, calcTargetCalories } from './_lib/ai_fallback';
+export { isGeminiModelAvailabilityError, normalizeGeminiTimeoutMs };
 
 
 /**
@@ -54,26 +64,6 @@ type UsageRecord = {
   lastTs: number;
 };
 
-type GeminiUsageMetadata = {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-  totalTokenCount?: number;
-};
-
-type GeminiCandidate = {
-  content?: {
-    parts?: Array<{ text?: string }>;
-  };
-};
-
-type GeminiResponse = JsonObject & {
-  text?: string;
-  output_text?: string;
-  usageMetadata?: GeminiUsageMetadata;
-  candidates?: GeminiCandidate[];
-  error?: string | { message?: string };
-};
-
 type AiEventArgs = {
   userId: string;
   feature: string;
@@ -106,10 +96,6 @@ const ALLOWED_GEMINI_MODELS = new Set<string>([
   ...AI_ALLOWED_MODELS,
   ...GEMINI_ALLOWED_MODELS,
 ]);
-const DEFAULT_GEMINI_TIMEOUT_MS = 30_000;
-const MIN_GEMINI_TIMEOUT_MS = 1_000;
-const MAX_GEMINI_TIMEOUT_MS = 60_000;
-
 export function resolveGeminiModel(value: unknown): string {
   const model = String(value || "").trim();
   return ALLOWED_GEMINI_MODELS.has(model) ? model : DEFAULT_GEMINI_MODEL;
@@ -117,15 +103,6 @@ export function resolveGeminiModel(value: unknown): string {
 
 export function resolveGeminiFallbackModels(model: string): string[] {
   return getAiFallbackModels(model);
-}
-
-export function normalizeGeminiTimeoutMs(value: unknown): number {
-  const raw = String(value ?? "").trim();
-  if (!raw) return DEFAULT_GEMINI_TIMEOUT_MS;
-
-  const parsed = Math.floor(Number(raw));
-  if (!Number.isFinite(parsed)) return DEFAULT_GEMINI_TIMEOUT_MS;
-  return Math.min(MAX_GEMINI_TIMEOUT_MS, Math.max(MIN_GEMINI_TIMEOUT_MS, parsed));
 }
 
 function jsonResponse(obj: unknown, status = 200, extraHeaders: Record<string,string> = {}) {
@@ -139,13 +116,6 @@ function jsonResponse(obj: unknown, status = 200, extraHeaders: Record<string,st
   });
 }
 
-function classifyAiFetchFailure(error: unknown): string {
-  const name = error instanceof Error ? error.name : "";
-  if (name === "AbortError") return "AI_FETCH_ABORTED";
-  if (name === "TimeoutError") return "AI_FETCH_TIMEOUT";
-  return "AI_FETCH_FAILED";
-}
-
 function getGeminiUsage(data: GeminiResponse) {
   const usage = isJsonObject(data.usageMetadata) ? data.usageMetadata : {};
   const openAiUsage = isJsonObject(data.usage) ? data.usage : {};
@@ -157,24 +127,6 @@ function getGeminiUsage(data: GeminiResponse) {
 
 function estimateCostUsd(inputTokens: number, outputTokens: number, inputPerMillion: number, outputPerMillion: number) {
   return (inputTokens / 1_000_000) * inputPerMillion + (outputTokens / 1_000_000) * outputPerMillion;
-}
-
-function getGeminiErrorMessage(error: GeminiResponse["error"], fallback: string): string {
-  if (typeof error === "string" && error.trim()) return error;
-  if (isJsonObject(error) && typeof error.message === "string" && error.message.trim()) return error.message;
-  return fallback;
-}
-
-export function isGeminiModelAvailabilityError(status: number, data: GeminiResponse): boolean {
-  if (status === 404) return true;
-  if (status !== 400 && status !== 403) return false;
-
-  const errorText = [
-    getGeminiErrorMessage(data.error, ""),
-    typeof data.message === "string" ? data.message : "",
-  ].join(" ").toLowerCase();
-
-  return /model|not found|not supported|unsupported|does not exist|permission|access/.test(errorText);
 }
 
 function getSettingNumberOrDefault(settings: Record<string, string>, key: string, fallback: number) {
@@ -419,11 +371,6 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     }
   }
 
-  let effectiveModel = model;
-  let url = usesOpenAiModel
-    ? "https://api.openai.com/v1/responses"
-    : `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(effectiveModel)}:generateContent`;
-
   const { feature: _drop, model: _model, ...payload } = body ?? {};
   const payloadToSend: Record<string, unknown> = (payload && typeof payload === "object") ? { ...payload } : {};
 
@@ -461,42 +408,20 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
 
   let geminiResp: Response | null = null;
   let data: GeminiResponse = {};
+  let effectiveModel = model;
   let latency = 0;
   const geminiTimeoutMs = normalizeGeminiTimeoutMs(env.GEMINI_TIMEOUT_MS);
-  const controller = new AbortController();
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   try {
-    timeoutId = setTimeout(() => controller.abort(), geminiTimeoutMs);
-    const requestGemini = async (requestUrl: string) => {
-      const response = await fetch(requestUrl, {
-        method: "POST",
-        headers: usesOpenAiModel
-          ? { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }
-          : { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify(upstreamPayload),
-        signal: controller.signal,
-      });
-      const rawGeminiData: unknown = await response.json().catch(() => null);
-      return { response, data: isJsonObject(rawGeminiData) ? rawGeminiData as GeminiResponse : {} };
-    };
-
-    const firstAttempt = await requestGemini(url);
-    geminiResp = firstAttempt.response;
-    data = firstAttempt.data;
-
-    // A model may be enabled for one API project but unavailable for another.
-    // Retry only model-availability errors; malformed prompts must remain visible.
-    if (isGeminiModelAvailabilityError(geminiResp.status, data)) {
-      for (const fallbackModel of getAiFallbackModels(model)) {
-        effectiveModel = fallbackModel;
-        url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(effectiveModel)}:generateContent`;
-        const retry = await requestGemini(url);
-        geminiResp = retry.response;
-        data = retry.data;
-        if (!isGeminiModelAvailabilityError(geminiResp.status, data)) break;
-      }
-    }
+    const providerResult = await requestAiProvider({
+      model,
+      apiKey,
+      payload: upstreamPayload,
+      timeoutMs: geminiTimeoutMs,
+    });
+    geminiResp = providerResult.response;
+    data = providerResult.data;
+    effectiveModel = providerResult.effectiveModel;
     latency = Date.now() - startedAt;
   } catch (error: unknown) {
     latency = Date.now() - startedAt;
@@ -531,8 +456,6 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
 
     await logAiEvent(env, { userId: String(user.sub), feature, status: 500, latencyMs: latency, safeMode, requestJson: body, responseJson: null, error: errorCode });
     return jsonResponse({ error: { message: "AI request failed" } }, 500);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
 
 
@@ -552,7 +475,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
       safeMode,
       requestJson: body,
       responseJson: fallback,
-        error: getGeminiErrorMessage(data.error, `status_${geminiResp!.status}`),
+        error: getAiProviderErrorMessage(data.error, `status_${geminiResp!.status}`),
       model: "fallback_status",
       isFallback: true,
     });
@@ -584,7 +507,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     safeMode,
     requestJson: body,
     responseJson: { text: extractedText },
-    error: geminiResp.status >= 400 ? getGeminiErrorMessage(data.error, "") || null : null,
+    error: geminiResp.status >= 400 ? getAiProviderErrorMessage(data.error, "") || null : null,
       model: effectiveModel,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
