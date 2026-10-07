@@ -6,12 +6,8 @@ import { requireBetaAccess } from "./_lib/access";
 import { requireDB } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject } from "./_lib/json";
-import { loadActivePlan as loadActivePlanShared, loadActivePlanByEmail as loadActivePlanByEmailShared } from "./_lib/plans";
-import {
-  migrateLegacyAccountByEmail as migrateLegacyAccountByEmailShared,
-  withProtectedFields as withProtectedFieldsShared,
-} from "./_lib/legacy_sync";
-import { loadStoredProfile, writeProfile, type ProfileWriteOutcome, type ProfileWriteUser } from './_lib/profile_write';
+import { writeProfile, type ProfileWriteOutcome, type ProfileWriteUser } from './_lib/profile_write';
+import { loadCurrentProfile } from './_lib/profile_read';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 export { writeProfileCas } from "./_lib/profile_cas";
 
@@ -74,15 +70,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try { await requireBetaAccess(env, user); } catch { return respond(requestId, { error: "ACCESS_REQUIRED" }, 403); }
 
   const db = requireDB(env);
-  const profile = await loadStoredProfile(db, user.sub);
-  if (!profile) {
-    const migrated = await migrateLegacyAccountByEmailShared(db, user);
-    if (!migrated) return respond(requestId, { profile: null }, 200);
-    return respond(requestId, { profile: migrated }, 200);
-  }
-  const serverPlan = await loadActivePlanShared(db, user.sub);
-  const effectivePlan = serverPlan === 'free' ? await loadActivePlanByEmailShared(db, user.email || '') : serverPlan;
-  return respond(requestId, { profile: withProtectedFieldsShared(user, { ...profile, plan: effectivePlan }) }, 200);
+  return respond(requestId, { profile: await loadCurrentProfile(db, user) }, 200);
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
