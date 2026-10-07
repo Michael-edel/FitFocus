@@ -4,15 +4,44 @@ import { persistAllUsersSnapshot, safeSetItem } from './storage/hybrid';
 import { errorMessage, isRecord, parseJson } from './safeJson';
 import { saveFamilyMenu, saveFamilyShoppingItems } from './features/family/familyApi';
 
-type FamilyMenuPrefs = {
+export type FamilyMenuPrefs = {
   includeIds: string[];
   cookingMode: 'all_meals' | 'once_per_day';
   budgetPerWeek: string;
   currency: string;
 };
 
+export const DEFAULT_FAMILY_MENU_PREFS: FamilyMenuPrefs = {
+  includeIds: [],
+  cookingMode: 'all_meals',
+  budgetPerWeek: '',
+  currency: 'KZT',
+};
+
 function isCookingMode(value: unknown): value is FamilyMenuPrefs['cookingMode'] {
   return value === 'all_meals' || value === 'once_per_day';
+}
+
+/** Reads only valid values and never lets one profile's preferences seed another's. */
+export function readFamilyMenuPrefs(raw: string | null, defaultIncludeIds: string[]): FamilyMenuPrefs {
+  const saved = raw ? parseJson(raw) : null;
+  const fromStore = isRecord(saved) ? saved : {};
+  const storedIncludeIds = Array.isArray(fromStore.includeIds)
+    ? fromStore.includeIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    : [];
+  const budgetPerWeek = fromStore.budgetPerWeek;
+  const currency = fromStore.currency;
+
+  return {
+    includeIds: storedIncludeIds.length ? storedIncludeIds : defaultIncludeIds,
+    cookingMode: isCookingMode(fromStore.cookingMode) ? fromStore.cookingMode : DEFAULT_FAMILY_MENU_PREFS.cookingMode,
+    budgetPerWeek: typeof budgetPerWeek === 'string' || typeof budgetPerWeek === 'number'
+      ? String(budgetPerWeek)
+      : DEFAULT_FAMILY_MENU_PREFS.budgetPerWeek,
+    currency: typeof currency === 'string' && currency.trim()
+      ? currency
+      : DEFAULT_FAMILY_MENU_PREFS.currency,
+  };
 }
 
 type UseFamilyMenuParams = {
@@ -45,34 +74,24 @@ export function useFamilyMenu({
   const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
   const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
   const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
-  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<FamilyMenuPrefs>({
-    includeIds: [],
-    cookingMode: 'all_meals',
-    budgetPerWeek: '',
-    currency: 'KZT',
-  });
+  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<FamilyMenuPrefs>(DEFAULT_FAMILY_MENU_PREFS);
 
   useEffect(() => {
-    if (!currentUser?.id) return;
-    const newPrefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
+    if (!currentUser?.id) {
+      setFamilyMenuPrefs(DEFAULT_FAMILY_MENU_PREFS);
+      return;
+    }
+    const prefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
     try {
-      const raw = localStorage.getItem(newPrefsKey);
-      const saved = raw ? parseJson(raw) : null;
-      if (raw) safeSetItem(newPrefsKey, raw);
-      const fromStore = isRecord(saved) ? saved : {};
-      const storedIncludeIds = Array.isArray(fromStore.includeIds)
-        ? fromStore.includeIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
-        : [];
-      const includeIds = storedIncludeIds.length ? storedIncludeIds : allUsers.map(u => u.id);
-      const storedMode = isCookingMode(fromStore.cookingMode) ? fromStore.cookingMode : undefined;
-      setFamilyMenuPrefs(prev => ({
-        ...prev,
-        includeIds,
-        cookingMode: storedMode || prev.cookingMode,
-        budgetPerWeek: String(fromStore.budgetPerWeek ?? prev.budgetPerWeek ?? ''),
-        currency: String(fromStore.currency ?? prev.currency ?? 'KZT'),
-      }));
-    } catch {}
+      const next = readFamilyMenuPrefs(localStorage.getItem(prefsKey), allUsers.map((user) => user.id));
+      setFamilyMenuPrefs(next);
+      safeSetItem(prefsKey, JSON.stringify(next));
+    } catch {
+      setFamilyMenuPrefs({
+        ...DEFAULT_FAMILY_MENU_PREFS,
+        includeIds: allUsers.map((user) => user.id),
+      });
+    }
   }, [allUsers, currentUser?.id]);
 
   const familyMenu = useMemo(() => cloudFamilyMenu ?? currentUser?.aiPlan?.familyWeeklyMenu ?? null, [cloudFamilyMenu, currentUser?.aiPlan?.familyWeeklyMenu]);
