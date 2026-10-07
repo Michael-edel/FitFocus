@@ -41,4 +41,17 @@ describe('UserStateRepository IndexedDB path', () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));
   });
+
+  it('removes the IndexedDB value and queues its cloud deletion', async () => {
+    const repository = new UserStateRepository('indexed-remove-user');
+    repository.writeJson('weekly_reports', []);
+    await repository.readJsonAsync('weekly_reports', [], Array.isArray);
+
+    repository.remove('weekly_reports');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readIndexedUserStateRaw('fitfocus_data_indexed-remove-user_weekly_reports')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/state?key=fitfocus_data_indexed-remove-user_weekly_reports'), expect.objectContaining({ method: 'DELETE' }));
+  });
 });

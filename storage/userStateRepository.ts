@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem } from '../types';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
 import { enqueueRemoteKVWrite, safeRemoveItem, safeSetItem } from './hybrid';
-import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './indexedUserState';
+import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, removeIndexedUserStateRaw, writeIndexedUserStateRaw } from './indexedUserState';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
 
@@ -94,6 +94,8 @@ export class UserStateRepository {
   }
 
   remove(stateKey: UserStateKey): void {
-    safeRemoveItem(this.key(stateKey));
+    const key = this.key(stateKey);
+    if (isIndexedUserStateStorageKey(key)) void removeIndexedUserStateRaw(key);
+    safeRemoveItem(key);
   }
 }
