@@ -109,6 +109,7 @@ import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { buildWeeklyIntelligenceRequest } from './features/ai/weeklyIntelligenceRequest';
+import { retryLastAiAction } from './features/ai/aiRetry';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1986,73 +1987,33 @@ const logWeight = useCallback(() => {
     checkAchievements: () => checkAchievements('ai_coach_success'),
   });
 
-  const handleAiRetry = useCallback(async (opts?: { force?: boolean }) => {
-    const last = (() => { try { return getLastAiAction(); } catch { return null; } })();
-    
-    // Clear cooldown/throttle and potentially proceed
-    const canRun = allowAiRetryNow(last?.feature, opts);
-    if (!canRun) return;
-
-    if (!last || !currentUser) return;
-
-    if (last.type === 'coach') {
-      await handleGetCoachAdvice();
-      return;
-    }
-
-    if (last.type === 'plan') {
-      try {
-        const aiPlan = await generatePersonalPlan(currentUser);
-        persistUser({ ...currentUser, aiPlan });
-      } catch (e) {
-        console.error(e);
-        persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
-      }
-      return;
-    }
-
-    if (last.type === 'plateau') {
-      setAdaptLoading(true);
-      try {
-        const txt = await generatePlateauExplanation({
-          name: currentUser.name,
-          goal: currentUser.goal,
-          compliancePct,
-          weightDeltaN,
-          expectedN,
-          adaptationIndex,
-          suggestion: refeedSuggestion,
-        });
-        setAdaptNote(txt);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setAdaptLoading(false);
-      }
-      return;
-    }
-
-    if (last.type === 'wis') {
-      if (!weekly) return;
-      try {
-        aiReportGenerationRef.current = null;
-        const weekKey = getWeekKey(new Date());
-        const generateAI = async () => {
-          aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
-          setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
-          // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-          return await getWeeklyIntelligenceInterpretation(
-            buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
-          );
-        };
-        await ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI);
-        setWeeklyReports(loadWeeklyReports(currentUser.id));
-      } catch (e) {
-        console.error(e);
-      }
-      return;
-    }
-  }, [currentUser, weekly, targets, compliancePct, weightDeltaN, expectedN, adaptationIndex, refeedSuggestion, persistUser, handleGetCoachAdvice]);
+  const handleAiRetry = useCallback((opts?: { force?: boolean }) => retryLastAiAction({
+    currentUser,
+    weekly,
+    targets,
+    compliancePct,
+    weightDeltaN,
+    expectedN,
+    adaptationIndex,
+    refeedSuggestion,
+    persistUser,
+    retryCoachAdvice: handleGetCoachAdvice,
+    setAdaptLoading,
+    setAdaptNote,
+    weeklyReportGenerationRef: aiReportGenerationRef,
+    setWeeklyReports,
+  }, opts), [
+    adaptationIndex,
+    compliancePct,
+    currentUser,
+    expectedN,
+    handleGetCoachAdvice,
+    persistUser,
+    refeedSuggestion,
+    targets,
+    weekly,
+    weightDeltaN,
+  ]);
 
   const handleRegister = useCallback(async () => {
     await runRegistrationFlow({
