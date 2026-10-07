@@ -6,7 +6,7 @@ import { requireDB, nowMs } from "../../_lib/db";
 import { requireRole } from "../../_lib/rbac";
 import { requireAdminRequest } from "../../_lib/admin_guard";
 import { buildAdminEventStatement } from "../../_lib/admin_audit";
-import { buildPushPayload, normalizePushBrowserLabel, normalizePushDeviceLabel, sendPushNotification } from "../../_lib/push";
+import { buildPushPayload, sendPushNotification } from "../../_lib/push";
 import { selectPushRecipients } from '../../_lib/push_recipient_selection';
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
@@ -139,137 +139,6 @@ function pushErrorDetails(error: unknown) {
     status: Number.isFinite(status) && status > 0 ? status : null,
     message,
   };
-}
-
-function getPlan(profile: ParsedProfile, fallback: string | null) {
-  return String(fallback || profile.plan || "free").toLowerCase();
-}
-
-function getSubscriptionStatus(profile: ParsedProfile, fallback: string | null) {
-  return String(fallback || profile.subscriptionStatus || "inactive").toLowerCase();
-}
-
-function getRecipient(row: PushRecipientRow): Recipient {
-  const profile = parseProfile(row.profile_json);
-  const roles = asRoles(row.roles_csv);
-  const device = normalizePushDeviceLabel(row.device_label, row.user_agent);
-  const browser = normalizePushBrowserLabel(row.user_agent);
-  const plan = getPlan(profile, row.subscription_plan);
-  const subscriptionStatus = getSubscriptionStatus(profile, row.subscription_status);
-  const active = asBoolean(row.is_active) && !row.deleted_at;
-  const familyIds = asFamilyIds(row.active_family_ids);
-  return {
-    ...row,
-    profile,
-    roles,
-    device,
-    browser,
-    plan,
-    subscriptionStatus,
-    active,
-    familyIds,
-  };
-}
-
-function matchesSegment(recipient: Recipient, segment: SegmentInput, userIds: Set<string>) {
-  if (userIds.size && !userIds.has(recipient.user_id)) return false;
-
-  const query = toText(segment.query);
-  if (query) {
-    const q = query.toLowerCase();
-    const name = String(recipient.profile.name || "").toLowerCase();
-    if (
-      !String(recipient.user_id).toLowerCase().includes(q) &&
-      !String(recipient.email || "").toLowerCase().includes(q) &&
-      !name.includes(q)
-    ) {
-      return false;
-    }
-  }
-
-  const status = toText(segment.status, "all").toLowerCase();
-  if (status === "active" && !(recipient.is_active === 1 && !recipient.deleted_at)) return false;
-  if (status === "inactive" && !(recipient.is_active === 0 && !recipient.deleted_at)) return false;
-  if (status === "deleted" && !recipient.deleted_at) return false;
-
-  const plan = toText(segment.plan, "all").toLowerCase();
-  if (plan !== "all" && recipient.plan !== plan) return false;
-
-  const wearable = toText(segment.wearable, "all").toLowerCase();
-  const wearableEnabled = asBoolean(recipient.profile.wearableEnabled);
-  if (wearable === "connected" && !wearableEnabled) return false;
-  if (wearable === "disconnected" && wearableEnabled) return false;
-
-  const glucose = toText(segment.glucose, "all").toLowerCase();
-  const glucoseValue = recipient.profile.bloodGlucoseMmolL;
-  if (glucose === "yes" && glucoseValue == null) return false;
-  if (glucose === "no" && glucoseValue != null) return false;
-
-  const measurements = toText(segment.measurements, "all").toLowerCase();
-  const measurementsHistory = Array.isArray(recipient.profile.measurementsHistory) ? recipient.profile.measurementsHistory : [];
-  const hasMeasurements =
-    measurementsHistory.length > 0 ||
-    recipient.profile.weight !== undefined ||
-    recipient.profile.restingPulse !== undefined ||
-    recipient.profile.bloodGlucoseMmolL !== undefined ||
-    recipient.profile.bloodPressureSystolic !== undefined ||
-    recipient.profile.bloodPressureDiastolic !== undefined;
-  if (measurements === "yes" && !hasMeasurements) return false;
-  if (measurements === "no" && hasMeasurements) return false;
-
-  const role = toText(segment.role, "all").toLowerCase();
-  if (role !== "all" && !recipient.roles.includes(role)) return false;
-
-  const familyId = toText(segment.familyId);
-  if (familyId && !recipient.familyIds.includes(familyId)) return false;
-
-  const device = toText(segment.device, "all").toLowerCase();
-  if (device !== "all" && recipient.device.toLowerCase() !== device) return false;
-
-  const browser = toText(segment.browser, "all").toLowerCase();
-  if (browser !== "all" && recipient.browser.toLowerCase() !== browser) return false;
-
-  return true;
-}
-
-function sortRecipients(recipients: Recipient[], sort: string) {
-  const order = sort.toLowerCase();
-  const compareText = (a: string, b: string) => a.localeCompare(b, "ru", { sensitivity: "base" });
-  const compareNumber = (a: number, b: number) => a - b;
-  recipients.sort((a, b) => {
-    switch (order) {
-      case "created_asc":
-        return compareNumber(a.created_at, b.created_at);
-      case "created_desc":
-        return compareNumber(b.created_at, a.created_at);
-      case "updated_asc":
-        return compareNumber(a.updated_at, b.updated_at);
-      case "updated_desc":
-        return compareNumber(b.updated_at, a.updated_at);
-      case "last_sent_asc":
-        return compareNumber(Number(a.last_sent_at || 0), Number(b.last_sent_at || 0)) || compareNumber(b.updated_at, a.updated_at);
-      case "last_sent_desc":
-        return compareNumber(Number(b.last_sent_at || 0), Number(a.last_sent_at || 0)) || compareNumber(b.updated_at, a.updated_at);
-      case "email_asc":
-        return compareText(String(a.email || ""), String(b.email || "")) || compareNumber(b.updated_at, a.updated_at);
-      case "email_desc":
-        return compareText(String(b.email || ""), String(a.email || "")) || compareNumber(b.updated_at, a.updated_at);
-      case "device_asc":
-        return compareText(a.device, b.device) || compareNumber(b.updated_at, a.updated_at);
-      case "device_desc":
-        return compareText(b.device, a.device) || compareNumber(b.updated_at, a.updated_at);
-      case "browser_asc":
-        return compareText(a.browser, b.browser) || compareNumber(b.updated_at, a.updated_at);
-      case "browser_desc":
-        return compareText(b.browser, a.browser) || compareNumber(b.updated_at, a.updated_at);
-      case "plan_asc":
-        return compareText(a.plan, b.plan) || compareNumber(b.updated_at, a.updated_at);
-      case "plan_desc":
-        return compareText(b.plan, a.plan) || compareNumber(b.updated_at, a.updated_at);
-      default:
-        return compareNumber(b.updated_at, a.updated_at);
-    }
-  });
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
