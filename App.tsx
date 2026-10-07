@@ -48,12 +48,10 @@ import {
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
-import { analyzeImageQuality } from './services/imageQuality';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
-import { analyzeFoodPhotoEnhanced } from './geminiService';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { formatTime, getDayKey, getWeekKey, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
@@ -108,6 +106,7 @@ import { useProfilePersistence } from './features/profile/useProfilePersistence'
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
+import { useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1720,6 +1719,25 @@ await ensurePdfInterFont(doc);
     persistUser({ ...currentUser, usage: nextUsage });
   }, [currentUser, persistUser]);
 
+  const remainingPhotoScans = useMemo(() => {
+    if (!currentUser) return 0;
+    const allowance = PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan];
+    if (!Number.isFinite(allowance)) return Infinity;
+    return Math.max(0, allowance - (currentUser.usage?.aiFoodPhotoCount || 0));
+  }, [currentUser, paywall.plan]);
+
+  const processPhotoFiles = useFoodPhotoAnalysis({
+    userId: currentUser?.id,
+    remainingScans: remainingPhotoScans,
+    openPaywall: paywall.openPaywall,
+    setScanning: setIsScanning,
+    compressPhoto: compressFoodPhoto,
+    analyzePhoto: analyzeFoodPhoto,
+    addFoodToDiary,
+    incrementUsage: () => incrementUsage('aiFoodPhotoCount'),
+    showInsight: setInsightModal,
+  });
+
   const {
     selectedFoodIds,
     toggleFoodSelected,
@@ -1948,49 +1966,6 @@ await ensurePdfInterFont(doc);
       setInviteChecking,
     });
   }, [requireInvite, inviteCode]);
-
-  const processPhotoFiles = useCallback(async (files: File[]) => {
-    if (!files.length || !currentUser) return;
-
-    // Paywall check once per batch
-    if (!checkLimit('aiFoodPhotoPerDay')) return paywall.openPaywall();
-
-    setIsScanning(true);
-    try {
-      for (const file of files) {
-        const { dataUrl: photo, thumbUrl: photoThumb, base64 } = await compressFoodPhoto(file);
-        const result = await analyzeFoodPhoto(base64);
-        if (!result) continue;
-
-        const nonFood = result.nonFood === true;
-        const insight: FoodInsight = {
-          calories: nonFood ? 0 : result.calories,
-          macros: {
-            protein: nonFood ? 0 : result.protein,
-            fat: nonFood ? 0 : result.fat,
-            carbs: nonFood ? 0 : result.carbs,
-          },
-          ingredients: nonFood || !Array.isArray(result.ingredients) ? [] : result.ingredients,
-          notes: Array.isArray(result.notes) ? result.notes : []
-        };
-
-        const newEntry = addFoodToDiary({
-          ...result,
-          ...(nonFood ? { calories: 0, protein: 0, fat: 0, carbs: 0, ingredients: [], nonFood: true } : {}),
-          photo,
-          photoThumb,
-          insight,
-        });
-        if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight, nonFood: newEntry.nonFood === true });
-        incrementUsage('aiFoodPhotoCount');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    finally {
-      setIsScanning(false);
-    }
-  }, [currentUser, addFoodToDiary, checkLimit, incrementUsage, paywall]);
 
   const handlePhotoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -2444,7 +2419,7 @@ const logWeight = useCallback(() => {
       setCameraFacing,
       handlePhotoUpload,
       processPhotoFiles,
-      remainingScans: checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0,
+      remainingScans: remainingPhotoScans,
       searchQuery,
       setSearchQuery,
       showSearchResults,
