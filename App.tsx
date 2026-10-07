@@ -47,7 +47,7 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
+import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { analyzeImageQuality } from './services/imageQuality';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
@@ -107,7 +107,7 @@ import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
-import { buildCoachAdviceRequest } from './features/ai/coachAdvice';
+import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -819,9 +819,6 @@ const App: React.FC = () => {
       // Ignore storage quota or privacy errors.
     }
   }, [pdfIncludeMealLog, pdfMealLogStorageKey]);
-
-  const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
-  const [coachLoading, setCoachLoading] = useState(false);
 
   const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
   // AI Council (Orchestrator v2)
@@ -2014,24 +2011,21 @@ const logWeight = useCallback(() => {
     });
   }, [checkAchievements, currentUser, newWeight, persistUser]);
 
-  const handleGetCoachAdvice = useCallback(async () => {
-    if (!currentUser) return;
-    if (!checkLimit('aiCoachAdvicePerDay')) return paywall.openPaywall();
-    setLastAiAction({ feature: 'coach_advice', type: 'coach', userId: currentUser.id });
-    setCoachLoading(true);
-    try {
-      const todayKey = getTodayKey();
-      const advice = await getCoachAdvice(buildCoachAdviceRequest(
-        currentUser,
-        targets,
-        dailyStats,
-        currentUser.dailyHabits?.[todayKey],
-      ));
-      setCoachCard(advice); incrementUsage('aiCoachCount');
-      userStateRepository?.writeJson('last_coach_card', advice);
-      void checkAchievements('ai_coach_success');
-    } catch (e) { console.error(e); } finally { setCoachLoading(false); }
-  }, [checkAchievements, checkLimit, currentUser, dailyStats, incrementUsage, paywall, targets, userStateRepository]);
+  const {
+    coachCard,
+    setCoachCard,
+    coachLoading,
+    handleGetCoachAdvice,
+  } = useCoachAdvice({
+    currentUser,
+    targets,
+    dailyStats,
+    canUseCoachAdvice: () => checkLimit('aiCoachAdvicePerDay'),
+    openPaywall: paywall.openPaywall,
+    incrementUsage: () => incrementUsage('aiCoachCount'),
+    repository: userStateRepository,
+    checkAchievements: () => checkAchievements('ai_coach_success'),
+  });
 
   const handleAiRetry = useCallback(async (opts?: { force?: boolean }) => {
     const last = (() => { try { return getLastAiAction(); } catch { return null; } })();
