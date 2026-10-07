@@ -2,23 +2,14 @@
 // POST: store normalized weekly shopping list items for the current user (and optional family scope)
 // Body: { week_start: 'YYYY-MM-DD', family_id?: string, items: [{name, grams}] }
 import { requireUser } from "../_lib/auth";
-import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
-import { requireFamilyMember } from "../_lib/family_access";
-import { normalizeShoppingIngredient } from "../_lib/ingredients";
-import { requireFamilyPlan } from "../_lib/plans";
+import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "../_lib/request_body";
-import { asString, isJsonObject } from "../_lib/json";
+import { saveWeeklyMenuItems } from '../_lib/weekly_menu_items';
 import { requestIdFor } from '../_lib/observability';
 import { tracedJsonResponse } from '../_lib/traced_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const WEEKLY_MENU_ITEMS_JSON_BODY_LIMIT_BYTES = 256 * 1024;
-type WeeklyMenuItemInput = { name: string; grams: number; key: string };
-
-function isIsoDay(s: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}
-
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
@@ -35,39 +26,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
-    if (!isJsonObject(body)) return tracedJsonResponse('weekly-menu.items.response', requestId, { error: "BAD_JSON" }, 400);
-    const week_start = asString(body.week_start).slice(0, 10);
-    const family_id = body.family_id ? asString(body.family_id) : null;
-    const items = Array.isArray(body.items) ? body.items : [];
-
-    if (!isIsoDay(week_start)) return tracedJsonResponse('weekly-menu.items.response', requestId, { error: "BAD_WEEK" }, 400);
-    if (family_id) {
-      const fam = await requireFamilyMember(db, family_id, user.sub);
-      await requireFamilyPlan(db, fam.owner_user_id);
-    }
-
-    const norm: WeeklyMenuItemInput[] = items
-      .filter(isJsonObject)
-      .map((it) => normalizeShoppingIngredient(it.name, it.grams))
-      .filter((it) => it.name && it.grams > 0)
-      .slice(0, 500);
-
-    const created_at = nowMs();
-    const statements = [
-      family_id
-        ? db.prepare(
-            "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id = ?"
-          ).bind(user.sub, week_start, family_id)
-        : db.prepare(
-            "DELETE FROM weekly_menu_items WHERE user_id = ? AND week_start = ? AND family_id IS NULL"
-          ).bind(user.sub, week_start),
-      ...norm.map((it) => db.prepare(
-        "INSERT INTO weekly_menu_items (id, user_id, family_id, week_start, ingredient_name, grams, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).bind(uuid(), user.sub, family_id, week_start, it.name, it.grams, created_at)),
-    ];
-    await db.batch(statements);
-
-    return tracedJsonResponse('weekly-menu.items.response', requestId, { ok: true, stored: norm.length, week_start }, 200);
+    const result = await saveWeeklyMenuItems({ db, userId: user.sub, body });
+    if (result.kind === 'invalid') return tracedJsonResponse('weekly-menu.items.response', requestId, { error: result.error }, 400);
+    return tracedJsonResponse('weekly-menu.items.response', requestId, { ok: true, stored: result.stored, week_start: result.weekStart }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
     return tracedJsonResponse('weekly-menu.items.response', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);

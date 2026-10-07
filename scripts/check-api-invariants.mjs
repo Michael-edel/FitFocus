@@ -938,7 +938,10 @@ if (familyMenuGenerate.includes('UPDATE weekly_menus SET menu_json=?, created_by
   process.exitCode = 1;
 }
 
-const weeklyMenuItems = read('functions/api/weekly_menu/items.ts');
+const weeklyMenuItems = [
+  read('functions/api/weekly_menu/items.ts'),
+  read('functions/api/_lib/weekly_menu_items.ts'),
+].join('\n');
 assertIncludes(
   weeklyMenuItems,
   'await db.batch(statements);',
