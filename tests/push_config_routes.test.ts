@@ -105,6 +105,7 @@ async function authedRequest(url: string, init: RequestInit = {}) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const headers = new Headers(init.headers);
   headers.set('Cookie', `ff_session=${token}`);
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', 'push-route-test-01');
   return new Request(url, { ...init, headers });
 }
 
@@ -135,6 +136,7 @@ describe('push runtime configuration routes', () => {
     }));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('push-route-test-01');
     await expect(response.json()).resolves.toMatchObject({
       configured: true,
       vapid_public_key: 'public-key',

@@ -1,6 +1,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { hasPushConfig, normalizePushBrowserLabel, normalizePushDeviceLabel } from "../_lib/push";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -21,7 +22,7 @@ type PushStatusRow = {
   enabled: number;
 };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handlePushStatusGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -70,4 +71,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     current_browser_label: currentBrowserLabel,
     subscriptions: items,
   }, 200);
+};
+
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handlePushStatusGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('push.status.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

@@ -3,6 +3,7 @@ import { requireDB, nowMs } from "../_lib/db";
 import { buildPushPayload, sendPushNotification } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -36,7 +37,7 @@ function pushErrorDetails(error: unknown) {
   };
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePushTestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -131,4 +132,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     failures: failures.slice(0, 5),
     payload,
   }, 200);
+};
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handlePushTestPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('push.test.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

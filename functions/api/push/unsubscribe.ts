@@ -3,13 +3,14 @@ import { requireDB } from "../_lib/db";
 import { parsePushSubscription } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
   DB?: D1Database;
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePushUnsubscribePost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -44,4 +45,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true,
     removed,
   }, 200);
+};
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handlePushUnsubscribePost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('push.unsubscribe.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

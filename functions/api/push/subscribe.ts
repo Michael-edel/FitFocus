@@ -3,6 +3,7 @@ import { requireDB, nowMs, uuid } from "../_lib/db";
 import { mergePushUserAgentWithBrowserHint, normalizePushDeviceLabel, parsePushSubscription } from "../_lib/push";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asOptionalString, isJsonObject } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -10,7 +11,7 @@ type Env = {
 };
 type CountRow = { count?: number };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePushSubscribePost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -58,4 +59,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     count: Number(results?.[0]?.count || 0),
     deviceLabel,
   }, 200);
+};
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handlePushSubscribePost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('push.subscribe.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
