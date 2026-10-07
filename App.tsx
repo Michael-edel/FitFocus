@@ -52,7 +52,7 @@ import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, AppSettings, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -113,6 +113,7 @@ import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
+import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -591,28 +592,10 @@ const App: React.FC = () => {
   // Weekly Reports History
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
-  // Settings
-  const [settings, setSettings] = useState<AppSettings>(() => ({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false }));
-
-  useEffect(() => {
-    if (!userStateRepository) return;
-    const stored = userStateRepository.readJson<AppSettings | null>('settings', null, (value): value is AppSettings =>
-      isRecord(value)
-      && (value.theme === 'dark' || value.theme === 'light' || value.theme === 'violet' || value.theme === 'calm' || value.theme === 'premium')
-      && value.language === 'ru'
-      && typeof value.soundEnabled === 'boolean'
-      && typeof value.musicEnabled === 'boolean',
-    );
-    if (stored) {
-      setSettings(stored);
-    } else {
-      userStateRepository.writeJson('settings', settings);
-    }
-  }, [currentUser?.id, userStateRepository]);
-
-  useEffect(() => {
-    userStateRepository?.writeJson('settings', settings);
-  }, [settings, userStateRepository]);
+  const { settings, setSettings } = useSettingsPersistence({
+    userId: currentUser?.id,
+    repository: userStateRepository,
+  });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
   const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {

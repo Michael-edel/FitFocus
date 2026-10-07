@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_APP_SETTINGS,
+  isAppSettings,
+  readStoredSettings,
+} from '../features/settings/useSettingsPersistence';
+
+describe('settings persistence feature', () => {
+  it('accepts only complete settings records', () => {
+    expect(isAppSettings({
+      theme: 'premium',
+      language: 'ru',
+      soundEnabled: true,
+      musicEnabled: false,
+    })).toBe(true);
+    expect(isAppSettings({ theme: 'dark' })).toBe(false);
+    expect(isAppSettings({ ...DEFAULT_APP_SETTINGS, language: 'en' })).toBe(false);
+  });
+
+  it('uses the typed repository fallback for invalid stored settings', () => {
+    const repository = {
+      readJson: <T,>(_key: string, fallback: T) => fallback,
+      writeJson: () => undefined,
+    };
+
+    expect(readStoredSettings(repository)).toBeNull();
+  });
+});
