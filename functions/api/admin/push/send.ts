@@ -7,11 +7,18 @@ import { requireRole } from "../../_lib/rbac";
 import { requireAdminRequest } from "../../_lib/admin_guard";
 import { buildAdminEventStatement } from "../../_lib/admin_audit";
 import { buildPushPayload } from "../../_lib/push";
-import { selectPushRecipients } from '../../_lib/push_recipient_selection';
+import {
+  normalizeStringArray,
+  selectPushRecipients,
+  toInt,
+  toText,
+  type PushRecipientRow,
+  type SegmentInput,
+} from '../../_lib/push_recipient_selection';
 import { deliverPushNotifications } from '../../_lib/push_delivery';
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
-import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
+import { asString, isJsonObject, type JsonObject } from "../../_lib/json";
 
 type Env = {
   AUTH_JWT_SECRET: string;
@@ -19,20 +26,6 @@ type Env = {
   PUSH_VAPID_PUBLIC_KEY?: string;
   PUSH_VAPID_PRIVATE_KEY?: string;
   PUSH_VAPID_SUBJECT?: string;
-};
-
-type SegmentInput = {
-  query?: unknown;
-  status?: unknown;
-  plan?: unknown;
-  wearable?: unknown;
-  glucose?: unknown;
-  measurements?: unknown;
-  role?: unknown;
-  familyId?: unknown;
-  device?: unknown;
-  browser?: unknown;
-  userIds?: unknown;
 };
 
 type PushSendBody = {
@@ -51,79 +44,6 @@ type PushSendBody = {
   userIds?: unknown;
   segment?: SegmentInput;
 };
-
-type PushRecipientRow = {
-  id: string;
-  user_id: string;
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  content_encoding: string | null;
-  device_label: string | null;
-  user_agent: string | null;
-  created_at: number;
-  updated_at: number;
-  last_sent_at: number | null;
-  last_error: string | null;
-  enabled: number;
-  email: string | null;
-  user_created_at: number | null;
-  deleted_at: string | null;
-  deletion_scheduled_at: string | null;
-  is_active: number | null;
-  subscription_plan: string | null;
-  subscription_status: string | null;
-  current_period_end: number | null;
-  profile_json: string | null;
-  roles_csv: string | null;
-  active_family_ids?: string | null;
-};
-
-type ParsedProfile = JsonObject;
-
-type Recipient = PushRecipientRow & {
-  profile: ParsedProfile;
-  roles: string[];
-  device: string;
-  browser: string;
-  plan: string;
-  subscriptionStatus: string;
-  active: boolean;
-  familyIds: string[];
-};
-
-function toText(value: unknown, fallback = "") {
-  return asString(value, fallback);
-}
-
-function toInt(value: unknown, fallback: number, min: number, max: number) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.trunc(n)));
-}
-
-function parseProfile(profileJson: unknown): ParsedProfile {
-  if (!profileJson) return {};
-  return safeJsonParseObject(String(profileJson)) ?? {};
-}
-
-function asRoles(value: unknown): string[] {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function asFamilyIds(value: unknown): string[] {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  return asStringArray(value);
-}
 
 const handlePushSend: PagesFunction<Env> = async ({ request, env }) => {
   let user;
