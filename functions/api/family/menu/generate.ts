@@ -1,7 +1,7 @@
 // /api/family/menu/generate
 // POST: generate shared weekly menu + personalized portions for all active members (server-side)
 // This enables true B2C Family mode: one shared menu, different portion sizes per member, one aggregated family shopping list.
-import { json, requireUser } from "../../_lib/auth";
+import { requireUser } from "../../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../../_lib/db";
 import { requireFamilyOwner } from "../../_lib/family_access";
 import { aggregateShoppingRows, normalizeShoppingIngredient } from "../../_lib/ingredients";
@@ -9,6 +9,8 @@ import { requireFamilyPlan } from "../../_lib/plans";
 import { calculateDailyTargets } from "../../../../domain/profileMath";
 import { Gender, Goal, ActivityLevel } from "../../../../domain/types";
 import { isJsonObject, safeJsonParse } from "../../_lib/json";
+import { requestIdFor } from '../../_lib/observability';
+import { familyResponse } from '../../_lib/family_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -309,6 +311,7 @@ function formatMealPortion(ingredients: { name: string; grams: number }[], kcal:
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -317,7 +320,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const url = new URL(request.url);
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
-    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(weekStart)) return familyResponse('family.menu.generate', requestId, { error: "BAD_WEEK" }, 400);
 
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);
@@ -451,9 +454,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ];
     await db.batch(statements);
 
-    return json({ ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
+    return familyResponse('family.menu.generate', requestId, { ok: true, weekStart, menuId, shared: { id: menuId, familyId: fam.id, weekStart, menu: familyWeeklyMenu }, members: membersList.length }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return familyResponse('family.menu.generate', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

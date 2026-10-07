@@ -906,7 +906,7 @@ assertIncludes(
 );
 assertIncludes(
   familyMenu,
-  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  "familyResponse('family.menu.read', requestId, { error: \"BAD_WEEK\" }, 400)",
   'family menu routes must reject malformed weekStart values',
 );
 if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_start = ?')) {
@@ -917,7 +917,7 @@ if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_s
 const familyMenuGenerate = read('functions/api/family/menu/generate.ts');
 assertIncludes(
   familyMenuGenerate,
-  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  "familyResponse('family.menu.generate', requestId, { error: \"BAD_WEEK\" }, 400)",
   'family menu generator must reject malformed weekStart values',
 );
 assertIncludes(

@@ -1,12 +1,14 @@
 // /api/family/menu
 // GET: returns shared menu for week + personalized portions for current user
 // POST: saves the family's weekly menu as the server source of truth
-import { json, requireUser } from "../_lib/auth";
+import { requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireActiveFamilyForUser, requireFamilyOwner } from "../_lib/family_access";
 import { requireFamilyPlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError } from "../_lib/request_body";
 import { isJsonObject, safeJsonParse, type JsonObject } from "../_lib/json";
+import { requestIdFor } from '../_lib/observability';
+import { familyResponse } from '../_lib/family_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const FAMILY_MENU_JSON_BODY_LIMIT_BYTES = 256 * 1024;
@@ -42,6 +44,7 @@ function weekStartISO(d: Date) {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -50,10 +53,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const url = new URL(request.url);
     const week = url.searchParams.get("week");
     const weekStart = week ? week : weekStartISO(new Date());
-    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(weekStart)) return familyResponse('family.menu.read', requestId, { error: "BAD_WEEK" }, 400);
 
     const fam = await requireActiveFamilyForUser(db, user.sub).catch(() => null);
-    if (!fam) return json({ weekStart, shared: null, portions: null }, 200);
+    if (!fam) return familyResponse('family.menu.read', requestId, { weekStart, shared: null, portions: null }, 200);
     await requireFamilyPlan(db, fam.owner_user_id);
 
     const shared = await db
@@ -61,7 +64,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       .bind(fam.id, weekStart)
       .first<WeeklyMenuRow>();
 
-    if (!shared) return json({ weekStart, shared: null, portions: null }, 200);
+    if (!shared) return familyResponse('family.menu.read', requestId, { weekStart, shared: null, portions: null }, 200);
 
     const portions = await db
       .prepare("SELECT portions_json, totals_json, updated_at FROM weekly_menu_portions WHERE weekly_menu_id=? AND user_id=? LIMIT 1")
@@ -72,18 +75,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const parsedPortions = portions ? parseJsonValue(portions.portions_json) : null;
     const parsedTotals = portions ? parseJsonValue(portions.totals_json) : null;
 
-    return json({
+    return familyResponse('family.menu.read', requestId, {
       weekStart,
       shared: { id: shared.id, familyId: shared.family_id, weekStart: shared.week_start, menu: parsedMenu },
       portions: portions ? { portions: parsedPortions, totals: parsedTotals, updatedAt: portions.updated_at } : null,
-    });
+    }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return familyResponse('family.menu.read', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -94,17 +98,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body = await readJsonRequest(request, FAMILY_MENU_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
       if (err instanceof RequestBodyTooLargeError) {
-        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+        return familyResponse('family.menu.save', requestId, { error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
       }
       throw err;
     }
-    if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+    if (!isJsonObject(body)) return familyResponse('family.menu.save', requestId, { error: "BAD_JSON" }, 400);
     const menu = body?.menu;
     const weekStart = String(body?.weekStart || body?.week_start || "").slice(0, 10) || weekStartISO(new Date());
 
-    if (!isJsonObject(menu)) return json({ error: "BAD_MENU" }, 400);
-    if (!Array.isArray(menu.days) || !menu.days.length) return json({ error: "BAD_MENU_DAYS" }, 400);
-    if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isJsonObject(menu)) return familyResponse('family.menu.save', requestId, { error: "BAD_MENU" }, 400);
+    if (!Array.isArray(menu.days) || !menu.days.length) return familyResponse('family.menu.save', requestId, { error: "BAD_MENU_DAYS" }, 400);
+    if (!isIsoDay(weekStart)) return familyResponse('family.menu.save', requestId, { error: "BAD_WEEK" }, 400);
 
     const fam = await requireFamilyOwner(db, user.sub);
     await requireFamilyPlan(db, user.sub);
@@ -129,9 +133,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .run();
     }
 
-    return json({ ok: true, weekStart, menuId }, 200);
+    return familyResponse('family.menu.save', requestId, { ok: true, weekStart, menuId }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return familyResponse('family.menu.save', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
