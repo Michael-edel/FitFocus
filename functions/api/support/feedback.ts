@@ -1,8 +1,9 @@
 import { json, requireUser } from "../_lib/auth";
-import { nowMs, requireDB, uuid } from "../_lib/db";
+import { requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { normalizeTicketStatus, readSupportTicketForAdmin, updateSupportTicket, type SupportTicketAdminRow } from '../_lib/support_ticket_admin';
+import { createSupportTicket } from '../_lib/support_ticket_create';
 import {
   readFormDataRequest,
   readJsonRequest,
@@ -124,35 +125,6 @@ async function loadMessageThread(db: D1Database, ticketId: string) {
   }));
 }
 
-async function appendSupportMessage(
-  db: D1Database,
-  ticketId: string,
-  authorUserId: string,
-  authorRole: "user" | "admin",
-  message: string,
-  attachments: SupportAttachmentRecord[],
-) {
-  const trimmedMessage = message.trim();
-  if (!trimmedMessage && attachments.length === 0) return null;
-  const id = uuid();
-  const createdAt = nowMs();
-  await db.prepare(
-    `INSERT INTO support_feedback_messages (
-      id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    id,
-    ticketId,
-    authorUserId,
-    authorRole,
-    trimmedMessage,
-    attachments.length,
-    attachments.length ? JSON.stringify(attachments) : null,
-    createdAt,
-  ).run();
-  return { id, createdAt };
-}
-
 async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>>[0]) {
   let user;
   try {
@@ -208,40 +180,29 @@ async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>
     return json({ error: "ATTACHMENT_PROCESSING_FAILED", public_message: "Не удалось обработать вложение." }, 400);
   }
 
-  const now = nowMs();
-  await db.prepare(
-    `INSERT INTO support_feedback (
-      id, user_id, created_at, updated_at, category, section, subject, message, steps_json,
-      device, browser, contact, app_version, status, priority, attachment_count, attachments_json, admin_note,
-      assigned_admin_user_id, resolved_at, closed_at, last_reply_at, last_reply_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', 'normal', ?, ?, ?, NULL, NULL, NULL, ?, ?)`
-  ).bind(
-    ticketId,
-    user.sub,
-    now,
-    now,
-    category,
-    section,
-    subject,
-    storedMessage,
-    parseSteps(steps),
-    storedDevice,
-    storedBrowser,
-    contact,
-    appVersion,
-    attachments.length,
-    attachments.length ? JSON.stringify(attachments) : null,
-    storedAdminNote,
-    now,
-    user.sub,
-  ).run();
-
-  await appendSupportMessage(db, ticketId, user.sub, "user", storedMessage, attachments);
+  const created = await createSupportTicket({
+    db,
+    userId: user.sub,
+    input: {
+      ticketId,
+      category,
+      section,
+      subject,
+      message: storedMessage,
+      stepsJson: parseSteps(steps),
+      device: storedDevice,
+      browser: storedBrowser,
+      contact,
+      appVersion,
+      adminNote: storedAdminNote,
+      attachments,
+    },
+  });
 
   return json({
     ok: true,
-    ticket_id: ticketId,
-    attachment_count: attachments.length,
+    ticket_id: created.ticketId,
+    attachment_count: created.attachmentCount,
   });
 }
 

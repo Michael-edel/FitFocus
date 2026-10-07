@@ -279,6 +279,9 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback ('))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
     const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
     expect(ticketInsert?.binds[6]).toBe('Кнопка не нажимается');
     expect(ticketInsert?.binds[7]).toBe('');
