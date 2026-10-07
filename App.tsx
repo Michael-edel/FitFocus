@@ -117,6 +117,7 @@ import { useSettingsPersistence } from './features/settings/useSettingsPersisten
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
+import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -460,38 +461,12 @@ const App: React.FC = () => {
       // ignore storage issues
     }
   }, [cameraFacing, cameraFacingStorageKey]);
-  const dashboardWeightStorageKey = useMemo(
-    () => `fitfocus.dashboard.new-weight.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const dashboardWeightSkipSaveRef = useRef(false);
-  const [newWeight, setNewWeight] = useState<string>(() => {
-    try {
-      return localStorage.getItem(dashboardWeightStorageKey) || '';
-    } catch {
-      return '';
-    }
-  });
-  useEffect(() => {
-    try {
-      dashboardWeightSkipSaveRef.current = true;
-      setNewWeight(localStorage.getItem(dashboardWeightStorageKey) || '');
-    } catch {
-      dashboardWeightSkipSaveRef.current = true;
-      setNewWeight('');
-    }
-  }, [dashboardWeightStorageKey]);
-  useEffect(() => {
-    if (dashboardWeightSkipSaveRef.current) {
-      dashboardWeightSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(dashboardWeightStorageKey, newWeight);
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [dashboardWeightStorageKey, newWeight]);
+  const {
+    newWeight,
+    setNewWeight,
+    pdfIncludeMealLog,
+    setPdfIncludeMealLog,
+  } = useDashboardPreferences(currentUser?.id);
   
   const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
   const {
@@ -542,7 +517,6 @@ const App: React.FC = () => {
       // ignore
     }
 
-    dashboardWeightSkipSaveRef.current = true;
     cameraFacingSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
@@ -626,39 +600,6 @@ const App: React.FC = () => {
       cls: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200',
     };
   }, [paywall.plan, requireInvite]);
-  const pdfMealLogStorageKey = useMemo(
-    () => `fitfocus.dashboard.pdf-include-meal-log.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const pdfMealLogSkipSaveRef = useRef(false);
-  const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(pdfMealLogStorageKey) === '1';
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      pdfMealLogSkipSaveRef.current = true;
-      setPdfIncludeMealLog(localStorage.getItem(pdfMealLogStorageKey) === '1');
-    } catch {
-      pdfMealLogSkipSaveRef.current = true;
-      setPdfIncludeMealLog(false);
-    }
-  }, [pdfMealLogStorageKey]);
-  useEffect(() => {
-    if (pdfMealLogSkipSaveRef.current) {
-      pdfMealLogSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(pdfMealLogStorageKey, pdfIncludeMealLog ? '1' : '0');
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [pdfIncludeMealLog, pdfMealLogStorageKey]);
-
   const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
   // AI Council (Orchestrator v2)
   const {
