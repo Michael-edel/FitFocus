@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { json, requireUser } from "../_lib/auth";
 import { asString } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   AUTH_JWT_SECRET: string;
@@ -26,7 +27,7 @@ export function resolveCheckoutPlanPrice(plan: string, env: Pick<Env, "PRICE_PRO
   };
 }
 
-export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
+async function handleCheckoutPost({ request, env }: { request: Request; env: Env }) {
   let user;
   try {
     user = await requireUser(request, env);
@@ -74,4 +75,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     console.error("billing.checkout_failed");
     return json({ error: "CHECKOUT_FAILED" }, 500);
   }
+}
+
+/** Correlates checkout outcomes without recording plan or Stripe payloads. */
+export async function onRequestPost(context: { request: Request; env: Env }) {
+  const response = await handleCheckoutPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('billing.checkout.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 }

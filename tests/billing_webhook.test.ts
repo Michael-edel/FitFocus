@@ -54,7 +54,7 @@ describe('billing webhook subscription updates', () => {
     const response = await onRequestPost({
       request: new Request('https://fitfocus.test/api/billing/webhook', {
         method: 'POST',
-        headers: { 'stripe-signature': 'bad-signature' },
+        headers: { 'stripe-signature': 'bad-signature', 'X-Request-ID': 'billing-webhook-test-01' },
         body: '{}',
       }),
       env: {
@@ -68,6 +68,7 @@ describe('billing webhook subscription updates', () => {
     const text = await response.text();
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('billing-webhook-test-01');
     expect(text).toBe('Webhook Error: invalid signature');
     expect(text).not.toContain('bad-signature');
     expect(text).not.toContain('No signatures found');

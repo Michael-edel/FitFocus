@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { readRequestText, RequestBodyTooLargeError } from "../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = {
   DB: D1Database;
@@ -84,7 +85,7 @@ export async function applyStripeSubscriptionUpdate(db: D1Database, sub: Subscri
   return { ok: true, user_id: uid, plan, status };
 }
 
-export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
+async function handleWebhookPost({ request, env }: { request: Request; env: Env }) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     apiVersion: "2023-10-16"
   });
@@ -115,4 +116,12 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   return new Response("ok", { status: 200 });
+}
+
+/** Correlates webhook outcomes without logging Stripe signatures or event content. */
+export async function onRequestPost(context: { request: Request; env: Env }) {
+  const response = await handleWebhookPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('billing.webhook.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 }
