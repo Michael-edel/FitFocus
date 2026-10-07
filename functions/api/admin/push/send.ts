@@ -9,6 +9,7 @@ import { buildAdminEventStatement } from "../../_lib/admin_audit";
 import { buildPushPayload } from "../../_lib/push";
 import { selectPushRecipients } from '../../_lib/push_recipient_selection';
 import { deliverPushNotifications } from '../../_lib/push_delivery';
+import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 
@@ -124,7 +125,7 @@ function normalizeStringArray(value: unknown): string[] {
   return asStringArray(value);
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePushSend: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -369,4 +370,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     })),
     payload,
   }, 200);
+};
+
+/** Correlates every administrative push response with a body-free server event. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handlePushSend(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.push.send.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
