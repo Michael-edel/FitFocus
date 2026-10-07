@@ -31,7 +31,10 @@ function assertOrder(text, before, after, label) {
   }
 }
 
-const familyJoin = read('functions/api/family/join.ts');
+const familyJoin = [
+  read('functions/api/family/join.ts'),
+  read('functions/api/_lib/family_join_by_invite.ts'),
+].join('\n');
 assertIncludes(
   familyJoin,
   'WHERE code = ? AND used_by_user_id IS NULL',
@@ -1197,7 +1200,10 @@ if (pushTestRoute.includes('UPDATE push_subscriptions SET last_sent_at') && push
   process.exitCode = 1;
 }
 
-const familyMember = read('functions/api/family/member.ts');
+const familyMember = [
+  read('functions/api/family/member.ts'),
+  read('functions/api/_lib/family_member_profile.ts'),
+].join('\n');
 assertIncludes(
   familyMember,
   'changedRows(result) === 0',
@@ -1214,7 +1220,10 @@ assertIncludes(
   'family member patch must only update active family member rows',
 );
 
-const familyInvite = read('functions/api/family/invite.ts');
+const familyInvite = [
+  read('functions/api/family/invite.ts'),
+  read('functions/api/_lib/family_invite_create.ts'),
+].join('\n');
 assertIncludes(
   familyInvite,
   'Number.isFinite(parsedTtlHours) ? parsedTtlHours : 72',
@@ -1231,7 +1240,10 @@ assertIncludes(
   'family invite creation must fail explicitly when unique code generation is exhausted',
 );
 
-const familyIndex = read('functions/api/family/index.ts');
+const familyIndex = [
+  read('functions/api/family/index.ts'),
+  read('functions/api/_lib/family_create.ts'),
+].join('\n');
 assertIncludes(
   familyIndex,
   'WHERE NOT EXISTS (',
