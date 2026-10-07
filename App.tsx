@@ -49,6 +49,7 @@ import {
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
 import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
+import { fetchWithResilience } from './services/httpClient';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
@@ -1408,7 +1409,7 @@ await ensurePdfInterFont(doc);
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch('/api/env', { credentials: 'include' });
+        const r = await fetchWithResilience('/api/env', { credentials: 'include' }, { retries: 1 });
         if (!r.ok) return;
         const raw = await r.json().catch(() => null) as unknown;
         if (isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
