@@ -235,7 +235,10 @@ assertIncludes(
   'support attachment route must enforce owner/admin access',
 );
 
-const userSupport = read('functions/api/support/feedback/my.ts');
+const userSupport = [
+  read('functions/api/support/feedback/my.ts'),
+  read('functions/api/_lib/support_ticket_user_read.ts'),
+].join('\n');
 const adminSupport = [
   read('functions/api/support/feedback.ts'),
   read('functions/api/_lib/support_ticket_admin_read.ts'),

@@ -6,92 +6,24 @@ import {
   SUPPORT_FORM_BODY_LIMIT_BYTES,
 } from "../../_lib/request_body";
 import {
-  attachmentResponseUrl,
   fileToAttachment,
-  parseAttachmentsJson,
   SupportAttachmentTooLargeError,
   type SupportAttachmentBucket,
   type SupportAttachmentRecord,
 } from "../../_lib/support_attachments";
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
+import {
+  listMySupportTickets,
+  presentMySupportTicket,
+  readMySupportTicketDetail,
+  type SupportTicketUserRow,
+} from '../../_lib/support_ticket_user_read';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 type ChangesResult = {
   meta?: { changes?: number } | null;
   changes?: number;
 };
-type SupportTicketRow = {
-  id: string;
-  created_at?: number | null;
-  updated_at?: number | null;
-  category?: string | null;
-  section?: string | null;
-  subject?: string | null;
-  message?: string | null;
-  status?: string | null;
-  priority?: string | null;
-  attachment_count?: number | null;
-  attachments_json?: string | null;
-  app_version?: string | null;
-  last_reply_at?: number | null;
-  last_reply_by?: string | null;
-  resolved_at?: number | null;
-  closed_at?: number | null;
-  [key: string]: unknown;
-};
-type SupportMessageRow = {
-  id: string;
-  ticket_id: string;
-  author_user_id: string;
-  author_role: "user" | "admin";
-  message: string;
-  attachment_count: number;
-  attachments_json?: string | null;
-  created_at: number;
-};
-
-const PUBLIC_TICKET_COLUMNS = `
-  id, created_at, updated_at, category, section, subject, message, status, priority,
-  attachment_count, attachments_json, app_version, last_reply_at, last_reply_by, resolved_at, closed_at
-`;
-
-function publicMessageText(value: unknown): string {
-  const text = typeof value === "string" ? value : "";
-  const marker = "\n\n---\nСистемная диагностика\n";
-  const index = text.indexOf(marker);
-  return (index >= 0 ? text.slice(0, index) : text).trim();
-}
-
-function mapAttachments(records: SupportAttachmentRecord[], scope: { ticketId: string; messageId?: string }) {
-  return records.map((attachment, index) => ({
-    ...attachment,
-    data_url: attachment.data_url || attachmentResponseUrl(scope.ticketId, index, scope.messageId),
-  }));
-}
-
-async function publicTicket(db: D1Database, ticket: SupportTicketRow, includeMessages: boolean) {
-  const attachments = mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: ticket.id });
-  return {
-    id: ticket.id,
-    created_at: ticket.created_at,
-    updated_at: ticket.updated_at,
-    category: ticket.category,
-    section: ticket.section,
-    subject: ticket.subject,
-    message: publicMessageText(ticket.message),
-    status: ticket.status,
-    priority: ticket.priority,
-    attachment_count: Number(ticket.attachment_count || 0),
-    app_version: ticket.app_version,
-    last_reply_at: ticket.last_reply_at,
-    last_reply_by: ticket.last_reply_by,
-    resolved_at: ticket.resolved_at,
-    closed_at: ticket.closed_at,
-    ...(includeMessages ? { attachments } : {}),
-    ...(includeMessages ? { messages: await loadMessages(db, ticket.id) } : {}),
-  };
-}
-
 function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
 }
@@ -109,22 +41,6 @@ async function deleteStoredAttachments(
   } catch {}
 }
 
-async function loadMessages(db: D1Database, ticketId: string) {
-  const { results } = await db.prepare(
-    `SELECT id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
-     FROM support_feedback_messages
-     WHERE ticket_id = ?
-     ORDER BY created_at ASC`
-  ).bind(ticketId).all<SupportMessageRow>();
-
-  return (results || []).map((row) => ({
-    ...row,
-    message: publicMessageText(row.message),
-    attachment_count: Number(row.attachment_count || 0),
-    attachments: mapAttachments(parseAttachmentsJson(row.attachments_json), { ticketId, messageId: row.id }),
-  }));
-}
-
 const handleMySupportGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -138,30 +54,12 @@ const handleMySupportGet: PagesFunction<Env> = async ({ request, env }) => {
   const id = String(url.searchParams.get("id") || "").trim();
 
   if (id) {
-    const ticket = await db.prepare(
-      `SELECT ${PUBLIC_TICKET_COLUMNS}
-       FROM support_feedback
-       WHERE id = ? AND user_id = ?
-       LIMIT 1`
-    ).bind(id, user.sub).first<SupportTicketRow>();
+    const ticket = await readMySupportTicketDetail(db, user.sub, id);
     if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-    return json({
-      ticket: await publicTicket(db, ticket, true),
-    });
+    return json({ ticket });
   }
 
-  const { results } = await db.prepare(
-    `SELECT id, created_at, updated_at, category, section, subject, message, status, priority,
-            attachment_count, app_version, last_reply_at, last_reply_by, resolved_at, closed_at
-     FROM support_feedback
-     WHERE user_id = ?
-     ORDER BY COALESCE(last_reply_at, updated_at, created_at) DESC
-     LIMIT 100`
-  ).bind(user.sub).all<SupportTicketRow>();
-
-  return json({
-    tickets: await Promise.all((results || []).map((row) => publicTicket(db, row, false))),
-  });
+  return json({ tickets: await listMySupportTickets(db, user.sub) });
 };
 
 const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -196,7 +94,7 @@ const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
      FROM support_feedback
      WHERE id = ? AND user_id = ?
      LIMIT 1`
-  ).bind(ticketId, user.sub).first<SupportTicketRow>();
+  ).bind(ticketId, user.sub).first<SupportTicketUserRow>();
   if (!ticket) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   if (ticket.status === "closed") return json({ error: "BAD_REQUEST", message: "ticket closed" }, 400);
 
@@ -263,20 +161,21 @@ const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
        FROM support_feedback
        WHERE id = ? AND user_id = ?
        LIMIT 1`
-    ).bind(ticketId, user.sub).first<SupportTicketRow>();
+    ).bind(ticketId, user.sub).first<SupportTicketUserRow>();
     if (latest?.status === "closed") return json({ error: "BAD_REQUEST", message: "ticket closed" }, 400);
     return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
   }
 
   const refreshed = await db.prepare(
-    `SELECT ${PUBLIC_TICKET_COLUMNS}
+    `SELECT id, created_at, updated_at, category, section, subject, message, status, priority,
+            attachment_count, attachments_json, app_version, last_reply_at, last_reply_by, resolved_at, closed_at
      FROM support_feedback
      WHERE id = ? AND user_id = ?
      LIMIT 1`
-  ).bind(ticketId, user.sub).first<SupportTicketRow>();
+  ).bind(ticketId, user.sub).first<SupportTicketUserRow>();
   return json({
     ok: true,
-    ticket: refreshed ? await publicTicket(db, refreshed, true) : null,
+    ticket: refreshed ? await presentMySupportTicket(db, refreshed, true) : null,
   });
 };
 
