@@ -917,7 +917,10 @@ if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_s
   process.exitCode = 1;
 }
 
-const familyMenuGenerate = read('functions/api/family/menu/generate.ts');
+const familyMenuGenerate = [
+  read('functions/api/family/menu/generate.ts'),
+  read('functions/api/_lib/family_menu_generate.ts'),
+].join('\n');
 assertIncludes(
   familyMenuGenerate,
   "familyResponse('family.menu.generate', requestId, { error: \"BAD_WEEK\" }, 400)",
