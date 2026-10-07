@@ -114,6 +114,7 @@ import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
+import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -696,48 +697,12 @@ const App: React.FC = () => {
   } = useCouncilChat({ currentUser, foodDiary, habits });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
-  const nutritionSearchStorageKey = useMemo(
-    () => `fitfocus.nutrition.search.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const nutritionSearchSkipSaveRef = useRef(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  useEffect(() => {
-    try {
-      nutritionSearchSkipSaveRef.current = true;
-      const raw = localStorage.getItem(nutritionSearchStorageKey);
-      if (!raw) {
-        setSearchQuery('');
-        setShowSearchResults(false);
-        return;
-      }
-      try {
-        const parsed = parseJson(raw);
-        const record = isRecord(parsed) ? parsed : {};
-        setSearchQuery(typeof record.query === 'string' ? record.query : '');
-        setShowSearchResults(record.open === true);
-      } catch {
-        setSearchQuery(raw);
-        setShowSearchResults(false);
-      }
-    } catch {
-      nutritionSearchSkipSaveRef.current = true;
-      setSearchQuery('');
-      setShowSearchResults(false);
-    }
-  }, [nutritionSearchStorageKey]);
-  useEffect(() => {
-    if (nutritionSearchSkipSaveRef.current) {
-      nutritionSearchSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(nutritionSearchStorageKey, JSON.stringify({ query: searchQuery, open: showSearchResults }));
-    } catch {
-      // ignore storage issues
-    }
-  }, [nutritionSearchStorageKey, searchQuery, showSearchResults]);
+  const {
+    searchQuery,
+    setSearchQuery,
+    showSearchResults,
+    setShowSearchResults,
+  } = useNutritionSearchState(currentUser?.id);
 
   const openEditFood = (item: FoodEntry) => {
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
