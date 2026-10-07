@@ -1,26 +1,13 @@
 // /api/shopping/bulk
 // PATCH: bulk update checked states for shopping list items
-// Body: { week_start: 'YYYY-MM-DD', family_id?: string, updates: [{ ingredient_name: string, checked: boolean }] }
-import { requireUser } from "../_lib/auth";
-import { requireDB, ensureUserRow, toApiError, nowMs } from "../_lib/db";
-import { requireFamilyMember } from "../_lib/family_access";
-import { normalizeShoppingIngredient } from "../_lib/ingredients";
-import { requireFamilyPlan } from "../_lib/plans";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
-import { asString, isJsonObject } from "../_lib/json";
+import { requireUser } from '../_lib/auth';
+import { requireDB, ensureUserRow, toApiError } from '../_lib/db';
 import { requestIdFor } from '../_lib/observability';
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
+import { updateShoppingChecks } from '../_lib/shopping_checks';
 import { tracedJsonResponse } from '../_lib/traced_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
-type ShoppingBulkUpdate = { ingredient_name: string; checked: boolean };
-
-function isIsoDay(s: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}
-
-function getShoppingScopeId(userId: string, familyId?: string | null) {
-  return familyId ? `family:${familyId}` : `personal:${userId}`;
-}
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
@@ -32,50 +19,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
     let body: unknown = {};
     try {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
-    } catch (err) {
-      if (err instanceof RequestBodyTooLargeError) {
-        return tracedJsonResponse('shopping.bulk.response', requestId, { error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return tracedJsonResponse('shopping.bulk.response', requestId, { error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413);
       }
-      throw err;
-    }
-    if (!isJsonObject(body)) return tracedJsonResponse('shopping.bulk.response', requestId, { error: "BAD_JSON" }, 400);
-    const week_start = asString(body.week_start).slice(0, 10);
-    const family_id = body.family_id ? asString(body.family_id) : null;
-    const updates = Array.isArray(body.updates) ? body.updates : [];
-
-    if (!isIsoDay(week_start)) return tracedJsonResponse('shopping.bulk.response', requestId, { error: "BAD_WEEK" }, 400);
-    if (family_id) {
-      const fam = await requireFamilyMember(db, family_id, user.sub);
-      await requireFamilyPlan(db, fam.owner_user_id);
+      throw error;
     }
 
-    const norm: ShoppingBulkUpdate[] = updates
-      .filter(isJsonObject)
-      .map((u) => ({
-        ingredient_name: normalizeShoppingIngredient(u.ingredient_name || u.ingredient, 1).name,
-        checked: Boolean(u.checked),
-      }))
-      .filter((u) => u.ingredient_name)
-      .slice(0, 500);
-
-    const updated_at = nowMs();
-    const scopeId = getShoppingScopeId(user.sub, family_id);
-    const statements = norm.map((u) => {
-      const val = u.checked ? 1 : 0;
-      return db
-        .prepare(
-          `INSERT INTO shopping_checked (scope_id, week_start, family_id, ingredient_name, checked, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(scope_id, week_start, ingredient_name)
-           DO UPDATE SET checked=excluded.checked, updated_at=excluded.updated_at`
-        )
-        .bind(scopeId, week_start, family_id, u.ingredient_name, val, updated_at);
-    });
-    await db.batch(statements);
-
-    return tracedJsonResponse('shopping.bulk.response', requestId, { ok: true, updated: norm.length, week_start }, 200);
-  } catch (e: unknown) {
-    const apiErr = toApiError(e);
-    return tracedJsonResponse('shopping.bulk.response', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    const result = await updateShoppingChecks({ db, userId: user.sub, body });
+    if (result.kind === 'invalid') return tracedJsonResponse('shopping.bulk.response', requestId, { error: result.error }, 400);
+    return tracedJsonResponse('shopping.bulk.response', requestId, { ok: true, updated: result.updated, week_start: result.weekStart }, 200);
+  } catch (error: unknown) {
+    const apiErr = toApiError(error);
+    return tracedJsonResponse('shopping.bulk.response', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'FORBIDDEN' ? 403 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };

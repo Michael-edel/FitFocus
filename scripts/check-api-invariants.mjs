@@ -994,7 +994,11 @@ assertIncludes(
   'weekly menu items save must enforce an explicit JSON body size limit',
 );
 
-const shoppingBulk = read('functions/api/shopping/bulk.ts');
+const shoppingBulkRoute = read('functions/api/shopping/bulk.ts');
+const shoppingBulk = [
+  shoppingBulkRoute,
+  read('functions/api/_lib/shopping_checks.ts'),
+].join('\n');
 assertIncludes(
   shoppingBulk,
   'await db.batch(statements);',
@@ -1002,10 +1006,10 @@ assertIncludes(
 );
 assertIncludes(
   shoppingBulk,
-  'const scopeId = getShoppingScopeId(user.sub, family_id);',
+  'const scopeId = shoppingScopeId(userId, familyId);',
   'shopping bulk updates must compute a stable scope id once per request',
 );
-if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includes('.run();')) {
+if (shoppingBulkRoute.includes('INSERT INTO shopping_checked') && shoppingBulkRoute.includes('.run();')) {
   console.error('shopping bulk updates must not execute per-item writes separately.');
   process.exitCode = 1;
 }
