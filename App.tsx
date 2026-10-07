@@ -120,6 +120,7 @@ import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -256,13 +257,13 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const [inviteCode, setInviteCode] = useState<string>('');
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const { inviteCode, setInviteCode } = useInviteCodeState(currentUser?.id);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
@@ -343,26 +344,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentUser?.id) resumeRemoteKVSync();
   }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const key = `fitfocus_data_${currentUser.id}_invite_code`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        setInviteCode(raw);
-        safeSetItem(key, raw);
-      }
-    } catch {}
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    try {
-      if (currentUser?.id) {
-        safeSetItem(`fitfocus_data_${currentUser.id}_invite_code`, inviteCode);
-      }
-    } catch {}
-  }, [inviteCode, currentUser?.id]);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
