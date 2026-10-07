@@ -10,6 +10,7 @@ import {
   parseAttachmentsJson,
   type SupportAttachmentRecord,
 } from "../_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 type SupportTicketOwnerRow = { id: string; user_id: string; attachments_json?: string | null };
@@ -31,7 +32,7 @@ function attachmentHeaders(attachment: SupportAttachmentRecord, fileName: string
   return headers;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleSupportAttachmentGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -101,4 +102,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const headers = attachmentHeaders(attachment, attachment.name);
   const body = inline.bytes.buffer.slice(inline.bytes.byteOffset, inline.bytes.byteOffset + inline.bytes.byteLength) as ArrayBuffer;
   return new Response(body, { status: 200, headers });
+};
+
+/** Correlates attachment delivery outcomes without logging ticket, file or user identifiers. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleSupportAttachmentGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.attachment.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

@@ -68,7 +68,7 @@ function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain'
   return async () => {
     const token = await signJwt({ sub: userId, sid: 'sid-1' });
     const request = new Request('https://fitfocus.test/api/support/attachment?id=ticket-1&messageId=message-1&index=0', {
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-attachment-test-01' },
     });
     const encoder = new TextEncoder();
     const bucket = {
@@ -105,6 +105,7 @@ describe('/api/support/attachment', () => {
     const response = await makeContext('user-1')();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('support-attachment-test-01');
     expect(response.headers.get('content-type')).toBe('text/plain');
     expect(await response.text()).toBe('hello');
   });
