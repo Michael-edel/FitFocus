@@ -5,6 +5,7 @@
 import { requireUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 type MobileSessionPayload = {
@@ -43,7 +44,7 @@ async function signSessionJwt(payload: MobileSessionPayload, secret: string, ttl
   return `${data}.${s}`;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleMobileTokenPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -91,4 +92,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     },
     200
   );
+};
+
+/** Correlates mobile-token outcomes without logging the token or account fields. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleMobileTokenPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('mobile.token.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
