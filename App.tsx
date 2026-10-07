@@ -47,7 +47,7 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
+import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
@@ -107,6 +107,7 @@ import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
+import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -926,8 +927,6 @@ const App: React.FC = () => {
   );
   const planUiSkipSaveRef = useRef(false);
   const [planIntroOpen, setPlanIntroOpen] = useState(false);
-  const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
-  const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
   const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
   const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
   const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
@@ -1132,21 +1131,15 @@ const App: React.FC = () => {
   }, [allUsers, normalizedAllUsers]);
 
   // ---- Weekly menus (personal + family) ----
-  const handleGenerateWeeklyMenu = useCallback(async () => {
-    if (!currentUser?.aiPlan) return;
-    setWeeklyMenuError(null);
-    setWeeklyMenuLoading(true);
-    try {
-      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
-      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
-      persistUser(updatedUser);
-      void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
-    } catch {
-      setWeeklyMenuError('Не удалось сгенерировать меню на неделю.');
-    } finally {
-      setWeeklyMenuLoading(false);
-    }
-  }, [checkAchievements, currentUser, persistUser]);
+  const {
+    weeklyMenuLoading,
+    weeklyMenuError,
+    handleGenerateWeeklyMenu,
+  } = useWeeklyMenuGeneration({
+    currentUser,
+    persistUser,
+    checkAchievements,
+  });
 
   const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
     const today = new Date().toLocaleDateString('en-CA');
