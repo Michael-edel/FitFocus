@@ -103,7 +103,7 @@ describe('public account endpoint errors', () => {
       ...baseContext(),
       request: new Request('https://fitfocus.test/api/logout_all', {
         method: 'POST',
-        headers: { Cookie: 'ff_session=bad-token' },
+        headers: { Cookie: 'ff_session=bad-token', 'X-Request-ID': 'logout-all-test-01' },
       }),
       env: { DB: makeDb() as unknown as D1Database } as unknown as LogoutAllContext['env'],
     });
@@ -111,6 +111,7 @@ describe('public account endpoint errors', () => {
     const bodyText = await response.text();
 
     expect(response.status).toBe(401);
+    expect(response.headers.get('X-Request-ID')).toBe('logout-all-test-01');
     expect(bodyText).toContain('"error":"UNAUTH"');
     expect(bodyText).not.toContain('AUTH_CONFIG');
     expect(bodyText).not.toContain('DB_CONFIG');
