@@ -4,6 +4,7 @@ import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } f
 import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
+import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
 import {
@@ -14,6 +15,7 @@ import {
 } from "../../aiModels";
 
 type JsonRecord = JsonObject;
+export { buildFallbackAdvice, calcTargetCalories } from './_lib/ai_fallback';
 
 
 /**
@@ -40,7 +42,6 @@ export interface Env {
   AUTH_JWT_SECRET?: string;
   GEMINI_TIMEOUT_MS?: string;
 }
-
 type GeminiPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
@@ -100,21 +101,6 @@ type AiEventArgs = {
   estimatedCostUsd?: number;
   isFallback?: boolean;
 };
-
-type MobileProfileLike = JsonObject & {
-  weight?: unknown;
-  weight_kg?: unknown;
-  weightKg?: unknown;
-  goal?: unknown;
-  goalType?: unknown;
-  activityLevel?: unknown;
-  activity_level?: unknown;
-  targetWeight?: unknown;
-  target_weight_kg?: unknown;
-  targetWeightKg?: unknown;
-};
-
-type UserProfileRow = { profile_json?: string | null };
 
 const EMPTY_USAGE_RECORD: UsageRecord = {
   count: 0,
@@ -469,8 +455,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
   // Emergency: force fallback for everyone (kill switch)
   if (emergencyFallback) {
-    const profile = await loadUserProfile(env, String(user.sub));
-    const fallback = buildFallback(feature, profile);
+    const profile = await loadAiFallbackProfile(env.DB, String(user.sub));
+    const fallback = buildAiFallback(feature, profile);
     await logAiEvent(env, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_emergency", isFallback: true });
     return jsonResponse({ ...fallback, text: JSON.stringify(fallback) }, 200, { "X-FF-AI-Fallback": "1" });
   }
@@ -504,8 +490,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
           return jsonV({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
         }
         // default: fallback
-        const profile = await loadUserProfile(env, String(user.sub));
-        const fallback = buildFallback(feature, profile);
+        const profile = await loadAiFallbackProfile(env.DB, String(user.sub));
+        const fallback = buildAiFallback(feature, profile);
         await logAiEvent(env, { userId: String(user.sub), feature, status: 200, latencyMs: 0, safeMode, requestJson: body, responseJson: fallback, error: null, model: "fallback_budget_guard", inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0, isFallback: true });
         return jsonV({ ok: true, data: fallback, fallback: true, limited: true, meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 200);
       }
@@ -666,8 +652,8 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     const errorCode = classifyAiFetchFailure(error);
 
     if (fallbackMode) {
-      const profile = await loadUserProfile(env, String(user.sub));
-      const fallback = buildFallback(feature, profile);
+      const profile = await loadAiFallbackProfile(env.DB, String(user.sub));
+      const fallback = buildAiFallback(feature, profile);
       await logAiEvent(env, {
         userId: String(user.sub),
         feature,
@@ -704,9 +690,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   // Gemini API обычно возвращает: candidates[].content.parts[].text
   const extractedText = extractTextFromGemini(data);
   // Fallback on quota/5xx: return a deterministic plan instead of breaking the product.
-  if (fallbackMode && (shouldFallback(geminiResp!.status) || isGeminiModelAvailabilityError(geminiResp!.status, data))) {
-    const profile = await loadUserProfile(env, String(user.sub));
-    const fallback = buildFallback(feature, profile);
+  if (fallbackMode && (shouldUseAiFallback(geminiResp!.status) || isGeminiModelAvailabilityError(geminiResp!.status, data))) {
+    const profile = await loadAiFallbackProfile(env.DB, String(user.sub));
+    const fallback = buildAiFallback(feature, profile);
     await logAiEvent(env, {
       userId: String(user.sub),
       feature,
@@ -795,115 +781,4 @@ function extractTextFromGemini(data: GeminiResponse): string {
 
   if (!parts.length && typeof data.output_text === 'string') return data.output_text;
   return parts.join('\n').trim();
-}
-
-
-// --- Fallback layer ---------------------------------------------------------
-// Когда Gemini недоступен/квота/ошибка, продукт не должен "умирать".
-// В fallback режиме возвращаем упрощённый, но полезный результат на основе профиля.
-async function loadUserProfile(env: Env, userId: string): Promise<JsonObject> {
-  try {
-    const row = await env?.DB?.prepare(
-      "SELECT profile_json FROM user_profiles WHERE user_id = ?"
-    ).bind(userId).first<UserProfileRow>();
-    if (!row?.profile_json) return {};
-    return safeJsonParseObject(row.profile_json) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-export function calcTargetCalories(profile: MobileProfileLike): number {
-  // Очень грубая оценка: если есть цель и активность — подстраиваем.
-  // Это fallback, не медицинская рекомендация.
-  const weight = Number(
-    profile?.weight ??
-    profile?.weight_kg ??
-    profile?.weightKg ??
-    70
-  );
-  const base = Math.round(weight * 30); // ~ поддержание
-  const goal = String(profile?.goal || profile?.goalType || "loss");
-  const activity = String(profile?.activityLevel || profile?.activity_level || "medium");
-  let adj = 0;
-  if (goal === "loss") adj -= 350;
-  else if (goal === "gain") adj += 250;
-  if (activity === "low") adj -= 150;
-  else if (activity === "high") adj += 150;
-  const cals = Math.max(1200, base + adj);
-  return cals;
-}
-
-function buildFallbackWeeklyMenu(profile: MobileProfileLike) {
-  const target = calcTargetCalories(profile);
-  const perMeal = Math.round(target / 3);
-  const days = [
-    "Понедельник",
-    "Вторник",
-    "Среда",
-    "Четверг",
-    "Пятница",
-    "Суббота",
-    "Воскресенье",
-  ].map((day) => ({
-    day,
-    targetCalories: target,
-    meals: [
-      { name: "Завтрак", calories: perMeal, idea: "Овсянка + йогурт/творог + ягоды" },
-      { name: "Обед", calories: perMeal, idea: "Курица/рыба + крупа + овощной салат" },
-      { name: "Ужин", calories: perMeal, idea: "Омлет/творог/рыба + овощи" },
-    ],
-  }));
-
-  return {
-    fallback: true,
-    reason: "AI temporarily unavailable",
-    targetCalories: target,
-    days,
-    notes: [
-      "Это временный план (fallback), чтобы приложение работало без перебоев.",
-      "При восстановлении AI вы сможете сгенерировать более точное меню.",
-    ],
-  };
-}
-
-export function buildFallbackAdvice(profile: MobileProfileLike) {
-  const target = calcTargetCalories(profile);
-  const w = profile?.weight ?? profile?.weight_kg ?? profile?.weightKg;
-  const tw = profile?.targetWeight ?? profile?.target_weight_kg ?? profile?.targetWeightKg;
-  const act = profile?.activityLevel ?? profile?.activity_level;
-  return {
-    fallback: true,
-    reason: "AI temporarily unavailable",
-    agreement: 0.88,
-    experts: [
-      { name: "Диетолог", summary: [`Цель: ~${target} ккал/день`, "Белок в каждом приёме пищи", "Овощи 400–600 г/день"] },
-      { name: "Тренер", summary: ["3–4 тренировки/нед (или 8–10k шагов/день)", "Прогрессия нагрузки", "Разминка/заминка"] },
-      { name: "Психолог", summary: ["Планируй 1–2 " + "любимые" + " еды в неделю без чувства вины", "Сон 7–8 часов", "Фиксируй триггеры переедания"] },
-      { name: "Стратег", summary: ["Держи дефицит умеренным", "Следи за средним весом по неделе", "Одна привычка за раз"] },
-    ],
-    plan: {
-      profileSnapshot: { weight: w ?? null, targetWeight: tw ?? null, activity: act ?? null },
-      steps: [
-        "Собери тарелку: 1/2 овощи, 1/4 белок, 1/4 сложные углеводы.",
-        "Пей воду и добавь лёгкую активность каждый день.",
-        "Отслеживай питание 3 дня для калибровки.",
-      ],
-    },
-  };
-}
-
-function buildFallback(feature: string, profile: MobileProfileLike) {
-  if (feature === "weekly_menu" || feature === "menu_week" || feature === "weekly_plan") {
-    return buildFallbackWeeklyMenu(profile);
-  }
-  return buildFallbackAdvice(profile);
-}
-
-function shouldFallback(status: number): boolean {
-  // 429 (quota), 5xx (server), 0/NaN
-  if (!status || Number.isNaN(status)) return true;
-  if (status === 429) return true;
-  if (status >= 500) return true;
-  return false;
 }

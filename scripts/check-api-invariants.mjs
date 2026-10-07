@@ -867,7 +867,10 @@ for (const legacyNeedle of [
   }
 }
 
-const aiRoute = read('functions/api/ai.ts');
+const aiRoute = [
+  read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_fallback.ts'),
+].join('\n');
 assertIncludes(
   aiRoute,
   'profile?.weight ??',
