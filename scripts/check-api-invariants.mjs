@@ -515,15 +515,18 @@ assertIncludes(
   'soft account delete must batch family cleanup and session revocation',
 );
 
-const adminAiLogs = read('functions/api/admin/ai_logs.ts');
+const adminAiLogs = [
+  read('functions/api/admin/ai_logs.ts'),
+  read('functions/api/_lib/admin_ai_logs.ts'),
+].join('\n');
 assertIncludes(
   adminAiLogs,
-  'toInt(url.searchParams.get("limit"), 50)',
+  "boundedInt(searchParams.get('limit'), 50, 1, 200)",
   'admin ai logs must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
   adminAiLogs,
-  'return json({ error: "UNAUTH" }, 401);',
+  "return json({ error: 'UNAUTH' }, 401);",
   'admin ai logs must return 401 for unauthenticated requests',
 );
 

@@ -116,6 +116,7 @@ describe('admin query params', () => {
     const invalidResponse = await getAiLogs(invalidContext);
 
     expect(invalidResponse.status).toBe(200);
+    expect(invalidResponse.headers.get('X-Request-ID')).toBe('admin-events-test-01');
     let query = db.allCalls.find((call) => call.sql.includes('FROM ai_events'));
     expect(query?.binds.at(-1)).toBe(50);
 
