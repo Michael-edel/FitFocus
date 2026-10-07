@@ -117,6 +117,7 @@ import { useSettingsPersistence } from './features/settings/useSettingsPersisten
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
+import { useRefeedSchedule } from './features/adaptation/useRefeedSchedule';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
@@ -434,7 +435,7 @@ const App: React.FC = () => {
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
   const [adaptNote, setAdaptNote] = useState<string>('');
-  const [refeedDate, setRefeedDate] = useState<string | null>(null);
+  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(currentUser?.id);
 
   const {
     adaptExpanded,
@@ -1230,25 +1231,6 @@ await ensurePdfInterFont(doc);
     if (adaptationIndex >= 45) return { type: 'adjust' as const, stepsExtra: 2000 };
     return { type: 'stay' as const };
   }, [currentUser, compliancePct, adaptationIndex, targets.calories]);
-
-  const scheduleRefeedTomorrow = useCallback(() => {
-    if (!currentUser) return;
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const value = localDayKey(d);
-    safeSetItem(key, value);
-    setRefeedDate(value);
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const value = localStorage.getItem(key);
-    if (value) {
-      safeSetItem(key, value);
-    }
-    setRefeedDate(value);
-  }, [currentUser?.id]);
 
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
     if (!currentUser) return false;
