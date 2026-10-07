@@ -630,15 +630,18 @@ assertIncludes(
   'admin subscription endpoint must write subscription and audit event through one batch',
 );
 
-const adminInvites = read('functions/api/admin/invites.ts');
+const adminInvites = [
+  read('functions/api/admin/invites.ts'),
+  read('functions/api/_lib/admin_invites.ts'),
+].join('\n');
 assertIncludes(
   adminInvites,
-  'toInt(url.searchParams.get("limit"), 100)',
+  'boundedInt(rawLimit, 100, 1, 200)',
   'admin invite list must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
   adminInvites,
-  'typeof body?.revoked !== "boolean"',
+  "typeof body.revoked !== 'boolean'",
   'admin invite update must require explicit boolean revoked values',
 );
 assertIncludes(
@@ -648,12 +651,12 @@ assertIncludes(
 );
 assertIncludes(
   adminInvites,
-  'action: "invite_update"',
+  "action: 'invite_update'",
   'admin invite update must write an audit event',
 );
 assertIncludes(
   adminInvites,
-  'action: "invite_create"',
+  "action: 'invite_create'",
   'admin invite creation must write an audit event',
 );
 assertIncludes(

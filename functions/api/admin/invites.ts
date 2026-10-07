@@ -1,160 +1,70 @@
 // /api/admin/invites
-// GET: list invite codes (admin only)
-// POST: create invite code (admin only)
-// PUT: revoke/unrevoke invite code (admin only)
-import { json, requireUser } from "../_lib/auth";
-import { requireDB, randomCode, nowMs, toApiError } from "../_lib/db";
-import { requireRole } from "../_lib/rbac";
-import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
-import { isJsonObject } from "../_lib/json";
+// GET: list invite codes; POST: create; PUT: revoke/unrevoke (admin only).
+import { json, requireUser } from '../_lib/auth';
+import { requireDB, toApiError } from '../_lib/db';
+import { requireRole } from '../_lib/rbac';
+import { requireAdminRequest } from '../_lib/admin_guard';
+import { createAdminInvites, listAdminInvites, updateAdminInvite } from '../_lib/admin_invites';
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
-type MutationResult = { meta?: { changes?: number }; changes?: number };
-type InviteListRow = {
-  code: string;
-  created_at?: number;
-  created_by?: string | null;
-  note?: string | null;
-  max_uses?: number | null;
-  uses?: number | null;
-  expires_at?: number | null;
-  revoked?: number | null;
-  redemption_count?: number | null;
-  last_redeemed_at?: number | null;
-};
 
-function changedRows(result: MutationResult): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+function errorResponse(error: unknown) {
+  if (error instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413);
+  const apiError = toApiError(error);
+  return json({ error: apiError }, apiError.code === 'UNAUTH' ? 401 : apiError.code === 'FORBIDDEN' ? 403 : 400);
 }
 
-function toInt(value: unknown, fallback: number) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+async function requireAdmin(context: Parameters<PagesFunction<Env>>[0]) {
+  const user = await requireUser(context.request, context.env);
+  requireRole(user, 'admin');
+  const db = requireDB(context.env);
+  await requireAdminRequest(user, context.request, db);
+  return { user, db };
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminInvitesGet: PagesFunction<Env> = async (context) => {
   try {
-    const user = await requireUser(request, env);
-    requireRole(user, "admin");
-    const db = requireDB(env);
-    await requireAdminRequest(user, request, db);
-
-    const url = new URL(request.url);
-    const limit = Math.max(1, Math.min(200, toInt(url.searchParams.get("limit"), 100)));
-
-    const rows = await db
-      .prepare(
-        `SELECT ic.code, ic.created_at, ic.created_by, ic.note, ic.max_uses, ic.uses, ic.expires_at, ic.revoked,
-                COALESCE(r.redemption_count, 0) AS redemption_count,
-                r.last_redeemed_at
-         FROM invite_codes ic
-         LEFT JOIN (
-           SELECT code, COUNT(*) AS redemption_count, MAX(redeemed_at) AS last_redeemed_at
-           FROM invite_redemptions
-           GROUP BY code
-         ) r ON r.code = ic.code
-         ORDER BY created_at DESC
-         LIMIT ?`
-      )
-      .bind(limit)
-      .all<InviteListRow>();
-
-    return json({ invites: rows.results || [] }, 200);
-  } catch (e: unknown) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    const { db } = await requireAdmin(context);
+    const data = await listAdminInvites(db, new URL(context.request.url).searchParams.get('limit'));
+    return json({ invites: data.invites }, 200);
+  } catch (error) {
+    return errorResponse(error);
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminInvitesPost: PagesFunction<Env> = async (context) => {
   try {
-    const user = await requireUser(request, env);
-    requireRole(user, "admin");
-    const db = requireDB(env);
-    await requireAdminRequest(user, request, db);
-
-    const body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
-    const payload = isJsonObject(body) ? body : {};
-    const note = String(payload.note || "").trim();
-    const count = Math.max(1, Math.min(50, Number.isFinite(payload.count) ? Math.floor(Number(payload.count)) : 1));
-    const maxUses = Number.isFinite(payload.max_uses) ? Math.max(1, Math.min(1000, Number(payload.max_uses))) : 1;
-    const maxExpiryMs = nowMs() + 30 * 24 * 60 * 60 * 1000;
-    const requestedExpiresAt = payload.expires_at ? Number(payload.expires_at) : null;
-    const expiresAt = Number.isFinite(requestedExpiresAt) && requestedExpiresAt > 0
-      ? Math.min(requestedExpiresAt, maxExpiryMs)
-      : null;
-
-    const createdAt = nowMs();
-    const codes: string[] = [];
-    const statements: D1PreparedStatement[] = [];
-
-    for (let idx = 0; idx < count; idx += 1) {
-      const code = randomCode(10);
-      const rowNote = count > 1 ? `${note || "invite"} #${idx + 1}` : note;
-
-      statements.push(db
-        .prepare(
-          `INSERT INTO invite_codes (code, created_at, created_by, note, max_uses, uses, expires_at, revoked)
-           VALUES (?, ?, ?, ?, ?, 0, ?, 0)`
-        )
-        .bind(code, createdAt, user.sub, rowNote, maxUses, expiresAt));
-
-      codes.push(code);
-    }
-
-    statements.push(buildAdminEventStatement(db, {
-      adminUserId: user.sub,
-      action: "invite_create",
-      targetUserId: null,
-      meta: { codes, count, max_uses: maxUses, note, expires_at: expiresAt, expiry_cap_days: 30 },
-    }));
-
-    await db.batch(statements);
-
-    return json({ ok: true, code: codes[0], codes }, 200);
-  } catch (e: unknown) {
-    if (e instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    const { user, db } = await requireAdmin(context);
+    const body = await readJsonRequest(context.request, SMALL_JSON_BODY_LIMIT_BYTES);
+    return json(await createAdminInvites(db, user.sub, body), 200);
+  } catch (error) {
+    return errorResponse(error);
   }
 };
 
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminInvitesPut: PagesFunction<Env> = async (context) => {
   try {
-    const user = await requireUser(request, env);
-    requireRole(user, "admin");
-    const db = requireDB(env);
-    await requireAdminRequest(user, request, db);
-
-    const body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
-    if (!isJsonObject(body)) throw new Error("BAD_REQUEST");
-    const code = String(body.code || "").trim();
-    if (typeof body?.revoked !== "boolean") throw new Error("BAD_REQUEST");
-    const revoked = body.revoked ? 1 : 0;
-    if (!code) throw new Error("BAD_REQUEST");
-
-    const inviteStatement = db.prepare("UPDATE invite_codes SET revoked = ? WHERE code = ?").bind(revoked, code);
-    const auditStatement = buildAdminEventAfterChangeStatement(db, {
-      adminUserId: user.sub,
-      action: "invite_update",
-      targetUserId: null,
-      meta: { code, revoked },
-    });
-    const [inviteResult] = await db.batch([inviteStatement, auditStatement]);
-    if (changedRows(inviteResult) === 0) {
-      return json({ error: "NOT_FOUND", message: "invite code not found" }, 404);
-    }
-
-    return json({ ok: true, code, revoked: revoked === 1 }, 200);
-  } catch (e: unknown) {
-    if (e instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+    const { user, db } = await requireAdmin(context);
+    const body = await readJsonRequest(context.request, SMALL_JSON_BODY_LIMIT_BYTES);
+    const result = await updateAdminInvite(db, user.sub, body);
+    if (result.kind === 'invalid') return json({ error: 'BAD_REQUEST' }, 400);
+    if (result.kind === 'not-found') return json({ error: 'NOT_FOUND', message: 'invite code not found' }, 404);
+    return json({ ok: true, code: result.code, revoked: result.revoked }, 200);
+  } catch (error) {
+    return errorResponse(error);
   }
 };
+
+async function trace(context: Parameters<PagesFunction<Env>>[0], event: string, handler: PagesFunction<Env>) {
+  const response = await handler(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent(event, { requestId, status: response.status });
+  return withRequestId(response, requestId);
+}
+
+/** Traces only operation and result; invitation codes and notes stay out of events. */
+export const onRequestGet: PagesFunction<Env> = (context) => trace(context, 'admin.invites.get.response', handleAdminInvitesGet);
+export const onRequestPost: PagesFunction<Env> = (context) => trace(context, 'admin.invites.post.response', handleAdminInvitesPost);
+export const onRequestPut: PagesFunction<Env> = (context) => trace(context, 'admin.invites.put.response', handleAdminInvitesPut);
