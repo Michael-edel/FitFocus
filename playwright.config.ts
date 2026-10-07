@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const npmCommand = process.env.npm_execpath
+  ? `${JSON.stringify(process.execPath)} ${JSON.stringify(process.env.npm_execpath)}`
+  : 'npm';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
@@ -18,7 +22,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
+    command: `${npmCommand} run build && ${npmCommand} run preview -- --host 127.0.0.1 --port 4173`,
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
