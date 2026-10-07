@@ -845,7 +845,10 @@ assertNotIncludes(
   'billing webhook must not read unbounded request bodies',
 );
 
-const exportRoute = read('functions/api/export.ts');
+const exportRoute = [
+  read('functions/api/export.ts'),
+  read('functions/api/_lib/user_data_export.ts'),
+].join('\n');
 assertIncludes(
   exportRoute,
   'SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits',

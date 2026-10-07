@@ -42,7 +42,10 @@ describe('security and privacy baseline', () => {
   });
 
   it('does not export push subscription credentials or broad support rows', () => {
-    const exportRoute = read('functions/api/export.ts');
+    const exportRoute = [
+      read('functions/api/export.ts'),
+      read('functions/api/_lib/user_data_export.ts'),
+    ].join('\n');
 
     expect(exportRoute).toContain('FROM push_subscriptions');
     expect(exportRoute).not.toContain('endpoint, p256dh, auth');
