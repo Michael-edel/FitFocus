@@ -6,8 +6,9 @@ import { requireDB, nowMs } from "../../_lib/db";
 import { requireRole } from "../../_lib/rbac";
 import { requireAdminRequest } from "../../_lib/admin_guard";
 import { buildAdminEventStatement } from "../../_lib/admin_audit";
-import { buildPushPayload, sendPushNotification } from "../../_lib/push";
+import { buildPushPayload } from "../../_lib/push";
 import { selectPushRecipients } from '../../_lib/push_recipient_selection';
+import { deliverPushNotifications } from '../../_lib/push_delivery';
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { asBoolean, asString, asStringArray, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 
@@ -90,8 +91,6 @@ type Recipient = PushRecipientRow & {
   familyIds: string[];
 };
 
-const PUSH_SEND_CONCURRENCY = 8;
-
 function toText(value: unknown, fallback = "") {
   return asString(value, fallback);
 }
@@ -123,22 +122,6 @@ function asFamilyIds(value: unknown): string[] {
 
 function normalizeStringArray(value: unknown): string[] {
   return asStringArray(value);
-}
-
-function isGoneError(error: unknown) {
-  if (!isJsonObject(error)) return false;
-  const status = Number(error?.statusCode || error?.status || error?.code || 0);
-  return status === 404 || status === 410;
-}
-
-function pushErrorDetails(error: unknown) {
-  const errorObject = isJsonObject(error) ? error : null;
-  const status = Number(errorObject?.statusCode || errorObject?.status || errorObject?.code || 0);
-  const message = String(errorObject?.message || error || "PUSH_ERROR").slice(0, 240);
-  return {
-    status: Number.isFinite(status) && status > 0 ? status : null,
-    message,
-  };
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -336,59 +319,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }, 200);
   }
 
-  let sent = 0;
-  let failed = 0;
-  let removed = 0;
-  const failures: Array<{ id: string; status: number | null; message: string; removed: boolean }> = [];
-  const statements: D1PreparedStatement[] = [];
-
-  for (let start = 0; start < selectedRecipients.length; start += PUSH_SEND_CONCURRENCY) {
-    const batch = selectedRecipients.slice(start, start + PUSH_SEND_CONCURRENCY);
-    const deliveries = await Promise.all(batch.map(async (recipient) => {
-      try {
-        await sendPushNotification(env, recipient, payload);
-        return { recipient, error: null };
-      } catch (error) {
-        return { recipient, error };
-      }
-    }));
-
-    for (const delivery of deliveries) {
-      const { recipient, error } = delivery;
-      if (!error) {
-        const sentAt = nowMs();
-        statements.push(
-          db.prepare("UPDATE push_subscriptions SET last_sent_at = ?, last_error = NULL, updated_at = ? WHERE id = ?")
-            .bind(sentAt, sentAt, recipient.id),
-        );
-        sent += 1;
-        continue;
-      }
-
-      failed += 1;
-      const details = pushErrorDetails(error);
-      const removedSubscription = isGoneError(error);
-      failures.push({
-        id: recipient.id,
-        ...details,
-        removed: removedSubscription,
-      });
-      if (removedSubscription) {
-        statements.push(db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(recipient.id));
-        removed += 1;
-      } else {
-        const updatedAt = nowMs();
-        statements.push(
-          db.prepare("UPDATE push_subscriptions SET last_error = ?, updated_at = ? WHERE id = ?")
-            .bind(details.message, updatedAt, recipient.id),
-        );
-      }
-    }
-  }
-
-  if (statements.length) {
-    await db.batch(statements);
-  }
+  const { sent, failed, removed, failures } = await deliverPushNotifications({
+    db,
+    env,
+    recipients: selectedRecipients,
+    payload,
+  });
 
   const auditStatement = buildAdminEventStatement(db, {
     adminUserId: user.sub,
