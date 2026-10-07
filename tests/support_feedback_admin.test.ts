@@ -128,6 +128,7 @@ async function getTickets(db: ReturnType<typeof makeDb>, query = '') {
   const request = new Request(`https://fitfocus.test/api/support/feedback${query}`, {
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-Request-ID': 'support-admin-get-test-01',
     },
   });
 
@@ -153,6 +154,7 @@ async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'support-admin-patch-test-01',
     },
     body,
   });
@@ -175,6 +177,7 @@ async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, cont
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': contentType,
+      'X-Request-ID': 'support-create-test-01',
     },
     body,
   });
@@ -194,6 +197,7 @@ async function postTicketForm(db: ReturnType<typeof makeDb>, form: FormData, ext
   const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
   const headers = new Headers({
     Cookie: `ff_session=${token}`,
+    'X-Request-ID': 'support-create-test-01',
     ...extraHeaders,
   });
   const request = new Request('https://fitfocus.test/api/support/feedback', {
@@ -220,6 +224,7 @@ describe('admin support ticket updates', () => {
     const res = await getTickets(db, '?limit=abc');
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-admin-get-test-01');
     const query = db.allCalls.find((call) => call.sql.includes('FROM support_feedback s'));
     expect(query?.binds.at(-1)).toBe(20);
   });
@@ -291,6 +296,7 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-create-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback ('))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
@@ -370,6 +376,7 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-admin-patch-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(true);

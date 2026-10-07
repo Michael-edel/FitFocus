@@ -13,6 +13,7 @@ import {
   SUPPORT_FORM_BODY_LIMIT_BYTES,
 } from "../_lib/request_body";
 import { fileToAttachment, SupportAttachmentTooLargeError, type SupportAttachmentBucket, type SupportAttachmentRecord } from "../_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
@@ -168,14 +169,18 @@ async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  let response: Response;
   try {
-    return await handleSupportPost(context);
+    response = await handleSupportPost(context);
   } catch {
-    return json({ error: "SERVER_ERROR", public_message: "Не удалось отправить обращение. Попробуйте ещё раз позже." }, 500);
+    response = json({ error: "SERVER_ERROR", public_message: "Не удалось отправить обращение. Попробуйте ещё раз позже." }, 500);
   }
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.create.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
-export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
+const handleSupportPatch: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -213,7 +218,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   });
 };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleSupportGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -244,4 +249,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({
     tickets: await listAdminSupportTickets(db, status, limit),
   });
+};
+
+/** Keeps support administration responses traceable without logging tickets or attachments. */
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const response = await handleSupportPatch(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.admin.patch.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
+};
+
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleSupportGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.admin.get.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
