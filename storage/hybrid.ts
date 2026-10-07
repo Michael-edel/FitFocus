@@ -1,5 +1,12 @@
 import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
+import {
+  clearIndexedUserStateForUser,
+  isIndexedUserStateStorageKey,
+  readIndexedUserStateRaw,
+  renameIndexedUserStatePrefix,
+  writeIndexedUserStateRaw,
+} from './indexedUserState';
 
 type KVItem = { key: string; value: string; baseVersion?: number };
 type ProfileLike = {
@@ -118,7 +125,11 @@ function setStoredVersion(key: string, version?: number) {
 
 async function applyRemoteKVConflict(key: string, serverValue: string, version?: number) {
   try {
-    localStorage.setItem(key, serverValue);
+    if (isIndexedUserStateStorageKey(key) && await writeIndexedUserStateRaw(key, serverValue)) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, serverValue);
+    }
     setStoredVersion(key, version);
   } catch {
     // ignore
@@ -249,7 +260,9 @@ async function flushRemoteKVOperations(): Promise<void> {
             }
             if (response.status === 409 && payload?.key) {
               const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
-              const currentValue = localStorage.getItem(operation.key);
+              const currentValue = isIndexedUserStateStorageKey(operation.key)
+                ? await readIndexedUserStateRaw(operation.key)
+                : localStorage.getItem(operation.key);
               if (typeof currentValue === 'string' && currentValue === operation.value && serverVersion) {
                 setStoredVersion(operation.key, serverVersion);
                 completeRemoteKVOperation(operation);
@@ -305,7 +318,7 @@ async function flushRemoteKVOperations(): Promise<void> {
   }
 }
 
-function enqueueRemoteKVWrite(key: string, value: string) {
+export function enqueueRemoteKVWrite(key: string, value: string) {
   if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
   setPendingRemoteKVOperation({
     type: 'put',
@@ -316,7 +329,7 @@ function enqueueRemoteKVWrite(key: string, value: string) {
   scheduleRemoteKVSync();
 }
 
-function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
+export function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
   if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
   setPendingRemoteKVOperation({ type: 'delete', key, baseVersion });
   scheduleRemoteKVSync();
@@ -375,6 +388,7 @@ export function clearLocalUserData(userId: string | null | undefined): number {
   } catch {
     // Best effort: storage can be unavailable or quota-restricted in private mode.
   }
+  void clearIndexedUserStateForUser(normalizedUserId);
   return keysToRemove.length;
 }
 
@@ -408,6 +422,7 @@ export function renameLocalStoragePrefix(oldPrefix: string, newPrefix: string) {
       // Best-effort migration only.
     }
   }
+  void renameIndexedUserStatePrefix(oldPrefix, newPrefix);
 }
 
 export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: unknown[]) {
@@ -532,7 +547,17 @@ export function applyRemoteStateItems(input: unknown) {
   for (const item of input) {
     if (!isRemoteStateItem(item)) continue;
     try {
-      localStorage.setItem(item.key, item.value);
+      if (isIndexedUserStateStorageKey(item.key)) {
+        void writeIndexedUserStateRaw(item.key, item.value).then((stored) => {
+          if (stored) {
+            try { localStorage.removeItem(item.key); } catch {}
+            return;
+          }
+          try { localStorage.setItem(item.key, item.value); } catch {}
+        });
+      } else {
+        localStorage.setItem(item.key, item.value);
+      }
       if (typeof item.version === 'number') {
         setStoredVersion(item.key, item.version);
       }

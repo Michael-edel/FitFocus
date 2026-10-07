@@ -26,7 +26,7 @@ function params(overrides: Partial<Parameters<typeof refreshWeeklyAiReport>[0]> 
       await generateAI();
       return { report: { weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }, isNew: true };
     },
-    loadReports: vi.fn().mockReturnValue([]),
+    loadReports: vi.fn().mockResolvedValue([]),
     isSoftError: vi.fn().mockReturnValue(false),
     logError: vi.fn(),
     ...overrides,
@@ -36,7 +36,7 @@ function params(overrides: Partial<Parameters<typeof refreshWeeklyAiReport>[0]> 
 describe('weekly AI report feature', () => {
   it('requests the shared weekly context and refreshes the saved reports', async () => {
     const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
-    const input = params({ loadReports: vi.fn().mockReturnValue(reports) });
+    const input = params({ loadReports: vi.fn().mockResolvedValue(reports) });
 
     await refreshWeeklyAiReport(input);
 

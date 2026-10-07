@@ -87,7 +87,7 @@ describe('AI retry feature', () => {
         await generateAI();
         return { report: reports[0], isNew: true };
       },
-      loadReports: () => reports,
+      loadReports: async () => reports,
     });
 
     await retryLastAiAction(input);

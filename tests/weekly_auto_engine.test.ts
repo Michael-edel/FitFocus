@@ -32,6 +32,7 @@ const weeklyData: WeeklyIntelligenceResult = {
 describe('weekly AI reports', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
     vi.setSystemTime(new Date('2026-10-06T09:00:00.000Z'));
     vi.stubGlobal('localStorage', createLocalStorage());
     vi.stubGlobal('window', {
@@ -45,7 +46,7 @@ describe('weekly AI reports', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reads reports saved under the existing user-scoped key', () => {
+  it('migrates reports saved under the existing user-scoped key', async () => {
     localStorage.setItem('fitfocus_data_user-1_weekly_reports', JSON.stringify([{
       weekKey: '2026-41',
       createdAt: '2026-10-06T09:00:00.000Z',
@@ -53,7 +54,7 @@ describe('weekly AI reports', () => {
       aiText: 'Продолжайте текущий план.',
     }]));
 
-    expect(loadWeeklyReports('user-1')).toEqual([{
+    expect(await loadWeeklyReports('user-1')).toEqual([{
       weekKey: '2026-41',
       createdAt: '2026-10-06T09:00:00.000Z',
       data: weeklyData,
@@ -65,7 +66,7 @@ describe('weekly AI reports', () => {
     const result = await ensureWeeklyReportWithAI('user-1', weeklyData, vi.fn().mockResolvedValue('Хорошая динамика.'));
 
     expect(result.isNew).toBe(true);
-    expect(localStorage.getItem('fitfocus_data_user-1_weekly_reports')).toContain('Хорошая динамика.');
+    expect(await loadWeeklyReports('user-1')).toMatchObject([{ aiText: 'Хорошая динамика.' }]);
 
     await vi.advanceTimersByTimeAsync(400);
     expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));

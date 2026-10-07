@@ -2,7 +2,8 @@ import { parseJson } from '../safeJson';
 import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem } from '../types';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { safeRemoveItem, safeSetItem } from './hybrid';
+import { enqueueRemoteKVWrite, safeRemoveItem, safeSetItem } from './hybrid';
+import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './indexedUserState';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
 
@@ -50,7 +51,46 @@ export class UserStateRepository {
   }
 
   writeJson<K extends UserStateKey>(stateKey: K, value: UserStateValue[K]): void {
-    safeSetItem(this.key(stateKey), JSON.stringify(value));
+    const key = this.key(stateKey);
+    const raw = JSON.stringify(value);
+    if (!isIndexedUserStateStorageKey(key)) {
+      safeSetItem(key, raw);
+      return;
+    }
+
+    void writeIndexedUserStateRaw(key, raw).then((stored) => {
+      if (!stored) {
+        safeSetItem(key, raw);
+        return;
+      }
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+      enqueueRemoteKVWrite(key, raw);
+    });
+  }
+
+  async readJsonAsync<T>(stateKey: UserStateKey, fallback: T, isValid: (value: unknown) => value is T): Promise<T> {
+    const key = this.key(stateKey);
+    const indexedRaw = await readIndexedUserStateRaw(key);
+    const raw = indexedRaw ?? (() => {
+      try { return localStorage.getItem(key); } catch { return null; }
+    })();
+    if (!raw) return fallback;
+    try {
+      const parsed = parseJson(raw);
+      if (!isValid(parsed)) return fallback;
+      if (!indexedRaw && isIndexedUserStateStorageKey(key)) {
+        void writeIndexedUserStateRaw(key, raw).then((stored) => {
+          if (stored) {
+            try { localStorage.removeItem(key); } catch {}
+          }
+        });
+      }
+      return parsed;
+    } catch {
+      return fallback;
+    }
   }
 
   remove(stateKey: UserStateKey): void {

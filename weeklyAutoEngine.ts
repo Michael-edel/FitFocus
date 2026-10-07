@@ -48,8 +48,8 @@ function clearInFlight(userId: string) {
   localStorage.removeItem(inFlightKey(userId));
 }
 
-export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
-  return new UserStateRepository(userId).readJson(
+export async function loadWeeklyReports(userId: string): Promise<WeeklyStoredReport[]> {
+  return new UserStateRepository(userId).readJsonAsync(
     'weekly_reports',
     [],
     (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyStoredReport),
@@ -84,7 +84,7 @@ export async function ensureWeeklyReportWithAI(
   generateAI: () => Promise<string>
 ): Promise<{ report: WeeklyStoredReport; isNew: boolean }> {
   const currentWeek = getWeekKey();
-  const reports = loadWeeklyReports(userId);
+  const reports = await loadWeeklyReports(userId);
 
   const existingIdx = reports.findIndex(r => r.weekKey === currentWeek);
   

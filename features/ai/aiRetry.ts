@@ -135,7 +135,7 @@ export async function retryLastAiAction({
       );
     };
     await ensureWeeklyReport(currentUser.id, weekly, generateAI);
-    setWeeklyReports(loadReports(currentUser.id));
+    setWeeklyReports(await loadReports(currentUser.id));
   } catch (error) {
     logError(error);
   }

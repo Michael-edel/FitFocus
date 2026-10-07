@@ -22,6 +22,7 @@ function createLocalStorage(): Storage {
 describe('UserStateRepository', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('indexedDB', undefined);
     vi.stubGlobal('localStorage', createLocalStorage());
     vi.stubGlobal('window', {
       setTimeout: (handler: () => void, delay?: number) => setTimeout(handler, delay) as unknown as number,
@@ -51,7 +52,7 @@ describe('UserStateRepository', () => {
       timestamp: '2026-10-06T08:00:00.000Z',
     }]);
 
-    expect(localStorage.getItem('fitfocus_data_user-1_diary')).toContain('"id":"meal-1"');
+    expect(await repository.readJsonAsync('diary', [], Array.isArray)).toMatchObject([{ id: 'meal-1' }]);
     await vi.advanceTimersByTimeAsync(400);
     expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));
   });

@@ -111,7 +111,7 @@ export function prependFavoriteRecipe(recipes: FavoriteRecipe[], recipe: Favorit
   return [recipe, ...recipes].slice(0, 100);
 }
 
-type FavoriteRecipeRepository = Pick<UserStateRepository, 'readJson' | 'writeJson'>;
+type FavoriteRecipeRepository = Pick<UserStateRepository, 'readJsonAsync' | 'writeJson'>;
 
 export function useFavoriteRecipes({
   userId,
@@ -128,10 +128,14 @@ export function useFavoriteRecipes({
       return;
     }
     if (!repository) return;
-    const stored = repository.readJson<unknown[]>('favorite_recipes', [], Array.isArray);
-    const normalized = stored.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
-    setFavoriteRecipes(normalized);
-    repository.writeJson('favorite_recipes', normalized);
+    let active = true;
+    void repository.readJsonAsync<unknown[]>('favorite_recipes', [], Array.isArray).then((stored) => {
+      if (!active) return;
+      const normalized = stored.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
+      setFavoriteRecipes(normalized);
+      repository.writeJson('favorite_recipes', normalized);
+    });
+    return () => { active = false; };
   }, [repository, userId]);
 
   const persistFavorites = useCallback((next: FavoriteRecipe[]) => {

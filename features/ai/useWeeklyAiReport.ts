@@ -49,7 +49,7 @@ export async function refreshWeeklyAiReport({
         buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
       );
     });
-    setWeeklyReports(loadReports(currentUser.id));
+    setWeeklyReports(await loadReports(currentUser.id));
   } catch (error) {
     if (!isSoftError(error)) logError(error);
     weeklyReportGenerationRef.current = null;
