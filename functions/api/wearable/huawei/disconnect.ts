@@ -6,6 +6,7 @@ import { ensureHuaweiConnectionsSchema, huaweiProviderId, type HuaweiHealthEnv }
 import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { loadActivePlan } from "../../_lib/plans";
+import { normalizeProfileRecord } from '../../_lib/profile_contract';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -15,7 +16,7 @@ async function loadProfile(db: D1Database, userId: string): Promise<{ profile: J
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
   return {
-    profile: row?.profile_json ? (safeJsonParseObject(String(row.profile_json)) || {}) : {},
+    profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {},
     version: Number(row?.version || 0),
   };
 }
@@ -41,12 +42,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const version = current.version + 1;
   const plan = await loadActivePlan(db, user.sub);
-  const nextProfile = withProtectedFields(user, {
+  const nextProfile = withProtectedFields(user, normalizeProfileRecord({
     ...profile,
     plan,
     version,
     wearableEnabled: false,
-  });
+  }));
   await db
     .prepare(
       "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +

@@ -9,6 +9,7 @@ import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES 
 import { loadActivePlan } from "../_lib/plans";
 import { withProtectedFields } from "../_lib/legacy_sync";
 import { writeProfileCas } from "../_lib/profile_cas";
+import { normalizeProfileRecord } from '../_lib/profile_contract';
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "../_lib/json";
 import { toLocalDayKey } from "../../../dateUtils";
 import { normalizeWearableSyncSnapshot, resolveWearableLocalDayKey, resolveWearableSyncTimestamp } from "../../../wearableSync";
@@ -25,7 +26,7 @@ async function loadProfileMeta(db: D1Database, userId: string): Promise<{ profil
   if (!row) return { profile: null, version: 0, exists: false };
   const parsed = safeJsonParseObject(String(row.profile_json));
   return {
-    profile: parsed,
+    profile: parsed ? normalizeProfileRecord(parsed) : null,
     version: Number(row.version || 1),
     exists: true,
   };
@@ -117,7 +118,7 @@ const handleWearableSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   const timestamp = resolveWearableSyncTimestamp(payload, new Date().toISOString());
   const localDayKey = resolveWearableLocalDayKey(payload, timestamp);
   const wearableMetricsDayKey = localDayKey || toLocalDayKey(timestamp);
-  const nextProfile: JsonObject = withProtectedFields(user, {
+  const nextProfile: JsonObject = withProtectedFields(user, normalizeProfileRecord({
     ...currentProfile,
     plan: serverPlan,
     version: nextVersion,
@@ -143,7 +144,7 @@ const handleWearableSyncPost: PagesFunction<Env> = async ({ request, env }) => {
           }),
         }
       : {}),
-  });
+  }));
 
   const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
   if (!profileWritten) {

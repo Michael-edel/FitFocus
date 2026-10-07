@@ -6,6 +6,7 @@ import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES 
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { writeProfileCas } from "../../_lib/profile_cas";
+import { normalizeProfileRecord } from '../../_lib/profile_contract';
 import { loadActivePlan } from "../../_lib/plans";
 import {
   decryptHuaweiAccessToken,
@@ -29,7 +30,7 @@ async function loadProfile(db: D1Database, userId: string): Promise<{ profile: J
     .bind(userId)
     .first<{ profile_json?: string; version?: number }>();
   return {
-    profile: row?.profile_json ? (safeJsonParseObject(String(row.profile_json)) || {}) : {},
+    profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {},
     version: Number(row?.version || 0),
   };
 }
@@ -135,7 +136,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   const expectedVersion = hasExplicitBaseVersion ? requestedBaseVersion : current.version;
   const version = expectedVersion + 1;
   const plan = await loadActivePlan(db, user.sub);
-  const nextProfile = withProtectedFields(user, {
+  const nextProfile = withProtectedFields(user, normalizeProfileRecord({
     ...currentProfile,
     plan,
     version,
@@ -149,7 +150,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
     ...(typeof snapshot.activeMinutesToday === "number" ? { wearableActiveMinutesToday: snapshot.activeMinutesToday } : {}),
     ...(typeof snapshot.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: snapshot.sleepHoursLastNight } : {}),
     ...(typeof snapshot.pulse === "number" && snapshot.pulse > 0 ? { restingPulse: snapshot.pulse, restingPulseMeasuredAt: timestamp } : {}),
-  });
+  }));
 
   const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
   if (!profileWritten) {
