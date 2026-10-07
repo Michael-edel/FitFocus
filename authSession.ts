@@ -144,7 +144,14 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
   const readMe = async (): Promise<MeResponse | null> => {
     try {
-      const r = await fetchFn(`/api/me?t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
+      const r = await fetchWithResilience(`/api/me?t=${Date.now()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      }, {
+        retries: 1,
+        retryDelayMs: 250,
+        fetchImpl: fetchFn,
+      });
       if (r.ok) return toMeResponse(await r.json());
     } catch {}
     return null;
@@ -237,11 +244,13 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
   params.setInviteChecking?.(true);
   params.setInviteError(null);
   try {
-    const r = await fetchFn('/api/invite/validate', {
+    const r = await fetchWithResilience('/api/invite/validate', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ code }),
+    }, {
+      fetchImpl: fetchFn,
     });
     const j = await readJsonRecord(r);
     if (!r.ok || j?.valid !== true) {
