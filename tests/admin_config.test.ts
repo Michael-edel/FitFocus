@@ -100,6 +100,7 @@ async function putRaw(path: string, db: ReturnType<typeof makeDb>, body: string)
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': path.includes('feature_flags') ? 'admin-flags-put-test-01' : 'admin-settings-put-test-01',
     },
     body,
   });
@@ -155,6 +156,7 @@ describe('admin runtime configuration', () => {
     const res = await put('/api/admin/feature_flags', db, { key: 'ai_safe_mode', enabled: true, rollout_percentage: 55.8 });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-flags-put-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('feature_flags') && run.binds[2] === 55)).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'flag_update')).toBe(true);
@@ -196,6 +198,7 @@ describe('admin runtime configuration', () => {
     const res = await put('/api/admin/settings', db, { key: 'ai_on_limit_action', value: ' BLOCK ' });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-settings-put-test-01');
     expect(await res.json()).toMatchObject({ key: 'ai_on_limit_action', value: 'block' });
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('feature_settings') && run.binds[1] === 'block')).toBe(true);

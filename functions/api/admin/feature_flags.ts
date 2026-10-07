@@ -7,6 +7,7 @@ import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
 import { asBoolean, asFiniteNumber, asString, isJsonObject } from "../_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -18,7 +19,7 @@ const ALLOWED_FEATURE_FLAGS = new Set([
   "ai_fallback_mode",
 ]);
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleFeatureFlagsGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -30,7 +31,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({ flags: results || [] });
 };
 
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+const handleFeatureFlagsPut: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -72,4 +73,19 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   await db.batch([flagStatement, auditStatement]);
 
   return json({ ok: true, key, enabled: enabled === 1, rollout_percentage: rollout });
+};
+
+/** Adds request correlation while avoiding flag keys, values and administrator data in events. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleFeatureFlagsGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.feature-flags.get.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
+};
+
+export const onRequestPut: PagesFunction<Env> = async (context) => {
+  const response = await handleFeatureFlagsPut(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.feature-flags.put.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

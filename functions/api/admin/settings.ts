@@ -7,6 +7,7 @@ import { requireAdminRequest } from "../_lib/admin_guard";
 import { buildAdminEventStatement } from "../_lib/admin_audit";
 import { asString, isJsonObject } from "../_lib/json";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -36,7 +37,7 @@ function limitAction(value: string): string | null {
   return normalized === "fallback" || normalized === "block" ? normalized : null;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleSettingsGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -48,7 +49,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json({ settings: results || [] });
 };
 
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+const handleSettingsPut: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
@@ -87,4 +88,19 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   await db.batch([settingStatement, auditStatement]);
 
   return json({ ok: true, key, value: normalizedValue });
+};
+
+/** Adds request correlation while avoiding setting values and administrator data in events. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleSettingsGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.settings.get.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
+};
+
+export const onRequestPut: PagesFunction<Env> = async (context) => {
+  const response = await handleSettingsPut(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.settings.put.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
