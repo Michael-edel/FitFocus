@@ -53,7 +53,7 @@ import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
-import { formatTime, getDayKey, getWeekKey, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
+import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
@@ -110,6 +110,7 @@ import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
+import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1143,27 +1144,6 @@ const App: React.FC = () => {
     checkAchievements,
   });
 
-  const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const weekKey = getWeekKey(new Date());
-    const usage = user.usage || {};
-    let updated = false;
-    const nextUsage = { ...usage };
-    if (usage.dayKey !== today) {
-      nextUsage.dayKey = today;
-      nextUsage.aiFoodPhotoCount = 0;
-      nextUsage.aiCoachCount = 0;
-      updated = true;
-    }
-    if (usage.weekKey !== weekKey) {
-      nextUsage.weekKey = weekKey;
-      nextUsage.familyMenuCount = 0;
-      updated = true;
-    }
-    if (updated) return { ...user, usage: nextUsage };
-    return user;
-  }, []);
-
   const targets = useMemo(() => {
     if (!currentUser) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
     return calculateDailyTargets(currentUser);
@@ -1405,7 +1385,7 @@ await ensurePdfInterFont(doc);
     }
 
     const hydrated = await hydrateSessionFromCloud(normalizedUser, {
-      resetUsageIfNewTime,
+      resetUsageIfNewTime: resetUsageIfNewPeriod,
       initialHabits: INITIAL_HABITS,
     });
 
@@ -1437,7 +1417,7 @@ await ensurePdfInterFont(doc);
     if (!hydrated.currentUser.aiPlan) {
       persistUser(nextUser);
     }
-  }, [googleMe?.sub, googleMe?.email, googleMe?.picture, resetUsageIfNewTime]);
+  }, [googleMe?.sub, googleMe?.email, googleMe?.picture]);
 
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
