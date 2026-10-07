@@ -722,7 +722,10 @@ assertIncludes(
   'admin settings endpoint must write setting updates and audit events through one batch',
 );
 
-const supportFeedback = read('functions/api/support/feedback.ts');
+const supportFeedback = [
+  read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_ticket_admin.ts'),
+].join('\n');
 assertIncludes(
   supportFeedback,
   'BAD_STATUS',

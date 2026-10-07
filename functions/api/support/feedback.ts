@@ -2,7 +2,7 @@ import { json, requireUser } from "../_lib/auth";
 import { nowMs, requireDB, uuid } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventAfterChangeStatement } from "../_lib/admin_audit";
+import { normalizeTicketStatus, readSupportTicketForAdmin, updateSupportTicket, type SupportTicketAdminRow } from '../_lib/support_ticket_admin';
 import {
   readFormDataRequest,
   readJsonRequest,
@@ -20,27 +20,6 @@ import {
 } from "../_lib/support_attachments";
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
-type ChangesResult = {
-  meta?: { changes?: number } | null;
-  changes?: number;
-};
-type SupportTicketAdminRow = {
-  id: string;
-  user_id?: string | null;
-  user_email?: string | null;
-  user_name?: string | null;
-  status?: string | null;
-  priority?: string | null;
-  attachment_count?: number | null;
-  attachments_json?: string | null;
-  admin_note?: string | null;
-  assigned_admin_user_id?: string | null;
-  resolved_at?: number | null;
-  closed_at?: number | null;
-  last_reply_at?: number | null;
-  last_reply_by?: string | null;
-  [key: string]: unknown;
-};
 
 type SupportMessageRow = {
   id: string;
@@ -52,61 +31,6 @@ type SupportMessageRow = {
   attachments_json?: string | null;
   created_at: number;
 };
-
-const SUPPORT_TICKET_ADMIN_COLUMNS = [
-  "id",
-  "user_id",
-  "created_at",
-  "updated_at",
-  "category",
-  "section",
-  "subject",
-  "message",
-  "steps_json",
-  "device",
-  "browser",
-  "contact",
-  "app_version",
-  "status",
-  "priority",
-  "attachment_count",
-  "attachments_json",
-  "admin_note",
-  "assigned_admin_user_id",
-  "resolved_at",
-  "closed_at",
-  "last_reply_at",
-  "last_reply_by",
-].join(", ");
-
-function normalizeTicketStatus(status: string) {
-  switch (status.trim()) {
-    case "new":
-    case "in_progress":
-    case "waiting_user":
-    case "resolved":
-    case "closed":
-      return status.trim();
-    default:
-      return "";
-  }
-}
-
-function normalizePriority(priority: string) {
-  switch (priority.trim()) {
-    case "low":
-    case "normal":
-    case "high":
-    case "urgent":
-      return priority.trim();
-    default:
-      return "";
-  }
-}
-
-function changedRows(result: ChangesResult | null | undefined): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
 
 function toInt(value: unknown, fallback: number) {
   const n = Number(value);
@@ -227,20 +151,6 @@ async function appendSupportMessage(
     createdAt,
   ).run();
   return { id, createdAt };
-}
-
-async function ticketRowForAdmin(db: D1Database, id: string) {
-  return db.prepare(
-    `SELECT s.id, s.user_id, s.created_at, s.updated_at, s.category, s.section, s.subject, s.message,
-            s.steps_json, s.device, s.browser, s.contact, s.app_version, s.status, s.priority,
-            s.attachment_count, s.attachments_json, s.admin_note, s.assigned_admin_user_id,
-            s.resolved_at, s.closed_at, s.last_reply_at, s.last_reply_by,
-            u.email as user_email, u.name as user_name
-     FROM support_feedback s
-     LEFT JOIN users u ON u.id = s.user_id
-     WHERE s.id = ?
-     LIMIT 1`
-  ).bind(id).first<SupportTicketAdminRow>();
 }
 
 async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>>[0]) {
@@ -370,102 +280,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   }
   if (!body) return json({ error: "BAD_REQUEST", message: "json required" }, 400);
 
-  const id = String(body.id || "").trim();
-  if (!id) return json({ error: "BAD_REQUEST", message: "ticket id required" }, 400);
+  const result = await updateSupportTicket({ db, adminUserId: user.sub, body });
+  if (result.kind === 'invalid') return json({ error: result.error, message: result.message }, 400);
+  if (result.kind === 'not-found') return json({ error: 'NOT_FOUND', message: 'ticket not found' }, 404);
 
-  const current = await db.prepare(`SELECT ${SUPPORT_TICKET_ADMIN_COLUMNS} FROM support_feedback WHERE id = ? LIMIT 1`).bind(id).first<SupportTicketAdminRow>();
-  if (!current) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-
-  const status = normalizeTicketStatus(String(body.status || ""));
-  const priority = normalizePriority(String(body.priority || ""));
-  const adminNote = body.admin_note == null ? undefined : String(body.admin_note || "").trim();
-  const replyMessage = String(body.message || "").trim();
-  const assignMode = String(body.assign_to || "").trim();
-  if (body.status != null && !status) return json({ error: "BAD_STATUS", message: "Invalid ticket status" }, 400);
-  if (body.priority != null && !priority) return json({ error: "BAD_PRIORITY", message: "Invalid ticket priority" }, 400);
-  if (body.assign_to != null && assignMode && assignMode !== "me" && assignMode !== "none") {
-    return json({ error: "BAD_ASSIGN_TO", message: "Invalid assignee mode" }, 400);
-  }
-  const now = nowMs();
-
-  const nextStatus = status || (replyMessage ? "waiting_user" : current.status || "new");
-  const nextPriority = priority || current.priority || "normal";
-  const assignedAdminUserId =
-    assignMode === "me" ? user.sub :
-    assignMode === "none" ? null :
-    current.assigned_admin_user_id || null;
-  const resolvedAt =
-    nextStatus === "resolved"
-      ? current.resolved_at || now
-      : nextStatus === "closed"
-        ? current.resolved_at || now
-        : null;
-  const closedAt = nextStatus === "closed" ? current.closed_at || now : null;
-
-  const statements: D1PreparedStatement[] = [];
-  if (replyMessage) {
-    statements.push(db.prepare(
-      `INSERT INTO support_feedback_messages (
-        id, ticket_id, author_user_id, author_role, message, attachment_count, attachments_json, created_at
-      )
-       SELECT ?, ?, ?, 'admin', ?, 0, NULL, ?
-       WHERE EXISTS (SELECT 1 FROM support_feedback WHERE id = ?)`
-    ).bind(uuid(), id, user.sub, replyMessage, now, id));
-  }
-
-  statements.push(db.prepare(
-    `UPDATE support_feedback
-     SET updated_at = ?,
-         status = ?,
-         priority = ?,
-         admin_note = ?,
-         assigned_admin_user_id = ?,
-         resolved_at = ?,
-         closed_at = ?,
-         last_reply_at = ?,
-         last_reply_by = ?
-     WHERE id = ?`
-  ).bind(
-    now,
-    nextStatus,
-    nextPriority,
-    adminNote === undefined ? current.admin_note || null : adminNote || null,
-    assignedAdminUserId,
-    resolvedAt,
-    closedAt,
-    replyMessage ? now : current.last_reply_at || null,
-    replyMessage ? user.sub : current.last_reply_by || null,
-    id,
-  ));
-
-  statements.push(buildAdminEventAfterChangeStatement(db, {
-    adminUserId: user.sub,
-    action: "support_ticket_update",
-    targetUserId: current.user_id || null,
-    meta: {
-      ticket_id: id,
-      status: nextStatus,
-      priority: nextPriority,
-      assigned_admin_user_id: assignedAdminUserId,
-      replied: Boolean(replyMessage),
-    },
-  }));
-
-  const writeResults = await db.batch(statements);
-  const messageResult = replyMessage ? writeResults[0] : null;
-  const updateResult = writeResults[replyMessage ? 1 : 0];
-  if (changedRows(updateResult) === 0 || (replyMessage && changedRows(messageResult) === 0)) {
-    return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-  }
-
-  const ticket = await ticketRowForAdmin(db, id);
-  const messages = await loadMessageThread(db, id);
+  const ticket = await readSupportTicketForAdmin(db, result.ticketId);
+  const messages = await loadMessageThread(db, result.ticketId);
   return json({
     ok: true,
     ticket: ticket ? {
       ...ticket,
       attachment_count: Number(ticket.attachment_count || 0),
-      attachments: mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: id }),
+      attachments: mapAttachments(parseAttachmentsJson(ticket.attachments_json), { ticketId: result.ticketId }),
       messages,
     } : null,
   });
@@ -493,7 +319,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const status = normalizeTicketStatus(String(url.searchParams.get("status") || ""));
 
   if (id) {
-    const row = await ticketRowForAdmin(db, id);
+    const row = await readSupportTicketForAdmin(db, id);
     if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
     return json({
       ticket: {
