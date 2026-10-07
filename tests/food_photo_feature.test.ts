@@ -116,4 +116,44 @@ describe('food photo feature', () => {
 
     expect(calls).toEqual(['paywall']);
   });
+
+  it('continues a batch after one file fails', async () => {
+    const calls: string[] = [];
+    const processed = await processFoodPhotoFiles({
+      userId: 'user-1',
+      files: [{ name: 'broken.jpg' }, { name: 'valid.jpg' }] as File[],
+      remainingScans: 2,
+      openPaywall: () => calls.push('paywall'),
+      setScanning: (value) => calls.push(`scanning:${value}`),
+      compressPhoto: async (file) => {
+        calls.push(`compress:${file.name}`);
+        if (file.name === 'broken.jpg') throw new Error('invalid image');
+        return { dataUrl: 'data:image/jpeg;base64,full', thumbUrl: 'data:image/jpeg;base64,thumb', base64: 'encoded' };
+      },
+      analyzePhoto: async () => {
+        calls.push('analyze');
+        return analysis;
+      },
+      addFoodToDiary: () => {
+        calls.push('diary');
+        return { id: 'entry-2', ...analysis, timestamp: '2026-10-07T10:00:00.000Z' } as FoodItem;
+      },
+      incrementUsage: () => calls.push('usage'),
+      showInsight: () => calls.push('insight'),
+      logError: (error) => calls.push(`error:${(error as Error).message}`),
+    });
+
+    expect(processed).toBe(1);
+    expect(calls).toEqual([
+      'scanning:true',
+      'compress:broken.jpg',
+      'error:invalid image',
+      'compress:valid.jpg',
+      'analyze',
+      'diary',
+      'insight',
+      'usage',
+      'scanning:false',
+    ]);
+  });
 });

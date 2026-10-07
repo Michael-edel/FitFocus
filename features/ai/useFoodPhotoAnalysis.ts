@@ -97,26 +97,28 @@ export async function processFoodPhotoFiles({
   setScanning(true);
   try {
     for (const file of batch) {
-      const photo = await compressPhoto(file);
-      const result = await analyzePhoto(photo.base64);
-      if (!result) continue;
+      try {
+        const photo = await compressPhoto(file);
+        const result = await analyzePhoto(photo.base64);
+        if (!result) continue;
 
-      const item = buildPhotoDiaryItem(result, photo);
-      const newEntry = addFoodToDiary(item);
-      if (newEntry) {
-        showInsight({
-          id: newEntry.id,
-          photo: photo.dataUrl,
-          name: result.name,
-          insight: item.insight,
-          nonFood: newEntry.nonFood === true,
-        });
+        const item = buildPhotoDiaryItem(result, photo);
+        const newEntry = addFoodToDiary(item);
+        if (newEntry) {
+          showInsight({
+            id: newEntry.id,
+            photo: photo.dataUrl,
+            name: result.name,
+            insight: item.insight,
+            nonFood: newEntry.nonFood === true,
+          });
+        }
+        incrementUsage();
+        processed += 1;
+      } catch (error) {
+        logError(error);
       }
-      incrementUsage();
-      processed += 1;
     }
-  } catch (error) {
-    logError(error);
   } finally {
     setScanning(false);
   }
