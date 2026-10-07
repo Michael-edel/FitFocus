@@ -118,6 +118,7 @@ import { useNutritionSearchState } from './features/nutrition/useNutritionSearch
 import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
+import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
@@ -174,9 +175,6 @@ type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isBooleanRecord = (value: unknown): value is Record<string, boolean> =>
-  isRecord(value) && Object.values(value).every((item) => typeof item === 'boolean');
 
 const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
   const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
@@ -633,90 +631,24 @@ const App: React.FC = () => {
   const activationTimerRef = useRef<number | null>(null);
   const activationIntervalRef = useRef<number | null>(null);
 
-  const planUiStorageKey = useMemo(
-    () => `fitfocus.plan.ui.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const planUiSkipSaveRef = useRef(false);
-  const [planIntroOpen, setPlanIntroOpen] = useState(false);
   const { planTaskDone, setPlanTaskDone } = usePlanTaskState(currentUser?.id);
-  const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
-  const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
+  const {
+    planIntroOpen,
+    setPlanIntroOpen,
+    planRulesExpanded,
+    setPlanRulesExpanded,
+    planWeekExpanded,
+    setPlanWeekExpanded,
+  } = usePlanUiState({
+    userId: currentUser?.id,
+    weekDayKeys: currentUser?.aiPlan?.weeklyMenu?.days.map((day) => day.day) ?? [],
+    planScope,
+    setPlanScope,
+    familyMenuPrefsOpen,
+    setFamilyMenuPrefsOpen,
+  });
   const [versionInfoOpen, setVersionInfoOpen] = useState(false);
 
-  useEffect(() => {
-    try {
-      planUiSkipSaveRef.current = true;
-      const raw = localStorage.getItem(planUiStorageKey);
-      if (!raw) {
-        setPlanIntroOpen(false);
-        setPlanRulesExpanded(false);
-        setPlanScope('personal');
-        setFamilyMenuPrefsOpen(false);
-        return;
-      }
-      const parsed = parseJson(raw);
-      const record = isRecord(parsed) ? parsed : {};
-      setPlanIntroOpen(record.planIntroOpen === true);
-      setPlanRulesExpanded(record.planRulesExpanded === true);
-      setPlanScope(record.planScope === 'family' ? 'family' : 'personal');
-      setFamilyMenuPrefsOpen(record.familyMenuPrefsOpen === true);
-    } catch {
-      planUiSkipSaveRef.current = true;
-      setPlanIntroOpen(false);
-      setPlanRulesExpanded(false);
-      setPlanScope('personal');
-      setFamilyMenuPrefsOpen(false);
-    }
-  }, [planUiStorageKey]);
-
-  useEffect(() => {
-    const next: Record<string, boolean> = {};
-    (currentUser?.aiPlan?.weeklyMenu?.days ?? []).forEach((day, idx) => {
-      next[day.day] = typeof planWeekExpanded[day.day] === 'boolean' ? planWeekExpanded[day.day] : idx < 2;
-    });
-    setPlanWeekExpanded(next);
-  }, [currentUser?.aiPlan?.weeklyMenu?.weekStart, currentUser?.aiPlan?.weeklyMenu?.days?.length]);
-
-  useEffect(() => {
-    try {
-      planUiSkipSaveRef.current = true;
-      const raw = localStorage.getItem(planUiStorageKey);
-      if (!raw) return;
-      const parsed = parseJson(raw);
-      const storedWeek = isRecord(parsed) && isBooleanRecord(parsed.planWeekExpanded) ? parsed.planWeekExpanded : {};
-      const days = currentUser?.aiPlan?.weeklyMenu?.days ?? [];
-      if (!days.length) {
-        setPlanWeekExpanded(storedWeek);
-        return;
-      }
-      const next: Record<string, boolean> = {};
-      days.forEach((day, idx) => {
-        next[day.day] = typeof storedWeek[day.day] === 'boolean' ? storedWeek[day.day] : idx < 2;
-      });
-      setPlanWeekExpanded(next);
-    } catch {
-      planUiSkipSaveRef.current = true;
-    }
-  }, [currentUser?.aiPlan?.weeklyMenu?.days?.length, currentUser?.aiPlan?.weeklyMenu?.weekStart, planUiStorageKey]);
-
-  useEffect(() => {
-    if (planUiSkipSaveRef.current) {
-      planUiSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(planUiStorageKey, JSON.stringify({
-        planIntroOpen,
-        planRulesExpanded,
-        planScope,
-        familyMenuPrefsOpen,
-        planWeekExpanded,
-      }));
-    } catch {
-      // no-op
-    }
-  }, [familyMenuPrefsOpen, planIntroOpen, planRulesExpanded, planScope, planUiStorageKey, planWeekExpanded]);
   const [planError, setPlanError] = useState<string | null>(null);
 
   // Cinematic AI activation steps
