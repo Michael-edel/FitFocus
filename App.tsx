@@ -115,6 +115,7 @@ import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
+import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -511,26 +512,12 @@ const App: React.FC = () => {
   const [adaptNote, setAdaptNote] = useState<string>('');
   const [refeedDate, setRefeedDate] = useState<string | null>(null);
 
-  const [adaptExpanded, setAdaptExpanded] = useState(false);
-  const [adaptRead, setAdaptRead] = useState(false);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
-    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
-    try {
-      const readValue = localStorage.getItem(kRead);
-      const expValue = localStorage.getItem(kExp);
-      if (readValue !== null) {
-        setAdaptRead(readValue === '1');
-        safeSetItem(kRead, readValue);
-      }
-      if (expValue !== null) {
-        setAdaptExpanded(expValue === '1');
-        safeSetItem(kExp, expValue);
-      }
-    } catch {}
-  }, [currentUser?.id]);
+  const {
+    adaptExpanded,
+    setAdaptExpanded,
+    adaptRead,
+    setAdaptRead,
+  } = useAdaptationUiState(currentUser?.id);
 
   const resetUiState = useCallback(() => {
     const userId = currentUser?.id;
@@ -579,16 +566,6 @@ const App: React.FC = () => {
     setInsightModal(null);
     setEditFoodModal(null);
   }, [currentUser?.id, setPlanScope, setFamilyMenuPrefsOpen]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
-    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
-    try {
-      safeSetItem(kRead, adaptRead ? '1' : '0');
-      safeSetItem(kExp, adaptExpanded ? '1' : '0');
-    } catch {}
-  }, [adaptRead, adaptExpanded, currentUser?.id]);
 
   // Weekly Reports History
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
