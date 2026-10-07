@@ -227,7 +227,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: WearableSyncContext = {
       request: new Request('https://fitfocus.test/api/wearable/sync', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'wearable-sync-test-01' },
         body: JSON.stringify({ provider: 'apple-health', payload: 'x'.repeat(80 * 1024) }),
       }),
       env,
@@ -239,6 +239,7 @@ describe('bounded JSON body guards on user routes', () => {
     const response = await postWearableSync(context);
 
     expect(response.status).toBe(413);
+    expect(response.headers.get('X-Request-ID')).toBe('wearable-sync-test-01');
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_profiles'))).toBe(false);
   });

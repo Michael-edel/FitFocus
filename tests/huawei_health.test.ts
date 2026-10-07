@@ -181,7 +181,7 @@ describe('Huawei Health integration', () => {
     const response = await postHuaweiSync({
       request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'huawei-sync-test-01' },
         body: JSON.stringify({ timezone: 'Asia/Yekaterinburg', date: '2026-06-28' }),
       }),
       env: env(db) as unknown as HuaweiSyncContext['env'],
@@ -192,6 +192,7 @@ describe('Huawei Health integration', () => {
     });
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('huawei-sync-test-01');
     await expect(response.json()).resolves.toMatchObject({
       provider: 'huawei_health',
       updatedFields: ['wearableStepsToday'],

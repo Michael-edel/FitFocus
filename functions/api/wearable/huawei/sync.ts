@@ -19,6 +19,7 @@ import {
   type HuaweiConnectionRow,
   type HuaweiHealthEnv,
 } from "../../_lib/huawei_health";
+import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -60,7 +61,7 @@ function changedFields(snapshot: {
   });
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -166,4 +167,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .run();
 
   return json({ provider, profile: nextProfile, updatedFields, version });
+};
+
+/** Correlates Huawei sync outcomes without recording OAuth tokens or health data. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiSyncPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('wearable.huawei.sync.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

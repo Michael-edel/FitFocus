@@ -12,6 +12,7 @@ import { writeProfileCas } from "../_lib/profile_cas";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "../_lib/json";
 import { toLocalDayKey } from "../../../dateUtils";
 import { normalizeWearableSyncSnapshot, resolveWearableLocalDayKey, resolveWearableSyncTimestamp } from "../../../wearableSync";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 
@@ -67,7 +68,7 @@ function pushMeasurementHistory(
   }, ...history].slice(0, 30);
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleWearableSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireMobileUser(request, env);
@@ -166,4 +167,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     },
     200
   );
+};
+
+/** Correlates mobile wearable sync outcomes without recording health readings or identity. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleWearableSyncPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('wearable.sync.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
