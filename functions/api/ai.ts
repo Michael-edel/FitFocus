@@ -5,6 +5,7 @@ import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
+import { buildOpenAiProviderPayload, normalizeAiContents } from './_lib/ai_provider_payload';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
 import {
@@ -594,7 +595,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   if ("contents" in payloadToSend) {
-    const normalized = normalizeContents(payloadToSend.contents);
+    const normalized = normalizeAiContents(payloadToSend.contents);
     if (!normalized.length) {
       await logUsage(env, { identity, feature, status: 400, latency: Date.now() - startedAt, bytesIn: bodyText.length });
       return jsonResponse({
@@ -605,7 +606,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   const upstreamPayload = usesOpenAiModel
-    ? buildOpenAiPayload(payloadToSend, model)
+    ? buildOpenAiProviderPayload(payloadToSend, model)
     : payloadToSend;
 
   let geminiResp: Response | null = null;
