@@ -4,6 +4,7 @@ import { json } from "../_lib/auth";
 import { requireDB, nowMs, toApiError } from "../_lib/db";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString } from "../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database };
 type InviteCodeRow = {
@@ -16,7 +17,7 @@ type InviteCodeRow = {
   revoked?: number | null;
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleInviteValidatePost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const db = requireDB(env);
     let body;
@@ -57,4 +58,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const apiErr = toApiError(e);
     return json({ valid: false, error: apiErr }, 400);
   }
+};
+
+/** Correlates invite preflight outcomes without logging invitation codes or metadata. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleInviteValidatePost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('invite.validate.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

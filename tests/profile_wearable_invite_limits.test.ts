@@ -250,7 +250,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: InviteRedeemContext = {
       request: new Request('https://fitfocus.test/api/invite/redeem', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'invite-redeem-test-01' },
         body: JSON.stringify({ code: 'INVITE', payload: 'x'.repeat(80 * 1024) }),
       }),
       env,
@@ -262,6 +262,7 @@ describe('bounded JSON body guards on user routes', () => {
     const response = await postInviteRedeem(context);
 
     expect(response.status).toBe(413);
+    expect(response.headers.get('X-Request-ID')).toBe('invite-redeem-test-01');
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('UPDATE invite_codes'))).toBe(false);
   });
