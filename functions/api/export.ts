@@ -6,6 +6,7 @@ import { requireBetaAccess } from "./_lib/access";
 import { requireDB } from "./_lib/db";
 import { safeJsonParse } from "./_lib/json";
 import { parseAttachmentsJson, type SupportAttachmentRecord } from "./_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 type KvRow = { k: string; v: string; updated_at?: number; version?: number };
@@ -13,7 +14,7 @@ type PublicSupportAttachment = Pick<SupportAttachmentRecord, "name" | "mime" | "
 type SupportFeedbackExportRow = Record<string, unknown> & { attachments_json?: string | null };
 type SupportMessageExportRow = Record<string, unknown> & { attachments_json?: string | null };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleExportGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -110,6 +111,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       "Referrer-Policy": "no-referrer",
     },
   });
+};
+
+/** Correlates data export outcomes without logging the export payload or user identity. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleExportGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('export.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
 function safeParse(s: string): unknown | null {
