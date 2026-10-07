@@ -1,5 +1,4 @@
-import { json } from './auth';
-import { logApiEvent, withRequestId } from './observability';
+import { tracedJsonResponse } from './traced_response';
 
 export type FamilyOperation =
   | 'family.read'
@@ -18,6 +17,5 @@ export function familyResponse(
   body: unknown,
   status: number,
 ): Response {
-  logApiEvent(`${operation}.response`, { requestId, status });
-  return withRequestId(json(body, status), requestId);
+  return tracedJsonResponse(`${operation}.response`, requestId, body, status);
 }

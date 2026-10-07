@@ -2,11 +2,13 @@
 // GET: aggregated shopping list for a week
 // - personal scope: per user
 // - family scope: aggregated for the whole family (family_id provided) if user is an active member
-import { json, requireUser } from "../_lib/auth";
+import { requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
 import { aggregateShoppingRows, ingredientKey } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
+import { requestIdFor } from '../_lib/observability';
+import { tracedJsonResponse } from '../_lib/traced_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 type ShoppingRow = { name?: string | null; grams?: number | null };
@@ -21,6 +23,7 @@ function getShoppingScopeId(userId: string, familyId?: string | null) {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -30,7 +33,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const week = String(url.searchParams.get("week") || "");
     const family_id = url.searchParams.get("family_id");
 
-    if (!isIsoDay(week)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(week)) return tracedJsonResponse('shopping.list.response', requestId, { error: "BAD_WEEK" }, 400);
 
     if (family_id) {
       const famId = String(family_id);
@@ -73,7 +76,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       })));
 
       const totalGrams = items.reduce((s, it) => s + it.grams, 0);
-      return json({ week_start: week, family_id: famId, items, total_grams: totalGrams });
+      return tracedJsonResponse('shopping.list.response', requestId, { week_start: week, family_id: famId, items, total_grams: totalGrams }, 200);
     }
 
     // Personal scope
@@ -111,9 +114,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     })));
 
     const totalGrams = items.reduce((s, it) => s + it.grams, 0);
-    return json({ week_start: week, items, total_grams: totalGrams });
+    return tracedJsonResponse('shopping.list.response', requestId, { week_start: week, items, total_grams: totalGrams }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return tracedJsonResponse('shopping.list.response', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };

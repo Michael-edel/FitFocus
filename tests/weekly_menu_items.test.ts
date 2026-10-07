@@ -69,12 +69,12 @@ function makeDb() {
   };
 }
 
-async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: WeeklyMenuItemsContext = {
     request: new Request('https://fitfocus.test/api/weekly_menu/items', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -95,9 +95,10 @@ describe('/api/weekly_menu/items', () => {
         { name: 'Овсянка', grams: 120 },
         { name: 'Банан', grams: 200 },
       ],
-    });
+    }, 'weekly-menu-items-request-1');
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('weekly-menu-items-request-1');
     await expect(response.json()).resolves.toMatchObject({ ok: true, stored: 2, week_start: '2026-06-22' });
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM weekly_menu_items'))).toBe(false);
     expect(db.batches).toHaveLength(1);
@@ -110,9 +111,10 @@ describe('/api/weekly_menu/items', () => {
     const response = await postItems(db, {
       week_start: 'bad-week',
       items: [{ name: 'Овсянка', grams: 120 }],
-    });
+    }, 'weekly-menu-items-request-2');
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('weekly-menu-items-request-2');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
     expect(db.batches).toHaveLength(0);
   });

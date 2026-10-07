@@ -93,11 +93,11 @@ function makeDb() {
   };
 }
 
-async function authedJsonRequest(url: string, method: string, body: string) {
+async function authedJsonRequest(url: string, method: string, body: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   return new Request(url, {
     method,
-    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     body,
   });
 }
@@ -220,6 +220,7 @@ describe('bounded JSON body guards on family and shopping routes', () => {
         'https://fitfocus.test/api/shopping/check',
         'PATCH',
         JSON.stringify({ week_start: '2026-06-22', ingredient_name: 'x'.repeat(80 * 1024), checked: true }),
+        'shopping-check-request-1',
       ),
       env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
@@ -230,6 +231,7 @@ describe('bounded JSON body guards on family and shopping routes', () => {
     const response = await patchShoppingCheck(context);
 
     expect(response.status).toBe(413);
+    expect(response.headers.get('X-Request-ID')).toBe('shopping-check-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO shopping_checked'))).toBe(false);
   });

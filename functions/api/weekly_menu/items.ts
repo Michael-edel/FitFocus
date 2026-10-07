@@ -1,13 +1,15 @@
 // /api/weekly_menu/items
 // POST: store normalized weekly shopping list items for the current user (and optional family scope)
 // Body: { week_start: 'YYYY-MM-DD', family_id?: string, items: [{name, grams}] }
-import { json, requireUser } from "../_lib/auth";
+import { requireUser } from "../_lib/auth";
 import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
 import { requireFamilyMember } from "../_lib/family_access";
 import { normalizeShoppingIngredient } from "../_lib/ingredients";
 import { requireFamilyPlan } from "../_lib/plans";
 import { readJsonRequest, RequestBodyTooLargeError } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
+import { requestIdFor } from '../_lib/observability';
+import { tracedJsonResponse } from '../_lib/traced_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const WEEKLY_MENU_ITEMS_JSON_BODY_LIMIT_BYTES = 256 * 1024;
@@ -18,6 +20,7 @@ function isIsoDay(s: string) {
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -28,16 +31,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body = await readJsonRequest(request, WEEKLY_MENU_ITEMS_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
       if (err instanceof RequestBodyTooLargeError) {
-        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+        return tracedJsonResponse('weekly-menu.items.response', requestId, { error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
       }
       throw err;
     }
-    if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
+    if (!isJsonObject(body)) return tracedJsonResponse('weekly-menu.items.response', requestId, { error: "BAD_JSON" }, 400);
     const week_start = asString(body.week_start).slice(0, 10);
     const family_id = body.family_id ? asString(body.family_id) : null;
     const items = Array.isArray(body.items) ? body.items : [];
 
-    if (!isIsoDay(week_start)) return json({ error: "BAD_WEEK" }, 400);
+    if (!isIsoDay(week_start)) return tracedJsonResponse('weekly-menu.items.response', requestId, { error: "BAD_WEEK" }, 400);
     if (family_id) {
       const fam = await requireFamilyMember(db, family_id, user.sub);
       await requireFamilyPlan(db, fam.owner_user_id);
@@ -64,9 +67,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ];
     await db.batch(statements);
 
-    return json({ ok: true, stored: norm.length, week_start });
+    return tracedJsonResponse('weekly-menu.items.response', requestId, { ok: true, stored: norm.length, week_start }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return tracedJsonResponse('weekly-menu.items.response', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
