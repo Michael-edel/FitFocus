@@ -893,7 +893,10 @@ assertIncludes(
   'billing checkout must support yearly pro pricing',
 );
 
-const familyMenu = read('functions/api/family/menu.ts');
+const familyMenu = [
+  read('functions/api/family/menu.ts'),
+  read('functions/api/_lib/family_menu.ts'),
+].join('\n');
 assertIncludes(
   familyMenu,
   'SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1',
@@ -906,7 +909,7 @@ assertIncludes(
 );
 assertIncludes(
   familyMenu,
-  "familyResponse('family.menu.read', requestId, { error: \"BAD_WEEK\" }, 400)",
+  "familyResponse('family.menu.read', requestId, { error: 'BAD_WEEK' }, 400)",
   'family menu routes must reject malformed weekStart values',
 );
 if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_start = ?')) {
