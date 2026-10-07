@@ -108,6 +108,7 @@ import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
+import { buildWeeklyIntelligenceRequest } from './features/ai/weeklyIntelligenceRequest';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1324,18 +1325,9 @@ await ensurePdfInterFont(doc);
       aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
       setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
       // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-      return await getWeeklyIntelligenceInterpretation({
-        name: currentUser.name,
-        goal: currentUser.goal,
-        wis: weekly.wis,
-        status: weekly.status,
-        weightDelta7: weekly.weightDelta7,
-        weightDelta30: weekly.weightDelta30,
-        compliancePct: weekly.compliance,
-        adaptationIndex: weekly.adaptationIndex,
-        calorieTarget: targets.calories,
-        macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs }
-      });
+      return await getWeeklyIntelligenceInterpretation(
+        buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
+      );
     };
 
     ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI).then(() => {
@@ -2049,18 +2041,9 @@ const logWeight = useCallback(() => {
           aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
           setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
           // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-          return await getWeeklyIntelligenceInterpretation({
-            name: currentUser.name,
-            goal: currentUser.goal,
-            wis: weekly.wis,
-            status: weekly.status,
-            weightDelta7: weekly.weightDelta7,
-            weightDelta30: weekly.weightDelta30,
-            compliancePct: weekly.compliance,
-            adaptationIndex: weekly.adaptationIndex,
-            calorieTarget: targets.calories,
-            macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs },
-          });
+          return await getWeeklyIntelligenceInterpretation(
+            buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
+          );
         };
         await ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI);
         setWeeklyReports(loadWeeklyReports(currentUser.id));
