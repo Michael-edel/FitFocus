@@ -115,6 +115,7 @@ import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
+import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
@@ -428,39 +429,7 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const cameraFacingStorageKey = useMemo(
-    () => `fitfocus.nutrition.camera-facing.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const cameraFacingSkipSaveRef = useRef(false);
-  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>(() => {
-    try {
-      return (localStorage.getItem(cameraFacingStorageKey) as 'user' | 'environment' | null) || 'environment';
-    } catch {
-      return 'environment';
-    }
-  });
-  useEffect(() => {
-    try {
-      cameraFacingSkipSaveRef.current = true;
-      const saved = localStorage.getItem(cameraFacingStorageKey);
-      setCameraFacing(saved === 'user' ? 'user' : 'environment');
-    } catch {
-      cameraFacingSkipSaveRef.current = true;
-      setCameraFacing('environment');
-    }
-  }, [cameraFacingStorageKey]);
-  useEffect(() => {
-    if (cameraFacingSkipSaveRef.current) {
-      cameraFacingSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(cameraFacingStorageKey, cameraFacing);
-    } catch {
-      // ignore storage issues
-    }
-  }, [cameraFacing, cameraFacingStorageKey]);
+  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id);
   const {
     newWeight,
     setNewWeight,
@@ -517,7 +486,6 @@ const App: React.FC = () => {
       // ignore
     }
 
-    cameraFacingSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
     setMobileMoreOpen(false);
