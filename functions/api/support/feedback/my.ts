@@ -13,6 +13,7 @@ import {
   type SupportAttachmentBucket,
   type SupportAttachmentRecord,
 } from "../../_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 type ChangesResult = {
@@ -124,7 +125,7 @@ async function loadMessages(db: D1Database, ticketId: string) {
   }));
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleMySupportGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -163,7 +164,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -277,4 +278,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true,
     ticket: refreshed ? await publicTicket(db, refreshed, true) : null,
   });
+};
+
+/** Correlates support reads and replies without logging ticket content or attachments. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleMySupportGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.my.get.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
+};
+
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleMySupportPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('support.my.post.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
