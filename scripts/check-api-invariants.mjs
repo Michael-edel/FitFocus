@@ -1002,28 +1002,30 @@ if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includ
 }
 
 const stateRoute = read('functions/api/state.ts');
+const stateWrite = read('functions/api/_lib/state_write.ts');
+const stateStore = read('functions/api/_lib/state_store.ts');
 assertIncludes(
-  stateRoute,
+  stateStore,
   'WITH input(k, v, base_version) AS (VALUES ',
   'state put must stage all kv items in one atomic SQL write',
 );
 assertIncludes(
-  stateRoute,
+  stateStore,
   'WHERE NOT EXISTS (SELECT 1 FROM conflict)',
   'state put must reject the entire write when a concurrent version conflict exists',
 );
 assertIncludes(
-  stateRoute,
+  stateStore,
   'RETURNING k, version',
   'state put must return the database-assigned versions after an atomic write',
 );
 assertIncludes(
-  stateRoute,
+  stateWrite,
   'Number.isInteger(parsedBaseVersion)',
   'state put must reject non-integer baseVersion values',
 );
 assertIncludes(
-  stateRoute,
+  stateWrite,
   'BAD_BASE_VERSION',
   'state put must reject invalid baseVersion values instead of bypassing conflict checks',
 );
@@ -1053,8 +1055,9 @@ if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user
 }
 
 const profileRoute = read('functions/api/profile.ts');
+const profileWrite = read('functions/api/_lib/profile_write.ts');
 assertIncludes(
-  profileRoute,
+  profileWrite,
   'Number.isInteger(parsedBaseVersion)',
   'profile writes must reject non-integer baseVersion values',
 );
