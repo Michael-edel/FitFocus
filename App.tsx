@@ -51,7 +51,7 @@ import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, rea
 import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
-import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
+import { classifyWisShareFailure } from './services/frontendErrors';
 import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { formatTime, getDayKey, getWeekKey, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
@@ -60,7 +60,7 @@ import { toggleHabit, calculateStreak, getTodayKey } from './habits';
 import { addWeight, weightDelta } from './weight';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
-import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
+import { type WeeklyStoredReport } from './weeklyAutoEngine';
 import { trackWisShareEvent } from './analytics/wisShare';
 import { calculateFoodStreak } from './analytics/foodStreak';
 import { useAchievements } from './useAchievements';
@@ -108,8 +108,8 @@ import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
-import { buildWeeklyIntelligenceRequest } from './features/ai/weeklyIntelligenceRequest';
 import { retryLastAiAction } from './features/ai/aiRetry';
+import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1313,32 +1313,12 @@ await ensurePdfInterFont(doc);
     }
   }, [checkAchievements, currentUser, weekly, weeklyReports.length, setWisShareNotice]);
 
-  // Оптимизированный запуск AI генерации еженедельных отчетов
-  const aiReportGenerationRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!currentUser || !weekly) return;
-    
-    const weekKey = getWeekKey(new Date());
-    // Если отчет для этой недели с этим WIS уже генерируется или готов - пропускаем
-    if (aiReportGenerationRef.current === `${currentUser.id}_${weekKey}_${weekly.wis}`) return;
-
-    const generateAI = async () => {
-      aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
-      setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
-      // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-      return await getWeeklyIntelligenceInterpretation(
-        buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
-      );
-    };
-
-    ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI).then(() => {
-      setWeeklyReports(loadWeeklyReports(currentUser.id));
-    }).catch((err: unknown) => {
-      // В dev StrictMode/перезапусках это нормальные "мягкие" ситуации — не засоряем консоль
-      if (!isSoftWeeklyAiError(err)) console.error("Weekly AI reporting failed", { code: "WEEKLY_AI_REPORT_FAILED" });
-      aiReportGenerationRef.current = null; // Позволяем переповтор при следующем изменении
-    });
-  }, [currentUser?.id, weekly?.wis]); // Срабатывает только при смене юзера или изменении итогового балла
+  const aiReportGenerationRef = useWeeklyAiReport({
+    currentUser,
+    weekly,
+    targets,
+    setWeeklyReports,
+  });
 
   const dailyStats = useMemo(() => {
     const todayKey = localDayKey(new Date());
