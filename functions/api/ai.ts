@@ -43,15 +43,6 @@ export interface Env {
   AUTH_JWT_SECRET?: string;
   GEMINI_TIMEOUT_MS?: string;
 }
-type GeminiPart =
-  | { text: string }
-  | { inlineData: { mimeType: string; data: string } };
-
-type GeminiContent = {
-  role?: "user" | "model";
-  parts: GeminiPart[];
-};
-
 type UsageRecord = {
   count: number;
   errorCount: number;
@@ -81,10 +72,6 @@ type GeminiResponse = JsonObject & {
   candidates?: GeminiCandidate[];
   error?: string | { message?: string };
 };
-
-type OpenAiInputPart =
-  | { type: "input_text"; text: string }
-  | { type: "input_image"; image_url: string; detail: "auto" };
 
 type AiEventArgs = {
   userId: string;
@@ -194,144 +181,6 @@ function getSettingNumberOrDefault(settings: Record<string, string>, key: string
   if (raw.trim() === "") return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function normalizeContents(input: unknown): GeminiContent[] {
-  const toTextContent = (t: string): GeminiContent => ({
-    role: "user",
-    parts: [{ text: t }],
-  });
-
-  const isPart = (p: unknown): p is GeminiPart =>
-    !!p &&
-    (isJsonObject(p) && typeof p.text === "string" ||
-      (isJsonObject(p) &&
-        isJsonObject(p.inlineData) &&
-        typeof p.inlineData.mimeType === "string" &&
-        typeof p.inlineData.data === "string"));
-
-  const toContent = (c: unknown): GeminiContent | null => {
-    if (!c) return null;
-
-    if (isJsonObject(c) && Array.isArray(c.parts) && c.parts.every(isPart)) {
-      const role = c.role === "model" ? "model" : "user";
-      return { role, parts: c.parts };
-    }
-
-    if (isPart(c)) {
-      return { role: "user", parts: [c] };
-    }
-
-    if (typeof c === "string") return toTextContent(c);
-    if (isJsonObject(c) && typeof c.text === "string") return toTextContent(c.text);
-
-    return null;
-  };
-
-  if (typeof input === "string") return [toTextContent(input)];
-
-  if (Array.isArray(input)) {
-    const out: GeminiContent[] = [];
-    for (const item of input) {
-      const cc = toContent(item);
-      if (cc) out.push(cc);
-    }
-    return out;
-  }
-
-  const single = toContent(input);
-  if (single) return [single];
-
-  return [];
-}
-
-function normalizeOpenAiSchema(value: unknown): JsonRecord | null {
-  if (!isJsonObject(value)) return null;
-
-  const rawType = typeof value.type === "string" ? value.type.toLowerCase() : "";
-  if (rawType === "object") {
-    const rawProperties = isJsonObject(value.properties) ? value.properties : {};
-    const properties: JsonRecord = {};
-    for (const [name, property] of Object.entries(rawProperties)) {
-      const normalized = normalizeOpenAiSchema(property);
-      if (normalized) properties[name] = normalized;
-    }
-
-    const result: JsonRecord = {
-      type: "object",
-      properties,
-      required: Object.keys(properties),
-      additionalProperties: false,
-    };
-    if (typeof value.description === "string") result.description = value.description;
-    return result;
-  }
-
-  if (rawType === "array") {
-    const result: JsonRecord = { type: "array" };
-    const items = normalizeOpenAiSchema(value.items);
-    if (items) result.items = items;
-    if (typeof value.description === "string") result.description = value.description;
-    return result;
-  }
-
-  const result: JsonRecord = { ...value };
-  if (rawType) result.type = rawType;
-  return result;
-}
-
-function normalizeOpenAiInput(input: unknown): JsonRecord[] {
-  const contents = normalizeContents(input);
-  return contents.flatMap((content) => {
-    const parts: OpenAiInputPart[] = [];
-    for (const part of content.parts) {
-      if ("text" in part && typeof part.text === "string") {
-        parts.push({ type: "input_text", text: part.text });
-        continue;
-      }
-
-      if ("inlineData" in part) {
-        const { mimeType, data } = part.inlineData;
-        if (mimeType && data) {
-          const imageUrl = data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`;
-          parts.push({ type: "input_image", image_url: imageUrl, detail: "auto" });
-        }
-      }
-    }
-
-    if (!parts.length) return [];
-    return [{ role: content.role === "model" ? "assistant" : "user", content: parts }];
-  });
-}
-
-function buildOpenAiPayload(payload: JsonRecord, model: string): JsonRecord {
-  const generationConfig = isJsonObject(payload.generationConfig) ? payload.generationConfig : {};
-  const request: JsonRecord = {
-    model,
-    input: normalizeOpenAiInput(payload.contents),
-    store: false,
-  };
-
-  const maxOutputTokens = Number(generationConfig.maxOutputTokens || 0);
-  if (Number.isFinite(maxOutputTokens) && maxOutputTokens > 0) {
-    request.max_output_tokens = Math.floor(maxOutputTokens);
-  }
-
-  const schema = normalizeOpenAiSchema(generationConfig.responseSchema);
-  if (schema) {
-    request.text = {
-      format: {
-        type: "json_schema",
-        name: "fitfocus_response",
-        strict: true,
-        schema,
-      },
-    };
-  } else if (generationConfig.responseMimeType === "application/json") {
-    request.text = { format: { type: "json_object" } };
-  }
-
-  return request;
 }
 
 async function sha256Hex(input: string) {
