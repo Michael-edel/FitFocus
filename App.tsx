@@ -52,7 +52,7 @@ import { compressFoodPhoto } from './services/foodPhoto';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -111,6 +111,7 @@ import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
+import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -169,8 +170,6 @@ const isRecord = (value: unknown): value is UnknownRecord =>
 
 const isBooleanRecord = (value: unknown): value is Record<string, boolean> =>
   isRecord(value) && Object.values(value).every((item) => typeof item === 'boolean');
-
-const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
 
 const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
   const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
@@ -652,130 +651,15 @@ const App: React.FC = () => {
     root.classList.toggle('dark', isDark);
   }, [settings.theme]);
 
-  // Favorite recipes
-  const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>([]);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setFavoriteRecipes([]);
-      return;
-    }
-    const normalizeFavoriteRecipe = (item: unknown): FavoriteRecipe | null => {
-      if (!isRecord(item)) return null;
-      const rawRecipe = isRecord(item.recipe) ? item.recipe : null;
-      const toIngredient = (value: unknown): { name: string; amount?: string } | null => {
-        if (typeof value === 'string') {
-          const text = value.trim();
-          if (!text) return null;
-          const separators = ['—', '–', '-', ':'];
-          for (const separator of separators) {
-            const idx = text.indexOf(separator);
-            if (idx > 0) {
-              const name = text.slice(0, idx).trim();
-              const amount = text.slice(idx + separator.length).trim();
-              if (name && amount) return { name, amount };
-            }
-          }
-          return { name: text };
-        }
-        if (!value || typeof value !== 'object') return null;
-        const ing = value as { name?: unknown; title?: unknown; amount?: unknown; grams?: unknown; value?: unknown };
-        const name = String(ing.name || ing.title || '').trim();
-        if (!name) return null;
-        const amount = ing.amount ?? ing.grams ?? ing.value;
-        return {
-          name,
-          amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
-        };
-      };
-
-      const ingredientHasAmount = (value: unknown) => !!toIngredient(value)?.amount;
-      const pickIngredientSource = (primary: unknown, fallback: unknown) => {
-        const primaryArr = Array.isArray(primary) ? primary : [];
-        const fallbackArr = Array.isArray(fallback) ? fallback : [];
-        if (primaryArr.some(ingredientHasAmount)) return primaryArr;
-        if (fallbackArr.some(ingredientHasAmount)) return fallbackArr;
-        return primaryArr.length ? primaryArr : fallbackArr;
-      };
-      const toIsoDate = (value: unknown) => {
-        if (typeof value === 'string' || typeof value === 'number') {
-          const date = new Date(value);
-          if (Number.isFinite(date.getTime())) return date.toISOString();
-        }
-        return new Date().toISOString();
-      };
-
-      const ingredientsSource = pickIngredientSource(item.ingredients, rawRecipe?.ingredients);
-      const stepsSource = Array.isArray(rawRecipe?.steps)
-        ? rawRecipe.steps
-        : Array.isArray(item.steps)
-          ? item.steps
-          : [];
-      const ingredients = ingredientsSource
-        .map(toIngredient)
-        .filter(isPresent);
-      const steps = stepsSource
-        .map((step: unknown, idx: number) => {
-          if (typeof step === 'string') {
-            const text = step.trim();
-            return text ? { n: idx + 1, text } : null;
-          }
-          if (!isRecord(step)) return null;
-          const text = String(step.text || step.step || '').trim();
-          if (!text) return null;
-          const n = Number(step.n || idx + 1);
-          const timeMin = step.timeMin ?? step.time_minutes;
-          return {
-            n: Number.isFinite(n) && n > 0 ? n : idx + 1,
-            text,
-            ...(timeMin === undefined || timeMin === null || timeMin === ''
-              ? {}
-              : { timeMin: Number(timeMin) || undefined }),
-          };
-        })
-        .filter(isPresent);
-      const recipe = {
-        title: String(rawRecipe?.title || item.title || 'Рецепт'),
-        servings: Number(rawRecipe?.servings ?? item.servings ?? 0) || undefined,
-        timeMinutes: Number(rawRecipe?.timeMinutes ?? item.timeMinutes ?? 0) || undefined,
-        ingredients,
-        steps,
-        tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
-      };
-      return {
-        id: String(item.id || globalThis.crypto?.randomUUID?.() || Date.now().toString()),
-        title: String(item.title || recipe.title),
-        createdAt: typeof item.createdAt === 'string' ? item.createdAt : toIsoDate(item.createdAt),
-        photo: typeof item.photo === 'string' ? item.photo : undefined,
-        allergens: Array.isArray(item.allergens) ? item.allergens.map(String).filter(Boolean) : undefined,
-        intolerances: Array.isArray(item.intolerances) ? item.intolerances.map(String).filter(Boolean) : undefined,
-        sourceFoodName: typeof item.sourceFoodName === 'string' ? item.sourceFoodName : undefined,
-        recipe,
-      };
-    };
-    if (!userStateRepository) return;
-    const stored = userStateRepository.readJson<unknown[]>('favorite_recipes', [], Array.isArray);
-    const normalized = stored.map(normalizeFavoriteRecipe).filter(isPresent);
-    setFavoriteRecipes(normalized);
-    userStateRepository.writeJson('favorite_recipes', normalized);
-  }, [currentUser?.id, userStateRepository]);
-
-  const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
-    setFavoriteRecipes(next);
-    userStateRepository?.writeJson('favorite_recipes', next);
-  }, [userStateRepository]);
-
-  const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
-    persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
-  }, [favoriteRecipes, persistFavorites]);
-
-  const removeFavoriteRecipe = useCallback((id: string) => {
-    persistFavorites(favoriteRecipes.filter(r => r.id !== id));
-  }, [favoriteRecipes, persistFavorites]);
-
-  const clearFavoriteRecipes = useCallback(() => {
-    persistFavorites([]);
-  }, [persistFavorites]);
+  const {
+    favoriteRecipes,
+    addFavoriteRecipe,
+    removeFavoriteRecipe,
+    clearFavoriteRecipes,
+  } = useFavoriteRecipes({
+    userId: currentUser?.id,
+    repository: userStateRepository,
+  });
 
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
   const modeBadge = useMemo(() => {
