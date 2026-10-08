@@ -1201,14 +1201,14 @@ assertNotIncludes(
 );
 
 const pushTestRoute = read('functions/api/push/test.ts');
-const pushStatusRoute = read('functions/api/push/status.ts');
+const pushStatusRoute = [read('functions/api/push/status.ts'), read('functions/api/_lib/push_subscriptions.ts')].join('\n');
 const pushSubscribeRoute = read('functions/api/push/subscribe.ts');
 const pushUnsubscribeRoute = read('functions/api/push/unsubscribe.ts');
 const settingsScreen = read('SettingsScreen.tsx');
 assertIncludes(
   pushStatusRoute,
-  'vapid_public_key: env.PUSH_VAPID_PUBLIC_KEY || null',
-  'push status route must expose the public VAPID key for browser subscription',
+  'vapid_public_key: input.env.PUSH_VAPID_PUBLIC_KEY || null',
+  'push status use case must expose the public VAPID key for browser subscription',
 );
 assertIncludes(
   settingsScreen,
