@@ -7,15 +7,12 @@ import {
   isSafeInlineAttachmentMime,
   inlineAttachmentBytes,
   normalizeAttachmentMime,
-  parseAttachmentsJson,
   type SupportAttachmentRecord,
 } from "../_lib/support_attachments";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { readSupportAttachmentRecord } from '../_lib/support_attachment_read';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
-type SupportTicketOwnerRow = { id: string; user_id: string; attachments_json?: string | null };
-type SupportMessageAttachmentRow = { attachments_json?: string | null };
-
 function safeFileName(name: string) {
   return name.replace(/["\\\r\n]/g, "_").slice(0, 120) || "attachment";
 }
@@ -55,38 +52,18 @@ const handleSupportAttachmentGet: PagesFunction<Env> = async ({ request, env }) 
     return json({ error: "BAD_REQUEST", message: "id and index are required" }, 400);
   }
 
-  const row = await db.prepare(
-    `SELECT id, user_id
-     FROM support_feedback
-     WHERE id = ?
-     LIMIT 1`
-  ).bind(ticketId).first<SupportTicketOwnerRow>();
-  if (!row) return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
-  if (!isAdmin && row.user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);
-
-  let attachmentsJson: string | null | undefined;
-  if (messageId) {
-    const messageRow = await db.prepare(
-      `SELECT attachments_json
-       FROM support_feedback_messages
-       WHERE id = ? AND ticket_id = ?
-       LIMIT 1`
-    ).bind(messageId, ticketId).first<SupportMessageAttachmentRow>();
-    if (!messageRow) return json({ error: "NOT_FOUND", message: "message not found" }, 404);
-    attachmentsJson = messageRow.attachments_json;
-  } else {
-    const ticketRow = await db.prepare(
-      `SELECT attachments_json
-       FROM support_feedback
-       WHERE id = ?
-       LIMIT 1`
-    ).bind(ticketId).first<SupportMessageAttachmentRow>();
-    attachmentsJson = ticketRow?.attachments_json;
-  }
-
-  const attachments = parseAttachmentsJson(attachmentsJson);
-  const attachment = attachments[index];
-  if (!attachment) return json({ error: "NOT_FOUND", message: "attachment not found" }, 404);
+  const result = await readSupportAttachmentRecord(db, {
+    userId: user.sub,
+    isAdmin,
+    ticketId,
+    messageId: messageId || undefined,
+    index,
+  });
+  if (result.kind === "ticket-not-found") return json({ error: "NOT_FOUND", message: "ticket not found" }, 404);
+  if (result.kind === "forbidden") return json({ error: "FORBIDDEN" }, 403);
+  if (result.kind === "message-not-found") return json({ error: "NOT_FOUND", message: "message not found" }, 404);
+  if (result.kind === "attachment-not-found") return json({ error: "NOT_FOUND", message: "attachment not found" }, 404);
+  const { attachment } = result;
 
   if (attachment.storage_key && env.SUPPORT_ATTACHMENTS) {
     const stored = await env.SUPPORT_ATTACHMENTS.get(attachment.storage_key);

@@ -252,7 +252,7 @@ assertIncludes(
   'support attachment route builder must include messageId in URLs',
 );
 
-const supportAttachmentRoute = read('functions/api/support/attachment.ts');
+const supportAttachmentRoute = `${read('functions/api/support/attachment.ts')}\n${read('functions/api/_lib/support_attachment_read.ts')}`;
 assertIncludes(
   supportAttachmentRoute,
   'const messageId = String(url.searchParams.get("messageId") || "").trim();',
@@ -265,7 +265,7 @@ assertIncludes(
 );
 assertIncludes(
   supportAttachmentRoute,
-  'if (!isAdmin && row.user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);',
+  "if (!input.isAdmin && ticket.user_id !== input.userId) return { kind: 'forbidden' };",
   'support attachment route must enforce owner/admin access',
 );
 
