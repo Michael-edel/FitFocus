@@ -3,6 +3,7 @@ import { consumeInviteCode } from "../_lib/invites";
 import { asString, isJsonObject, type JsonObject } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { cookieSerialize, signSessionJwt } from "./_oauth";
+import { logApiEvent, requestIdFor, withRequestId } from "../_lib/observability";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
 // then issues our own signed session JWT in HttpOnly cookie.
@@ -14,7 +15,7 @@ async function safeResponseJson(response: Response): Promise<JsonObject> {
   return isJsonObject(parsed) ? parsed : {};
 }
 
-export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+const handleGoogleIdentityPost: PagesFunction<Env> = async (ctx) => {
   try {
     const { request, env } = ctx;
 
@@ -159,6 +160,14 @@ await env.DB.prepare(
   } catch {
     return json({ error: "Server error" }, 500);
   }
+};
+
+/** Records only the sign-in outcome; credentials and identity data stay private. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleGoogleIdentityPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("auth.google.identity.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
 type Env = {

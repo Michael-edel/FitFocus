@@ -53,7 +53,7 @@ async function postGoogleRequest(db: ReturnType<typeof makeDb>) {
   const context: GoogleAuthContext = {
     request: new Request('https://fitfocus.test/api/auth/google', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https', 'x-request-id': 'google-identity-01' },
       body: JSON.stringify({ credential: 'google-id-token' }),
     }),
     env: {
@@ -84,6 +84,7 @@ describe('/api/auth/google admin promotion', () => {
     const response = await postGoogleAuth(db, false);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('google-identity-01');
     expect(hasAdminPromotion(db)).toBe(false);
   });
 
