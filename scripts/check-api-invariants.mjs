@@ -139,6 +139,11 @@ assertIncludes(
   'await safeResponseJson(infoRes)',
   'google OAuth callback must tolerate non-JSON tokeninfo failures',
 );
+assertIncludes(
+  googleOAuthCallback,
+  'if (!googleSub) return json({ error: "Invalid subject" }, 400);',
+  'google OAuth callback must reject a provider response without a stable subject',
+);
 
 const googleOAuthStart = read('functions/api/auth/google/start.ts');
 assertIncludes(

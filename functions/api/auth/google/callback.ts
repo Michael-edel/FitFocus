@@ -106,8 +106,10 @@ const handleGoogleOAuthCallback: PagesFunction<{
     if (!infoRes.ok) return json({ error: "tokeninfo failed" }, 502);
     if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
 
+    const googleSub = typeof info.sub === "string" ? info.sub.trim() : "";
+    if (!googleSub) return json({ error: "Invalid subject" }, 400);
     const user = {
-      sub: String(info.sub),
+      sub: googleSub,
       email: String(info.email || ""),
       name: String(info.name || info.given_name || ""),
       picture: String(info.picture || ""),
