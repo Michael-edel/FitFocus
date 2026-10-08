@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion, parseHuaweiSyncInput } from '../functions/api/_lib/huawei_health';
 import { syncHuaweiProfile } from '../functions/api/_lib/huawei_sync';
+import { disconnectHuaweiProfile } from '../functions/api/_lib/huawei_disconnect';
 
 describe('Huawei sync field rules', () => {
   it('accepts non-negative integer base versions and rejects invalid values', () => {
@@ -64,5 +65,22 @@ describe('Huawei sync field rules', () => {
       now: 1_700_000_000_000,
     });
     expect(result).toMatchObject({ kind: 'conflict', profile: { height: 180, version: 4 }, version: 4 });
+  });
+
+  it('does not overwrite a concurrently changed Huawei profile while disconnecting', async () => {
+    const db = {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async () => sql.includes('FROM user_profiles') ? { profile_json: '{"wearableProvider":"huawei_health"}', version: 4 } : null,
+          run: async () => ({ meta: { changes: sql.includes('UPDATE user_profiles') ? 0 : 1 } }),
+        }),
+      }),
+    } as unknown as D1Database;
+    const result = await disconnectHuaweiProfile({
+      db,
+      user: { sub: 'user-1', sid: 'sid-1', emailVerified: false, roles: [] },
+      maxAttempts: 1,
+    });
+    expect(result).toMatchObject({ kind: 'conflict', version: 4, profile: { wearableProvider: 'huawei_health', version: 4 } });
   });
 });
