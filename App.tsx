@@ -116,6 +116,7 @@ import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { useAiActivityStatus } from './features/ai/useAiActivityStatus';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
+import { PREMIUM_GATES, canUsePremiumGate, incrementUsageCounter, type UsageCounter } from './features/usage/premiumGates';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
 import { completeCourseLesson, recordCourseQuizAnswer } from './features/course/courseProgress';
@@ -201,14 +202,6 @@ const waitForDocumentFonts = async () => {
 // NOTE: PDF генерация вынесена в ./pdf (см. pdf/font.ts). Это решает "кракозябры" (кириллица) и упрощает поддержку.
 
 
-
-const PREMIUM_GATES = {
-  aiFoodPhotoPerDay: { free: 3, pro: Infinity, family: Infinity },
-  aiCoachAdvicePerDay: { free: 3, pro: Infinity, family: Infinity },
-  familyMenuGenerationsPerWeek: { free: 1, pro: 10, family: 100 },
-  weeklyReview: { free: false, pro: true, family: true },
-  metabolicAdaptation: { free: false, pro: true, family: true }
-};
 
 const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_water', title: 'Пить воду', goal: 8, current: 0, unit: 'ст.', streak: 0, lastCompletedDate: null },
@@ -990,16 +983,12 @@ const App: React.FC = () => {
 
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
     if (!currentUser) return false;
-    const usage = currentUser.usage || {};
-    if (type === 'aiFoodPhotoPerDay') return (usage.aiFoodPhotoCount || 0) < (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan] || 3);
-    if (type === 'aiCoachAdvicePerDay') return (usage.aiCoachCount || 0) < (PREMIUM_GATES.aiCoachAdvicePerDay[paywall.plan] || 1);
-    return Boolean(PREMIUM_GATES[type][paywall.plan]);
+    return canUsePremiumGate(type, paywall.plan, currentUser.usage);
   }, [currentUser, paywall.plan]);
 
-  const incrementUsage = useCallback((key: keyof UsageStats) => {
+  const incrementUsage = useCallback((key: UsageCounter) => {
     if (!currentUser) return;
-    const nextUsage = { ...currentUser.usage, [key]: (Number(currentUser.usage?.[key as keyof UsageStats]) || 0) + 1 };
-    persistUser({ ...currentUser, usage: nextUsage });
+    persistUser({ ...currentUser, usage: incrementUsageCounter(currentUser.usage, key) });
   }, [currentUser, persistUser]);
 
   const remainingPhotoScans = useMemo(() => {
