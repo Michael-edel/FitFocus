@@ -1210,6 +1210,7 @@ assertNotIncludes(
 );
 
 const pushTestRoute = read('functions/api/push/test.ts');
+const pushTestDelivery = read('functions/api/_lib/push_test_delivery.ts');
 const pushStatusRoute = [read('functions/api/push/status.ts'), read('functions/api/_lib/push_subscriptions.ts')].join('\n');
 const pushSubscribeRoute = read('functions/api/push/subscribe.ts');
 const pushUnsubscribeRoute = read('functions/api/push/unsubscribe.ts');
@@ -1261,16 +1262,16 @@ for (const [file, text] of [
   );
 }
 assertIncludes(
-  pushTestRoute,
+  pushTestDelivery,
   'const statements: D1PreparedStatement[] = [];',
   'push test route must stage subscription status writes',
 );
 assertIncludes(
-  pushTestRoute,
-  'await db.batch(statements);',
+  pushTestDelivery,
+  'await input.db.batch(statements);',
   'push test route must write subscription status changes through one batch',
 );
-if (pushTestRoute.includes('UPDATE push_subscriptions SET last_sent_at') && pushTestRoute.includes('.run();')) {
+if (pushTestDelivery.includes('UPDATE push_subscriptions SET last_sent_at') && pushTestDelivery.includes('.run();')) {
   console.error('push test route must not execute per-subscription status writes separately.');
   process.exitCode = 1;
 }
