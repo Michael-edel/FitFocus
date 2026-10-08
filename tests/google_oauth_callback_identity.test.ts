@@ -28,10 +28,12 @@ function makeContext(): GoogleCallbackContext {
   };
 }
 
-function mockProviderInfo(info: Record<string, unknown>) {
-  vi.stubGlobal('fetch', vi.fn()
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id_token: 'google-id-token' }), { status: 200 }))
-    .mockResolvedValueOnce(new Response(JSON.stringify(info), { status: 200 })));
+function mockProviderInfo(info: Record<string, unknown>, token: Record<string, unknown> = { id_token: 'google-id-token' }) {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(token), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(info), { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 describe('Google OAuth callback identity validation', () => {
@@ -44,6 +46,14 @@ describe('Google OAuth callback identity validation', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a whitespace-only token endpoint id_token before tokeninfo', async () => {
+    const fetchMock = mockProviderInfo({}, { id_token: '   ' });
+
+    const response = await onRequestGet(makeContext());
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'No id_token returned' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it('rejects tokeninfo without a stable subject before database access', async () => {
     mockProviderInfo({ aud: 'google-client-id', iss: 'https://accounts.google.com' });
 

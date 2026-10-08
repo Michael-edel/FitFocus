@@ -97,7 +97,7 @@ export async function handleGoogleOAuthCallback({ request, env }: { request: Req
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed" }, 502);
     }
-    const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token : undefined;
+    const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";
     if (!idToken) return json({ error: "No id_token returned" }, 502);
 
     // Validate token + get profile

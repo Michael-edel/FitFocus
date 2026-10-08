@@ -139,6 +139,11 @@ assertIncludes(
 );
 assertIncludes(
   googleOAuthCallback,
+  'const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";',
+  'google OAuth callback must accept only a non-empty string id_token from the token endpoint',
+);
+assertIncludes(
+  googleOAuthCallback,
   'await safeResponseJson(infoRes)',
   'google OAuth callback must tolerate non-JSON tokeninfo failures',
 );
