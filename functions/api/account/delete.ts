@@ -4,7 +4,7 @@
 
 import { requireUser, json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
-import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, softDeleteAccount } from "../_lib/account_delete";
+import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, logSelfServiceAccountDeletion, softDeleteAccount } from "../_lib/account_delete";
 import { asString } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
@@ -55,14 +55,7 @@ const handleAccountDeletePost: PagesFunction<Env> = async ({ request, env }) => 
     }
     await softDeleteAccount(db, user.sub);
 
-    // Log event (non-AI, but reuse ai_events for audit)
-    try {
-      await db.prepare(
-        "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-        .bind(crypto.randomUUID(), user.sub, Date.now(), "account_delete", 200, Date.now() - t0, 0, null, null, null)
-        .run();
-    } catch {}
+    await logSelfServiceAccountDeletion(db, user.sub, Date.now() - t0);
 
     const h = new Headers();
     // Clear cookie on client side too
