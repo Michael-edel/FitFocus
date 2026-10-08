@@ -47,7 +47,7 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
+import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { fetchWithResilience } from './services/httpClient';
 import { type FastLogItem } from './storage/foodDiary';
@@ -113,6 +113,7 @@ import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
+import { useAiActivityStatus } from './features/ai/useAiActivityStatus';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
@@ -475,21 +476,7 @@ const App: React.FC = () => {
   });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
-  const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {
-    try { return readAiStatus(); } catch { return null; }
-  });
-
-  const [lastAiAction, setLastAiActionState] = useState(() => {
-    try { return getLastAiAction(); } catch { return null; }
-  });
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      try { setAiStatus(readAiStatus()); } catch {}
-      try { setLastAiActionState(getLastAiAction()); } catch {}
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, []);
+  const { aiStatus, lastAiAction } = useAiActivityStatus();
 
   useDocumentTheme(settings.theme);
 
