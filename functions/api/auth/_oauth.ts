@@ -297,6 +297,15 @@ async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {
   );
 }
 
+/** Validates the Apple identity claims after the JWT signature has been verified. */
+export function validateAppleIdTokenClaims(payload: Record<string, unknown>, expectedAudience: string, now = Math.floor(Date.now() / 1000)): Record<string, unknown> | null {
+  const subject = typeof payload.sub === 'string' ? payload.sub.trim() : '';
+  if (String(payload.iss || '') !== 'https://appleid.apple.com') return null;
+  if (String(payload.aud || '') !== expectedAudience) return null;
+  if (Number(payload.exp || 0) <= now) return null;
+  if (!subject) return null;
+  return { ...payload, sub: subject };
+}
 export async function verifyAppleIdToken(token: string, expectedAudience: string): Promise<Record<string, unknown> | null> {
   const parsed = parseJwtParts(token);
   if (!parsed) return null;
@@ -319,11 +328,5 @@ export async function verifyAppleIdToken(token: string, expectedAudience: string
   );
   if (!verified) return null;
 
-  const payload = parsed.payload;
-  const now = Math.floor(Date.now() / 1000);
-  if (String(payload.iss || "") !== "https://appleid.apple.com") return null;
-  if (String(payload.aud || "") !== expectedAudience) return null;
-  if (Number(payload.exp || 0) <= now) return null;
-  if (!String(payload.sub || "")) return null;
-  return payload;
+  return validateAppleIdTokenClaims(parsed.payload, expectedAudience);
 }
