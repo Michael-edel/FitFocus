@@ -851,7 +851,7 @@ for (const [file, text] of [
   );
 }
 
-const billingWebhook = read('functions/api/billing/webhook.ts');
+const billingWebhook = `${read('functions/api/billing/webhook.ts')}\n${read('functions/api/_lib/billing_subscription.ts')}`;
 assertIncludes(
   billingWebhook,
   'applyStripeSubscriptionUpdate',
