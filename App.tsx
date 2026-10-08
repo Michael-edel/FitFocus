@@ -115,6 +115,7 @@ import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { useAiActivityStatus } from './features/ai/useAiActivityStatus';
+import { buildAiActivityBadge } from './features/ai/aiActivityBadge';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { PREMIUM_GATES, canUsePremiumGate, incrementUsageCounter, type UsageCounter } from './features/usage/premiumGates';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
@@ -1267,37 +1268,7 @@ const logWeight = useCallback(() => {
 
   const plateau = useMemo(() => currentUser ? detectPlateau(currentUser) : false, [currentUser]);
 
-  const aiBadge = useMemo(() => {
-    const s = aiStatus;
-    const now = Date.now();
-    const cooling = (s?.cooldownUntil ?? 0) > now;
-
-    if (!s) {
-      return { label: 'AI: готов', cls: 'bg-slate-800/60 text-slate-300 border-slate-700', title: 'AI готов к работе' };
-    }
-
-    if (cooling) {
-      return {
-        label: 'AI: пауза',
-        cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20',
-        title: `AI временно ограничен (квота/лимит). Используется кэш/фолбэк до ${new Date(s.cooldownUntil || now).toLocaleTimeString()}`
-      };
-    }
-
-    if (s.source.includes('cooldown')) {
-      return { label: 'AI: кэш', cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20', title: s.reason || 'Используется кэш из-за лимитов' };
-    }
-    if (s.source === 'cache') {
-      return { label: 'AI: кэш', cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20', title: 'Показывается ранее сгенерированный результат' };
-    }
-    if (s.source === 'fallback') {
-      return { label: 'AI: офлайн', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'AI недоступен, используется локальный совет' };
-    }
-    if (s.source === 'error') {
-      return { label: 'AI: ошибка', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'Ошибка AI' };
-    }
-    return { label: 'AI: online', cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20', title: 'AI отвечает в реальном времени' };
-  }, [aiStatus]);
+  const aiBadge = useMemo(() => buildAiActivityBadge(aiStatus), [aiStatus]);
 
   const retryMeta = useMemo(() => {
     const cooling = (aiStatus?.cooldownUntil ?? 0) > Date.now();
