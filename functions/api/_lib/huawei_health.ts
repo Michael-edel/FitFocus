@@ -20,6 +20,7 @@ export type HuaweiHealthEnv = {
   HUAWEI_HEALTH_ACTIVE_MINUTES_DATA_TYPE?: string;
   HUAWEI_HEALTH_SLEEP_DATA_TYPE?: string;
   HUAWEI_HEALTH_PULSE_DATA_TYPE?: string;
+  HUAWEI_HEALTH_TIMEOUT_MS?: string;
 };
 
 export type HuaweiConnectionRow = {
@@ -58,6 +59,30 @@ const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authori
 const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
 const DEFAULT_API_BASE_URL = "https://health-api.cloud.huawei.com/healthkit/v1";
 const DEFAULT_STEPS_DATA_TYPE = "com.huawei.continuous.steps.delta";
+const DEFAULT_HUAWEI_TIMEOUT_MS = 12_000;
+
+export function normalizeHuaweiTimeoutMs(value: unknown): number {
+  const timeout = Number(value);
+  return Number.isFinite(timeout) && timeout >= 1_000 && timeout <= 60_000 ? Math.floor(timeout) : DEFAULT_HUAWEI_TIMEOUT_MS;
+}
+
+/** Sends a bounded request to Huawei Health so a stalled upstream cannot hold a worker request indefinitely. */
+export async function requestHuawei(env: HuaweiHealthEnv, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const inherited = init.signal;
+  const onAbort = () => controller.abort();
+  inherited?.addEventListener('abort', onAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), normalizeHuaweiTimeoutMs(env.HUAWEI_HEALTH_TIMEOUT_MS));
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted && !inherited?.aborted) throw new Error('HUAWEI_REQUEST_TIMEOUT');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    inherited?.removeEventListener('abort', onAbort);
+  }
+}
 
 export async function loadHuaweiProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
   const row = await db.prepare('SELECT profile_json, version FROM user_profiles WHERE user_id = ?').bind(userId).first<{ profile_json?: string; version?: number }>();
@@ -260,7 +285,7 @@ function readTokenSet(payload: unknown, fallbackScope: string): HuaweiTokenSet |
 export async function exchangeHuaweiCode(env: HuaweiHealthEnv, request: Request, code: string): Promise<HuaweiTokenSet> {
   const config = getHuaweiConfig(env, request);
   if (config.missing.length) throw new Error(`HUAWEI_CONFIG_MISSING:${config.missing.join(",")}`);
-  const response = await fetch(config.tokenUrl, {
+  const response = await requestHuawei(env, config.tokenUrl, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: new URLSearchParams({
@@ -281,7 +306,7 @@ export async function exchangeHuaweiCode(env: HuaweiHealthEnv, request: Request,
 export async function refreshHuaweiAccessToken(env: HuaweiHealthEnv, request: Request, refreshToken: string): Promise<HuaweiTokenSet> {
   const config = getHuaweiConfig(env, request);
   if (config.missing.length) throw new Error(`HUAWEI_CONFIG_MISSING:${config.missing.join(",")}`);
-  const response = await fetch(config.tokenUrl, {
+  const response = await requestHuawei(env, config.tokenUrl, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: new URLSearchParams({
@@ -445,7 +470,7 @@ export async function fetchHuaweiDailySnapshot(
     String(env.HUAWEI_HEALTH_SLEEP_DATA_TYPE || "").trim(),
     String(env.HUAWEI_HEALTH_PULSE_DATA_TYPE || "").trim(),
   ].filter(Boolean);
-  const response = await fetch(`${config.apiBaseUrl}/sampleSet:polymerize`, {
+  const response = await requestHuawei(env, `${config.apiBaseUrl}/sampleSet:polymerize`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`,

@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion, parseHuaweiSyncInput } from '../functions/api/_lib/huawei_health';
+import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, normalizeHuaweiTimeoutMs, parseHuaweiBaseVersion, parseHuaweiSyncInput } from '../functions/api/_lib/huawei_health';
 import { syncHuaweiProfile } from '../functions/api/_lib/huawei_sync';
 import { disconnectHuaweiProfile } from '../functions/api/_lib/huawei_disconnect';
 
 describe('Huawei sync field rules', () => {
+  it('bounds Huawei provider timeouts to a safe configured range', () => {
+    expect(normalizeHuaweiTimeoutMs(undefined)).toBe(12_000);
+    expect(normalizeHuaweiTimeoutMs('2500')).toBe(2500);
+    expect(normalizeHuaweiTimeoutMs('10')).toBe(12_000);
+    expect(normalizeHuaweiTimeoutMs('70000')).toBe(12_000);
+  });
+
   it('accepts non-negative integer base versions and rejects invalid values', () => {
     expect(parseHuaweiBaseVersion(undefined)).toBe(0);
     expect(parseHuaweiBaseVersion(' 4 ')).toBe(4);
