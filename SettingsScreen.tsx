@@ -12,6 +12,7 @@ import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 import { requestMobileToken } from './features/settings/mobileTokenApi';
+import { disconnectHuaweiHealth, requestHuaweiHealthStatus, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -21,15 +22,6 @@ const MIN_BMI = 12;
 const MAX_BMI = 60;
 
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
-
-type HuaweiHealthStatus = {
-  configured: boolean;
-  connected: boolean;
-  status: string;
-  scope: string;
-  expiresAt: number | null;
-  lastSyncAt: number | null;
-};
 
 type SettingsUiState = {
   draftName: string;
@@ -530,22 +522,7 @@ export default function SettingsScreen({
     }
     setHuaweiBusy((current) => current || 'status');
     try {
-      const response = await fetchWithResilience('/api/wearable/huawei/status', {
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      }, { retries: 1 });
-      const payload = await readJsonRecord(response);
-      if (!response.ok || !payload) {
-        throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось проверить Huawei Health.');
-      }
-      const next: HuaweiHealthStatus = {
-        configured: payload.configured === true,
-        connected: payload.connected === true,
-        status: typeof payload.status === 'string' ? payload.status : 'disconnected',
-        scope: typeof payload.scope === 'string' ? payload.scope : '',
-        expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : null,
-        lastSyncAt: typeof payload.lastSyncAt === 'number' ? payload.lastSyncAt : null,
-      };
+      const next = await requestHuaweiHealthStatus();
       setHuaweiStatus(next);
       return next;
     } catch (error) {
@@ -620,15 +597,7 @@ export default function SettingsScreen({
       setHuaweiError(null);
       setHuaweiNotice(null);
       try {
-        const response = await fetch('/api/wearable/huawei/disconnect', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { Accept: 'application/json' },
-        });
-        const payload = await readJsonRecord(response);
-        if (!response.ok) {
-          throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось отключить Huawei Health.');
-        }
+        const payload = await disconnectHuaweiHealth();
         if (isUserProfilePayload(payload?.profile) && onChangeUser) {
           onChangeUser(payload.profile);
         } else {
@@ -662,23 +631,7 @@ export default function SettingsScreen({
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const today = new Date();
       const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const response = await fetch('/api/wearable/huawei/sync', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ timezone, date }),
-      });
-      const payload = await readJsonRecord(response);
-      if (!response.ok || !payload) {
-        const message = payload?.error === 'HUAWEI_NOT_CONNECTED'
-          ? 'Huawei Health ещё не подключён.'
-          : payload?.error === 'NO_HUAWEI_DATA'
-            ? 'Huawei Health не вернул данные за сегодня.'
-            : payload?.error === 'UNAUTH'
-              ? 'Сначала войдите в аккаунт FitFocus.'
-              : 'Не удалось синхронизировать Huawei Health.';
-        throw new Error(message);
-      }
+      const payload = await requestHuaweiHealthSync(timezone, date);
       if (isUserProfilePayload(payload?.profile) && onChangeUser) {
         onChangeUser(payload.profile);
       }
