@@ -58,7 +58,7 @@ import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { toggleHabit, calculateStreak, getTodayKey } from './habits';
-import { addWeight, weightDelta } from './weight';
+import { weightDelta } from './weight';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { type WeeklyStoredReport } from './weeklyAutoEngine';
