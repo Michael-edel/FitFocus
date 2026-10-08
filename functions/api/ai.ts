@@ -6,6 +6,7 @@ import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
 import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
 import { buildOpenAiProviderPayload, normalizeAiContents } from './_lib/ai_provider_payload';
+import { estimateAiProviderCostUsd, extractAiProviderText, getAiProviderUsage } from './_lib/ai_provider_response';
 import {
   classifyAiFetchFailure,
   getAiProviderErrorMessage,
@@ -25,7 +26,6 @@ import {
 } from "../../aiModels";
 
 type JsonRecord = JsonObject;
-type GeminiResponse = AiProviderResponse;
 export { buildFallbackAdvice, calcTargetCalories } from './_lib/ai_fallback';
 export { isGeminiModelAvailabilityError, normalizeGeminiTimeoutMs };
 
@@ -114,19 +114,6 @@ function jsonResponse(obj: unknown, status = 200, extraHeaders: Record<string,st
       ...extraHeaders,
     },
   });
-}
-
-function getGeminiUsage(data: GeminiResponse) {
-  const usage = isJsonObject(data.usageMetadata) ? data.usageMetadata : {};
-  const openAiUsage = isJsonObject(data.usage) ? data.usage : {};
-  const inputTokens = Number(usage.promptTokenCount || openAiUsage.input_tokens || 0);
-  const outputTokens = Number(usage.candidatesTokenCount || openAiUsage.output_tokens || 0);
-  const totalTokens = Number(usage.totalTokenCount || openAiUsage.total_tokens || inputTokens + outputTokens || 0);
-  return { inputTokens, outputTokens, totalTokens };
-}
-
-function estimateCostUsd(inputTokens: number, outputTokens: number, inputPerMillion: number, outputPerMillion: number) {
-  return (inputTokens / 1_000_000) * inputPerMillion + (outputTokens / 1_000_000) * outputPerMillion;
 }
 
 function getSettingNumberOrDefault(settings: Record<string, string>, key: string, fallback: number) {
@@ -407,7 +394,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     : payloadToSend;
 
   let geminiResp: Response | null = null;
-  let data: GeminiResponse = {};
+  let data: AiProviderResponse = {};
   let effectiveModel = model;
   let latency = 0;
   const geminiTimeoutMs = normalizeGeminiTimeoutMs(env.GEMINI_TIMEOUT_MS);
@@ -462,7 +449,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   // --- Compatibility layer -------------------------------------------------
   // UI (geminiService.ts) historically ожидает поле `text`.
   // Gemini API обычно возвращает: candidates[].content.parts[].text
-  const extractedText = extractTextFromGemini(data);
+  const extractedText = extractAiProviderText(data);
   // Fallback on quota/5xx: return a deterministic plan instead of breaking the product.
   if (fallbackMode && (shouldUseAiFallback(geminiResp!.status) || isGeminiModelAvailabilityError(geminiResp!.status, data))) {
     const profile = await loadAiFallbackProfile(env.DB, String(user.sub));
@@ -498,7 +485,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   }
 
   
-  const usage = getGeminiUsage(data);
+  const usage = getAiProviderUsage(data);
   await logAiEvent(env, {
     userId: String(user.sub),
     feature,
@@ -512,7 +499,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
-    estimatedCostUsd: estimateCostUsd(usage.inputTokens, usage.outputTokens, inputCostPerMillion, outputCostPerMillion),
+    estimatedCostUsd: estimateAiProviderCostUsd(usage.inputTokens, usage.outputTokens, inputCostPerMillion, outputCostPerMillion),
     isFallback: false,
   });
 return new Response(JSON.stringify({ ...data, text: extractedText }), {
@@ -524,37 +511,6 @@ return new Response(JSON.stringify({ ...data, text: extractedText }), {
       "X-FF-KV": kv ? "found" : "missing"
     },
   });
-}
-
-function extractTextFromGemini(data: GeminiResponse): string {
-  if (typeof data.text === 'string') return data.text;
-
-  const parts: string[] = [];
-  const candidates = data.candidates;
-  if (Array.isArray(candidates)) {
-    for (const c of candidates) {
-      const p = c.content?.parts;
-      if (Array.isArray(p)) {
-        for (const part of p) {
-          if (typeof part?.text === 'string') parts.push(part.text);
-        }
-      }
-    }
-  }
-
-  const output = data.output;
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      if (!isJsonObject(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
-      for (const content of item.content) {
-        if (!isJsonObject(content) || content.type !== "output_text") continue;
-        if (typeof content.text === "string") parts.push(content.text);
-      }
-    }
-  }
-
-  if (!parts.length && typeof data.output_text === 'string') return data.output_text;
-  return parts.join('\n').trim();
 }
 
 /** Adds a correlation identifier to every AI response without logging user content. */
