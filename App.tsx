@@ -106,6 +106,7 @@ import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
 import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
 import { useCloudSyncRecovery } from './features/profile/useCloudSyncRecovery';
+import { buildCloudSyncBadge } from './features/profile/cloudSyncBadge';
 import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
@@ -1280,44 +1281,12 @@ const logWeight = useCallback(() => {
     return { cooling, label, title };
   }, [aiStatus, lastAiAction]);
 
-  const syncBadge = useMemo(() => {
-    const lastSync = lastProfileSyncAt ? new Date(lastProfileSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-    if (!googleMe?.sub) {
-      return {
-        label: 'Cloud: local',
-        cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
-        title: 'Облачная синхронизация не активна: войдите в Google, чтобы сохранять данные между устройствами.',
-      };
-    }
-    if (profileSyncState === 'saving') {
-      return {
-        label: 'Cloud: saving',
-        cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
-        title: `Синхронизация с облаком… Последний успешный синк: ${lastSync}`,
-      };
-    }
-    if (profileSyncState === 'saved') {
-      return {
-        label: 'Cloud: saved',
-        cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
-        title: `Синхронизировано с облаком. Последний синк: ${lastSync}`,
-      };
-    }
-    if (profileSyncState === 'error') {
-      return {
-        label: 'Cloud: error',
-        cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
-        title: profileSyncNote
-          ? `${profileSyncNote} Последний успешный синк: ${lastSync}`
-          : `Ошибка синхронизации. Последний успешный синк: ${lastSync}`,
-      };
-    }
-    return {
-      label: 'Cloud: idle',
-      cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
-      title: profileSyncNote || `Синхронизация готова. Последний синк: ${lastSync}`,
-    };
-  }, [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
+  const syncBadge = useMemo(() => buildCloudSyncBadge({
+    hasCloudSession: Boolean(googleMe?.sub),
+    state: profileSyncState,
+    note: profileSyncNote,
+    lastSyncAt: lastProfileSyncAt,
+  }), [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
 
   const createFamilyCloudWithAchievements = useCallback(async () => {
     await createFamilyCloud();
