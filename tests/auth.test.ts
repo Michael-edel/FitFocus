@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { requireMobileUser, requireUser } from '../functions/api/_lib/auth';
+import { onRequestGet as getMe } from '../functions/api/me';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -90,5 +91,16 @@ describe('auth audience scope', () => {
       new Request('https://fitfocus.test/api/me', { headers: { Authorization: 'Bearer a.%%%.b' } }),
       { AUTH_JWT_SECRET: SECRET, DB: makeDb() },
     )).rejects.toThrow('UNAUTH');
+  });
+
+  it('correlates an empty session response without exposing session state', async () => {
+    const response = await getMe({
+      request: new Request('https://fitfocus.test/api/me', { headers: { 'X-Request-ID': 'me-route-test-01' } }),
+      env: {} as { AUTH_JWT_SECRET?: string; DB?: D1Database },
+    } as Parameters<typeof getMe>[0]);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('me-route-test-01');
+    await expect(response.json()).resolves.toMatchObject({ user: null });
   });
 });
