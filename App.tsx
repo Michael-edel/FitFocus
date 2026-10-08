@@ -104,6 +104,7 @@ import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
+import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
@@ -452,26 +453,7 @@ const App: React.FC = () => {
   } = useAdaptationUiState(currentUser?.id);
 
   const resetUiState = useCallback(() => {
-    const userId = currentUser?.id;
-    try {
-      if (userId) {
-        [
-          `fitfocus.dashboard.new-weight.v1:${userId}`,
-          `fitfocus.course.ui.v1:${userId}`,
-          `fitfocus.plan.ui.v1:${userId}`,
-          `fitfocus.plan.active-day.v1:${userId}`,
-          `fitfocus.progress.ui.v1:${userId}`,
-          `fitfocus.progress-archive.sections.v1:${userId}`,
-          `fitfocus.settings.ui.v1:${userId}`,
-          `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
-          `fitfocus.dashboard.mobile-more-open.v1:${userId}`,
-          `fitfocus.nutrition.search.v1:${userId}`,
-          `fitfocus.nutrition.camera-facing.v1:${userId}`,
-        ].forEach((key) => localStorage.removeItem(key));
-      }
-    } catch {
-      // ignore
-    }
+    clearAppUiStorage(currentUser?.id);
 
     setNewWeight('');
     setPdfIncludeMealLog(false);
