@@ -1452,7 +1452,7 @@ const logWeight = useCallback(() => {
 
   const handleMarkLessonRead = useCallback(() => {
     if (!currentUser || !currentLesson) return;
-    const completion = completeCourseLesson(currentUser.courseProgress, currentLesson.id, new Date().toLocaleDateString('en-CA'));
+    const completion = completeCourseLesson(currentUser.courseProgress, currentLesson.id, localDayKey(new Date()));
     if (completion.kind === 'completed') {
       persistUser({ ...currentUser, courseProgress: completion.progress });
     }
@@ -1467,7 +1467,7 @@ const logWeight = useCallback(() => {
 
   const handleQuizSubmit = useCallback(() => {
     if (!currentUser || !currentLesson || !selectedQuizOption) return;
-    const answers = recordCourseQuizAnswer(currentUser.lessonQuizAnswers, currentLesson.id, selectedQuizOption.id, new Date().toLocaleDateString('en-CA'));
+    const answers = recordCourseQuizAnswer(currentUser.lessonQuizAnswers, currentLesson.id, selectedQuizOption.id, localDayKey(new Date()));
     persistUser({ ...currentUser, lessonQuizAnswers: answers });
     closeLessonView();
   }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
