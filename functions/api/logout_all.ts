@@ -2,15 +2,14 @@
 // Revokes ALL sessions for current user and clears ff_session cookie.
 
 import { requireUser, json } from "./_lib/auth";
+import { revokeAllUserSessions } from "./_lib/session_revocation";
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 const handleLogoutAllPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
 
-    await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?")
-      .bind(u.sub)
-      .run();
+    await revokeAllUserSessions(env.DB, u.sub);
 
     const isHttps =
       new URL(request.url).protocol === "https:" ||

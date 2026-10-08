@@ -2,6 +2,7 @@
 // Revokes current session (if present) and clears ff_session cookie.
 
 import { readCookie, verifySessionJwt } from "./_lib/auth";
+import { revokeSession } from "./_lib/session_revocation";
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 const handleLogoutPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -18,9 +19,7 @@ const handleLogoutPost: PagesFunction<Env> = async ({ request, env }) => {
       const sid = String(payload?.sid || "");
       const sub = String(payload?.sub || "");
       if (sid && sub) {
-        await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?")
-          .bind(sid, sub)
-          .run();
+        await revokeSession(env.DB, sid, sub);
       }
     }
   } catch {
