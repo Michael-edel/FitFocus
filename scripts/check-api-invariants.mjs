@@ -1340,5 +1340,18 @@ assertIncludes(
   'family creation must surface unresolved creation races explicitly',
 );
 
+
+const oauthTransport = read('functions/api/auth/_oauth.ts');
+assertIncludes(oauthTransport, 'fetchOAuthProvider', 'OAuth providers must use the bounded shared transport');
+assertIncludes(oauthTransport, 'OAUTH_PROVIDER_TIMEOUT_MS', 'OAuth provider requests must have a bounded timeout');
+
+const huaweiTransport = read('functions/api/_lib/huawei_health.ts');
+assertIncludes(huaweiTransport, 'requestHuawei(env, config.tokenUrl', 'Huawei token operations must use bounded provider requests');
+assertIncludes(huaweiTransport, 'requestHuawei(env, `${config.apiBaseUrl}/sampleSet:polymerize`', 'Huawei metric reads must use bounded provider requests');
+
+const pushTransport = read('functions/api/_lib/push.ts');
+assertIncludes(pushTransport, 'normalizePushDeliveryTimeoutMs', 'Web Push delivery must normalize its request timeout');
+assertIncludes(pushTransport, 'signal: controller.signal', 'Web Push delivery must abort a stalled endpoint request');
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
