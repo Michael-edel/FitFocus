@@ -104,6 +104,7 @@ import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
+import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
 import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
@@ -992,36 +993,15 @@ await ensurePdfInterFont(doc);
   }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
 
   // Server-driven: persist profile changes to D1 (debounced)
-  const profileSaveTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!currentUser) return;
-    if (!googleMe?.sub) {
-      if (profileSyncState !== 'idle') {
-        setProfileSyncState('idle');
-      }
-      if (profileSyncNote) {
-        setProfileSyncNote(null);
-      }
-      if (lastProfileSyncAt !== null) {
-        setLastProfileSyncAt(null);
-      }
-      return;
-    }
-    if (suppressNextFullProfileSyncRef.current) {
-      suppressNextFullProfileSyncRef.current = false;
-      return;
-    }
-    if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
-    profileSaveTimer.current = window.setTimeout(async () => {
-      await pushProfileToCloud(currentUser);
-    }, 500);
-    return () => {
-      if (profileSaveTimer.current) {
-        window.clearTimeout(profileSaveTimer.current);
-        profileSaveTimer.current = null;
-      }
-    };
-  }, [currentUser, googleMe?.sub, pushProfileToCloud]);
+  useProfileAutoSync({
+    currentUser,
+    cloudUserId: googleMe?.sub,
+    suppressNextFullProfileSyncRef,
+    pushProfileToCloud,
+    setProfileSyncState,
+    setProfileSyncNote,
+    setLastProfileSyncAt,
+  });
 
   const adaptationWeightProgress = useMemo(
     () => calculateAdaptationWeightProgress(currentUser?.weightHistory),
