@@ -2,6 +2,8 @@ import { getBaseUrl, normalizeAppUrl } from "../auth/_oauth";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "./json";
 import { decryptSecretValue, encryptSecretValue } from "./secret_box";
 import { normalizeProfileRecord } from './profile_contract';
+import { withProtectedFields } from './legacy_sync';
+import type { SessionUser } from './auth';
 
 export type HuaweiHealthEnv = {
   AUTH_JWT_SECRET: string;
@@ -60,6 +62,37 @@ const DEFAULT_STEPS_DATA_TYPE = "com.huawei.continuous.steps.delta";
 export async function loadHuaweiProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
   const row = await db.prepare('SELECT profile_json, version FROM user_profiles WHERE user_id = ?').bind(userId).first<{ profile_json?: string; version?: number }>();
   return { profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {}, version: Number(row?.version || 0) };
+}
+
+export function buildHuaweiSyncedProfile(input: {
+  user: SessionUser;
+  currentProfile: JsonObject;
+  plan: string;
+  version: number;
+  timestamp: string;
+  date?: string;
+  snapshot: HuaweiDailySnapshot;
+}) {
+  const { currentProfile, snapshot } = input;
+  return withProtectedFields(input.user, normalizeProfileRecord({
+    ...currentProfile,
+    plan: input.plan,
+    version: input.version,
+    wearableProvider: huaweiProviderId(),
+    wearableEnabled: true,
+    wearableConnectedAt: typeof currentProfile.wearableConnectedAt === 'string' ? currentProfile.wearableConnectedAt : input.timestamp,
+    wearableLastSyncAt: input.timestamp,
+    wearableMetricsUpdatedAt: input.timestamp,
+    ...(input.date ? { wearableMetricsDayKey: input.date } : {}),
+    ...(typeof snapshot.stepsToday === 'number' ? { wearableStepsToday: snapshot.stepsToday } : {}),
+    ...(typeof snapshot.activeMinutesToday === 'number' ? { wearableActiveMinutesToday: snapshot.activeMinutesToday } : {}),
+    ...(typeof snapshot.sleepHoursLastNight === 'number' ? { wearableSleepHoursLastNight: snapshot.sleepHoursLastNight } : {}),
+    ...(typeof snapshot.pulse === 'number' && snapshot.pulse > 0 ? { restingPulse: snapshot.pulse, restingPulseMeasuredAt: input.timestamp } : {}),
+  }));
+}
+
+export function protectHuaweiProfile(user: SessionUser, profile: JsonObject) {
+  return withProtectedFields(user, profile);
 }
 
 export type HuaweiAccessTokenResult =

@@ -4,15 +4,15 @@ import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { asOptionalString, isJsonObject } from "../../_lib/json";
-import { withProtectedFields } from "../../_lib/legacy_sync";
 import { writeProfileCas } from "../../_lib/profile_cas";
-import { normalizeProfileRecord } from '../../_lib/profile_contract';
 import { loadActivePlan } from "../../_lib/plans";
 import {
   ensureHuaweiConnectionsSchema,
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
   huaweiChangedFields,
+  buildHuaweiSyncedProfile,
+  protectHuaweiProfile,
   loadHuaweiProfile,
   parseHuaweiBaseVersion,
   loadHuaweiAccessToken,
@@ -65,33 +65,19 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   const current = await loadHuaweiProfile(db, user.sub);
   const currentProfile = current.profile;
   if (hasExplicitBaseVersion && requestedBaseVersion !== current.version) {
-    return json({ error: "PROFILE_CONFLICT", profile: withProtectedFields(user, { ...currentProfile, version: current.version }), version: current.version }, 409);
+    return json({ error: "PROFILE_CONFLICT", profile: protectHuaweiProfile(user, { ...currentProfile, version: current.version }), version: current.version }, 409);
   }
   const expectedVersion = hasExplicitBaseVersion ? requestedBaseVersion : current.version;
   const version = expectedVersion + 1;
   const plan = await loadActivePlan(db, user.sub);
-  const nextProfile = withProtectedFields(user, normalizeProfileRecord({
-    ...currentProfile,
-    plan,
-    version,
-    wearableProvider: provider,
-    wearableEnabled: true,
-    wearableConnectedAt: typeof currentProfile.wearableConnectedAt === "string" ? currentProfile.wearableConnectedAt : timestamp,
-    wearableLastSyncAt: timestamp,
-    wearableMetricsUpdatedAt: timestamp,
-    ...(date ? { wearableMetricsDayKey: date } : {}),
-    ...(typeof snapshot.stepsToday === "number" ? { wearableStepsToday: snapshot.stepsToday } : {}),
-    ...(typeof snapshot.activeMinutesToday === "number" ? { wearableActiveMinutesToday: snapshot.activeMinutesToday } : {}),
-    ...(typeof snapshot.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: snapshot.sleepHoursLastNight } : {}),
-    ...(typeof snapshot.pulse === "number" && snapshot.pulse > 0 ? { restingPulse: snapshot.pulse, restingPulseMeasuredAt: timestamp } : {}),
-  }));
+  const nextProfile = buildHuaweiSyncedProfile({ user, currentProfile, plan, version, timestamp, date, snapshot });
 
   const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
   if (!profileWritten) {
     const latest = await loadHuaweiProfile(db, user.sub);
     return json({
       error: "PROFILE_CONFLICT",
-      profile: withProtectedFields(user, { ...latest.profile, version: latest.version }),
+      profile: protectHuaweiProfile(user, { ...latest.profile, version: latest.version }),
       version: latest.version,
     }, 409);
   }
