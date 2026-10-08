@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion } from '../functions/api/_lib/huawei_health';
+import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion, parseHuaweiSyncInput } from '../functions/api/_lib/huawei_health';
 
 describe('Huawei sync field rules', () => {
   it('accepts non-negative integer base versions and rejects invalid values', () => {
@@ -43,5 +43,10 @@ describe('Huawei sync field rules', () => {
     const db = { prepare: () => ({ bind: (...args: unknown[]) => ({ run: async () => { calls.push(args); } }) }) } as unknown as D1Database;
     await markHuaweiSynced(db, 'user-1', 1_700_000_123_456);
     expect(calls).toEqual([[1_700_000_123, 1_700_000_123, 'user-1', 'huawei_health']]);
+  });
+
+  it('normalizes sync input and preserves an explicit base version', () => {
+    expect(parseHuaweiSyncInput({ timezone: ' UTC ', date: ' 2026-01-02 ', baseVersion: '3' })).toEqual({ timezone: 'UTC', date: '2026-01-02', hasExplicitBaseVersion: true, baseVersion: 3 });
+    expect(parseHuaweiSyncInput({ baseVersion: -1 }).baseVersion).toBeNull();
   });
 });
