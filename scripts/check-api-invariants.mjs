@@ -391,6 +391,7 @@ assertOrder(
 
 const aiEndpoint = [
   read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_request_handler.ts'),
   read('functions/api/_lib/ai_provider_request.ts'),
 ].join('\n');
 assertIncludes(
@@ -940,6 +941,7 @@ for (const legacyNeedle of [
 
 const aiRoute = [
   read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_request_handler.ts'),
   read('functions/api/_lib/ai_fallback.ts'),
 ].join('\n');
 assertIncludes(
