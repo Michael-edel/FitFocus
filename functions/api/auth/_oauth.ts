@@ -51,6 +51,22 @@ function timingSafeEqualString(a: string, b: string): boolean {
 }
 
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_PROVIDER_TIMEOUT_MS = 12_000;
+
+/** Bounds external OAuth calls so an unavailable identity provider cannot exhaust a worker request. */
+export async function fetchOAuthProvider(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const inherited = init.signal;
+  const onAbort = () => controller.abort();
+  inherited?.addEventListener('abort', onAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), OAUTH_PROVIDER_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    inherited?.removeEventListener('abort', onAbort);
+  }
+}
 
 export async function verifyState(
   state: string,
@@ -233,7 +249,7 @@ async function loadAppleJwks(): Promise<AppleJwk[]> {
     return appleJwksCache.keys;
   }
 
-  const response = await fetch("https://appleid.apple.com/auth/keys", {
+  const response = await fetchOAuthProvider("https://appleid.apple.com/auth/keys", {
     headers: { accept: "application/json" },
   });
   if (!response.ok) {

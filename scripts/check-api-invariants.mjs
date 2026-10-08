@@ -126,7 +126,7 @@ for (const file of [
 const googleOAuthCallback = read('functions/api/auth/google/callback.ts');
 assertIncludes(
   googleOAuthCallback,
-  'import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth"',
+  'fetchOAuthProvider',
   'google OAuth callback must use shared OAuth session/state helpers',
 );
 assertIncludes(
@@ -177,7 +177,7 @@ assertIncludes(
 const legacyGoogleAuth = `${read('functions/api/auth/google.ts')}\n${read('functions/api/_lib/google_login.ts')}`;
 assertIncludes(
   legacyGoogleAuth,
-  'import { cookieSerialize, signSessionJwt } from "./_oauth"',
+  'import { cookieSerialize, fetchOAuthProvider, signSessionJwt } from "./_oauth"',
   'legacy Google auth endpoint must use shared OAuth session helpers',
 );
 assertIncludes(

@@ -3,7 +3,7 @@ import { ensureAuthSchema, readCookie } from "../../_lib/auth";
 import { completeGoogleLogin } from '../../_lib/google_login';
 import { isJsonObject } from "../../_lib/json";
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
-import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth";
+import { cookieSerialize, fetchOAuthProvider, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth";
 
 type GoogleTokenResponse = { id_token?: string };
 type GoogleTokenInfoResponse = {
@@ -80,7 +80,7 @@ const handleGoogleOAuthCallback: PagesFunction<{
     const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
     // Exchange code -> tokens
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    const tokenRes = await fetchOAuthProvider("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -100,7 +100,7 @@ const handleGoogleOAuthCallback: PagesFunction<{
     if (!idToken) return json({ error: "No id_token returned" }, 502);
 
     // Validate token + get profile
-    const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    const infoRes = await fetchOAuthProvider(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     const infoRaw = await safeResponseJson(infoRes);
     const info: GoogleTokenInfoResponse = isJsonObject(infoRaw) ? infoRaw : {};
     if (!infoRes.ok) return json({ error: "tokeninfo failed" }, 502);

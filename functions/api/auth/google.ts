@@ -2,7 +2,7 @@ import { ensureAuthSchema, json } from "../_lib/auth";
 import { completeGoogleLogin } from "../_lib/google_login";
 import { asString, isJsonObject, type JsonObject } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
-import { cookieSerialize, signSessionJwt } from "./_oauth";
+import { cookieSerialize, fetchOAuthProvider, signSessionJwt } from "./_oauth";
 import { logApiEvent, requestIdFor, withRequestId } from "../_lib/observability";
 // Cloudflare Pages Function: /api/auth/google
 // Accepts Google Identity Services "credential" (ID token), validates it via Google tokeninfo,
@@ -46,7 +46,7 @@ const handleGoogleIdentityPost: PagesFunction<Env> = async (ctx) => {
 
     // Validate token with Google (simple + reliable, no crypto libs needed).
     const tokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(credential);
-    const r = await fetch(tokenInfoUrl, { method: "GET" });
+    const r = await fetchOAuthProvider(tokenInfoUrl, { method: "GET" });
     const info = await safeResponseJson(r);
     if (!r.ok) {
       return json({ error: "Invalid Google token" }, 401);

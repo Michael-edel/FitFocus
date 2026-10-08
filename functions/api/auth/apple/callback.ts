@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
+import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, fetchOAuthProvider, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
 import { ensureAuthSchema, readCookie } from "../../_lib/auth";
 import { completeAppleLogin } from "../../_lib/apple_login";
 import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
@@ -104,7 +104,7 @@ const handleAppleOAuthCallback: PagesFunction<{
     const redirectUri = `${baseUrl}/api/auth/apple/callback`;
 
     const clientSecret = await createAppleClientSecret(env);
-    const tokenRes = await fetch("https://appleid.apple.com/auth/token", {
+    const tokenRes = await fetchOAuthProvider("https://appleid.apple.com/auth/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
