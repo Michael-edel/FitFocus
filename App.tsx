@@ -121,6 +121,7 @@ import { useCameraFacingPreference } from './features/nutrition/useCameraFacingP
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { useRefeedSchedule } from './features/adaptation/useRefeedSchedule';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
+import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
@@ -1296,9 +1297,9 @@ await ensurePdfInterFont(doc);
   }, [checkAchievements, currentUser, habits, persistUser]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
-    if (!currentUser || !currentUser.tasks) return;
-    const nextTasks = currentUser.tasks.map(t => t.date === taskDate ? { ...t, completed: !t.completed } : t);
-    persistUser({ ...currentUser, tasks: nextTasks });
+    if (!currentUser) return;
+    const nextTasks = togglePlanTask(currentUser.tasks, taskDate);
+    if (nextTasks) persistUser({ ...currentUser, tasks: nextTasks });
   }, [currentUser, persistUser]);
 
   const exportShortPdf = useCallback(async () => {
