@@ -60,6 +60,22 @@ export function huaweiProviderId() {
   return HUAWEI_PROVIDER;
 }
 
+export function parseHuaweiBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) return 0;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export function huaweiChangedFields(snapshot: Pick<HuaweiDailySnapshot, 'stepsToday' | 'activeMinutesToday' | 'sleepHoursLastNight' | 'pulse'>) {
+  return Object.keys({
+    ...(typeof snapshot.stepsToday === 'number' ? { wearableStepsToday: true } : {}),
+    ...(typeof snapshot.activeMinutesToday === 'number' ? { wearableActiveMinutesToday: true } : {}),
+    ...(typeof snapshot.sleepHoursLastNight === 'number' ? { wearableSleepHoursLastNight: true } : {}),
+    ...(typeof snapshot.pulse === 'number' ? { restingPulse: true } : {}),
+  });
+}
+
 export async function readHuaweiConnectionStatus(input: {
   db: D1Database;
   userId: string;

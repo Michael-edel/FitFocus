@@ -15,6 +15,8 @@ import {
   encryptHuaweiTokenSet,
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
+  huaweiChangedFields,
+  parseHuaweiBaseVersion,
   refreshHuaweiAccessToken,
   shouldRefreshHuaweiToken,
   type HuaweiConnectionRow,
@@ -41,26 +43,6 @@ function readStringField(body: unknown, key: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function parseBaseVersion(value: unknown): number | null {
-  if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) return 0;
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function changedFields(snapshot: {
-  stepsToday?: number;
-  activeMinutesToday?: number;
-  sleepHoursLastNight?: number;
-  pulse?: number;
-}) {
-  return Object.keys({
-    ...(typeof snapshot.stepsToday === "number" ? { wearableStepsToday: true } : {}),
-    ...(typeof snapshot.activeMinutesToday === "number" ? { wearableActiveMinutesToday: true } : {}),
-    ...(typeof snapshot.sleepHoursLastNight === "number" ? { wearableSleepHoursLastNight: true } : {}),
-    ...(typeof snapshot.pulse === "number" ? { restingPulse: true } : {}),
-  });
-}
 
 const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
@@ -118,10 +100,10 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   const timezone = readStringField(body, "timezone");
   const date = readStringField(body, "date");
   const hasExplicitBaseVersion = isJsonObject(body) && Object.prototype.hasOwnProperty.call(body, "baseVersion");
-  const requestedBaseVersion = parseBaseVersion(isJsonObject(body) ? body.baseVersion : undefined);
+  const requestedBaseVersion = parseHuaweiBaseVersion(isJsonObject(body) ? body.baseVersion : undefined);
   if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const snapshot = await fetchHuaweiDailySnapshot(env, request, accessToken, { timezone, date });
-  const updatedFields = changedFields(snapshot);
+  const updatedFields = huaweiChangedFields(snapshot);
   if (!updatedFields.length) {
     return json({ error: "NO_HUAWEI_DATA", provider, updatedFields: [] }, 422);
   }
