@@ -31,9 +31,21 @@ function assertOrder(text, before, after, label) {
   }
 }
 
-// React screens must use the shared browser transport for internal API calls.
-// Changelog intentionally fetches public GitHub history, not /api routes.
-for (const file of fs.readdirSync(root).filter((entry) => entry.endsWith('.tsx'))) {
+function browserSourceFiles(directory = root) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('.') || entry.name === 'functions' || entry.name === 'tests' || entry.name === 'e2e' || entry.name === 'node_modules' || entry.name === 'dist') return [];
+      return browserSourceFiles(absolute);
+    }
+    if (!entry.isFile() || !/\.(ts|tsx)$/.test(entry.name) || entry.name === 'sw.ts') return [];
+    return [path.relative(root, absolute)];
+  });
+}
+
+// Browser application modules must use the shared transport for internal API
+// calls. The service worker is excluded because it runs outside window APIs.
+for (const file of browserSourceFiles()) {
   const text = read(file);
   if (/\bfetch\(\s*['"`]\/api\//.test(text)) {
     console.error(`${file}: internal API calls must use fetchWithResilience`);
