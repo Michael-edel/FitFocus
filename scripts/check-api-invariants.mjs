@@ -567,41 +567,41 @@ assertIncludes(
   'admin events must parse invalid offset values through a finite fallback',
 );
 
-const adminUserRoles = read('functions/api/admin/user_roles.ts');
+const adminUserRoles = [read('functions/api/admin/user_roles.ts'), read('functions/api/_lib/admin_user_roles.ts')].join('\n');
 assertIncludes(
   adminUserRoles,
   'ALLOWED_ROLE_VALUES',
-  'admin user role endpoint must validate known role values',
+  'admin user role use case must validate known role values',
 );
 assertIncludes(
   adminUserRoles,
   'ALLOWED_ACTION_VALUES',
-  'admin user role endpoint must validate known actions',
+  'admin user role use case must validate known actions',
 );
 assertIncludes(
   adminUserRoles,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin user role endpoint must verify target user exists and is active',
+  'admin user role use case must verify target user exists and is active',
 );
 assertIncludes(
   adminUserRoles,
   'SELECT COUNT(*)',
-  'admin user role endpoint must guard last-admin removal inside the delete statement',
+  'admin user role use case must guard last-admin removal inside the delete statement',
 );
 assertIncludes(
   adminUserRoles,
   'changedRows(roleResult) === 0',
-  'admin user role endpoint must reject guarded admin removals that change no rows',
+  'admin user role use case must reject guarded admin removals that change no rows',
 );
 assertIncludes(
   adminUserRoles,
   'buildAdminEventAfterChangeStatement',
-  'admin user role endpoint must audit guarded admin removals only after a changed row',
+  'admin user role use case must audit guarded admin removals only after a changed row',
 );
 assertIncludes(
   adminUserRoles,
   'await db.batch([roleStatement, auditStatement]);',
-  'admin user role endpoint must write role changes and audit events through one batch',
+  'admin user role use case must write role changes and audit events through one batch',
 );
 
 const adminSessions = read('functions/api/admin/sessions.ts');
