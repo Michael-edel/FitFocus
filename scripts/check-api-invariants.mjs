@@ -55,6 +55,10 @@ for (const file of browserSourceFiles()) {
     console.error(`${file}: dynamic JavaScript execution is not allowed in browser modules`);
     process.exitCode = 1;
   }
+  if (/\b(?:dangerouslySetInnerHTML|innerHTML|outerHTML)\b/.test(text)) {
+    console.error(`${file}: direct HTML injection is not allowed in browser modules`);
+    process.exitCode = 1;
+  }
 }
 
 const familyJoin = [
