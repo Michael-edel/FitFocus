@@ -58,7 +58,6 @@ import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
 import { calculateStreak, getTodayKey } from './habits';
-import { weightDelta } from './weight';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { type WeeklyStoredReport } from './weeklyAutoEngine';
@@ -130,6 +129,7 @@ import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
+import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
@@ -785,28 +785,10 @@ await ensurePdfInterFont(doc);
     setWeeklyReports,
   });
 
-  const dailyStats = useMemo(() => {
-    const todayKey = localDayKey(new Date());
-    const todayDiary = foodDiary.filter((item) => localDayKey(item.timestamp) === todayKey);
-    return todayDiary.reduce((acc, item) => ({
-      calories: acc.calories + item.calories,
-      protein: acc.protein + item.protein,
-      fat: acc.fat + item.fat,
-      carbs: acc.carbs + item.carbs,
-    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
-  }, [foodDiary]);
+  const dailyStats = useMemo(() => calculateDailyNutrition(foodDiary), [foodDiary]);
   const lessons = courseLibrary ?? [];
 
-  const weightTrend = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory || []).length < 2) return undefined;
-    const sorted = [...currentUser.weightHistory].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const last = sorted[sorted.length - 1];
-    const prev = sorted[sorted.length - 2];
-    const diff = last.weight - prev.weight;
-    const delta7 = weightDelta(currentUser.weightHistory, 7);
-    const delta30 = weightDelta(currentUser.weightHistory, 30);
-    return { current: last.weight, diff, diffPct: (diff / prev.weight) * 100, delta7, delta30 };
-  }, [currentUser]);
+  const weightTrend = useMemo(() => calculateDashboardWeightTrend(currentUser?.weightHistory), [currentUser?.weightHistory]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
