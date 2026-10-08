@@ -80,7 +80,6 @@ import {
   safeRemoveItem,
   safeSetItem,
 } from './storage/hybrid';
-import { hydrateSessionFromCloud } from './sessionHydration';
 import {
   bootstrapAuthSession,
   clearOAuthContinuationState,
@@ -142,6 +141,7 @@ import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
+import { prepareLoginSession } from './features/auth/loginSession';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
@@ -774,67 +774,24 @@ const App: React.FC = () => {
     user: UserProfile,
     authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
   ) => {
-    const normalizedUser = authUser?.sub && user.id !== authUser.sub
-      ? {
-          ...user,
-          id: authUser.sub,
-          googleSub: authUser.sub,
-          email: authUser.email ?? user.email,
-          picture: authUser.picture ?? user.picture,
-        }
-      : user;
-
-    if (authUser?.sub && user.id !== authUser.sub) {
-      renameLocalStoragePrefix(
-        `fitfocus_data_${user.id}_`,
-        `fitfocus_data_${authUser.sub}_`,
-      );
-      persistAllUsersSnapshot(authUser.sub, (readStoredAllUsersSnapshotForUser<UserProfile>(user.id) || [user]).map((profile) =>
-        profile.id === user.id
-          ? {
-              ...profile,
-              id: authUser.sub,
-              googleSub: authUser.sub,
-              email: authUser.email ?? profile.email,
-              picture: authUser.picture ?? profile.picture,
-            }
-          : profile
-      ));
-    }
-
-    const hydrated = await hydrateSessionFromCloud(normalizedUser, {
-      resetUsageIfNewTime: resetUsageIfNewPeriod,
+    const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
+      resetUsageIfNewTime: resetUsageIfNewPeriod,
     });
-
-    const nextUserBase = authUser?.sub && hydrated.currentUser.id !== authUser.sub
-      ? {
-          ...hydrated.currentUser,
-          id: authUser.sub,
-          googleSub: authUser.sub,
-          email: authUser.email ?? hydrated.currentUser.email,
-          picture: authUser.picture ?? hydrated.currentUser.picture,
-        }
-      : hydrated.currentUser;
-    const nextUser = nextUserBase.aiPlan ? nextUserBase : { ...nextUserBase, aiPlan: buildFallbackAiPlan(nextUserBase) };
-    setCurrentUser(nextUser);
-    if (Array.isArray(hydrated.allUsers) && hydrated.allUsers.length > 0) {
-      setAllUsers(hydrated.allUsers);
-    }
-    setWeeklyReports(hydrated.weeklyReports);
-    setFoodDiary(hydrated.foodDiary);
-    setHabits(hydrated.habits);
-    setFoodHistory(hydrated.foodHistory);
-    setFoodFavorites(hydrated.foodFavorites);
-    setCoachCard(hydrated.coachCard);
+    setCurrentUser(prepared.currentUser);
+    if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
+    setWeeklyReports(prepared.hydrated.weeklyReports);
+    setFoodDiary(prepared.hydrated.foodDiary);
+    setHabits(prepared.hydrated.habits);
+    setFoodHistory(prepared.hydrated.foodHistory);
+    setFoodFavorites(prepared.hydrated.foodFavorites);
+    setCoachCard(prepared.hydrated.coachCard);
     setCurrentLesson(null);
     clearOAuthContinuationState();
     setAuthState('app');
     setProfileSyncState('saved');
     setLastProfileSyncAt(Date.now());
-    if (!hydrated.currentUser.aiPlan) {
-      persistUser(nextUser);
-    }
+    if (prepared.shouldPersistFallbackPlan) persistUser(prepared.currentUser);
   }, [googleMe?.sub, googleMe?.email, googleMe?.picture]);
 
 

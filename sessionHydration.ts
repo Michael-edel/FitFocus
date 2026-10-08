@@ -6,7 +6,7 @@ import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUser
 import { isRecord, parseJson } from './safeJson';
 import { isUserProfilePayload } from './profileValidation';
 
-type HydratedSession = {
+export type HydratedSession = {
   currentUser: UserProfile;
   allUsers: UserProfile[];
   weeklyReports: WeeklyStoredReport[];
@@ -17,7 +17,7 @@ type HydratedSession = {
   coachCard: unknown;
 };
 
-type HydrationDeps = {
+export type HydrationDeps = {
   resetUsageIfNewTime: (user: UserProfile) => UserProfile;
   initialHabits: UserHabit[];
   fetchImpl?: typeof fetch;
