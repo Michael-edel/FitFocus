@@ -1341,6 +1341,11 @@ assertIncludes(
 );
 
 
+const dashboardWeightLogging = read('features/dashboard/weightLogging.ts');
+assertIncludes(dashboardWeightLogging, 'const MIN_WEIGHT_KG = 20', 'dashboard weight logging must match the minimum profile contract weight');
+assertIncludes(dashboardWeightLogging, 'const MAX_WEIGHT_KG = 500', 'dashboard weight logging must match the maximum profile contract weight');
+assertIncludes(dashboardWeightLogging, 'Number.isFinite(weight)', 'dashboard weight logging must reject non-finite values before persistence');
+
 const oauthTransport = read('functions/api/auth/_oauth.ts');
 assertIncludes(oauthTransport, 'fetchOAuthProvider', 'OAuth providers must use the bounded shared transport');
 assertIncludes(oauthTransport, 'OAUTH_PROVIDER_TIMEOUT_MS', 'OAuth provider requests must have a bounded timeout');
