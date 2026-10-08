@@ -17,8 +17,9 @@ import {
   type AiProviderResponse,
 } from './_lib/ai_provider_request';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
+import { logAiEvent, logAiUsage } from './_lib/ai_telemetry';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
-import { isJsonObject, safeJsonParse, safeJsonParseObject, type JsonObject } from "./_lib/json";
+import { isJsonObject, safeJsonParse, type JsonObject } from "./_lib/json";
 import {
   AI_ALLOWED_MODELS,
   AI_DEFAULT_MODEL,
@@ -55,43 +56,6 @@ export interface Env {
   AUTH_JWT_SECRET?: string;
   GEMINI_TIMEOUT_MS?: string;
 }
-type UsageRecord = {
-  count: number;
-  errorCount: number;
-  totalLatency: number;
-  totalBytesIn: number;
-  cacheHits: number;
-  lastStatus: number;
-  lastTs: number;
-};
-
-type AiEventArgs = {
-  userId: string;
-  feature: string;
-  status: number;
-  latencyMs: number;
-  safeMode: boolean;
-  requestJson?: unknown;
-  responseJson?: unknown;
-  error?: string | null;
-  model?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  estimatedCostUsd?: number;
-  isFallback?: boolean;
-};
-
-const EMPTY_USAGE_RECORD: UsageRecord = {
-  count: 0,
-  errorCount: 0,
-  totalLatency: 0,
-  totalBytesIn: 0,
-  cacheHits: 0,
-  lastStatus: 0,
-  lastTs: 0,
-};
-
 const DEFAULT_GEMINI_MODEL = AI_DEFAULT_MODEL;
 const ALLOWED_GEMINI_MODELS = new Set<string>([
   ...AI_ALLOWED_MODELS,
@@ -127,77 +91,6 @@ function getSettingNumberOrDefault(settings: Record<string, string>, key: string
 async function sha256Hex(input: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function logAiEvent(env: Env, args: AiEventArgs) {
-  try {
-    if (!env.DB) return;
-    const id = crypto.randomUUID();
-    const ts = Date.now();
-    const baseValues = [
-      id,
-      args.userId,
-      ts,
-      args.feature,
-      args.status,
-      Math.max(0, Math.round(args.latencyMs)),
-      args.safeMode ? 1 : 0,
-      null,
-      null,
-      args.error || null
-    ];
-    try {
-      await env.DB.prepare(
-        `INSERT INTO ai_events (
-          id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error,
-          model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, is_fallback
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(
-        ...baseValues,
-        args.model || null,
-        Math.max(0, Math.round(Number(args.inputTokens || 0))),
-        Math.max(0, Math.round(Number(args.outputTokens || 0))),
-        Math.max(0, Math.round(Number(args.totalTokens || 0))),
-        Math.max(0, Number(args.estimatedCostUsd || 0)),
-        args.isFallback ? 1 : 0
-      ).run();
-    } catch {
-      await env.DB.prepare(
-        "INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(...baseValues).run();
-    }
-  } catch {
-    // never break request
-  }
-}
-async function logUsage(
-  env: Env,
-  ev: { identity: string; feature: string; status: number; latency: number; bytesIn: number; cacheHit?: boolean }
-) {
-  if (!env.FITFOCUS_KV) return;
-  try {
-    const day = new Date().toISOString().slice(0, 10);
-    const key = `usage:${day}:${ev.identity}:${ev.feature}`;
-
-    const prevRaw = await env.FITFOCUS_KV.get(key);
-    const prevParsed = typeof prevRaw === "string" ? safeJsonParseObject(prevRaw) : null;
-    const prev: UsageRecord = {
-      ...EMPTY_USAGE_RECORD,
-      ...(prevParsed ?? {}),
-    };
-
-    prev.count += 1;
-    if (ev.status >= 400) prev.errorCount += 1;
-    prev.totalLatency += Number(ev.latency) || 0;
-    prev.totalBytesIn += Number(ev.bytesIn) || 0;
-    if (ev.cacheHit) prev.cacheHits += 1;
-    prev.lastStatus = ev.status;
-    prev.lastTs = Date.now();
-
-    await env.FITFOCUS_KV.put(key, JSON.stringify(prev), { expirationTtl: 60 * 60 * 24 * 7 });
-  } catch {
-    // never break request
-  }
 }
 
 async function handleAiPost({ request, env }: { request: Request; env: Env }) {
@@ -291,7 +184,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   const identity = String(user?.sub || "");
 
   if (!apiKey) {
-    await logUsage(env, { identity, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+    await logAiUsage(env, { identity, feature, status: 500, latency: Date.now() - startedAt, bytesIn: bodyText.length });
     return jsonResponse({ error: { code: "AI_UNAVAILABLE", message: "AI-сервис временно недоступен. Попробуйте позже." } }, 500);
   }
 
@@ -313,7 +206,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     if (error instanceof AiLimitError || (error instanceof Error && error.name === "AiLimitError")) {
       const aiError = error as AiLimitError;
       const status = Number(aiError.status || 429);
-      await logUsage(env, { identity, feature, status, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+      await logAiUsage(env, { identity, feature, status, latency: Date.now() - startedAt, bytesIn: bodyText.length });
       await logAiEvent(env, {
         userId: identity,
         feature,
@@ -341,7 +234,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     const cached = await kv.get(dedupKey, { type: "json" }) as unknown;
     if (isJsonObject(cached) && "data" in cached) {
       const cachedStatus = Number(cached.status || 200);
-      await logUsage(env, { identity, feature, status: cachedStatus, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
+      await logAiUsage(env, { identity, feature, status: cachedStatus, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
       return new Response(JSON.stringify(cached.data), {
         status: cachedStatus,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
@@ -372,7 +265,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   if ("contents" in payloadToSend) {
     const normalized = normalizeAiContents(payloadToSend.contents);
     if (!normalized.length) {
-      await logUsage(env, { identity, feature, status: 400, latency: Date.now() - startedAt, bytesIn: bodyText.length });
+      await logAiUsage(env, { identity, feature, status: 400, latency: Date.now() - startedAt, bytesIn: bodyText.length });
       return jsonResponse({
         error: { message: "Invalid contents: expected string or Content/Content[] with parts[]. Use {contents:[{role:'user',parts:[{text:'...'}]}]}" }
       }, 400);
@@ -472,7 +365,7 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
 
   if (kv) {
     await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data }), { expirationTtl: 60 });
-    await logUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
+    await logAiUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
   }
 
   
