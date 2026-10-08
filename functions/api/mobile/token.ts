@@ -6,44 +6,9 @@ import { requireUser, json } from "../_lib/auth";
 import { requireBetaAccess } from "../_lib/access";
 import { requireDB, nowMs } from "../_lib/db";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { signSessionJwt } from '../auth/_oauth';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
-type MobileSessionPayload = {
-  v: number;
-  sub: string;
-  sid: string;
-  email?: string;
-  email_verified?: boolean;
-  name?: string;
-  picture?: string;
-  aud?: "mobile";
-  iat?: number;
-  exp?: number;
-};
-
-async function signSessionJwt(payload: MobileSessionPayload, secret: string, ttlSeconds: number): Promise<string> {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const full = { ...payload, iat: now, exp: now + ttlSeconds };
-  const enc = new TextEncoder();
-  const b64 = (input: string | Uint8Array | ArrayBuffer) => {
-    const bytes =
-      typeof input === "string"
-        ? enc.encode(input)
-        : input instanceof Uint8Array
-          ? input
-          : new Uint8Array(input);
-    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  };
-  const h = b64(JSON.stringify(header));
-  const p = b64(JSON.stringify(full));
-  const data = `${h}.${p}`;
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
-  const s = b64(new Uint8Array(sig));
-  return `${data}.${s}`;
-}
-
 const handleMobileTokenPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
@@ -73,7 +38,7 @@ const handleMobileTokenPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const token = await signSessionJwt(
-    { v: 2, sub: user.sub, sid: user.sid, email: user.email, email_verified: user.emailVerified, name: user.name, picture: user.picture, aud: "mobile", iat: now },
+    { v: 2, sub: user.sub, sid: user.sid, email: user.email, email_verified: user.emailVerified, name: user.name, picture: user.picture, aud: "mobile", iat: Math.floor(now / 1000) },
     env.AUTH_JWT_SECRET,
     ttl
   );

@@ -86,6 +86,8 @@ describe('/api/mobile/token', () => {
 
     const payload = await verifySessionJwt(body.token, SECRET);
     expect(payload).toMatchObject({ sub: 'user-1', sid: 'sid-1', aud: 'mobile', v: 2 });
+    expect(payload?.iat).toBeGreaterThan(1_000_000_000);
+    expect(payload?.iat).toBeLessThan(10_000_000_000);
   });
 
   it('rejects revoked source sessions', async () => {
