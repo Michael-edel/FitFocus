@@ -1,4 +1,5 @@
 import { safeJsonParseObject, type JsonObject } from './json';
+import { normalizeProfileRecord } from './profile_contract';
 
 type AdminUserListRow = {
   id: string;
@@ -24,7 +25,7 @@ function toInt(value: unknown, fallback: number) {
 }
 
 function parseProfile(profileJson: unknown): JsonObject {
-  return profileJson ? safeJsonParseObject(String(profileJson)) ?? {} : {};
+  return profileJson ? normalizeProfileRecord(safeJsonParseObject(String(profileJson))) : {};
 }
 
 function asNumber(value: unknown): number | null {

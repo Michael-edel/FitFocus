@@ -1,4 +1,5 @@
 import { safeJsonParseObject, type JsonObject } from './json';
+import { normalizeProfileRecord } from './profile_contract';
 
 type UserRow = { id: string; email?: string | null; name?: string | null; picture?: string | null; created_at?: number; updated_at?: number; deleted_at?: string | null; deletion_scheduled_at?: string | null; is_active?: number };
 type ProfileRow = { profile_json?: string | null; updated_at?: number; version?: number };
@@ -20,7 +21,7 @@ function asNumber(value: unknown): number | null {
 }
 
 function profileFrom(row: ProfileRow | null): JsonObject {
-  return row?.profile_json ? safeJsonParseObject(String(row.profile_json)) ?? {} : {};
+  return row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {};
 }
 
 /** Reads and normalizes the complete admin-only user card from D1. */
