@@ -1,4 +1,5 @@
 import { safeJsonParseObject, type JsonObject } from './json';
+import { normalizeProfileRecord } from './profile_contract';
 
 export type AiFallbackProfile = JsonObject & {
   weight?: unknown;
@@ -17,7 +18,7 @@ export type AiFallbackProfile = JsonObject & {
 export async function loadAiFallbackProfile(db: D1Database | undefined, userId: string): Promise<AiFallbackProfile> {
   try {
     const row = await db?.prepare('SELECT profile_json FROM user_profiles WHERE user_id = ?').bind(userId).first<{ profile_json?: string | null }>();
-    return row?.profile_json ? safeJsonParseObject(row.profile_json) ?? {} : {};
+    return row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(row.profile_json)) : {};
   } catch {
     return {};
   }

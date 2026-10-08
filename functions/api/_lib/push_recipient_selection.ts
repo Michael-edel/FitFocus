@@ -1,5 +1,6 @@
 import { normalizePushBrowserLabel, normalizePushDeviceLabel } from './push';
 import { asBoolean, asString, asStringArray, safeJsonParseObject, type JsonObject } from './json';
+import { normalizeProfileRecord } from './profile_contract';
 
 export type SegmentInput = { query?: unknown; status?: unknown; plan?: unknown; wearable?: unknown; glucose?: unknown; measurements?: unknown; role?: unknown; familyId?: unknown; device?: unknown; browser?: unknown; userIds?: unknown };
 export type PushRecipientRow = {
@@ -20,7 +21,7 @@ export function normalizeStringArray(value: unknown) { return asStringArray(valu
 
 function splitList(value: unknown) { return String(value || '').split(',').map((item) => item.trim()).filter(Boolean); }
 function recipientForRow(row: PushRecipientRow): Recipient {
-  const profile = row.profile_json ? safeJsonParseObject(String(row.profile_json)) ?? {} : {};
+  const profile = row.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {};
   return {
     ...row,
     profile,

@@ -2,6 +2,7 @@ import { ACHIEVEMENT_BY_KEY, ACHIEVEMENT_CATALOG } from '../../../achievements/c
 import { evaluateAchievements, mergeAchievementContext, type AchievementEvaluationContext } from '../../../achievements/engine';
 import { nowMs, uuid } from './db';
 import { isJsonObject, safeJsonParseObject, type JsonObject } from './json';
+import { normalizeProfileRecord } from './profile_contract';
 
 function numberOrNull(value: unknown): number | null {
   const next = Number(value);
@@ -48,7 +49,8 @@ function safeClientContext(input: unknown): AchievementEvaluationContext {
 export async function checkAchievements(db: D1Database, userId: string, body: JsonObject) {
   const row = await db.prepare('SELECT profile_json FROM user_profiles WHERE user_id = ? LIMIT 1')
     .bind(userId).first<{ profile_json?: string }>();
-  const profile = row?.profile_json ? safeJsonParseObject(row.profile_json) : null;
+  const parsedProfile = row?.profile_json ? safeJsonParseObject(row.profile_json) : null;
+  const profile = parsedProfile ? normalizeProfileRecord(parsedProfile) : null;
   const context = mergeAchievementContext(contextFromProfile(profile), safeClientContext(body.context || body));
   const candidates = evaluateAchievements(context);
   if (!candidates.length) return { catalog: ACHIEVEMENT_CATALOG, newlyUnlocked: [] };

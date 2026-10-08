@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkAchievements } from '../functions/api/_lib/achievement_check';
 
-function makeDb(existingKeys: string[] = []) {
+function makeDb(existingKeys: string[] = [], profile: Record<string, unknown> = { profileDetailsCompleted: true }) {
   const writes: unknown[][] = [];
   const db = {
     prepare(sql: string) {
@@ -13,7 +13,7 @@ function makeDb(existingKeys: string[] = []) {
         },
         async first() {
           if (sql.includes('FROM user_profiles')) {
-            return { profile_json: JSON.stringify({ profileDetailsCompleted: true }) };
+            return { profile_json: JSON.stringify(profile) };
           }
           return null;
         },
@@ -43,5 +43,14 @@ describe('achievement check use case', () => {
     expect(result.newlyUnlocked.map((achievement) => achievement.key)).toEqual(['profile_details_completed']);
     expect(writes).toHaveLength(1);
     expect(writes[0][2]).toBe('profile_details_completed');
+  });
+
+  it('does not treat a legacy string false as completed profile details', async () => {
+    const { db, writes } = makeDb(['welcome'], { profileDetailsCompleted: 'false' });
+
+    const result = await checkAchievements(db, 'user-1', {});
+
+    expect(result.newlyUnlocked).toEqual([]);
+    expect(writes).toHaveLength(0);
   });
 });
