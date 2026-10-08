@@ -1,5 +1,6 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
 
@@ -10,7 +11,7 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
   });
 }
 
-export const onRequestGet: PagesFunction<{
+const handleAppleOAuthStart: PagesFunction<{
   APPLE_CLIENT_ID: string;
   AUTH_JWT_SECRET: string;
   APP_URL?: string;
@@ -65,4 +66,16 @@ export const onRequestGet: PagesFunction<{
   );
   headers.set("Location", auth.toString());
   return new Response(null, { status: 302, headers });
+};
+
+/** Records only the OAuth start outcome; state, nonce, invite code, and redirect stay private. */
+export const onRequestGet: PagesFunction<{
+  APPLE_CLIENT_ID: string;
+  AUTH_JWT_SECRET: string;
+  APP_URL?: string;
+}> = async (context) => {
+  const response = await handleAppleOAuthStart(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("auth.apple.start.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

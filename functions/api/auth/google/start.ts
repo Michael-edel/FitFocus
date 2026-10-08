@@ -1,5 +1,6 @@
 import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth";
 import type { PagesFunction } from "@cloudflare/workers-types";
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
 
@@ -13,7 +14,7 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
 // Classic OAuth2 redirect flow (works across browsers; avoids FedCM).
 // GET /api/auth/google/start?redirect=<origin>&invite=<code>
 
-export const onRequestGet: PagesFunction<{
+const handleGoogleOAuthStart: PagesFunction<{
   DB: D1Database;
   GOOGLE_CLIENT_ID: string;
   AUTH_JWT_SECRET: string;
@@ -76,4 +77,17 @@ export const onRequestGet: PagesFunction<{
   );
   headers.set("Location", auth.toString());
   return new Response(null, { status: 302, headers });
+};
+
+/** Records only the OAuth start outcome; state, nonce, invite code, and redirect stay private. */
+export const onRequestGet: PagesFunction<{
+  DB: D1Database;
+  GOOGLE_CLIENT_ID: string;
+  AUTH_JWT_SECRET: string;
+  APP_URL?: string;
+}> = async (context) => {
+  const response = await handleGoogleOAuthStart(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("auth.google.start.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
