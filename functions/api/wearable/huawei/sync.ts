@@ -9,18 +9,13 @@ import { writeProfileCas } from "../../_lib/profile_cas";
 import { normalizeProfileRecord } from '../../_lib/profile_contract';
 import { loadActivePlan } from "../../_lib/plans";
 import {
-  decryptHuaweiAccessToken,
-  decryptHuaweiRefreshToken,
   ensureHuaweiConnectionsSchema,
-  encryptHuaweiTokenSet,
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
   huaweiChangedFields,
   loadHuaweiProfile,
   parseHuaweiBaseVersion,
-  refreshHuaweiAccessToken,
-  shouldRefreshHuaweiToken,
-  type HuaweiConnectionRow,
+  loadHuaweiAccessToken,
   type HuaweiHealthEnv,
 } from "../../_lib/huawei_health";
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
@@ -49,37 +44,10 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const db = requireDB(env);
   await ensureHuaweiConnectionsSchema(db);
-  const provider = huaweiProviderId();
-  const row = await db
-    .prepare("SELECT user_id, provider, access_token_enc, refresh_token_enc, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1")
-    .bind(user.sub, provider)
-    .first<HuaweiConnectionRow>();
-  if (!row) return json({ error: "HUAWEI_NOT_CONNECTED" }, 409);
-
-  let accessToken = await decryptHuaweiAccessToken(env, request, row);
-  if (shouldRefreshHuaweiToken(row)) {
-    const refreshToken = await decryptHuaweiRefreshToken(env, request, row);
-    if (!refreshToken) return json({ error: "HUAWEI_REFRESH_TOKEN_MISSING" }, 409);
-    const tokenSet = await refreshHuaweiAccessToken(env, request, refreshToken);
-    const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
-    accessToken = tokenSet.accessToken;
-    await db
-      .prepare(
-        "UPDATE wearable_connections SET access_token_enc = ?, refresh_token_enc = COALESCE(?, refresh_token_enc), " +
-          "token_type = ?, scope = ?, expires_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?"
-      )
-      .bind(
-        encrypted.accessTokenEnc,
-        encrypted.refreshTokenEnc,
-        tokenSet.tokenType,
-        tokenSet.scope,
-        tokenSet.expiresAt,
-        Math.floor(Date.now() / 1000),
-        user.sub,
-        provider,
-      )
-      .run();
-  }
+  const credential = await loadHuaweiAccessToken(env, request, db, user.sub);
+  if (credential.kind === 'not-connected') return json({ error: "HUAWEI_NOT_CONNECTED" }, 409);
+  if (credential.kind === 'refresh-token-missing') return json({ error: "HUAWEI_REFRESH_TOKEN_MISSING" }, 409);
+  const { provider, accessToken } = credential;
 
   const timezone = asOptionalString(isJsonObject(body) ? body.timezone : undefined);
   const date = asOptionalString(isJsonObject(body) ? body.date : undefined);

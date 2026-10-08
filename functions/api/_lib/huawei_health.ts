@@ -62,6 +62,38 @@ export async function loadHuaweiProfile(db: D1Database, userId: string): Promise
   return { profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {}, version: Number(row?.version || 0) };
 }
 
+export type HuaweiAccessTokenResult =
+  | { kind: 'ready'; provider: string; accessToken: string }
+  | { kind: 'not-connected' }
+  | { kind: 'refresh-token-missing' };
+
+/** Loads a connected Huawei credential and persists an OAuth refresh when needed. */
+export async function loadHuaweiAccessToken(
+  env: HuaweiHealthEnv,
+  request: Request,
+  db: D1Database,
+  userId: string,
+): Promise<HuaweiAccessTokenResult> {
+  const provider = huaweiProviderId();
+  const row = await db.prepare(
+    "SELECT user_id, provider, access_token_enc, refresh_token_enc, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1",
+  ).bind(userId, provider).first<HuaweiConnectionRow>();
+  if (!row) return { kind: 'not-connected' };
+
+  let accessToken = await decryptHuaweiAccessToken(env, request, row);
+  if (shouldRefreshHuaweiToken(row)) {
+    const refreshToken = await decryptHuaweiRefreshToken(env, request, row);
+    if (!refreshToken) return { kind: 'refresh-token-missing' };
+    const tokenSet = await refreshHuaweiAccessToken(env, request, refreshToken);
+    const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
+    accessToken = tokenSet.accessToken;
+    await db.prepare(
+      "UPDATE wearable_connections SET access_token_enc = ?, refresh_token_enc = COALESCE(?, refresh_token_enc), token_type = ?, scope = ?, expires_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?",
+    ).bind(encrypted.accessTokenEnc, encrypted.refreshTokenEnc, tokenSet.tokenType, tokenSet.scope, tokenSet.expiresAt, Math.floor(Date.now() / 1000), userId, provider).run();
+  }
+  return { kind: 'ready', provider, accessToken };
+}
+
 export function huaweiProviderId() {
   return HUAWEI_PROVIDER;
 }
