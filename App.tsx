@@ -105,6 +105,7 @@ import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
 import { useProfilePersistence } from './features/profile/useProfilePersistence';
 import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
+import { useCloudSyncRecovery } from './features/profile/useCloudSyncRecovery';
 import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
@@ -604,8 +605,6 @@ const App: React.FC = () => {
   const suppressNextFullProfileSyncRef = useRef(false);
   const suppressProfileSyncStateRef = useRef(false);
   const hasPendingProfileChangesRef = useRef(false);
-  const lastAutoCloudSyncAttemptAtRef = useRef(0);
-  const CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS = 60_000;
 
   const persistUser = useProfilePersistence({
     googleSubject: googleMe?.sub,
@@ -1162,28 +1161,14 @@ await ensurePdfInterFont(doc);
     };
   }, []);
 
-  useEffect(() => {
-    if (!googleMe?.sub || !currentUser) return;
-    const syncFromCloud = () => {
-      if (document.visibilityState && document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastAutoCloudSyncAttemptAtRef.current < CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS) {
-        return;
-      }
-      lastAutoCloudSyncAttemptAtRef.current = now;
-      if (hasPendingProfileChangesRef.current || profileSyncState === 'error') {
-        void syncAllLocalDataNow();
-        return;
-      }
-      void reloadUserFromCloud();
-    };
-    window.addEventListener('online', syncFromCloud);
-    document.addEventListener('visibilitychange', syncFromCloud);
-    return () => {
-      window.removeEventListener('online', syncFromCloud);
-      document.removeEventListener('visibilitychange', syncFromCloud);
-    };
-  }, [googleMe?.sub, currentUser?.id, profileSyncState, reloadUserFromCloud, syncAllLocalDataNow]);
+  useCloudSyncRecovery({
+    cloudUserId: googleMe?.sub,
+    currentUserId: currentUser?.id,
+    profileSyncState,
+    hasPendingProfileChangesRef,
+    syncAllLocalDataNow,
+    reloadUserFromCloud,
+  });
 
   // Load public env flags (no auth)
   useEffect(() => {
