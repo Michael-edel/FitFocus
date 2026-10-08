@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, parseHuaweiBaseVersion } from '../functions/api/_lib/huawei_health';
+import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion } from '../functions/api/_lib/huawei_health';
 
 describe('Huawei sync field rules', () => {
   it('accepts non-negative integer base versions and rejects invalid values', () => {
@@ -36,5 +36,12 @@ describe('Huawei sync field rules', () => {
       snapshot: { stepsToday: 10, pulse: 72, raw: {} },
     });
     expect(profile).toMatchObject({ wearableConnectedAt: '2025-01-01T00:00:00.000Z', wearableStepsToday: 10, restingPulse: 72, wearableMetricsDayKey: '2026-01-02', version: 5 });
+  });
+
+  it('records the sync timestamp in seconds for the Huawei connection', async () => {
+    const calls: unknown[][] = [];
+    const db = { prepare: () => ({ bind: (...args: unknown[]) => ({ run: async () => { calls.push(args); } }) }) } as unknown as D1Database;
+    await markHuaweiSynced(db, 'user-1', 1_700_000_123_456);
+    expect(calls).toEqual([[1_700_000_123, 1_700_000_123, 'user-1', 'huawei_health']]);
   });
 });
