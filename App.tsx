@@ -132,6 +132,7 @@ import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
 import { applyHabitToggle } from './features/habits/legacyProgress';
+import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -144,7 +145,6 @@ import PaywallDialog from './PaywallDialog';
 import { formatGramsPretty, MealParts } from './mealPresentation';
 import VersionInfoModal from './VersionInfoModal';
 import {
-  AppTabId,
   mobilePrimaryTabIds,
   sidebarCoreTabIds,
   sidebarFeatureTabIds,
@@ -164,12 +164,6 @@ const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
 const RegistrationScreen = React.lazy(() => import('./RegistrationScreen'));
 const AuthChoiceScreen = React.lazy(() => import('./AuthChoiceScreen'));
 
-function getInitialTabFromHash(): AppTabId | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash.replace(/^#\/?/, '').split(/[?&]/)[0];
-  if (!hash || hash === 'admin') return null;
-  return sidebarTabs.some((tab) => tab.id === hash) ? hash as AppTabId : null;
-}
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
@@ -382,17 +376,8 @@ const App: React.FC = () => {
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<AppTabId>(() => getInitialTabFromHash() || 'dashboard');
+  const { activeTab, setActiveTab } = useHashTabNavigation('dashboard');
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  useEffect(() => {
-    const applyHashTab = () => {
-      const tab = getInitialTabFromHash();
-      if (tab) setActiveTab(tab);
-    };
-    applyHashTab();
-    window.addEventListener('hashchange', applyHashTab);
-    return () => window.removeEventListener('hashchange', applyHashTab);
-  }, []);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
   const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
