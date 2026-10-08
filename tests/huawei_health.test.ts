@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onRequestGet as getHuaweiStatus } from '../functions/api/wearable/huawei/status';
 import { onRequestPost as postHuaweiSync } from '../functions/api/wearable/huawei/sync';
+import { onRequestGet as startHuaweiOAuth } from '../functions/api/wearable/huawei/start';
+import { onRequestGet as callbackHuaweiOAuth } from '../functions/api/wearable/huawei/callback';
+import { onRequestPost as disconnectHuawei } from '../functions/api/wearable/huawei/disconnect';
 import { encryptHuaweiTokenSet } from '../functions/api/_lib/huawei_health';
 
 type HuaweiStatusContext = Parameters<typeof getHuaweiStatus>[0];
 type HuaweiSyncContext = Parameters<typeof postHuaweiSync>[0];
+type HuaweiStartContext = Parameters<typeof startHuaweiOAuth>[0];
+type HuaweiCallbackContext = Parameters<typeof callbackHuaweiOAuth>[0];
+type HuaweiDisconnectContext = Parameters<typeof disconnectHuawei>[0];
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -105,6 +111,33 @@ afterEach(() => {
 });
 
 describe('Huawei Health integration', () => {
+  it('correlates OAuth start, callback, and disconnect failures without provider data', async () => {
+    const db = makeDb();
+    const context = { params: {}, data: {}, waitUntil: () => undefined, next: () => Promise.resolve(new Response(null, { status: 404 })) };
+    const start = await startHuaweiOAuth({
+      ...context,
+      request: new Request('https://fitfocus.test/api/wearable/huawei/start', { headers: { 'X-Request-ID': 'huawei-start-test-01' } }),
+      env: env(db),
+    } as unknown as HuaweiStartContext);
+    const callback = await callbackHuaweiOAuth({
+      ...context,
+      request: new Request('https://fitfocus.test/api/wearable/huawei/callback', { headers: { 'X-Request-ID': 'huawei-callback-test-01' } }),
+      env: env(db),
+    } as unknown as HuaweiCallbackContext);
+    const disconnect = await disconnectHuawei({
+      ...context,
+      request: new Request('https://fitfocus.test/api/wearable/huawei/disconnect', { method: 'POST', headers: { 'X-Request-ID': 'huawei-disconnect-test-01' } }),
+      env: env(db),
+    } as unknown as HuaweiDisconnectContext);
+
+    expect(start.status).toBe(401);
+    expect(start.headers.get('X-Request-ID')).toBe('huawei-start-test-01');
+    expect(callback.status).toBe(400);
+    expect(callback.headers.get('X-Request-ID')).toBe('huawei-callback-test-01');
+    expect(disconnect.status).toBe(401);
+    expect(disconnect.headers.get('X-Request-ID')).toBe('huawei-disconnect-test-01');
+  });
+
   it('returns connection status without leaking encrypted tokens', async () => {
     const encrypted = await encryptHuaweiTokenSet(env(makeDb()), new Request('https://fitfocus.test'), {
       accessToken: 'access-token',

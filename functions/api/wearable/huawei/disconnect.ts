@@ -7,6 +7,7 @@ import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { loadActivePlan } from "../../_lib/plans";
 import { normalizeProfileRecord } from '../../_lib/profile_contract';
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -21,7 +22,7 @@ async function loadProfile(db: D1Database, userId: string): Promise<{ profile: J
   };
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiDisconnectPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -56,4 +57,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .bind(user.sub, JSON.stringify(nextProfile), Date.now(), version)
     .run();
   return json({ disconnected: true, profile: nextProfile, version });
+};
+
+/** Correlates disconnect outcomes without logging connection or profile details. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiDisconnectPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("wearable.huawei.disconnect.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

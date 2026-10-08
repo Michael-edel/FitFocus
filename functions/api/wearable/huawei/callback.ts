@@ -8,6 +8,7 @@ import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { loadActivePlan } from "../../_lib/plans";
 import { normalizeProfileRecord } from '../../_lib/profile_contract';
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
@@ -22,7 +23,7 @@ async function loadProfile(db: D1Database, userId: string): Promise<{ profile: J
   };
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiOAuthCallback: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get("code") || "";
@@ -125,4 +126,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "HUAWEI_CALLBACK_FAILED" }, 502);
   }
+};
+
+/** Records only the connection callback outcome; codes, state, tokens, and profile data stay private. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiOAuthCallback(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("wearable.huawei.callback.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
