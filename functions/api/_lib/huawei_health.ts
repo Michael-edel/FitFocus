@@ -60,6 +60,27 @@ export function huaweiProviderId() {
   return HUAWEI_PROVIDER;
 }
 
+export async function readHuaweiConnectionStatus(input: {
+  db: D1Database;
+  userId: string;
+  configured: boolean;
+}) {
+  const row = await input.db
+    .prepare('SELECT user_id, provider, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? LIMIT 1')
+    .bind(input.userId, huaweiProviderId())
+    .first<HuaweiConnectionRow>();
+  return {
+    provider: huaweiProviderId(),
+    configured: input.configured,
+    connected: row?.status === 'connected',
+    status: row?.status || 'disconnected',
+    scope: row?.scope || '',
+    expiresAt: row?.expires_at || null,
+    lastSyncAt: row?.last_sync_at || null,
+    metadata: row ? readHuaweiMetadata(row) : {},
+  };
+}
+
 export async function ensureHuaweiConnectionsSchema(db: D1Database): Promise<void> {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS wearable_connections (
