@@ -530,3 +530,8 @@ Stripe checkout выделен в billing command use case. Route оставля
 аутентификацию, лимит body и преобразование результата в публичный HTTP-ответ;
 выбор разрешённой цены и создание Stripe Session изолированы и тестируются без
 HTTP-контекста.
+
+Агрегации admin health dashboard вынесены в read use case: SQL-сводки,
+optional-table fallback и alert-вычисление изолированы от auth и HTTP-ответа.
+Маршрут `/api/admin/stats` теперь содержит только guard, вызов use case и
+корреляцию ответа.
