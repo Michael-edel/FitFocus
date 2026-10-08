@@ -108,7 +108,7 @@ for (const file of [
   'functions/api/auth/apple/callback.ts',
   'functions/api/auth/google.ts',
 ]) {
-  const oauth = file === 'functions/api/auth/google/callback.ts'
+  const oauth = file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/google.ts'
     ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}`
     : file === 'functions/api/auth/apple/callback.ts'
       ? `${read(file)}\n${read('functions/api/_lib/apple_login.ts')}`
@@ -174,7 +174,7 @@ assertIncludes(
   'apple OAuth callback must only bootstrap admins with verified token email',
 );
 
-const legacyGoogleAuth = read('functions/api/auth/google.ts');
+const legacyGoogleAuth = `${read('functions/api/auth/google.ts')}\n${read('functions/api/_lib/google_login.ts')}`;
 assertIncludes(
   legacyGoogleAuth,
   'import { cookieSerialize, signSessionJwt } from "./_oauth"',
@@ -182,7 +182,7 @@ assertIncludes(
 );
 assertIncludes(
   legacyGoogleAuth,
-  'if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase()))',
+  'if (user.email_verified && email && listed(input.adminEmails).includes(email))',
   'legacy Google auth endpoint must only auto-promote admins with verified emails',
 );
 assertIncludes(

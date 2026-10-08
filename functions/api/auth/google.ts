@@ -1,5 +1,5 @@
-import { ensureAuthSchema, json, replaceActiveSessionsForUser } from "../_lib/auth";
-import { consumeInviteCode } from "../_lib/invites";
+import { ensureAuthSchema, json } from "../_lib/auth";
+import { completeGoogleLogin } from "../_lib/google_login";
 import { asString, isJsonObject, type JsonObject } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { cookieSerialize, signSessionJwt } from "./_oauth";
@@ -70,69 +70,33 @@ const handleGoogleIdentityPost: PagesFunction<Env> = async (ctx) => {
     if (!env.DB) return json(AUTH_UNAVAILABLE, 500);
     await ensureAuthSchema(env.DB);
 
-    const sid = crypto.randomUUID();
-    const ttl = 60 * 60 * 24 * 30; // 30 days
-    const expiresAt = now + ttl;
-
-    // Upsert user with profile metadata so admin / profile views stay in sync.
-    await env.DB.prepare(
-      "INSERT INTO users (id, email, name, picture, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) " +
-        "ON CONFLICT(id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture, updated_at=excluded.updated_at"
-    )
-      .bind(user.sub, user.email, user.name, user.picture, now, now)
-      .run();
-
-// Closed beta (invite codes)
-const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
-if (requireInvite) {
-  const inviteCode = asString(body?.inviteCode);
-  if (!inviteCode) return json({ error: "INVITE_REQUIRED" }, 403);
-
-  const consumed = await consumeInviteCode(env.DB, inviteCode, user.sub, Math.floor(Date.now() / 1000));
-  if (!consumed.ok) {
-    return json({ error: "INVITE_INVALID" }, 403);
-  }
-}
-
-// Restore soft-deleted accounts only after beta/invite access checks pass.
-await env.DB.prepare(
-  `UPDATE users
-   SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
-   WHERE id = ?
-     AND deleted_at IS NOT NULL
-     AND deletion_scheduled_at IS NOT NULL
-     AND deletion_scheduled_at > datetime('now')`
-)
-  .bind(now, user.sub)
-  .run();
-
-
-// Optional: auto-promote admins/supports by email (enterprise convenience)
-const adminEmails = asString(env.ADMIN_EMAILS).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase())) {
-  await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(user.sub).run();
-}
-// Create server-tracked session (enterprise layer)
-const ip =
-  request.headers.get("cf-connecting-ip") ||
-  request.headers.get("x-forwarded-for") ||
-  request.headers.get("x-real-ip") ||
-  "";
-
-await replaceActiveSessionsForUser(env.DB, user.sub, now);
-
-await env.DB.prepare(
-  "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
-)
-  .bind(sid, user.sub, now, expiresAt, request.headers.get("user-agent")?.slice(0, 500) || "", String(ip).slice(0, 100))
-  .run();
+    const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
+    const inviteCode = requireInvite ? asString(body?.inviteCode) : "";
+    const ip =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      "";
+    const login = await completeGoogleLogin({
+      db: env.DB,
+      user,
+      inviteCode,
+      now,
+      requireInvite,
+      adminEmails: env.ADMIN_EMAILS,
+      userAgent: request.headers.get("user-agent") || "",
+      ip: String(ip),
+    });
+    if (login.kind === "invite-required") return json({ error: "INVITE_REQUIRED" }, 403);
+    if (login.kind === "invalid-invite") return json({ error: "INVITE_INVALID" }, 403);
+    const ttl = 60 * 60 * 24 * 30;
 
 
     const session = await signSessionJwt(
       {
         v: 2,
         sub: user.sub,
-        sid,
+        sid: login.sid,
         email: user.email,
         email_verified: user.email_verified,
         name: user.name,
