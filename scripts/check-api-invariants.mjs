@@ -308,6 +308,7 @@ const userSupport = [
 ].join('\n');
 const adminSupport = [
   read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_feedback_handler.ts'),
   read('functions/api/_lib/support_ticket_admin_read.ts'),
 ].join('\n');
 assertIncludes(
@@ -810,6 +811,7 @@ assertIncludes(
 
 const supportFeedback = [
   read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_feedback_handler.ts'),
   read('functions/api/_lib/support_ticket_admin.ts'),
   read('functions/api/_lib/support_ticket_admin_read.ts'),
 ].join('\n');
