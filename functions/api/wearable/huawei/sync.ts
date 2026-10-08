@@ -3,7 +3,6 @@ import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
-import { asOptionalString, isJsonObject } from "../../_lib/json";
 import { writeProfileCas } from "../../_lib/profile_cas";
 import { loadActivePlan } from "../../_lib/plans";
 import {
@@ -15,7 +14,7 @@ import {
   protectHuaweiProfile,
   markHuaweiSynced,
   loadHuaweiProfile,
-  parseHuaweiBaseVersion,
+  parseHuaweiSyncInput,
   loadHuaweiAccessToken,
   type HuaweiHealthEnv,
 } from "../../_lib/huawei_health";
@@ -50,10 +49,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   if (credential.kind === 'refresh-token-missing') return json({ error: "HUAWEI_REFRESH_TOKEN_MISSING" }, 409);
   const { provider, accessToken } = credential;
 
-  const timezone = asOptionalString(isJsonObject(body) ? body.timezone : undefined);
-  const date = asOptionalString(isJsonObject(body) ? body.date : undefined);
-  const hasExplicitBaseVersion = isJsonObject(body) && Object.prototype.hasOwnProperty.call(body, "baseVersion");
-  const requestedBaseVersion = parseHuaweiBaseVersion(isJsonObject(body) ? body.baseVersion : undefined);
+  const { timezone, date, hasExplicitBaseVersion, baseVersion: requestedBaseVersion } = parseHuaweiSyncInput(body);
   if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const snapshot = await fetchHuaweiDailySnapshot(env, request, accessToken, { timezone, date });
   const updatedFields = huaweiChangedFields(snapshot);

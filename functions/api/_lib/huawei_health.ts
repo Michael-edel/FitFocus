@@ -144,6 +144,14 @@ export function parseHuaweiBaseVersion(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+export function parseHuaweiSyncInput(body: unknown) {
+  const object = isJsonObject(body) ? body : null;
+  const timezone = typeof object?.timezone === 'string' && object.timezone.trim() ? object.timezone.trim() : undefined;
+  const date = typeof object?.date === 'string' && object.date.trim() ? object.date.trim() : undefined;
+  const hasExplicitBaseVersion = Boolean(object && Object.prototype.hasOwnProperty.call(object, 'baseVersion'));
+  return { timezone, date, hasExplicitBaseVersion, baseVersion: parseHuaweiBaseVersion(object?.baseVersion) };
+}
+
 export function huaweiChangedFields(snapshot: Pick<HuaweiDailySnapshot, 'stepsToday' | 'activeMinutesToday' | 'sleepHoursLastNight' | 'pulse'>) {
   return Object.keys({
     ...(typeof snapshot.stepsToday === 'number' ? { wearableStepsToday: true } : {}),
