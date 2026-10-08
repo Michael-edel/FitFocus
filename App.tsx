@@ -53,7 +53,7 @@ import { fetchWithResilience } from './services/httpClient';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, TariffPlan, AIPlan, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -118,6 +118,7 @@ import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
 import { completeCourseLesson, recordCourseQuizAnswer } from './features/course/courseProgress';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
+import { useDocumentTheme } from './features/settings/useDocumentTheme';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
@@ -490,15 +491,7 @@ const App: React.FC = () => {
     return () => window.clearInterval(id);
   }, []);
 
-  // Apply theme to document root (works for Vite/PWA and AI Studio preview)
-  useEffect(() => {
-    const root = document.documentElement;
-    // store theme in a data-attribute for CSS variables
-    root.dataset.ffTheme = settings.theme;
-    // Tailwind dark-mode class: enabled for all themes except 'light'
-    const isDark = settings.theme !== 'light';
-    root.classList.toggle('dark', isDark);
-  }, [settings.theme]);
+  useDocumentTheme(settings.theme);
 
   const {
     favoriteRecipes,
