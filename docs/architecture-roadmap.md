@@ -535,3 +535,6 @@ HTTP-контекста.
 optional-table fallback и alert-вычисление изолированы от auth и HTTP-ответа.
 Маршрут `/api/admin/stats` теперь содержит только guard, вызов use case и
 корреляцию ответа.
+
+Read use case admin stats получил прямой контрактный тест для суммарных
+метрик, дневной AI-телеметрии и derived alert-ов без HTTP-авторизации.
