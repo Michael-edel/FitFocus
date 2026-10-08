@@ -127,6 +127,7 @@ import { useDashboardPreferences } from './features/dashboard/useDashboardPrefer
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
+import { usePlanActivation } from './features/auth/usePlanActivation';
 import { syncLegacyHabitProgress } from './features/habits/legacyProgress';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
@@ -614,10 +615,6 @@ const App: React.FC = () => {
   }, [authState, googleMe?.email, googleMe?.name, regData.name]);
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
-  const [isActivatingPlan, setIsActivatingPlan] = useState(false);
-  const [activationStep, setActivationStep] = useState(0);
-  const activationTimerRef = useRef<number | null>(null);
-  const activationIntervalRef = useRef<number | null>(null);
 
   const { planTaskDone, setPlanTaskDone } = usePlanTaskState(currentUser?.id);
   const {
@@ -1470,27 +1467,11 @@ const logWeight = useCallback(() => {
     });
   }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
-  const handleActivateWithTransition = useCallback(() => {
-    if (isActivatingPlan) return;
-    setActivationStep(0); setIsActivatingPlan(true);
-    if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-    activationIntervalRef.current = window.setInterval(() => {
-      setActivationStep((s) => Math.min(s + 1, ACTIVATION_STEPS.length - 1));
-    }, ACTIVATION_STEP_MS);
-    if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
-    activationTimerRef.current = window.setTimeout(async () => {
-      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-      activationIntervalRef.current = null; activationTimerRef.current = null;
-      await handleRegister(); setIsActivatingPlan(false);
-    }, ACTIVATION_TOTAL_MS);
-  }, [handleRegister, isActivatingPlan, ACTIVATION_STEPS.length, ACTIVATION_STEP_MS, ACTIVATION_TOTAL_MS]);
-
-  useEffect(() => {
-    return () => {
-      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-      if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
-    };
-  }, []);
+  const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
+    totalMs: ACTIVATION_TOTAL_MS,
+    stepCount: ACTIVATION_STEPS.length,
+    onComplete: handleRegister,
+  });
 
   useEffect(() => {
     if (!currentUser) return;
