@@ -22,4 +22,9 @@ describe('Huawei sync field rules', () => {
     } as unknown as D1Database;
     await expect(loadHuaweiProfile(db, 'user-1')).resolves.toMatchObject({ version: 7, profile: { height: 180, weight: 80 } });
   });
+
+  it('returns an empty profile when the user has no persisted record', async () => {
+    const db = { prepare: () => ({ bind: () => ({ first: async () => null }) }) } as unknown as D1Database;
+    await expect(loadHuaweiProfile(db, 'user-1')).resolves.toEqual({ profile: {}, version: 0 });
+  });
 });
