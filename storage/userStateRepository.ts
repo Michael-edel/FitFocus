@@ -33,7 +33,19 @@ export function userStateStorageKey(userId: string, stateKey: UserStateKey): str
  * compatible with the existing Cloudflare state mirroring layer.
  */
 export class UserStateRepository {
+  private readonly revisions = new Map<string, number>();
+
   constructor(private readonly userId: string) {}
+
+  private bumpRevision(key: string): number {
+    const next = (this.revisions.get(key) ?? 0) + 1;
+    this.revisions.set(key, next);
+    return next;
+  }
+
+  private isCurrentRevision(key: string, revision: number): boolean {
+    return this.revisions.get(key) === revision;
+  }
 
   key(stateKey: UserStateKey): string {
     return userStateStorageKey(this.userId, stateKey);
@@ -58,7 +70,9 @@ export class UserStateRepository {
       return;
     }
 
+    const revision = this.bumpRevision(key);
     void writeIndexedUserStateRaw(key, raw).then((stored) => {
+      if (!this.isCurrentRevision(key, revision)) return;
       if (!stored) {
         safeSetItem(key, raw);
         return;
@@ -80,9 +94,10 @@ export class UserStateRepository {
     try {
       const parsed = parseJson(raw);
       if (!isValid(parsed)) return fallback;
-      if (!indexedRaw && isIndexedUserStateStorageKey(key)) {
+      if (!indexedRaw && isIndexedUserStateStorageKey(key) && !this.revisions.has(key)) {
+        const revision = this.bumpRevision(key);
         void writeIndexedUserStateRaw(key, raw).then((stored) => {
-          if (stored) {
+          if (stored && this.isCurrentRevision(key, revision)) {
             try { localStorage.removeItem(key); } catch {}
           }
         });
@@ -95,6 +110,7 @@ export class UserStateRepository {
 
   remove(stateKey: UserStateKey): void {
     const key = this.key(stateKey);
+    this.bumpRevision(key);
     if (isIndexedUserStateStorageKey(key)) void removeIndexedUserStateRaw(key);
     safeRemoveItem(key);
   }
