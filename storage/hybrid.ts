@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
+import { fetchWithResilience } from '../services/httpClient';
 import {
   clearIndexedUserStateForUser,
   isIndexedUserStateStorageKey,
@@ -228,7 +229,7 @@ async function flushRemoteKVOperations(): Promise<void> {
       if (__pendingRemoteKVOperations.get(operation.key) !== operation) continue;
         try {
           if (operation.type === 'put') {
-            const response = await fetch('/api/state', {
+            const response = await fetchWithResilience('/api/state', {
               method: 'PUT',
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
@@ -280,7 +281,7 @@ async function flushRemoteKVOperations(): Promise<void> {
             key: operation.key,
             baseVersion: String(operation.baseVersion ?? 0),
           });
-          const response = await fetch(`/api/state?${deleteParams}`, {
+          const response = await fetchWithResilience(`/api/state?${deleteParams}`, {
             method: 'DELETE',
             credentials: 'include',
           });

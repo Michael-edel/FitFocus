@@ -53,10 +53,15 @@ describe('hybrid storage remote mirror policy', () => {
     await vi.advanceTimersByTimeAsync(400);
 
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch).toHaveBeenCalledWith(`/api/state?key=${encodeURIComponent(key)}&baseVersion=0`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/state?key=${encodeURIComponent(key)}&baseVersion=0`,
+      expect.objectContaining({
+        method: 'DELETE',
+        credentials: 'include',
+      }),
+    );
+    const [, request] = vi.mocked(fetch).mock.calls[0] || [];
+    expect(new Headers((request as RequestInit).headers).get('X-Request-ID')).toMatch(/^web-/);
   });
 
   it('retries a transient write failure without another local change', async () => {
