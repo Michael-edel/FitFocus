@@ -3,7 +3,7 @@ import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
-import { isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
+import { asOptionalString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { writeProfileCas } from "../../_lib/profile_cas";
 import { normalizeProfileRecord } from '../../_lib/profile_contract';
@@ -35,12 +35,6 @@ async function loadProfile(db: D1Database, userId: string): Promise<{ profile: J
     profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {},
     version: Number(row?.version || 0),
   };
-}
-
-function readStringField(body: unknown, key: string): string | undefined {
-  if (!isJsonObject(body)) return undefined;
-  const value = body[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 
@@ -97,8 +91,8 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
       .run();
   }
 
-  const timezone = readStringField(body, "timezone");
-  const date = readStringField(body, "date");
+  const timezone = asOptionalString(isJsonObject(body) ? body.timezone : undefined);
+  const date = asOptionalString(isJsonObject(body) ? body.date : undefined);
   const hasExplicitBaseVersion = isJsonObject(body) && Object.prototype.hasOwnProperty.call(body, "baseVersion");
   const requestedBaseVersion = parseHuaweiBaseVersion(isJsonObject(body) ? body.baseVersion : undefined);
   if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
