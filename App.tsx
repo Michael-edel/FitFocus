@@ -124,6 +124,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { syncLegacyHabitProgress } from './features/habits/legacyProgress';
@@ -1392,13 +1393,13 @@ await ensurePdfInterFont(doc);
 
 const logWeight = useCallback(() => {
     if (!currentUser || !newWeight) return;
-    const nextWeight = parseFloat(newWeight);
-    const updatedUser = addWeight(currentUser, nextWeight);
-    persistUser(updatedUser);
+    const result = recordDashboardWeight(currentUser, newWeight);
+    if (result.kind === 'invalid') return;
+    persistUser(result.profile);
     setNewWeight('');
     void checkAchievements('log_weight', {
-      weightHistoryCount: updatedUser.weightHistory?.length || 0,
-      latestWeight: nextWeight,
+      weightHistoryCount: result.profile.weightHistory?.length || 0,
+      latestWeight: result.weight,
     });
   }, [checkAchievements, currentUser, newWeight, persistUser]);
 
