@@ -4,6 +4,7 @@ import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } f
 import { requireDB } from "./_lib/db";
 import { dailyAiLimitForPlan, loadActivePlan } from "./_lib/plans";
 import { AiLimitError, enforceAiRateControls } from "./_lib/ai_limits";
+import { checkAiBudgetGuard } from './_lib/ai_budget_guard';
 import { buildAiFallback, loadAiFallbackProfile, shouldUseAiFallback } from './_lib/ai_fallback';
 import { buildOpenAiProviderPayload, normalizeAiContents } from './_lib/ai_provider_payload';
 import { estimateAiProviderCostUsd, extractAiProviderText, getAiProviderUsage } from './_lib/ai_provider_response';
@@ -256,26 +257,16 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
     try {
       const db = requireDB(env);
 
-      // per-user calls today
-      const callsRow = await db.prepare("SELECT COUNT(*) as cnt FROM ai_events WHERE user_id = ? AND ts >= ?")
-        .bind(String(user.sub), dayStart).first();
-      const callsToday = Number(callsRow?.cnt || 0);
-
-      // per-user cost today
-      const costUserRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE user_id = ? AND ts >= ?")
-        .bind(String(user.sub), dayStart).first();
-      const costUserToday = Number(costUserRow?.cost || 0);
-
-      // total cost today
-      const costTotalRow = await db.prepare("SELECT SUM(COALESCE(estimated_cost_usd,0)) as cost FROM ai_events WHERE ts >= ?")
-        .bind(dayStart).first();
-      const costTotalToday = Number(costTotalRow?.cost || 0);
-
-      const exceedCalls = maxCallsPerUserDay > 0 && callsToday >= maxCallsPerUserDay;
-      const exceedUserCost = maxCostPerUserDay > 0 && costUserToday >= maxCostPerUserDay;
-      const exceedTotalCost = maxCostTotalDay > 0 && costTotalToday >= maxCostTotalDay;
-
-      if (exceedCalls || exceedUserCost || exceedTotalCost) {
+      const budget = await checkAiBudgetGuard({
+        db,
+        userId: String(user.sub),
+        dayStart,
+        maxCallsPerUserDay,
+        maxCostPerUserDay,
+        maxCostTotalDay,
+      });
+      if (budget.exceeded) {
+        const { exceedCalls, exceedUserCost, exceedTotalCost } = budget;
         if (onLimitAction === "block") {
           return jsonV({ error: "AI_LIMIT", message: "Достигнут лимит использования AI. Попробуйте позже.", meta: { exceedCalls, exceedUserCost, exceedTotalCost } }, 429);
         }
