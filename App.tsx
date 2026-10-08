@@ -123,6 +123,7 @@ import { useNutritionSearchState } from './features/nutrition/useNutritionSearch
 import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
 import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
 import { useRefeedSchedule } from './features/adaptation/useRefeedSchedule';
+import { calculateAdaptationCompliance, calculateAdaptationIndex, calculateAdaptationWeightProgress, calculateExpectedWeightDelta, getAdaptationStatus, getRefeedSuggestion } from './features/adaptation/adaptationMetrics';
 import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
@@ -1022,82 +1023,37 @@ await ensurePdfInterFont(doc);
     };
   }, [currentUser, googleMe?.sub, pushProfileToCloud]);
 
-  const deltaDays = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
-    const log = currentUser.weightHistory ?? [];
-    const first = log[0];
-    const last = log[log.length - 1];
-    const days = Math.floor((new Date(last.date).getTime() - new Date(first.date).getTime()) / 86400000);
-    // показываем «дельту» за доступный период, но не больше 14 дней
-    return Math.max(1, Math.min(14, isFinite(days) ? days : 1));
-  }, [currentUser]);
+  const adaptationWeightProgress = useMemo(
+    () => calculateAdaptationWeightProgress(currentUser?.weightHistory),
+    [currentUser?.weightHistory],
+  );
+  const deltaDays = adaptationWeightProgress.deltaDays;
+  const weightDeltaN = adaptationWeightProgress.weightDelta;
 
-  const weightDeltaN = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 0;
-    const log = currentUser.weightHistory ?? [];
-    const now = log[log.length - 1];
-    const ms = deltaDays * 86400000;
-    const past = log
-      .slice()
-      .reverse()
-      .find(e => new Date(now.date).getTime() - new Date(e.date).getTime() >= ms);
-    return past ? (now.weight - past.weight) : (now.weight - log[0].weight);
-  }, [currentUser, deltaDays]);
+  const expectedN = useMemo(
+    () => currentUser ? calculateExpectedWeightDelta(currentUser, deltaDays) : 0,
+    [currentUser, deltaDays],
+  );
 
-  const expectedN = useMemo(() => {
-    if (!currentUser) return 0;
-    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * deltaDays) / 7700;
-    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * deltaDays) / 7700;
-    return 0;
-  }, [currentUser, deltaDays]);
+  const compliancePct = useMemo(
+    () => currentUser ? calculateAdaptationCompliance(foodDiary, habits, targets.calories) : 0,
+    [currentUser, foodDiary, habits, targets.calories],
+  );
 
-  const compliancePct = useMemo(() => {
-    if (!currentUser) return 0;
-    const now = Date.now();
-    const last7 = foodDiary.filter(f => (now - new Date(f.timestamp).getTime()) <= 7 * 86400000);
-    if (!last7.length) return 0;
-    const sums: Record<string, number> = {};
-    for (const f of last7) {
-      const key = localDayKey(f.timestamp);
-      if (!key) continue;
-      sums[key] = (sums[key] ?? 0) + (f.calories ?? 0);
-    }
-    const days = Object.keys(sums);
-    const okDays = days.filter(d => sums[d] <= (targets.calories || 1) * 1.1).length;
-    const dietScore = okDays / Math.max(1, days.length);
-    const habitScore = (habits.filter(h => h.current >= h.goal).length) / Math.max(1, habits.length);
-    return Math.round((dietScore * 0.6 + habitScore * 0.4) * 100);
-  }, [currentUser, foodDiary, habits, targets.calories]);
+  const adaptationIndex = useMemo(
+    () => currentUser ? calculateAdaptationIndex(currentUser.goal, expectedN, weightDeltaN) : 0,
+    [currentUser, expectedN, weightDeltaN],
+  );
 
-  const adaptationIndex = useMemo(() => {
-    if (!currentUser) return 0;
-    if (currentUser.goal === Goal.MAINTAIN) return 0;
-    const exp = expectedN;
-    if (exp === 0) return 0;
-    const actual = weightDeltaN;
-    const progress = currentUser.goal === Goal.LOSS
-      ? Math.min(1, Math.max(0, (Math.abs(actual) / Math.abs(exp))))
-      : Math.min(1, Math.max(0, (actual / exp)));
-    const idx = Math.round((1 - progress) * 100);
-    return Math.max(0, Math.min(100, idx));
-  }, [currentUser, expectedN, weightDeltaN]);
+  const adaptationStatus = useMemo(
+    () => currentUser ? getAdaptationStatus(currentUser.goal, adaptationIndex) : { label: '—', color: 'text-slate-400', level: 'none' as const },
+    [currentUser, adaptationIndex],
+  );
 
-  const adaptationStatus = useMemo(() => {
-    if (!currentUser) return { label: '—', color: 'text-slate-400', level: 'none' as const };
-    if (currentUser.goal === Goal.MAINTAIN) return { label: 'Поддержание', color: 'text-slate-300', level: 'none' as const };
-    if (adaptationIndex < 35) return { label: 'Низкая', color: 'text-emerald-300', level: 'low' as const };
-    if (adaptationIndex < 70) return { label: 'Средняя', color: 'text-amber-300', level: 'mid' as const };
-    return { label: 'Высокая', color: 'text-rose-300', level: 'high' as const };
-  }, [currentUser, adaptationIndex]);
-
-  const refeedSuggestion = useMemo(() => {
-    if (!currentUser) return { type: 'stay' as const };
-    if (currentUser.goal !== Goal.LOSS) return { type: 'stay' as const };
-    if (compliancePct < 70) return { type: 'stay' as const };
-    if (adaptationIndex >= 70) return { type: 'refeed' as const, caloriesTomorrow: targets.calories + 300 };
-    if (adaptationIndex >= 45) return { type: 'adjust' as const, stepsExtra: 2000 };
-    return { type: 'stay' as const };
-  }, [currentUser, compliancePct, adaptationIndex, targets.calories]);
+  const refeedSuggestion = useMemo(
+    () => currentUser ? getRefeedSuggestion(currentUser.goal, compliancePct, adaptationIndex, targets.calories) : { type: 'stay' as const },
+    [currentUser, compliancePct, adaptationIndex, targets.calories],
+  );
 
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
     if (!currentUser) return false;
