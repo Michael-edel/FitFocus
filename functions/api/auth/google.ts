@@ -65,6 +65,7 @@ const handleGoogleIdentityPost: PagesFunction<Env> = async (ctx) => {
       picture: String(info.picture || ""),
       email_verified: String(info.email_verified || "") === "true",
     };
+    if (!user.sub) return json({ error: "Invalid Google token" }, 401);
 
     const now = Math.floor(Date.now() / 1000);
     if (!env.DB) return json(AUTH_UNAVAILABLE, 500);
