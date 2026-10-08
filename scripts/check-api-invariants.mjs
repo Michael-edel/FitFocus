@@ -1165,9 +1165,10 @@ assertNotIncludes(
 );
 
 const wearableSyncRoute = read('functions/api/wearable/sync.ts');
+const wearableSyncUseCase = read('functions/api/_lib/wearable_profile_sync.ts');
 assertIncludes(
-  wearableSyncRoute,
-  'Number.isInteger(parsedBaseVersion)',
+  wearableSyncUseCase,
+  'Number.isInteger(parsed)',
   'wearable sync must reject non-integer baseVersion values',
 );
 assertIncludes(
