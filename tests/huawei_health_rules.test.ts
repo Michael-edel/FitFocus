@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildHuaweiSyncedProfile, huaweiChangedFields, loadHuaweiProfile, markHuaweiSynced, parseHuaweiBaseVersion, parseHuaweiSyncInput } from '../functions/api/_lib/huawei_health';
+import { syncHuaweiProfile } from '../functions/api/_lib/huawei_sync';
 
 describe('Huawei sync field rules', () => {
   it('accepts non-negative integer base versions and rejects invalid values', () => {
@@ -48,5 +49,20 @@ describe('Huawei sync field rules', () => {
   it('normalizes sync input and preserves an explicit base version', () => {
     expect(parseHuaweiSyncInput({ timezone: ' UTC ', date: ' 2026-01-02 ', baseVersion: '3' })).toEqual({ timezone: 'UTC', date: '2026-01-02', hasExplicitBaseVersion: true, baseVersion: 3 });
     expect(parseHuaweiSyncInput({ baseVersion: -1 }).baseVersion).toBeNull();
+  });
+
+  it('returns the protected current profile before writing when the requested version is stale', async () => {
+    const db = {
+      prepare: () => ({ bind: () => ({ first: async () => ({ profile_json: '{"height":180}', version: 4 }) }) }),
+    } as unknown as D1Database;
+    const result = await syncHuaweiProfile({
+      db,
+      user: { sub: 'user-1', sid: 'sid-1', emailVerified: false, roles: [] },
+      snapshot: { stepsToday: 10, raw: {} },
+      hasExplicitBaseVersion: true,
+      requestedBaseVersion: 3,
+      now: 1_700_000_000_000,
+    });
+    expect(result).toMatchObject({ kind: 'conflict', profile: { height: 180, version: 4 }, version: 4 });
   });
 });

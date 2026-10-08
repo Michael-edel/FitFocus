@@ -3,21 +3,16 @@ import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
-import { writeProfileCas } from "../../_lib/profile_cas";
-import { loadActivePlan } from "../../_lib/plans";
 import {
   ensureHuaweiConnectionsSchema,
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
   huaweiChangedFields,
-  buildHuaweiSyncedProfile,
-  protectHuaweiProfile,
-  markHuaweiSynced,
-  loadHuaweiProfile,
   parseHuaweiSyncInput,
   loadHuaweiAccessToken,
   type HuaweiHealthEnv,
 } from "../../_lib/huawei_health";
+import { syncHuaweiProfile } from '../../_lib/huawei_sync';
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
@@ -58,30 +53,17 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const now = Date.now();
-  const timestamp = new Date(now).toISOString();
-  const current = await loadHuaweiProfile(db, user.sub);
-  const currentProfile = current.profile;
-  if (hasExplicitBaseVersion && requestedBaseVersion !== current.version) {
-    return json({ error: "PROFILE_CONFLICT", profile: protectHuaweiProfile(user, { ...currentProfile, version: current.version }), version: current.version }, 409);
-  }
-  const expectedVersion = hasExplicitBaseVersion ? requestedBaseVersion : current.version;
-  const version = expectedVersion + 1;
-  const plan = await loadActivePlan(db, user.sub);
-  const nextProfile = buildHuaweiSyncedProfile({ user, currentProfile, plan, version, timestamp, date, snapshot });
-
-  const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
-  if (!profileWritten) {
-    const latest = await loadHuaweiProfile(db, user.sub);
+  const result = await syncHuaweiProfile({
+    db, user, snapshot, date, hasExplicitBaseVersion, requestedBaseVersion, now,
+  });
+  if (result.kind === 'conflict') {
     return json({
       error: "PROFILE_CONFLICT",
-      profile: protectHuaweiProfile(user, { ...latest.profile, version: latest.version }),
-      version: latest.version,
+      profile: result.profile,
+      version: result.version,
     }, 409);
   }
-
-  await markHuaweiSynced(db, user.sub, now);
-
-  return json({ provider, profile: nextProfile, updatedFields, version });
+  return json({ provider, profile: result.profile, updatedFields, version: result.version });
 };
 
 /** Correlates Huawei sync outcomes without recording OAuth tokens or health data. */
