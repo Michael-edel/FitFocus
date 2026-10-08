@@ -103,6 +103,36 @@ export async function removeIndexedUserStateRaw(key: string): Promise<boolean> {
   }
 }
 
+/** Returns all volume-state records so backups can include data outside localStorage. */
+export async function listIndexedUserStateRaw(): Promise<Record<string, string>> {
+  const database = await openDatabase();
+  if (!database) return {};
+  try {
+    const transaction = database.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const entries: Record<string, string> = {};
+    await new Promise<void>((resolve) => {
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+        const entry = cursor.value as IndexedValue;
+        if (typeof entry.key === 'string' && typeof entry.value === 'string' && isIndexedUserStateStorageKey(entry.key)) {
+          entries[entry.key] = entry.value;
+        }
+        cursor.continue();
+      };
+      request.onerror = () => resolve();
+    });
+    return entries;
+  } catch {
+    return {};
+  }
+}
+
 async function updateKeys(prefix: string, update: (store: IDBObjectStore, entry: IndexedValue) => void) {
   const database = await openDatabase();
   if (!database) return false;

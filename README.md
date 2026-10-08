@@ -504,7 +504,7 @@ npx wrangler d1 migrations apply fitfocus --remote
 
 Ограничения:
 
-- `backup.ts` прямо содержит статус prototype.
+- `backup.ts` экспортирует localStorage и объёмное пользовательское состояние из IndexedDB.
 - File handle не сохраняется между сессиями.
 - Работа без сети как основной режим не заявлена: приложение использует cloud-first модель.
 
@@ -541,7 +541,7 @@ npx wrangler d1 migrations apply fitfocus --remote
 
 1. Android onboarding issue на Galaxy S23+ не может считаться полностью закрытым без проверки на реальном устройстве; Playwright покрывает Android-эмуляцию, но не конкретную прошивку Samsung.
 2. Wearable-интеграции Google Fit/Fitbit/Garmin не являются полноценными provider-интеграциями; сейчас есть UI, общий snapshot endpoint и iOS HealthKit bridge. Huawei Health добавлен как server-side OAuth/sync flow, но требует внешней настройки Huawei Health Kit credentials/scopes.
-3. Backup/autosave остается prototype-level: JSON export/import есть, но persistent file handle не сохраняется между сессиями; работа без сети как основной режим не входит в заявленную cloud-first модель.
+3. Backup/autosave ограничен browser-level JSON snapshot: IndexedDB включён, но persistent file handle не сохраняется между сессиями; работа без сети как основной режим не входит в заявленную cloud-first модель.
 4. Push зависит от разрешений браузера/ОС, VAPID secrets и валидных подписок. Код обрабатывает устаревшие подписки, но доставка не гарантируется для браузеров/ОС, которые блокируют Web Push.
 5. Stripe billing зависит от корректных Cloudflare secrets, price ids и webhook secret. Без них checkout/webhook не завершат полный платный цикл.
 6. ИИ зависит от `OPENAI_API_KEY` и доступности GPT-5.6 Luna. Резервный режим есть, но это не равно качеству полноценного ИИ-ответа.
