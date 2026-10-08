@@ -142,6 +142,10 @@ describe('/api/ai server configuration', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
     vi.stubGlobal('fetch', fetchMock);
+    const failingCache = {
+      get: vi.fn().mockRejectedValue(new Error('KV unavailable')),
+      put: vi.fn().mockRejectedValue(new Error('KV unavailable')),
+    };
 
     try {
       const response = await postAi(db, {
@@ -157,13 +161,14 @@ describe('/api/ai server configuration', () => {
             },
           },
         },
-        env: { OPENAI_API_KEY: 'test-openai-key' },
+        env: { OPENAI_API_KEY: 'test-openai-key', FITFOCUS_KV: failingCache },
       });
       const body = await response.json() as { text?: string };
 
       expect(response.status).toBe(200);
       expect(body.text).toBe('{"answer":"ok"}');
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(failingCache.put).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }

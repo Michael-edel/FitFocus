@@ -18,6 +18,7 @@ import {
 } from './_lib/ai_provider_request';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { logAiEvent, logAiUsage } from './_lib/ai_telemetry';
+import { readAiDedupCache, writeAiDedupCache } from './_lib/ai_dedup_cache';
 import { readRequestText, RequestBodyTooLargeError } from "./_lib/request_body";
 import { isJsonObject, safeJsonParse, type JsonObject } from "./_lib/json";
 import {
@@ -230,16 +231,14 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   const bodyHash = await sha256Hex(bodyText || "{}");
   const dedupKey = `dedup:60s:${identity}:${feature}:${bodyHash}`;
 
-  if (kv) {
-    const cached = await kv.get(dedupKey, { type: "json" }) as unknown;
-    if (isJsonObject(cached) && "data" in cached) {
-      const cachedStatus = Number(cached.status || 200);
-      await logAiUsage(env, { identity, feature, status: cachedStatus, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
-      return new Response(JSON.stringify(cached.data), {
-        status: cachedStatus,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
-      });
-    }
+  const cached = await readAiDedupCache(kv, dedupKey);
+  if (isJsonObject(cached) && "data" in cached) {
+    const cachedStatus = Number(cached.status || 200);
+    await logAiUsage(env, { identity, feature, status: cachedStatus, latency: Date.now() - startedAt, bytesIn: bodyText.length, cacheHit: true });
+    return new Response(JSON.stringify(cached.data), {
+      status: cachedStatus,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-FF-Cache": "HIT" },
+    });
   }
 
   const { feature: _drop, model: _model, ...payload } = body ?? {};
@@ -363,10 +362,8 @@ async function handleAiPost({ request, env }: { request: Request; env: Env }) {
   }
 
 
-  if (kv) {
-    await kv.put(dedupKey, JSON.stringify({ status: geminiResp.status, data }), { expirationTtl: 60 });
-    await logAiUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
-  }
+  await writeAiDedupCache(kv, dedupKey, { status: geminiResp.status, data });
+  await logAiUsage(env, { identity, feature, status: geminiResp.status, latency, bytesIn: bodyText.length });
 
   
   const usage = getAiProviderUsage(data);
