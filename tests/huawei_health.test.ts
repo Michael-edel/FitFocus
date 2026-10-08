@@ -129,7 +129,9 @@ describe('Huawei Health integration', () => {
     });
 
     const response = await getHuaweiStatus({
-      request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status'),
+      request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status', {
+        headers: { 'X-Request-ID': 'huawei-status-test-01' },
+      }),
       env: env(db) as unknown as HuaweiStatusContext['env'],
       params: {},
       data: {},
@@ -138,6 +140,7 @@ describe('Huawei Health integration', () => {
     });
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('huawei-status-test-01');
     const bodyText = await response.text();
     expect(bodyText).toContain('"connected":true');
     expect(bodyText).not.toContain('access-token');

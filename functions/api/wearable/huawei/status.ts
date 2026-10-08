@@ -3,10 +3,11 @@ import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { ensureHuaweiConnectionsSchema, getHuaweiConfig, huaweiProviderId, readHuaweiMetadata, type HuaweiConnectionRow, type HuaweiHealthEnv } from "../../_lib/huawei_health";
+import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiStatusGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -33,4 +34,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     lastSyncAt: row?.last_sync_at || null,
     metadata: row ? readHuaweiMetadata(row) : {},
   });
+};
+
+/** Correlates status checks without logging connection state or wearable metadata. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiStatusGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('wearable.huawei.status.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

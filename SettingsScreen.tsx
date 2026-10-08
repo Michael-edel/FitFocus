@@ -10,6 +10,7 @@ import { clearAiCache } from './geminiService';
 import ProfileDetailsSection from './components/ProfileDetailsSection';
 import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
+import { fetchWithResilience } from './services/httpClient';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -528,10 +529,10 @@ export default function SettingsScreen({
     }
     setHuaweiBusy((current) => current || 'status');
     try {
-      const response = await fetch('/api/wearable/huawei/status', {
+      const response = await fetchWithResilience('/api/wearable/huawei/status', {
         credentials: 'include',
         headers: { Accept: 'application/json' },
-      });
+      }, { retries: 1 });
       const payload = await readJsonRecord(response);
       if (!response.ok || !payload) {
         throw new Error(payload?.error === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : 'Не удалось проверить Huawei Health.');
