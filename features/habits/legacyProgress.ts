@@ -1,4 +1,5 @@
 import type { UserHabit, UserProfile } from '../../types';
+import { getTodayKey, toggleHabit } from '../../habits';
 
 type HabitKey = 'water' | 'steps' | 'breakfast' | 'sleep';
 
@@ -22,4 +23,11 @@ export function syncLegacyHabitProgress(
     habits: habits.map((habit) => habit.id === legacyId ? { ...habit, current: done ? habit.goal : 0 } : habit),
     waterGoalReached: habitKey === 'water' && done,
   };
+}
+
+/** Applies a daily habit toggle and derives all dashboard-facing legacy progress in one operation. */
+export function applyHabitToggle(profile: UserProfile, habits: UserHabit[], habitKey: HabitKey) {
+  const updatedProfile = toggleHabit(profile, habitKey);
+  const legacy = syncLegacyHabitProgress(habits, updatedProfile, habitKey, getTodayKey());
+  return { updatedProfile, ...legacy };
 }

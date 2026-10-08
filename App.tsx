@@ -57,7 +57,7 @@ import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
-import { toggleHabit, calculateStreak, getTodayKey } from './habits';
+import { calculateStreak, getTodayKey } from './habits';
 import { weightDelta } from './weight';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
@@ -130,7 +130,7 @@ import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
-import { syncLegacyHabitProgress } from './features/habits/legacyProgress';
+import { applyHabitToggle } from './features/habits/legacyProgress';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1222,11 +1222,10 @@ await ensurePdfInterFont(doc);
 
   const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
     if (!currentUser) return;
-    const updatedUser = toggleHabit(currentUser, habitKey);
-    persistUser(updatedUser);
-    const legacy = syncLegacyHabitProgress(habits, updatedUser, habitKey, getTodayKey());
-    setHabits(legacy.habits);
-    if (legacy.waterGoalReached) {
+    const result = applyHabitToggle(currentUser, habits, habitKey);
+    persistUser(result.updatedProfile);
+    setHabits(result.habits);
+    if (result.waterGoalReached) {
       void checkAchievements('habit_water_done', { waterToday: true });
     }
   }, [checkAchievements, currentUser, habits, persistUser]);
