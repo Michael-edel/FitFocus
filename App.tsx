@@ -124,6 +124,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { shareWisCard } from './features/dashboard/shareWisCard';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { syncLegacyHabitProgress } from './features/habits/legacyProgress';
 import { UserStateRepository } from './storage/userStateRepository';
@@ -841,55 +842,13 @@ await ensurePdfInterFont(doc);
     trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
 
     try {
-      const html2canvasModule = await import('html2canvas');
-      const html2canvas = html2canvasModule.default;
-      await waitForDocumentFonts();
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const canvas = await html2canvas(card, {
-        useCORS: true,
-        scale: 1,
-        backgroundColor: null,
-      });
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) {
-        throw new Error('canvas_to_blob_failed');
-      }
-
-      const file = new File([blob], `FitFocus_WIS_${weekly.wis}.png`, { type: 'image/png' });
-      const canShareFiles =
-        typeof navigator !== 'undefined' &&
-        typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [file] });
-
-      if (canShareFiles) {
-        await navigator.share({
-          files: [file],
-          title: 'FitFocus WIS',
-          text: 'Моя недельная WIS-карточка FitFocus',
-        });
-        setWisShareNotice('success', 'Карточка готова и передана в системное меню отправки.');
-        trackWisShareEvent('wis_share_success', { method: 'share_sheet', wis: weekly.wis });
-        void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
-        return;
-      }
-
-      const url = URL.createObjectURL(blob);
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `FitFocus_WIS_${weekly.wis}.png`;
-        link.rel = 'noopener';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-      setWisShareNotice('success', 'Системная отправка недоступна — PNG скачан на устройство.');
-      trackWisShareEvent('wis_share_success', { method: 'download', wis: weekly.wis });
+      const method = await shareWisCard({ card, wis: weekly.wis, waitForFonts: waitForDocumentFonts });
+      setWisShareNotice('success', method === 'share_sheet'
+        ? 'Карточка готова и передана в системное меню отправки.'
+        : 'Системная отправка недоступна — PNG скачан на устройство.');
+      trackWisShareEvent('wis_share_success', { method, wis: weekly.wis });
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
+      return;
     } catch (error: unknown) {
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
