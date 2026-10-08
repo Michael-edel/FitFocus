@@ -108,12 +108,14 @@ for (const file of [
   'functions/api/auth/apple/callback.ts',
   'functions/api/auth/google.ts',
 ]) {
-  const oauth = read(file);
+  const oauth = file === 'functions/api/auth/google/callback.ts'
+    ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}`
+    : read(file);
   assertIncludes(oauth, 'consumeInviteCode(', `${file} must consume beta invites through the shared helper`);
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
   assertOrder(
     oauth,
-    'const requireInvite = String(',
+    file === 'functions/api/auth/google/callback.ts' ? 'if (input.requireInvite' : 'const requireInvite = String(',
     'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1',
     `${file} must restore only after invite access checks`,
   );
