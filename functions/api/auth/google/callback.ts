@@ -2,6 +2,7 @@ import type { PagesFunction } from "@cloudflare/workers-types";
 import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
 import { consumeInviteCode } from "../../_lib/invites";
 import { isJsonObject } from "../../_lib/json";
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth";
 
 type GoogleTokenResponse = { id_token?: string };
@@ -33,7 +34,7 @@ async function safeResponseJson(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}));
 }
 
-export const onRequestGet: PagesFunction<{
+const handleGoogleOAuthCallback: PagesFunction<{
   DB: D1Database;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
@@ -206,4 +207,21 @@ export const onRequestGet: PagesFunction<{
   } catch {
     return json({ error: "Server error" }, 500);
   }
+};
+
+/** Records only the OAuth callback outcome; credentials and identity data stay private. */
+export const onRequestGet: PagesFunction<{
+  DB: D1Database;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  AUTH_JWT_SECRET: string;
+  APP_URL?: string;
+  REQUIRE_INVITE?: string;
+  ADMIN_EMAILS?: string;
+  BOOTSTRAP_ADMIN_EMAILS?: string;
+}> = async (context) => {
+  const response = await handleGoogleOAuthCallback(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("auth.google.callback.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

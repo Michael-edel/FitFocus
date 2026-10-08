@@ -65,7 +65,7 @@ async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Recor
   const context: AppleCallbackContext = {
     request: new Request('https://fitfocus.test/api/auth/apple/callback', {
       method: 'POST',
-      headers: { Cookie: 'ff_oauth_nonce=nonce', 'x-forwarded-proto': 'https' },
+      headers: { Cookie: 'ff_oauth_nonce=nonce', 'x-forwarded-proto': 'https', 'x-request-id': 'apple-oauth-callback-01' },
       body: form,
     }),
     env: {
@@ -99,6 +99,7 @@ describe('/api/auth/apple admin promotion', () => {
     const response = await postAppleCallback(db, { sub: 'apple-user-1' });
 
     expect(response.status).toBe(302);
+    expect(response.headers.get('X-Request-ID')).toBe('apple-oauth-callback-01');
     expect(hasAdminPromotion(db)).toBe(false);
   });
 

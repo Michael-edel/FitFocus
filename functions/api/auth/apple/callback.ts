@@ -4,6 +4,7 @@ import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../.
 import { consumeInviteCode } from "../../_lib/invites";
 import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { readFormDataRequest, RequestBodyTooLargeError } from "../../_lib/request_body";
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 type ExistingAppleUserRow = {
   email?: string | null;
@@ -43,7 +44,7 @@ function buildAppleName(userJson: JsonObject | null): string {
   return [first, last].filter(Boolean).join(" ").trim();
 }
 
-export const onRequest: PagesFunction<{
+const handleAppleOAuthCallback: PagesFunction<{
   DB: D1Database;
   APPLE_CLIENT_ID: string;
   APPLE_CLIENT_SECRET?: string;
@@ -232,4 +233,24 @@ export const onRequest: PagesFunction<{
     }
     return json({ error: "Server error" }, 500);
   }
+};
+
+/** Records only the OAuth callback outcome; credentials and identity data stay private. */
+export const onRequest: PagesFunction<{
+  DB: D1Database;
+  APPLE_CLIENT_ID: string;
+  APPLE_CLIENT_SECRET?: string;
+  APPLE_TEAM_ID?: string;
+  APPLE_KEY_ID?: string;
+  APPLE_PRIVATE_KEY?: string;
+  AUTH_JWT_SECRET: string;
+  APP_URL?: string;
+  REQUIRE_INVITE?: string;
+  ADMIN_EMAILS?: string;
+  BOOTSTRAP_ADMIN_EMAILS?: string;
+}> = async (context) => {
+  const response = await handleAppleOAuthCallback(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("auth.apple.callback.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
