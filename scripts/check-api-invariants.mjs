@@ -1069,8 +1069,8 @@ for (const [file, text] of [
   ['functions/api/family/join.ts', read('functions/api/family/join.ts')],
   ['functions/api/family/member.ts', read('functions/api/family/member.ts')],
   ['functions/api/family/menu.ts', familyMenu],
-  ['functions/api/shopping/bulk.ts', read('functions/api/shopping/bulk.ts')],
-  ['functions/api/shopping/check.ts', read('functions/api/shopping/check.ts')],
+  ['functions/api/shopping/bulk.ts', [read('functions/api/shopping/bulk.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n')],
+  ['functions/api/shopping/check.ts', [read('functions/api/shopping/check.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n')],
   ['functions/api/weekly_menu/items.ts', weeklyMenuItems],
 ]) {
   assertIncludes(
@@ -1100,7 +1100,7 @@ assertIncludes(
   'weekly menu items save must enforce an explicit JSON body size limit',
 );
 
-const shoppingBulkRoute = read('functions/api/shopping/bulk.ts');
+const shoppingBulkRoute = [read('functions/api/shopping/bulk.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n');
 const shoppingBulk = [
   shoppingBulkRoute,
   read('functions/api/_lib/shopping_checks.ts'),
