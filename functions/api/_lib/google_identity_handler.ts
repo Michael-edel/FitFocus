@@ -55,8 +55,10 @@ let body: JsonObject | null = null;
       return json({ error: "Token iss mismatch" }, 401);
     }
 
+    const googleSub = typeof info.sub === "string" ? info.sub.trim() : "";
+    if (!googleSub) return json({ error: "Invalid Google token" }, 401);
     const user = {
-      sub: String(info.sub || ""),
+      sub: googleSub,
       email: String(info.email || ""),
       name: String(info.name || info.given_name || ""),
       picture: String(info.picture || ""),

@@ -109,6 +109,20 @@ describe('/api/auth/google admin promotion', () => {
     expect(response.status).toBe(401);
     expect(db.runs).toEqual([]);
   });
+  it('rejects a non-string Google subject before any user write', async () => {
+    const db = makeDb();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      aud: 'google-client-id',
+      iss: 'https://accounts.google.com',
+      sub: { unexpected: true },
+      email: 'admin@example.com',
+      email_verified: 'true',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    const response = await postGoogleRequest(db);
+    expect(response.status).toBe(401);
+    expect(db.runs).toEqual([]);
+  });
   it('does not read tokeninfo error responses through unbounded text()', async () => {
     const text = vi.fn(async () => 'not-json-error-body');
     vi.stubGlobal('fetch', vi.fn(async () => ({

@@ -217,6 +217,11 @@ assertIncludes(
   'await safeResponseJson(r)',
   'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
 );
+assertIncludes(
+  legacyGoogleAuth,
+  'const googleSub = typeof info.sub === "string" ? info.sub.trim() : "";',
+  'legacy Google auth endpoint must accept only a non-empty string Google subject',
+);
 assertNotIncludes(
   legacyGoogleAuth,
   'await r.text()',
