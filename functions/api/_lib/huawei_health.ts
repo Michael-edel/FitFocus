@@ -1,6 +1,7 @@
 import { getBaseUrl, normalizeAppUrl } from "../auth/_oauth";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "./json";
 import { decryptSecretValue, encryptSecretValue } from "./secret_box";
+import { normalizeProfileRecord } from './profile_contract';
 
 export type HuaweiHealthEnv = {
   AUTH_JWT_SECRET: string;
@@ -55,6 +56,11 @@ const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authori
 const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
 const DEFAULT_API_BASE_URL = "https://health-api.cloud.huawei.com/healthkit/v1";
 const DEFAULT_STEPS_DATA_TYPE = "com.huawei.continuous.steps.delta";
+
+export async function loadHuaweiProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
+  const row = await db.prepare('SELECT profile_json, version FROM user_profiles WHERE user_id = ?').bind(userId).first<{ profile_json?: string; version?: number }>();
+  return { profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {}, version: Number(row?.version || 0) };
+}
 
 export function huaweiProviderId() {
   return HUAWEI_PROVIDER;

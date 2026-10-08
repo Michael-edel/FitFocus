@@ -3,7 +3,7 @@ import { requireUser, json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
-import { asOptionalString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
+import { asOptionalString, isJsonObject } from "../../_lib/json";
 import { withProtectedFields } from "../../_lib/legacy_sync";
 import { writeProfileCas } from "../../_lib/profile_cas";
 import { normalizeProfileRecord } from '../../_lib/profile_contract';
@@ -16,6 +16,7 @@ import {
   fetchHuaweiDailySnapshot,
   huaweiProviderId,
   huaweiChangedFields,
+  loadHuaweiProfile,
   parseHuaweiBaseVersion,
   refreshHuaweiAccessToken,
   shouldRefreshHuaweiToken,
@@ -25,17 +26,6 @@ import {
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
-
-async function loadProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
-  const row = await db
-    .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
-    .bind(userId)
-    .first<{ profile_json?: string; version?: number }>();
-  return {
-    profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {},
-    version: Number(row?.version || 0),
-  };
-}
 
 
 const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -104,7 +94,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const now = Date.now();
   const timestamp = new Date(now).toISOString();
-  const current = await loadProfile(db, user.sub);
+  const current = await loadHuaweiProfile(db, user.sub);
   const currentProfile = current.profile;
   if (hasExplicitBaseVersion && requestedBaseVersion !== current.version) {
     return json({ error: "PROFILE_CONFLICT", profile: withProtectedFields(user, { ...currentProfile, version: current.version }), version: current.version }, 409);
@@ -130,7 +120,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const profileWritten = await writeProfileCas(db, user.sub, nextProfile, expectedVersion, now);
   if (!profileWritten) {
-    const latest = await loadProfile(db, user.sub);
+    const latest = await loadHuaweiProfile(db, user.sub);
     return json({
       error: "PROFILE_CONFLICT",
       profile: withProtectedFields(user, { ...latest.profile, version: latest.version }),
