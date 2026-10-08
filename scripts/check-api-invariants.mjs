@@ -909,7 +909,10 @@ assertIncludes(
   'AI fallback must prefer canonical activityLevel profile fields',
 );
 
-const billingCheckout = read('functions/api/billing/checkout.ts');
+const billingCheckout = [
+  read('functions/api/billing/checkout.ts'),
+  read('functions/api/_lib/billing_checkout.ts'),
+].join('\n');
 assertIncludes(
   billingCheckout,
   'resolveCheckoutPlanPrice',
