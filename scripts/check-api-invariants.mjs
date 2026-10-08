@@ -631,31 +631,31 @@ assertIncludes(
   'admin session revoke must write revoke and audit through one batch',
 );
 
-const adminSubscription = read('functions/api/admin/subscription.ts');
+const adminSubscription = [read('functions/api/admin/subscription.ts'), read('functions/api/_lib/admin_subscription.ts')].join('\n');
 assertIncludes(
   adminSubscription,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin subscription endpoint must verify target user exists and is active',
+  'admin subscription use case must verify target user exists and is active',
 );
 assertIncludes(
   adminSubscription,
   'action: "subscription_update"',
-  'admin subscription endpoint must write an audit event',
+  'admin subscription use case must write an audit event',
 );
 assertIncludes(
   adminSubscription,
   "VALUES (?1, 'free', 'canceled', NULL, NULL, NULL, ?2)",
-  'admin subscription endpoint must upsert a free canceled row instead of relying on update-only behavior',
+  'admin subscription use case must upsert a free canceled row instead of relying on update-only behavior',
 );
 assertIncludes(
   adminSubscription,
   'buildAdminEventStatement',
-  'admin subscription endpoint must stage the audit event with the subscription write',
+  'admin subscription use case must stage the audit event with the subscription write',
 );
 assertIncludes(
   adminSubscription,
   'await db.batch([subscriptionStatement, auditStatement]);',
-  'admin subscription endpoint must write subscription and audit event through one batch',
+  'admin subscription use case must write subscription and audit event through one batch',
 );
 
 const adminInvites = [
