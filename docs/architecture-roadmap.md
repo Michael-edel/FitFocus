@@ -562,3 +562,5 @@ timeout, request ID и безопасной политикой повторов.
 Feature flags и runtime settings вынесены в общий dmin_config use case. В нём закреплены whitelist ключей, нормализация лимитов и rollout, атомарная запись вместе с audit event; маршруты оставляют только admin guard и HTTP-контракт.
 
 Ручная смена подписки вынесена в dmin_subscription use case: проверка активного пользователя, нормализация плана, upsert статуса и audit event больше не живут в HTTP-маршруте.
+
+Просмотр и отзыв админ-сессий вынесены в dmin_session_management use case; проверка целевого пользователя, ограниченная выборка, атомарный revoke и условный audit event теперь не зависят от HTTP-маршрута.

@@ -604,31 +604,31 @@ assertIncludes(
   'admin user role use case must write role changes and audit events through one batch',
 );
 
-const adminSessions = read('functions/api/admin/sessions.ts');
+const adminSessions = [read('functions/api/admin/sessions.ts'), read('functions/api/_lib/admin_session_management.ts')].join('\n');
 assertIncludes(
   adminSessions,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin session endpoint must verify target user exists and is active',
+  'admin session use case must verify target user exists and is active',
 );
 assertIncludes(
   adminSessions,
   'changedRows(revokeResult) === 0',
-  'admin session revoke must reject missing session rows',
+  'admin session revoke use case must reject missing session rows',
 );
 assertIncludes(
   adminSessions,
   'action: "session_revoke"',
-  'admin session revoke must write an audit event',
+  'admin session revoke use case must write an audit event',
 );
 assertIncludes(
   adminSessions,
   'buildAdminEventAfterChangeStatement',
-  'admin session revoke must audit only after a changed row',
+  'admin session revoke use case must audit only after a changed row',
 );
 assertIncludes(
   adminSessions,
   'await db.batch([revokeStatement, auditStatement]);',
-  'admin session revoke must write revoke and audit through one batch',
+  'admin session revoke use case must write revoke and audit through one batch',
 );
 
 const adminSubscription = [read('functions/api/admin/subscription.ts'), read('functions/api/_lib/admin_subscription.ts')].join('\n');
