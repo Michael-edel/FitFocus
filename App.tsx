@@ -114,6 +114,7 @@ import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
+import { completeCourseLesson, recordCourseQuizAnswer } from './features/course/courseProgress';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
 import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
@@ -1548,19 +1549,10 @@ const logWeight = useCallback(() => {
 
   const handleMarkLessonRead = useCallback(() => {
     if (!currentUser || !currentLesson) return;
-    const progress = currentUser.courseProgress || { completedLessonIds: [], streak: 0 };
-    if (progress.completedLessonIds.includes(currentLesson.id)) {
-      closeLessonView();
-      return;
+    const completion = completeCourseLesson(currentUser.courseProgress, currentLesson.id, new Date().toLocaleDateString('en-CA'));
+    if (completion.kind === 'completed') {
+      persistUser({ ...currentUser, courseProgress: completion.progress });
     }
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    const nextProgress = {
-      completedLessonIds: [...progress.completedLessonIds, currentLesson.id],
-      lastLessonDate: todayStr,
-      lastLessonId: currentLesson.id,
-      streak: (progress.streak || 0) + 1
-    };
-    persistUser({ ...currentUser, courseProgress: nextProgress });
     closeLessonView();
   }, [closeLessonView, currentUser, currentLesson, persistUser]);
 
@@ -1572,8 +1564,8 @@ const logWeight = useCallback(() => {
 
   const handleQuizSubmit = useCallback(() => {
     if (!currentUser || !currentLesson || !selectedQuizOption) return;
-    const newAnswer = { lessonId: currentLesson.id, optionId: selectedQuizOption.id, date: new Date().toLocaleDateString('en-CA') };
-    persistUser({ ...currentUser, lessonQuizAnswers: [...(currentUser.lessonQuizAnswers || []), newAnswer] });
+    const answers = recordCourseQuizAnswer(currentUser.lessonQuizAnswers, currentLesson.id, selectedQuizOption.id, new Date().toLocaleDateString('en-CA'));
+    persistUser({ ...currentUser, lessonQuizAnswers: answers });
     closeLessonView();
   }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
 
