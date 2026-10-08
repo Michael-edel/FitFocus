@@ -133,6 +133,7 @@ import { useDashboardPreferences } from './features/dashboard/useDashboardPrefer
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
+import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf';
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
@@ -180,16 +181,10 @@ const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
 
 type UnknownRecord = Record<string, unknown>;
-type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
-  const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
-  return typeof finalY === 'number' && Number.isFinite(finalY) ? finalY : fallback;
-};
 
 const waitForDocumentFonts = async () => {
   const ready = (document as FontReadyDocument).fonts?.ready;
@@ -713,41 +708,7 @@ const App: React.FC = () => {
     return 0;
   }, [weekly, currentUser]);
 
-  const exportWeeklyPDF = async (report: WeeklyStoredReport) => {
-    const [{ default: jsPDF }, autoTableModule, { ensurePdfInterFont }] = await Promise.all([
-  import('jspdf'),
-  import('jspdf-autotable'),
-  import('./pdf/font'),
-]);
-const autoTable = autoTableModule.default;
-const doc = new jsPDF();
-await ensurePdfInterFont(doc);
-    doc.setFont("Inter", "normal");
-    doc.setFontSize(18);
-    doc.text("FitFocus — Еженедельный AI-отчёт (WIS)", 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Неделя: ${report.weekKey}`, 14, 30);
-    doc.text(`WIS (индекс недели): ${report.data.wis}/100`, 14, 36);
-    autoTable(doc, {
-      startY: 45,
-      styles: { font: 'Inter' },
-      head: [["Показатель", "Значение"]],
-      body: [
-        ["Дельта 7 дней", `${report.data.weightDelta7.toFixed(1)} кг`],
-        ["Дельта 30 дней", `${report.data.weightDelta30.toFixed(1)} кг`],
-        ["Комплаенс", `${report.data.compliance}%`],
-        ["Адаптация", `${report.data.adaptationIndex}/100`],
-      ],
-    });
-    if (report.aiText) {
-      doc.setFontSize(12);
-      const finalY = getAutoTableFinalY(doc, 90);
-      doc.text("AI Интерпретация:", 14, finalY + 10);
-      doc.setFontSize(10);
-      doc.text(doc.splitTextToSize(report.aiText, 180), 14, finalY + 18);
-    }
-    doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
-  };
+  const exportWeeklyPDF = exportWeeklyReportPdf;
 
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
   const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice();
