@@ -109,7 +109,10 @@ for (const file of [
   'functions/api/auth/google.ts',
 ]) {
   const oauth = file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/google.ts'
-    ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}\n${read('functions/api/_lib/google_oauth_callback.ts')}`
+? `${read(file)}
+${read('functions/api/_lib/google_identity_handler.ts')}
+${read('functions/api/_lib/google_login.ts')}
+${read('functions/api/_lib/google_oauth_callback.ts')}`
     : file === 'functions/api/auth/apple/callback.ts'
       ? `${read(file)}\n${read('functions/api/_lib/apple_oauth_callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`
       : read(file);
@@ -196,10 +199,12 @@ assertIncludes(
   'apple OAuth callback must only bootstrap admins with verified token email',
 );
 
-const legacyGoogleAuth = `${read('functions/api/auth/google.ts')}\n${read('functions/api/_lib/google_login.ts')}`;
+const legacyGoogleAuth = `${read('functions/api/auth/google.ts')}
+${read('functions/api/_lib/google_identity_handler.ts')}
+${read('functions/api/_lib/google_login.ts')}`;
 assertIncludes(
   legacyGoogleAuth,
-  'import { cookieSerialize, fetchOAuthProvider, signSessionJwt } from "./_oauth"',
+'import { cookieSerialize, fetchOAuthProvider, signSessionJwt } from "../auth/_oauth"',
   'legacy Google auth endpoint must use shared OAuth session helpers',
 );
 assertIncludes(
@@ -1376,13 +1381,16 @@ for (const oauthRoute of [
   'functions/api/auth/google/callback.ts',
   'functions/api/auth/apple/callback.ts',
 ]) {
-  const oauthSource = oauthRoute === 'functions/api/auth/google/callback.ts'
+  const oauthSource = oauthRoute === 'functions/api/auth/google.ts'
     ? `${read(oauthRoute)}
-${read('functions/api/_lib/google_oauth_callback.ts')}`
-    : oauthRoute === 'functions/api/auth/apple/callback.ts'
+${read('functions/api/_lib/google_identity_handler.ts')}`
+    : oauthRoute === 'functions/api/auth/google/callback.ts'
       ? `${read(oauthRoute)}
+${read('functions/api/_lib/google_oauth_callback.ts')}`
+      : oauthRoute === 'functions/api/auth/apple/callback.ts'
+        ? `${read(oauthRoute)}
 ${read('functions/api/_lib/apple_oauth_callback.ts')}`
-      : read(oauthRoute);
+        : read(oauthRoute);
   assertIncludes(oauthSource, 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
   assertNotIncludes(oauthSource, 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
 }

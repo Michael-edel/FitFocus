@@ -61,7 +61,7 @@ describe('security and privacy baseline', () => {
   });
 
   it('does not return upstream OAuth error details to clients', () => {
-    const googleAuth = read('functions/api/auth/google.ts');
+    const googleAuth = [read('functions/api/auth/google.ts'), read('functions/api/_lib/google_identity_handler.ts')].join('\\n');
     const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
     const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
 
@@ -83,7 +83,7 @@ describe('security and privacy baseline', () => {
     const supportMy = read('functions/api/support/feedback/my.ts');
     const googleStart = read('functions/api/auth/google/start.ts');
     const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
-    const googleAuth = read('functions/api/auth/google.ts');
+    const googleAuth = [read('functions/api/auth/google.ts'), read('functions/api/_lib/google_identity_handler.ts')].join('\\n');
     const appleStart = read('functions/api/auth/apple/start.ts');
     const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
     const authLib = read('functions/api/_lib/auth.ts');
