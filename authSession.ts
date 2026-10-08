@@ -132,9 +132,30 @@ function clearAuthRecoveryReloadMarker(): void {
   } catch {}
 }
 
+const OAUTH_CONTINUATION_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
+
+/** Reads and normalizes the post-OAuth continuation marker, then removes auth from the visible URL. */
+export function consumeOAuthContinuationState(): boolean {
+  let continueAfterOAuth = false;
+  try {
+    continueAfterOAuth = sessionStorage.getItem(OAUTH_CONTINUATION_STORAGE_KEY) === '1';
+  } catch {}
+  try {
+    const url = new URL(window.location.href);
+    const auth = url.searchParams.get('auth');
+    if (auth === 'google' || auth === 'apple') {
+      continueAfterOAuth = true;
+      try { sessionStorage.setItem(OAUTH_CONTINUATION_STORAGE_KEY, '1'); } catch {}
+      url.searchParams.delete('auth');
+      window.history.replaceState({}, '', url.toString());
+    }
+  } catch {}
+  return continueAfterOAuth;
+}
+
 export function clearOAuthContinuationState(): void {
   try {
-    sessionStorage.removeItem('fitfocus.auth.pending-oauth.v1');
+    sessionStorage.removeItem(OAUTH_CONTINUATION_STORAGE_KEY);
   } catch {}
   clearAuthRecoveryReloadMarker();
 }

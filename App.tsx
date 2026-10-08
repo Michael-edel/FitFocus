@@ -85,6 +85,7 @@ import { hydrateSessionFromCloud } from './sessionHydration';
 import {
   bootstrapAuthSession,
   clearOAuthContinuationState,
+  consumeOAuthContinuationState,
   createLogoutSession,
   deleteAccountSession,
   ensureInviteCodeIsValid,
@@ -177,7 +178,6 @@ const PlanIntroModal = React.lazy(() => import('./PlanIntroModal'));
 const LessonViewModal = React.lazy(() => import('./LessonViewModal'));
 const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
-const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
 type UnknownRecord = Record<string, unknown>;
 type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
@@ -1252,23 +1252,7 @@ await ensurePdfInterFont(doc);
   }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
-    let continueAfterOAuth = false;
-    try {
-      continueAfterOAuth = sessionStorage.getItem(AUTH_PENDING_STORAGE_KEY) === '1';
-    } catch {}
-
-    try {
-      const authParam = new URLSearchParams(window.location.search).get('auth');
-      if (authParam === 'google' || authParam === 'apple') {
-        continueAfterOAuth = true;
-        try {
-          sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
-        } catch {}
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('auth');
-        window.history.replaceState({}, '', cleanUrl.toString());
-      }
-    } catch {}
+    const continueAfterOAuth = consumeOAuthContinuationState();
 
     await bootstrapAuthSession({
       requireInvite,

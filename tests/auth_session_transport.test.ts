@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bootstrapAuthSession, ensureInviteCodeIsValid } from '../authSession';
+import { bootstrapAuthSession, consumeOAuthContinuationState, ensureInviteCodeIsValid } from '../authSession';
 
 function requestIdFromCall(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
   const init = fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined;
@@ -47,5 +47,17 @@ describe('auth session transport', () => {
       headers: expect.any(Headers),
     }));
     expect(requestIdFromCall(fetchImpl)).toMatch(/^web-/);
+  });
+});
+
+
+describe('OAuth continuation state', () => {
+  it('recognizes a trusted OAuth query marker and cleans it from the URL', () => {
+    const replaceState = vi.fn();
+    vi.stubGlobal('window', { location: { href: 'https://fitfocus.test/?auth=google&x=1' }, history: { replaceState } });
+    vi.stubGlobal('sessionStorage', { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() });
+    expect(consumeOAuthContinuationState()).toBe(true);
+    expect(replaceState).toHaveBeenCalledWith({}, '', 'https://fitfocus.test/?x=1');
+    vi.unstubAllGlobals();
   });
 });
