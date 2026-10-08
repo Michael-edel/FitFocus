@@ -126,7 +126,7 @@ const handleAppleOAuthCallback: PagesFunction<{
     if (!idPayload) return json({ error: "Invalid id_token signature or claims" }, 400);
     const now = Math.floor(Date.now() / 1000);
 
-    const appleSub = String(idPayload.sub || "");
+    const appleSub = typeof idPayload.sub === "string" ? idPayload.sub.trim() : "";
     if (!appleSub) return json({ error: "Missing sub" }, 400);
 
     await ensureAuthSchema(env.DB);

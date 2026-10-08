@@ -94,6 +94,17 @@ describe('/api/auth/apple admin promotion', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a non-string Apple subject before database access', async () => {
+    const db = makeDb();
+    const response = await postAppleCallback(db, {
+      sub: { unexpected: true },
+      email: 'admin@example.com',
+      email_verified: true,
+    });
+
+    expect(response.status).toBe(400);
+    expect(db.runs).toEqual([]);
+  });
   it('does not auto-promote an admin email supplied only through the form user field', async () => {
     const db = makeDb();
     const response = await postAppleCallback(db, { sub: 'apple-user-1' });
