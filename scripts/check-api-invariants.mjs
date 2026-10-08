@@ -160,10 +160,10 @@ assertIncludes(
   'google OAuth callback must validate the issuer returned by tokeninfo',
 );
 
-const googleOAuthStart = read('functions/api/auth/google/start.ts');
+const googleOAuthStart = [read('functions/api/auth/google/start.ts'), read('functions/api/auth/_oauth_start.ts')].join('\\n');
 assertIncludes(
   googleOAuthStart,
-  'import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth"',
+  'startOAuthAuthorization',
   'google OAuth start must use shared OAuth state helpers',
 );
 
