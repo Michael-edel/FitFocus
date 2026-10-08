@@ -117,6 +117,7 @@ import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
 import { useAiActivityStatus } from './features/ai/useAiActivityStatus';
 import { buildAiActivityBadge } from './features/ai/aiActivityBadge';
+import { buildAiRetryMeta } from './features/ai/aiRetryMeta';
 import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { PREMIUM_GATES, canUsePremiumGate, incrementUsageCounter, type UsageCounter } from './features/usage/premiumGates';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
@@ -1271,15 +1272,7 @@ const logWeight = useCallback(() => {
 
   const aiBadge = useMemo(() => buildAiActivityBadge(aiStatus), [aiStatus]);
 
-  const retryMeta = useMemo(() => {
-    const cooling = (aiStatus?.cooldownUntil ?? 0) > Date.now();
-    const typeLabel = !lastAiAction ? '' : (lastAiAction.type === 'coach' ? 'Coach' : lastAiAction.type === 'plan' ? 'Plan' : lastAiAction.type === 'plateau' ? 'Plateau' : 'WIS');
-    const label = lastAiAction ? `Retry: ${typeLabel}` : 'Retry';
-    const title = !lastAiAction
-      ? 'Нет действия для повтора'
-      : (cooling ? 'AI сейчас на паузе из-за квоты. Используйте Force, если понимаете риск.' : 'Повторить последнее действие AI');
-    return { cooling, label, title };
-  }, [aiStatus, lastAiAction]);
+  const retryMeta = useMemo(() => buildAiRetryMeta(lastAiAction, aiStatus), [aiStatus, lastAiAction]);
 
   const syncBadge = useMemo(() => buildCloudSyncBadge({
     hasCloudSession: Boolean(googleMe?.sub),
