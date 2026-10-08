@@ -1,4 +1,5 @@
 import { isJsonObject, safeJsonParseObject } from "../_lib/json";
+import { fetchWithTimeout } from "../_lib/external_fetch";
 
 export function base64UrlEncode(bytes: Uint8Array): string {
   let s = "";
@@ -55,17 +56,7 @@ const OAUTH_PROVIDER_TIMEOUT_MS = 12_000;
 
 /** Bounds external OAuth calls so an unavailable identity provider cannot exhaust a worker request. */
 export async function fetchOAuthProvider(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController();
-  const inherited = init.signal;
-  const onAbort = () => controller.abort();
-  inherited?.addEventListener('abort', onAbort, { once: true });
-  const timeout = setTimeout(() => controller.abort(), OAUTH_PROVIDER_TIMEOUT_MS);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-    inherited?.removeEventListener('abort', onAbort);
-  }
+  return fetchWithTimeout(input, init, { timeoutMs: OAUTH_PROVIDER_TIMEOUT_MS });
 }
 
 export async function verifyState(

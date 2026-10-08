@@ -4,6 +4,7 @@ import { decryptSecretValue, encryptSecretValue } from "./secret_box";
 import { normalizeProfileRecord } from './profile_contract';
 import { withProtectedFields } from './legacy_sync';
 import type { SessionUser } from './auth';
+import { fetchWithTimeout } from './external_fetch';
 
 export type HuaweiHealthEnv = {
   AUTH_JWT_SECRET: string;
@@ -68,20 +69,10 @@ export function normalizeHuaweiTimeoutMs(value: unknown): number {
 
 /** Sends a bounded request to Huawei Health so a stalled upstream cannot hold a worker request indefinitely. */
 export async function requestHuawei(env: HuaweiHealthEnv, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController();
-  const inherited = init.signal;
-  const onAbort = () => controller.abort();
-  inherited?.addEventListener('abort', onAbort, { once: true });
-  const timeout = setTimeout(() => controller.abort(), normalizeHuaweiTimeoutMs(env.HUAWEI_HEALTH_TIMEOUT_MS));
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (controller.signal.aborted && !inherited?.aborted) throw new Error('HUAWEI_REQUEST_TIMEOUT');
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    inherited?.removeEventListener('abort', onAbort);
-  }
+  return fetchWithTimeout(input, init, {
+    timeoutMs: normalizeHuaweiTimeoutMs(env.HUAWEI_HEALTH_TIMEOUT_MS),
+    timeoutError: "HUAWEI_REQUEST_TIMEOUT",
+  });
 }
 
 export async function loadHuaweiProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {

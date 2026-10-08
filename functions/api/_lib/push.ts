@@ -1,4 +1,5 @@
-import { nowMs, uuid } from "./db";
+import { nowMs, uuid } from './db';
+import { fetchWithTimeout } from './external_fetch';
 
 export type PushEnv = {
   DB?: D1Database;
