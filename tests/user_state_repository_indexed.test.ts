@@ -54,4 +54,38 @@ describe('UserStateRepository IndexedDB path', () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/state?key=fitfocus_data_indexed-remove-user_weekly_reports'), expect.objectContaining({ method: 'DELETE' }));
   });
+  it('keeps a pending IndexedDB write from reviving a removed cloud value', async () => {
+    const repository = new UserStateRepository('indexed-race-user');
+    repository.writeJson('diary', [{
+      id: 'meal-race', name: 'Суп', calories: 120, protein: 6, fat: 4, carbs: 14,
+      timestamp: '2026-10-08T08:00:00.000Z',
+    }]);
+    repository.remove('diary');
+
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+    expect(calls.some(([url, init]) => url === '/api/state' && init.method === 'PUT')).toBe(false);
+    expect(calls.some(([url, init]) => url.includes('fitfocus_data_indexed-race-user_diary') && init.method === 'DELETE')).toBe(true);
+  });
+
+  it('keeps only the newest IndexedDB value in the cloud queue', async () => {
+    const repository = new UserStateRepository('indexed-latest-user');
+    repository.writeJson('diary', [{
+      id: 'meal-old', name: 'Старое', calories: 100, protein: 1, fat: 1, carbs: 1,
+      timestamp: '2026-10-08T08:00:00.000Z',
+    }]);
+    repository.writeJson('diary', [{
+      id: 'meal-new', name: 'Новое', calories: 200, protein: 2, fat: 2, carbs: 2,
+      timestamp: '2026-10-08T09:00:00.000Z',
+    }]);
+
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls;
+    const putBodies = calls
+      .filter(([url, init]) => url === '/api/state' && init.method === 'PUT')
+      .map(([, init]) => String(init.body));
+    expect(putBodies).toHaveLength(1);
+    expect(putBodies[0]).toContain('meal-new');
+    expect(putBodies[0]).not.toContain('meal-old');
+  });
 });
