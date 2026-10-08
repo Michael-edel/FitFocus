@@ -7,6 +7,7 @@ import {
 } from "../../_lib/request_body";
 import {
   fileToAttachment,
+  deleteStoredSupportAttachments,
   SupportAttachmentTooLargeError,
   type SupportAttachmentBucket,
   type SupportAttachmentRecord,
@@ -26,19 +27,6 @@ type ChangesResult = {
 };
 function changedRows(result: ChangesResult | null | undefined): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
-
-async function deleteStoredAttachments(
-  bucket: SupportAttachmentBucket | undefined,
-  attachments: SupportAttachmentRecord[],
-) {
-  const keys = attachments
-    .map((attachment) => attachment.storage_key)
-    .filter((key): key is string => Boolean(key));
-  if (keys.length === 0 || !bucket?.delete) return;
-  try {
-    await bucket.delete(keys);
-  } catch {}
 }
 
 const handleMySupportGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -113,6 +101,7 @@ const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
       }));
     }
   } catch (error: unknown) {
+    await deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);
     if (error instanceof SupportAttachmentTooLargeError) {
       return json({ error: "BAD_REQUEST", message: "Файл слишком большой. Прикрепите файл до 2 MB." }, 400);
     }
@@ -151,11 +140,17 @@ const handleMySupportPost: PagesFunction<Env> = async ({ request, env }) => {
     ).bind(createdAt, "new", createdAt, user.sub, ticketId, user.sub),
   ];
 
-  const writeResults = await db.batch(statements);
+  let writeResults: D1Result[];
+  try {
+    writeResults = await db.batch(statements);
+  } catch (error) {
+    await deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);
+    throw error;
+  }
   const messageResult = writeResults[0];
   const updateResult = writeResults[1];
   if (changedRows(messageResult) === 0 || changedRows(updateResult) === 0) {
-    await deleteStoredAttachments(env.SUPPORT_ATTACHMENTS, attachments);
+    await deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);
     const latest = await db.prepare(
       `SELECT id, status
        FROM support_feedback

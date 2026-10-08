@@ -12,7 +12,7 @@ import {
   SMALL_JSON_BODY_LIMIT_BYTES,
   SUPPORT_FORM_BODY_LIMIT_BYTES,
 } from "../_lib/request_body";
-import { fileToAttachment, SupportAttachmentTooLargeError, type SupportAttachmentBucket, type SupportAttachmentRecord } from "../_lib/support_attachments";
+import { deleteStoredSupportAttachments, fileToAttachment, SupportAttachmentTooLargeError, type SupportAttachmentBucket, type SupportAttachmentRecord } from "../_lib/support_attachments";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
@@ -136,30 +136,37 @@ async function handleSupportPost({ request, env }: Parameters<PagesFunction<Env>
       attachments.push(await fileToAttachment(file, { bucket: env.SUPPORT_ATTACHMENTS, ticketId, index }));
     }
   } catch (error: unknown) {
+    await deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);
     if (error instanceof SupportAttachmentTooLargeError) {
       return json({ error: "ATTACHMENT_TOO_LARGE", public_message: "Файл слишком большой. Прикрепите файл до 2 MB." }, 400);
     }
     return json({ error: "ATTACHMENT_PROCESSING_FAILED", public_message: "Не удалось обработать вложение." }, 400);
   }
 
-  const created = await createSupportTicket({
-    db,
-    userId: user.sub,
-    input: {
-      ticketId,
-      category,
-      section,
-      subject,
-      message: storedMessage,
-      stepsJson: parseSteps(steps),
-      device: storedDevice,
-      browser: storedBrowser,
-      contact,
-      appVersion,
-      adminNote: storedAdminNote,
-      attachments,
-    },
-  });
+  let created: { ticketId: string; attachmentCount: number };
+  try {
+    created = await createSupportTicket({
+      db,
+      userId: user.sub,
+      input: {
+        ticketId,
+        category,
+        section,
+        subject,
+        message: storedMessage,
+        stepsJson: parseSteps(steps),
+        device: storedDevice,
+        browser: storedBrowser,
+        contact,
+        appVersion,
+        adminNote: storedAdminNote,
+        attachments,
+      },
+    });
+  } catch (error) {
+    await deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);
+    throw error;
+  }
 
   return json({
     ok: true,

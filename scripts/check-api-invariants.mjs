@@ -280,12 +280,12 @@ assertIncludes(
 );
 assertIncludes(
   userSupport,
-  'const writeResults = await db.batch(statements);',
+  'writeResults = await db.batch(statements);',
   'user support reply must write message and ticket update through one batch',
 );
 assertIncludes(
   userSupport,
-  'deleteStoredAttachments(env.SUPPORT_ATTACHMENTS, attachments);',
+  'deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);',
   'user support reply must remove stored R2 attachments when the guarded write fails',
 );
 assertIncludes(

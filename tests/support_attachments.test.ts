@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   attachmentResponseUrl,
   buildAttachmentRoute,
+  deleteStoredSupportAttachments,
   fileToAttachment,
   inlineAttachmentBytes,
   isSafeInlineAttachmentMime,
@@ -77,5 +78,18 @@ describe('support attachment helpers', () => {
 
     await expect(fileToAttachment(file)).rejects.toBeInstanceOf(SupportAttachmentTooLargeError);
     await expect(fileToAttachment(file)).rejects.not.toThrow('secret-diagnostic-name.bin');
+  });
+
+  it('removes only stored attachment objects during rollback', async () => {
+    let deleted: string[] = [];
+    await deleteStoredSupportAttachments({
+      put: async () => undefined,
+      get: async () => null,
+      delete: async (keys) => { deleted = Array.isArray(keys) ? keys : [keys]; },
+    }, [
+      { name: 'stored.png', mime: 'image/png', size: 1, kind: 'photo', storage_key: 'support/t/00-stored.png' },
+      { name: 'inline.txt', mime: 'text/plain', size: 1, kind: 'file', data_url: 'data:text/plain;base64,eA==' },
+    ]);
+    expect(deleted).toEqual(['support/t/00-stored.png']);
   });
 });
