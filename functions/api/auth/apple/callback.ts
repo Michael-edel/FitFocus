@@ -1,7 +1,7 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
-import { ensureAuthSchema, readCookie, replaceActiveSessionsForUser } from "../../_lib/auth";
-import { consumeInviteCode } from "../../_lib/invites";
+import { ensureAuthSchema, readCookie } from "../../_lib/auth";
+import { completeAppleLogin } from "../../_lib/apple_login";
 import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { readFormDataRequest, RequestBodyTooLargeError } from "../../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
@@ -148,69 +148,24 @@ const handleAppleOAuthCallback: PagesFunction<{
     const nextPicture = String(existing?.picture || "");
 
     await ensureAuthSchema(env.DB);
-    await env.DB.prepare(
-      `INSERT INTO users (id, email, name, picture, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET email=excluded.email, name=excluded.name, picture=excluded.picture, updated_at=excluded.updated_at`
-    )
-      .bind(appleSub, nextEmail, nextName, nextPicture, now, now)
-      .run();
-
-    const requireInvite = String(env.REQUIRE_INVITE || "").trim() === "1";
-    if (requireInvite && !inviteCode) {
-      return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
-    }
-
-    if (inviteCode) {
-      const consumed = await consumeInviteCode(env.DB, inviteCode, appleSub, now);
-      if (!consumed.ok) {
-        return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
-      }
-    }
-
-    await env.DB.prepare(
-      `UPDATE users
-       SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1, updated_at = ?
-       WHERE id = ?
-         AND deleted_at IS NOT NULL
-         AND deletion_scheduled_at IS NOT NULL
-         AND deletion_scheduled_at > datetime('now')`
-    )
-      .bind(now, appleSub)
-      .run();
-
-    const adminEmails = String(env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (adminEmails.length && verifiedTokenEmail && adminEmails.includes(verifiedTokenEmail.toLowerCase())) {
-      await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(appleSub).run();
-    }
-
-    const bootstrapEmails = String(env.BOOTSTRAP_ADMIN_EMAILS || "")
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    if (bootstrapEmails.length && verifiedTokenEmail) {
-      const anyAdmin = await env.DB.prepare("SELECT 1 FROM user_roles WHERE role='admin' LIMIT 1").first();
-      if (!anyAdmin && bootstrapEmails.includes(verifiedTokenEmail.toLowerCase())) {
-        await env.DB.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'admin')").bind(appleSub).run();
-      }
-    }
-
-    const sid = crypto.randomUUID();
-    const ttl = 60 * 60 * 24 * 30;
-    const expiresAt = now + ttl;
     const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "";
-    await replaceActiveSessionsForUser(env.DB, appleSub, now);
-    await env.DB.prepare(
-      "INSERT INTO sessions (id, user_id, created_at, expires_at, revoked, user_agent, ip) VALUES (?, ?, ?, ?, 0, ?, ?)"
-    )
-      .bind(sid, appleSub, now, expiresAt, request.headers.get("user-agent")?.slice(0, 500) || "", String(ip).slice(0, 100))
-      .run();
+    const login = await completeAppleLogin({
+      db: env.DB,
+      user: { sub: appleSub, email: nextEmail, name: nextName, picture: nextPicture, emailVerified: tokenEmailVerified },
+      inviteCode,
+      now,
+      requireInvite: String(env.REQUIRE_INVITE || "").trim() === "1",
+      adminEmails: env.ADMIN_EMAILS,
+      bootstrapAdminEmails: env.BOOTSTRAP_ADMIN_EMAILS,
+      userAgent: request.headers.get("user-agent") || "",
+      ip: String(ip),
+    });
+    if (login.kind === "invite-required") return Response.redirect(`${baseUrl}/?invite_error=required`, 302);
+    if (login.kind === "invalid-invite") return Response.redirect(`${baseUrl}/?invite_error=invalid`, 302);
+    const ttl = 60 * 60 * 24 * 30;
 
     const sessionJwt = await signSessionJwt(
-      { v: 2, sub: appleSub, sid, email: nextEmail, email_verified: Boolean(verifiedTokenEmail), name: nextName, picture: nextPicture, iat: now },
+      { v: 2, sub: appleSub, sid: login.sid, email: nextEmail, email_verified: tokenEmailVerified, name: nextName, picture: nextPicture, iat: now },
       env.AUTH_JWT_SECRET,
       ttl
     );

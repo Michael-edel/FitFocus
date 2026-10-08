@@ -110,12 +110,14 @@ for (const file of [
 ]) {
   const oauth = file === 'functions/api/auth/google/callback.ts'
     ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}`
-    : read(file);
+    : file === 'functions/api/auth/apple/callback.ts'
+      ? `${read(file)}\n${read('functions/api/_lib/apple_login.ts')}`
+      : read(file);
   assertIncludes(oauth, 'consumeInviteCode(', `${file} must consume beta invites through the shared helper`);
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
   assertOrder(
     oauth,
-    file === 'functions/api/auth/google/callback.ts' ? 'if (input.requireInvite' : 'const requireInvite = String(',
+    file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/apple/callback.ts' ? 'if (input.requireInvite' : 'const requireInvite = String(',
     'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1',
     `${file} must restore only after invite access checks`,
   );
@@ -145,7 +147,7 @@ assertIncludes(
   'google OAuth start must use shared OAuth state helpers',
 );
 
-const appleOAuthCallback = read('functions/api/auth/apple/callback.ts');
+const appleOAuthCallback = `${read('functions/api/auth/apple/callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`;
 assertIncludes(
   appleOAuthCallback,
   'await safeResponseJson(tokenRes)',
@@ -163,12 +165,12 @@ assertIncludes(
 );
 assertIncludes(
   appleOAuthCallback,
-  'if (adminEmails.length && verifiedTokenEmail && adminEmails.includes(verifiedTokenEmail.toLowerCase()))',
+  'if (user.emailVerified && email && listed(input.adminEmails).includes(email))',
   'apple OAuth callback must only auto-promote admins with verified token email',
 );
 assertIncludes(
   appleOAuthCallback,
-  'if (bootstrapEmails.length && verifiedTokenEmail)',
+  'if (user.emailVerified && email && listed(input.bootstrapAdminEmails).includes(email))',
   'apple OAuth callback must only bootstrap admins with verified token email',
 );
 
