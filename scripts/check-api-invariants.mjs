@@ -51,6 +51,10 @@ for (const file of browserSourceFiles()) {
     console.error(`${file}: internal API calls must use fetchWithResilience`);
     process.exitCode = 1;
   }
+  if (/\b(?:eval|Function)\s*\(/.test(text)) {
+    console.error(`${file}: dynamic JavaScript execution is not allowed in browser modules`);
+    process.exitCode = 1;
+  }
 }
 
 const familyJoin = [
