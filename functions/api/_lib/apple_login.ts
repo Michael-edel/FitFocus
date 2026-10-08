@@ -3,6 +3,18 @@ import { consumeInviteCode } from './invites';
 
 export type AppleLoginUser = { sub: string; email: string; name: string; picture: string; emailVerified: boolean };
 export type AppleLoginResult = { kind: 'ok'; sid: string; expiresAt: number } | { kind: 'invite-required' } | { kind: 'invalid-invite' };
+export type ExistingAppleUser = {
+  email?: string | null;
+  name?: string | null;
+  picture?: string | null;
+};
+
+/** Reads only the persisted identity fields Apple does not return on every login. */
+export async function readExistingAppleUser(db: D1Database, userId: string): Promise<ExistingAppleUser | null> {
+  return db.prepare('SELECT email, name, picture FROM users WHERE id = ? LIMIT 1')
+    .bind(userId)
+    .first<ExistingAppleUser>();
+}
 
 /** Applies access policy, account restoration, roles and a replacement web session after Apple identity validation. */
 export async function completeAppleLogin(input: {

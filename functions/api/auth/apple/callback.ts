@@ -1,7 +1,7 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { getBaseUrl, normalizeAppUrl, cookieSerialize, createAppleClientSecret, fetchOAuthProvider, OAUTH_STATE_TTL_MS, verifyState, signSessionJwt, verifyAppleIdToken } from "../_oauth";
 import { ensureAuthSchema, readCookie } from "../../_lib/auth";
-import { completeAppleLogin } from "../../_lib/apple_login";
+import { completeAppleLogin, readExistingAppleUser } from "../../_lib/apple_login";
 import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "../../_lib/json";
 import { readFormDataRequest, RequestBodyTooLargeError } from "../../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
@@ -129,9 +129,8 @@ const handleAppleOAuthCallback: PagesFunction<{
     const appleSub = String(idPayload.sub || "");
     if (!appleSub) return json({ error: "Missing sub" }, 400);
 
-    const existing = await env.DB.prepare("SELECT email, name, picture FROM users WHERE id = ? LIMIT 1")
-      .bind(appleSub)
-      .first<ExistingAppleUserRow>();
+    await ensureAuthSchema(env.DB);
+    const existing = await readExistingAppleUser(env.DB, appleSub);
 
     const tokenEmail = String(idPayload.email || "");
     const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";
@@ -147,7 +146,6 @@ const handleAppleOAuthCallback: PagesFunction<{
       "Apple User";
     const nextPicture = String(existing?.picture || "");
 
-    await ensureAuthSchema(env.DB);
     const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "";
     const login = await completeAppleLogin({
       db: env.DB,
