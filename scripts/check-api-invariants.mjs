@@ -143,6 +143,10 @@ assertIncludes(
   googleOAuthCallback,
   'if (!googleSub) return json({ error: "Invalid subject" }, 400);',
   'google OAuth callback must reject a provider response without a stable subject',
+);assertIncludes(
+  googleOAuthCallback,
+  'if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com")',
+  'google OAuth callback must validate the issuer returned by tokeninfo',
 );
 
 const googleOAuthStart = read('functions/api/auth/google/start.ts');

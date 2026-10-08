@@ -8,6 +8,7 @@ import { cookieSerialize, fetchOAuthProvider, getBaseUrl, normalizeAppUrl, OAUTH
 type GoogleTokenResponse = { id_token?: string };
 type GoogleTokenInfoResponse = {
   aud?: string;
+  iss?: string;
   sub?: string;
   email?: string;
   name?: string;
@@ -105,6 +106,7 @@ const handleGoogleOAuthCallback: PagesFunction<{
     const info: GoogleTokenInfoResponse = isJsonObject(infoRaw) ? infoRaw : {};
     if (!infoRes.ok) return json({ error: "tokeninfo failed" }, 502);
     if (info.aud !== env.GOOGLE_CLIENT_ID) return json({ error: "Invalid aud" }, 400);
+    if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com") return json({ error: "Invalid iss" }, 400);
 
     const googleSub = typeof info.sub === "string" ? info.sub.trim() : "";
     if (!googleSub) return json({ error: "Invalid subject" }, 400);
