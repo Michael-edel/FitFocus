@@ -133,6 +133,7 @@ import { useDashboardPreferences } from './features/dashboard/useDashboardPrefer
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
+import { calculateNextWeekWeightForecast, findFoodSearchResults } from './features/dashboard/dashboardViewModels';
 import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf';
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
@@ -701,12 +702,10 @@ const App: React.FC = () => {
     return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
   }, [currentUser, foodDiary, habits, targets.calories]);
 
-  const forecastNextWeek = useMemo(() => {
-    if (!weekly || !currentUser) return 0;
-    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 7) / 7700;
-    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 7) / 7700;
-    return 0;
-  }, [weekly, currentUser]);
+  const forecastNextWeek = useMemo(() => calculateNextWeekWeightForecast(currentUser, Boolean(weekly), {
+    lossDeficit: DEFAULT_DEFICIT,
+    gainSurplus: DEFAULT_SURPLUS,
+  }), [weekly, currentUser]);
 
   const exportWeeklyPDF = exportWeeklyReportPdf;
 
@@ -752,13 +751,7 @@ const App: React.FC = () => {
 
   const weightTrend = useMemo(() => calculateDashboardWeightTrend(currentUser?.weightHistory), [currentUser?.weightHistory]);
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    const combined = [...foodHistory, ...foodFavorites];
-    const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
-    return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
-  }, [searchQuery, foodHistory, foodFavorites]);
+  const searchResults = useMemo(() => findFoodSearchResults(searchQuery, foodHistory, foodFavorites), [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useMemo(() => createLogoutSession({
     googleSub: googleMe?.sub,
