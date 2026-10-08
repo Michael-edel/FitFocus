@@ -128,6 +128,7 @@ import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
+import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
 import { applyHabitToggle } from './features/habits/legacyProgress';
@@ -782,32 +783,8 @@ await ensurePdfInterFont(doc);
     doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
   };
 
-  type WisShareState = 'idle' | 'busy' | 'success' | 'error';
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
-  const wisShareResetTimerRef = useRef<number | null>(null);
-  const [wisShareState, setWisShareState] = useState<WisShareState>('idle');
-  const [wisShareMessage, setWisShareMessage] = useState<string | null>(null);
-
-  const setWisShareNotice = useCallback((state: WisShareState, message: string | null) => {
-    setWisShareState(state);
-    setWisShareMessage(message);
-    if (wisShareResetTimerRef.current) {
-      window.clearTimeout(wisShareResetTimerRef.current);
-      wisShareResetTimerRef.current = null;
-    }
-    if (state !== 'busy' && message) {
-      wisShareResetTimerRef.current = window.setTimeout(() => {
-        setWisShareState('idle');
-        setWisShareMessage(null);
-      }, 3500);
-    }
-  }, []);
-
-  useEffect(() => () => {
-    if (wisShareResetTimerRef.current) {
-      window.clearTimeout(wisShareResetTimerRef.current);
-    }
-  }, []);
+  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice();
 
   const handleShareWisCard = useCallback(async () => {
     if (!currentUser || !weekly) return;
