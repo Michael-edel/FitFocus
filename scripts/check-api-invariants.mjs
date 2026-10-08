@@ -303,6 +303,7 @@ assertIncludes(
 
 const userSupport = [
   read('functions/api/support/feedback/my.ts'),
+  read('functions/api/_lib/support_feedback_my_handler.ts'),
   read('functions/api/_lib/support_ticket_user_read.ts'),
   read('functions/api/_lib/support_ticket_user_reply.ts'),
 ].join('\n');
