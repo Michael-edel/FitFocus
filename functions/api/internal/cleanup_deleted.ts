@@ -6,6 +6,7 @@ import { json, readBearerToken } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; CRON_SECRET?: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
@@ -26,7 +27,7 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleScheduledCleanupPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.CRON_SECRET) {
     return json({ ok: false, error: "CRON_SECRET_NOT_CONFIGURED" }, 503);
   }
@@ -55,4 +56,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   });
 
   return json(result, result.failed > 0 ? 500 : 200);
+};
+
+/** Correlates scheduled cleanup without logging the bearer token or cleanup details. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleScheduledCleanupPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('internal.cleanup_deleted.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
