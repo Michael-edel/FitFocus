@@ -1187,7 +1187,7 @@ assertIncludes(
 );
 assertIncludes(
   settingsScreen,
-  "fetch('/api/push/status'",
+  "fetchWithResilience('/api/push/status'",
   'settings screen must load push runtime config from the server',
 );
 assertIncludes(

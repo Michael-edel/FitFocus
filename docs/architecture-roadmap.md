@@ -493,3 +493,7 @@ Huawei Health status, disconnect и sync вынесены из SettingsScreen в
 feature API. GET сохраняет timeout и безопасный повтор, а POST-операции имеют
 сквозной request ID, но не повторяются автоматически из-за изменения токенов
 и профильных данных на сервере.
+
+Push-настройки в SettingsScreen переведены на общий HTTP-транспорт: status
+получает timeout, request ID и безопасный повтор GET, а subscribe, unsubscribe
+и test получают timeout и request ID без автоматического повтора POST.

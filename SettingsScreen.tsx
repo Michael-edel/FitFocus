@@ -793,7 +793,7 @@ export default function SettingsScreen({
 
   const readPushStatus = async () => {
     const browserLabel = getPushBrowserLabel();
-    const response = await fetch('/api/push/status', {
+    const response = await fetchWithResilience('/api/push/status', {
       cache: 'no-store',
       credentials: 'include',
       headers: {
@@ -930,7 +930,7 @@ export default function SettingsScreen({
         });
       }
 
-      const response = await fetch('/api/push/subscribe', {
+      const response = await fetchWithResilience('/api/push/subscribe', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -979,7 +979,7 @@ export default function SettingsScreen({
         }
       }
 
-      const response = await fetch('/api/push/unsubscribe', {
+      const response = await fetchWithResilience('/api/push/unsubscribe', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1026,7 +1026,7 @@ export default function SettingsScreen({
     try {
       const registration = await getReadyServiceWorkerRegistration();
       const subscription = await registration.pushManager.getSubscription();
-      const response = await fetch('/api/push/test', {
+      const response = await fetchWithResilience('/api/push/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
