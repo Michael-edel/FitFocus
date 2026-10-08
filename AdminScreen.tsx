@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import clsx from 'clsx';
 import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip, Send, Filter } from "lucide-react";
 import { parseJson } from "./safeJson";
 
@@ -122,6 +123,13 @@ type Stats = {
     ai_avg_latency_ms?: number;
     meals_logged: number;
   };
+  alerts?: Array<{
+    code: 'ai_error_rate' | 'ai_latency';
+    severity: 'warning' | 'critical';
+    message: string;
+    value: number;
+    threshold: number;
+  }>;
 };
 
 
@@ -2278,6 +2286,21 @@ export default function AdminScreen() {
             <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_event_avg_latency_ms ?? stats?.today?.ai_avg_latency_ms ?? 0} ms</div>
           </div>
         </div>
+
+        {(stats?.alerts || []).length > 0 && (
+          <div className="mt-4 space-y-2" role="status" aria-live="polite">
+            {stats?.alerts?.map((alert) => (
+              <div key={alert.code} className={clsx(
+                'rounded-2xl border px-4 py-3 font-semibold',
+                alert.severity === 'critical'
+                  ? 'border-rose-500/60 bg-rose-950/40 text-rose-100'
+                  : 'border-amber-500/60 bg-amber-950/40 text-amber-100',
+              )}>
+                {alert.message}: {alert.value}{alert.code === 'ai_error_rate' ? '%' : ' мс'}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-3 mt-5 flex-wrap">
           <div className="text-slate-300 font-semibold">Фильтр feature:</div>

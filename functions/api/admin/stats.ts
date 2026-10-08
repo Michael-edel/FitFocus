@@ -5,6 +5,7 @@ import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { evaluateAdminHealthAlerts } from '../_lib/admin_health_alerts';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 type CountRow = { c?: number };
@@ -162,6 +163,11 @@ const handleAdminStats: PagesFunction<Env> = async ({ request, env }) => {
         ai_event_errors: aiErrorsEvents,
         ai_event_avg_latency_ms: aiAvgLatency,
       },
+      alerts: evaluateAdminHealthAlerts({
+        calls: aiCallsEvents,
+        errors: aiErrorsEvents,
+        avgLatencyMs: aiAvgLatency,
+      }),
     },
   });
 };
