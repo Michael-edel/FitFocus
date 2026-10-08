@@ -11,7 +11,7 @@ const profile = {
   wearableSleepHoursLastNight: 8,
   dailyHabits: { "2026-10-08": { water: true } },
   aiPlan: { weeklyMenu: { days: [] } },
-} as UserProfile;
+} as unknown as UserProfile;
 
 describe("buildAchievementContext", () => {
   it("creates a complete achievement snapshot from app state", () => {
