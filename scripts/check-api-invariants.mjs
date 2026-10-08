@@ -109,7 +109,7 @@ for (const file of [
   'functions/api/auth/google.ts',
 ]) {
   const oauth = file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/google.ts'
-    ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}`
+    ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}\n${read('functions/api/_lib/google_oauth_callback.ts')}`
     : file === 'functions/api/auth/apple/callback.ts'
       ? `${read(file)}\n${read('functions/api/_lib/apple_login.ts')}`
       : read(file);
@@ -123,7 +123,10 @@ for (const file of [
   );
 }
 
-const googleOAuthCallback = read('functions/api/auth/google/callback.ts');
+const googleOAuthCallback = [
+  read('functions/api/auth/google/callback.ts'),
+  read('functions/api/_lib/google_oauth_callback.ts'),
+].join('\\n');
 assertIncludes(
   googleOAuthCallback,
   'fetchOAuthProvider',
@@ -1368,8 +1371,11 @@ for (const oauthRoute of [
   'functions/api/auth/google/callback.ts',
   'functions/api/auth/apple/callback.ts',
 ]) {
-  assertIncludes(read(oauthRoute), 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
-  assertNotIncludes(read(oauthRoute), 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
+  const oauthSource = oauthRoute === 'functions/api/auth/google/callback.ts'
+    ? `${read(oauthRoute)}\n${read('functions/api/_lib/google_oauth_callback.ts')}`
+    : read(oauthRoute);
+  assertIncludes(oauthSource, 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
+  assertNotIncludes(oauthSource, 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
 }
 
 const oauthTransport = read('functions/api/auth/_oauth.ts');

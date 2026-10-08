@@ -62,7 +62,7 @@ describe('security and privacy baseline', () => {
 
   it('does not return upstream OAuth error details to clients', () => {
     const googleAuth = read('functions/api/auth/google.ts');
-    const googleCallback = read('functions/api/auth/google/callback.ts');
+    const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
     const appleCallback = read('functions/api/auth/apple/callback.ts');
 
     expect(googleAuth).not.toContain('details:');
@@ -82,7 +82,7 @@ describe('security and privacy baseline', () => {
     const supportAdmin = read('functions/api/support/feedback.ts');
     const supportMy = read('functions/api/support/feedback/my.ts');
     const googleStart = read('functions/api/auth/google/start.ts');
-    const googleCallback = read('functions/api/auth/google/callback.ts');
+    const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
     const googleAuth = read('functions/api/auth/google.ts');
     const appleStart = read('functions/api/auth/apple/start.ts');
     const appleCallback = read('functions/api/auth/apple/callback.ts');
