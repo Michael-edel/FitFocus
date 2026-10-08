@@ -272,6 +272,7 @@ assertIncludes(
 const userSupport = [
   read('functions/api/support/feedback/my.ts'),
   read('functions/api/_lib/support_ticket_user_read.ts'),
+  read('functions/api/_lib/support_ticket_user_reply.ts'),
 ].join('\n');
 const adminSupport = [
   read('functions/api/support/feedback.ts'),
@@ -289,7 +290,7 @@ assertIncludes(
 );
 assertIncludes(
   userSupport,
-  'deleteStoredSupportAttachments(env.SUPPORT_ATTACHMENTS, attachments);',
+  'deleteStoredSupportAttachments(bucket, attachments);',
   'user support reply must remove stored R2 attachments when the guarded write fails',
 );
 assertIncludes(
