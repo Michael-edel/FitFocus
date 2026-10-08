@@ -47,9 +47,14 @@ function hasAdminPromotion(db: ReturnType<typeof makeDb>) {
   return db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.sql.includes("'admin'"));
 }
 
-async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Record<string, unknown>, formEmail = 'admin@example.com') {
+async function postAppleCallback(
+  db: ReturnType<typeof makeDb>,
+  idPayload: Record<string, unknown>,
+  formEmail = 'admin@example.com',
+  tokenResponse: Record<string, unknown> = { id_token: 'apple-id-token' },
+) {
   verifyAppleIdToken.mockResolvedValue(idPayload);
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id_token: 'apple-id-token' }), {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(tokenResponse), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })));
@@ -94,6 +99,16 @@ describe('/api/auth/apple admin promotion', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a non-string token endpoint id_token before signature verification', async () => {
+    const db = makeDb();
+    const response = await postAppleCallback(db, { sub: 'apple-user-1' }, 'admin@example.com', {
+      id_token: { unexpected: true },
+    });
+
+    expect(response.status).toBe(502);
+    expect(verifyAppleIdToken).not.toHaveBeenCalled();
+    expect(db.runs).toEqual([]);
+  });
   it('rejects a non-string Apple subject before database access', async () => {
     const db = makeDb();
     const response = await postAppleCallback(db, {

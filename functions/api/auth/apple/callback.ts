@@ -6,12 +6,6 @@ import { asString, isJsonObject, safeJsonParseObject, type JsonObject } from "..
 import { readFormDataRequest, RequestBodyTooLargeError } from "../../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
-type ExistingAppleUserRow = {
-  email?: string | null;
-  name?: string | null;
-  picture?: string | null;
-};
-
 const AUTH_UNAVAILABLE = { error: "AUTH_UNAVAILABLE" };
 const OAUTH_FORM_BODY_LIMIT_BYTES = 32 * 1024;
 
@@ -119,7 +113,7 @@ const handleAppleOAuthCallback: PagesFunction<{
     if (!tokenRes.ok) {
       return json({ error: "Token exchange failed" }, 502);
     }
-    const idToken = tokenJson.id_token as string | undefined;
+    const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";
     if (!idToken) return json({ error: "No id_token returned" }, 502);
 
     const idPayload = await verifyAppleIdToken(idToken, env.APPLE_CLIENT_ID);

@@ -164,6 +164,11 @@ assertIncludes(
 );
 assertIncludes(
   appleOAuthCallback,
+  'const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";',
+  'apple OAuth callback must accept only a non-empty string id_token from the token endpoint',
+);
+assertIncludes(
+  appleOAuthCallback,
   'const tokenEmailVerified = idPayload.email_verified === true || idPayload.email_verified === "true";',
   'apple OAuth callback must derive admin eligibility from the verified id_token email flag',
 );
