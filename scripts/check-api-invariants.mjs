@@ -708,58 +708,58 @@ assertIncludes(
   'admin invite update must write revoke changes and audit events through one batch',
 );
 
-const adminFeatureFlags = read('functions/api/admin/feature_flags.ts');
+const adminFeatureFlags = [read('functions/api/admin/feature_flags.ts'), read('functions/api/_lib/admin_config.ts')].join('\n');
 assertIncludes(
   adminFeatureFlags,
   'ALLOWED_FEATURE_FLAGS',
-  'admin feature flag endpoint must allow only known runtime flags',
+  'admin feature flag use case must allow only known runtime flags',
 );
 assertIncludes(
   adminFeatureFlags,
-  'typeof body?.enabled !== "boolean"',
-  'admin feature flag endpoint must require explicit boolean enabled values',
+  "typeof update.enabled !== 'boolean'",
+  'admin feature flag use case must require explicit boolean enabled values',
 );
 assertIncludes(
   adminFeatureFlags,
   'BAD_ROLLOUT',
-  'admin feature flag endpoint must reject invalid rollout values',
+  'admin feature flag use case must reject invalid rollout values',
 );
 assertIncludes(
   adminFeatureFlags,
   'buildAdminEventStatement',
-  'admin feature flag endpoint must stage audit writes with flag updates',
+  'admin feature flag use case must stage audit writes with flag updates',
 );
 assertIncludes(
   adminFeatureFlags,
   'await db.batch([flagStatement, auditStatement]);',
-  'admin feature flag endpoint must write flag updates and audit events through one batch',
+  'admin feature flag use case must write flag updates and audit events through one batch',
 );
 
-const adminSettings = read('functions/api/admin/settings.ts');
+const adminSettings = [read('functions/api/admin/settings.ts'), read('functions/api/_lib/admin_config.ts')].join('\n');
 assertIncludes(
   adminSettings,
   'SETTING_VALIDATORS',
-  'admin settings endpoint must allow only known runtime settings',
+  'admin settings use case must allow only known runtime settings',
 );
 assertIncludes(
   adminSettings,
   'nonNegativeInteger',
-  'admin settings endpoint must validate integer limits',
+  'admin settings use case must validate integer limits',
 );
 assertIncludes(
   adminSettings,
   'limitAction',
-  'admin settings endpoint must validate limit action values',
+  'admin settings use case must validate limit action values',
 );
 assertIncludes(
   adminSettings,
   'buildAdminEventStatement',
-  'admin settings endpoint must stage audit writes with setting updates',
+  'admin settings use case must stage audit writes with setting updates',
 );
 assertIncludes(
   adminSettings,
-  'await db.batch([settingStatement, auditStatement]);',
-  'admin settings endpoint must write setting updates and audit events through one batch',
+  'await input.db.batch([settingStatement, auditStatement]);',
+  'admin settings use case must write setting updates and audit events through one batch',
 );
 
 const supportFeedback = [
