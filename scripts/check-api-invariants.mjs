@@ -31,6 +31,16 @@ function assertOrder(text, before, after, label) {
   }
 }
 
+// React screens must use the shared browser transport for internal API calls.
+// Changelog intentionally fetches public GitHub history, not /api routes.
+for (const file of fs.readdirSync(root).filter((entry) => entry.endsWith('.tsx'))) {
+  const text = read(file);
+  if (/\bfetch\(\s*['"`]\/api\//.test(text)) {
+    console.error(`${file}: internal API calls must use fetchWithResilience`);
+    process.exitCode = 1;
+  }
+}
+
 const familyJoin = [
   read('functions/api/family/join.ts'),
   read('functions/api/_lib/family_join_by_invite.ts'),
