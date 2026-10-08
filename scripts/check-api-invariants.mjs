@@ -111,7 +111,7 @@ for (const file of [
   const oauth = file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/google.ts'
     ? `${read(file)}\n${read('functions/api/_lib/google_login.ts')}\n${read('functions/api/_lib/google_oauth_callback.ts')}`
     : file === 'functions/api/auth/apple/callback.ts'
-      ? `${read(file)}\n${read('functions/api/_lib/apple_login.ts')}`
+      ? `${read(file)}\n${read('functions/api/_lib/apple_oauth_callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`
       : read(file);
   assertIncludes(oauth, 'consumeInviteCode(', `${file} must consume beta invites through the shared helper`);
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
@@ -159,7 +159,7 @@ assertIncludes(
   'google OAuth start must use shared OAuth state helpers',
 );
 
-const appleOAuthCallback = `${read('functions/api/auth/apple/callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`;
+const appleOAuthCallback = `${read('functions/api/auth/apple/callback.ts')}\n${read('functions/api/_lib/apple_oauth_callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`;
 assertIncludes(
   appleOAuthCallback,
   'await safeResponseJson(tokenRes)',
@@ -1372,8 +1372,12 @@ for (const oauthRoute of [
   'functions/api/auth/apple/callback.ts',
 ]) {
   const oauthSource = oauthRoute === 'functions/api/auth/google/callback.ts'
-    ? `${read(oauthRoute)}\n${read('functions/api/_lib/google_oauth_callback.ts')}`
-    : read(oauthRoute);
+    ? `${read(oauthRoute)}
+${read('functions/api/_lib/google_oauth_callback.ts')}`
+    : oauthRoute === 'functions/api/auth/apple/callback.ts'
+      ? `${read(oauthRoute)}
+${read('functions/api/_lib/apple_oauth_callback.ts')}`
+      : read(oauthRoute);
   assertIncludes(oauthSource, 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
   assertNotIncludes(oauthSource, 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
 }

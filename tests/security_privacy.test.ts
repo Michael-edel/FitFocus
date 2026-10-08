@@ -63,7 +63,7 @@ describe('security and privacy baseline', () => {
   it('does not return upstream OAuth error details to clients', () => {
     const googleAuth = read('functions/api/auth/google.ts');
     const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
-    const appleCallback = read('functions/api/auth/apple/callback.ts');
+    const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
 
     expect(googleAuth).not.toContain('details:');
     expect(googleAuth).not.toContain('aud: info.aud');
@@ -85,7 +85,7 @@ describe('security and privacy baseline', () => {
     const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
     const googleAuth = read('functions/api/auth/google.ts');
     const appleStart = read('functions/api/auth/apple/start.ts');
-    const appleCallback = read('functions/api/auth/apple/callback.ts');
+    const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
     const authLib = read('functions/api/_lib/auth.ts');
     const aiRoute = [read('functions/api/ai.ts'), read('functions/api/_lib/ai_request_handler.ts')].join('\\n');
     const logoutAll = read('functions/api/logout_all.ts');
