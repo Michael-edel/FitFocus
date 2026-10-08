@@ -11,6 +11,7 @@ import ProfileDetailsSection from './components/ProfileDetailsSection';
 import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
+import { requestMobileToken } from './features/settings/mobileTokenApi';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -698,22 +699,11 @@ export default function SettingsScreen({
     setMobileTokenCopiedAt(null);
     setBridgeSetupCopiedAt(null);
     try {
-      const response = await fetch('/api/mobile/token', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      });
-      const payload = await readJsonRecord(response);
-      if (!response.ok || !payload || typeof payload.token !== 'string') {
-        throw new Error(payload?.error === 'UNAUTH'
-          ? 'Сначала войдите в аккаунт FitFocus.'
-          : 'Не удалось создать мобильный токен.');
-      }
-
-      setMobileTokenValue(payload.token);
-      setMobileTokenExpiresAt(typeof payload.expiresAt === 'number' ? payload.expiresAt : null);
+      const { token, expiresAt } = await requestMobileToken();
+      setMobileTokenValue(token);
+      setMobileTokenExpiresAt(expiresAt);
       try {
-        await navigator.clipboard.writeText(payload.token);
+        await navigator.clipboard.writeText(token);
         setMobileTokenCopiedAt(Date.now());
       } catch {
         // clipboard is optional
