@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isAllowedPushEndpoint, sendPushNotification } from '../functions/api/_lib/push';
+import { isAllowedPushEndpoint, normalizePushDeliveryTimeoutMs, sendPushNotification } from '../functions/api/_lib/push';
 
 function b64url(bytes: Uint8Array): string {
   let binary = '';

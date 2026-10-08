@@ -5,7 +5,15 @@ export type PushEnv = {
   PUSH_VAPID_PUBLIC_KEY?: string;
   PUSH_VAPID_PRIVATE_KEY?: string;
   PUSH_VAPID_SUBJECT?: string;
+  PUSH_DELIVERY_TIMEOUT_MS?: string;
 };
+
+const DEFAULT_PUSH_DELIVERY_TIMEOUT_MS = 12_000;
+
+export function normalizePushDeliveryTimeoutMs(value: unknown): number {
+  const timeout = Number(value);
+  return Number.isFinite(timeout) && timeout >= 1_000 && timeout <= 60_000 ? Math.floor(timeout) : DEFAULT_PUSH_DELIVERY_TIMEOUT_MS;
+}
 
 export type PushSubscriptionRow = {
   id: string;
@@ -314,7 +322,11 @@ export async function sendPushNotification(
   if (getPushConfigError(env)) throw new Error("PUSH_CONFIG");
   if (!isAllowedPushEndpoint(subscription.endpoint)) throw new Error("PUSH_ENDPOINT");
   const encrypted = await encryptPushPayload(subscription, payload);
-  const response = await fetch(subscription.endpoint, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS));
+  let response: Response;
+  try {
+    response = await fetch(subscription.endpoint, {
     method: "POST",
     headers: {
       TTL: String(PUSH_TTL_SECONDS),
@@ -324,7 +336,14 @@ export async function sendPushNotification(
       "Content-Encoding": "aes128gcm",
     },
     body: toArrayBuffer(encrypted),
-  });
+    signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("PUSH_REQUEST_TIMEOUT");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     const details = await readResponseTextLimit(response);
     const err = new Error(details ? `PUSH_HTTP_${response.status}: ${details}` : `PUSH_HTTP_${response.status}`);
