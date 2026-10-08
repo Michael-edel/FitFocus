@@ -64,7 +64,6 @@ import { type WeeklyStoredReport } from './weeklyAutoEngine';
 import { trackWisShareEvent } from './analytics/wisShare';
 import { calculateFoodStreak } from './analytics/foodStreak';
 import { useAchievements } from './useAchievements';
-import type { AchievementEvaluationContext } from './achievements/engine';
 import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
@@ -141,6 +140,7 @@ import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
+import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -608,36 +608,16 @@ const App: React.FC = () => {
     setProfileSyncState,
   });
 
-  const buildAchievementContext = useCallback((): AchievementEvaluationContext => {
-    const weightHistory = currentUser?.weightHistory || [];
-    const firstWeight = typeof weightHistory[0]?.weight === 'number' ? weightHistory[0].weight : null;
-    const latestWeight =
-      typeof weightHistory[weightHistory.length - 1]?.weight === 'number'
-        ? weightHistory[weightHistory.length - 1].weight
-        : typeof currentUser?.weight === 'number'
-          ? currentUser.weight
-          : null;
-    const todayHabits = currentUser?.dailyHabits?.[getTodayKey()] || {};
-    return {
-      profileExists: !!currentUser,
-      profileDetailsCompleted: !!currentUser?.profileDetailsCompleted,
-      hasAiPlan: !!currentUser?.aiPlan,
-      hasWeeklyMenu: !!currentUser?.aiPlan?.weeklyMenu || !!currentUser?.aiPlan?.familyWeeklyMenu,
-      foodDiaryCount: foodDiary.length,
-      foodStreak: calculateFoodStreak(foodDiary).streak,
-      weightHistoryCount: weightHistory.length,
-      initialWeight: firstWeight,
-      latestWeight,
-      measurementsCount: currentUser?.measurementsHistory?.length || 0,
-      wisCount: weeklyReports.length,
-      shoppingCheckedCount: familyShopping?.items?.filter((item) => item.checked).length || 0,
-      familyActive: !!cloudFamily,
-      waterToday: !!todayHabits.water,
-      sleepHours: typeof currentUser?.wearableSleepHoursLastNight === 'number' ? currentUser.wearableSleepHoursLastNight : null,
-    };
-  }, [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
+  const getAchievementContext = useCallback(() => buildAchievementContext({
+    currentUser,
+    foodDiary,
+    weeklyReportsCount: weeklyReports.length,
+    shoppingItems: familyShopping?.items,
+    familyActive: Boolean(cloudFamily),
+    todayKey: getTodayKey(),
+  }), [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
 
-  const achievements = useAchievements({ userId: currentUser?.id, getContext: buildAchievementContext });
+  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext });
   const checkAchievements = achievements.checkAchievements;
   const {
     persistFoodDiary,
