@@ -1346,6 +1346,15 @@ assertIncludes(dashboardWeightLogging, 'const MIN_WEIGHT_KG = 20', 'dashboard we
 assertIncludes(dashboardWeightLogging, 'const MAX_WEIGHT_KG = 500', 'dashboard weight logging must match the maximum profile contract weight');
 assertIncludes(dashboardWeightLogging, 'Number.isFinite(weight)', 'dashboard weight logging must reject non-finite values before persistence');
 
+for (const oauthRoute of [
+  'functions/api/auth/google.ts',
+  'functions/api/auth/google/callback.ts',
+  'functions/api/auth/apple/callback.ts',
+]) {
+  assertIncludes(read(oauthRoute), 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
+  assertNotIncludes(read(oauthRoute), 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
+}
+
 const oauthTransport = read('functions/api/auth/_oauth.ts');
 assertIncludes(oauthTransport, 'fetchOAuthProvider', 'OAuth providers must use the bounded shared transport');
 assertIncludes(oauthTransport, 'OAUTH_PROVIDER_TIMEOUT_MS', 'OAuth provider requests must have a bounded timeout');
