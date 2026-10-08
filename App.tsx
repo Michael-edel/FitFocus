@@ -125,6 +125,7 @@ import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
+import { syncLegacyHabitProgress } from './features/habits/legacyProgress';
 import { UserStateRepository } from './storage/userStateRepository';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
@@ -1284,15 +1285,10 @@ await ensurePdfInterFont(doc);
     if (!currentUser) return;
     const updatedUser = toggleHabit(currentUser, habitKey);
     persistUser(updatedUser);
-    const legacyMap: Record<string, string> = { water: 'h_water', steps: 'h_steps', breakfast: 'h_veg', sleep: 'h_sleep' };
-    const lid = legacyMap[habitKey];
-    if (lid) {
-      const isDone = updatedUser.dailyHabits?.[getTodayKey()]?.[habitKey];
-      const nextHabits = habits.map(h => h.id === lid ? { ...h, current: isDone ? h.goal : 0 } : h);
-      setHabits(nextHabits);
-      if (habitKey === 'water' && isDone) {
-        void checkAchievements('habit_water_done', { waterToday: true });
-      }
+    const legacy = syncLegacyHabitProgress(habits, updatedUser, habitKey, getTodayKey());
+    setHabits(legacy.habits);
+    if (legacy.waterGoalReached) {
+      void checkAchievements('habit_water_done', { waterToday: true });
     }
   }, [checkAchievements, currentUser, habits, persistUser]);
 
