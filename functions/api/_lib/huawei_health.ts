@@ -95,6 +95,12 @@ export function protectHuaweiProfile(user: SessionUser, profile: JsonObject) {
   return withProtectedFields(user, profile);
 }
 
+export async function markHuaweiSynced(db: D1Database, userId: string, now: number) {
+  const seconds = Math.floor(now / 1000);
+  await db.prepare('UPDATE wearable_connections SET last_sync_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?')
+    .bind(seconds, seconds, userId, huaweiProviderId()).run();
+}
+
 export type HuaweiAccessTokenResult =
   | { kind: 'ready'; provider: string; accessToken: string }
   | { kind: 'not-connected' }

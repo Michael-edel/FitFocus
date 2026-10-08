@@ -13,6 +13,7 @@ import {
   huaweiChangedFields,
   buildHuaweiSyncedProfile,
   protectHuaweiProfile,
+  markHuaweiSynced,
   loadHuaweiProfile,
   parseHuaweiBaseVersion,
   loadHuaweiAccessToken,
@@ -82,10 +83,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
     }, 409);
   }
 
-  await db
-    .prepare("UPDATE wearable_connections SET last_sync_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?")
-    .bind(Math.floor(now / 1000), Math.floor(now / 1000), user.sub, provider)
-    .run();
+  await markHuaweiSynced(db, user.sub, now);
 
   return json({ provider, profile: nextProfile, updatedFields, version });
 };
