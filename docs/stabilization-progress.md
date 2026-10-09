@@ -62,5 +62,43 @@ P0.2–P0.9 этим изменением не закрываются.
 полю регистрации и фактический outline в desktop Chromium. Он прошёл;
 в других проектах этот специфичный тест явно пропускается.
 
-CI на `1363ec7` прошёл полностью. После этих уточнений требуется новый
-прогон на HEAD; прошлый зелёный запуск не подменяет его.
+CI на `1363ec7` был промежуточным. Финальные уточнения проверены на
+[`4c16088569871df3c8b22a78f94e6e3e482c0e56`](https://github.com/Michael-edel/FitFocus/actions/runs/37914508279):
+GitHub CI completed/success. [PR #92](https://github.com/Michael-edel/FitFocus/pull/92)
+ещё открыт; mergeable_state=blocked, хотя mergeable=true. Конкретное
+невыполненное правило защиты через доступный API не установлено.
+Защита main не изменялась, слияние и выпуск не заявляются.
+
+### Перенос в интеграционную ветку
+
+На `e35cbf6` изменения перенесены в код переработки с сохранением всех
+API-инвариантов выделенных use cases и fake-indexeddb. Устаревшее ожидание
+`signal: controller.signal` внутри push.ts заменено проверкой подключения
+помощника. 162 unit-файла / 498 тестов прошли; три проверки типов,
+API/auth/admin/schema/privacy и production build прошли. Playwright:
+19 passed / 9 explicit skips; шесть новых skips относятся к Chromium-only
+forced-colors тесту, ещё три — к ранее ограниченному onboarding smoke.
+На `cc880d952f7872b52099947ff02d13e4992031cf` изменена только документация
+поверх этой проверенной реализации. [CI на точном SHA](https://github.com/Michael-edel/FitFocus/actions/runs/37915083725)
+завершился success. [PR #90](https://github.com/Michael-edel/FitFocus/pull/90)
+пока открыт, mergeable_state=blocked. Эти проверки не закрывают весь P0.
+
+## P0.8 — первый компонент legacy-импорта
+
+Ревизия: [`149e4d403a0b7986f2b98e8a2da6409d4289d117`](https://github.com/Michael-edel/FitFocus/commit/149e4d403a0b7986f2b98e8a2da6409d4289d117),
+ветка `fix/durable-outbox`, зависит от интеграционной ревизии PR #90.
+
+Добавлен нормализатор `storage/legacyQueue.ts`: непустой key, обязательная
+строка value для put, отсутствие свойства value у delete, целые
+неотрицательные metadata либо 0 при отсутствии. Все семь причин отказа
+сохранены в типе UnknownLegacyRecord.
+
+Fingerprint использует SHA-256 от JSON-массива нормализованных
+type/key/value-or-null/baseVersion с префиксом legacy:v1:. Порядок записей,
+порядок свойств и retryCount не меняют идентификатор. 62 unit-проверки
+и storage-strict typecheck прошли локально.
+
+Это самостоятельный компонент. IDB-stores, атомарный импорт, карантин,
+claim/lease и подключение к сохранению ещё не реализованы. Тип
+UnknownLegacyRecord сам по себе не сохраняет повреждённые записи.
+P0.8 остаётся открытым; следующая реализация сверяется с ADR-005.

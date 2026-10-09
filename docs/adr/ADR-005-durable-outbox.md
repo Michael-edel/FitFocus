@@ -1,6 +1,7 @@
 # ADR-005: одна постоянная outbox в IndexedDB
 
-Дата: 09.10.2026. Статус: **согласовано, реализация ожидается**.
+Дата: 09.10.2026. Статус: **согласовано; первый компонент реализован,
+полная очередь и runtime-интеграция ожидаются**.
 Задача: [P0.8](../../TASKS.md). Область кода: [карта документации](../README.md).
 
 ## Причина
@@ -56,7 +57,10 @@ Legacy не имеет надёжного accountId. Владельца уста
 
 ## Согласованный нормализатор
 
-Это спецификация реализации, ещё не добавленная в исполняемый код.
+Нормализатор реализован в [`storage/legacyQueue.ts` на `149e4d4`](https://github.com/Michael-edel/FitFocus/blob/149e4d403a0b7986f2b98e8a2da6409d4289d117/storage/legacyQueue.ts).
+[62 unit-проверки](https://github.com/Michael-edel/FitFocus/blob/149e4d403a0b7986f2b98e8a2da6409d4289d117/tests/legacy_queue.test.ts)
+и storage-strict прошли локально. Ни импорт, ни runtime-подключение очереди
+ещё не реализованы. Ниже сохранены согласованные правила формата.
 
 ```typescript
 type LegacyQueueRecord = {
@@ -147,11 +151,13 @@ const fields: [string, string, string | null, number] = [
   record.type === "put" ? record.value! : null,
   record.baseVersion ?? 0,
 ];
-const fingerprint = stableHash(JSON.stringify(fields));
+const canonical = JSON.stringify(fields);
 ```
 
-stableHash — обозначение детерминированного хеша; реализацию нужно выбрать
-и проверить. Никаких разделителей строк вместо JSON-сериализации массива.
+В компоненте `149e4d4` используется SHA-256 от UTF-8 canonical через
+crypto.subtle; итоговая строка — `legacy:v1:` и 64 hex-символа. Проверены
+ожидаемый digest и стабильность полей. Никаких разделителей строк вместо
+JSON-сериализации массива.
 Индекс и retryCount не входят в fingerprint. Отсутствующая baseVersion и 0
 дают одинаковый результат; перестановка контейнера не создаёт новый импорт.
 

@@ -8,7 +8,7 @@
 [`810adb11b01447114de9f240c6e2d520f747470b`](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b)
 в [PR #90](https://github.com/Michael-edel/FitFocus/pull/90), ветка
 `fix/dependency-audit`. На момент сверки GitHub `main` —
-`c939ae6f3dbdb802478ea8a305b180eefb0b90f8`; между ними 250 коммитов.
+`c939ae6f3dbdb802478ea8a305b180eefb0b90f8`; на этом исходном снимке между ними 250 коммитов.
 Описание этой интеграционной ревизии не подтверждает её слияние или deploy.
 
 Ссылки на исходники закреплены за проверенным SHA. Документы можно
@@ -30,20 +30,40 @@ production-интеграции или отсутствие секретов. Р
 | [Модель синхронизации](sync-model.md) | Текущее поведение, целевые гарантии и матрица приёмки |
 | [API_CONTRACTS](../API_CONTRACTS.md) | Действующие state/profile-контракты и их ограничения |
 | [TASKS](../TASKS.md) | P0/P1, зависимости и критерии готовности |
+| [CONTRIBUTING](../CONTRIBUTING.md) | Запуск, проверка и порядок изменений |
+| [AGENTS](../AGENTS.md) | Инструкции помощнику по работе с репозиторием |
+| [Журнал стабилизации](stabilization-progress.md) | Проверенные изменения, SHA и CI |
 | [DECISIONS](../DECISIONS.md) | Журнал согласованных решений и статус внедрения |
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 
-Первое изменение реализации: **P0.1**, исправление зависимостей GitHub main
+Первым изменением реализации стал **P0.1**, исправление зависимостей GitHub main
 и проверки push при интеграции переработки. CI документации
 [на SHA 8b13b25](https://github.com/Michael-edel/FitFocus/actions/runs/37910803294)
 остановился на audit: 16 уязвимостей, остальные проверки пропущены.
 Дальше — единая очередь и сценарии сохранности данных, а не новый круг
 переписывания плана.
 
+Ход реализации P0.1 и результаты новых проверок:
+[журнал стабилизации](stabilization-progress.md). Исторический audit failure
+выше сохранён как основание задачи; актуальный статус определяется по HEAD PR.
+
+## Последующие проверенные ревизии
+
+| Изменение | Ревизия и подтверждение | Что ещё не завершено |
+|---|---|---|
+| P0.1 на базе main, PR #92 | `4c16088`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37914508279) | Слияние в защищённую main |
+| Перенос P0.1 в PR #90 | `cc880d9`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37915083725) | Слияние всей интеграционной ветки |
+| Первый компонент P0.8 | [`149e4d4`](https://github.com/Michael-edel/FitFocus/commit/149e4d403a0b7986f2b98e8a2da6409d4289d117), нормализатор и fingerprint, 62 unit-проверки | IDB-outbox, импорт и подключение к runtime |
+
+Это разные ревизии и области проверки. Документация PR #91 основана
+на ветке PR #92; зависимости от кода PR #90 и P0.8 отмечены отдельно.
+Документы не добавляют отсутствующие модули в main.
+
 ## Прежние материалы
 
+[Архив прежнего README](history/README-2026-08-29.md),
 [ARCHITECTURE](../ARCHITECTURE.md), [ARCHITECTURE_V2](../ARCHITECTURE_V2.md)
 и [исторический roadmap](https://github.com/Michael-edel/FitFocus/blob/810adb11b01447114de9f240c6e2d520f747470b/docs/architecture-roadmap.md)
 содержат ранние описания и этапы переработки. При расхождениях состояние
