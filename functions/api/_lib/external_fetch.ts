@@ -12,7 +12,11 @@ export async function fetchWithTimeout(
   const controller = new AbortController();
   const inherited = init.signal;
   const onAbort = () => controller.abort();
-  inherited?.addEventListener("abort", onAbort, { once: true });
+  if (inherited?.aborted) {
+    controller.abort();
+  } else {
+    inherited?.addEventListener("abort", onAbort, { once: true });
+  }
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });

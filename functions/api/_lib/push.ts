@@ -323,27 +323,22 @@ export async function sendPushNotification(
   if (getPushConfigError(env)) throw new Error("PUSH_CONFIG");
   if (!isAllowedPushEndpoint(subscription.endpoint)) throw new Error("PUSH_ENDPOINT");
   const encrypted = await encryptPushPayload(subscription, payload);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS));
   let response: Response;
   try {
-    response = await fetch(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      TTL: String(PUSH_TTL_SECONDS),
-      Urgency: "normal",
-      Authorization: await buildVapidAuthorization(subscription.endpoint, env),
-      "Content-Type": "application/octet-stream",
-      "Content-Encoding": "aes128gcm",
-    },
-    body: toArrayBuffer(encrypted),
-    signal: controller.signal,
+    response = await fetchWithTimeout(subscription.endpoint, {
+      method: "POST",
+      headers: {
+        TTL: String(PUSH_TTL_SECONDS),
+        Urgency: "normal",
+        Authorization: await buildVapidAuthorization(subscription.endpoint, env),
+        "Content-Type": "application/octet-stream",
+        "Content-Encoding": "aes128gcm",
+      },
+      body: toArrayBuffer(encrypted),
+    }, {
+      timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS),
+      timeoutError: "PUSH_REQUEST_TIMEOUT",
     });
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error("PUSH_REQUEST_TIMEOUT");
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
   if (!response.ok) {
     const details = await readResponseTextLimit(response);

@@ -30,4 +30,20 @@ describe("fetchWithTimeout", () => {
 
     await expect(outcome).resolves.toBe("caller aborted");
   });
+
+  it("forwards a signal that was already cancelled before the request starts", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.signal?.aborted) return Promise.reject(new Error("caller aborted"));
+      return Promise.resolve(new Response());
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const outcome = fetchWithTimeout("https://provider.test", { signal: controller.signal }, { timeoutMs: 10_000, timeoutError: "UPSTREAM_TIMEOUT" })
+      .then(() => "resolved", (error: Error) => error.message);
+
+    await expect(outcome).resolves.toBe("caller aborted");
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
 });
