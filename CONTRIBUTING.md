@@ -49,8 +49,9 @@ npx wrangler pages dev dist --port 8788 --ip localhost
 ```
 
 После запуска backend запустите Vite в другом терминале. Эти команды
-описывают локальный путь проекта; настоящий запуск OAuth/D1 в текущей
-сессии не подтверждён. Перед обращением к удалённой базе отдельно проверьте
+описывают локальный путь проекта. В серверном PR #94 отдельно проверен
+[локальный Worker/D1 с синтетической сессией](docs/state-generations.md);
+настоящий OAuth и staging этим не подтверждены. Перед обращением к удалённой базе отдельно проверьте
 окружение и [чек-лист выпуска](RELEASE_CHECKLIST.md).
 
 Шаблоны `.env.example` и `.env.local.example` перечисляют часть настроек.
@@ -111,6 +112,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Хранилище, версия схемы, владение | docs/data-model.md и затронутый ADR |
 | Очередь, конфликт, retry, сессии | docs/sync-model.md, ADR-005 и docs/outbox-implementation.md |
 | Legacy-формат, импорт, ledger или карантин | docs/legacy-migration.md и относящиеся пункты TASKS |
+| Серверные поколения, tombstones, protocol 2 или порядок их выпуска | docs/state-generations.md, API_CONTRACTS.md и RELEASE_CHECKLIST.md |
 | Существенное архитектурное решение | DECISIONS.md и новый/изменённый ADR |
 | Порядок выпуска или отката | RELEASE_CHECKLIST.md |
 

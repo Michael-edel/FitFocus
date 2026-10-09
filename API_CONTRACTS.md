@@ -4,6 +4,11 @@
 а не гарантированно развёрнутый API. Полная область: [документация](docs/README.md).
 Это ограниченный реестр state/profile, не полная спецификация всех endpoints.
 
+Последующее серверное изменение проверено на `237f862` в draft PR #94:
+[state protocol 2](docs/state-generations.md) сохраняет tombstone-поколения,
+добавляет includeDeleted/exists и подтверждённую версию DELETE. Разделы ниже
+сохраняют контракт исходного `810adb1`; новый API ещё не объявлен выпущенным.
+
 Источники: [state.ts](https://github.com/Michael-edel/FitFocus/blob/810adb11b01447114de9f240c6e2d520f747470b/functions/api/state.ts),
 [state_write.ts](https://github.com/Michael-edel/FitFocus/blob/810adb11b01447114de9f240c6e2d520f747470b/functions/api/_lib/state_write.ts),
 [state_store.ts](https://github.com/Michael-edel/FitFocus/blob/810adb11b01447114de9f240c6e2d520f747470b/functions/api/_lib/state_store.ts),
@@ -98,9 +103,10 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 
 ## Изменения, которые ещё предстоит внедрить
 
-P0.7 должен согласовать tombstone/exists и монотонную версию в ответе удаления,
-смысл baseVersion=0 и совместимость старых клиентов. До кода, миграции и
-контрактных тестов эти поля не объявляются действующим контрактом.
+Серверная часть P0.7 реализована и проверена на `237f862`:
+[новый контракт и условия выпуска](docs/state-generations.md). Клиентское
+подключение и staging ещё ожидаются. Нельзя отправлять старый sender на
+новый DELETE-контракт без приёмки совместимости и остановки старых writers.
 
 409 не разрешает потерять локальную правку. 401 приостанавливает отправку,
 но не локальное сохранение. 403 разбирается по коду причины. Эти требования

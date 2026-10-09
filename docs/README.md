@@ -37,6 +37,7 @@ production-интеграции или отсутствие секретов. Р
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
 | [Реализация P0.8](outbox-implementation.md) | Код и тесты фундамента, очередь оставшихся изменений |
 | [Импорт старой очереди](legacy-migration.md) | Контракт компонента, карантин, снимки и ограничения интеграции |
+| [Серверные поколения P0.7](state-generations.md) | Проверенный tombstone/CAS, HTTP protocol 2 и порядок выпуска |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 
@@ -60,12 +61,18 @@ production-интеграции или отсутствие секретов. Р
 | Нормализатор P0.8 после исправления типизации | `f32c5ad`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37917864872); 62 проверки нормализации/fingerprint | Импорт и подключение к runtime |
 | Фундамент очереди P0.8, draft PR #93 | [`61d256e`](https://github.com/Michael-edel/FitFocus/commit/61d256e84e92225c45535e917c4ff424a5904aba), [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37919548774); схема v2, атомарные запись/claim/finish | Импорт, все writers, HTTP sender, UI и приёмка жизненного цикла |
 | Компонент legacy-импорта P0.8, draft PR #93 | [`51a789c`](https://github.com/Michael-edel/FitFocus/commit/51a789c5c0d8b724a54071ecf10232ecc58a42df), [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37925347789); 649 unit-тестов, из них 59 проверок импортера | Доказательства владения/остановки старых writers, repository/sender/auth/hydration, UI, экспорт и приёмка старого/нового build |
+| Серверные поколения P0.7, draft PR #94 | [`237f862`](https://github.com/Michael-edel/FitFocus/commit/237f862adb51f82378617e11d48ce698504d10d2), [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37930729452); 532 unit-теста и отдельно 17 локальных HTTP-проверок | Совместимый клиент, старые writers/поколения, staging и выпуск |
 
 Это разные ревизии и области проверки. Документация PR #91 основана
 на ветке PR #92; зависимости от кода PR #90 и P0.8 отмечены отдельно.
 Документы не добавляют отсутствующие модули в main. Последний проверенный SHA P0.8 —
 `51a789c`; изменения после этой ревизии требуют отдельного подтверждения CI.
 Состояние слияния и выпуска проверяется отдельно.
+
+На 09.10.2026 PR #90–#94 открыты, main остаётся на `c939ae6`.
+Документация #91 зависит от CI-ветки #92; кодовые #93 и #94 основаны
+на #90. Это состояние GitHub, а не подтверждение завершённой локальной
+интеграции: совместную ревизию нужно проверять отдельно.
 
 ## Прежние материалы
 
