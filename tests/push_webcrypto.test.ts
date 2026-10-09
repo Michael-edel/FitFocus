@@ -128,6 +128,44 @@ describe('Worker-compatible web push sender', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('keeps the push deadline while an error response body stalls', async () => {
+    const env = { ...(await makeVapidEnv()), PUSH_DELIVERY_TIMEOUT_MS: '1000' };
+    const subscription = await makeSubscription();
+    vi.useFakeTimers();
+    let reading!: () => void;
+    const bodyStarted = new Promise<void>((resolve) => { reading = resolve; });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('body aborted')), { once: true });
+        },
+        pull() { reading(); },
+      });
+      return new Response(body, { status: 503 });
+    });
+
+    const outcome = sendPushNotification(env, subscription, { title: 'FitFocus' })
+      .catch((error: Error) => error);
+    await bodyStarted;
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await outcome).toMatchObject({ message: 'PUSH_REQUEST_TIMEOUT' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cancels an error body after the diagnostics byte limit', async () => {
+    const cancel = vi.fn();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(2048))); },
+      cancel,
+    }), { status: 503 }));
+
+    await expect(sendPushNotification(
+      await makeVapidEnv(), await makeSubscription(), { title: 'FitFocus' },
+    )).rejects.toMatchObject({ message: `PUSH_HTTP_503: ${'x'.repeat(1024)}`, statusCode: 503 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves network failures and clears the request deadline', async () => {
     vi.useFakeTimers();
     const failure = new Error('connection failed');

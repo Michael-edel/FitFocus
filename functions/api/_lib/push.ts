@@ -305,12 +305,18 @@ async function readResponseTextLimit(response: Response, limit = 1024): Promise<
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
   let size = 0;
-  while (size < limit) {
-    const { value, done } = await reader.read();
-    if (done || !value) break;
-    const slice = value.slice(0, Math.max(0, limit - size));
-    chunks.push(slice);
-    size += slice.length;
+  try {
+    while (size < limit) {
+      const { value, done } = await reader.read();
+      if (done || !value) break;
+      const slice = value.slice(0, Math.max(0, limit - size));
+      chunks.push(slice);
+      size += slice.length;
+    }
+  } finally {
+    // Do not leave an oversized error response streaming after the byte cap.
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
   return new TextDecoder().decode(concatBytes(chunks)).trim();
 }
@@ -336,13 +342,15 @@ export async function sendPushNotification(
     }, {
       timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS),
       timeoutError: "PUSH_REQUEST_TIMEOUT",
+  }, async (response) => {
+    if (!response.ok) {
+      const details = await readResponseTextLimit(response);
+      const err = new Error(details ? `PUSH_HTTP_${response.status}: ${details}` : `PUSH_HTTP_${response.status}`);
+      (err as Error & { statusCode?: number }).statusCode = response.status;
+      throw err;
+    }
+    return response;
   });
-  if (!response.ok) {
-    const details = await readResponseTextLimit(response);
-    const err = new Error(details ? `PUSH_HTTP_${response.status}: ${details}` : `PUSH_HTTP_${response.status}`);
-    (err as Error & { statusCode?: number }).statusCode = response.status;
-    throw err;
-  }
   return response;
 }
 
