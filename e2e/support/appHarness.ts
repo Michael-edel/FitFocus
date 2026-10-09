@@ -318,10 +318,8 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
     });
 
     if (!options.supported) {
-      Object.defineProperty(window, 'PushManager', {
-        configurable: true,
-        value: undefined,
-      });
+      // Capability detection uses `in`, so assigning undefined still reports support.
+      Reflect.deleteProperty(window, 'PushManager');
       return;
     }
 
@@ -341,18 +339,19 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
       },
     };
 
-    const registration = {
+    // PWA registration and push recovery attach listeners to these browser objects.
+    const registration = Object.assign(new EventTarget(), {
       active: {
         scriptURL: '/sw.js',
         state: 'activated',
       },
       pushManager,
       async update() {},
-    };
+    });
 
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
-      value: {
+      value: Object.assign(new EventTarget(), {
         async getRegistration() {
           return registration;
         },
@@ -363,7 +362,7 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
           return registration;
         },
         ready: Promise.resolve(registration),
-      },
+      }),
     });
   }, { options: config });
 }
