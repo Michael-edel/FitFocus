@@ -109,7 +109,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Проверки конкретной ревизии | docs/stabilization-progress.md |
 | API state/profile | API_CONTRACTS.md |
 | Хранилище, версия схемы, владение | docs/data-model.md и затронутый ADR |
-| Очередь, конфликт, retry, сессии | docs/sync-model.md и ADR-005 |
+| Очередь, конфликт, retry, сессии | docs/sync-model.md, ADR-005 и docs/outbox-implementation.md |
 | Существенное архитектурное решение | DECISIONS.md и новый/изменённый ADR |
 | Порядок выпуска или отката | RELEASE_CHECKLIST.md |
 

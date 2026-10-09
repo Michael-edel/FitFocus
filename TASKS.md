@@ -20,10 +20,10 @@
 
 ### P0.1 — восстановить CI: зависимости и проверка push
 
-- [ ] Устранить dependency audit failure актуальной GitHub `main`, проверив
-  совместимость обновлений. В [CI PR #91 на SHA 8b13b25](https://github.com/Michael-edel/FitFocus/actions/runs/37910803294)
-  обнаружено 16 уязвимостей (1 low, 6 moderate, 9 high); последующие проверки
-  пропущены. Документирующая ветка не меняла package.json/lockfile.
+- [x] Исправить зависимости и проверить совместимость в PR #92; audit
+  проходит на `4c16088` и интеграционной ревизии `cc880d9`. Исторический
+  [CI на SHA 8b13b25](https://github.com/Michael-edel/FitFocus/actions/runs/37910803294)
+  обнаружил 16 уязвимостей; main ещё ожидает интеграции исправления.
 - [x] Убрать устаревшее требование наличия `signal: controller.signal`
   непосредственно в `push.ts` из `scripts/check-api-invariants.mjs`.
 - [x] Проверять отмену зависшего запроса через реальный путь
@@ -112,18 +112,34 @@ CI подтверждён на обеих ревизиях. P0.1 остаётс�
 
 ### P0.8 — единая постоянная очередь в IndexedDB
 
-Первый компонент реализован в [`storage/legacyQueue.ts` на `149e4d4`](https://github.com/Michael-edel/FitFocus/blob/149e4d403a0b7986f2b98e8a2da6409d4289d117/storage/legacyQueue.ts): нормализация всех
-согласованных случаев и fingerprint по JSON-массиву с SHA-256. 62 unit-проверки
-и storage-strict typecheck прошли. Компонент пока не подключён к runtime;
-ни импорт legacy, ни смена хранилища очереди этим шагом не завершены.
+Проверенный фундамент — [`61d256e`](https://github.com/Michael-edel/FitFocus/commit/61d256e84e92225c45535e917c4ff424a5904aba)
+в [черновом PR #93](https://github.com/Michael-edel/FitFocus/pull/93),
+база — PR #90. [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37919548774): 590 unit-тестов, три режима типизации,
+сборка и браузерные проверки. Это проверка отдельных компонентов;
+UserStateRepository и HTTP sender ещё используют прежнюю очередь.
 
-- [ ] Реализовать [ADR-005](docs/adr/ADR-005-durable-outbox.md), включая
-  нормализацию legacy, карантин, атомарный импорт и возобновляемую миграцию.
-- [ ] Добавить outbox в существующую IDB; связанные записи `values` и
-  операции сохранять одной транзакцией и ждать её завершения.
-- [ ] Реализовать атомарный claim, lease по startedAtMs и защиту завершения.
-- [ ] Обработать `blocked`, `versionchange`, quota/abort и недоступность IDB.
-- [ ] Проверить старую и новую сборку на одном origin в одном browser context.
+- [x] Нормализовать legacy-формат и вычислять стабильный fingerprint:
+  62 проверки; отсутствие metadata допустимо, value у delete запрещено.
+- [x] Обновить существующую IDB до v2, сохранив values; создать outbox,
+  outbox_migration_items, outbox_migration_unknown и outbox_meta.
+- [x] Проверить атомарную запись value/операции, claim/lease и завершение
+  попытки с проверкой владельца, сессии и ревизии: 30 новых проверок.
+- [x] Обработать blocked, versionchange, повтор открытия и отказ транзакции
+  в менеджере IDB. Подключение этих состояний к UI остаётся ниже.
+- [ ] Реализовать атомарный возобновляемый импорт, migration ledger и карантин
+  по [ADR-005](docs/adr/ADR-005-durable-outbox.md); не угадывать владельца.
+- [ ] Подключить UserStateRepository и все новые writers к общей транзакции;
+  отдельно определить путь profile и остальных localStorage-значений.
+- [ ] Перевести HTTP sender на claim/finish; согласовать auth-паузу,
+  hydration и серверные версии удаления с P0.2–P0.7.
+- [ ] Показывать ошибки сохранения и blocked в UI, добавить экспорт/очистку
+  операций и карантина; не создавать резервную localStorage-outbox.
+- [ ] Проверить старую и новую сборку на одном origin в одном browser context,
+  несколько вкладок без Web Locks и восстановление после reload.
+
+Сопоставление кода и тестов, порядок следующих изменений и критерии проверки:
+[реализация P0.8](docs/outbox-implementation.md). Созданные stores не доказывают
+выполненный импорт; проверенные примитивы не закрывают P0.2–P0.6 в приложении.
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;
 legacy-ключ не используется для новой очереди и не удаляется до проверенного

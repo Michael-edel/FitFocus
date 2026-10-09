@@ -98,7 +98,47 @@ type/key/value-or-null/baseVersion с префиксом legacy:v1:. Поряд�
 порядок свойств и retryCount не меняют идентификатор. 62 unit-проверки
 и storage-strict typecheck прошли локально.
 
-Это самостоятельный компонент. IDB-stores, атомарный импорт, карантин,
-claim/lease и подключение к сохранению ещё не реализованы. Тип
+На этой ревизии это самостоятельный компонент. IDB-stores, атомарный импорт,
+карантин, claim/lease и подключение к сохранению ещё не реализованы. Тип
 UnknownLegacyRecord сам по себе не сохраняет повреждённые записи.
 P0.8 остаётся открытым; следующая реализация сверяется с ADR-005.
+
+
+## P0.8 — транзакционный фундамент на 61d256e
+
+Проверено: 09.10.2026. Ревизия: [`61d256e84e92225c45535e917c4ff424a5904aba`](https://github.com/Michael-edel/FitFocus/commit/61d256e84e92225c45535e917c4ff424a5904aba).
+[Черновой PR #93](https://github.com/Michael-edel/FitFocus/pull/93),
+база — `fix/dependency-audit` / PR #90. Слияние и выпуск не подтверждены.
+
+Первый CI нормализатора выявил TS2339 в тестовом помощнике. Проверка
+`ok === false` на `f32c5ad19768ea3e8962195d83bc69e09afba547` устранила ошибку;
+[CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/37917864872)
+завершился success. Первоначальные 62 проверки относятся к нормализатору.
+
+Следующий компонент добавляет `stateDatabase.ts`: схема v2 с сохранением
+values, outbox/migration/meta stores, blocked, versionchange, повтор открытия
+и завершение транзакции. `indexedUserState.ts` использует этот менеджер.
+DurableOutbox добавляет атомарные value/операцию, сохранение независимых
+снимков как конфликтов, явного владельца, claim/lease и проверку завершения.
+Подтверждение меняет версию только явного зависимого потомка того же автора.
+
+[GitHub CI на точном SHA 61d256e](https://github.com/Michael-edel/FitFocus/actions/runs/37919548774) — **completed/success**:
+
+- 165 unit-файлов / 590 тестов;
+- общая, domain-strict и storage-strict типизация;
+- dependency audit, schema/privacy, auth/API/admin guards;
+- production build;
+- Playwright: 19 passed / 9 explicit skips.
+
+30 новых unit-проверок покрывают менеджер IDB и DurableOutbox. Конкуренция
+проверена отдельными fake-IDB соединениями, quota/abort — внесёнными отказами.
+Это не реальное заполнение браузерного хранилища и не проверка старого/нового
+bundle. Browser API в существующих E2E подменён; staging не подтверждён.
+
+На этом SHA stores миграции ещё не содержат импортера/карантина. Прежние
+UserStateRepository и HTTP sender не переведены на DurableOutbox. Остаются
+импорт с доказанным владением, auth/hydration, UI ошибок, экспорт/очистка,
+реальные вкладки и P0.7. DELETE API пока не возвращает возрастающую версию,
+которую требует новый finish; клиент не должен выдумывать подтверждение.
+Более поздние наработки импортера не входят в приведённый CI.
+P0.2–P0.9 остаются открытыми. [Следующие изменения](outbox-implementation.md#следующие-изменения).

@@ -35,6 +35,7 @@ production-интеграции или отсутствие секретов. Р
 | [Журнал стабилизации](stabilization-progress.md) | Проверенные изменения, SHA и CI |
 | [DECISIONS](../DECISIONS.md) | Журнал согласованных решений и статус внедрения |
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
+| [Реализация P0.8](outbox-implementation.md) | Код и тесты фундамента, очередь оставшихся изменений |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 
@@ -55,11 +56,14 @@ production-интеграции или отсутствие секретов. Р
 |---|---|---|
 | P0.1 на базе main, PR #92 | `4c16088`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37914508279) | Слияние в защищённую main |
 | Перенос P0.1 в PR #90 | `cc880d9`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37915083725) | Слияние всей интеграционной ветки |
-| Первый компонент P0.8 | [`149e4d4`](https://github.com/Michael-edel/FitFocus/commit/149e4d403a0b7986f2b98e8a2da6409d4289d117), нормализатор и fingerprint, 62 unit-проверки | IDB-outbox, импорт и подключение к runtime |
+| Нормализатор P0.8 после исправления типизации | `f32c5ad`, [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37917864872); 62 проверки нормализации/fingerprint | Импорт и подключение к runtime |
+| Фундамент очереди P0.8, draft PR #93 | [`61d256e`](https://github.com/Michael-edel/FitFocus/commit/61d256e84e92225c45535e917c4ff424a5904aba), [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37919548774); схема v2, атомарные запись/claim/finish | Импорт, все writers, HTTP sender, UI и приёмка жизненного цикла |
 
 Это разные ревизии и области проверки. Документация PR #91 основана
 на ветке PR #92; зависимости от кода PR #90 и P0.8 отмечены отдельно.
-Документы не добавляют отсутствующие модули в main.
+Документы не добавляют отсутствующие модули в main. Проверенный SHA P0.8 —
+`61d256e`; изменения после этой ревизии требуют отдельного подтверждения CI.
+Состояние слияния и выпуска проверяется отдельно.
 
 ## Прежние материалы
 

@@ -24,6 +24,7 @@ Google/Apple, push, поддержка и административные фу�
 | [DECISIONS.md](DECISIONS.md) и [ADR-005](docs/adr/ADR-005-durable-outbox.md) | Решения и статус внедрения |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Проверка, выпуск и откат |
 | [Журнал стабилизации](docs/stabilization-progress.md) | Изменения, SHA и результаты проверок |
+| [Реализация P0.8](docs/outbox-implementation.md) | Проверенный фундамент очереди, оставшаяся работа и приёмка |
 
 ## Локальный запуск
 
@@ -42,7 +43,7 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 
 Описание архитектуры закреплено за `810adb1` из
 [PR #90](https://github.com/Michael-edel/FitFocus/pull/90).
-Последующие исправления CI и первый компонент P0.8 перечислены
+Последующие исправления CI и проверенные компоненты P0.8 перечислены
 [в журнале](docs/stabilization-progress.md) с отдельными ревизиями.
 На дату проверки PR #90 и [PR #92](https://github.com/Michael-edel/FitFocus/pull/92)
 ещё не слиты в защищённую `main`. Поэтому состояние этих веток не считается
