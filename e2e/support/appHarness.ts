@@ -160,6 +160,14 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       return;
     }
 
+    if (path === '/api/ai' && method === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown> | null;
+      if (body?.feature === 'wis_text') {
+        await json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
+        return;
+      }
+    }
+
     if (path === '/api/push/status' && method === 'GET') {
       const currentSubscriptionId = push.supported && push.preSubscribed ? 'sub-e2e-1' : null;
       const currentBrowserLabel = await page.evaluate(() => {
