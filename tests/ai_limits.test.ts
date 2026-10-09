@@ -70,4 +70,20 @@ describe('AI rate limit cleanup', () => {
     expect(db.firsts.some((call) => call.sql.includes('SELECT count FROM usage_daily'))).toBe(true);
     expect(db.runs).toHaveLength(0);
   });
+
+  it('uses one server-controlled bucket for arbitrary client feature labels', async () => {
+    const db = makeDb();
+
+    await enforceAiRateControls({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      feature: 'attacker-chosen-label',
+      plan: 'pro',
+      planDailyLimit: 10,
+      nowMs: Date.UTC(2026, 0, 2, 3, 4, 5),
+    });
+
+    expect(db.runs.flatMap((call) => call.binds)).not.toContain('attacker-chosen-label');
+    expect(db.runs.flatMap((call) => call.binds)).toContain('ai');
+  });
 });

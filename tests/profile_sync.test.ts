@@ -56,5 +56,6 @@ describe('profile sync serialization', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'PATCH' });
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('X-Request-ID')).toMatch(/^web-/);
   });
 });

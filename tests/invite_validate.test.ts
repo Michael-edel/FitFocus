@@ -47,7 +47,7 @@ describe('/api/invite/validate', () => {
     });
     const request = new Request('https://fitfocus.test/api/invite/validate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'invite-validate-test-01' },
       body: JSON.stringify({ code: 'BETA-123' }),
     });
 
@@ -55,6 +55,7 @@ describe('/api/invite/validate', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('invite-validate-test-01');
     expect(body).toMatchObject({ valid: true, schema_version: 3 });
     expect(body).not.toHaveProperty('code');
     expect(body).not.toHaveProperty('note');

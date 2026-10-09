@@ -86,7 +86,9 @@ describe('beta access route boundaries', () => {
       env,
     } as unknown as BootstrapContext);
     const exportResponse = await getExport({
-      ...baseContext(new Request('https://fitfocus.test/api/export', { headers: { Cookie: `ff_session=${token}` } })),
+      ...baseContext(new Request('https://fitfocus.test/api/export', {
+        headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'export-beta-test-01' },
+      })),
       env,
     } as unknown as ExportContext);
     const mobileResponse = await postMobileToken({
@@ -98,6 +100,8 @@ describe('beta access route boundaries', () => {
       expect(response.status).toBe(403);
       await expect(response.json()).resolves.toMatchObject({ error: 'ACCESS_REQUIRED' });
     }
+    expect(bootstrapResponse.headers.get('X-Request-ID')).toBeTruthy();
+    expect(exportResponse.headers.get('X-Request-ID')).toBe('export-beta-test-01');
 
     expect(db.queries.filter((sql) => sql.includes('SELECT profile_json') || sql.includes('SELECT k, v') || sql.includes('SELECT id, email'))).toHaveLength(0);
   });

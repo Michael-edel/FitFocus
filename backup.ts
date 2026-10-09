@@ -1,10 +1,13 @@
-// Simple local backup/restore helpers.
-// In this prototype we keep everything in localStorage and allow exporting/importing a JSON snapshot.
+// Local backup/restore helpers. Volume state can live in IndexedDB, so both
+// browser storage layers are included in the portable JSON snapshot.
+
+import { listIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
 
 export type BackupPayload = {
   version: number;
   createdAt: string;
   localStorage: Record<string, string>;
+  indexedDb?: Record<string, string>;
 };
 
 export type BackupFileHandle = {
@@ -25,8 +28,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
+}
+
 function isBackupPayload(value: unknown): value is BackupPayload {
-  return isRecord(value) && isRecord(value.localStorage) && typeof value.version === "number" && typeof value.createdAt === "string";
+  return isRecord(value)
+    && isStringRecord(value.localStorage)
+    && (value.indexedDb === undefined || isStringRecord(value.indexedDb))
+    && typeof value.version === "number"
+    && typeof value.createdAt === "string";
 }
 
 function safeJsonParse(text: string): unknown | null {
@@ -46,7 +57,7 @@ function isFitFocusBackupKey(key: string): boolean {
   );
 }
 
-export function createBackupPayload(): BackupPayload {
+export async function createBackupPayload(): Promise<BackupPayload> {
   const data: Record<string, string> = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -62,13 +73,14 @@ export function createBackupPayload(): BackupPayload {
   }
 
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     localStorage: data,
+    indexedDb: await listIndexedUserStateRaw(),
   };
 }
 
-export function applyBackupPayload(payload: unknown): { ok: boolean; error?: string } {
+export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolean; error?: string }> {
   try {
     if (!isBackupPayload(payload)) return { ok: false, error: 'Invalid payload' };
 
@@ -78,6 +90,9 @@ export function applyBackupPayload(payload: unknown): { ok: boolean; error?: str
       if (typeof v !== 'string') continue;
       if (!isFitFocusBackupKey(k)) continue;
       try { localStorage.setItem(k, v); } catch {}
+    }
+    for (const [key, value] of Object.entries(payload.indexedDb || {})) {
+      await writeIndexedUserStateRaw(key, value);
     }
     return { ok: true };
   } catch (error: unknown) {

@@ -1,125 +1,62 @@
-// Cloudflare Pages Function: /api/admin/user_roles
-// Admin-only role management (B2C-safe):
-// - Unique roles enforced at DB level (ux_user_roles_user_role)
-// - Prevent removing the last remaining admin
-
-import { requireUser, json } from "../_lib/auth";
-import { requireDB } from "../_lib/db";
-import { requireRole } from "../_lib/rbac";
-import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventAfterChangeStatement, buildAdminEventStatement } from "../_lib/admin_audit";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
-import { asString, isJsonObject } from "../_lib/json";
+import { requireUser, json } from '../_lib/auth';
+import { requireDB } from '../_lib/db';
+import { requireRole } from '../_lib/rbac';
+import { requireAdminRequest } from '../_lib/admin_guard';
+import { changeAdminUserRole, readAdminUserRoles } from '../_lib/admin_user_roles';
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
+import { asString, isJsonObject } from '../_lib/json';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
-const ALLOWED_ROLE_VALUES = new Set(["user", "pro", "family_parent", "family_child", "support", "admin"]);
-const ALLOWED_ACTION_VALUES = new Set(["add", "remove"]);
-
-function changedRows(result: { meta?: { changes?: number }; changes?: number }): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
+async function adminContext(request: Request, env: Env) {
+  const user = await requireUser(request, env);
+  requireRole(user, 'admin');
+  const db = requireDB(env);
+  await requireAdminRequest(user, request, db);
+  return { user, db };
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
-  const url = new URL(request.url);
-  const userId = (url.searchParams.get("user_id") || "").trim();
-  if (!userId) return json({ error: "BAD_REQUEST", message: "user_id required" }, 400);
-
-  const target = await db
-    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
-
-  const { results } = await db
-    .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")
-    .bind(userId)
-    .all<{ role: string }>();
-
-  return json({ user_id: userId, roles: (results || []).map((r) => r.role) });
+const handleAdminUserRolesGet: PagesFunction<Env> = async ({ request, env }) => {
+  let admin;
+  try { admin = await adminContext(request, env); } catch (error) {
+    return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401);
+  }
+  const userId = (new URL(request.url).searchParams.get('user_id') || '').trim();
+  if (!userId) return json({ error: 'BAD_REQUEST', message: 'user_id required' }, 400);
+  const result = await readAdminUserRoles({ db: admin.db, userId });
+  return result ? json(result) : json({ error: 'NOT_FOUND', message: 'User not found' }, 404);
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
+const handleAdminUserRolesPost: PagesFunction<Env> = async ({ request, env }) => {
+  let admin;
+  try { admin = await adminContext(request, env); } catch (error) {
+    return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401);
+  }
   let body: unknown = null;
-  try {
-    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
-  } catch (err) {
-    if (err instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
+  try { body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES); } catch (err) {
+    if (err instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413);
     throw err;
   }
-  if (!isJsonObject(body)) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
+  if (!isJsonObject(body)) return json({ error: 'BAD_REQUEST', message: 'user_id and role required' }, 400);
   const userId = asString(body.user_id);
   const role = asString(body.role);
-  const action = asString(body.action, "add"); // add | remove
-  if (!userId || !role) return json({ error: "BAD_REQUEST", message: "user_id and role required" }, 400);
-  if (!ALLOWED_ACTION_VALUES.has(action)) return json({ error: "BAD_ACTION", message: "action must be add or remove" }, 400);
-  if (!ALLOWED_ROLE_VALUES.has(role)) return json({ error: "BAD_ROLE", message: "Unknown role" }, 400);
-
-  const target = await db
-    .prepare("SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1")
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!target) return json({ error: "NOT_FOUND", message: "User not found" }, 404);
-
-  let roleStatement: D1PreparedStatement;
-  const auditParams = {
-    adminUserId: user.sub,
-    action: action === "remove" ? "role_remove" : "role_add",
-    targetUserId: userId,
-    meta: { role },
-  };
-
-  if (action === "remove") {
-    if (role === "admin") {
-      roleStatement = db.prepare(
-        `DELETE FROM user_roles
-         WHERE user_id = ?
-           AND role = 'admin'
-           AND (
-             SELECT COUNT(*)
-             FROM user_roles ur
-             JOIN users u ON u.id = ur.user_id
-             WHERE ur.role = 'admin'
-               AND u.is_active = 1
-               AND u.deleted_at IS NULL
-           ) > 1`
-      ).bind(userId);
-      const auditStatement = buildAdminEventAfterChangeStatement(db, auditParams);
-      const [roleResult] = await db.batch([roleStatement, auditStatement]);
-      if (changedRows(roleResult) === 0) {
-        return json({ error: "GUARD", message: "Нельзя удалить роль admin у последнего администратора." }, 409);
-      }
-    } else {
-      roleStatement = db.prepare("DELETE FROM user_roles WHERE user_id = ? AND role = ?").bind(userId, role);
-      const auditStatement = buildAdminEventStatement(db, auditParams);
-      await db.batch([roleStatement, auditStatement]);
-    }
-  } else {
-    roleStatement = db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)").bind(userId, role);
-    const auditStatement = buildAdminEventStatement(db, auditParams);
-    await db.batch([roleStatement, auditStatement]);
-  }
-
-  const { results } = await db
-    .prepare("SELECT role FROM user_roles WHERE user_id = ? ORDER BY role")
-    .bind(userId)
-    .all<{ role: string }>();
-
-  return json({ ok: true, user_id: userId, roles: (results || []).map((r) => r.role) });
+  const action = asString(body.action, 'add');
+  if (!userId || !role) return json({ error: 'BAD_REQUEST', message: 'user_id and role required' }, 400);
+  const result = await changeAdminUserRole({ db: admin.db, change: { userId, role, action, adminUserId: admin.user.sub } });
+  if (result.kind === 'ok') return json({ ok: true, user_id: result.user_id, roles: result.roles });
+  if (result.kind === 'not_found') return json({ error: 'NOT_FOUND', message: 'User not found' }, 404);
+  if (result.kind === 'bad_action') return json({ error: 'BAD_ACTION', message: 'action must be add or remove' }, 400);
+  if (result.kind === 'bad_role') return json({ error: 'BAD_ROLE', message: 'Unknown role' }, 400);
+  return json({ error: 'GUARD', message: 'Нельзя удалить роль admin у последнего администратора.' }, 409);
 };
+
+async function trace(context: Parameters<PagesFunction<Env>>[0], event: string, handler: PagesFunction<Env>) {
+  const response = await handler(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent(event, { requestId, status: response.status });
+  return withRequestId(response, requestId);
+}
+
+export const onRequestGet: PagesFunction<Env> = (context) => trace(context, 'admin.user_roles.get.response', handleAdminUserRolesGet);
+export const onRequestPost: PagesFunction<Env> = (context) => trace(context, 'admin.user_roles.post.response', handleAdminUserRolesPost);

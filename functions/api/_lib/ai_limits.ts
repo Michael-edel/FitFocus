@@ -36,10 +36,6 @@ type ChangesResult = {
   changes?: number;
 };
 
-function sanitizeFeature(value: string): string {
-  return String(value || "ai").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 64) || "ai";
-}
-
 function changesOf(result: ChangesResult | null | undefined): number {
   const changes = Number(result?.meta?.changes ?? result?.changes ?? 0);
   return Number.isFinite(changes) ? changes : 0;
@@ -232,7 +228,9 @@ async function recordDailyUsage(
 }
 
 export async function enforceAiRateControls(input: AiRateControlInput): Promise<void> {
-  const feature = sanitizeFeature(input.feature);
+  // All paid AI calls share one server-controlled quota bucket. Client-provided
+  // feature labels remain telemetry only and cannot create fresh quota buckets.
+  const feature = "ai";
   const nowMs = input.nowMs || Date.now();
   const cooldownMs = input.cooldownMs ?? 4_000;
   const burstLimit = input.burstLimit ?? 20;

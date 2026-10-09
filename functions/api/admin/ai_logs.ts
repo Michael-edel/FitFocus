@@ -1,47 +1,27 @@
-import { requireUser, json } from "../_lib/auth";
-import { requireDB } from "../_lib/db";
-import { requireRole } from "../_lib/rbac";
-import { requireAdminRequest } from "../_lib/admin_guard";
+import { requireUser, json } from '../_lib/auth';
+import { requireDB } from '../_lib/db';
+import { requireRole } from '../_lib/rbac';
+import { requireAdminRequest } from '../_lib/admin_guard';
+import { readAdminAiLogs } from '../_lib/admin_ai_logs';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
-type AiLogRow = {
-  id: string;
-  user_id: string;
-  ts: number;
-  feature: string;
-  status: number;
-  latency_ms?: number | null;
-  safe_mode?: number | boolean | null;
-  error?: string | null;
-};
 
-function toInt(value: unknown, fallback: number) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
-}
-
-export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
+const handleAdminAiLogsGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
+  try { user = await requireUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
+  try { requireRole(user, 'admin'); } catch { return json({ error: 'FORBIDDEN' }, 403); }
   const db = requireDB(env);
   await requireAdminRequest(user, request, db);
 
+  const data = await readAdminAiLogs(db, new URL(request.url).searchParams);
+  return json({ logs: data.logs });
+};
 
-  const url = new URL(request.url);
-  const limit = Math.max(1, Math.min(200, toInt(url.searchParams.get("limit"), 50)));
-  const userId = url.searchParams.get("user_id");
-  const feature = url.searchParams.get("feature");
-
-  let sql = "SELECT id, user_id, ts, feature, status, latency_ms, safe_mode, error FROM ai_events";
-  const binds: Array<string | number> = [];
-  const where: string[] = [];
-
-  if (userId) { where.push("user_id = ?"); binds.push(userId); }
-  if (feature) { where.push("feature = ?"); binds.push(feature); }
-  if (where.length) sql += " WHERE " + where.join(" AND ");
-  sql += " ORDER BY ts DESC LIMIT ?"; binds.push(limit);
-
-  const rows = await env.DB.prepare(sql).bind(...binds).all<AiLogRow>();
-  return json({ logs: rows.results || [] });
-}
+/** Emits no event payload, user ID, feature, or model error text. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleAdminAiLogsGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.ai_logs.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
+};

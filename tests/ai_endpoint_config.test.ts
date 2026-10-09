@@ -76,7 +76,7 @@ async function postAi(
   const context: AiPostContext = {
     request: new Request('https://fitfocus.test/api/ai', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'ai-config-test-01' },
       body: JSON.stringify(options.body ?? { feature: 'coach', contents: 'hello' }),
     }),
     env: {
@@ -96,6 +96,7 @@ describe('/api/ai server configuration', () => {
     const body = await response.json() as AiErrorBody;
 
     expect(response.status).toBe(500);
+    expect(response.headers.get('X-Request-ID')).toBe('ai-config-test-01');
     expect(body.error?.code).toBe('AI_UNAVAILABLE');
     expect(body.error?.message).not.toContain('OPENAI_API_KEY');
     expect(db.prepared.some((stmt) => stmt.sql.includes('FROM subscriptions'))).toBe(false);
@@ -141,6 +142,10 @@ describe('/api/ai server configuration', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
     vi.stubGlobal('fetch', fetchMock);
+    const failingCache = {
+      get: vi.fn().mockRejectedValue(new Error('KV unavailable')),
+      put: vi.fn().mockRejectedValue(new Error('KV unavailable')),
+    };
 
     try {
       const response = await postAi(db, {
@@ -156,13 +161,14 @@ describe('/api/ai server configuration', () => {
             },
           },
         },
-        env: { OPENAI_API_KEY: 'test-openai-key' },
+        env: { OPENAI_API_KEY: 'test-openai-key', FITFOCUS_KV: failingCache },
       });
       const body = await response.json() as { text?: string };
 
       expect(response.status).toBe(200);
       expect(body.text).toBe('{"answer":"ok"}');
       expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(failingCache.put).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }

@@ -127,6 +127,7 @@ async function adminRequestRaw(url: string, body: string) {
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'admin-sessions-test-01',
     },
     body,
   });
@@ -188,6 +189,7 @@ describe('admin session and subscription mutations', () => {
     const res = await postSession(context(request, db));
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-sessions-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('UPDATE sessions SET revoked = 1'))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && run.sql.includes('WHERE changes() > 0'))).toBe(true);
@@ -232,6 +234,7 @@ describe('admin session and subscription mutations', () => {
     const res = await postSubscription(context(request, db));
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-sessions-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO subscriptions'))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);

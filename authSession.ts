@@ -2,6 +2,7 @@ import type { UserProfile } from './types';
 import type { RegistrationData } from './RegistrationScreen';
 import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
 import { isUserProfilePayload } from './profileValidation';
+import { fetchWithResilience } from './services/httpClient';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 type UnknownRecord = Record<string, unknown>;
@@ -131,9 +132,30 @@ function clearAuthRecoveryReloadMarker(): void {
   } catch {}
 }
 
+const OAUTH_CONTINUATION_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
+
+/** Reads and normalizes the post-OAuth continuation marker, then removes auth from the visible URL. */
+export function consumeOAuthContinuationState(): boolean {
+  let continueAfterOAuth = false;
+  try {
+    continueAfterOAuth = sessionStorage.getItem(OAUTH_CONTINUATION_STORAGE_KEY) === '1';
+  } catch {}
+  try {
+    const url = new URL(window.location.href);
+    const auth = url.searchParams.get('auth');
+    if (auth === 'google' || auth === 'apple') {
+      continueAfterOAuth = true;
+      try { sessionStorage.setItem(OAUTH_CONTINUATION_STORAGE_KEY, '1'); } catch {}
+      url.searchParams.delete('auth');
+      window.history.replaceState({}, '', url.toString());
+    }
+  } catch {}
+  return continueAfterOAuth;
+}
+
 export function clearOAuthContinuationState(): void {
   try {
-    sessionStorage.removeItem('fitfocus.auth.pending-oauth.v1');
+    sessionStorage.removeItem(OAUTH_CONTINUATION_STORAGE_KEY);
   } catch {}
   clearAuthRecoveryReloadMarker();
 }
@@ -143,7 +165,14 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
   const readMe = async (): Promise<MeResponse | null> => {
     try {
-      const r = await fetchFn(`/api/me?t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
+      const r = await fetchWithResilience(`/api/me?t=${Date.now()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      }, {
+        retries: 1,
+        retryDelayMs: 250,
+        fetchImpl: fetchFn,
+      });
       if (r.ok) return toMeResponse(await r.json());
     } catch {}
     return null;
@@ -174,7 +203,11 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   if (serverUser?.sub) {
     clearAuthRecoveryReloadMarker();
     try {
-      const pr = await fetchFn('/api/bootstrap', { credentials: 'include' });
+      const pr = await fetchWithResilience('/api/bootstrap', { credentials: 'include' }, {
+        retries: 1,
+        retryDelayMs: 250,
+        fetchImpl: fetchFn,
+      });
       const pj = await readJsonRecord(pr);
       if (pr.ok) {
         applyRemoteStateItems(pj?.items);
@@ -232,11 +265,13 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
   params.setInviteChecking?.(true);
   params.setInviteError(null);
   try {
-    const r = await fetchFn('/api/invite/validate', {
+    const r = await fetchWithResilience('/api/invite/validate', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ code }),
+    }, {
+      fetchImpl: fetchFn,
     });
     const j = await readJsonRecord(r);
     if (!r.ok || j?.valid !== true) {

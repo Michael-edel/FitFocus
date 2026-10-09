@@ -53,7 +53,7 @@ async function postGoogleRequest(db: ReturnType<typeof makeDb>) {
   const context: GoogleAuthContext = {
     request: new Request('https://fitfocus.test/api/auth/google', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https', 'x-request-id': 'google-identity-01' },
       body: JSON.stringify({ credential: 'google-id-token' }),
     }),
     env: {
@@ -84,6 +84,7 @@ describe('/api/auth/google admin promotion', () => {
     const response = await postGoogleAuth(db, false);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('google-identity-01');
     expect(hasAdminPromotion(db)).toBe(false);
   });
 
@@ -95,6 +96,33 @@ describe('/api/auth/google admin promotion', () => {
     expect(hasAdminPromotion(db)).toBe(true);
   });
 
+  it('rejects a provider response without a stable Google subject before any user write', async () => {
+    const db = makeDb();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      aud: 'google-client-id',
+      iss: 'https://accounts.google.com',
+      email: 'admin@example.com',
+      email_verified: 'true',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    const response = await postGoogleRequest(db);
+    expect(response.status).toBe(401);
+    expect(db.runs).toEqual([]);
+  });
+  it('rejects a non-string Google subject before any user write', async () => {
+    const db = makeDb();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      aud: 'google-client-id',
+      iss: 'https://accounts.google.com',
+      sub: { unexpected: true },
+      email: 'admin@example.com',
+      email_verified: 'true',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    const response = await postGoogleRequest(db);
+    expect(response.status).toBe(401);
+    expect(db.runs).toEqual([]);
+  });
   it('does not read tokeninfo error responses through unbounded text()', async () => {
     const text = vi.fn(async () => 'not-json-error-body');
     vi.stubGlobal('fetch', vi.fn(async () => ({

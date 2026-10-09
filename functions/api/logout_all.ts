@@ -2,14 +2,14 @@
 // Revokes ALL sessions for current user and clears ff_session cookie.
 
 import { requireUser, json } from "./_lib/auth";
+import { revokeAllUserSessions } from "./_lib/session_revocation";
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleLogoutAllPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
 
-    await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?")
-      .bind(u.sub)
-      .run();
+    await revokeAllUserSessions(env.DB, u.sub);
 
     const isHttps =
       new URL(request.url).protocol === "https:" ||
@@ -32,6 +32,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ ok: false, error: "UNAUTH" }, 401);
   }
+};
+
+/** Correlates global session revocation without recording session or user information. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleLogoutAllPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('auth.logout-all.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };

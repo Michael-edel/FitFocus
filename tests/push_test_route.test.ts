@@ -102,7 +102,7 @@ async function postPushTest(db: ReturnType<typeof makeDb>, body = JSON.stringify
   const context: PushTestContext = {
     request: new Request('https://fitfocus.test/api/push/test', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'push-test-route-01' },
       body,
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -129,6 +129,7 @@ describe('/api/push/test', () => {
     const response = await postPushTest(db);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('push-test-route-01');
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       sent: 1,

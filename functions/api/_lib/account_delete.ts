@@ -275,6 +275,17 @@ export async function deleteUserAccountAndAllData(
   }
 }
 
+/** Stores a compact account-delete audit event without allowing audit failures to affect deletion. */
+export async function logSelfServiceAccountDeletion(db: D1Database, userId: string, latencyMs: number): Promise<void> {
+  try {
+    await db.prepare(
+      'INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(crypto.randomUUID(), userId, Date.now(), 'account_delete', 200, Math.max(0, latencyMs), 0, null, null, null).run();
+  } catch {
+    // Audit persistence cannot change the result of account deletion.
+  }
+}
+
 export async function softDeleteAccount(db: D1Database, userId: string): Promise<void> {
   const now = new Date().toISOString();
 

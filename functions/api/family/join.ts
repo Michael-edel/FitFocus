@@ -1,23 +1,16 @@
 // /api/family/join
 // POST: join a family by invite code
-import { json, requireUser } from "../_lib/auth";
-import { requireDB, ensureUserRow, uuid, nowMs, toApiError } from "../_lib/db";
-import { getActiveFamilyForUser } from "../_lib/family_access";
-import { loadActivePlan } from "../_lib/plans";
+import { requireUser } from "../_lib/auth";
+import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
+import { joinFamilyByInvite } from "../_lib/family_join_by_invite";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
-import { asString, isJsonObject } from "../_lib/json";
+import { requestIdFor } from '../_lib/observability';
+import { familyResponse } from '../_lib/family_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
-type MutationResult = { meta?: { changes?: number }; changes?: number };
-type FamilyInviteRow = { code: string; family_id: string; expires_at: number; used_by_user_id?: string | null };
-type ActiveFamilyRow = { id: string; owner_user_id: string };
-type CountRow = { c?: number };
-
-function changedRows(result: MutationResult): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const requestId = requestIdFor(request);
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
@@ -28,80 +21,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES) ?? {};
     } catch (err) {
       if (err instanceof RequestBodyTooLargeError) {
-        return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
+        return familyResponse('family.invite.join', requestId, { error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
       }
       throw err;
     }
-    if (!isJsonObject(body)) throw new Error("BAD_REQUEST");
-    const code = asString(body.code).toUpperCase();
-    if (!code) throw new Error("BAD_REQUEST");
-
-    // already in a family?
-    const existing = await getActiveFamilyForUser(db, user.sub);
-    if (existing) return json({ ok: true, familyId: existing.id, alreadyMember: true }, 200);
-
-    const inv = await db
-      .prepare(
-        `SELECT code, family_id, expires_at, used_by_user_id
-         FROM family_invites WHERE code = ? LIMIT 1`
-      )
-      .bind(code)
-      .first<FamilyInviteRow>();
-
-    const now = Math.floor(nowMs() / 1000);
-    if (!inv || inv.used_by_user_id || now > inv.expires_at) throw new Error("INVITE_INVALID");
-
-    const activeFamily = await db
-      .prepare("SELECT id, owner_user_id FROM families WHERE id = ? AND is_active = 1 LIMIT 1")
-      .bind(inv.family_id)
-      .first<ActiveFamilyRow>();
-    if (!activeFamily) throw new Error("INVITE_INVALID");
-
-    const ownerPlan = await loadActivePlan(db, String(activeFamily.owner_user_id || ""));
-    if (ownerPlan !== "family") throw new Error("FAMILY_PLAN_INACTIVE");
-
-    // enforce max 5 active members
-    const cnt = await db
-      .prepare("SELECT COUNT(*) as c FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1")
-      .bind(inv.family_id)
-      .first<CountRow>();
-    if ((cnt?.c || 0) >= 5) throw new Error("FAMILY_LIMIT");
-
-    const inviteUpdate = await db
-      .prepare("UPDATE family_invites SET used_by_user_id = ?, used_at = ? WHERE code = ? AND used_by_user_id IS NULL AND expires_at >= ?")
-      .bind(user.sub, now, code, now)
-      .run();
-    if (changedRows(inviteUpdate) !== 1) throw new Error("INVITE_INVALID");
-
-    const memberInsert = await db.prepare(
-      `INSERT INTO family_members
-       (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
-       SELECT ?, ?, ?, 'member', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
-       WHERE (SELECT COUNT(*) FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1) < 5
-         AND NOT EXISTS (
-           SELECT 1
-           FROM family_members fm
-           JOIN families f ON f.id = fm.family_id
-           WHERE fm.user_id = ?
-             AND fm.status = 'active'
-             AND fm.is_active = 1
-             AND f.is_active = 1
-         )`
-    ).bind(uuid(), inv.family_id, user.sub, now, now, inv.family_id, user.sub).run();
-
-    if (changedRows(memberInsert) !== 1) {
-      await db
-        .prepare("UPDATE family_invites SET used_by_user_id = NULL, used_at = NULL WHERE code = ? AND used_by_user_id = ?")
-        .bind(code, user.sub)
-        .run();
-      const latestFamily = await getActiveFamilyForUser(db, user.sub);
-      if (latestFamily) return json({ ok: true, familyId: latestFamily.id, alreadyMember: true }, 200);
-      throw new Error("FAMILY_JOIN_CONFLICT");
-    }
-
-    return json({ ok: true, familyId: inv.family_id }, 200);
+    const result = await joinFamilyByInvite({ db, userId: user.sub, body });
+    return familyResponse('family.invite.join', requestId, { ok: true, familyId: result.familyId, ...(result.alreadyMember ? { alreadyMember: true } : {}) }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
+    return familyResponse('family.invite.join', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
   }
 };

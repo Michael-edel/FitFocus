@@ -7,7 +7,9 @@ type Env = {
   VITE_REQUIRE_INVITE?: string;
 };
 
-export const onRequestGet: PagesFunction<Env> = async (context) => {
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
+
+const handleEnvGet: PagesFunction<Env> = async (context) => {
   const env = context.env || {};
   const googleClientIdLocal =
     env.VITE_GOOGLE_CLIENT_ID_LOCAL ||
@@ -29,4 +31,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'Referrer-Policy': 'no-referrer',
     },
   });
+};
+
+/** Emits only outcome metadata; public configuration values are not logged. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleEnvGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('env.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

@@ -1,4 +1,5 @@
 import { isJsonObject, safeJsonParseObject } from "../_lib/json";
+import { fetchWithTimeout } from "../_lib/external_fetch";
 
 export function base64UrlEncode(bytes: Uint8Array): string {
   let s = "";
@@ -51,6 +52,12 @@ function timingSafeEqualString(a: string, b: string): boolean {
 }
 
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_PROVIDER_TIMEOUT_MS = 12_000;
+
+/** Bounds external OAuth calls so an unavailable identity provider cannot exhaust a worker request. */
+export async function fetchOAuthProvider(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetchWithTimeout(input, init, { timeoutMs: OAUTH_PROVIDER_TIMEOUT_MS });
+}
 
 export async function verifyState(
   state: string,
@@ -74,8 +81,10 @@ export async function verifyState(
     if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
     if (issuedAt > now + 60_000) return null;
     if (now - issuedAt > maxAgeMs) return null;
-    const expectedNonce = opts.expectedNonce ? String(opts.expectedNonce) : "";
-    if (expectedNonce && String(parsed.n || "") !== expectedNonce) return null;
+    if (Object.prototype.hasOwnProperty.call(opts, "expectedNonce")) {
+      const expectedNonce = String(opts.expectedNonce || "");
+      if (!expectedNonce || String(parsed.n || "") !== expectedNonce) return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -231,7 +240,7 @@ async function loadAppleJwks(): Promise<AppleJwk[]> {
     return appleJwksCache.keys;
   }
 
-  const response = await fetch("https://appleid.apple.com/auth/keys", {
+  const response = await fetchOAuthProvider("https://appleid.apple.com/auth/keys", {
     headers: { accept: "application/json" },
   });
   if (!response.ok) {
@@ -279,6 +288,15 @@ async function importAppleJwk(jwk: AppleJwk): Promise<CryptoKey> {
   );
 }
 
+/** Validates the Apple identity claims after the JWT signature has been verified. */
+export function validateAppleIdTokenClaims(payload: Record<string, unknown>, expectedAudience: string, now = Math.floor(Date.now() / 1000)): Record<string, unknown> | null {
+  const subject = typeof payload.sub === 'string' ? payload.sub.trim() : '';
+  if (String(payload.iss || '') !== 'https://appleid.apple.com') return null;
+  if (String(payload.aud || '') !== expectedAudience) return null;
+  if (Number(payload.exp || 0) <= now) return null;
+  if (!subject) return null;
+  return { ...payload, sub: subject };
+}
 export async function verifyAppleIdToken(token: string, expectedAudience: string): Promise<Record<string, unknown> | null> {
   const parsed = parseJwtParts(token);
   if (!parsed) return null;
@@ -301,11 +319,5 @@ export async function verifyAppleIdToken(token: string, expectedAudience: string
   );
   if (!verified) return null;
 
-  const payload = parsed.payload;
-  const now = Math.floor(Date.now() / 1000);
-  if (String(payload.iss || "") !== "https://appleid.apple.com") return null;
-  if (String(payload.aud || "") !== expectedAudience) return null;
-  if (Number(payload.exp || 0) <= now) return null;
-  if (!String(payload.sub || "")) return null;
-  return payload;
+  return validateAppleIdTokenClaims(parsed.payload, expectedAudience);
 }

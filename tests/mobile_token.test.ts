@@ -58,12 +58,12 @@ function makeDb(options: { revoked?: number; expiresAt?: number } = {}) {
   };
 }
 
-async function postMobileToken(db: ReturnType<typeof makeDb>) {
+async function postMobileToken(db: ReturnType<typeof makeDb>, requestId = 'mobile-token-test-01') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com', name: 'User' });
   const context: MobileTokenContext = {
     request: new Request('https://fitfocus.test/api/mobile/token', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
@@ -79,12 +79,15 @@ describe('/api/mobile/token', () => {
     const response = await postMobileToken(makeDb());
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('mobile-token-test-01');
     const body = await response.json() as MobileTokenBody;
     expect(body.tokenType).toBe('Bearer');
     expect(body.user.id).toBe('user-1');
 
     const payload = await verifySessionJwt(body.token, SECRET);
     expect(payload).toMatchObject({ sub: 'user-1', sid: 'sid-1', aud: 'mobile', v: 2 });
+    expect(payload?.iat).toBeGreaterThan(1_000_000_000);
+    expect(payload?.iat).toBeLessThan(10_000_000_000);
   });
 
   it('rejects revoked source sessions', async () => {

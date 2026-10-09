@@ -2,8 +2,10 @@
 // Revokes current session (if present) and clears ff_session cookie.
 
 import { readCookie, verifySessionJwt } from "./_lib/auth";
+import { revokeSession } from "./_lib/session_revocation";
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleLogoutPost: PagesFunction<Env> = async ({ request, env }) => {
   const isHttps =
     new URL(request.url).protocol === "https:" ||
     request.headers.get("x-forwarded-proto") === "https" ||
@@ -17,9 +19,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       const sid = String(payload?.sid || "");
       const sub = String(payload?.sub || "");
       if (sid && sub) {
-        await env.DB.prepare("UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?")
-          .bind(sid, sub)
-          .run();
+        await revokeSession(env.DB, sid, sub);
       }
     }
   } catch {
@@ -39,6 +39,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   headers.append("Set-Cookie", cookie);
 
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+};
+
+/** Correlates logout completion without recording session or user information. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleLogoutPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('auth.logout.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };

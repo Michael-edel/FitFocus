@@ -35,7 +35,7 @@ export function useBackupAutosave() {
     const tick = async () => {
       const handle = backupHandleRef.current;
       if (!handle) return;
-      const payload = createBackupPayload();
+      const payload = await createBackupPayload();
       await writeBackupToHandle(handle, JSON.stringify(payload));
     };
 
@@ -43,15 +43,15 @@ export function useBackupAutosave() {
     return () => window.clearInterval(id);
   }, [autosaveEnabled]);
 
-  const onExportBackup = useCallback(() => {
-    const payload = createBackupPayload();
+  const onExportBackup = useCallback(async () => {
+    const payload = await createBackupPayload();
     downloadJson('fitfocus-backup.json', JSON.stringify(payload, null, 2));
   }, []);
 
   const onImportBackup = useCallback(async (file: File) => {
     try {
       const parsed = await restoreFromFile(file);
-      const result = applyBackupPayload(parsed);
+      const result = await applyBackupPayload(parsed);
       if (!result.ok) {
         alert('Файл не похож на резервную копию FitFocus.');
         return;
@@ -72,7 +72,7 @@ export function useBackupAutosave() {
     if (!handle) return false;
     backupHandleRef.current = handle;
     setAutosaveEnabled(true);
-    const payload = createBackupPayload();
+    const payload = await createBackupPayload();
     await writeBackupToHandle(handle, JSON.stringify(payload, null, 2));
     return true;
   }, []);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AchievementDefinition } from './achievements/catalog';
 import type { AchievementEvaluationContext } from './achievements/engine';
 import { isRecord, parseJson, responseErrorMessage } from './safeJson';
+import { fetchWithResilience } from './services/httpClient';
 
 export type UnlockedAchievement = {
   key: string;
@@ -118,7 +119,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/achievements', { credentials: 'include' });
+      const res = await fetchWithResilience('/api/achievements', { credentials: 'include' }, { retries: 1 });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok) throw new Error(responseErrorMessage(data, 'ACHIEVEMENTS_LOAD_FAILED'));
       const nextEnabled = !isRecord(data) || data.enabled !== false;
@@ -181,7 +182,7 @@ export function useAchievements({ userId, getContext }: UseAchievementsParams) {
     };
 
     try {
-      const res = await fetch('/api/achievements/check', {
+      const res = await fetchWithResilience('/api/achievements/check', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

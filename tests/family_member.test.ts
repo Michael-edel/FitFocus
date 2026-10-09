@@ -65,12 +65,12 @@ function makeDb(options: { updateChanges?: number } = {}) {
   };
 }
 
-async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMemberContext = {
     request: new Request('https://fitfocus.test/api/family/member', {
       method: 'PATCH',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -84,8 +84,9 @@ async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, u
 
 describe('/api/family/member', () => {
   it('rejects invalid goal values', async () => {
-    const response = await patchMember(makeDb(), { goal: 'bulk' });
+    const response = await patchMember(makeDb(), { goal: 'bulk' }, 'family-member-request-1');
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('family-member-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_GOAL' });
   });
 

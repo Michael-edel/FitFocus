@@ -79,7 +79,7 @@ function makeDb(options: { updateChanges?: number; messageInsertChanges?: number
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-admin', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('SELECT is_active, deleted_at FROM users')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('FROM support_feedback') && sql.includes('WHERE id = ?')) return currentTicket;
+          if (sql.includes('FROM support_feedback') && (sql.includes('WHERE id = ?') || sql.includes('WHERE s.id = ?'))) return currentTicket;
           return null;
         },
         async all() {
@@ -128,6 +128,7 @@ async function getTickets(db: ReturnType<typeof makeDb>, query = '') {
   const request = new Request(`https://fitfocus.test/api/support/feedback${query}`, {
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-Request-ID': 'support-admin-get-test-01',
     },
   });
 
@@ -153,6 +154,7 @@ async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'support-admin-patch-test-01',
     },
     body,
   });
@@ -175,6 +177,7 @@ async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, cont
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': contentType,
+      'X-Request-ID': 'support-create-test-01',
     },
     body,
   });
@@ -194,6 +197,7 @@ async function postTicketForm(db: ReturnType<typeof makeDb>, form: FormData, ext
   const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
   const headers = new Headers({
     Cookie: `ff_session=${token}`,
+    'X-Request-ID': 'support-create-test-01',
     ...extraHeaders,
   });
   const request = new Request('https://fitfocus.test/api/support/feedback', {
@@ -220,8 +224,21 @@ describe('admin support ticket updates', () => {
     const res = await getTickets(db, '?limit=abc');
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-admin-get-test-01');
     const query = db.allCalls.find((call) => call.sql.includes('FROM support_feedback s'));
     expect(query?.binds.at(-1)).toBe(20);
+  });
+
+  it('loads an individual ticket through the shared admin read use case', async () => {
+    const db = makeDb();
+
+    const res = await getTickets(db, '?id=ticket-1');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ticket: { id: 'ticket-1', attachment_count: 0, messages: [] },
+    });
+    expect(db.allCalls.some((call) => call.sql.includes('FROM support_feedback_messages'))).toBe(true);
   });
 
   it('rejects invalid statuses before writing', async () => {
@@ -279,6 +296,10 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-create-test-01');
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback ('))).toBe(true);
+    expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
     const ticketInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback ('));
     expect(ticketInsert?.binds[6]).toBe('Кнопка не нажимается');
     expect(ticketInsert?.binds[7]).toBe('');
@@ -355,6 +376,7 @@ describe('admin support ticket updates', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('support-admin-patch-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO support_feedback_messages'))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('UPDATE support_feedback'))).toBe(true);

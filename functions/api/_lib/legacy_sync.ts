@@ -1,6 +1,7 @@
 import { loadActivePlanByEmail } from "./plans";
 import { nowMs } from "./db";
 import { isJsonObject, safeJsonParse } from "./json";
+import { normalizeProfileRecord } from './profile_contract';
 
 export async function loadLegacyProfileByEmail(
   db: D1Database,
@@ -23,7 +24,7 @@ export async function loadLegacyProfileByEmail(
     if (!row?.profile_json || !row.user_id) return null;
     const parsed = safeJsonParse(String(row.profile_json));
     return isJsonObject(parsed)
-      ? { userId: row.user_id, profile: parsed, version: Number(row.version || 1) }
+      ? { userId: row.user_id, profile: normalizeProfileRecord(parsed), version: Number(row.version || 1) }
       : null;
   } catch {
     return null;
@@ -122,18 +123,21 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
 
 export async function migrateLegacyAccountByEmail(
   db: D1Database,
-  user: { sub: string; email?: string; name?: string; picture?: string },
+  user: { sub: string; email?: string; emailVerified?: boolean; name?: string; picture?: string },
 ): Promise<Record<string, unknown> | null> {
+  // Email-based ownership transfer is allowed only when the identity provider
+  // verified this email in the current signed session.
+  if (!user.emailVerified) return null;
   const legacy = await loadLegacyProfileByEmail(db, user.email || "");
   if (!legacy || legacy.userId === user.sub) return null;
 
   await migrateLegacyStateToCurrentUser(db, legacy.userId, user.sub);
   const serverPlan = await loadActivePlanByEmail(db, user.email || "");
-  const migratedProfile = withProtectedFields(user, {
+  const migratedProfile = withProtectedFields(user, normalizeProfileRecord({
     ...legacy.profile,
     plan: serverPlan,
     version: legacy.version,
-  });
+  }));
 
   const t = nowMs();
   await db

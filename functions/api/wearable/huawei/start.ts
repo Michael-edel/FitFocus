@@ -4,10 +4,11 @@ import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../../auth/_oauth";
 import { buildHuaweiAuthorizeUrl, getHuaweiConfig, type HuaweiHealthEnv } from "../../_lib/huawei_health";
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiOAuthStart: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
     user = await requireUser(request, env);
@@ -59,4 +60,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   headers.set("Location", authUrl.toString());
   headers.set("cache-control", "no-store");
   return new Response(null, { status: 302, headers });
+};
+
+/** Records only the connection-start outcome; state, nonce, and redirect stay private. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiOAuthStart(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("wearable.huawei.start.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

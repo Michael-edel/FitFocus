@@ -1,6 +1,10 @@
 import { getBaseUrl, normalizeAppUrl } from "../auth/_oauth";
 import { isJsonObject, safeJsonParseObject, type JsonObject } from "./json";
 import { decryptSecretValue, encryptSecretValue } from "./secret_box";
+import { normalizeProfileRecord } from './profile_contract';
+import { withProtectedFields } from './legacy_sync';
+import type { SessionUser } from './auth';
+import { fetchWithTimeout } from './external_fetch';
 
 export type HuaweiHealthEnv = {
   AUTH_JWT_SECRET: string;
@@ -17,6 +21,7 @@ export type HuaweiHealthEnv = {
   HUAWEI_HEALTH_ACTIVE_MINUTES_DATA_TYPE?: string;
   HUAWEI_HEALTH_SLEEP_DATA_TYPE?: string;
   HUAWEI_HEALTH_PULSE_DATA_TYPE?: string;
+  HUAWEI_HEALTH_TIMEOUT_MS?: string;
 };
 
 export type HuaweiConnectionRow = {
@@ -55,9 +60,142 @@ const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authori
 const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
 const DEFAULT_API_BASE_URL = "https://health-api.cloud.huawei.com/healthkit/v1";
 const DEFAULT_STEPS_DATA_TYPE = "com.huawei.continuous.steps.delta";
+const DEFAULT_HUAWEI_TIMEOUT_MS = 12_000;
+
+export function normalizeHuaweiTimeoutMs(value: unknown): number {
+  const timeout = Number(value);
+  return Number.isFinite(timeout) && timeout >= 1_000 && timeout <= 60_000 ? Math.floor(timeout) : DEFAULT_HUAWEI_TIMEOUT_MS;
+}
+
+/** Sends a bounded request to Huawei Health so a stalled upstream cannot hold a worker request indefinitely. */
+export async function requestHuawei(env: HuaweiHealthEnv, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  return fetchWithTimeout(input, init, {
+    timeoutMs: normalizeHuaweiTimeoutMs(env.HUAWEI_HEALTH_TIMEOUT_MS),
+    timeoutError: "HUAWEI_REQUEST_TIMEOUT",
+  });
+}
+
+export async function loadHuaweiProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
+  const row = await db.prepare('SELECT profile_json, version FROM user_profiles WHERE user_id = ?').bind(userId).first<{ profile_json?: string; version?: number }>();
+  return { profile: row?.profile_json ? normalizeProfileRecord(safeJsonParseObject(String(row.profile_json))) : {}, version: Number(row?.version || 0) };
+}
+
+export function buildHuaweiSyncedProfile(input: {
+  user: SessionUser;
+  currentProfile: JsonObject;
+  plan: string;
+  version: number;
+  timestamp: string;
+  date?: string;
+  snapshot: HuaweiDailySnapshot;
+}) {
+  const { currentProfile, snapshot } = input;
+  return withProtectedFields(input.user, normalizeProfileRecord({
+    ...currentProfile,
+    plan: input.plan,
+    version: input.version,
+    wearableProvider: huaweiProviderId(),
+    wearableEnabled: true,
+    wearableConnectedAt: typeof currentProfile.wearableConnectedAt === 'string' ? currentProfile.wearableConnectedAt : input.timestamp,
+    wearableLastSyncAt: input.timestamp,
+    wearableMetricsUpdatedAt: input.timestamp,
+    ...(input.date ? { wearableMetricsDayKey: input.date } : {}),
+    ...(typeof snapshot.stepsToday === 'number' ? { wearableStepsToday: snapshot.stepsToday } : {}),
+    ...(typeof snapshot.activeMinutesToday === 'number' ? { wearableActiveMinutesToday: snapshot.activeMinutesToday } : {}),
+    ...(typeof snapshot.sleepHoursLastNight === 'number' ? { wearableSleepHoursLastNight: snapshot.sleepHoursLastNight } : {}),
+    ...(typeof snapshot.pulse === 'number' && snapshot.pulse > 0 ? { restingPulse: snapshot.pulse, restingPulseMeasuredAt: input.timestamp } : {}),
+  }));
+}
+
+export function protectHuaweiProfile(user: SessionUser, profile: JsonObject) {
+  return withProtectedFields(user, profile);
+}
+
+export async function markHuaweiSynced(db: D1Database, userId: string, now: number) {
+  const seconds = Math.floor(now / 1000);
+  await db.prepare('UPDATE wearable_connections SET last_sync_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?')
+    .bind(seconds, seconds, userId, huaweiProviderId()).run();
+}
+
+export type HuaweiAccessTokenResult =
+  | { kind: 'ready'; provider: string; accessToken: string }
+  | { kind: 'not-connected' }
+  | { kind: 'refresh-token-missing' };
+
+/** Loads a connected Huawei credential and persists an OAuth refresh when needed. */
+export async function loadHuaweiAccessToken(
+  env: HuaweiHealthEnv,
+  request: Request,
+  db: D1Database,
+  userId: string,
+): Promise<HuaweiAccessTokenResult> {
+  const provider = huaweiProviderId();
+  const row = await db.prepare(
+    "SELECT user_id, provider, access_token_enc, refresh_token_enc, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? AND status = 'connected' LIMIT 1",
+  ).bind(userId, provider).first<HuaweiConnectionRow>();
+  if (!row) return { kind: 'not-connected' };
+
+  let accessToken = await decryptHuaweiAccessToken(env, request, row);
+  if (shouldRefreshHuaweiToken(row)) {
+    const refreshToken = await decryptHuaweiRefreshToken(env, request, row);
+    if (!refreshToken) return { kind: 'refresh-token-missing' };
+    const tokenSet = await refreshHuaweiAccessToken(env, request, refreshToken);
+    const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
+    accessToken = tokenSet.accessToken;
+    await db.prepare(
+      "UPDATE wearable_connections SET access_token_enc = ?, refresh_token_enc = COALESCE(?, refresh_token_enc), token_type = ?, scope = ?, expires_at = ?, updated_at = ? WHERE user_id = ? AND provider = ?",
+    ).bind(encrypted.accessTokenEnc, encrypted.refreshTokenEnc, tokenSet.tokenType, tokenSet.scope, tokenSet.expiresAt, Math.floor(Date.now() / 1000), userId, provider).run();
+  }
+  return { kind: 'ready', provider, accessToken };
+}
 
 export function huaweiProviderId() {
   return HUAWEI_PROVIDER;
+}
+
+export function parseHuaweiBaseVersion(value: unknown): number | null {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) return 0;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export function parseHuaweiSyncInput(body: unknown) {
+  const object = isJsonObject(body) ? body : null;
+  const timezone = typeof object?.timezone === 'string' && object.timezone.trim() ? object.timezone.trim() : undefined;
+  const date = typeof object?.date === 'string' && object.date.trim() ? object.date.trim() : undefined;
+  const hasExplicitBaseVersion = Boolean(object && Object.prototype.hasOwnProperty.call(object, 'baseVersion'));
+  return { timezone, date, hasExplicitBaseVersion, baseVersion: parseHuaweiBaseVersion(object?.baseVersion) };
+}
+
+export function huaweiChangedFields(snapshot: Pick<HuaweiDailySnapshot, 'stepsToday' | 'activeMinutesToday' | 'sleepHoursLastNight' | 'pulse'>) {
+  return Object.keys({
+    ...(typeof snapshot.stepsToday === 'number' ? { wearableStepsToday: true } : {}),
+    ...(typeof snapshot.activeMinutesToday === 'number' ? { wearableActiveMinutesToday: true } : {}),
+    ...(typeof snapshot.sleepHoursLastNight === 'number' ? { wearableSleepHoursLastNight: true } : {}),
+    ...(typeof snapshot.pulse === 'number' ? { restingPulse: true } : {}),
+  });
+}
+
+export async function readHuaweiConnectionStatus(input: {
+  db: D1Database;
+  userId: string;
+  configured: boolean;
+}) {
+  const row = await input.db
+    .prepare('SELECT user_id, provider, token_type, scope, expires_at, created_at, updated_at, last_sync_at, status, metadata_json FROM wearable_connections WHERE user_id = ? AND provider = ? LIMIT 1')
+    .bind(input.userId, huaweiProviderId())
+    .first<HuaweiConnectionRow>();
+  return {
+    provider: huaweiProviderId(),
+    configured: input.configured,
+    connected: row?.status === 'connected',
+    status: row?.status || 'disconnected',
+    scope: row?.scope || '',
+    expiresAt: row?.expires_at || null,
+    lastSyncAt: row?.last_sync_at || null,
+    metadata: row ? readHuaweiMetadata(row) : {},
+  };
 }
 
 export async function ensureHuaweiConnectionsSchema(db: D1Database): Promise<void> {
@@ -138,7 +276,7 @@ function readTokenSet(payload: unknown, fallbackScope: string): HuaweiTokenSet |
 export async function exchangeHuaweiCode(env: HuaweiHealthEnv, request: Request, code: string): Promise<HuaweiTokenSet> {
   const config = getHuaweiConfig(env, request);
   if (config.missing.length) throw new Error(`HUAWEI_CONFIG_MISSING:${config.missing.join(",")}`);
-  const response = await fetch(config.tokenUrl, {
+  const response = await requestHuawei(env, config.tokenUrl, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: new URLSearchParams({
@@ -159,7 +297,7 @@ export async function exchangeHuaweiCode(env: HuaweiHealthEnv, request: Request,
 export async function refreshHuaweiAccessToken(env: HuaweiHealthEnv, request: Request, refreshToken: string): Promise<HuaweiTokenSet> {
   const config = getHuaweiConfig(env, request);
   if (config.missing.length) throw new Error(`HUAWEI_CONFIG_MISSING:${config.missing.join(",")}`);
-  const response = await fetch(config.tokenUrl, {
+  const response = await requestHuawei(env, config.tokenUrl, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body: new URLSearchParams({
@@ -323,7 +461,7 @@ export async function fetchHuaweiDailySnapshot(
     String(env.HUAWEI_HEALTH_SLEEP_DATA_TYPE || "").trim(),
     String(env.HUAWEI_HEALTH_PULSE_DATA_TYPE || "").trim(),
   ].filter(Boolean);
-  const response = await fetch(`${config.apiBaseUrl}/sampleSet:polymerize`, {
+  const response = await requestHuawei(env, `${config.apiBaseUrl}/sampleSet:polymerize`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`,
