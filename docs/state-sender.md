@@ -4,6 +4,10 @@
 #94 → #90. Это следующий этап после [repository](runtime-state.md),
 а не завершение всего P0. Проверки конкретного изменения — [в журнале](stabilization-progress.md).
 
+Исполняемый код отправителя закреплён за
+[`2a72801`](https://github.com/Michael-edel/FitFocus/commit/2a728011c1639a600d566528d3030d7906741d4c).
+Последующее уточнение браузерного mock не меняет этот снимок runtime.
+
 ## Подключение
 
 [StateSync](../storage/stateSync.ts) запускается приложением для точного
