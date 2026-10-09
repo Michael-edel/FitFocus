@@ -1,8 +1,7 @@
 import { STORAGE_KEYS } from './keys';
+import { STATE_STORES, userStateDatabase } from './stateDatabase';
 
-const DATABASE_NAME = 'fitfocus-user-state-v1';
-const DATABASE_VERSION = 1;
-const STORE_NAME = 'values';
+const STORE_NAME = STATE_STORES.values;
 
 type IndexedValue = { key: string; value: string; updatedAt: number };
 
@@ -14,32 +13,8 @@ const VOLUME_STATE_SUFFIXES = [
   'last_coach_card',
 ] as const;
 
-let databasePromise: Promise<IDBDatabase | null> | null = null;
-
-function supportsIndexedDb() {
-  return typeof indexedDB !== 'undefined';
-}
-
 function openDatabase(): Promise<IDBDatabase | null> {
-  if (!supportsIndexedDb()) return Promise.resolve(null);
-  if (databasePromise) return databasePromise;
-
-  databasePromise = new Promise((resolve) => {
-    try {
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-          request.result.createObjectStore(STORE_NAME, { keyPath: 'key' });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
-      request.onblocked = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-  return databasePromise;
+  return userStateDatabase.open().catch(() => null);
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T | null> {

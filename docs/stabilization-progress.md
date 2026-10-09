@@ -75,3 +75,39 @@ API/auth/admin/schema/privacy и production build прошли. Playwright:
 19 passed / 9 explicit skips; шесть новых skips относятся к Chromium-only
 forced-colors тесту, ещё три — к ранее ограниченному onboarding smoke.
 CI и слияние в GitHub main оцениваются отдельно; P0.8 ещё не реализован.
+
+## P0.8 — транзакционный фундамент в PR #93
+
+Дата: 09.10.2026. Ветка `fix/durable-outbox`, база — PR #90.
+[Черновой PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+Нормализатор на `149e4d4` прошёл 62 unit-теста, но первый CI остановился
+на TS2339 в тестовом помощнике. После явной проверки `ok === false`
+на `f32c5ad19768ea3e8962195d83bc69e09afba547` прошли все три режима typecheck
+и [GitHub CI](https://github.com/Michael-edel/FitFocus/actions/runs/37917864872).
+
+Добавлен `storage/stateDatabase.ts`: схема v2 существующей базы, сохранение
+values, новые outbox/migration/meta stores, единое соединение, blocked,
+versionchange, повтор открытия после отказа и явный результат транзакции.
+`indexedUserState.ts` использует новый менеджер.
+
+`storage/durableOutbox.ts` предоставляет атомарную запись value/операции,
+сохранение независимого снимка как конфликта, accountId/writerId, явный parent,
+claim/lease и транзакционный finish. Поздняя попытка, смена аккаунта/сессии
+и изменённая ревизия/payload не дают подтвердить новую операцию. Неподтверждённый
+delete остаётся delete. Явный владелец ключа сохраняется и после удаления value.
+
+Локально на исполняемом коде этого этапа: 165 unit-файлов, 590 тестов — passed;
+общий и storage-strict typecheck — passed. Domain-strict, API/auth/admin,
+schema/privacy и production build прошли перед финальным уточнением менеджера;
+их окончательный результат на новом HEAD проверяется обязательным CI.
+30 новых unit-проверок покрывают новый менеджер и очередь. Quota/abort
+проверены внесённым отказом fake IndexedDB; это не реальный тест заполнения
+браузерного хранилища. Конкуренция проверена отдельными IDB-соединениями,
+а не старым и новым browser bundle.
+
+Существующий UserStateRepository и HTTP sender ещё используют прежнюю очередь.
+Миграционные stores созданы, но импортера, карантина с данными и финальных
+markers пока нет. Остаются auth/hydration и UI ошибок, экспорт/очистка новых
+данных, browser lifecycle и серверный P0.7. API finish требует подтверждённую
+возрастающую версию; текущий DELETE такой версии не возвращает, и клиент
+не должен выдумывать её. P0.2–P0.9 этим этапом не закрываются.
