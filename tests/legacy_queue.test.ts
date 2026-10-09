@@ -9,7 +9,7 @@ import {
 
 function normalized(record: unknown): NormalizedLegacyQueueRecord {
   const result = normalizeLegacyRecord(record);
-  if (!result.ok) throw new Error(result.reason);
+  if (result.ok === false) throw new Error(result.reason);
   return result.value;
 }
 
