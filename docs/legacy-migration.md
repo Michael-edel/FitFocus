@@ -87,8 +87,9 @@ ack не импортирует её повторно. Недействител�
 Используется fake IndexedDB; это не проверка настоящих browser bundle.
 
 Остаются runtime-источники доказанного владения и остановки writers,
-UserStateRepository/HTTP sender, auth/hydration, отображение ошибок, экспорт
-и очистка новых stores. Нужны старый и новый build на одном origin и в одном
-browser context. Серверный [P0.7](../TASKS.md) должен дать возрастающую версию
-DELETE; клиент не подменяет её вычисленной версией. Общая
+HTTP sender, все writers/profile, полный auth/hydration, экспорт и очистка
+новых stores. [Шесть ключей repository и часть UI](runtime-state.md) подключены;
+это не завершение всей интеграции. Нужны старый и новый build на одном origin
+и в одном browser context. [Сервер P0.7](state-generations.md) реализован;
+sender ещё должен использовать его DELETE-версию. Общая
 [матрица приёмки](sync-model.md#матрица-приёмки) остаётся открытой.

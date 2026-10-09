@@ -40,9 +40,9 @@ describe('UserStateRepository', () => {
     expect(userStateStorageKey('user-1', 'favorite_recipes')).toBe('fitfocus_data_user-1_favorite_recipes');
   });
 
-  it('persists JSON through the cloud-mirrored storage layer', async () => {
+  it('rejects an unavailable IDB instead of pretending localStorage is an atomic queue', async () => {
     const repository = new UserStateRepository('user-1');
-    repository.writeJson('diary', [{
+    await expect(repository.writeJson('diary', [{
       id: 'meal-1',
       name: 'Овсянка',
       calories: 350,
@@ -50,21 +50,20 @@ describe('UserStateRepository', () => {
       fat: 8,
       carbs: 54,
       timestamp: '2026-10-06T08:00:00.000Z',
-    }]);
-
-    expect(await repository.readJsonAsync('diary', [], Array.isArray)).toMatchObject([{ id: 'meal-1' }]);
+    }])).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(localStorage.getItem('fitfocus_data_user-1_diary')).toBeNull();
     await vi.advanceTimersByTimeAsync(400);
-    expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('returns a fallback when stored JSON does not match the requested shape', () => {
+  it('does not silently read a second authoritative store when IDB is unavailable', async () => {
     localStorage.setItem('fitfocus_data_user-1_settings', '{"theme":42}');
     const repository = new UserStateRepository('user-1');
 
-    const settings = repository.readJson('settings', { theme: 'dark' }, (value): value is { theme: string } =>
+    const settings = repository.readJsonAsync('settings', { theme: 'dark' }, (value): value is { theme: string } =>
       !!value && typeof value === 'object' && typeof (value as { theme?: unknown }).theme === 'string',
     );
 
-    expect(settings).toEqual({ theme: 'dark' });
+    await expect(settings).rejects.toMatchObject({ kind: 'unavailable' });
   });
 });

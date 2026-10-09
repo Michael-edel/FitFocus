@@ -21,7 +21,7 @@ afterEach(async () => {
 describe('Indexed user state', () => {
   it('stores volume state outside localStorage and can move it to a resolved account id', async () => {
     expect(isIndexedUserStateStorageKey(firstKey)).toBe(true);
-    expect(isIndexedUserStateStorageKey(`fitfocus_data_${firstUserId}_settings`)).toBe(false);
+    expect(isIndexedUserStateStorageKey(`fitfocus_data_${firstUserId}_settings`)).toBe(true);
 
     expect(await writeIndexedUserStateRaw(firstKey, '[{"weekKey":"2026-41"}]')).toBe(true);
     expect(await readIndexedUserStateRaw(firstKey)).toBe('[{"weekKey":"2026-41"}]');

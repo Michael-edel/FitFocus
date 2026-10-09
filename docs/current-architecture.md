@@ -35,6 +35,12 @@ Profile hooks → profileSync.ts → отдельная Promise-цепочка �
 
 Подробнее: [данные](data-model.md), [синхронизация](sync-model.md).
 
+Последующее изменение в PR #93: шесть ключей UserStateRepository используют
+атомарную value/outbox-транзакцию. Настройки читаются из IDB; managed hydration
+проверяет протокол, локальную ревизию и очередь. Показанный выше путь Map
+сохраняется для остальных writers; общий HTTP sender ещё не переведён.
+[Граница и проверки подключения](runtime-state.md).
+
 ## Сервер
 
 Cloudflare Pages Functions в `functions/api/`, D1 с binding `DB`.

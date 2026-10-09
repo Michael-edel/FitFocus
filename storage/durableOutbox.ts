@@ -26,6 +26,7 @@ export type OutboxOperation = OutboxIntent & {
 type KeyState = {
   id: string; accountId: string; key: string; lastRevision: number;
   valueRevision: number; confirmedVersion: number; headOpId?: string;
+  acknowledgedOpId?: string; acknowledgedWriterId?: string; acknowledgedRevision?: number;
 };
 type ActiveSession = { id: 'active-session'; accountId: string; sessionEpoch: string };
 export type OutboxClaim = OutboxOperation & { status: 'sending'; attempt: OutboxAttempt };
@@ -79,18 +80,21 @@ export async function writeOutboxInTransaction(
   if (!finiteInteger(meta.lastRevision + 1)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
   const parent = input.parentOpId ? await indexedRequest(outbox.get(input.parentOpId)) as OutboxOperation | undefined : undefined;
   const head = meta.headOpId ? await indexedRequest(outbox.get(meta.headOpId)) as OutboxOperation | undefined : undefined;
+  const acknowledgedParent = input.parentOpId && !parent && !head
+    && meta.acknowledgedOpId === input.parentOpId && meta.acknowledgedWriterId === input.writerId
+    && meta.acknowledgedRevision === input.expectedRevision;
   let reason = context.conflictReason;
   if (!reason && (input.expectedRevision ?? (context.legacy ? meta.valueRevision : -1)) !== meta.valueRevision) reason = 'local-revision-conflict';
-  else if (!reason && input.parentOpId && (!parent || parent.opId !== head?.opId || parent.accountId !== input.accountId
+  else if (!reason && input.parentOpId && !acknowledgedParent && (!parent || parent.opId !== head?.opId || parent.accountId !== input.accountId
     || parent.key !== input.intent.key || parent.writerId !== input.writerId || !['pending', 'sending'].includes(parent.status))) reason = 'invalid-parent';
   else if (!reason && head && !parent) reason = 'independent-snapshot';
-  else if (!reason && input.baseVersion !== (parent?.baseVersion ?? meta.confirmedVersion)) reason = 'base-version-conflict';
+  else if (!reason && !input.parentOpId && input.baseVersion !== meta.confirmedVersion) reason = 'base-version-conflict';
   if (!reason && context.legacy && existingValue
     && (input.intent.type === 'delete' || existingValue.value !== input.intent.value)) reason = 'legacy-local-value-conflict';
 
   const operation: OutboxOperation = {
     ...input.intent, opId: context.opId, accountId: input.accountId, writerId: input.writerId,
-    revision: meta.lastRevision + 1, baseVersion: input.baseVersion,
+    revision: meta.lastRevision + 1, baseVersion: !reason && input.parentOpId ? parent?.baseVersion ?? meta.confirmedVersion : input.baseVersion,
     status: reason ? 'conflicted' : 'pending', retryCount: context.legacy?.retryCount ?? 0, nextAttemptAtMs: context.nowMs,
     createdAtMs: context.nowMs, updatedAtMs: context.nowMs,
     ...(input.parentOpId ? { parentOpId: input.parentOpId } : {}), ...(reason ? { reason } : {}),
@@ -166,6 +170,37 @@ export class DurableOutbox {
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox], 'readonly', (tx) =>
       indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountId').getAll(accountId)) as Promise<OutboxOperation[]>);
+  }
+
+  /** Apply a protocol-2 observation only if no local intent or newer local read intervened. */
+  async hydrate(accountId: string, key: string, observation: { value: string; version: number; exists: boolean }, expectedRevision: number): Promise<boolean> {
+    requireOwnedKey(accountId, key);
+    if (!finiteInteger(expectedRevision) || !finiteInteger(observation.version)
+      || typeof observation.value !== 'string' || typeof observation.exists !== 'boolean'
+      || (observation.exists && observation.version === 0)) throw new Error('OUTBOX_INVALID_OBSERVATION');
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+      const metaStore = tx.objectStore(STATE_STORES.meta);
+      const owner = await indexedRequest(metaStore.get(outboxKeyOwnerId(key))) as { accountId: string } | undefined;
+      if (owner && owner.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      const id = keyStateId(accountId, key);
+      const meta = await indexedRequest(metaStore.get(id)) as KeyState | undefined;
+      const operations = await indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountKey').getAll([accountId, key])) as OutboxOperation[];
+      if (operations.length || (meta?.valueRevision ?? 0) !== expectedRevision
+        || observation.version < (meta?.confirmedVersion ?? 0)) return false;
+      const values = tx.objectStore(STATE_STORES.values);
+      const existing = await indexedRequest(values.get(key)) as { value: string; accountId?: string } | undefined;
+      if (existing?.accountId && existing.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      // Unowned legacy content needs its migration/provenance decision before replacement.
+      if (existing && !existing.accountId && (!observation.exists || existing.value !== observation.value)) return false;
+      const revision = (meta?.lastRevision ?? 0) + 1;
+      if (!finiteInteger(revision)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
+      if (observation.exists) values.put({ key, accountId, value: observation.value, updatedAt: Date.now() });
+      else values.delete(key);
+      metaStore.put({ id, accountId, key, lastRevision: revision, valueRevision: revision, confirmedVersion: observation.version } satisfies KeyState);
+      metaStore.put({ id: outboxKeyOwnerId(key), accountId, key });
+      return true;
+    });
   }
 
   /** A conflicting full snapshot is retained as an operation, without overwriting values. */
@@ -256,6 +291,9 @@ export class DurableOutbox {
           }
         }
         meta.confirmedVersion = outcome.version;
+        meta.acknowledgedOpId = current.opId;
+        meta.acknowledgedWriterId = current.writerId;
+        meta.acknowledgedRevision = current.revision;
         if (meta.headOpId === current.opId && meta.valueRevision === current.revision) delete meta.headOpId;
         metaStore.put(meta);
         if (receipt) tx.objectStore(STATE_STORES.migrationItems).put({ ...receipt, acknowledgedVersion: outcome.version, acknowledgedAtMs: nowMs });

@@ -48,8 +48,8 @@ function clearInFlight(userId: string) {
   localStorage.removeItem(inFlightKey(userId));
 }
 
-export async function loadWeeklyReports(userId: string): Promise<WeeklyStoredReport[]> {
-  return new UserStateRepository(userId).readJsonAsync(
+export async function loadWeeklyReports(userId: string, repository = new UserStateRepository(userId)): Promise<WeeklyStoredReport[]> {
+  return repository.readJsonAsync(
     'weekly_reports',
     [],
     (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyStoredReport),
@@ -71,8 +71,9 @@ function isWeeklyStoredReport(value: unknown): value is WeeklyStoredReport {
     && (value.aiText === undefined || typeof value.aiText === 'string');
 }
 
-function saveWeeklyReports(userId: string, reports: WeeklyStoredReport[]) {
-  new UserStateRepository(userId).writeJson('weekly_reports', reports.slice(-4));
+async function saveWeeklyReports(repository: UserStateRepository, reports: WeeklyStoredReport[]): Promise<void> {
+  const operation = await repository.writeJson('weekly_reports', reports.slice(-4));
+  if (operation.status === 'conflicted') throw new Error('WEEKLY_REPORT_STORAGE_CONFLICT');
 }
 
 /**
@@ -84,7 +85,8 @@ export async function ensureWeeklyReportWithAI(
   generateAI: () => Promise<string>
 ): Promise<{ report: WeeklyStoredReport; isNew: boolean }> {
   const currentWeek = getWeekKey();
-  const reports = await loadWeeklyReports(userId);
+  const repository = new UserStateRepository(userId);
+  const reports = await loadWeeklyReports(userId, repository);
 
   const existingIdx = reports.findIndex(r => r.weekKey === currentWeek);
   
@@ -93,7 +95,7 @@ export async function ensureWeeklyReportWithAI(
     // Обновляем данные WIS если они значительно изменились, но не перегенерируем AI текст без нужды
     if (Math.abs(existing.data.wis - weeklyData.wis) > 5) {
       existing.data = weeklyData;
-      saveWeeklyReports(userId, reports);
+      await saveWeeklyReports(repository, reports);
     }
     return { report: existing, isNew: false };
   }
@@ -128,7 +130,7 @@ export async function ensureWeeklyReportWithAI(
     };
 
     const updated = [...reports, newReport];
-    saveWeeklyReports(userId, updated);
+    await saveWeeklyReports(repository, updated);
     localStorage.removeItem(lastAttemptKey(userId));
     clearInFlight(userId);
 

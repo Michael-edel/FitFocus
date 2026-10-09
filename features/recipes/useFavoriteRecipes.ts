@@ -133,8 +133,7 @@ export function useFavoriteRecipes({
       if (!active) return;
       const normalized = stored.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
       setFavoriteRecipes(normalized);
-      repository.writeJson('favorite_recipes', normalized);
-    });
+    }).catch(() => { /* Keep the storage failure visible; never persist an empty fallback. */ });
     return () => { active = false; };
   }, [repository, userId]);
 

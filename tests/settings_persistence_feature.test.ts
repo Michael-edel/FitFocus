@@ -17,12 +17,12 @@ describe('settings persistence feature', () => {
     expect(isAppSettings({ ...DEFAULT_APP_SETTINGS, language: 'en' })).toBe(false);
   });
 
-  it('uses the typed repository fallback for invalid stored settings', () => {
+  it('uses the typed repository fallback for invalid stored settings', async () => {
     const repository = {
-      readJson: <T,>(_key: string, fallback: T) => fallback,
-      writeJson: () => undefined,
+      readJsonAsync: async <T,>(_key: string, fallback: T) => fallback,
+      writeJson: async () => ({} as never),
     };
 
-    expect(readStoredSettings(repository)).toBeNull();
+    expect(await readStoredSettings(repository)).toBeNull();
   });
 });
