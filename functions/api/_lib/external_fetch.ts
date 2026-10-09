@@ -3,12 +3,25 @@ export type FetchTimeoutOptions = {
   timeoutError?: string;
 };
 
-/** Runs one external request with a bounded lifetime while preserving caller cancellation. */
-export async function fetchWithTimeout(
+export function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  options: FetchTimeoutOptions,
+): Promise<Response>;
+export function fetchWithTimeout<T>(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  options: FetchTimeoutOptions,
+  consumeResponse: (response: Response) => Promise<T>,
+): Promise<T>;
+
+/** Keeps the deadline through required response processing as well as headers. */
+export async function fetchWithTimeout<T>(
   input: RequestInfo | URL,
   init: RequestInit = {},
   options: FetchTimeoutOptions,
-): Promise<Response> {
+  consumeResponse?: (response: Response) => Promise<T>,
+): Promise<Response | T> {
   const controller = new AbortController();
   const inherited = init.signal;
   const onAbort = () => controller.abort();
@@ -19,7 +32,8 @@ export async function fetchWithTimeout(
   }
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    return consumeResponse ? await consumeResponse(response) : response;
   } catch (error) {
     if (options.timeoutError && controller.signal.aborted && !inherited?.aborted) {
       throw new Error(options.timeoutError);
