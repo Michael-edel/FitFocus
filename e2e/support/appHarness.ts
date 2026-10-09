@@ -328,13 +328,12 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
     if (!options.supported) {
       // Capability detection uses `in`, so assigning undefined still reports support.
       Reflect.deleteProperty(window, 'PushManager');
-      return;
+    } else {
+      Object.defineProperty(window, 'PushManager', {
+        configurable: true,
+        value: function PushManager() {},
+      });
     }
-
-    Object.defineProperty(window, 'PushManager', {
-      configurable: true,
-      value: function PushManager() {},
-    });
 
     const pushManager = {
       async getSubscription() {
@@ -353,7 +352,7 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
         scriptURL: '/sw.js',
         state: 'activated',
       },
-      pushManager,
+      ...(options.supported ? { pushManager } : {}),
       async update() {},
     });
 
