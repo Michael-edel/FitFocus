@@ -5,6 +5,10 @@
 объединённая коммитом 93f90c0. Это промежуточная реализация;
 HTTP sender, авторизация, все writers и выпуск ещё не завершены.
 
+Исполняемый код этого этапа закреплён за
+[`cfcc31b`](https://github.com/Michael-edel/FitFocus/commit/cfcc31bec96a62e1460b80a7a044b47f3efd19b1).
+Последующие изменения только Markdown не меняют этот снимок реализации.
+
 ## Что подключено
 
 [UserStateRepository](../storage/userStateRepository.ts) используется приложением
