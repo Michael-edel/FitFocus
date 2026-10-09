@@ -32,6 +32,7 @@ production-интеграции или отсутствие секретов. Р
 | [TASKS](../TASKS.md) | P0/P1, зависимости и критерии готовности |
 | [DECISIONS](../DECISIONS.md) | Журнал согласованных решений и статус внедрения |
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
+| [Legacy migration](legacy-migration.md) | Реализованный импорт, его предусловия и ограничения |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 

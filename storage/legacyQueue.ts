@@ -80,3 +80,7 @@ export async function legacyFingerprint(record: NormalizedLegacyQueueRecord): Pr
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
   return `legacy:v1:${hash}`;
 }
+
+export const LEGACY_QUEUE_SOURCE_KEY = 'fitfocus.remote-kv-outbox.v1';
+export const LEGACY_MIGRATION_META_ID = 'legacy-migration:v1';
+export const legacyMigrationItemId = (fingerprint: string) => `legacy-item:${fingerprint}`;
