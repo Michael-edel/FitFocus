@@ -26,7 +26,7 @@ function makeDb() {
 describe('state read use case', () => {
   it('returns only state keys allowed for the authenticated account', async () => {
     await expect(readStateItems(makeDb(), 'user-1', 'fitfocus_data_user-1_')).resolves.toEqual([
-      { key: 'fitfocus_data_user-1_diary', value: '[]', version: 2, updated_at: 100 },
+      { key: 'fitfocus_data_user-1_diary', value: '[]', version: 2, updated_at: 100, exists: true },
     ]);
   });
 });

@@ -2,6 +2,8 @@ import { isJsonObject } from './json';
 import { isAllowedStateKey } from './state_keyspace';
 
 type StatePutItem = { key: unknown; value: unknown; baseVersion?: unknown };
+// 3 parameters per item plus 3 context parameters fit D1's 100-parameter limit.
+export const MAX_STATE_WRITE_ITEMS = 32;
 
 export type StateWriteItem = {
   key: string;
@@ -11,14 +13,14 @@ export type StateWriteItem = {
 
 export type StateWriteValidation =
   | { ok: true; items: StateWriteItem[] }
-  | { ok: false; error: 'NO_ITEMS' | 'FORBIDDEN_KEYSPACE' | 'DUPLICATE_KEY' | 'BAD_VALUE' | 'BAD_BASE_VERSION'; key?: string };
+  | { ok: false; error: 'NO_ITEMS' | 'TOO_MANY_ITEMS' | 'FORBIDDEN_KEYSPACE' | 'DUPLICATE_KEY' | 'BAD_VALUE' | 'BAD_BASE_VERSION'; key?: string };
 
 export function parseStateBaseVersion(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
   if (typeof value === 'string' && value.trim() === '') return 0;
   if (typeof value !== 'number' && typeof value !== 'string') return null;
   const parsedBaseVersion = Number(value);
-  if (!Number.isFinite(parsedBaseVersion) || !Number.isInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
+  if (!Number.isSafeInteger(parsedBaseVersion) || parsedBaseVersion < 0) return null;
   return parsedBaseVersion;
 }
 
@@ -38,6 +40,7 @@ function readItems(body: unknown): StatePutItem[] {
 export function normalizeStateWrite(body: unknown, userId: string): StateWriteValidation {
   const items = readItems(body);
   if (!items.length) return { ok: false, error: 'NO_ITEMS' };
+  if (items.length > MAX_STATE_WRITE_ITEMS) return { ok: false, error: 'TOO_MANY_ITEMS' };
 
   const normalizedItems: StateWriteItem[] = [];
   const seenKeys = new Set<string>();
