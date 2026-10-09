@@ -1,4 +1,12 @@
 export type StateSaveIssue = { accountId: string; key: string; kind: 'error' | 'conflicted'; reason: string };
+import type { StateSyncPause } from './durableOutbox';
+let pauseSnapshot: readonly { accountId: string; reason: StateSyncPause }[] = [];
+export const getStateSyncPauses = () => pauseSnapshot;
+export function reportStateSyncPause(accountId: string, reason: StateSyncPause | null): void {
+  if (pauseSnapshot.find((entry) => entry.accountId === accountId)?.reason === (reason ?? undefined)) return;
+  pauseSnapshot = [...pauseSnapshot.filter((entry) => entry.accountId !== accountId), ...(reason ? [{ accountId, reason }] : [])];
+  publish();
+}
 const issues = new Map<string, StateSaveIssue>();
 const listeners = new Set<() => void>();
 let snapshot: readonly StateSaveIssue[] = [];
@@ -13,6 +21,11 @@ export function reportStateOperation(accountId: string, operation: QueueOperatio
 }
 
 export function reportStateQueue(accountId: string, current: readonly QueueOperation[]): void {
+  const known = [...operations.values()].filter((operation) => operation.accountId === accountId);
+  if (known.length === current.length && current.every((operation) => {
+    const previous = operations.get(operation.opId);
+    return previous?.accountId === accountId && previous.status === operation.status;
+  })) return;
   for (const [id, operation] of operations) if (operation.accountId === accountId) operations.delete(id);
   for (const operation of current) operations.set(operation.opId, { accountId, opId: operation.opId, status: operation.status });
   publish();

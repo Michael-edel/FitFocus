@@ -28,13 +28,15 @@ type KeyState = {
   valueRevision: number; confirmedVersion: number; headOpId?: string;
   acknowledgedOpId?: string; acknowledgedWriterId?: string; acknowledgedRevision?: number;
 };
-type ActiveSession = { id: 'active-session'; accountId: string; sessionEpoch: string };
+export type StateSyncPause = 'auth' | 'access' | 'protocol' | 'legacy';
+export type ActiveOutboxSession = { id: 'active-session'; accountId: string; sessionEpoch: string; serverSessionId?: string; pause?: StateSyncPause };
+type ActiveSession = ActiveOutboxSession;
 export type OutboxClaim = OutboxOperation & { status: 'sending'; attempt: OutboxAttempt };
 export type OutboxOutcome =
   | { kind: 'acknowledged'; version: number }
   | { kind: 'conflicted'; reason: string; serverSnapshot?: OutboxOperation['serverSnapshot'] }
   | { kind: 'failed'; reason: string }
-  | { kind: 'retry'; reason: string; nextAttemptAtMs: number };
+  | { kind: 'retry'; reason: string; nextAttemptAtMs: number; pause?: StateSyncPause };
 
 const keyStateId = (accountId: string, key: string) => `key:${JSON.stringify([accountId, key])}`;
 export const outboxKeyOwnerId = (key: string) => `owner:${JSON.stringify(key)}`;
@@ -134,6 +136,49 @@ function canSendLegacy(operation: OutboxOperation, gate: LegacyGate | undefined,
 export class DurableOutbox {
   constructor(private readonly connection: StateDatabase = userStateDatabase) {}
 
+  async sessionState(): Promise<{ fence: number; active?: ActiveOutboxSession }> {
+    const db = await this.connection.open();
+    return stateTransaction(db, [STATE_STORES.meta], 'readonly', async (tx) => {
+      const store = tx.objectStore(STATE_STORES.meta);
+      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number } | undefined;
+      const active = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
+      return { fence: fence?.revision ?? 0, active };
+    });
+  }
+
+  /** Accept a fresh /me proof only if logout or another account/session did not intervene. */
+  async acceptSession(accountId: string, serverSessionId: string, expectedFence: number): Promise<ActiveOutboxSession | null> {
+    requireText(accountId); requireText(serverSessionId);
+    if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
+    const db = await this.connection.open();
+    return stateTransaction(db, [STATE_STORES.meta], 'readwrite', async (tx) => {
+      const store = tx.objectStore(STATE_STORES.meta);
+      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
+      if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
+      const current = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
+      if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return current;
+      const revision = (fence?.revision ?? 0) + 1;
+      if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+      const active: ActiveOutboxSession = { id: 'active-session', accountId, serverSessionId, sessionEpoch: crypto.randomUUID() };
+      store.put({ id: 'auth-fence', revision });
+      store.put(active);
+      return active;
+    });
+  }
+
+  async invalidateSessions(): Promise<void> {
+    const db = await this.connection.open();
+    await stateTransaction(db, [STATE_STORES.meta], 'readwrite', async (tx) => {
+      const store = tx.objectStore(STATE_STORES.meta);
+      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
+      const active = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
+      const revision = (fence?.revision ?? 0) + 1;
+      if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+      store.put({ id: 'auth-fence', revision, loggedOutSession: active?.serverSessionId ?? fence?.loggedOutSession });
+      store.delete('active-session');
+    });
+  }
+
   async activateSession(accountId: string, sessionEpoch: string): Promise<void> {
     requireText(accountId); requireText(sessionEpoch);
     const database = await this.connection.open();
@@ -223,7 +268,7 @@ export class DurableOutbox {
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
       const session = await indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as ActiveSession | undefined;
-      if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch) return null;
+      if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch || session.pause) return null;
       const store = tx.objectStore(STATE_STORES.outbox);
       const operations = await indexedRequest(store.index('accountId').getAll(input.accountId)) as OutboxOperation[];
       // Revisions define per-key order even if the wall clock moves backwards.
@@ -238,7 +283,7 @@ export class DurableOutbox {
           if (!canSendLegacy(operation, gate, receipt)) continue;
         }
         if (operation.status === 'sending') {
-          if (!operation.attempt || input.nowMs - operation.attempt.startedAtMs < input.leaseMs) continue;
+          if (!operation.attempt || (operation.attempt.sessionEpoch === input.sessionEpoch && input.nowMs - operation.attempt.startedAtMs < input.leaseMs)) continue;
         } else if (operation.status !== 'pending' || operation.nextAttemptAtMs > input.nowMs) continue;
         const claim: OutboxClaim = {
           ...operation, status: 'sending', updatedAtMs: input.nowMs,
@@ -271,7 +316,7 @@ export class DurableOutbox {
         || current.attempt?.attemptId !== claim.attempt.attemptId
         || current.attempt.owner !== claim.attempt.owner || current.attempt.startedAtMs !== claim.attempt.startedAtMs
         || current.attempt.sessionEpoch !== claim.attempt.sessionEpoch
-        || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch) return false;
+        || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch || session.pause) return false;
       let receipt: LegacyReceipt | undefined;
       if (current.migrationSourceKey || current.migrationFingerprint || current.migrationCanonical) {
         const gate = await indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as LegacyGate | undefined;
@@ -301,7 +346,17 @@ export class DurableOutbox {
       } else {
         updated.reason = outcome.reason;
         updated.status = outcome.kind === 'retry' ? 'pending' : outcome.kind;
-        if (outcome.kind === 'retry') { updated.retryCount += 1; updated.nextAttemptAtMs = outcome.nextAttemptAtMs; }
+        if (outcome.kind === 'retry') {
+          if (!outcome.pause) updated.retryCount += 1;
+          updated.nextAttemptAtMs = outcome.nextAttemptAtMs;
+          if (outcome.pause) {
+            const fence = await indexedRequest(metaStore.get('auth-fence')) as { revision: number } | undefined;
+            const revision = (fence?.revision ?? 0) + 1;
+            if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+            metaStore.put({ id: 'auth-fence', revision });
+            metaStore.put({ ...session, pause: outcome.pause });
+          }
+        }
         if (outcome.kind === 'conflicted' && outcome.serverSnapshot) updated.serverSnapshot = outcome.serverSnapshot;
         store.put(updated);
       }

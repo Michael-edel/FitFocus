@@ -30,8 +30,10 @@
   должен относиться к своей операции, попытке, аккаунту и сессии.
 - Цель P0.8 — одна IDB-outbox, атомарные данные/операция и импорт/ledger.
   Наличие Web Locks не выбирает хранилище. Шесть ключей repository используют
-  атомарные value/операции; HTTP sender, остальные writers и lifecycle ещё
+  атомарные value/операции; sender шести ключей использует свежий /me proof,
+  server session guard и claim/finish. Остальные writers и lifecycle ещё
   не подключены полностью. Проверенная граница:
+  [sender](docs/state-sender.md),
   [текущий клиент](docs/runtime-state.md),
   [фундамент P0.8](docs/outbox-implementation.md).
 - Компонент [legacy-импорта](docs/legacy-migration.md) уже реализован на

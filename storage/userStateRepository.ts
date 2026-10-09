@@ -65,8 +65,8 @@ export class UserStateRepository {
       const operations = await this.outbox.list(this.accountId);
       reportStateQueue(this.accountId, operations);
       for (const operation of operations) {
-        if (operation.key === key && (operation.status === 'conflicted' || operation.status === 'failed')) {
-          reportStateSaveIssue({ accountId: this.accountId, key, kind: operation.status === 'conflicted' ? 'conflicted' : 'error', reason: operation.reason ?? operation.status });
+        if (operation.key === key && operation.status === 'conflicted') {
+          reportStateSaveIssue({ accountId: this.accountId, key, kind: 'conflicted', reason: operation.reason ?? operation.status });
         }
       }
       const previous = this.observations.get(key);

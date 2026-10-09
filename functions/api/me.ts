@@ -3,13 +3,15 @@
 
 import { requireUser, json } from "./_lib/auth";
 import { hasBetaAccess } from "./_lib/access";
+import { stateSessionId } from './_lib/state_session';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
     const hasAccess = await hasBetaAccess(env, u);
-    return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles }, hasAccess }, 200);
+    return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles }, hasAccess,
+      stateSync: { protocol: 2, guard: 1, accountId: u.sub, sessionId: await stateSessionId(u) } }, 200);
   } catch {
     return json({ user: null }, 200);
   }

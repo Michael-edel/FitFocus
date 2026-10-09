@@ -145,8 +145,9 @@ import { prepareLoginSession } from './features/auth/loginSession';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
+import { stateSync } from './storage/stateSync';
 import { StateStorageNotice } from './ui/StateStorageNotice';
-import { getStateQueueSummaries, getStateSaveIssues, subscribeStateSaveIssues } from './storage/stateSaveStatus';
+import { getStateQueueSummaries, getStateSaveIssues, reportStateSaveIssue, subscribeStateSaveIssues } from './storage/stateSaveStatus';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
@@ -280,6 +281,10 @@ const App: React.FC = () => {
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  useEffect(() => {
+    if (currentUser?.id && currentUser.id === googleMe?.sub) stateSync.start(currentUser.id);
+    return () => stateSync.stop();
+  }, [currentUser?.id, googleMe?.sub]);
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -732,7 +737,12 @@ const App: React.FC = () => {
   const searchResults = useMemo(() => findFoodSearchResults(searchQuery, foodHistory, foodFavorites), [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useMemo(() => createLogoutSession({
-    onClearLocalSession: () => { loginAttemptRef.current += 1; setUserStateRepository(null); },
+    onClearLocalSession: () => {
+      loginAttemptRef.current += 1; setUserStateRepository(null);
+      void stateSync.invalidate().catch(() => {
+        if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
+      });
+    },
     googleSub: googleMe?.sub,
     setGoogleMe,
     setCurrentUser,

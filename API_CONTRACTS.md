@@ -23,6 +23,21 @@ State дополнительно проверяет разрешённое пр�
 State также возвращает `X-FitFocus-State-Protocol: 2`. Новый клиент должен
 проверить успешный ответ и этот заголовок до трактовки tombstone-чтения.
 
+## Привязка новой отправки к сессии
+
+`GET /api/me` после requireUser возвращает также
+`stateSync: { protocol: 2, guard: 1, accountId, sessionId }` и hasAccess.
+sessionId — SHA-256 с разделителем назначения от subject/sid; raw sid не выдаётся.
+Новый sender проверяет capability и точное совпадение подтверждённого accountId.
+
+State принимает парные `X-FitFocus-State-Account` и `X-FitFocus-State-Session`.
+Если передан хотя бы один, requireStateUser требует оба и сравнивает их
+с фактической сессией. Смена cookie/аккаунта → 401 до state-чтения или мутации.
+Прежние запросы без обоих заголовков пока поддерживаются. Ответ state содержит
+`X-FitFocus-State-Guard: 1` и переданную привязку; новый sender принимает ack
+только с проверенными scope, key, exists, ok и версией своей операции.
+[Порядок отправки и паузы](docs/state-sender.md).
+
 | Ответ | Значение |
 |---|---|
 | 401 `{"error":"UNAUTH"}` | Не удалось подтвердить пользователя |

@@ -42,6 +42,7 @@
 | [Legacy migration](legacy-migration.md) | Реализованный импорт, его предусловия и ограничения |
 | [Реализация P0.8](outbox-implementation.md) | Проверенный фундамент и оставшиеся этапы подключения |
 | [Runtime state](runtime-state.md) | Атомарный repository, managed hydration, UI ошибок и оставшееся подключение |
+| [State sender](state-sender.md) | Отправка шести ключей, доказанная сессия, HTTP-исходы и граница legacy |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 
@@ -60,7 +61,8 @@
 value/outbox, managed hydration сохраняет локальное намерение, UI показывает
 ошибки и ожидание. Серверный компонент PR #94 объединён коммитом `93f90c0`;
 зависимость PR #93 теперь проходит через #94 к #90. Проверки и ограничения:
-[runtime state](runtime-state.md). HTTP sender и полный lifecycle ещё открыты.
+[runtime state](runtime-state.md). Следующий этап [sender](state-sender.md)
+подключён для шести ключей; оставшиеся writers и полный lifecycle ещё открыты.
 
 ## Прежние материалы
 

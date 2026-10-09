@@ -2,8 +2,10 @@
 
 Обновлено: 09.10.2026. Ветка fix/durable-outbox, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Серверная зависимость — [PR #94](https://github.com/Michael-edel/FitFocus/pull/94),
-объединённая коммитом 93f90c0. Это промежуточная реализация;
-HTTP sender, авторизация, все writers и выпуск ещё не завершены.
+объединённая коммитом 93f90c0. Это промежуточная реализация.
+На описанном ниже снимке HTTP sender ещё не подключён. Следующий этап уже
+подключает [отправитель шести ключей и подтверждение сессии](state-sender.md);
+остальные writers, legacy и выпуск ещё не завершены.
 
 Исполняемый код этого этапа закреплён за
 [`cfcc31b`](https://github.com/Michael-edel/FitFocus/commit/cfcc31bec96a62e1460b80a7a044b47f3efd19b1).
@@ -84,7 +86,8 @@ Repository запоминает ревизию прочитанного сним
 
 Проверенные числа и ограничения: [журнал](stabilization-progress.md).
 Fake-IDB quota и внесённый браузерный отказ не доказывают реальное заполнение диска.
-Следующий шаг — sender на claim/finish, подтверждённая auth-сессия и HTTP-исходы.
+Следующий после этого снимка этап sender на claim/finish, подтверждённой
+auth-сессии и HTTP-исходов описан в [state sender](state-sender.md).
 Остаются остальные writers/profile, runtime legacy-импорт с реальным барьером,
 экспорт/очистка новых stores, разрешение конфликтов/повтор в UI и старый/новый
 bundle на одном origin. Прежний hybrid sender ещё активен для оставшихся путей;

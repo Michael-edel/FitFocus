@@ -72,6 +72,10 @@ parentOpId того же writer связывает последующие пол
 родителя может обновить baseVersion pending-потомка в той же транзакции;
 независимые conflicted-снимки не перебазируются.
 
+Следующий этап добавляет public serverSessionId, причину паузы и монотонный
+auth-fence. Проверка `/me`, logout, возобновление и claim/finish используют
+этот metadata-store транзакционно; raw sid/cookie в IDB не сохраняются.
+
 Claim и finish проверяют активную сессию в IDB. Попытка фиксирует owner,
 attemptId, sessionEpoch и startedAtMs. Upgrade сообщает blocked и продолжает
 тот же запрос после закрытия старого соединения; versionchange закрывает
@@ -79,7 +83,8 @@ attemptId, sessionEpoch и startedAtMs. Upgrade сообщает blocked и пр
 старым и новым browser bundle.
 
 Атомарная запись подключена к шести ключам UserStateRepository;
-HTTP claim/finish и доказанная auth-сессия пока не подключены. Компонент
+HTTP claim/finish и проверенная server session подключены для шести ключей
+в [следующем этапе](state-sender.md). Компонент
 `storage/legacyMigration.ts` заполняет migration stores только при явном вызове;
 запуска при входе/старте приложения пока нет. Ledger содержит canonical,
 raw-варианты, ссылку на opId/accountId и сохранённое подтверждение отправки.
@@ -102,7 +107,7 @@ outbox-операции атомарны. [Контракт и проверки]
 чтение tombstones, экспорт включает exists/deleted_at. Показанный выше снимок
 `810adb1` остаётся исторической базой. Серверная ветка объединена с клиентской
 коммитом `93f90c0`; managed hydration читает protocol 2, новый HTTP sender
-ещё ожидается. Слияние в main и staging не подтверждены.
+подключён для шести ключей. Слияние в main и staging не подтверждены.
 
 Удаление должно сохранять поколение ключа: tombstone в `user_kv` или
 эквивалентный механизм. Следующие мутации повышают версию, включая recreate.
