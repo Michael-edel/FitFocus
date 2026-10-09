@@ -58,7 +58,7 @@ describe('coach advice feature', () => {
       canUseCoachAdvice: () => true,
       openPaywall: () => calls.push('paywall'),
       incrementUsage: () => calls.push('usage'),
-      repository: { writeJson: (key, value) => calls.push(`${key}:${value === advice}`) },
+      repository: { writeJson: async (key, value) => { calls.push(`${key}:${value === advice}`); return {} as never; } },
       setCoachCard: (value) => calls.push(`card:${value === advice}`),
       setLoading: (value) => calls.push(`loading:${value}`),
       checkAchievements: () => calls.push('achievement'),

@@ -1,7 +1,10 @@
-import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyBackupPayload, createBackupPayload } from '../backup';
 import { readIndexedUserStateRaw, writeIndexedUserStateRaw } from '../storage/indexedUserState';
+import { UserStateRepository } from '../storage/userStateRepository';
+import { DurableOutbox } from '../storage/durableOutbox';
+import { userStateDatabase } from '../storage/stateDatabase';
 
 function createLocalStorage(): Storage {
   const values = new Map<string, string>();
@@ -16,9 +19,27 @@ function createLocalStorage(): Storage {
 }
 
 describe('browser backup', () => {
-  beforeEach(() => vi.stubGlobal('localStorage', createLocalStorage()));
-  afterEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    userStateDatabase.close();
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('localStorage', createLocalStorage());
+  });
+  afterEach(() => {
+    userStateDatabase.close();
+    vi.unstubAllGlobals();
+  });
 
+  it('reports a rejected restore without overwriting durable values or their pending intent', async () => {
+    const repository = new UserStateRepository('backup-owned-user');
+    await repository.writeJson('weekly_reports', []);
+    const before = await new DurableOutbox().list('backup-owned-user');
+    const result = await applyBackupPayload({ version: 2, createdAt: '2026-10-09T00:00:00Z', localStorage: {},
+      indexedDb: { 'fitfocus_data_backup-owned-user_weekly_reports': '[{"replaced":true}]' } });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeTruthy();
+    expect(await readIndexedUserStateRaw('fitfocus_data_backup-owned-user_weekly_reports')).toBe('[]');
+    expect(await new DurableOutbox().list('backup-owned-user')).toEqual(before);
+  });
   it('round-trips indexed volume state with the local snapshot', async () => {
     const indexedKey = 'fitfocus_data_backup-user_diary';
     localStorage.setItem('fitfocus_data_backup-user_settings', '{"theme":"dark"}');

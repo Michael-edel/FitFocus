@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
+import { userStateDatabase } from '../storage/stateDatabase';
+import { DurableOutbox } from '../storage/durableOutbox';
 import { ensureWeeklyReportWithAI, loadWeeklyReports } from '../weeklyAutoEngine';
 import type { WeeklyIntelligenceResult } from '../weeklyIntelligence';
 
@@ -31,9 +34,8 @@ const weeklyData: WeeklyIntelligenceResult = {
 
 describe('weekly AI reports', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.stubGlobal('indexedDB', undefined);
-    vi.setSystemTime(new Date('2026-10-06T09:00:00.000Z'));
+    userStateDatabase.close();
+    vi.stubGlobal('indexedDB', new IDBFactory());
     vi.stubGlobal('localStorage', createLocalStorage());
     vi.stubGlobal('window', {
       setTimeout: (handler: () => void, delay?: number) => setTimeout(handler, delay) as unknown as number,
@@ -42,11 +44,11 @@ describe('weekly AI reports', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    userStateDatabase.close();
     vi.unstubAllGlobals();
   });
 
-  it('migrates reports saved under the existing user-scoped key', async () => {
+  it('reads legacy reports without rewriting the source before an atomic edit', async () => {
     localStorage.setItem('fitfocus_data_user-1_weekly_reports', JSON.stringify([{
       weekKey: '2026-41',
       createdAt: '2026-10-06T09:00:00.000Z',
@@ -62,13 +64,13 @@ describe('weekly AI reports', () => {
     }]);
   });
 
-  it('saves a generated report through the cloud-mirrored repository', async () => {
+  it('awaits the atomic report and outgoing intent before reporting success', async () => {
     const result = await ensureWeeklyReportWithAI('user-1', weeklyData, vi.fn().mockResolvedValue('Хорошая динамика.'));
 
     expect(result.isNew).toBe(true);
     expect(await loadWeeklyReports('user-1')).toMatchObject([{ aiText: 'Хорошая динамика.' }]);
 
-    await vi.advanceTimersByTimeAsync(400);
-    expect(fetch).toHaveBeenCalledWith('/api/state', expect.objectContaining({ method: 'PUT' }));
+    expect((await new DurableOutbox().list('user-1'))[0]).toMatchObject({ type: 'put', key: 'fitfocus_data_user-1_weekly_reports', status: 'pending' });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

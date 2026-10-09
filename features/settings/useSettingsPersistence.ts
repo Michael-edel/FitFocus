@@ -21,10 +21,10 @@ export function isAppSettings(value: unknown): value is AppSettings {
     && typeof value.musicEnabled === 'boolean';
 }
 
-type SettingsRepository = Pick<UserStateRepository, 'readJson' | 'writeJson'>;
+type SettingsRepository = Pick<UserStateRepository, 'readJsonAsync' | 'writeJson'>;
 
-export function readStoredSettings(repository: SettingsRepository): AppSettings | null {
-  return repository.readJson<AppSettings | null>('settings', null, isAppSettings);
+export function readStoredSettings(repository: SettingsRepository): Promise<AppSettings | null> {
+  return repository.readJsonAsync<AppSettings | null>('settings', null, isAppSettings);
 }
 
 /** Keeps settings scoped to the active profile without writing stale state during hydration. */
@@ -37,31 +37,32 @@ export function useSettingsPersistence({
 }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const hydratedUserIdRef = useRef<string | null>(null);
-  const skipNextSaveRef = useRef(false);
+  const loadedSettingsRef = useRef<AppSettings | null>(null);
 
   useEffect(() => {
     if (!userId || !repository) {
       hydratedUserIdRef.current = null;
-      skipNextSaveRef.current = true;
+      loadedSettingsRef.current = null;
       setSettings(DEFAULT_APP_SETTINGS);
       return;
     }
-    if (hydratedUserIdRef.current === userId) return;
-
-    const stored = readStoredSettings(repository);
-    const nextSettings = stored || DEFAULT_APP_SETTINGS;
-    hydratedUserIdRef.current = userId;
-    skipNextSaveRef.current = true;
-    setSettings(nextSettings);
-    if (!stored) repository.writeJson('settings', nextSettings);
+    hydratedUserIdRef.current = null;
+    loadedSettingsRef.current = null;
+    let active = true;
+    void readStoredSettings(repository).then((stored) => {
+      if (!active) return;
+      hydratedUserIdRef.current = userId;
+      const next = stored ?? DEFAULT_APP_SETTINGS;
+      loadedSettingsRef.current = next;
+      setSettings(next);
+    }).catch(() => { /* The shared storage notice reports the failure; do not save defaults. */ });
+    return () => { active = false; };
   }, [repository, userId]);
 
   useEffect(() => {
     if (!userId || !repository || hydratedUserIdRef.current !== userId) return;
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
+    if (loadedSettingsRef.current === settings) return;
+    loadedSettingsRef.current = settings;
     repository.writeJson('settings', settings);
   }, [repository, settings, userId]);
 

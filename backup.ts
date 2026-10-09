@@ -92,7 +92,9 @@ export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolea
       try { localStorage.setItem(k, v); } catch {}
     }
     for (const [key, value] of Object.entries(payload.indexedDb || {})) {
-      await writeIndexedUserStateRaw(key, value);
+      if (!(await writeIndexedUserStateRaw(key, value))) {
+        return { ok: false, error: 'Не все данные удалось восстановить: хранилище недоступно или запись защищена очередью изменений.' };
+      }
     }
     return { ok: true };
   } catch (error: unknown) {

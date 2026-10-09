@@ -35,6 +35,7 @@ type InviteCheckParams = Pick<AuthStateSetters, 'setInviteError' | 'setInviteChe
 };
 
 type LogoutParams = Pick<AuthStateSetters, 'setGoogleMe' | 'setCurrentUser' | 'setProfileSyncState' | 'setLastProfileSyncAt' | 'setAuthState'> & {
+  onClearLocalSession?: () => void;
   googleSub?: string | null;
   fetchImpl?: typeof fetch;
 };
@@ -291,6 +292,7 @@ export function createLogoutSession(params: LogoutParams) {
   let serverLogoutInFlight: Promise<void> | null = null;
 
   const clearClientSession = () => {
+    params.onClearLocalSession?.();
     clearOAuthContinuationState();
 
     params.setGoogleMe(null);

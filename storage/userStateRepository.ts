@@ -2,8 +2,8 @@ import { parseJson } from '../safeJson';
 import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem } from '../types';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { enqueueRemoteKVWrite, safeRemoveItem, safeSetItem } from './hybrid';
-import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, removeIndexedUserStateRaw, writeIndexedUserStateRaw } from './indexedUserState';
+import { DurableOutbox, type OutboxIntent, type OutboxOperation } from './durableOutbox';
+import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
 
@@ -28,90 +28,105 @@ export function userStateStorageKey(userId: string, stateKey: UserStateKey): str
   return `${STORAGE_KEYS.dataPrefix}${userId}_${stateKey}`;
 }
 
-/**
- * Browser-side state owned by one account. The key format deliberately stays
- * compatible with the existing Cloudflare state mirroring layer.
- */
+/** An editor keeps the revision it actually read, rather than adopting a fresh base at write time. */
 export class UserStateRepository {
-  private readonly revisions = new Map<string, number>();
+  private readonly outbox: DurableOutbox;
+  private readonly writerId: string;
+  private readonly observations = new Map<string, { revision: number; confirmedVersion: number; parentOpId?: string }>();
+  private readonly pending = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly userId: string) {}
-
-  private bumpRevision(key: string): number {
-    const next = (this.revisions.get(key) ?? 0) + 1;
-    this.revisions.set(key, next);
-    return next;
-  }
-
-  private isCurrentRevision(key: string, revision: number): boolean {
-    return this.revisions.get(key) === revision;
+  constructor(readonly accountId: string, options: { outbox?: DurableOutbox; writerId?: string } = {}) {
+    this.outbox = options.outbox ?? new DurableOutbox();
+    this.writerId = options.writerId ?? crypto.randomUUID();
   }
 
   key(stateKey: UserStateKey): string {
-    return userStateStorageKey(this.userId, stateKey);
+    return userStateStorageKey(this.accountId, stateKey);
   }
 
-  readJson<T>(stateKey: UserStateKey, fallback: T, isValid: (value: unknown) => value is T): T {
-    try {
-      const raw = localStorage.getItem(this.key(stateKey));
-      if (!raw) return fallback;
-      const parsed = parseJson(raw);
-      return isValid(parsed) ? parsed : fallback;
-    } catch {
-      return fallback;
-    }
+  private serialize<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const result = (this.pending.get(key) ?? Promise.resolve()).then(work);
+    this.pending.set(key, result.then(() => undefined, () => undefined));
+    return result;
   }
 
-  writeJson<K extends UserStateKey>(stateKey: K, value: UserStateValue[K]): void {
+  private track<T>(key: string, promise: Promise<T>): Promise<T> {
+    // Keep rejection observable to callers, and handled when a UI event ignores the Promise.
+    void promise.catch((error: unknown) => reportStateSaveIssue({
+      accountId: this.accountId, key, kind: 'error', reason: error instanceof Error ? error.name : 'storage',
+    }));
+    return promise;
+  }
+
+  observe(stateKey: UserStateKey): Promise<{ value: string | null; revision: number; confirmedVersion: number }> {
     const key = this.key(stateKey);
-    const raw = JSON.stringify(value);
-    if (!isIndexedUserStateStorageKey(key)) {
-      safeSetItem(key, raw);
-      return;
-    }
-
-    const revision = this.bumpRevision(key);
-    void writeIndexedUserStateRaw(key, raw).then((stored) => {
-      if (!this.isCurrentRevision(key, revision)) return;
-      if (!stored) {
-        safeSetItem(key, raw);
-        return;
+    return this.track(key, this.serialize(key, async () => {
+      const snapshot = await this.outbox.snapshot(this.accountId, key);
+      const operations = await this.outbox.list(this.accountId);
+      reportStateQueue(this.accountId, operations);
+      for (const operation of operations) {
+        if (operation.key === key && operation.status === 'conflicted') {
+          reportStateSaveIssue({ accountId: this.accountId, key, kind: 'conflicted', reason: operation.reason ?? operation.status });
+        }
       }
-      try {
-        localStorage.removeItem(key);
-      } catch {}
-      enqueueRemoteKVWrite(key, raw);
-    });
+      const previous = this.observations.get(key);
+      this.observations.set(key, {
+        revision: snapshot.revision, confirmedVersion: snapshot.confirmedVersion,
+        ...(previous?.revision === snapshot.revision && previous.parentOpId ? { parentOpId: previous.parentOpId } : {}),
+      });
+      return snapshot;
+    }));
+  }
+
+  hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number): Promise<boolean> {
+    const key = this.key(stateKey);
+    return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision)));
+  }
+
+  private mutate(stateKey: UserStateKey, intent: OutboxIntent): Promise<OutboxOperation> {
+    const key = this.key(stateKey);
+    return this.track(key, this.serialize(key, async () => {
+      // An editor that has not loaded existing data cannot silently claim its revision.
+      const observation = this.observations.get(key) ?? { revision: 0, confirmedVersion: 0 };
+      const operation = await this.outbox.write({
+        accountId: this.accountId, writerId: this.writerId, intent,
+        expectedRevision: observation.revision, baseVersion: observation.confirmedVersion,
+        ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
+      });
+      reportStateOperation(this.accountId, operation);
+      if (operation.status === 'conflicted') {
+        reportStateSaveIssue({ accountId: this.accountId, key, kind: 'conflicted', reason: operation.reason ?? 'conflict' });
+      } else {
+        this.observations.set(key, { revision: operation.revision, confirmedVersion: operation.baseVersion, parentOpId: operation.opId });
+        // IDB is authoritative after commit, including a deletion. This is cleanup, not a second queue.
+        try { localStorage.removeItem(key); } catch {}
+        reportStateSaveSuccess(this.accountId, key);
+      }
+      return operation;
+    }));
+  }
+
+  writeJson<K extends UserStateKey>(stateKey: K, value: UserStateValue[K]): Promise<OutboxOperation> {
+    let raw: string;
+    try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
+    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value: raw });
   }
 
   async readJsonAsync<T>(stateKey: UserStateKey, fallback: T, isValid: (value: unknown) => value is T): Promise<T> {
-    const key = this.key(stateKey);
-    const indexedRaw = await readIndexedUserStateRaw(key);
-    const raw = indexedRaw ?? (() => {
-      try { return localStorage.getItem(key); } catch { return null; }
-    })();
+    const snapshot = await this.observe(stateKey);
+    // A committed delete must never revive a leftover localStorage value.
+    let raw = snapshot.value;
+    if (raw === null && snapshot.revision === 0) {
+      try { raw = localStorage.getItem(this.key(stateKey)); } catch {}
+    }
     if (!raw) return fallback;
     try {
       const parsed = parseJson(raw);
-      if (!isValid(parsed)) return fallback;
-      if (!indexedRaw && isIndexedUserStateStorageKey(key) && !this.revisions.has(key)) {
-        const revision = this.bumpRevision(key);
-        void writeIndexedUserStateRaw(key, raw).then((stored) => {
-          if (stored && this.isCurrentRevision(key, revision)) {
-            try { localStorage.removeItem(key); } catch {}
-          }
-        });
-      }
-      return parsed;
-    } catch {
-      return fallback;
-    }
+      return isValid(parsed) ? parsed : fallback;
+    } catch { return fallback; }
   }
 
-  remove(stateKey: UserStateKey): void {
-    const key = this.key(stateKey);
-    this.bumpRevision(key);
-    if (isIndexedUserStateStorageKey(key)) void removeIndexedUserStateRaw(key);
-    safeRemoveItem(key);
+  remove(stateKey: UserStateKey): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) });
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { 
   Activity, 
@@ -145,6 +145,9 @@ import { prepareLoginSession } from './features/auth/loginSession';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
+import { stateSync } from './storage/stateSync';
+import { StateStorageNotice } from './ui/StateStorageNotice';
+import { getStateQueueSummaries, getStateSaveIssues, reportStateSaveIssue, subscribeStateSaveIssues } from './storage/stateSaveStatus';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
@@ -269,15 +272,19 @@ const App: React.FC = () => {
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
-  const userStateRepository = useMemo(
-    () => (currentUser?.id ? new UserStateRepository(currentUser.id) : null),
-    [currentUser?.id],
-  );
+  const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
+  const loginAttemptRef = useRef(0);
+  const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
+  const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  useEffect(() => {
+    if (currentUser?.id && currentUser.id === googleMe?.sub) stateSync.start(currentUser.id);
+    return () => stateSync.stop();
+  }, [currentUser?.id, googleMe?.sub]);
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -730,6 +737,12 @@ const App: React.FC = () => {
   const searchResults = useMemo(() => findFoodSearchResults(searchQuery, foodHistory, foodFavorites), [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useMemo(() => createLogoutSession({
+    onClearLocalSession: () => {
+      loginAttemptRef.current += 1; setUserStateRepository(null);
+      void stateSync.invalidate().catch(() => {
+        if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
+      });
+    },
     googleSub: googleMe?.sub,
     setGoogleMe,
     setCurrentUser,
@@ -754,10 +767,13 @@ const App: React.FC = () => {
     user: UserProfile,
     authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
   ) => {
+    const loginAttempt = ++loginAttemptRef.current;
     const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
       resetUsageIfNewTime: resetUsageIfNewPeriod,
     });
+    if (loginAttempt !== loginAttemptRef.current) return;
+    setUserStateRepository(prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id));
     setCurrentUser(prepared.currentUser);
     if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
     setWeeklyReports(prepared.hydrated.weeklyReports);
@@ -1199,7 +1215,9 @@ const logWeight = useCallback(() => {
     state: profileSyncState,
     note: profileSyncNote,
     lastSyncAt: lastProfileSyncAt,
-  }), [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
+    stateQueue: stateQueues.find((queue) => queue.accountId === currentUser?.id),
+    localSaveError: stateSaveIssues.some((issue) => issue.accountId === currentUser?.id && issue.kind === 'error'),
+  }), [googleMe?.sub, currentUser?.id, lastProfileSyncAt, profileSyncNote, profileSyncState, stateQueues, stateSaveIssues]);
 
   const createFamilyCloudWithAchievements = useCallback(async () => {
     await createFamilyCloud();
@@ -1472,6 +1490,7 @@ const logWeight = useCallback(() => {
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
+      <StateStorageNotice accountId={currentUser?.id} />
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">

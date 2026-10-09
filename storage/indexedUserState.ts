@@ -1,8 +1,8 @@
 import { STORAGE_KEYS } from './keys';
+import { STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
+import { outboxKeyOwnerId } from './durableOutbox';
 
-const DATABASE_NAME = 'fitfocus-user-state-v1';
-const DATABASE_VERSION = 1;
-const STORE_NAME = 'values';
+const STORE_NAME = STATE_STORES.values;
 
 type IndexedValue = { key: string; value: string; updatedAt: number };
 
@@ -12,34 +12,11 @@ const VOLUME_STATE_SUFFIXES = [
   'weekly_reports',
   'favorite_recipes',
   'last_coach_card',
+  'settings',
 ] as const;
 
-let databasePromise: Promise<IDBDatabase | null> | null = null;
-
-function supportsIndexedDb() {
-  return typeof indexedDB !== 'undefined';
-}
-
 function openDatabase(): Promise<IDBDatabase | null> {
-  if (!supportsIndexedDb()) return Promise.resolve(null);
-  if (databasePromise) return databasePromise;
-
-  databasePromise = new Promise((resolve) => {
-    try {
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-          request.result.createObjectStore(STORE_NAME, { keyPath: 'key' });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => resolve(null);
-      request.onblocked = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-  return databasePromise;
+  return userStateDatabase.open().catch(() => null);
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T | null> {
@@ -82,9 +59,11 @@ export async function writeIndexedUserStateRaw(key: string, value: string): Prom
   const database = await openDatabase();
   if (!database) return false;
   try {
-    const transaction = database.transaction(STORE_NAME, 'readwrite');
-    transaction.objectStore(STORE_NAME).put({ key, value, updatedAt: Date.now() } satisfies IndexedValue);
-    return await transactionDone(transaction);
+    return await stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta], 'readwrite', async (tx) => {
+      if (await indexedRequest(tx.objectStore(STATE_STORES.meta).get(outboxKeyOwnerId(key)))) return false;
+      tx.objectStore(STORE_NAME).put({ key, value, updatedAt: Date.now() } satisfies IndexedValue);
+      return true;
+    });
   } catch {
     return false;
   }
@@ -95,9 +74,11 @@ export async function removeIndexedUserStateRaw(key: string): Promise<boolean> {
   const database = await openDatabase();
   if (!database) return false;
   try {
-    const transaction = database.transaction(STORE_NAME, 'readwrite');
-    transaction.objectStore(STORE_NAME).delete(key);
-    return await transactionDone(transaction);
+    return await stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta], 'readwrite', async (tx) => {
+      if (await indexedRequest(tx.objectStore(STATE_STORES.meta).get(outboxKeyOwnerId(key)))) return false;
+      tx.objectStore(STORE_NAME).delete(key);
+      return true;
+    });
   } catch {
     return false;
   }

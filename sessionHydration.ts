@@ -5,8 +5,11 @@ import { rememberRemoteStateVersion } from './storage/hybrid';
 import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
 import { isRecord, parseJson } from './safeJson';
 import { isUserProfilePayload } from './profileValidation';
+import { UserStateRepository, type UserStateKey } from './storage/userStateRepository';
+import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
 
 export type HydratedSession = {
+  repository?: UserStateRepository;
   currentUser: UserProfile;
   allUsers: UserProfile[];
   weeklyReports: WeeklyStoredReport[];
@@ -81,6 +84,20 @@ function isCoachCard(value: unknown): value is { title: string; advice: string; 
 
 export async function hydrateSessionFromCloud(user: UserProfile, deps: HydrationDeps): Promise<HydratedSession> {
   const fetchFn = deps.fetchImpl ?? fetch;
+  const repository = new UserStateRepository(user.id);
+  const managedKeys: UserStateKey[] = ['diary', 'history', 'favorite_recipes', 'weekly_reports', 'last_coach_card', 'settings'];
+  const observed = new Map(await Promise.all(managedKeys.map(async (stateKey) => [stateKey,
+    await repository.observe(stateKey).then((snapshot) => snapshot.revision, () => 0),
+  ] as const)));
+  const managedByKey = new Map(managedKeys.map((stateKey) => [repository.key(stateKey), stateKey]));
+  const hasLegacyIntent = (key: string): boolean => {
+    try {
+      const raw = localStorage.getItem(LEGACY_QUEUE_SOURCE_KEY);
+      if (!raw) return false;
+      const parsed = parseJson(raw);
+      return !Array.isArray(parsed) || parsed.some((record) => !isRecord(record) || record.key === key);
+    } catch { return true; }
+  };
   const userWithResetUsage = deps.resetUsageIfNewTime(user);
   const prefixes = [
     `fitfocus_data_${user.id}_`,
@@ -93,13 +110,28 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
 
   try {
     for (const prefix of prefixes) {
-      const r = await fetchFn(`/api/state?prefix=${encodeURIComponent(prefix)}`, { credentials: 'include' });
+      const r = await fetchFn(`/api/state?prefix=${encodeURIComponent(prefix)}&includeDeleted=1`, { credentials: 'include' });
       if (!r.ok) continue;
       const rawData: unknown = await r.json().catch(() => null);
       const data = isRecord(rawData) ? rawData : {};
       const items = Array.isArray(data.items) ? data.items.filter(isRecord) : [];
+      const protocolReady = r.headers.get('X-FitFocus-State-Protocol') === '2' && Array.isArray(data.items)
+        && data.items.every((item) => isRecord(item) && typeof item.key === 'string' && item.key.startsWith(prefix)
+          && typeof item.value === 'string' && typeof item.exists === 'boolean' && Number.isSafeInteger(item.version)
+          && typeof item.version === 'number' && item.version >= (item.exists ? 1 : 0));
+      const receivedManagedKeys = new Set<string>();
       for (const it of items) {
-        if (typeof it.key === 'string' && it.key.length > 0 && typeof it.value === 'string') {
+        if (typeof it.key === 'string' && it.key.startsWith(prefix) && typeof it.value === 'string') {
+          const stateKey = managedByKey.get(it.key);
+          if (stateKey) {
+            receivedManagedKeys.add(it.key);
+            // Old responses do not prove generation ownership; legacy/local pending stays untouched.
+            if (!protocolReady || hasLegacyIntent(it.key)
+              || localStorage.getItem(it.key) !== null || typeof it.exists !== 'boolean'
+              || typeof it.version !== 'number') continue;
+            await repository.hydrate(stateKey, { value: it.value, version: it.version, exists: it.exists }, observed.get(stateKey) ?? 0);
+            continue;
+          }
           kv[it.key] = it.value;
           try {
             if (isIndexedUserStateStorageKey(it.key) && await writeIndexedUserStateRaw(it.key, it.value)) {
@@ -113,11 +145,27 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
           } catch {}
         }
       }
+      if (prefix === `fitfocus_data_${user.id}_` && protocolReady) {
+        for (const stateKey of managedKeys) {
+          const key = repository.key(stateKey);
+          if (!receivedManagedKeys.has(key) && !hasLegacyIntent(key) && localStorage.getItem(key) === null) {
+            await repository.hydrate(stateKey, { value: '', version: 0, exists: false }, observed.get(stateKey) ?? 0);
+          }
+        }
+      }
     }
   } catch {}
 
   const readKV = async <T,>(suffix: string, fallback: T, validate: (value: unknown) => value is T): Promise<T> => {
     const fullKey = `fitfocus_data_${user.id}_${suffix}`;
+    const stateKey = managedByKey.get(fullKey);
+    if (stateKey) {
+      return repository.readJsonAsync(stateKey, fallback, validate).catch(() => {
+        // Keep login/read-only access possible after an IDB failure. Writes still reject.
+        try { const value = parseJson(localStorage.getItem(fullKey) ?? ''); return validate(value) ? value : fallback; }
+        catch { return fallback; }
+      });
+    }
     const indexedRaw = await readIndexedUserStateRaw(fullKey);
     const raw = kv[fullKey] ?? indexedRaw ?? localStorage.getItem(fullKey);
     if (!raw) return fallback;
@@ -140,6 +188,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
   const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
 
   return {
+    repository,
     currentUser: {
       ...userWithTask,
       lossDeficit: userWithTask.lossDeficit ?? userWithResetUsage.lossDeficit,
