@@ -17,7 +17,9 @@ const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
 
 function respond(requestId: string, body: unknown, status: number): Response {
   logApiEvent('state.response', { requestId, status });
-  return withRequestId(json(body, status), requestId);
+  const response = withRequestId(json(body, status), requestId);
+  response.headers.set('X-FitFocus-State-Protocol', '2');
+  return response;
 }
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
@@ -40,7 +42,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const items = await readStateItems(db, user.sub, prefix);
+  const items = await readStateItems(db, user.sub, prefix, url.searchParams.get('includeDeleted') === '1');
   return respond(requestId, { items }, 200);
 };
 
@@ -113,8 +115,8 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const db = requireDB(env);
-  const conflict = await deleteStateItem(db, user.sub, key, baseVersion);
-  if (conflict) return respond(requestId, { error: 'KV_CONFLICT', ...conflict }, 409);
+  const deleted = await deleteStateItem(db, user.sub, key, baseVersion);
+  if (deleted.ok === false) return respond(requestId, { error: 'KV_CONFLICT', ...deleted.conflict }, 409);
 
-  return respond(requestId, { ok: true }, 200);
+  return respond(requestId, { ok: true, ...deleted.item }, 200);
 };

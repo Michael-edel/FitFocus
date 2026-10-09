@@ -1140,8 +1140,8 @@ assertIncludes(
 );
 assertIncludes(
   stateWrite,
-  'Number.isInteger(parsedBaseVersion)',
-  'state put must reject non-integer baseVersion values',
+  'Number.isSafeInteger(parsedBaseVersion)',
+  'state put must reject unsafe or non-integer baseVersion values',
 );
 assertIncludes(
   stateWrite,
