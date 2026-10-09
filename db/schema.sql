@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS user_kv (
   v TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
   version INTEGER NOT NULL DEFAULT 1,
+  deleted_at INTEGER,
   PRIMARY KEY (user_id, k)
 );
 

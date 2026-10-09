@@ -51,6 +51,11 @@ CAS сравнивает версии. PUT state уже использует у�
 одним SQL с `RETURNING`; DELETE физически удаляет строку и её версию.
 Форматы ответов: [API_CONTRACTS](../API_CONTRACTS.md).
 
+В последующем серверном компоненте `fix/state-generations` физический state
+DELETE заменён на очищенный tombstone с возрастающей версией; добавлена
+миграция 0019 и opt-in чтение поколений. [Контракт и выпуск P0.7](state-generations.md).
+Снимок `810adb1` выше и нынешний клиент не объявляются уже переключёнными.
+
 ## Внешние сервисы и выпуск
 
 Есть AI, Google/Apple, Stripe, web push, Huawei Health и отдельный iOS bridge.
