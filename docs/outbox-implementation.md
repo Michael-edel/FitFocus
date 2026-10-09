@@ -6,11 +6,11 @@
 
 ## Проверенная граница
 
-Ревизия [`61d256e84e92225c45535e917c4ff424a5904aba`](https://github.com/Michael-edel/FitFocus/commit/61d256e84e92225c45535e917c4ff424a5904aba),
+Ревизия [`51a789c5c0d8b724a54071ecf10232ecc58a42df`](https://github.com/Michael-edel/FitFocus/commit/51a789c5c0d8b724a54071ecf10232ecc58a42df),
 ветка `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-Зависимость — PR #90, `cc880d9`. [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37919548774): 590 unit-тестов,
+Зависимость — PR #90, `cc880d9`. [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/37925347789): 649 unit-тестов,
 три проверки типов, audit/инварианты, сборка, 19 browser passed / 9 skips.
-Подробные ограничения — в [журнале](stabilization-progress.md#p08--транзакционный-фундамент-на-61d256e).
+Подробные ограничения — в [журнале](stabilization-progress.md#p08--возобновляемый-компонент-legacy-импорта-на-51a789c).
 
 На этом SHA очередь реализована как отдельный API. Работающее приложение
 ещё использует прежние writers и HTTP sender. Изменения после этого SHA
@@ -18,13 +18,14 @@
 
 ## Код и подтверждение
 
-| Компонент | Что реализовано | Подтверждение на 61d256e |
+| Компонент | Что реализовано | Подтверждение на 51a789c |
 |---|---|---|
-| [legacyQueue.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/legacyQueue.ts) | Семь причин отказа; отсутствующие metadata → 0; delete без value; SHA-256 по нормализованному JSON-массиву | [62 проверки](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/tests/legacy_queue.test.ts), включая порядок, retryCount и границы полей |
-| [stateDatabase.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/stateDatabase.ts) | Та же база, схема 2; values сохранён; пять stores; blocked/versionchange; повтор открытия; ожидание commit/rollback | [8 проверок](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/tests/state_database.test.ts); fake-IDB upgrade, отказ открытия и abort |
-| [durableOutbox.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/durableOutbox.ts) | Атомарные value/операция; владелец ключа; конфликты; claim/lease; проверяемый finish | [22 проверки](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/tests/durable_outbox.test.ts); конкуренция, quota, поздние ответы, сессии и причинный parent |
-| [indexedUserState.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/indexedUserState.ts) | Объёмные values используют общий менеджер IDB | Входит в полный CI; прежние bool/null API ещё сохранены |
-| [userStateRepository.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/userStateRepository.ts) и [hybrid.ts](https://github.com/Michael-edel/FitFocus/blob/61d256e84e92225c45535e917c4ff424a5904aba/storage/hybrid.ts) | Прежняя запись и Map/localStorage sender остаются активными | Подключение новой очереди не выполнено |
+| [legacyQueue.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/legacyQueue.ts) | Семь причин отказа; отсутствующие metadata → 0; delete без value; SHA-256 по нормализованному JSON-массиву | [62 проверки](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/tests/legacy_queue.test.ts), включая порядок, retryCount и границы полей |
+| [stateDatabase.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/stateDatabase.ts) | Та же база, схема 2; values сохранён; пять stores; blocked/versionchange; повтор открытия; ожидание commit/rollback | [8 проверок](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/tests/state_database.test.ts); fake-IDB upgrade, отказ открытия и abort |
+| [durableOutbox.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/durableOutbox.ts) | Атомарные value/операция; владелец ключа; конфликты; claim/lease; проверяемый finish; migration gate/ledger и атомарный ack receipt | [22 базовые проверки](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/tests/durable_outbox.test.ts); migration gate/ack дополнительно покрыты тестами импортера |
+| [legacyMigration.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/legacyMigration.ts) | Атомарные импорт/карантин/ledger/прогресс; точные снимки; восстановление прежних снимков; финальный audit операции или ack; readonly legacy-источник | [59 проверок](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/tests/legacy_migration.test.ts); abort/restart, владение, коллизии, потеря ledger/операции, параллельные соединения |
+| [indexedUserState.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/indexedUserState.ts) | Объёмные values используют общий менеджер IDB | Входит в полный CI; прежние bool/null API ещё сохранены |
+| [userStateRepository.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/userStateRepository.ts) и [hybrid.ts](https://github.com/Michael-edel/FitFocus/blob/51a789c5c0d8b724a54071ecf10232ecc58a42df/storage/hybrid.ts) | Прежняя запись и Map/localStorage sender остаются активными | Подключение новой очереди не выполнено |
 
 Владельца новой записи передаёт вызывающая сторона; он не определяется
 по активному экрану. Подтверждённый parent связывает только операции того же
@@ -35,9 +36,9 @@
 
 | Порядок | Что сделать | Критерий проверки |
 |---|---|---|
-| 1. Импорт legacy | Подтверждённое соответствие ключа владельцу; карантин; операция, ledger и прогресс одной транзакцией порции | Abort/restart без потери и дублей; raw и причина сохранены; unknown/unprocessed не дают completed |
+| 1. Доказательства для импорта | Компонент готов; подключить подтверждённое соответствие ключа владельцу и проверяемую остановку старых writers | Текущий аккаунт не становится доказательством; boolean не заменяет остановку; старый writer не дописывает legacy после финального marker |
 | 2. Repository и writers | Новые account-owned values и операции пишутся через DurableOutbox; profile/localStorage получают явный путь | Ошибка commit не выглядит успехом; delete сохраняет намерение; все вызовы проинвентаризированы |
-| 3. Сервер P0.7 | Сохранить поколение ключа после delete и возвращать версию подтверждённой мутации | Delete → recreate → stale update не проходит CAS; старые клиенты совместимы |
+| 3. Сервер P0.7 | Сохранить поколение ключа после delete и возвращать версию подтверждённой мутации | Delete → recreate → stale update не проходит CAS; поведение старых клиентов и безопасный порядок выпуска проверены |
 | 4. Sender и сессии | HTTP только после claim commit; 401/403/409/retry → соответствующий исход; finish проверяет попытку | Новые правки при auth-паузе сохраняются; поздний ответ и смена аккаунта безопасны |
 | 5. Hydration, UI и данные | Не затирать pending/conflicted; показывать blocked/ошибку; включить очередь и карантин в экспорт/очистку | Reload/login/online сохраняют локальное намерение; очищаются данные только выбранного владельца |
 | 6. Браузерная приёмка | Две вкладки без Web Locks; старый/новый bundle на одном origin и в одном browser context | Реальные blocked/versionchange, lease recovery, reload и отсутствие дописывания legacy после завершения |
@@ -47,6 +48,10 @@
 Нельзя заменять серверное подтверждение вычисленной клиентом версией.
 
 ## Обязательные правила импорта
+
+Компонент реализован на `51a789c`; полный контракт и ограничения —
+[импорт старой очереди](legacy-migration.md). Следующие правила остаются
+обязательными при подключении к приложению.
 
 - Единственное новое хранилище очереди — IDB; Web Locks лишь координируют.
 - Исходный `fitfocus.remote-kv-outbox.v1` сохраняется. Это источник миграции;
@@ -59,6 +64,9 @@
   ledger и прогресс порции коммитятся вместе; ошибка откатывает всю порцию.
 - Итог миграции проверяет все записи и сохранность источника. `completed`
   недопустим при неизвестных или необработанных записях.
+- Проверяются также прежние сохранённые снимки и backing operation/ack;
+  одного processed marker недостаточно. Claim/finish требуют matching ledger
+  и разрешение миграции; ack receipt сохраняется вместе с удалением операции.
 - Старые writers должны быть остановлены проверяемым способом до финального
   marker; новое уведомление не меняет код уже открытой старой вкладки.
 
