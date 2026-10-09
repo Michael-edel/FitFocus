@@ -120,7 +120,7 @@ import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
 import { PREMIUM_GATES, canUsePremiumGate, incrementUsageCounter, type UsageCounter } from './features/usage/premiumGates';
 import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
 import { useCourseUiState } from './features/course/useCourseUiState';
-import { completeCourseLesson, recordCourseQuizAnswer } from './features/course/courseProgress';
+import { useCourseActions } from './features/course/useCourseActions';
 import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
 import { useDocumentTheme } from './features/settings/useDocumentTheme';
 import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
@@ -1172,33 +1172,16 @@ const logWeight = useCallback(() => {
     persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
   }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
 
-  const closeLessonView = useCallback(() => {
-    setIsQuizActive(false);
-    setIsLessonViewOpen(false);
-    setSelectedQuizOption(null);
-  }, []);
-
-  const handleMarkLessonRead = useCallback(() => {
-    if (!currentUser || !currentLesson) return;
-    const completion = completeCourseLesson(currentUser.courseProgress, currentLesson.id, localDayKey(new Date()));
-    if (completion.kind === 'completed') {
-      persistUser({ ...currentUser, courseProgress: completion.progress });
-    }
-    closeLessonView();
-  }, [closeLessonView, currentUser, currentLesson, persistUser]);
-
-  const handleStartLessonQuiz = useCallback(() => {
-    if (!currentLesson?.quiz) return;
-    setSelectedQuizOption(null);
-    setIsQuizActive(true);
-  }, [currentLesson]);
-
-  const handleQuizSubmit = useCallback(() => {
-    if (!currentUser || !currentLesson || !selectedQuizOption) return;
-    const answers = recordCourseQuizAnswer(currentUser.lessonQuizAnswers, currentLesson.id, selectedQuizOption.id, localDayKey(new Date()));
-    persistUser({ ...currentUser, lessonQuizAnswers: answers });
-    closeLessonView();
-  }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
+  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit } = useCourseActions({
+    currentUser,
+    currentLesson,
+    selectedQuizOption,
+    persistUser,
+    setIsLessonViewOpen,
+    setIsQuizActive,
+    setSelectedQuizOption,
+    toDayKey: localDayKey,
+  });
 
   const todayTask = useMemo(() => {
     const today = localDayKey(new Date());

@@ -323,9 +323,7 @@ export async function sendPushNotification(
   if (getPushConfigError(env)) throw new Error("PUSH_CONFIG");
   if (!isAllowedPushEndpoint(subscription.endpoint)) throw new Error("PUSH_ENDPOINT");
   const encrypted = await encryptPushPayload(subscription, payload);
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(subscription.endpoint, {
+  const response = await fetchWithTimeout(subscription.endpoint, {
       method: "POST",
       headers: {
         TTL: String(PUSH_TTL_SECONDS),
@@ -338,8 +336,7 @@ export async function sendPushNotification(
     }, {
       timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS),
       timeoutError: "PUSH_REQUEST_TIMEOUT",
-    });
-  }
+  });
   if (!response.ok) {
     const details = await readResponseTextLimit(response);
     const err = new Error(details ? `PUSH_HTTP_${response.status}: ${details}` : `PUSH_HTTP_${response.status}`);
