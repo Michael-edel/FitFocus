@@ -160,6 +160,14 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       return;
     }
 
+    if (path === '/api/ai' && method === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown> | null;
+      if (body?.feature === 'wis_text') {
+        await json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
+        return;
+      }
+    }
+
     if (path === '/api/push/status' && method === 'GET') {
       const currentSubscriptionId = push.supported && push.preSubscribed ? 'sub-e2e-1' : null;
       const currentBrowserLabel = await page.evaluate(() => {
@@ -320,13 +328,12 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
     if (!options.supported) {
       // Capability detection uses `in`, so assigning undefined still reports support.
       Reflect.deleteProperty(window, 'PushManager');
-      return;
+    } else {
+      Object.defineProperty(window, 'PushManager', {
+        configurable: true,
+        value: function PushManager() {},
+      });
     }
-
-    Object.defineProperty(window, 'PushManager', {
-      configurable: true,
-      value: function PushManager() {},
-    });
 
     const pushManager = {
       async getSubscription() {
@@ -345,7 +352,7 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
         scriptURL: '/sw.js',
         state: 'activated',
       },
-      pushManager,
+      ...(options.supported ? { pushManager } : {}),
       async update() {},
     });
 
