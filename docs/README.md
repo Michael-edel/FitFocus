@@ -52,11 +52,12 @@ success, 860 unit-тестов в 179 файлах, 152 browser passed / 9 skips
 и исправление жеста Save. Предыдущие результаты относятся к своим SHA
 и сохраняются [в журнале](stabilization-progress.md).
 
-В рабочем дереве есть ещё не опубликованное подключение персонального меню.
-Его целевые unit-тесты прошли; браузерный набор дал 11 passed / 4 failed.
-Это не результат CI `8fc0b1b` и не завершение P0.5.
-Перед продолжением сверить HEAD, рабочее дерево и
-[условия приёмки](ai-session-guard.md#клиентское-подключение-в-работе).
+Следующий компонент [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e) подключает персональное недельное меню и
+атомарный generated-profile commit. Локальная приёмка: 900 unit / 183 файла,
+три typecheck и обязательные проверки; 200 browser passed / 1 failed / 9 skips без retries.
+CI этого компонента проверяется после публикации отдельно от `8fc0b1b` и
+документирующего `59a3630` (его CI: 860 unit, 152 browser passed / 9 skips).
+[Контракт и оставшаяся работа](ai-session-guard.md#клиентское-подключение-в-работе).
 Ниже исторические этапы сохраняют свои ревизии; актуальные следующие шаги —
 в [статусе](project-status.md) и [TASKS](../TASKS.md).
 
@@ -74,7 +75,7 @@ success, 860 unit-тестов в 179 файлах, 152 browser passed / 9 skips
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
-| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, подключение меню в работе и оставшаяся приёмка |
+| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |

@@ -962,3 +962,76 @@ API и карта кода синхронизированы с этой гран
 Проверка Markdown: 27 документов, 570 ссылок и 27 закреплённых путей
 исходников, ошибок нет; `git diff --check` для Markdown прошёл.
 Этот этап меняет только документацию и не подтверждает приёмку локального кода.
+
+## 12.10.2026 — персональное меню, generated commit и desktop-навигация
+
+Код: [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e). CI предшествующего документирующего `59a3630`:
+[38178142888](https://github.com/Michael-edel/FitFocus/actions/runs/38178142888),
+success, 860 unit / 179 файлов, 152 browser passed / 9 skips, без flaky.
+Этот CI не проверял новый menu-код; workflow нового HEAD проверяется отдельно.
+
+Свежий proof и capabilities теперь передаются в AI и явный items writer.
+Guarded generated-profile commit проверяет account/session/epoch/auth-fence
+и актуальность редактора одной транзакцией. UI ждёт постоянного сохранения;
+quota, конфликт и старая попытка не запускают items/achievement успешного меню.
+Для вторичного отказа показано отдельное предупреждение.
+
+Первый браузерный набор дал 11 passed / 4 failed. Трасса и screenshot выявили
+реальную ошибку: desktop-панель fixed, нижние пункты вне viewport и прокрутки нет.
+Добавлены desktop overflow-y и запрет сжатия элементов; тест использует обычный
+scroll/click с viewport assertion. Следующий прогон дал 9 passed / 6 failed:
+все падения были новым неверным ожиданием `#settings` — приложение переключает
+React tabs, не записывая hash. Ожидание убрано по фактическому контракту,
+видимая форма по-прежнему проверяется. Затем 18/18 целевых сценариев прошли.
+
+Первая полная матрица: 200 passed / 1 failed / 9 skips, workers=2, retries=0.
+Все 49 menu-сценариев прошли. Прежний plan-task reload на iPhone Safari
+прочитал transient sending до legacy-паузы. Тест теперь ждёт pause=legacy
+и status=pending по одному снимку IDB; конечная проверка pending не ослаблена.
+Десять повторов iPhone Safari/PWA с двумя workers прошли без retries.
+
+Отдельный red unit подтвердил неправильную классификацию отмены `/me`:
+1 failed / 13 passed. После исправления отмена означает смену действия,
+не транспортный fallback. Ещё один red unit (1 failed / 14 passed) выявил,
+что deadline HTTP отменял action-controller и мог оставить loading навсегда.
+Теперь отдельный request-controller наследует явную отмену действия, а timeout
+позволяет показать ошибку, снять loading и повторить генерацию.
+
+Итоговые локальные проверки: **900 unit / 183 файла**, три typecheck,
+admin/auth/API guards, schema (21 migrations, 30 tables), privacy (27 tables),
+audit (0 известных уязвимостей) и build прошли. Полная браузерная матрица:
+**200 passed / 1 failed / 9 skips**, workers=4, retries=0. Все 49 новых menu-проверок
+прошли в семи проектах; добавлены pagehide/pageshow и timeout/retry.
+Unit проверяет две IDB connections и same-account relogin; browser lifecycle
+events синтетические. Это не реальный BFCache, old/new bundles или OAuth.
+
+Browser plugin not available: repository Playwright, mock API,
+`http://127.0.0.1:4173`. URL/title, содержимое, overlay, ошибки и viewport
+проверены; desktop/mobile screenshots сохранены вне Git. Разрешена только
+инъецированная HTTP 503 resource-ошибка items-сценария; CORS/pageerror не скрыты.
+Полный лог: `weekly-menu-client-final-full-e2e.log`; unit: `weekly-menu-client-final-unit.log`.
+
+Открыты version/CAS и durable-порядок secondary items, остальные AI/report/retry/family
+writers, причина прежних Safari reload errors, runtime legacy provenance/barrier/import,
+конфликты/export/clear, staging и выпуск. Полная локальная матрица не прошла;
+причина Safari-сообщения остаётся открытой. Схема и зависимости не менялись.
+
+Read-only сверка обнаружила ещё один writer: `useAchievements.ts` после
+положительного menu commit может отправлять POST через throttle-очередь без
+scope/lifetime. Его серверный handler тоже ещё не сверяет requested session.
+Это явно оставлено открытым в TASKS и AI-контракте; успешные menu-тесты
+не считаются подтверждением безопасности achievement HTTP при смене cookie.
+
+Повторная полная матрица с четырьмя workers: **200 passed / 1 failed /
+9 skips**, retries=0. Все новые menu-сценарии прошли. Старый profile reload на
+desktop WebKit воспроизвёл native `/api/me due to access control checks`;
+имя и локальная операция были сохранены. Raw stack: `requestJson` → `verify`
+sender. Reload начался в 172214.473 ms трассы, pageError — в 172337.693 ms.
+Предшествующие plain `/api/me` отражены в network trace со status 200;
+это не устанавливает причину отмены body. Общий фильтр не добавлен.
+Следующий шаг — воспроизвести и проверить lifecycle именно этого sender request.
+Полная приёмка не объявляется успешной; результат CI не заменяет эту диагностику.
+
+Проверка Markdown: 27 документов, 612 ссылок и 27 закреплённых путей
+исходников, ошибок нет; `git diff --check` прошёл. Обновлены контракты,
+навигация по коду, статус, задачи и границы проверок этого компонента.

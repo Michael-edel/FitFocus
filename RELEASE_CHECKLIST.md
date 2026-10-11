@@ -14,6 +14,11 @@
 - [ ] Перед выпуском клиента с [AI/items guard](docs/ai-session-guard.md)
   серверные capabilities и отказы при смене account/session проверены на staging.
   Старые запросы без scope не считать защищёнными; клиентская интеграция обязательна.
+- [ ] Для персонального меню проверены profile commit до items, quota/409,
+  поздние ответы, timeout/retry и реальный lifecycle страницы. Mock событий
+  pagehide/pageshow не заменяет BFCache на целевом браузере.
+- [ ] Для вторичных items определены версия/CAS и durable-порядок всех writers;
+  session guard не считается защитой от перестановки уже принятых запросов.
 
 Для изменения исполняемого кода запускать проверки из `package.json`
 и действующего `.github/workflows/ci.yml`:

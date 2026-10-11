@@ -33,6 +33,24 @@ commit, но не принимает новую ревизию, которую �
 профилем с серверной версией; pending-профиль не заменяется более новым cloud
 snapshot. Чтение и генерация defaults для отображения не создают intent.
 
+## Сохранение сгенерированного результата
+
+Последующий компонент [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e) добавляет отдельный guarded путь:
+`persistUser(functionalPatch, { readGuard, canCommit })` →
+`StateEditor.commitGenerated` → repository/outbox. Proof и predicate копируются
+до ожидания; session/epoch/auth-fence и актуальность editor revision
+проверяются внутри транзакции до любой записи value/операции.
+
+Generated value публикуется после durable commit. Quota/abort не заменяют
+видимое значение; конфликт хранится как intent без публикации успешного AI-результата.
+Независимая правка во время запроса или ожидания IDB не перезаписывается.
+Обычный `persistUser(update)` сохраняет прежнее поведение локального редактора,
+включая offline/auth-паузу; для него HTTP proof не требуется.
+
+Персональное меню ждёт pending commit до отдельного items writer.
+[Сценарий и границы](ai-session-guard.md#клиентское-подключение-в-работе),
+[транзакционные регрессии](../tests/generated_result_commit.test.ts).
+
 ## HTTP и завершение
 
 Прежняя Promise-очередь и прямые PUT/PATCH из profileSync удалены.

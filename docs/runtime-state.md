@@ -1,6 +1,6 @@
 # P0.8: подключение пользовательских данных к outbox
 
-Обновлено: 11.10.2026. Ветка fix/durable-outbox, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+Обновлено: 12.10.2026. Ветка fix/durable-outbox, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Серверная зависимость — [PR #94](https://github.com/Michael-edel/FitFocus/pull/94),
 объединённая коммитом 93f90c0. Это промежуточная реализация.
 На описанном ниже снимке HTTP sender ещё не подключён. Следующий этап уже
@@ -109,3 +109,14 @@ bundle на одном origin. Прежний hybrid sender ещё активе�
 теперь возвращается как ошибка, а не успех восстановления. Полноценный экспорт
 и атомарное восстановление очереди/карантина пока не реализованы; существующий
 импорт нескольких хранилищ не следует считать общей атомарной транзакцией.
+
+## Последующее персональное меню
+
+На [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e) generated profile использует эту же IDB-outbox с дополнительным
+транзакционным readGuard и lifetime predicate. Меню публикуется после commit;
+независимые edits, logout и поздние ответы проверяются отдельно от sender.
+[Контракт](ai-session-guard.md), [профиль](profile-persistence.md#сохранение-сгенерированного-результата).
+Вторичные items пока являются прямой scoped HTTP-проекцией без version/CAS
+и durable-порядка. Остальные AI/report/retry/family callbacks, runtime legacy,
+конфликты, экспорт/очистка и выпуск остаются открытыми. Историческое описание
+`cfcc31b` выше сохраняется как снимок своей реализации.
