@@ -69,15 +69,11 @@ import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { buildCorrectedFoodPatch, buildFoodCorrectionDraft, type FoodCorrectionDraft } from './foodCorrection';
 import {
-  collectLocalStateItems,
   clearLocalUserData,
   persistAllUsersSnapshot,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
   renameLocalStoragePrefix,
-  resumeRemoteKVSync,
-  safeRemoveItem,
-  safeSetItem,
 } from './storage/hybrid';
 import {
   bootstrapAuthSession,
@@ -347,10 +343,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     setAiStorageScope(currentUser?.id ?? null);
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentUser?.id) resumeRemoteKVSync();
   }, [currentUser?.id]);
 
   // --- Local JSON backup (hybrid approach):
@@ -805,7 +797,6 @@ const App: React.FC = () => {
       setAllUsers,
       persistUser,
       loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
@@ -822,7 +813,6 @@ const App: React.FC = () => {
       setAllUsers,
       persistUser,
       loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
@@ -858,7 +848,6 @@ const App: React.FC = () => {
       setAllUsers,
       persistUser,
       loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
@@ -886,7 +875,6 @@ const App: React.FC = () => {
       setAllUsers,
       persistUser,
       loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
       persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
       fetchImpl: fetch,
       suppressNextFullProfileSyncRef,
@@ -983,10 +971,11 @@ const App: React.FC = () => {
     const result = applyHabitToggle(currentUser, habits, habitKey);
     persistUser(result.updatedProfile);
     setHabits(result.habits);
+    void userStateRepository?.writeJson('habits', result.habits);
     if (result.waterGoalReached) {
       void checkAchievements('habit_water_done', { waterToday: true });
     }
-  }, [checkAchievements, currentUser, habits, persistUser]);
+  }, [checkAchievements, currentUser, habits, persistUser, userStateRepository]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
     if (!currentUser) return;

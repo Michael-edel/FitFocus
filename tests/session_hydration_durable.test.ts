@@ -26,6 +26,23 @@ beforeEach(() => {
 afterEach(() => { userStateDatabase.close(); vi.unstubAllGlobals(); });
 
 describe('cloud hydration with the runtime durable repository', () => {
+  it('hydrates additional managed keys while keeping device AI metadata local', async () => {
+    const planKey = `fitfocus_data_${user.id}_plan_task_done`;
+    const aiKey = `fitfocus_data_${user.id}_ai_gemini_status`;
+    localStorage.setItem(aiKey, 'device status');
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL) => response([
+      { key: planKey, value: '{"task":true}', exists: true, version: 8 },
+      { key: aiKey, value: 'foreign status', exists: true, version: 12 },
+    ]));
+    const hydrated = await hydrate(fetchImpl);
+    expect(await hydrated.repository!.readRawAsync('plan_task_done')).toBe('{"task":true}');
+    expect(await new DurableOutbox().list(user.id)).toEqual([]);
+    expect(localStorage.getItem(aiKey)).toBe('device status');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).not.toContain('prefix=ai_');
+    expect(await hydrated.repository!.writeRaw('plan_task_done', '{"task":false}')).toMatchObject({ status: 'pending', baseVersion: 8 });
+  });
+
   it('loads a clean protocol-2 snapshot and hands its actual editor revision to the app', async () => {
     const fetchImpl = vi.fn(async (url: RequestInfo | URL) => response(String(url).includes('fitfocus_data_') ? [remote('cloud')] : []));
     const hydrated = await hydrate(fetchImpl);

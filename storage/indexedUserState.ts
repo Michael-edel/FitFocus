@@ -1,19 +1,13 @@
 import { STORAGE_KEYS } from './keys';
 import { STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { outboxKeyOwnerId } from './durableOutbox';
+import { USER_STATE_KEYS } from './userStateRepository';
 
 const STORE_NAME = STATE_STORES.values;
 
 type IndexedValue = { key: string; value: string; updatedAt: number };
 
-const VOLUME_STATE_SUFFIXES = [
-  'diary',
-  'history',
-  'weekly_reports',
-  'favorite_recipes',
-  'last_coach_card',
-  'settings',
-] as const;
+const VOLUME_STATE_SUFFIXES = USER_STATE_KEYS;
 
 function openDatabase(): Promise<IDBDatabase | null> {
   return userStateDatabase.open().catch(() => null);

@@ -1,11 +1,10 @@
 import { createTask } from './coach';
 import { type FoodItem, type FavoriteRecipe, type UserHabit, type UserProfile } from './types';
 import type { WeeklyStoredReport } from './weeklyAutoEngine';
-import { rememberRemoteStateVersion } from './storage/hybrid';
 import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
 import { isRecord, parseJson } from './safeJson';
 import { isUserProfilePayload } from './profileValidation';
-import { UserStateRepository, type UserStateKey } from './storage/userStateRepository';
+import { UserStateRepository, USER_STATE_KEYS, type UserStateKey } from './storage/userStateRepository';
 import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
 
 export type HydratedSession = {
@@ -85,7 +84,7 @@ function isCoachCard(value: unknown): value is { title: string; advice: string; 
 export async function hydrateSessionFromCloud(user: UserProfile, deps: HydrationDeps): Promise<HydratedSession> {
   const fetchFn = deps.fetchImpl ?? fetch;
   const repository = new UserStateRepository(user.id);
-  const managedKeys: UserStateKey[] = ['diary', 'history', 'favorite_recipes', 'weekly_reports', 'last_coach_card', 'settings'];
+  const managedKeys: readonly UserStateKey[] = USER_STATE_KEYS;
   const observed = new Map(await Promise.all(managedKeys.map(async (stateKey) => [stateKey,
     await repository.observe(stateKey).then((snapshot) => snapshot.revision, () => 0),
   ] as const)));
@@ -99,13 +98,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
     } catch { return true; }
   };
   const userWithResetUsage = deps.resetUsageIfNewTime(user);
-  const prefixes = [
-    `fitfocus_data_${user.id}_`,
-    'ff_gemini_cooldown_until',
-    'ff_ai_last_status_v1',
-    'ff_ai_last_action_v1',
-    'ff_ai_feature_lastcall_v1:',
-  ];
+  const prefixes = [`fitfocus_data_${user.id}_`];
   let kv: Record<string, string> = {};
 
   try {
@@ -132,17 +125,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
             await repository.hydrate(stateKey, { value: it.value, version: it.version, exists: it.exists }, observed.get(stateKey) ?? 0);
             continue;
           }
-          kv[it.key] = it.value;
-          try {
-            if (isIndexedUserStateStorageKey(it.key) && await writeIndexedUserStateRaw(it.key, it.value)) {
-              localStorage.removeItem(it.key);
-            } else {
-              localStorage.setItem(it.key, it.value);
-            }
-            if (typeof it.version === 'number') {
-              rememberRemoteStateVersion(it.key, it.version);
-            }
-          } catch {}
+          // Unknown keys and device AI metadata are not applied outside managed hydration.
         }
       }
       if (prefix === `fitfocus_data_${user.id}_` && protocolReady) {

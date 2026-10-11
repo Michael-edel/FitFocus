@@ -99,6 +99,20 @@ export class StateSync {
     return this.verify(this.generation);
   }
 
+  /** Profile actions may request a flush, never create raw state writes or switch the active account. */
+  async syncNow(accountId: string): Promise<boolean> {
+    if (this.accountId !== accountId) return false;
+    const generation = this.generation;
+    if (!await this.verify(generation)) return false;
+    const sessionEpoch = this.session?.sessionEpoch;
+    if (!sessionEpoch) return false;
+    await this.flush();
+    if (generation !== this.generation || this.accountId !== accountId) return false;
+    const drained = await this.outbox.isDrained(accountId, sessionEpoch);
+    return generation === this.generation && this.accountId === accountId && sessionEpoch === this.session?.sessionEpoch
+      && !this.legacyPending() && drained;
+  }
+
   start(accountId: string): void {
     const connecting = this.connect(accountId);
     const generation = this.generation;

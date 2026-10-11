@@ -2,16 +2,13 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { UserProfile } from './types';
 import { isUserProfilePayload } from './profileValidation';
 import {
-  applyRemoteStateItems,
-  collectLocalStateItems,
   persistAllUsersSnapshot,
   readStoredAllUsersSnapshotForUser,
-  rememberRemoteStateVersion,
 } from './storage/hybrid';
+import { stateSync } from './storage/stateSync';
 import { HttpRequestError, fetchWithResilience } from './services/httpClient';
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
-type LocalStateItem = { key: string; value: string; baseVersion?: number };
 type JsonRecord = Record<string, unknown>;
 
 type ProfileSyncDeps = {
@@ -22,7 +19,7 @@ type ProfileSyncDeps = {
   setAllUsers: Dispatch<SetStateAction<UserProfile[]>>;
   persistUser: (updated: UserProfile) => void;
   loginAsUser: (user: UserProfile) => Promise<void>;
-  collectLocalStateItemsImpl?: typeof collectLocalStateItems;
+  syncStateImpl?: (accountId: string) => Promise<boolean>;
   persistAllUsersSnapshotImpl?: typeof persistAllUsersSnapshot;
   fetchImpl?: typeof fetch;
   suppressNextFullProfileSyncRef?: MutableRefObject<boolean>;
@@ -93,35 +90,14 @@ async function handleProfileConflict(
   return serverProfile;
 }
 
-async function syncStateItemsToCloud(items: LocalStateItem[], fetchImpl?: typeof fetch): Promise<boolean> {
-  if (!items.length) return true;
-  const response = await fetchProfileApi('/api/state', {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
-  }, fetchImpl);
-  const payload = await readJsonRecord(response);
-  if (response.ok) {
-    if (Array.isArray(payload?.items)) {
-      for (const item of payload.items) {
-        if (!isJsonRecord(item) || typeof item.key !== 'string' || typeof item.version !== 'number') continue;
-        rememberRemoteStateVersion(item.key, item.version);
-      }
-    }
-    return true;
-  }
-  if (response.status === 409 && typeof payload?.key === 'string' && typeof payload.value === 'string') {
-    applyRemoteStateItems([{ key: payload.key, value: payload.value, version: typeof payload.version === 'number' ? payload.version : undefined }]);
-  }
-  return false;
+async function syncStateItemsToCloud(accountId: string, deps: ProfileSyncDeps): Promise<boolean> {
+  return (deps.syncStateImpl ?? ((id) => stateSync.syncNow(id)))(accountId);
 }
 
 async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps): Promise<void> {
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
-    const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(profile.id);
     const body = { ...profile, baseVersion: profile.version ?? 0 };
     const r = await fetchProfileApi('/api/profile', {
       method: 'PUT',
@@ -162,7 +138,7 @@ async function pushProfileToCloudNow(profile: UserProfile, deps: ProfileSyncDeps
       }
       deps.persistUser(serverProfile);
     }
-    if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+    if (!(await syncStateItemsToCloud(profile.id, deps))) {
       deps.setProfileSyncNote?.('Профиль сохранён, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
       deps.setProfileSyncState('error');
       return;
@@ -196,7 +172,6 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
   deps.setProfileSyncNote?.(null);
   deps.setProfileSyncState('saving');
   try {
-    const stateItems: LocalStateItem[] = (deps.collectLocalStateItemsImpl ?? collectLocalStateItems)(nextUser.id);
     const r = await fetchProfileApi('/api/profile', {
       method: 'PATCH',
       credentials: 'include',
@@ -227,7 +202,7 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
             deps.suppressProfileSyncStateRef.current = true;
           }
           deps.persistUser(retryProfile);
-          if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+          if (!(await syncStateItemsToCloud(nextUser.id, deps))) {
             deps.setProfileSyncNote?.('Изменение профиля сохранено, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
             deps.setProfileSyncState('error');
             return;
@@ -261,7 +236,7 @@ async function patchProfileInCloudNow(patch: Partial<UserProfile>, deps: Profile
       }
       deps.persistUser(serverProfile);
     }
-    if (!(await syncStateItemsToCloud(stateItems, deps.fetchImpl))) {
+    if (!(await syncStateItemsToCloud(nextUser.id, deps))) {
       deps.setProfileSyncNote?.('Изменение профиля сохранено, но часть локальных данных не синхронизирована. Повторите синхронизацию.');
       deps.setProfileSyncState('error');
       return;

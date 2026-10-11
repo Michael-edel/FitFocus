@@ -55,6 +55,7 @@ function requireOwnedKey(accountId: string, key: string): void {
 export type OutboxWrite = {
   accountId: string; writerId: string; intent: OutboxIntent; expectedRevision: number;
   baseVersion: number; parentOpId?: string;
+  conflictReason?: 'editor-not-loaded';
 };
 
 /** Internal transaction primitive, shared by ordinary writes and atomic migration. */
@@ -217,6 +218,19 @@ export class DurableOutbox {
       indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountId').getAll(accountId)) as Promise<OutboxOperation[]>);
   }
 
+  /** A completion status must observe the session and every remaining intent atomically. */
+  async isDrained(accountId: string, sessionEpoch: string): Promise<boolean> {
+    requireText(accountId); requireText(sessionEpoch);
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta], 'readonly', async (tx) => {
+      const [active, count] = await Promise.all([
+        indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as Promise<ActiveOutboxSession | undefined>,
+        indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountId').count(accountId)),
+      ]);
+      return active?.accountId === accountId && active.sessionEpoch === sessionEpoch && !active.pause && count === 0;
+    });
+  }
+
   /** Apply a protocol-2 observation only if no local intent or newer local read intervened. */
   async hydrate(accountId: string, key: string, observation: { value: string; version: number; exists: boolean }, expectedRevision: number): Promise<boolean> {
     requireOwnedKey(accountId, key);
@@ -258,7 +272,7 @@ export class DurableOutbox {
     const nowMs = Date.now();
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) =>
-      writeOutboxInTransaction(tx, input, { opId, nowMs }));
+      writeOutboxInTransaction(tx, input, { opId, nowMs, conflictReason: input.conflictReason }));
   }
 
   async claim(input: { accountId: string; sessionEpoch: string; owner: string; nowMs: number; leaseMs: number }): Promise<OutboxClaim | null> {

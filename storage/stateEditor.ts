@@ -1,0 +1,55 @@
+import { UserStateRepository, type UserStateKey } from './userStateRepository';
+import { reportStateSaveIssue } from './stateSaveStatus';
+
+export type StateCodec<T> = { decode: (raw: string | null, fallback: T) => T; encode: (value: T) => string };
+type Snapshot<T> = { value: T; phase: 'local' | 'loading' | 'ready' | 'error' };
+
+/** A feature editor owns the revision it loaded. Reading never creates an outgoing operation. */
+export class StateEditor<T> {
+  private snapshot: Snapshot<T>;
+  private readonly listeners = new Set<() => void>();
+  private loading?: Promise<void>;
+  private unobservedEdit = false;
+  private editRevision = 0;
+  constructor(private readonly repository: UserStateRepository | null, private readonly key: UserStateKey,
+    private readonly initial: T, private readonly codec: StateCodec<T>) {
+    this.snapshot = { value: initial, phase: repository ? 'loading' : 'local' };
+  }
+  readonly getSnapshot = (): Snapshot<T> => this.snapshot;
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  };
+  private publish(snapshot: Snapshot<T>): void { this.snapshot = snapshot; for (const listener of this.listeners) { try { listener(); } catch {} } }
+  load(): Promise<void> {
+    if (!this.repository) return Promise.resolve();
+    return this.loading ??= this.repository.readRawAsync(this.key).then((raw) => {
+      const value = this.unobservedEdit ? this.snapshot.value : this.codec.decode(raw, this.initial);
+      this.publish({ value, phase: 'ready' });
+    }).catch((error: unknown) => {
+      this.publish({ ...this.snapshot, phase: 'error' });
+      this.issue(error);
+    });
+  }
+  private issue(error: unknown): void {
+    if (this.repository) reportStateSaveIssue({ accountId: this.repository.accountId, key: this.repository.key(this.key),
+      kind: 'error', reason: error instanceof Error ? error.name : 'state-editor' });
+  }
+  set(action: T | ((value: T) => T)) {
+    const value = typeof action === 'function' ? (action as (value: T) => T)(this.snapshot.value) : action;
+    let raw: string;
+    try { raw = this.codec.encode(value); } catch (error) { this.issue(error); return Promise.reject(error); }
+    if (this.repository && this.snapshot.phase !== 'ready') this.unobservedEdit = true;
+    this.editRevision += 1;
+    this.publish({ ...this.snapshot, value });
+    return this.repository ? this.repository.writeRaw(this.key, raw, this.unobservedEdit) : Promise.resolve(null);
+  }
+  async remove() {
+    const editRevision = ++this.editRevision;
+    if (this.repository && this.snapshot.phase !== 'ready') this.unobservedEdit = true;
+    const operation = this.repository ? await this.repository.remove(this.key, this.unobservedEdit) : null;
+    if (editRevision === this.editRevision && (!operation || operation.status === 'pending')) {
+      this.publish({ ...this.snapshot, value: this.initial });
+    }
+    return operation;
+  }
+}

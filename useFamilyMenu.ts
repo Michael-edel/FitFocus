@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { FamilyWeeklyMenu, UserProfile } from './types';
-import { persistAllUsersSnapshot, safeSetItem } from './storage/hybrid';
+import { persistAllUsersSnapshot } from './storage/hybrid';
+import { useOwnedState } from './features/state/useOwnedState';
+import type { StateCodec } from './storage/stateEditor';
 import { errorMessage, isRecord, parseJson } from './safeJson';
 import { saveFamilyMenu, saveFamilyShoppingItems } from './features/family/familyApi';
 
-export type FamilyMenuPrefs = {
-  includeIds: string[];
-  cookingMode: 'all_meals' | 'once_per_day';
-  budgetPerWeek: string;
-  currency: string;
-};
+import type { FamilyMenuPrefs } from './storage/stateTypes';
+export type { FamilyMenuPrefs } from './storage/stateTypes';
 
 export const DEFAULT_FAMILY_MENU_PREFS: FamilyMenuPrefs = {
   includeIds: [],
@@ -44,6 +42,10 @@ export function readFamilyMenuPrefs(raw: string | null, defaultIncludeIds: strin
   };
 }
 
+const familyPrefsCodec: StateCodec<FamilyMenuPrefs> = {
+  decode: (raw, fallback) => readFamilyMenuPrefs(raw, fallback.includeIds), encode: JSON.stringify,
+};
+
 type UseFamilyMenuParams = {
   allUsers: UserProfile[];
   cloudFamily: { id?: string | null } | null;
@@ -74,25 +76,11 @@ export function useFamilyMenu({
   const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
   const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
   const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
-  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<FamilyMenuPrefs>(DEFAULT_FAMILY_MENU_PREFS);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setFamilyMenuPrefs(DEFAULT_FAMILY_MENU_PREFS);
-      return;
-    }
-    const prefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
-    try {
-      const next = readFamilyMenuPrefs(localStorage.getItem(prefsKey), allUsers.map((user) => user.id));
-      setFamilyMenuPrefs(next);
-      safeSetItem(prefsKey, JSON.stringify(next));
-    } catch {
-      setFamilyMenuPrefs({
-        ...DEFAULT_FAMILY_MENU_PREFS,
-        includeIds: allUsers.map((user) => user.id),
-      });
-    }
-  }, [allUsers, currentUser?.id]);
+  const preferences = useOwnedState(currentUser?.id, 'family_menu_prefs', {
+    ...DEFAULT_FAMILY_MENU_PREFS, includeIds: allUsers.map((user) => user.id),
+  }, familyPrefsCodec);
+  const familyMenuPrefs = preferences.value;
+  const setFamilyMenuPrefs = preferences.setValue;
 
   const familyMenu = useMemo(() => cloudFamilyMenu ?? currentUser?.aiPlan?.familyWeeklyMenu ?? null, [cloudFamilyMenu, currentUser?.aiPlan?.familyWeeklyMenu]);
 
@@ -114,9 +102,8 @@ export function useFamilyMenu({
         currency: familyMenuPrefs.currency || 'KZT',
       };
 
-      try {
-        safeSetItem(`fitfocus_data_${currentUser.id}_family_menu_prefs`, JSON.stringify(prefs));
-      } catch {}
+      const operation = await preferences.persist({ ...familyMenuPrefs, includeIds });
+      if (operation?.status === 'conflicted') throw new Error('Настройки семьи сохранены как конфликт. Сначала разрешите его.');
 
       const familyWeeklyMenu = await generateFamilyWeeklyMenu(currentUser, allUsers, prefs);
       const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, familyWeeklyMenu } };
@@ -156,6 +143,7 @@ export function useFamilyMenu({
     setCloudFamilyMenu,
     setCurrentUser,
     weekStartISO,
+    preferences.persist,
   ]);
 
   return {

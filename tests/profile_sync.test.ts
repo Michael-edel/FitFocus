@@ -16,7 +16,7 @@ function makeDeps(fetchImpl: typeof fetch) {
     setAllUsers: vi.fn(),
     persistUser: vi.fn(),
     loginAsUser: vi.fn(async () => undefined),
-    collectLocalStateItemsImpl: () => [],
+    syncStateImpl: vi.fn(async () => true),
     fetchImpl,
   };
 }
@@ -26,6 +26,21 @@ afterEach(() => {
 });
 
 describe('profile sync serialization', () => {
+  it('requests the owned sender instead of uploading localStorage state directly', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ profile }), { status: 200 }));
+    const deps = makeDeps(fetchMock);
+    await pushProfileToCloud(profile, deps);
+    expect(deps.syncStateImpl).toHaveBeenCalledWith(profile.id);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/profile');
+  });
+  it('does not label pending or conflicted state as synchronized after a profile success', async () => {
+    const deps = makeDeps(vi.fn(async () => new Response(JSON.stringify({ profile }), { status: 200 })) as typeof fetch);
+    deps.syncStateImpl.mockResolvedValue(false);
+    await pushProfileToCloud(profile, deps);
+    expect(deps.setProfileSyncState).toHaveBeenLastCalledWith('error');
+    expect(deps.setLastProfileSyncAt).not.toHaveBeenCalled();
+  });
   it('waits for an active profile sync before sending the next change', async () => {
     let releaseFirstRequest: (() => void) | undefined;
     const firstRequest = new Promise<void>((resolve) => {

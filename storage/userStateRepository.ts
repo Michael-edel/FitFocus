@@ -1,19 +1,17 @@
 import { parseJson } from '../safeJson';
 import type { CoachAdviceResult } from '../geminiService';
-import type { AppSettings, FavoriteRecipe, FoodItem } from '../types';
+import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit } from '../types';
+import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
 import { DurableOutbox, type OutboxIntent, type OutboxOperation } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
 
-export type UserStateKey =
-  | 'diary'
-  | 'history'
-  | 'favorite_recipes'
-  | 'weekly_reports'
-  | 'last_coach_card'
-  | 'settings';
+export const USER_STATE_KEYS = ['diary', 'history', 'favorite_recipes', 'weekly_reports', 'last_coach_card', 'settings',
+  'habits', 'favorites', 'adapt_read', 'adapt_expanded', 'refeed', 'plan_task_done', 'council_history', 'family_menu_prefs', 'invite_code'] as const;
+export type UserStateKey = typeof USER_STATE_KEYS[number];
+type JsonUserStateKey = Exclude<UserStateKey, 'adapt_read' | 'adapt_expanded' | 'refeed' | 'invite_code'>;
 
 export type UserStateValue = {
   diary: FoodItem[];
@@ -22,6 +20,15 @@ export type UserStateValue = {
   weekly_reports: WeeklyStoredReport[];
   last_coach_card: CoachAdviceResult | null;
   settings: AppSettings;
+  habits: UserHabit[];
+  favorites: FastLogItem[];
+  adapt_read: boolean;
+  adapt_expanded: boolean;
+  refeed: string | null;
+  plan_task_done: Record<string, boolean>;
+  council_history: CouncilChatMsg[];
+  family_menu_prefs: FamilyMenuPrefs;
+  invite_code: string;
 };
 
 export function userStateStorageKey(userId: string, stateKey: UserStateKey): string {
@@ -83,7 +90,7 @@ export class UserStateRepository {
     return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision)));
   }
 
-  private mutate(stateKey: UserStateKey, intent: OutboxIntent): Promise<OutboxOperation> {
+  private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false): Promise<OutboxOperation> {
     const key = this.key(stateKey);
     return this.track(key, this.serialize(key, async () => {
       // An editor that has not loaded existing data cannot silently claim its revision.
@@ -91,6 +98,7 @@ export class UserStateRepository {
       const operation = await this.outbox.write({
         accountId: this.accountId, writerId: this.writerId, intent,
         expectedRevision: observation.revision, baseVersion: observation.confirmedVersion,
+        ...(retainAsConflict ? { conflictReason: 'editor-not-loaded' as const } : {}),
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
       });
       reportStateOperation(this.accountId, operation);
@@ -106,19 +114,28 @@ export class UserStateRepository {
     }));
   }
 
-  writeJson<K extends UserStateKey>(stateKey: K, value: UserStateValue[K]): Promise<OutboxOperation> {
+  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K]): Promise<OutboxOperation> {
     let raw: string;
     try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
-    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value: raw });
+    return this.writeRaw(stateKey, raw);
   }
 
-  async readJsonAsync<T>(stateKey: UserStateKey, fallback: T, isValid: (value: unknown) => value is T): Promise<T> {
+  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict);
+  }
+
+  async readRawAsync(stateKey: UserStateKey): Promise<string | null> {
     const snapshot = await this.observe(stateKey);
     // A committed delete must never revive a leftover localStorage value.
     let raw = snapshot.value;
     if (raw === null && snapshot.revision === 0) {
       try { raw = localStorage.getItem(this.key(stateKey)); } catch {}
     }
+    return raw;
+  }
+
+  async readJsonAsync<T>(stateKey: UserStateKey, fallback: T, isValid: (value: unknown) => value is T): Promise<T> {
+    const raw = await this.readRawAsync(stateKey);
     if (!raw) return fallback;
     try {
       const parsed = parseJson(raw);
@@ -126,7 +143,7 @@ export class UserStateRepository {
     } catch { return fallback; }
   }
 
-  remove(stateKey: UserStateKey): Promise<OutboxOperation> {
-    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) });
+  remove(stateKey: UserStateKey, retainAsConflict = false): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict);
   }
 }

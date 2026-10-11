@@ -1,15 +1,10 @@
 import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
-import { fetchWithResilience } from '../services/httpClient';
 import {
   clearIndexedUserStateForUser,
-  isIndexedUserStateStorageKey,
-  readIndexedUserStateRaw,
   renameIndexedUserStatePrefix,
-  writeIndexedUserStateRaw,
 } from './indexedUserState';
 
-type KVItem = { key: string; value: string; baseVersion?: number };
 type ProfileLike = {
   id: string;
   googleSub?: string;
@@ -30,32 +25,6 @@ function isProfileLike(value: unknown): value is ProfileLike {
   return isRecord(value) && typeof value.id === 'string' && value.id.trim().length > 0;
 }
 
-type RemoteStateItem = {
-  key: string;
-  value: string;
-  version?: number;
-};
-
-type PendingRemoteKVOperation =
-  | { type: 'put'; key: string; value: string; baseVersion?: number; retryCount?: number }
-  | { type: 'delete'; key: string; baseVersion?: number; retryCount?: number };
-
-const REMOTE_STATE_PREFIXES = [
-  STORAGE_KEYS.dataPrefix,
-  "ff_gemini_cooldown_until",
-  "ff_ai_last_status_v1",
-  "ff_ai_last_action_v1",
-  "ff_ai_feature_lastcall_v1:",
-];
-
-const __pendingRemoteKVOperations = new Map<string, PendingRemoteKVOperation>();
-let __remoteKVTimer: number | null = null;
-let __remoteKVSyncing = false;
-let __remoteAuthBlockedUntil = 0;
-let __remoteOutboxHydrated = false;
-const REMOTE_AUTH_BACKOFF_MS = 30_000;
-const REMOTE_SYNC_DELAY_MS = 400;
-const REMOTE_SYNC_RETRY_DELAY_MS = 2_000;
 export const REMOTE_KV_OUTBOX_STORAGE_KEY = 'fitfocus.remote-kv-outbox.v1';
 
 const USER_SCOPED_KEY_PREFIXES = [
@@ -84,32 +53,16 @@ function isLocalUserKey(key: string, userId: string): boolean {
   return USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`);
 }
 
-export function shouldMirrorKey(key: string): boolean {
-  if (key.endsWith('__ffv')) return false;
-  if (key.endsWith('_all_users')) return false;
-  return REMOTE_STATE_PREFIXES.some((prefix) => key.startsWith(prefix));
-}
+/** Automatic mirroring is retired; all synchronized edits require an explicit account editor. */
+export function shouldMirrorKey(_key: string): boolean { return false; }
 
-function isRemoteAuthBlocked(): boolean {
-  return Date.now() < __remoteAuthBlockedUntil;
-}
-
-function blockRemoteSyncAfterAuthFailure() {
-  __remoteAuthBlockedUntil = Date.now() + REMOTE_AUTH_BACKOFF_MS;
+function requireLocalOnlyKey(key: string): void {
+  if (key.startsWith(STORAGE_KEYS.dataPrefix) && !key.endsWith('_all_users')) throw new Error('OWNED_STATE_REPOSITORY_REQUIRED');
+  if (key === REMOTE_KV_OUTBOX_STORAGE_KEY) throw new Error('LEGACY_SOURCE_READ_ONLY');
 }
 
 function versionMetaKey(key: string) {
   return `${key}__ffv`;
-}
-
-function getStoredVersion(key: string): number | undefined {
-  try {
-    const raw = localStorage.getItem(versionMetaKey(key));
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function setStoredVersion(key: string, version?: number) {
@@ -124,230 +77,10 @@ function setStoredVersion(key: string, version?: number) {
   }
 }
 
-async function applyRemoteKVConflict(key: string, serverValue: string, version?: number) {
-  try {
-    if (isIndexedUserStateStorageKey(key) && await writeIndexedUserStateRaw(key, serverValue)) {
-      localStorage.removeItem(key);
-    } else {
-      localStorage.setItem(key, serverValue);
-    }
-    setStoredVersion(key, version);
-  } catch {
-    // ignore
-  }
-}
-
-function isRemoteStateItem(value: unknown): value is RemoteStateItem {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Record<string, unknown>;
-  if (typeof candidate.key !== "string") return false;
-  if (typeof candidate.value !== "string") return false;
-  if ("version" in candidate && candidate.version !== undefined && typeof candidate.version !== "number") {
-    return false;
-  }
-  return true;
-}
-
-function isPendingRemoteKVOperation(value: unknown): value is PendingRemoteKVOperation {
-  if (!isRecord(value) || typeof value.key !== 'string' || !value.key) return false;
-  const baseVersion = value.baseVersion;
-  const retryCount = value.retryCount;
-  if (baseVersion !== undefined && (typeof baseVersion !== 'number' || !Number.isInteger(baseVersion) || baseVersion < 0)) return false;
-  if (retryCount !== undefined && (typeof retryCount !== 'number' || !Number.isInteger(retryCount) || retryCount < 0)) return false;
-  if (value.type === 'put') return typeof value.value === 'string';
-  return value.type === 'delete';
-}
-
-function hydrateRemoteOutbox() {
-  if (__remoteOutboxHydrated) return;
-  __remoteOutboxHydrated = true;
-  try {
-    const raw = localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY);
-    const parsed = raw ? parseJson(raw) : null;
-    if (!Array.isArray(parsed)) return;
-    for (const operation of parsed) {
-      if (isPendingRemoteKVOperation(operation) && shouldMirrorKey(operation.key)) {
-        __pendingRemoteKVOperations.set(operation.key, operation);
-      }
-    }
-  } catch {
-    // Browser storage may be unavailable in private mode.
-  }
-}
-
-function persistRemoteOutbox() {
-  try {
-    if (__pendingRemoteKVOperations.size === 0) {
-      localStorage.removeItem(REMOTE_KV_OUTBOX_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(
-      REMOTE_KV_OUTBOX_STORAGE_KEY,
-      JSON.stringify([...__pendingRemoteKVOperations.values()]),
-    );
-  } catch {
-    // The primary local write still succeeds even if the durable queue cannot be stored.
-  }
-}
-
-function setPendingRemoteKVOperation(operation: PendingRemoteKVOperation) {
-  hydrateRemoteOutbox();
-  __pendingRemoteKVOperations.set(operation.key, operation);
-  persistRemoteOutbox();
-}
-
-function completeRemoteKVOperation(operation: PendingRemoteKVOperation) {
-  if (__pendingRemoteKVOperations.get(operation.key) !== operation) return;
-  __pendingRemoteKVOperations.delete(operation.key);
-  persistRemoteOutbox();
-}
-
-function scheduleRemoteKVSync(delay = REMOTE_SYNC_DELAY_MS): void {
-  hydrateRemoteOutbox();
-  if (__remoteKVTimer != null || __remoteKVSyncing) return;
-  __remoteKVTimer = window.setTimeout(() => {
-    __remoteKVTimer = null;
-    void flushRemoteKVOperations();
-  }, delay);
-}
-
-function retryRemoteKVOperation(operation: PendingRemoteKVOperation): boolean {
-  if (__pendingRemoteKVOperations.get(operation.key) !== operation) return false;
-  setPendingRemoteKVOperation({ ...operation, retryCount: (operation.retryCount ?? 0) + 1 });
-  return true;
-}
-
-async function flushRemoteKVOperations(): Promise<void> {
-  hydrateRemoteOutbox();
-  if (__remoteKVSyncing || isRemoteAuthBlocked()) return;
-  __remoteKVSyncing = true;
-  let retryPending = false;
-  try {
-    const batch = [...__pendingRemoteKVOperations.values()];
-
-    for (const operation of batch) {
-      if (__pendingRemoteKVOperations.get(operation.key) !== operation) continue;
-        try {
-          if (operation.type === 'put') {
-            const response = await fetchWithResilience('/api/state', {
-              method: 'PUT',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: operation.key,
-                value: operation.value,
-                baseVersion: operation.baseVersion ?? 0,
-              }),
-            });
-            const rawPayload: unknown = await response.json().catch(() => null);
-            const payload = isRecord(rawPayload) ? rawPayload : {};
-            if (response.ok) {
-              const serverItem = Array.isArray(payload?.items)
-                ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === operation.key) ?? null
-                : null;
-              if (typeof serverItem?.version === 'number') {
-                setStoredVersion(operation.key, serverItem.version);
-              }
-              completeRemoteKVOperation(operation);
-              continue;
-            }
-            if (response.status === 401 || response.status === 403) {
-              blockRemoteSyncAfterAuthFailure();
-              return;
-            }
-            if (response.status === 429 || response.status >= 500) {
-              retryPending = retryRemoteKVOperation(operation) || retryPending;
-              continue;
-            }
-            if (response.status === 409 && payload?.key) {
-              const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
-              const currentValue = isIndexedUserStateStorageKey(operation.key)
-                ? await readIndexedUserStateRaw(operation.key)
-                : localStorage.getItem(operation.key);
-              if (typeof currentValue === 'string' && currentValue === operation.value && serverVersion) {
-                setStoredVersion(operation.key, serverVersion);
-                completeRemoteKVOperation(operation);
-                continue;
-              }
-              if (typeof payload.value === 'string' && payload.key === operation.key) {
-                await applyRemoteKVConflict(operation.key, payload.value, serverVersion);
-              }
-            }
-            completeRemoteKVOperation(operation);
-            continue;
-          }
-
-          const deleteParams = new URLSearchParams({
-            key: operation.key,
-            baseVersion: String(operation.baseVersion ?? 0),
-          });
-          const response = await fetchWithResilience(`/api/state?${deleteParams}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          });
-          if (response.status === 401 || response.status === 403) {
-            blockRemoteSyncAfterAuthFailure();
-            return;
-          }
-          if (response.status === 409) {
-            const rawPayload: unknown = await response.json().catch(() => null);
-            const payload = isRecord(rawPayload) ? rawPayload : {};
-            if (typeof payload?.key === 'string' && typeof payload?.value === 'string') {
-              await applyRemoteKVConflict(
-                payload.key,
-                payload.value,
-                typeof payload.version === 'number' ? payload.version : undefined,
-              );
-            }
-            completeRemoteKVOperation(operation);
-            continue;
-          }
-          if (response.status === 429 || response.status >= 500) {
-            retryPending = retryRemoteKVOperation(operation) || retryPending;
-            continue;
-          }
-          completeRemoteKVOperation(operation);
-        } catch {
-          retryPending = retryRemoteKVOperation(operation) || retryPending;
-        }
-    }
-  } finally {
-    __remoteKVSyncing = false;
-    if (__pendingRemoteKVOperations.size > 0 && !isRemoteAuthBlocked()) {
-      scheduleRemoteKVSync(retryPending ? REMOTE_SYNC_RETRY_DELAY_MS : REMOTE_SYNC_DELAY_MS);
-    }
-  }
-}
-
-export function enqueueRemoteKVWrite(key: string, value: string) {
-  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  setPendingRemoteKVOperation({
-    type: 'put',
-    key,
-    value,
-    baseVersion: getStoredVersion(key),
-  });
-  scheduleRemoteKVSync();
-}
-
-export function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
-  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  setPendingRemoteKVOperation({ type: 'delete', key, baseVersion });
-  scheduleRemoteKVSync();
-}
-
-/** Resume durable state syncing after the authenticated browser session is ready. */
-export function resumeRemoteKVSync(): void {
-  hydrateRemoteOutbox();
-  if (__pendingRemoteKVOperations.size > 0 && !isRemoteAuthBlocked()) {
-    scheduleRemoteKVSync(0);
-  }
-}
-
 export function safeSetItem(key: string, value: string) {
+  requireLocalOnlyKey(key);
   try {
     localStorage.setItem(key, value);
-    enqueueRemoteKVWrite(key, value);
   } catch (e) {
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
       console.warn('LocalStorage quota exceeded. Consider clearing old data.');
@@ -358,11 +91,10 @@ export function safeSetItem(key: string, value: string) {
 }
 
 export function safeRemoveItem(key: string) {
+  requireLocalOnlyKey(key);
   try {
-    const baseVersion = getStoredVersion(key);
     localStorage.removeItem(key);
     localStorage.removeItem(versionMetaKey(key));
-    enqueueRemoteKVDelete(key, baseVersion);
   } catch {
     // ignore
   }
@@ -517,53 +249,6 @@ export function normalizeUserProfiles<T extends ProfileLike>(profiles: T[]): T[]
     .map((entry) => entry.profile);
 }
 
-export function collectLocalStateItems(userId: string): KVItem[] {
-  const items: KVItem[] = [];
-  for (let i = 0; i < localStorage.length; i += 1) {
-    const key = localStorage.key(i);
-    if (!key) continue;
-    if (!shouldMirrorKey(key)) continue;
-    if (
-      !key.startsWith(STORAGE_KEYS.dataPrefix) &&
-      key !== 'ff_gemini_cooldown_until' &&
-      key !== 'ff_ai_last_status_v1' &&
-      key !== 'ff_ai_last_action_v1' &&
-      !key.startsWith('ff_ai_feature_lastcall_v1:')
-    ) {
-      continue;
-    }
-    if (key.startsWith(STORAGE_KEYS.dataPrefix) && !key.startsWith(`${STORAGE_KEYS.dataPrefix}${userId}_`)) continue;
-    const value = localStorage.getItem(key);
-    if (typeof value === 'string') items.push({ key, value, baseVersion: getStoredVersion(key) });
-  }
-  return items;
-}
-
 export function rememberRemoteStateVersion(key: string, version?: number) {
   setStoredVersion(key, version);
-}
-
-export function applyRemoteStateItems(input: unknown) {
-  if (!Array.isArray(input)) return;
-  for (const item of input) {
-    if (!isRemoteStateItem(item)) continue;
-    try {
-      if (isIndexedUserStateStorageKey(item.key)) {
-        void writeIndexedUserStateRaw(item.key, item.value).then((stored) => {
-          if (stored) {
-            try { localStorage.removeItem(item.key); } catch {}
-            return;
-          }
-          try { localStorage.setItem(item.key, item.value); } catch {}
-        });
-      } else {
-        localStorage.setItem(item.key, item.value);
-      }
-      if (typeof item.version === 'number') {
-        setStoredVersion(item.key, item.version);
-      }
-    } catch {
-      // Best-effort hydration only.
-    }
-  }
 }

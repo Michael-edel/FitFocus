@@ -1,6 +1,6 @@
 import type { UserProfile } from './types';
 import type { RegistrationData } from './RegistrationScreen';
-import { applyRemoteStateItems, normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
+import { normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 
@@ -211,7 +211,6 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       });
       const pj = await readJsonRecord(pr);
       if (pr.ok) {
-        applyRemoteStateItems(pj?.items);
         const profile = isUserProfilePayload(pj?.profile) ? pj.profile : null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));

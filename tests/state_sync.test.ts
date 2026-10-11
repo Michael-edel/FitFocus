@@ -31,6 +31,60 @@ function client(mutation: (input: RequestInfo | URL, init?: RequestInit) => Prom
 const ack = (version = 1) => json({ ok: true, items: [{ key, version, exists: true }] }, 200, scope);
 
 describe('durable HTTP sender', () => {
+  it('does not let a captured profile flush switch to another account', async () => {
+    const { instance, fetchFn } = client(async () => ack());
+    expect(await instance.syncNow(account)).toBe(false);
+    await instance.connect(account);
+    expect(await instance.syncNow('account-b')).toBe(false);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect((await outbox.sessionState()).active?.accountId).toBe(account);
+  });
+
+  it('reports a requested flush complete only after fresh proof and a drained owned queue', async () => {
+    await write(); const { instance, fetchFn } = client(async () => ack());
+    await outbox.write({ accountId: 'account-b', writerId: 'other-editor', expectedRevision: 0, baseVersion: 0,
+      intent: { type: 'put', key: 'fitfocus_data_account-b_settings', value: 'other account' } });
+    await instance.connect(account);
+    expect(await instance.syncNow(account)).toBe(true);
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me', '/api/me', '/api/state']);
+    expect(await outbox.list(account)).toEqual([]);
+    expect(await outbox.list('account-b')).toHaveLength(1);
+  });
+
+  it.each([401, 409])('does not report a profile flush complete after HTTP %s', async (status) => {
+    await write(); const { instance } = client(async () => json({ error: status === 401 ? 'UNAUTH' : 'KV_CONFLICT' }, status));
+    await instance.connect(account);
+    expect(await instance.syncNow(account)).toBe(false);
+    expect(await outbox.list(account)).toHaveLength(1);
+  });
+
+  it('observes a logout in another tab before reporting completion', async () => {
+    const { instance } = client(async () => ack()); await instance.connect(account);
+    const drain = outbox.isDrained.bind(outbox);
+    vi.spyOn(outbox, 'isDrained').mockImplementation(async (...args) => {
+      await new DurableOutbox(secondDb).invalidateSessions();
+      return drain(...args);
+    });
+    expect(await instance.syncNow(account)).toBe(false);
+  });
+
+  it('rejects a late completion after the local sender was stopped', async () => {
+    const { instance } = client(async () => ack()); await instance.connect(account);
+    const drain = outbox.isDrained.bind(outbox);
+    vi.spyOn(outbox, 'isDrained').mockImplementation(async (...args) => {
+      const result = await drain(...args);
+      instance.stop();
+      return result;
+    });
+    expect(await instance.syncNow(account)).toBe(false);
+  });
+
+  it('does not report completion while a legacy source still requires verified import', async () => {
+    const { instance } = client(async () => ack(), undefined, { legacyPending: () => true });
+    await instance.connect(account);
+    expect(await instance.syncNow(account)).toBe(false);
+  });
+
   it('starts HTTP only after claim commit, uses scoped CAS and accepts the actual returned version', async () => {
     await write();
     const { instance } = client(async (url, init) => {
