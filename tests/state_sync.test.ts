@@ -153,6 +153,20 @@ describe('durable HTTP sender', () => {
     expect(await instance.connect(account)).toBe(false); await instance.flush(); expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
+  it('does not resend an auth-paused intent until syncNow obtains a fresh proof', async () => {
+    const operation = await write();
+    const { instance, fetchFn } = client(async () => json({ error: 'UNAUTH' }, 401));
+    await instance.connect(account); await instance.flush();
+    expect((await outbox.sessionState()).active?.pause).toBe('auth');
+    await instance.flush(); await instance.flush();
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual(['/api/me', '/api/state']);
+
+    expect(await instance.syncNow(account)).toBe(false);
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual(['/api/me', '/api/state', '/api/me', '/api/state']);
+    expect((await outbox.sessionState()).active?.pause).toBe('auth');
+    expect(await outbox.list(account)).toMatchObject([{ opId: operation.opId, status: 'pending', retryCount: 0, baseVersion: 0 }]);
+  });
+
   it('saves during auth pause and resumes only after a new successful server verification', async () => {
     const first = await write(); let authorized = false; let version = 0;
     const { instance } = client(async () => authorized ? ack(++version) : json({ error: 'UNAUTH' }, 401));

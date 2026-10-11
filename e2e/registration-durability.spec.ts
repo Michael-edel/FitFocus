@@ -10,9 +10,11 @@ async function saved(page: Page) {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
     const read = <T,>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
     try {
-      const tx = db.transaction(['values', 'outbox'], 'readonly');
-      const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
+      const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
+      const [value, operations, session] = await Promise.all([read(tx.objectStore('values').get(key)),
+        read(tx.objectStore('outbox').getAll()), read(tx.objectStore('outbox_meta').get('active-session'))]);
       return { value: value ? JSON.parse(value.value) as { id: string; aiPlan?: { title: string } } : null,
+        pause: (session as { pause?: string } | undefined)?.pause,
         operations: operations.filter(op => op.key === key) as Array<{ resource: string; status: string; baseVersion: number }> };
     } finally { db.close(); }
   }, key);
@@ -55,11 +57,14 @@ test('registration is durable before AI and reload restores it without an OAuth 
   const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
   await expect(page.getByText(/Ваш AI/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('AI Инициализация')).toHaveCount(0);
-  await expect.poll(() => requests.profile).toBe(1); expect(requests.ai).toBe(1);
+  // Auto-sync may obtain a new proof after the first 401; wait for the durable pause, not a timed request count.
+  await expect.poll(async () => (await saved(page)).pause).toBe('auth');
+  expect(requests.profile).toBeGreaterThanOrEqual(1); expect(requests.ai).toBe(1);
   expect((await saved(page)).operations).toHaveLength(2);
   expect(await page.evaluate(() => sessionStorage.getItem('fitfocus.auth.pending-oauth.v1'))).toBeNull();
   await page.reload(); await expect(page).toHaveURL(/#plan$/); await expect(create).toHaveCount(0);
   await expect(page.getByText(/Ваш AI/)).toBeVisible();
+  await expect.poll(async () => (await saved(page)).pause).toBe('auth');
   expect((await saved(page)).value).toMatchObject({ id: account, aiPlan: { title: 'E2E plan' } });
   expect((await saved(page)).operations).toHaveLength(2); expect(errors).toEqual([]);
   await page.screenshot({ path: info.outputPath('registration-reload.png') });
@@ -78,6 +83,6 @@ test('registration remains on the form and sends no AI or profile request after 
   const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
   await expect(page.getByText('Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.')).toBeVisible();
   await expect(page.getByText('AI Инициализация')).toHaveCount(0); await expect(create).toBeEnabled();
-  expect(await saved(page)).toEqual({ value: null, operations: [] }); expect(requests).toEqual({ ai: 0, profile: 0 }); expect(errors).toEqual([]);
+  expect(await saved(page)).toEqual({ value: null, pause: undefined, operations: [] }); expect(requests).toEqual({ ai: 0, profile: 0 }); expect(errors).toEqual([]);
   await page.screenshot({ path: info.outputPath('registration-quota.png') });
 });
