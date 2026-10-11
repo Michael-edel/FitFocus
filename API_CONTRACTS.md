@@ -1,7 +1,8 @@
 # Контракты API, критичные для синхронизации
 
-Обновлено: 09.10.2026. State описывает серверный компонент P0.7
-в `fix/state-generations` после миграции 0019; profile — снимок `810adb1`.
+Обновлено: 11.10.2026. State описывает серверный компонент P0.7
+в `fix/state-generations` после миграции 0019; profile включает guard/capability
+интеграционной ветки `fix/durable-outbox`.
 Серверная ветка объединена с клиентской коммитом `93f90c0`;
 слияние в main и deploy не подтверждены. [Область](docs/README.md).
 Это ограниченный реестр state/profile, не полная спецификация всех endpoints.
@@ -111,6 +112,15 @@ baseVersion конфликтует; клиент не выдумывает ack �
 
 ## /api/profile
 
+`/api/me` дополнительно сообщает `profileSync: { protocol: 1, guard: 1 }`.
+Проверенные accountId/sessionId берутся из stateSync того же ответа /me.
+Новый sender требует обе capabilities перед отправкой profile-операции.
+GET/PUT/PATCH поддерживают парные X-FitFocus-State-Account/Session с той же
+серверной проверкой, что state; изменение cookie возвращает 401 до работы
+с профилем. Ответ profile содержит X-FitFocus-Profile-Protocol: 1,
+X-FitFocus-Profile-Guard: 1 и переданную привязку. Запросы без обоих заголовков
+ещё поддерживаются; реальный барьер старых клиентов этим не реализован.
+
 GET возвращает 200 `{ "profile": … }`.
 PUT заменяет профиль через сценарий `replace`, PATCH применяет сценарий `patch`.
 Оба принимают разрешённые поля профиля прямо в JSON-body вместе с baseVersion,
@@ -124,6 +134,10 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 
 Успех записи содержит `profile`, `updatedFields`, `stateItems`, `mode`, `version`.
 `stateItems` в этом ответе — число, а не массив state-записей.
+Для ack нового sender нужны совпадающие scope и profile.id, целая версия
+больше baseVersion и равенство version в ответе и profile.version.
+409 сохраняет конфликт; автоматического PATCH с новой серверной базой нет.
+[Граница редактора и общей outbox](docs/profile-persistence.md).
 409: `{ "error": "PROFILE_CONFLICT", "profile": …, "version": … }`.
 400: `BAD_JSON`, `BAD_BASE_VERSION`, `EMPTY_PATCH`, `STATE_ITEMS_USE_STATE_ENDPOINT`.
 Загрузка state и сохранение профиля — отдельные пути, которые нужно тестировать

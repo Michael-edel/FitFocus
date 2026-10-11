@@ -435,3 +435,71 @@ CI не переносится автоматически на следующи�
 На дату сверки PR #93 открыт как draft с базой `fix/state-generations`;
 защищённая main остаётся на `c939ae6f3dbdb802478ea8a305b180eefb0b90f8`.
 Profile, runtime legacy-миграция, полная приёмка и выпуск остаются открытыми.
+
+## Существующий профиль в постоянной outbox
+
+Дата сверки: 11.10.2026. Код этапа —
+[`fc6bb82a6bfcf6e82cd19e223d66b0e9296896dc`](https://github.com/Michael-edel/FitFocus/commit/fc6bb82a6bfcf6e82cd19e223d66b0e9296896dc),
+ветка `fix/durable-outbox`, draft PR #93 с прежней базой #94 → #90.
+[Контракт компонента](profile-persistence.md) описывает существующий профиль,
+а не всю регистрацию и auth/legacy lifecycle.
+
+Редактор профиля использует StateEditor и атомарный value/intent/revision
+в прежней IDB v2. `resource: profile` выбирает `/api/profile`; отсутствие
+resource сохраняет формат state-операций. Новый store не добавлен,
+USER_STATE_KEYS по-прежнему содержит 15 state-ключей. Прежняя Promise-очередь,
+прямые PUT/PATCH profileSync и автоматический повтор 409 с новой базой удалены.
+
+Свежий `/me` подтверждает profile capability и account/session; сервер
+проверяет эту привязку до GET/PUT/PATCH. Ack требует версию своей мутации.
+409 сохраняет локальное намерение и проверенный серверный снимок;
+auth/access/protocol-пауза сохраняет локальные правки. Flush ждёт commit,
+но не принимает незнакомую редактору ревизию другой вкладки.
+
+При входе восстанавливается IDB-профиль; bootstrap может заполнить лишь
+пустое хранилище. Guarded refresh проверяет ревизию, отсутствие intent и
+sessionEpoch транзакционно; UI проверяет поколение входа и счётчик правок.
+Чистое обновление заменяет только профиль. Несохранённая форма блокирует
+refresh; quota-отказ сохраняет черновик и доступную кнопку после reload.
+Проверки актуальности bootstrap и subject добавлены, но полная HTTP-защита
+bootstrap/state-hydration остаётся отдельной работой.
+
+### Проверка компонента fc6bb82
+
+- 790 unit-тестов в 173 файлах прошли. Покрыты быстрые patches, локальные
+  и серверные конфликты, поздний flush/refresh, смена аккаунта/сессии,
+  capability, ошибочный ack, auth/access, bounded retry и сохранность intent.
+- Гонка времени немедленной retry-паузы и finish сначала воспроизведена
+  детерминированными движущимися часами: OUTBOX_INVALID_RETRY_TIME.
+  Исправление использует единое время завершения и сохраняет допустимость retry.
+- Браузерный quota-сценарий сначала упал на всех семи проектах: cache считал
+  форму clean, когда её поле совпало с оптимистичным currentUser после отказа.
+  Явный dirty-признак теперь сохраняется. Повтор четырёх новых сценариев
+  на desktop Chromium и Android Chrome: 8 passed, без retries.
+- Финальный полный локальный Playwright: 103 passed, 9 прежних явных skips,
+  без retries. Все четыре profile-сценария прошли на семи проектах:
+  desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA.
+  Skips относятся к выбранным платформам onboarding и Chromium-only forced-colors.
+- Все три режима typecheck, auth/API/admin guards, schema parity
+  (21 migration / 30 tables), privacy (27 tables) и audit
+  (0 известных уязвимостей) прошли. Production build выполнен E2E-конфигурацией.
+- Browser plugin not available: использован Playwright проекта на
+  `http://127.0.0.1:4173`. Проверены title/URL, содержимое, отсутствие overlay,
+  interactions и console/page errors. Desktop/Android screenshots просмотрены.
+  Ожидаемые сообщения загрузки `/api/profile` для специально внедрённых
+  401/409 учтены отдельно; прочие ошибки не скрываются.
+
+API в браузерных сценариях mocked, quota внедрена только в commit операции
+профиля. Это не проверка реального OAuth, физического заполнения диска или
+staging. В stdout preview встречается ECONNREFUSED к локальному backend:
+backend в этом mock-прогоне не запущен; успешный E2E не подтверждает его работу.
+Предыдущий опубликованный HEAD `fdaa5ea` отдельно прошёл
+[CI 38151565193](https://github.com/Michael-edel/FitFocus/actions/runs/38151565193)
+с прежними 759 unit / 75 browser / 9 skips. CI следующего опубликованного
+HEAD проверяется отдельно в PR #93 и не выводится из старого результата.
+
+Остаются регистрация с прямым созданием профиля, полный bootstrap/hydration,
+family/AI callbacks, runtime provenance/barrier/import legacy, UI разрешения
+конфликтов, атомарный backup/экспорт/очистка всех stores, staging и защищённая
+main. Старые запросы без scope пока совместимы; guard не останавливает
+старую сборку. PR остаётся draft, весь P0 не закрыт.

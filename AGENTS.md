@@ -35,8 +35,11 @@
   Наличие Web Locks не выбирает хранилище. Пятнадцать управляемых ключей
   используют атомарные value/операции; sender использует свежий /me proof,
   server session guard и claim/finish. Прежний Map sender удалён из текущей
-  сборки; это не барьер для старых сборок. Profile и полный lifecycle ещё
-  не завершены. Проверенная граница:
+  сборки; это не барьер для старых сборок. Редактор существующего profile
+  использует ту же outbox с resource: profile и отдельным guarded HTTP;
+  черновик формы не считается сохранённым при отказе commit. Регистрация
+  и полный lifecycle ещё не завершены. Проверенная граница:
+  [сохранение профиля](docs/profile-persistence.md),
   [подключение остальных state-записей](docs/owned-state-writers.md),
   [sender](docs/state-sender.md),
   [текущий клиент](docs/runtime-state.md),

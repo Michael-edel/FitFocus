@@ -1,6 +1,6 @@
 # Работа с FitFocus
 
-Обновлено: 09.10.2026. Начальная навигация: [карта документации](docs/README.md).
+Обновлено: 11.10.2026. Начальная навигация: [карта документации](docs/README.md).
 Это инструкция для разработки; результаты выполненных проверок хранятся
 отдельно в [журнале стабилизации](docs/stabilization-progress.md).
 
@@ -108,7 +108,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Пользовательская функция или её готовность | PRODUCT.md |
 | Статус, зависимость или критерий задачи | TASKS.md |
 | Проверки конкретной ревизии | docs/stabilization-progress.md |
-| API state/profile | API_CONTRACTS.md |
+| API state/profile | API_CONTRACTS.md; для редактора и sender профиля также docs/profile-persistence.md |
 | Хранилище, версия схемы, владение | docs/data-model.md и затронутый ADR |
 | Очередь, конфликт, retry, сессии | docs/sync-model.md, ADR-005, docs/outbox-implementation.md, docs/runtime-state.md и docs/state-sender.md |
 | Legacy-формат, импорт, ledger или карантин | docs/legacy-migration.md и относящиеся пункты TASKS |

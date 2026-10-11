@@ -4,7 +4,9 @@
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93), база #94 → #90.
 Код этого этапа: [`31ec847`](https://github.com/Michael-edel/FitFocus/commit/31ec84757ca72b4a48ccb6b3fa0e19ca8245a2f5). Это продолжение
 [repository](runtime-state.md) и [HTTP sender](state-sender.md).
-Полная миграция legacy, profile и приёмка выпуска ещё открыты.
+На этой ревизии полная миграция legacy, profile и приёмка выпуска ещё открыты.
+Следующий этап [сохранения профиля](profile-persistence.md) использует
+ту же outbox; описание ниже сохраняет границу `31ec847`.
 
 ## Управляемые ключи
 

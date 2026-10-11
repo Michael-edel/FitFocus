@@ -40,7 +40,9 @@ Profile hooks → profileSync.ts → отдельная Promise-цепочка �
 и [HTTP sender](state-sender.md), затем [15 управляемых state-ключей](owned-state-writers.md).
 Они используют атомарную value/outbox-транзакцию. Настройки читаются из IDB;
 managed hydration проверяет протокол, локальную ревизию и очередь.
-Map sender удалён из текущей сборки. Profile остаётся отдельным путём;
+Map sender удалён из текущей сборки. Следующий этап
+[подключает редактор профиля](profile-persistence.md) к общей IDB-outbox
+и sender с явным HTTP dispatch; регистрация остаётся отдельным путём;
 runtime legacy-импорт, барьер старых сборок и общая приёмка ещё не завершены.
 
 ## Сервер
