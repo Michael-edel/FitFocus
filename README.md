@@ -18,6 +18,7 @@ Google/Apple, push, поддержка и административные фу�
 | Файл | Для чего нужен |
 |---|---|
 | [Текущее состояние](docs/project-status.md) | Проверенный SHA, готовые компоненты, рабочие изменения и ближайшие шаги |
+| [Карта кода](docs/code-map.md) | Функция → исходники → контракт и проверки; границы ответственности |
 | [Пользовательские записи](docs/owned-state-writers.md) | 15 управляемых ключей, редакторы и границы profile/legacy |
 | [Сохранение профиля](docs/profile-persistence.md) | Редактор профиля, постоянная операция, сессии и несохранённая форма |
 | [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
@@ -75,7 +76,11 @@ lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf`
 не делает первую правку конфликтующей. 846 unit-тестов прошли. Полный локальный
 E2E: 144 passed / 1 failed / 9 skips; нестабильный profile Save на iPhone PWA
 остаётся открытым: [контракт и результаты](docs/bootstrap-hydration.md).
-CI следующего HEAD проверяется отдельно в PR #93.
+CI опубликованного `ece4e7a` [завершился успешно](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617):
+846 unit-тестов; браузеры — 144 passed, 1 flaky и 9 skips. Тест регистрации
+на iPhone Safari прошёл после повтора; это остаётся открытой проверкой.
+Диагностика Save зафиксировала смену цели между pointerdown и pointerup;
+исправление ещё не реализовано. [Свидетельства и следующие шаги](docs/project-status.md).
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).
 
