@@ -26,6 +26,7 @@ type BootstrapAuthParams = AuthStateSetters & {
   loginAsUser: (user: UserProfile, authUser?: ServerUser | null) => Promise<void>;
   continueAfterOAuth?: boolean;
   fetchImpl?: typeof fetch;
+  isCurrentSession?: () => boolean;
 };
 
 type InviteCheckParams = Pick<AuthStateSetters, 'setInviteError' | 'setInviteChecking'> & {
@@ -163,6 +164,8 @@ export function clearOAuthContinuationState(): void {
 
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
   const fetchFn = params.fetchImpl ?? fetch;
+  const isCurrent = params.isCurrentSession ?? (() => true);
+  if (!isCurrent()) return;
 
   const readMe = async (): Promise<MeResponse | null> => {
     try {
@@ -180,13 +183,16 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   };
 
   let me = await readMe();
+  if (!isCurrent()) return;
   if (!me?.user?.sub && params.continueAfterOAuth) {
     const delays = [150, 250, 400, 600, 900, 1200, 1600, 2200];
     for (const delay of delays) {
       try {
         await new Promise((resolve) => setTimeout(resolve, delay));
       } catch {}
+      if (!isCurrent()) return;
       me = await readMe();
+      if (!isCurrent()) return;
       if (me?.user?.sub) break;
     }
   }
@@ -210,8 +216,9 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         fetchImpl: fetchFn,
       });
       const pj = await readJsonRecord(pr);
+      if (!isCurrent()) return;
       if (pr.ok) {
-        const profile = isUserProfilePayload(pj?.profile) ? pj.profile : null;
+        const profile = isUserProfilePayload(pj?.profile) && pj.profile.id === serverUser.sub ? pj.profile : null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));
           await params.loginAsUser(profile, serverUser);
@@ -219,6 +226,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
         }
       }
     } catch {}
+    if (!isCurrent()) return;
 
     if (!params.continueAfterOAuth) {
       params.setAuthState('auth_choice');

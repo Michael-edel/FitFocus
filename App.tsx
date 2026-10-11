@@ -70,7 +70,6 @@ import { buildFallbackAiPlan } from './aiPlanFallback';
 import { buildCorrectedFoodPatch, buildFoodCorrectionDraft, type FoodCorrectionDraft } from './foodCorrection';
 import {
   clearLocalUserData,
-  persistAllUsersSnapshot,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
   renameLocalStoragePrefix,
@@ -269,7 +268,9 @@ const App: React.FC = () => {
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
   const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
+  const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
   const loginAttemptRef = useRef(0);
+  const authBootstrapAttemptRef = useRef(0);
   const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
   const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
@@ -594,13 +595,23 @@ const App: React.FC = () => {
   const regNameValid = regNameTrim.length > 0;
 
   const suppressNextFullProfileSyncRef = useRef(false);
-  const suppressProfileSyncStateRef = useRef(false);
   const hasPendingProfileChangesRef = useRef(false);
+  const profileEditRevisionRef = useRef(0);
+  const hasProfileDraftRef = useRef(false);
+  const onProfileDraftChange = useCallback((dirty: boolean) => {
+    hasProfileDraftRef.current = dirty;
+    if (dirty) profileEditRevisionRef.current += 1;
+  }, []);
+  const isCurrentProfileSession = useMemo(() => {
+    const attempt = loginAttemptRef.current;
+    return () => attempt === loginAttemptRef.current;
+  }, [userProfileRepository]);
 
   const persistUser = useProfilePersistence({
-    googleSubject: googleMe?.sub,
-    suppressNextFullProfileSyncRef,
-    suppressProfileSyncStateRef,
+    repository: userProfileRepository,
+    currentUser,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
     hasPendingProfileChangesRef,
     setCurrentUser,
     setAllUsers,
@@ -730,7 +741,10 @@ const App: React.FC = () => {
 
   const logout = useMemo(() => createLogoutSession({
     onClearLocalSession: () => {
+      authBootstrapAttemptRef.current += 1;
       loginAttemptRef.current += 1; setUserStateRepository(null);
+      setUserProfileRepository(null);
+      hasProfileDraftRef.current = false;
       void stateSync.invalidate().catch(() => {
         if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
       });
@@ -758,14 +772,26 @@ const App: React.FC = () => {
   const loginAsUser = useCallback(async (
     user: UserProfile,
     authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
+    isCurrent: () => boolean = () => true,
   ) => {
+    if (!isCurrent()) return;
     const loginAttempt = ++loginAttemptRef.current;
     const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
       resetUsageIfNewTime: resetUsageIfNewPeriod,
     });
-    if (loginAttempt !== loginAttemptRef.current) return;
-    setUserStateRepository(prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id));
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    const profileRepository = prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id);
+    // Creating a new profile is an explicit registration intent, not a write caused by reading defaults.
+    if (!prepared.currentUser.version && !(await profileRepository.observe('profile')).value) {
+      await profileRepository.writeJson('profile', prepared.currentUser);
+      if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    }
+    const pendingProfile = await profileRepository.hasPending('profile');
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    setUserStateRepository(profileRepository);
+    setUserProfileRepository(profileRepository);
+    hasProfileDraftRef.current = false;
     setCurrentUser(prepared.currentUser);
     if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
     setWeeklyReports(prepared.hydrated.weeklyReports);
@@ -777,11 +803,23 @@ const App: React.FC = () => {
     setCurrentLesson(null);
     clearOAuthContinuationState();
     setAuthState('app');
-    setProfileSyncState('saved');
-    setLastProfileSyncAt(Date.now());
-    if (prepared.shouldPersistFallbackPlan) persistUser(prepared.currentUser);
+    hasPendingProfileChangesRef.current = pendingProfile;
+    setProfileSyncState(pendingProfile ? 'saving' : 'idle');
+    setLastProfileSyncAt(null);
   }, [googleMe?.sub, googleMe?.email, googleMe?.picture]);
 
+
+  const applyRemoteProfile = useCallback((profile: UserProfile) => {
+    loginAttemptRef.current += 1;
+    const refreshed = resetUsageIfNewPeriod(profile);
+    const displayed = refreshed.aiPlan ? refreshed : { ...refreshed, aiPlan: buildFallbackAiPlan(refreshed) };
+    setUserProfileRepository(new UserStateRepository(profile.id));
+    setCurrentUser(displayed);
+    setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? displayed : user)));
+    hasPendingProfileChangesRef.current = false;
+    setProfileSyncState('idle');
+    setProfileSyncNote('Профиль обновлён из облака.');
+  }, []);
 
   const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
@@ -791,37 +829,36 @@ const App: React.FC = () => {
     }
     await pushProfileToCloudService(profile, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloudService(patch, {
+    return patchProfileInCloudService(patch, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloud(patch);
+    const committed = await patchProfileInCloud(patch);
+    if (!committed || !isCurrentProfileSession()) return false;
     if (patch.profileDetailsCompleted) {
       void checkAchievements('profile_details_completed', { profileDetailsCompleted: true });
     }
@@ -831,7 +868,8 @@ const App: React.FC = () => {
     if (typeof patch.wearableSleepHoursLastNight === 'number' && patch.wearableSleepHoursLastNight >= 8) {
       void checkAchievements('sleep_8h_recorded', { sleepHours: patch.wearableSleepHoursLastNight });
     }
-  }, [checkAchievements, patchProfileInCloud]);
+    return true;
+  }, [checkAchievements, patchProfileInCloud, isCurrentProfileSession]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!googleMe?.sub) {
@@ -842,18 +880,17 @@ const App: React.FC = () => {
     }
     await syncAllLocalDataNowService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   useEffect(() => {
     if (profileSyncState === 'saved') {
@@ -869,18 +906,17 @@ const App: React.FC = () => {
     }
     await reloadUserFromCloudService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   // Server-driven: persist profile changes to D1 (debounced)
   useProfileAutoSync({
@@ -998,11 +1034,14 @@ const App: React.FC = () => {
   }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
 
   const bootstrapAuth = useCallback(async () => {
+    const attempt = ++authBootstrapAttemptRef.current;
+    const isCurrent = () => attempt === authBootstrapAttemptRef.current;
     const continueAfterOAuth = consumeOAuthContinuationState();
 
     await bootstrapAuthSession({
       requireInvite,
-      loginAsUser,
+      loginAsUser: (user, authUser) => loginAsUser(user, authUser, isCurrent),
+      isCurrentSession: isCurrent,
       setGoogleMe,
       setInviteError,
       setAuthState,
@@ -1014,6 +1053,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     void bootstrapAuth();
+    return () => { authBootstrapAttemptRef.current += 1; };
   }, [bootstrapAuth]);
 
   useEffect(() => {
@@ -1248,6 +1288,7 @@ const logWeight = useCallback(() => {
       deleteAccount,
       persistUser,
       patchProfileInCloud: patchProfileInCloudWithAchievements,
+      onProfileDraftChange,
       onExportBackup,
       onImportBackup,
       onConnectAutosave,

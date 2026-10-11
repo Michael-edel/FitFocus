@@ -41,7 +41,8 @@ const defaultAiPlan = {
 
 export function buildMockProfile() {
   return {
-    id: 'user-e2e',
+    id: 'google-e2e-sub',
+    version: 1,
     name: 'E2E User',
     email: 'e2e@example.com',
     googleSub: 'google-e2e-sub',

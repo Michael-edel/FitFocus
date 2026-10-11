@@ -2,12 +2,17 @@ import { isRecord } from '../safeJson';
 import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome } from './durableOutbox';
 import { reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
+import { isUserProfilePayload } from '../profileValidation';
 
 type JsonResponse = { response: Response; body: Record<string, unknown> | null };
 type Options = { outbox?: DurableOutbox; fetchImpl?: typeof fetch; now?: () => number; random?: () => number; timeoutMs?: number; legacyPending?: () => boolean };
 const LEASE_MS = 30_000;
 const MAX_RETRIES = 8;
 const MAX_RETRY_DELAY_MS = 15 * 60_000;
+function profileIntent(claim: OutboxClaim): unknown {
+  if (claim.resource !== 'profile' || claim.type !== 'put') return null;
+  try { return JSON.parse(claim.value); } catch { return null; }
+}
 
 /** Until runtime migration proves its writer barrier, a nonempty/unknown old source blocks sending. */
 function legacyPending(): boolean {
@@ -64,6 +69,7 @@ export class StateSync {
   private generation = 0;
   private accountId?: string;
   private session?: ActiveOutboxSession;
+  private profileProtocol = false;
   private readonly requests = new Set<AbortController>();
   private running?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
@@ -81,6 +87,7 @@ export class StateSync {
   stop(): void {
     this.generation += 1;
     this.accountId = undefined; this.session = undefined;
+    this.profileProtocol = false;
     for (const request of this.requests) request.abort();
     this.requests.clear();
     if (this.timer) clearInterval(this.timer);
@@ -111,6 +118,29 @@ export class StateSync {
     const drained = await this.outbox.isDrained(accountId, sessionEpoch);
     return generation === this.generation && this.accountId === accountId && sessionEpoch === this.session?.sessionEpoch
       && !this.legacyPending() && drained;
+  }
+
+  /** A refresh cannot replace an intent, a newer local read, or another session. */
+  async refreshProfile(accountId: string): Promise<string | null> {
+    if (this.accountId !== accountId) return null;
+    const generation = this.generation;
+    if (!await this.verify(generation) || !this.profileProtocol || !this.session) return null;
+    const session = this.session;
+    const key = `fitfocus_data_${accountId}_profile`;
+    const observed = await this.outbox.snapshot(accountId, key);
+    if (generation !== this.generation) return null;
+    const controller = new AbortController(); this.requests.add(controller);
+    try {
+      const { response, body } = await requestJson(this.fetchFn, '/api/profile', { headers: {
+        'X-FitFocus-State-Account': accountId, 'X-FitFocus-State-Session': session.serverSessionId!,
+      } }, controller, this.timeoutMs);
+      if (generation !== this.generation || !response.ok || !this.profileScope(response, accountId, session.serverSessionId!)
+        || !isUserProfilePayload(body?.profile) || body.profile.id !== accountId
+        || typeof body.profile.version !== 'number' || !Number.isSafeInteger(body.profile.version) || body.profile.version < 1) return null;
+      const raw = JSON.stringify(body.profile);
+      const applied = await this.outbox.hydrate(accountId, key, { value: raw, version: body.profile.version, exists: true }, observed.revision, session.sessionEpoch);
+      return generation === this.generation && applied ? raw : null;
+    } finally { this.requests.delete(controller); }
   }
 
   start(accountId: string): void {
@@ -146,6 +176,7 @@ export class StateSync {
     const accountId = this.accountId;
     if (!accountId) return false;
     this.session = undefined;
+    this.profileProtocol = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const before = await this.outbox.sessionState();
       if (generation !== this.generation || accountId !== this.accountId) return false;
@@ -169,6 +200,7 @@ export class StateSync {
       if (generation !== this.generation || accountId !== this.accountId) return false;
       if (accepted) {
         this.session = accepted;
+        this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
         reportStateSyncPause(accountId, null);
         return true;
       }
@@ -205,7 +237,11 @@ export class StateSync {
         const claim = await this.outbox.claim({ accountId, sessionEpoch: session.sessionEpoch, owner: this.owner, nowMs: this.now(), leaseMs: LEASE_MS });
         if (!claim || generation !== this.generation) return;
         if (this.legacyPending()) {
-          await this.outbox.finish(claim, { kind: 'retry', reason: 'legacy-import-required', pause: 'legacy', nextAttemptAtMs: this.now() }, this.now());
+          await this.finish(claim, { kind: 'retry', reason: 'legacy-import-required', pause: 'legacy', nextAttemptAtMs: this.now() });
+          continue;
+        }
+        if (claim.resource === 'profile' && !this.profileProtocol) {
+          await this.finish(claim, { kind: 'retry', reason: 'profile-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
           continue;
         }
         const controller = new AbortController(); this.requests.add(controller);
@@ -213,16 +249,23 @@ export class StateSync {
         try {
           const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': accountId,
             'X-FitFocus-State-Session': session.serverSessionId! };
-          const url = claim.type === 'put' ? '/api/state' : `/api/state?key=${encodeURIComponent(claim.key)}&baseVersion=${claim.baseVersion}`;
-          const init: RequestInit = claim.type === 'put'
-            ? { method: 'PUT', headers, body: JSON.stringify({ items: [{ key: claim.key, value: claim.value, baseVersion: claim.baseVersion }] }) }
-            : { method: 'DELETE', headers };
-          const result = await requestJson(this.fetchFn, url, init, controller, this.timeoutMs);
-          outcome = this.outcome(claim, result, session.serverSessionId!);
+          const profile = profileIntent(claim);
+          if (claim.resource === 'profile' && (!isUserProfilePayload(profile) || profile.id !== accountId || claim.key !== `fitfocus_data_${accountId}_profile`)) {
+            outcome = { kind: 'failed', reason: 'invalid-profile-intent' };
+          } else {
+            const url = claim.resource === 'profile' ? '/api/profile' : claim.type === 'put' ? '/api/state' : `/api/state?key=${encodeURIComponent(claim.key)}&baseVersion=${claim.baseVersion}`;
+            const init: RequestInit = claim.resource === 'profile'
+              ? { method: 'PUT', headers, body: JSON.stringify({ ...(profile as Record<string, unknown>), baseVersion: claim.baseVersion }) }
+              : claim.type === 'put'
+                ? { method: 'PUT', headers, body: JSON.stringify({ items: [{ key: claim.key, value: claim.value, baseVersion: claim.baseVersion }] }) }
+                : { method: 'DELETE', headers };
+            const result = await requestJson(this.fetchFn, url, init, controller, this.timeoutMs);
+            outcome = this.outcome(claim, result, session.serverSessionId!);
+          }
         } catch { outcome = this.retry(claim, 'network-or-timeout'); }
         finally { this.requests.delete(controller); }
         if (generation !== this.generation) return;
-        await this.outbox.finish(claim, outcome, this.now());
+        await this.finish(claim, outcome);
       }
     } finally {
       if (generation === this.generation) reportStateQueue(accountId, await this.outbox.list(accountId));
@@ -239,12 +282,29 @@ export class StateSync {
     return { kind: 'retry', reason, nextAttemptAtMs: this.now() + delay };
   }
 
+  private finish(claim: OutboxClaim, outcome: OutboxOutcome): Promise<boolean> {
+    const nowMs = this.now();
+    // An immediate pause may be computed a millisecond before finish; preserve its eligibility.
+    const settled = outcome.kind === 'retry' ? { ...outcome, nextAttemptAtMs: Math.max(nowMs, outcome.nextAttemptAtMs) } : outcome;
+    return this.outbox.finish(claim, settled, nowMs);
+  }
+
   private outcome(claim: OutboxClaim, { response, body }: JsonResponse, serverSessionId: string): OutboxOutcome {
     const scope = response.headers.get('X-FitFocus-State-Protocol') === '2' && response.headers.get('X-FitFocus-State-Guard') === '1'
       && response.headers.get('X-FitFocus-State-Account') === claim.accountId && response.headers.get('X-FitFocus-State-Session') === serverSessionId;
     const pause = (reason: 'auth' | 'access' | 'protocol'): OutboxOutcome => ({ kind: 'retry', reason, pause: reason, nextAttemptAtMs: this.now() });
     if (response.status === 401) return pause('auth');
     if (response.status === 403 && body?.error === 'ACCESS_REQUIRED') return pause('access');
+    if (claim.resource === 'profile') {
+      const valid = this.profileScope(response, claim.accountId, serverSessionId)
+        && isUserProfilePayload(body?.profile) && body.profile.id === claim.accountId
+        && typeof body.version === 'number' && Number.isSafeInteger(body.version) && body.version >= 0
+        && body.profile.version === body.version;
+      if (response.status === 409) return { kind: 'conflicted', reason: 'server-version-conflict',
+        ...(valid ? { serverSnapshot: { value: JSON.stringify(body!.profile), version: body!.version as number, exists: true } } : {}) };
+      if (response.ok) return valid && (body!.version as number) > claim.baseVersion
+        ? { kind: 'acknowledged', version: body!.version as number } : pause('protocol');
+    }
     if (response.status === 409) {
       const snapshot = scope && body?.key === claim.key && typeof body.value === 'string' && typeof body.exists === 'boolean'
         && typeof body.version === 'number' && Number.isSafeInteger(body.version) && body.version >= (body.exists ? 1 : 0)
@@ -261,6 +321,11 @@ export class StateSync {
     }
     if (response.status === 408 || response.status === 429 || response.status >= 500) return this.retry(claim, `http-${response.status}`, response.headers.get('Retry-After'));
     return { kind: 'failed', reason: response.status === 403 && body?.error === 'FORBIDDEN_KEYSPACE' ? 'FORBIDDEN_KEYSPACE' : `http-${response.status}` };
+  }
+
+  private profileScope(response: Response, accountId: string, sessionId: string): boolean {
+    return response.headers.get('X-FitFocus-Profile-Protocol') === '1' && response.headers.get('X-FitFocus-Profile-Guard') === '1'
+      && response.headers.get('X-FitFocus-State-Account') === accountId && response.headers.get('X-FitFocus-State-Session') === sessionId;
   }
 }
 

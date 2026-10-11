@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { bootstrapAuthSession, consumeOAuthContinuationState, ensureInviteCodeIsValid } from '../authSession';
+import { userProfile } from './_helpers/userProfile';
 
 function requestIdFromCall(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
   const init = fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined;
@@ -7,6 +8,30 @@ function requestIdFromCall(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
 }
 
 describe('auth session transport', () => {
+  it('does not relabel a bootstrap profile from a different authenticated account', async () => {
+    const loginAsUser = vi.fn(async () => {}); const setAllUsers = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>(async url => new Response(JSON.stringify(String(url).startsWith('/api/me')
+      ? { user: { sub: 'account-a' }, hasAccess: true } : { profile: userProfile('account-b') })));
+    await bootstrapAuthSession({ requireInvite: false, loginAsUser, setAllUsers, fetchImpl,
+      setAuthState: vi.fn(), setGoogleMe: vi.fn(), setInviteError: vi.fn(), setRegData: vi.fn() });
+    expect(loginAsUser).not.toHaveBeenCalled(); expect(setAllUsers).not.toHaveBeenCalled();
+  });
+  it.each(['me', 'bootstrap'])('does not apply a late %s response after session cancellation', async (stage) => {
+    let current = true;
+    const loginAsUser = vi.fn(async () => {}); const setAuthState = vi.fn(); const setAllUsers = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>(async url => {
+      if (String(url).startsWith('/api/me')) {
+        if (stage === 'me') current = false;
+        return new Response(JSON.stringify({ user: { sub: 'account-a' }, hasAccess: true }));
+      }
+      current = false;
+      return new Response(JSON.stringify({ profile: { id: 'account-a' } }));
+    });
+    await bootstrapAuthSession({ requireInvite: false, loginAsUser, setAuthState, setAllUsers,
+      setGoogleMe: vi.fn(), setInviteError: vi.fn(), setRegData: vi.fn(), fetchImpl, isCurrentSession: () => current });
+    expect(loginAsUser).not.toHaveBeenCalled(); expect(setAuthState).not.toHaveBeenCalled(); expect(setAllUsers).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(stage === 'me' ? 1 : 2);
+  });
   it('retries the safe session read with one request ID before showing the sign-in screen', async () => {
     const fetchImpl = vi.fn()
       .mockRejectedValueOnce(new Error('offline'))

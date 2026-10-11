@@ -1,0 +1,75 @@
+import { IDBFactory } from 'fake-indexeddb';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { StateDatabase } from '../storage/stateDatabase';
+import { DurableOutbox } from '../storage/durableOutbox';
+import { UserStateRepository } from '../storage/userStateRepository';
+import { StateSync } from '../storage/stateSync';
+import { restoreProfile } from '../storage/profileState';
+import { userProfile } from './_helpers/userProfile';
+const account = 'account-a'; const sid = 'a'.repeat(64); const profile = userProfile(account);
+const scope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1', 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid };
+const json = (body: unknown, status = 200, headers: HeadersInit = scope) => new Response(JSON.stringify(body), { status, headers });
+let db: StateDatabase; let outbox: DurableOutbox; let repo: UserStateRepository; let sync: StateSync;
+beforeEach(async () => { db = new StateDatabase({ factory: new IDBFactory() }); outbox = new DurableOutbox(db);
+  repo = new UserStateRepository(account, { outbox }); await restoreProfile(repo, profile); });
+afterEach(() => { sync?.stop(); db.close(); vi.restoreAllMocks(); });
+function client(mutation: typeof fetch, capability = true, options: { now?: () => number } = {}) {
+  const fetchFn = vi.fn<typeof fetch>(async (url, init) => String(url) === '/api/me'
+    ? json({ user: { sub: account }, hasAccess: true, stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
+      ...(capability ? { profileSync: { protocol: 1, guard: 1 } } : {}) }) : mutation(url, init));
+  sync = new StateSync({ outbox, fetchImpl: fetchFn, legacyPending: () => false, ...options }); return fetchFn;
+}
+it('uses one finish time for an immediate auth pause even as the wall clock advances', async () => {
+  await repo.writeJson('profile', profile); let clock = Date.now() + 1_000;
+  client(async () => json({ error: 'UNAUTH' }, 401), true, { now: () => clock++ });
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(false);
+  expect((await outbox.list(account))[0]).toMatchObject({ status: 'pending', reason: 'auth' });
+});
+it('dispatches profile intents to the guarded profile endpoint with the observed CAS version', async () => {
+  await repo.writeJson('profile', { ...profile, name: 'Локально' });
+  const fetchFn = client(async () => json({ profile: { ...profile, name: 'Локально', version: 3 }, version: 3 }));
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(true);
+  const request = fetchFn.mock.calls.find(([url]) => String(url) === '/api/profile')!;
+  expect(request[1]?.method).toBe('PUT'); expect(JSON.parse(request[1]!.body as string)).toMatchObject({ name: 'Локально', baseVersion: 2 });
+  expect(new Headers(request[1]?.headers).get('X-FitFocus-State-Session')).toBe(sid);
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(3);
+});
+it('retains a 409 payload and both snapshots without retrying with the server version', async () => {
+  await repo.writeJson('profile', { ...profile, name: 'Локально' });
+  const fetchFn = client(async () => json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Облако', version: 8 }, version: 8 }, 409));
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(false); await sync.flush();
+  const [op] = await outbox.list(account);
+  expect(op).toMatchObject({ status: 'conflicted', baseVersion: 2, resource: 'profile', serverSnapshot: { version: 8 } });
+  expect(JSON.parse((op as { value: string }).value).name).toBe('Локально'); expect(JSON.parse(op.serverSnapshot!.value!).name).toBe('Облако');
+  expect(fetchFn.mock.calls.filter(([url]) => String(url) === '/api/profile')).toHaveLength(1);
+});
+it.each(['missing-capability', 'missing-headers', 'wrong-account', 'wrong-version'])('does not acknowledge %s', async (fault) => {
+  await repo.writeJson('profile', profile);
+  const fetchFn = client(async () => json({ profile: { ...profile, id: fault === 'wrong-account' ? 'other' : account, version: 3 },
+    version: fault === 'wrong-version' ? 4 : 3 }, 200, fault === 'missing-headers' ? {} : scope), fault !== 'missing-capability');
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(false);
+  expect(await outbox.list(account)).toHaveLength(1); expect((await outbox.sessionState()).active?.pause).toBe('protocol');
+  if (fault === 'missing-capability') expect(fetchFn.mock.calls.some(([url]) => String(url) === '/api/profile')).toBe(false);
+});
+it.each([401, 403, 422, 429, 503])('retains the local intent after HTTP %s', async (status) => {
+  await repo.writeJson('profile', { ...profile, name: 'Локально' });
+  client(async () => json({ error: status === 403 ? 'ACCESS_REQUIRED' : 'error' }, status));
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(false);
+  expect(await outbox.list(account)).toHaveLength(1);
+  expect(JSON.parse((await outbox.snapshot(account, repo.key('profile'))).value!).name).toBe('Локально');
+});
+it('does not hydrate over a pending edit or after a cross-tab logout', async () => {
+  client(async () => { await repo.writeJson('profile', { ...profile, name: 'Новая правка' }); return json({ profile: { ...profile, version: 9 } }); });
+  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  expect(JSON.parse((await outbox.snapshot(account, repo.key('profile'))).value!).name).toBe('Новая правка');
+});
+it('checks the session inside the hydration transaction', async () => {
+  client(async () => { await outbox.invalidateSessions(); return json({ profile: { ...profile, version: 9 } }); });
+  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(2);
+});
+it('applies a clean refresh without creating an outgoing operation', async () => {
+  client(async () => json({ profile: { ...profile, name: 'Обновлённый профиль', version: 9 } }));
+  await sync.connect(account); expect(JSON.parse((await sync.refreshProfile(account))!).name).toBe('Обновлённый профиль');
+  expect(await outbox.list(account)).toEqual([]);
+});

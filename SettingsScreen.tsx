@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
 import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send, Camera, Upload } from 'lucide-react';
@@ -24,6 +24,7 @@ const MAX_BMI = 60;
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type SettingsUiState = {
+  profileDirty?: boolean;
   draftName: string;
   draftGoal: Goal;
   draftTargetWeight: string;
@@ -57,7 +58,8 @@ type Props = {
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
   onChangeUser?: (next: UserProfile) => void;
-  onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+  onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
+  onProfileDraftChange?: (dirty: boolean) => void;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
   onConnectAutosave?: () => Promise<boolean>;
@@ -351,6 +353,7 @@ export default function SettingsScreen({
   user,
   onChangeUser,
   onPatchUser,
+  onProfileDraftChange,
   onExportBackup,
   onImportBackup,
   onConnectAutosave,
@@ -397,7 +400,11 @@ export default function SettingsScreen({
   const [progressPhotoNote, setProgressPhotoNote] = useState('');
   const [progressPhotoBusy, setProgressPhotoBusy] = useState(false);
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
-  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileDirty, setProfileDirtyState] = useState(false);
+  const setProfileDirty = useCallback((dirty: boolean) => {
+    onProfileDraftChange?.(dirty);
+    setProfileDirtyState(dirty);
+  }, [onProfileDraftChange]);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [huaweiStatus, setHuaweiStatus] = useState<HuaweiHealthStatus | null>(null);
   const [huaweiBusy, setHuaweiBusy] = useState<'status' | 'connect' | 'sync' | 'disconnect' | null>(null);
@@ -1079,6 +1086,8 @@ export default function SettingsScreen({
       if (raw) {
         const parsed = parseJsonRecord(raw);
         if (!parsed) throw new Error('Invalid settings UI state');
+        // A clean cached form is display state, not an unsaved intent from an older profile.
+        if (parsed.profileDirty === false) throw new Error('Clean settings UI state');
         const fallbackName = user.name || '';
         const fallbackGoal = user.goal || Goal.MAINTAIN;
         const fallbackTargetWeight = user.targetWeight ? String(user.targetWeight) : '';
@@ -1144,7 +1153,7 @@ export default function SettingsScreen({
         setAckLoss(nextAckLoss);
         setAckGain(nextAckGain);
         setProfileDirty(
-          nextDraftName !== fallbackName ||
+          parsed.profileDirty === true || nextDraftName !== fallbackName ||
           nextDraftGoal !== fallbackGoal ||
           nextDraftTargetWeight !== fallbackTargetWeight ||
           nextDraftAge !== fallbackAge ||
@@ -1212,6 +1221,7 @@ export default function SettingsScreen({
     }
     try {
       localStorage.setItem(settingsUiStorageKey, JSON.stringify({
+        profileDirty,
         draftName,
         draftGoal,
         draftTargetWeight,
@@ -1257,6 +1267,7 @@ export default function SettingsScreen({
     draftTargetWeight,
     draftWaistCm,
     progressPhotoNote,
+    profileDirty,
     settingsUiStorageKey,
   ]);
 
@@ -1384,7 +1395,7 @@ export default function SettingsScreen({
     }
 
     if (serverSession && onPatchUser) {
-      await onPatchUser(patch);
+      if (await onPatchUser(patch) === false) return;
     } else if (onChangeUser) {
       onChangeUser({ ...user, ...patch });
     }

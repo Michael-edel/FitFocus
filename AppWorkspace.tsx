@@ -41,7 +41,8 @@ type AppWorkspaceData = {
     logout: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
     persistUser?: (user: UserProfile) => Promise<void> | void;
-    patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
+    onProfileDraftChange?: (dirty: boolean) => void;
     onExportBackup?: () => void;
     onImportBackup?: (file: File) => void;
     onConnectAutosave?: () => Promise<boolean>;
@@ -75,7 +76,7 @@ type AppWorkspaceData = {
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { meta, dashboard, plan, nutrition, progress, family, council, content } = workspaceProps;
 
-  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
+  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onProfileDraftChange, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
 
   const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, setAdaptLoading, setLastAiAction, generatePlateauExplanation, adaptNote, setAdaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
 
@@ -375,7 +376,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onDeleteAccount={deleteAccount}
             user={currentUser}
             onChangeUser={(u: UserProfile) => void persistUser?.(u)}
-            onPatchUser={(patch: Partial<UserProfile>) => void patchProfileInCloud?.(patch)}
+            onPatchUser={(patch: Partial<UserProfile>) => patchProfileInCloud?.(patch)}
+            onProfileDraftChange={onProfileDraftChange}
             onExportBackup={onExportBackup}
             onImportBackup={onImportBackup}
             onConnectAutosave={onConnectAutosave}

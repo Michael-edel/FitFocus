@@ -6,6 +6,7 @@ import { isRecord, parseJson } from './safeJson';
 import { isUserProfilePayload } from './profileValidation';
 import { UserStateRepository, USER_STATE_KEYS, type UserStateKey } from './storage/userStateRepository';
 import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
+import { restoreProfile } from './storage/profileState';
 
 export type HydratedSession = {
   repository?: UserStateRepository;
@@ -84,6 +85,8 @@ function isCoachCard(value: unknown): value is { title: string; advice: string; 
 export async function hydrateSessionFromCloud(user: UserProfile, deps: HydrationDeps): Promise<HydratedSession> {
   const fetchFn = deps.fetchImpl ?? fetch;
   const repository = new UserStateRepository(user.id);
+  // An old bootstrap response must not overwrite a durable profile or its pending edits.
+  user = await restoreProfile(repository, user).catch(() => user);
   const managedKeys: readonly UserStateKey[] = USER_STATE_KEYS;
   const observed = new Map(await Promise.all(managedKeys.map(async (stateKey) => [stateKey,
     await repository.observe(stateKey).then((snapshot) => snapshot.revision, () => 0),

@@ -1,6 +1,6 @@
 import { parseJson } from '../safeJson';
 import type { CoachAdviceResult } from '../geminiService';
-import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit } from '../types';
+import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
 import { DurableOutbox, type OutboxIntent, type OutboxOperation } from './durableOutbox';
@@ -10,10 +10,11 @@ import { STORAGE_KEYS } from './keys';
 
 export const USER_STATE_KEYS = ['diary', 'history', 'favorite_recipes', 'weekly_reports', 'last_coach_card', 'settings',
   'habits', 'favorites', 'adapt_read', 'adapt_expanded', 'refeed', 'plan_task_done', 'council_history', 'family_menu_prefs', 'invite_code'] as const;
-export type UserStateKey = typeof USER_STATE_KEYS[number];
+export type UserStateKey = typeof USER_STATE_KEYS[number] | 'profile';
 type JsonUserStateKey = Exclude<UserStateKey, 'adapt_read' | 'adapt_expanded' | 'refeed' | 'invite_code'>;
 
 export type UserStateValue = {
+  profile: UserProfile;
   diary: FoodItem[];
   history: FastLogItem[];
   favorite_recipes: FavoriteRecipe[];
@@ -51,6 +52,15 @@ export class UserStateRepository {
     return userStateStorageKey(this.accountId, stateKey);
   }
 
+  /** A flush barrier must not silently adopt a revision the editor never displayed. */
+  waitForWrites(stateKey: UserStateKey): Promise<void> {
+    return this.serialize(this.key(stateKey), async () => {});
+  }
+
+  async hasPending(stateKey: UserStateKey): Promise<boolean> {
+    return (await this.outbox.list(this.accountId)).some(operation => operation.key === this.key(stateKey));
+  }
+
   private serialize<T>(key: string, work: () => Promise<T>): Promise<T> {
     const result = (this.pending.get(key) ?? Promise.resolve()).then(work);
     this.pending.set(key, result.then(() => undefined, () => undefined));
@@ -85,9 +95,9 @@ export class UserStateRepository {
     }));
   }
 
-  hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number): Promise<boolean> {
+  hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string): Promise<boolean> {
     const key = this.key(stateKey);
-    return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision)));
+    return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch)));
   }
 
   private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false): Promise<OutboxOperation> {
@@ -97,6 +107,7 @@ export class UserStateRepository {
       const observation = this.observations.get(key) ?? { revision: 0, confirmedVersion: 0 };
       const operation = await this.outbox.write({
         accountId: this.accountId, writerId: this.writerId, intent,
+        ...(stateKey === 'profile' ? { resource: 'profile' as const } : {}),
         expectedRevision: observation.revision, baseVersion: observation.confirmedVersion,
         ...(retainAsConflict ? { conflictReason: 'editor-not-loaded' as const } : {}),
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
