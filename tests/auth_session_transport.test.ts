@@ -5,6 +5,16 @@ import { userProfile } from './_helpers/userProfile';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { userStateDatabase } from '../storage/stateDatabase';
+import { sessionMe, sessionHeaders } from './_helpers/sessionRead';
+
+beforeEach(() => {
+  userStateDatabase.close(); vi.stubGlobal('indexedDB', new IDBFactory());
+  const values = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (k: string) => values.get(k) ?? null,
+    setItem: (k: string, v: string) => { values.set(k, v); }, removeItem: (k: string) => { values.delete(k); },
+    get length() { return values.size; }, key: (i: number) => [...values.keys()][i] ?? null });
+});
+afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function requestIdFromCall(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
   const init = fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined;
@@ -15,7 +25,7 @@ describe('auth session transport', () => {
   it('does not relabel a bootstrap profile from a different authenticated account', async () => {
     const loginAsUser = vi.fn(async () => {}); const setAllUsers = vi.fn();
     const fetchImpl = vi.fn<typeof fetch>(async url => new Response(JSON.stringify(String(url).startsWith('/api/me')
-      ? { user: { sub: 'account-a' }, hasAccess: true } : { profile: userProfile('account-b') })));
+      ? sessionMe('account-a') : { user: { sub: 'account-a' }, profile: userProfile('account-b') }), { headers: sessionHeaders('account-a', 'bootstrap') }));
     await bootstrapAuthSession({ requireInvite: false, loginAsUser, setAllUsers, fetchImpl,
       setAuthState: vi.fn(), setGoogleMe: vi.fn(), setInviteError: vi.fn(), setRegData: vi.fn() });
     expect(loginAsUser).not.toHaveBeenCalled(); expect(setAllUsers).not.toHaveBeenCalled();
@@ -26,7 +36,7 @@ describe('auth session transport', () => {
     const fetchImpl = vi.fn<typeof fetch>(async url => {
       if (String(url).startsWith('/api/me')) {
         if (stage === 'me') current = false;
-        return new Response(JSON.stringify({ user: { sub: 'account-a' }, hasAccess: true }));
+        return new Response(JSON.stringify(sessionMe('account-a')));
       }
       current = false;
       return new Response(JSON.stringify({ profile: { id: 'account-a' } }));
@@ -92,26 +102,19 @@ describe('OAuth continuation state', () => {
 });
 
 describe('owned profile recovery', () => {
-  beforeEach(() => {
-    userStateDatabase.close(); vi.stubGlobal('indexedDB', new IDBFactory());
-    const values = new Map<string, string>();
-    vi.stubGlobal('localStorage', { getItem: (k: string) => values.get(k) ?? null,
-      setItem: (k: string, v: string) => { values.set(k, v); }, removeItem: (k: string) => { values.delete(k); },
-      get length() { return values.size; }, key: (i: number) => [...values.keys()][i] ?? null });
-  });
-  afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   const start = async (bootstrap: Response, continueAfterOAuth = false) => {
     const loginAsUser = vi.fn(async () => {}); const setAuthState = vi.fn();
     await bootstrapAuthSession({ requireInvite: false, continueAfterOAuth, loginAsUser, setAuthState,
       setGoogleMe: vi.fn(), setInviteError: vi.fn(), setAllUsers: vi.fn(), setRegData: vi.fn(),
       fetchImpl: async url => String(url).startsWith('/api/me')
-        ? new Response(JSON.stringify({ user: { sub: 'owner', email: 'same@example.test' }, hasAccess: true })) : bootstrap.clone() });
+        ? new Response(JSON.stringify(sessionMe('owner', { email: 'same@example.test' })))
+        : new Response(JSON.stringify({ user: { sub: 'owner' }, ...await bootstrap.clone().json() }), { status: bootstrap.status, headers: sessionHeaders('owner', 'bootstrap') }) });
     return { loginAsUser, setAuthState };
   };
   it.each([200, 503])('restores an own pending registration without an OAuth marker when bootstrap returns %i', async status => {
     await new UserStateRepository('owner').writeJson('profile', userProfile('owner', { version: 0 }));
     const result = await start(new Response('{"profile":null}', { status }));
-    expect(result.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'owner', version: 0 }), expect.objectContaining({ sub: 'owner' }));
+    expect(result.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'owner', version: 0 }), expect.objectContaining({ sub: 'owner' }), expect.objectContaining({ accountId: 'owner' }));
     expect(result.setAuthState).not.toHaveBeenCalledWith('register'); expect(await new DurableOutbox().list('owner')).toHaveLength(1);
   });
   it('does not infer ownership from a matching email in a legacy snapshot', async () => {

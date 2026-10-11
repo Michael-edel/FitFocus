@@ -1,10 +1,10 @@
 import { isRecord } from '../safeJson';
-import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome } from './durableOutbox';
+import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome, type OutboxReadGuard } from './durableOutbox';
 import { reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
 import { isUserProfilePayload } from '../profileValidation';
 
-type JsonResponse = { response: Response; body: Record<string, unknown> | null };
+import { requestJson, type JsonResponse } from './sessionTransport';
 type Options = { outbox?: DurableOutbox; fetchImpl?: typeof fetch; now?: () => number; random?: () => number; timeoutMs?: number; legacyPending?: () => boolean };
 const LEASE_MS = 30_000;
 const MAX_RETRIES = 8;
@@ -24,39 +24,6 @@ function legacyPending(): boolean {
   } catch { return true; }
 }
 
-/** One transport attempt includes headers and the bounded response body; no hidden mutation retries. */
-async function requestJson(fetchFn: typeof fetch, url: string, init: RequestInit, controller: AbortController, timeoutMs: number): Promise<JsonResponse> {
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  let rejectAbort: (reason: Error) => void = () => {};
-  const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
-  const onAbort = () => rejectAbort(new Error('STATE_REQUEST_ABORTED'));
-  controller.signal.addEventListener('abort', onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const work = (async () => {
-    const response = await fetchFn(url, { ...init, credentials: 'include', cache: 'no-store', redirect: 'error', signal: controller.signal });
-    if (controller.signal.aborted) { void response.body?.cancel().catch(() => {}); throw new Error('STATE_REQUEST_ABORTED'); }
-    reader = response.body?.getReader();
-    let text = ''; let size = 0;
-    const decoder = new TextDecoder();
-    if (reader) for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      size += chunk.value.byteLength;
-      if (size > 1024 * 1024) throw new Error('STATE_RESPONSE_TOO_LARGE');
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    text += decoder.decode();
-    let body: unknown = null;
-    try { body = JSON.parse(text); } catch {}
-    return { response, body: isRecord(body) ? body : null };
-  })();
-  try { return await Promise.race([work, aborted]); }
-  finally {
-    clearTimeout(timer);
-    controller.signal.removeEventListener('abort', onAbort);
-    void reader?.cancel().catch(() => {});
-  }
-}
 
 export class StateSync {
   private readonly outbox: DurableOutbox;
@@ -69,6 +36,7 @@ export class StateSync {
   private generation = 0;
   private accountId?: string;
   private session?: ActiveOutboxSession;
+  private readGuard?: OutboxReadGuard;
   private profileProtocol = false;
   private readonly requests = new Set<AbortController>();
   private running?: Promise<void>;
@@ -87,6 +55,7 @@ export class StateSync {
   stop(): void {
     this.generation += 1;
     this.accountId = undefined; this.session = undefined;
+    this.readGuard = undefined;
     this.profileProtocol = false;
     for (const request of this.requests) request.abort();
     this.requests.clear();
@@ -124,8 +93,9 @@ export class StateSync {
   async refreshProfile(accountId: string): Promise<string | null> {
     if (this.accountId !== accountId) return null;
     const generation = this.generation;
-    if (!await this.verify(generation) || !this.profileProtocol || !this.session) return null;
+    if (!await this.verify(generation) || !this.profileProtocol || !this.session || !this.readGuard) return null;
     const session = this.session;
+    const guard = this.readGuard;
     const key = `fitfocus_data_${accountId}_profile`;
     const observed = await this.outbox.snapshot(accountId, key);
     if (generation !== this.generation) return null;
@@ -138,7 +108,7 @@ export class StateSync {
         || !isUserProfilePayload(body?.profile) || body.profile.id !== accountId
         || typeof body.profile.version !== 'number' || !Number.isSafeInteger(body.profile.version) || body.profile.version < 1) return null;
       const raw = JSON.stringify(body.profile);
-      const applied = await this.outbox.hydrate(accountId, key, { value: raw, version: body.profile.version, exists: true }, observed.revision, session.sessionEpoch);
+      const applied = await this.outbox.hydrate(accountId, key, { value: raw, version: body.profile.version, exists: true }, observed.revision, session.sessionEpoch, guard.authFence);
       return generation === this.generation && applied ? raw : null;
     } finally { this.requests.delete(controller); }
   }
@@ -176,6 +146,7 @@ export class StateSync {
     const accountId = this.accountId;
     if (!accountId) return false;
     this.session = undefined;
+    this.readGuard = undefined;
     this.profileProtocol = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const before = await this.outbox.sessionState();
@@ -196,10 +167,12 @@ export class StateSync {
         || typeof proof.sessionId !== 'string' || !/^[a-f0-9]{64}$/.test(proof.sessionId)) {
         reportStateSyncPause(accountId, 'protocol'); return false;
       }
-      const accepted = await this.outbox.acceptSession(accountId, proof.sessionId, before.fence);
+      const accepted = await this.outbox.acceptReadSession(accountId, proof.sessionId, before.fence);
       if (generation !== this.generation || accountId !== this.accountId) return false;
-      if (accepted) {
-        this.session = accepted;
+      if (accepted && await this.outbox.isReadSessionCurrent(accepted)) {
+        if (generation !== this.generation || accountId !== this.accountId) return false;
+        this.readGuard = accepted;
+        this.session = { id: 'active-session', ...accepted };
         this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
         reportStateSyncPause(accountId, null);
         return true;

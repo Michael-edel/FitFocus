@@ -138,6 +138,8 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
@@ -777,6 +779,7 @@ const App: React.FC = () => {
     user: UserProfile,
     authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
     isCurrent: () => boolean = () => true,
+    readGuard?: OutboxReadGuard,
   ) => {
     if (!isCurrent()) return;
     const loginAttempt = ++loginAttemptRef.current;
@@ -784,10 +787,12 @@ const App: React.FC = () => {
       initialHabits: INITIAL_HABITS,
       resetUsageIfNewTime: resetUsageIfNewPeriod,
       isCurrentSession: () => loginAttempt === loginAttemptRef.current && isCurrent(),
+      readGuard,
     });
     if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
     const profileRepository = prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id);
     const pendingProfile = await profileRepository.hasPending('profile');
+    if (prepared.hydrated.readGuard) await assertReadSession(prepared.hydrated.readGuard, { isCurrentSession: isCurrent });
     if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
     setUserStateRepository(profileRepository);
     setUserProfileRepository(profileRepository);
@@ -1040,7 +1045,7 @@ const App: React.FC = () => {
 
     await bootstrapAuthSession({
       requireInvite,
-      loginAsUser: (user, authUser) => loginAsUser(user, authUser, isCurrent),
+      loginAsUser: (user, authUser, readGuard) => loginAsUser(user, authUser, isCurrent, readGuard),
       isCurrentSession: isCurrent,
       setGoogleMe,
       setInviteError,

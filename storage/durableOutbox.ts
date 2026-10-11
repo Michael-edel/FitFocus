@@ -32,6 +32,7 @@ type KeyState = {
 };
 export type StateSyncPause = 'auth' | 'access' | 'protocol' | 'legacy';
 export type ActiveOutboxSession = { id: 'active-session'; accountId: string; sessionEpoch: string; serverSessionId?: string; pause?: StateSyncPause };
+export type OutboxReadGuard = { accountId: string; serverSessionId: string; sessionEpoch: string; authFence: number };
 type ActiveSession = ActiveOutboxSession;
 export type OutboxClaim = OutboxOperation & { status: 'sending'; attempt: OutboxAttempt };
 export type OutboxOutcome =
@@ -154,8 +155,17 @@ export class DurableOutbox {
     });
   }
 
-  /** Accept a fresh /me proof only if logout or another account/session did not intervene. */
   async acceptSession(accountId: string, serverSessionId: string, expectedFence: number): Promise<ActiveOutboxSession | null> {
+    return (await this.acceptSessionState(accountId, serverSessionId, expectedFence))?.session ?? null;
+  }
+
+  async acceptReadSession(accountId: string, serverSessionId: string, expectedFence: number): Promise<OutboxReadGuard | null> {
+    const accepted = await this.acceptSessionState(accountId, serverSessionId, expectedFence);
+    return accepted ? { accountId, serverSessionId, sessionEpoch: accepted.session.sessionEpoch, authFence: accepted.authFence } : null;
+  }
+
+  /** Accept proof and capture its fence in the same transaction; later reads cannot adopt a newer fence. */
+  private async acceptSessionState(accountId: string, serverSessionId: string, expectedFence: number): Promise<{ session: ActiveOutboxSession; authFence: number } | null> {
     requireText(accountId); requireText(serverSessionId);
     if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
     const db = await this.connection.open();
@@ -164,13 +174,13 @@ export class DurableOutbox {
       const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
       if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
       const current = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
-      if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return current;
+      if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return { session: current, authFence: expectedFence };
       const revision = (fence?.revision ?? 0) + 1;
       if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
       const active: ActiveOutboxSession = { id: 'active-session', accountId, serverSessionId, sessionEpoch: crypto.randomUUID() };
       store.put({ id: 'auth-fence', revision });
       store.put(active);
-      return active;
+      return { session: active, authFence: revision };
     });
   }
 
@@ -239,9 +249,16 @@ export class DurableOutbox {
     });
   }
 
-  /** Apply a protocol-2 observation only if no local intent or newer local read intervened. */
-  async hydrate(accountId: string, key: string, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string): Promise<boolean> {
+  async isReadSessionCurrent(guard: OutboxReadGuard): Promise<boolean> {
+    const { fence, active } = await this.sessionState();
+    return fence === guard.authFence && active?.accountId === guard.accountId
+      && active.sessionEpoch === guard.sessionEpoch && active.serverSessionId === guard.serverSessionId && !active.pause;
+  }
+
+  /** Session/fence, local revision and pending intents are checked in the same apply transaction. */
+  async hydrate(accountId: string, key: string, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string, expectedAuthFence?: number): Promise<boolean> {
     requireOwnedKey(accountId, key);
+    if (expectedAuthFence !== undefined && (!expectedSessionEpoch || !finiteInteger(expectedAuthFence))) throw new Error('OUTBOX_INVALID_READ_GUARD');
     if (!finiteInteger(expectedRevision) || !finiteInteger(observation.version)
       || typeof observation.value !== 'string' || typeof observation.exists !== 'boolean'
       || (observation.exists && observation.version === 0)) throw new Error('OUTBOX_INVALID_OBSERVATION');
@@ -251,6 +268,10 @@ export class DurableOutbox {
       if (expectedSessionEpoch) {
         const active = await indexedRequest(metaStore.get('active-session')) as ActiveOutboxSession | undefined;
         if (active?.accountId !== accountId || active.sessionEpoch !== expectedSessionEpoch || active.pause) return false;
+        if (expectedAuthFence !== undefined) {
+          const fence = await indexedRequest(metaStore.get('auth-fence')) as { revision: number } | undefined;
+          if ((fence?.revision ?? 0) !== expectedAuthFence) return false;
+        }
       }
       const owner = await indexedRequest(metaStore.get(outboxKeyOwnerId(key))) as { accountId: string } | undefined;
       if (owner && owner.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
@@ -264,6 +285,10 @@ export class DurableOutbox {
       if (existing?.accountId && existing.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
       // Unowned legacy content needs its migration/provenance decision before replacement.
       if (existing && !existing.accountId && (!observation.exists || existing.value !== observation.value)) return false;
+      // Re-reading the same owned generation must not make another tab's editor stale.
+      // Initial absence still creates metadata so a leftover legacy value cannot revive.
+      if (meta && owner?.accountId === accountId && observation.version === meta.confirmedVersion
+        && (observation.exists ? existing?.accountId === accountId && existing.value === observation.value : !existing)) return true;
       const revision = (meta?.lastRevision ?? 0) + 1;
       if (!finiteInteger(revision)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
       if (observation.exists) values.put({ key, accountId, value: observation.value, updatedAt: Date.now() });

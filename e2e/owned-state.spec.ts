@@ -11,11 +11,13 @@ async function state(page: Page, suffix: string) {
   return page.evaluate(async ({ key, sourceKey }) => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
-    const tx = db.transaction(['values', 'outbox'], 'readonly');
+    const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
     const read = <T,>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-    const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
+    const [value, operations, active] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll()),
+      read(tx.objectStore('outbox_meta').get('active-session'))]);
     db.close();
-    return { value: value?.value ?? null, operations: operations.filter((operation) => operation.key === key), source: localStorage.getItem(sourceKey) };
+    return { value: value?.value ?? null, operations: operations.filter((operation) => operation.key === key),
+      source: localStorage.getItem(sourceKey), pause: active?.pause };
   }, { key: `fitfocus_data_${account}_${suffix}`, sourceKey });
 }
 
@@ -69,7 +71,11 @@ test('cleared council history stays deleted despite a stale localStorage copy', 
   await page.reload();
   await expect(page.getByRole('button', { name: 'Очистить', exact: true })).toBeVisible();
   await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
-  const saved = await state(page, 'council_history');
+  let saved = await state(page, 'council_history');
+  await expect.poll(async () => {
+    saved = await state(page, 'council_history');
+    return { pause: saved.pause, status: saved.operations[0]?.status };
+  }).toEqual({ pause: 'legacy', status: 'pending' });
   expect(saved.value).toBeNull(); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'delete', accountId: account, status: 'pending' });
   expect(saved.source).toBe(source);

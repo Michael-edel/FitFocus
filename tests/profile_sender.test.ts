@@ -1,6 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { StateDatabase } from '../storage/stateDatabase';
+import { StateDatabase, stateTransaction } from '../storage/stateDatabase';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { StateSync } from '../storage/stateSync';
@@ -11,7 +11,9 @@ const scope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': 
 const json = (body: unknown, status = 200, headers: HeadersInit = scope) => new Response(JSON.stringify(body), { status, headers });
 let db: StateDatabase; let outbox: DurableOutbox; let repo: UserStateRepository; let sync: StateSync;
 beforeEach(async () => { db = new StateDatabase({ factory: new IDBFactory() }); outbox = new DurableOutbox(db);
-  repo = new UserStateRepository(account, { outbox }); await restoreProfile(repo, profile); });
+  repo = new UserStateRepository(account, { outbox });
+  const guard = (await outbox.acceptReadSession(account, sid, (await outbox.sessionState()).fence))!;
+  await restoreProfile(repo, profile, guard); });
 afterEach(() => { sync?.stop(); db.close(); vi.restoreAllMocks(); });
 function client(mutation: typeof fetch, capability = true, options: { now?: () => number } = {}) {
   const fetchFn = vi.fn<typeof fetch>(async (url, init) => String(url) === '/api/me'
@@ -65,6 +67,17 @@ it('does not hydrate over a pending edit or after a cross-tab logout', async () 
 });
 it('checks the session inside the hydration transaction', async () => {
   client(async () => { await outbox.invalidateSessions(); return json({ profile: { ...profile, version: 9 } }); });
+  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(2);
+});
+it('does not adopt a newer auth fence while refreshing a profile in the same epoch', async () => {
+  client(async () => {
+    const fence = (await outbox.sessionState()).fence;
+    await stateTransaction(await db.open(), ['outbox_meta'], 'readwrite', tx => {
+      tx.objectStore('outbox_meta').put({ id: 'auth-fence', revision: fence + 1 });
+    });
+    return json({ profile: { ...profile, version: 9 } });
+  });
   await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
   expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(2);
 });

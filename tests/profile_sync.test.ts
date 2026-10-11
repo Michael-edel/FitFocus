@@ -13,7 +13,8 @@ const profile = userProfile();
 beforeEach(async () => {
   db = new StateDatabase({ factory: new IDBFactory() }); outbox = new DurableOutbox(db);
   repository = new UserStateRepository(profile.id, { outbox });
-  await restoreProfile(repository, profile);
+  const guard = (await outbox.acceptReadSession(profile.id, 'a'.repeat(64), (await outbox.sessionState()).fence))!;
+  await restoreProfile(repository, profile, guard);
 });
 afterEach(() => { db.close(); vi.restoreAllMocks(); });
 function deps() {

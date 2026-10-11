@@ -32,6 +32,31 @@ beforeEach(() => {
 afterEach(() => { connection.close(); userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('runtime repository and durable intent', () => {
+  it.each([
+    { exists: false, value: '', version: 0 },
+    { exists: true, value: JSON.stringify(diary('cloud')), version: 5 },
+  ])('an unchanged $exists snapshot in a second tab preserves the first editor revision', async observation => {
+    expect(await repository.hydrate('diary', observation, 0)).toBe(true);
+    const before = await repository.observe('diary');
+    expect(before.revision).toBeGreaterThan(0);
+    const second = new UserStateRepository(accountId, { outbox, writerId: 'writer-b' });
+    expect(await second.hydrate('diary', observation, before.revision)).toBe(true);
+    expect(await outbox.snapshot(accountId, key)).toEqual(before);
+    expect(await repository.writeJson('diary', diary('first-edit'))).toMatchObject({
+      status: 'pending', baseVersion: observation.version,
+    });
+  });
+
+  it('a newer server generation still invalidates an independent editor even with the same payload', async () => {
+    const value = JSON.stringify(diary('cloud'));
+    await repository.hydrate('diary', { exists: true, value, version: 5 }, 0);
+    const before = await repository.observe('diary');
+    const second = new UserStateRepository(accountId, { outbox, writerId: 'writer-b' });
+    expect(await second.hydrate('diary', { exists: true, value, version: 6 }, before.revision)).toBe(true);
+    expect(await repository.writeJson('diary', diary('stale-edit'))).toMatchObject({ status: 'conflicted' });
+    expect(await outbox.snapshot(accountId, key)).toMatchObject({ value, confirmedVersion: 6 });
+  });
+
   it('commits values and outgoing intent together and survives a fresh repository', async () => {
     const operation = await repository.writeJson('diary', diary('meal-1'));
     expect(operation).toMatchObject({ status: 'pending', accountId, type: 'put' });

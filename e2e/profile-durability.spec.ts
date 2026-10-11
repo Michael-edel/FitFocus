@@ -4,6 +4,7 @@ const account = 'google-e2e-sub'; const sid = 'a'.repeat(64);
 const key = `fitfocus_data_${account}_profile`;
 const profile = { ...buildMockProfile(), id: account, version: 2 };
 const scope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
+  'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
   'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
   'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid };
 async function saved(page: Page) {
@@ -36,8 +37,8 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh') {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 } });
-    if (path === '/api/bootstrap') return json({ profile, items: [] });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
+    if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile' && request.method() === 'PUT') {
       mutations.push(request.method());
       const body = request.postDataJSON() as { baseVersion: number };

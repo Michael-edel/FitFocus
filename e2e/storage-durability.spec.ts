@@ -46,13 +46,21 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
     stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
+    bootstrapSync: { protocol: 1, guard: 1 },
   }) }));
   await page.route('**/api/state*', async (route) => {
     const request = route.request(); const headers = request.headers();
-    if (request.method() !== 'PUT' || !headers['x-fitfocus-state-account']) { await route.fallback(); return; }
-    const items = request.postDataJSON().items as { key: string; value: string; baseVersion: number }[];
+    if (!headers['x-fitfocus-state-account']) { await route.fallback(); return; }
     const scope = { 'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
       'X-FitFocus-State-Account': headers['x-fitfocus-state-account'], 'X-FitFocus-State-Session': headers['x-fitfocus-state-session'] };
+    if (request.method() === 'GET') {
+      const prefix = new URL(request.url()).searchParams.get('prefix') ?? '';
+      await route.fulfill({ contentType: 'application/json', headers: scope, body: JSON.stringify({
+        items: [...server].filter(([key]) => key.startsWith(prefix)).map(([key, item]) => ({ key, ...item, exists: true })),
+      }) }); return;
+    }
+    if (request.method() !== 'PUT') { await route.fallback(); return; }
+    const items = request.postDataJSON().items as { key: string; value: string; baseVersion: number }[];
     for (const item of items) if (item.key.endsWith('_settings')) options.settingsRequests?.push(item.baseVersion);
     if (options.conflict && items[0].key.endsWith('_settings')) {
       await route.fulfill({ status: 409, contentType: 'application/json', headers: scope,

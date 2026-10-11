@@ -2,7 +2,7 @@ import type { UserProfile } from '../types';
 import { isUserProfilePayload } from '../profileValidation';
 import { UserStateRepository } from './userStateRepository';
 import { reportStateSaveIssue } from './stateSaveStatus';
-import type { OutboxOperation } from './durableOutbox';
+import type { OutboxOperation, OutboxReadGuard } from './durableOutbox';
 
 /** Registration creates an intent with baseVersion 0; an existing local profile is never adopted as its base. */
 export async function createProfileIntent(profile: UserProfile, repository: UserStateRepository): Promise<OutboxOperation> {
@@ -30,12 +30,15 @@ export async function readOwnedProfile(repository: UserStateRepository): Promise
 }
 
 /** Bootstrap may seed an empty profile, but cannot replace an existing local snapshot. */
-export async function restoreProfile(repository: UserStateRepository, incoming: UserProfile): Promise<UserProfile> {
+export async function restoreProfile(repository: UserStateRepository, incoming: UserProfile, guard?: OutboxReadGuard): Promise<UserProfile> {
   if (incoming.id !== repository.accountId) throw new Error('PROFILE_ACCOUNT_MISMATCH');
+  if (guard && !await repository.isReadSessionCurrent(guard)) throw new Error('LOGIN_SESSION_CHANGED');
   const first = await repository.observe('profile');
   if (first.value === null && first.revision === 0 && typeof incoming.version === 'number'
     && Number.isSafeInteger(incoming.version) && incoming.version > 0) {
-    await repository.hydrate('profile', { value: JSON.stringify(incoming), version: incoming.version, exists: true }, first.revision);
+    if (!guard) throw new Error('PROFILE_UNVERIFIED_SNAPSHOT');
+    await repository.hydrate('profile', { value: JSON.stringify(incoming), version: incoming.version, exists: true }, first.revision, guard.sessionEpoch, guard.authFence);
   }
+  if (guard && !await repository.isReadSessionCurrent(guard)) throw new Error('LOGIN_SESSION_CHANGED');
   return await readOwnedProfile(repository) ?? incoming;
 }

@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { DurableOutbox, type OutboxIntent, type OutboxOperation } from './durableOutbox';
+import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
@@ -95,9 +95,13 @@ export class UserStateRepository {
     }));
   }
 
-  hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string): Promise<boolean> {
+  isReadSessionCurrent(guard: OutboxReadGuard): Promise<boolean> {
+    return guard.accountId === this.accountId ? this.outbox.isReadSessionCurrent(guard) : Promise.resolve(false);
+  }
+
+  hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string, expectedAuthFence?: number): Promise<boolean> {
     const key = this.key(stateKey);
-    return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch)));
+    return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch, expectedAuthFence)));
   }
 
   private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false): Promise<OutboxOperation> {

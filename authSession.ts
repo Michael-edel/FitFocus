@@ -5,6 +5,8 @@ import { readOwnedProfile } from './storage/profileState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { verifyReadSession, readScopedJson, assertReadSession, SessionReadError } from './storage/sessionRead';
 
 type ServerUser = { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] };
 type UnknownRecord = Record<string, unknown>;
@@ -25,7 +27,7 @@ type AuthStateSetters = {
 
 type BootstrapAuthParams = AuthStateSetters & {
   requireInvite: boolean;
-  loginAsUser: (user: UserProfile, authUser?: ServerUser | null) => Promise<void>;
+  loginAsUser: (user: UserProfile, authUser?: ServerUser | null, readGuard?: OutboxReadGuard) => Promise<void>;
   continueAfterOAuth?: boolean;
   fetchImpl?: typeof fetch;
   isCurrentSession?: () => boolean;
@@ -142,17 +144,12 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   const isCurrent = params.isCurrentSession ?? (() => true);
   if (!isCurrent()) return;
 
+  let readGuard: OutboxReadGuard | null = null;
   const readMe = async (): Promise<MeResponse | null> => {
     try {
-      const r = await fetchWithResilience(`/api/me?t=${Date.now()}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      }, {
-        retries: 1,
-        retryDelayMs: 250,
-        fetchImpl: fetchFn,
-      });
-      if (r.ok) return toMeResponse(await r.json());
+      const result = await verifyReadSession({ bootstrap: true, fetchImpl: fetchFn, isCurrentSession: isCurrent });
+      readGuard = result.guard;
+      return toMeResponse(result.body);
     } catch {}
     return null;
   };
@@ -183,15 +180,18 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
   }
 
   if (serverUser?.sub) {
+    if (!readGuard) {
+      params.setInviteError('Не удалось подтвердить протокол загрузки и сессию. Повторите вход после обновления сервера.');
+      params.setAuthState('auth_choice');
+      return;
+    }
+    const bootstrapGuard = readGuard;
     clearAuthRecoveryReloadMarker();
     let confirmedAbsent = false;
     try {
-      const pr = await fetchWithResilience('/api/bootstrap', { credentials: 'include' }, {
-        retries: 1,
-        retryDelayMs: 250,
-        fetchImpl: fetchFn,
+      const { response: pr, body: pj } = await readScopedJson('/api/bootstrap', bootstrapGuard, 'bootstrap', {
+        fetchImpl: fetchFn, isCurrentSession: isCurrent,
       });
-      const pj = await readJsonRecord(pr);
       if (!isCurrent()) return;
       if (pr.status === 401 || pr.status === 403) {
         params.setInviteError('Сессия или доступ изменились. Повторите вход.');
@@ -200,10 +200,12 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       }
       if (pr.ok) {
         confirmedAbsent = pj?.profile === null;
-        const profile = isUserProfilePayload(pj?.profile) && pj.profile.id === serverUser.sub ? pj.profile : null;
+        const profile = isUserProfilePayload(pj?.profile) && pj.profile.id === serverUser.sub
+          && typeof pj.profile.version === 'number' && Number.isSafeInteger(pj.profile.version) && pj.profile.version > 0 ? pj.profile : null;
         if (profile) {
+          await assertReadSession(bootstrapGuard, { isCurrentSession: isCurrent });
           params.setAllUsers(normalizeUserProfiles([profile]));
-          await params.loginAsUser(profile, serverUser);
+          await params.loginAsUser(profile, serverUser, bootstrapGuard);
           return;
         }
         if (!confirmedAbsent) {
@@ -212,19 +214,35 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
           return;
         }
       }
-    } catch {}
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (error instanceof SessionReadError || error instanceof Error && error.message === 'LOGIN_SESSION_CHANGED') {
+        params.setInviteError(error instanceof SessionReadError && error.kind !== 'session'
+          ? 'Сессия, доступ или протокол загрузки изменились. Повторите вход.'
+          : 'Сессия изменилась во время загрузки. Повторите вход.');
+        params.setAuthState('auth_choice');
+        return;
+      }
+    }
     if (!isCurrent()) return;
 
     try {
+      await assertReadSession(bootstrapGuard, { isCurrentSession: isCurrent });
       const localProfile = await readOwnedProfile(new UserStateRepository(serverUser.sub));
+      await assertReadSession(bootstrapGuard, { isCurrentSession: isCurrent });
       if (!isCurrent()) return;
       if (localProfile) {
         params.setAllUsers([localProfile]);
-        await params.loginAsUser(localProfile, serverUser);
+        await params.loginAsUser(localProfile, serverUser, bootstrapGuard);
         return;
       }
-    } catch {
+    } catch (error) {
       if (!isCurrent()) return;
+      if (error instanceof SessionReadError || error instanceof Error && error.message === 'LOGIN_SESSION_CHANGED') {
+        params.setInviteError('Сессия изменилась во время загрузки. Повторите вход.');
+        params.setAuthState('auth_choice');
+        return;
+      }
       params.setInviteError('Не удалось прочитать локальный профиль. Проверьте доступ к хранилищу и повторите вход.');
       params.setAuthState('auth_choice');
       return;

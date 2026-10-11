@@ -1,6 +1,7 @@
 import { buildFallbackAiPlan } from "../../aiPlanFallback";
 import { hydrateSessionFromCloud, type HydratedSession } from "../../sessionHydration";
 import type { UserHabit, UserProfile } from "../../types";
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
 
 export type AuthIdentity = { sub?: string; email?: string; picture?: string } | null | undefined;
 
@@ -10,6 +11,7 @@ type LoginSessionDeps = {
   hydrateSession?: typeof hydrateSessionFromCloud;
   buildFallbackPlan?: typeof buildFallbackAiPlan;
   isCurrentSession?: () => boolean;
+  readGuard?: OutboxReadGuard;
 };
 
 export type PreparedLoginSession = {
@@ -34,6 +36,7 @@ export async function prepareLoginSession(
     resetUsageIfNewTime: deps.resetUsageIfNewTime,
     initialHabits: deps.initialHabits,
     isCurrentSession: isCurrent,
+    readGuard: deps.readGuard,
   });
   if (!isCurrent()) throw new Error('LOGIN_SESSION_CHANGED');
   if (hydrated.currentUser.id !== identity) throw new Error('PROFILE_ACCOUNT_MISMATCH');

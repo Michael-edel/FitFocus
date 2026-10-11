@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 const account = 'google-e2e-sub'; const sid = 'a'.repeat(64); const key = `fitfocus_data_${account}_profile`;
 const scope = { 'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
+  'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
   'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
   'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid };
 async function saved(page: Page) {
@@ -32,8 +33,8 @@ async function setup(page: Page) {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me') return json({ user: { sub: account, name: 'Registration owner', email: 'e2e@example.com' }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 } });
-    if (path === '/api/bootstrap' || path === '/api/profile' && request.method() === 'GET') return json({ profile: null, items: [] });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
+    if (path === '/api/bootstrap' || path === '/api/profile' && request.method() === 'GET') return json({ user: { sub: account }, profile: null, items: [] });
     if (path === '/api/ai' && request.postDataJSON()?.feature === 'personal_plan') {
       requests.ai += 1;
       expect((await saved(page)).value?.id).toBe(account); expect(requests.profile).toBe(0);
