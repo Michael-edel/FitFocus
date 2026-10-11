@@ -272,6 +272,7 @@ const App: React.FC = () => {
   const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
   const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
   const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
+  const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
   const registrationAttemptRef = useRef(0);
@@ -633,7 +634,8 @@ const App: React.FC = () => {
     todayKey: getTodayKey(),
   }), [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
 
-  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext });
+  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext,
+    isCurrentSession: isCurrentProfileSession, loginGuard: loginReadGuard });
   const checkAchievements = achievements.checkAchievements;
   const {
     persistFoodDiary,
@@ -752,6 +754,7 @@ const App: React.FC = () => {
       authBootstrapAttemptRef.current += 1;
       loginAttemptRef.current += 1; setUserStateRepository(null);
       setUserProfileRepository(null);
+      setLoginReadGuard(null);
       hasProfileDraftRef.current = false;
       void stateSync.invalidate().catch(() => {
         if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
@@ -798,6 +801,7 @@ const App: React.FC = () => {
     if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
     setUserStateRepository(profileRepository);
     setUserProfileRepository(profileRepository);
+    setLoginReadGuard(prepared.hydrated.readGuard ?? null);
     hasProfileDraftRef.current = false;
     setCurrentUser(prepared.currentUser);
     if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);

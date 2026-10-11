@@ -10,6 +10,7 @@ const scope = {
   'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
   'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
   'X-FitFocus-Weekly-Menu-Protocol': '1', 'X-FitFocus-Weekly-Menu-Guard': '1',
+  'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
 };
 async function saved(page: Page) {
   return page.evaluate(async key => {
@@ -43,7 +44,8 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'items-erro
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 },
-      bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } } : { user: null });
+      bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+      achievementSync: { protocol: 1, guard: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/logout') { active = false; return json({ ok: true }); }
     if (path === '/api/profile') {

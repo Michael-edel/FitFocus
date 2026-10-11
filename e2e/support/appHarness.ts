@@ -112,7 +112,10 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
     const json = async (payload: unknown, status = 200) => route.fulfill({
       status,
       contentType: 'application/json',
-      headers: path === '/api/bootstrap' || path === '/api/state' && method === 'GET' ? {
+      headers: path.startsWith('/api/achievements') ? {
+        'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
+        'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
+      } : path === '/api/bootstrap' || path === '/api/state' && method === 'GET' ? {
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Protocol' : 'X-FitFocus-State-Protocol']: path === '/api/bootstrap' ? '1' : '2',
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Guard' : 'X-FitFocus-State-Guard']: '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
@@ -141,6 +144,7 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         hasAccess: true,
         stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
         bootstrapSync: { protocol: 1, guard: 1 },
+        achievementSync: { protocol: 1, guard: 1 },
       });
       return;
     }
@@ -154,6 +158,9 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       return;
     }
 
+    if (path === '/api/achievements' || path === '/api/achievements/check') {
+      await json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] }); return;
+    }
     if (path === '/api/state' && method === 'GET') { await json({ items: [] }); return; }
     // Default mocks retain outgoing intents via protocol pause; verified writer tests install their own acknowledgements.
 
