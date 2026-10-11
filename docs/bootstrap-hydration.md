@@ -4,8 +4,11 @@
 [`dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`](https://github.com/Michael-edel/FitFocus/commit/dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf),
 ветка `fix/durable-outbox`. Unit/типы/guards и целевые E2E прошли;
 полная локальная матрица выявила нестабильный profile-сценарий iPhone PWA.
-Он остаётся открытым. [CI опубликованного `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617)
-прошёл с одним flaky регистрации Safari; это не закрывает приёмку.
+На `3550cc8` добавлено [исправление стабильности формы](profile-persistence.md#стабильность-формы-при-изменении-уведомления).
+Полная приёмка и причины Safari page errors при reload остаются открытыми.
+[CI `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617)
+прошёл с одним flaky; следующий [CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
+прошёл без flaky. Оба предшествуют исправлению UI.
 Результат предыдущей ревизии на этот код не переносится.
 Общий порядок: [TASKS](../TASKS.md); опубликованное состояние:
 [статус проекта](project-status.md).
@@ -125,8 +128,8 @@ payload: независимый редактор со старой версие�
   чтении идентичного снимка; сохранить конфликт при настоящем изменении версии.
 - [x] Проверять очищенную историю и статус операции по одному снимку IDB,
   дождавшись pending/legacy-паузы; stale localStorage не возвращает историю.
-- [ ] Исправить потерю клика profile Save и проверить удержание указателя
-  во время изменения статуса синхронизации; один жест создаёт одну операцию.
+- [x] Стабилизировать высоту notice при удержанном profile Save (`3550cc8`):
+  семь проектов и 20 повторов Safari/PWA прошли; один жест создаёт одну операцию.
 - [ ] Разобрать Safari console errors при reload, сохранив проверку
   неожиданных ошибок; повторный успех не считать исправлением.
 - [x] Проверить [CI `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617):

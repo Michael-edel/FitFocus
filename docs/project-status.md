@@ -20,7 +20,8 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | Область | Подтверждённое состояние на дату сверки |
 |---|---|
 | Архитектурный снимок | `810adb1`, PR #90; исходная точка технического описания |
-| Код текущего клиентского этапа | `dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`, ветка `fix/durable-outbox`; [guarded bootstrap/hydration](bootstrap-hydration.md), auth-fence и повторная загрузка во второй вкладке |
+| Код bootstrap/hydration | `dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`, ветка `fix/durable-outbox`; [guarded bootstrap/hydration](bootstrap-hydration.md), auth-fence и повторная загрузка во второй вкладке |
+| Текущее исправление UI | `3550cc8fc81002cd0fcb127a398d73a5536f31bb`: [область notice сохраняет высоту до завершения жеста](profile-persistence.md#стабильность-формы-при-изменении-уведомления) |
 | Предыдущая опубликованная проверенная ревизия | `7f481aa34dc03c8aceefa2928d9573d9632e2414`: карта документации, статус и открытые задачи |
 | Опубликованная ревизия текущего этапа | `ece4e7a62159bbfae53ccfe4b19da211fb9d298e`: код `dac2de2` и обновлённые контракты |
 | Локальная проверка dac2de2 | 846 unit-тестов в 178 файлах, три режима typecheck и guards прошли; E2E: 144 passed / 1 failed / 9 skips, profile Save на iPhone PWA исследуется |
@@ -29,6 +30,8 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | GitHub main | `c939ae6f3dbdb802478ea8a305b180eefb0b90f8`, защищена; PR #93 не слит |
 | CI на 7f481aa | [Запуск 38165704790](https://github.com/Michael-edel/FitFocus/actions/runs/38165704790): success, 817 unit-тестов в 175 файлах; 117 browser passed, 9 skips, без flaky |
 | CI на ece4e7a | [Запуск 38168916617](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617): success, 846 unit-тестов в 178 файлах; 144 browser passed, 1 flaky, 9 skips; регистрация iPhone Safari прошла после повтора |
+| CI на 57f956d | [Запуск 38170218508](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508): success, 846 unit в 178 файлах; 145 browser passed / 9 skips, без flaky; это предыдущая ревизия до исправления UI |
+| Локальная проверка 3550cc8 | 846 unit, три typecheck, guards, schema/privacy и audit прошли; новый сценарий — 7/7 проектов, исходный и новый — 20 повторов Safari/PWA без retries; полная матрица: 151 passed / 1 failed / 9 skips, Safari page error на reload |
 | Локальные проверки cb6e6cf | 817 unit-тестов в 175 файлах, typecheck и 20 повторных registration/quota-сценариев на Firefox/iPhone PWA, без retries |
 | Полная локальная браузерная проверка b723b7d | 117 passed / 9 явных skips, без retries; историческая граница сохранена [в журнале](stabilization-progress.md) |
 
@@ -38,7 +41,9 @@ CI `7f481aa` также проверил audit, три проверки типо
 сохранены в журнале со своими ревизиями. Результаты нового компонента с 846
 unit-тестами учитываются отдельно. CI `ece4e7a` также прошёл обязательные
 проверки, но имеет один flaky: console error `/api/profile due to access
-control checks` после reload. Успех повтора не доказывает устранение причины.
+control checks` после reload. Следующий CI `57f956d` прошёл без flaky,
+но успешный запуск не устанавливает причину сообщения и не подтверждает
+ещё не проверенный CI исправления `3550cc8`.
 Наличие реализации в ветке не подтверждает
 её выпуск в main или production.
 
@@ -89,8 +94,14 @@ revision, новая версия всё равно защищает незав�
 После десяти успешных диагностических повторов прогон Safari/PWA с двумя
 workers дал 18 passed / 2 failed. В одном падении pointerdown попал в Save,
 а через 12 мс pointerup/click — в DIV; операция и PUT не создавались.
-Это подтверждает потерю клика при смене цели. Изменение высоты notice над
-формой — проверяемая гипотеза, исправления ещё нет. Второе падение:
+Это подтверждает потерю клика при смене цели. Регрессионный тест отдельно
+воспроизвёл сдвиг документа при исчезновении notice: 86/86/106 px на
+Chromium/Firefox/iPhone PWA. На `3550cc8` высота области сохраняется до
+завершения жеста; семь проектов и 20 Safari/PWA повторов прошли.
+Полная матрица исправления: 151 passed / 1 failed / 9 skips. Все новые
+сценарии прошли; profile-conflict на iPhone Safari упал после функциональных
+проверок на сообщении `/api/me due to access control checks` при reload.
+CI исправления проверяется отдельно. Второе историческое падение:
 console `/api/me due to access control checks` при reload; причина не установлена.
 CI регистрации выявил похожее сообщение для `/api/profile`; объединять
 эти случаи до проверки трасс нельзя. [Результаты и границы](stabilization-progress.md).
@@ -99,7 +110,7 @@ CI регистрации выявил похожее сообщение для 
 ## Что делаем дальше
 
 1. Завершить приёмку [bootstrap/hydration](bootstrap-hydration.md#приёмка-компонента-и-оставшаяся-работа),
-   устранив потерю клика Save и разобрав Safari console errors при reload;
+   проверив полный набор после исправления Save и разобрав Safari page errors при reload;
    затем остальные family/AI callbacks и cache с привязкой к исходной сессии.
    Не выдавать сохранение профиля за подтверждение всей очереди.
 2. Подключить runtime-импорт legacy с доказанным владельцем и фактической

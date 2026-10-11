@@ -59,7 +59,7 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 изменения перечислены [в журнале](docs/stabilization-progress.md)
 с отдельными ревизиями и границами проверки.
 
-Код текущего клиентского этапа — `dac2de2`,
+Код bootstrap/hydration — `dac2de2`, исправление UI — `3550cc8`,
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 [15 управляемых state-ключей](docs/owned-state-writers.md) используют
 атомарный repository, защищённую загрузку и sender с проверкой сессии.
@@ -76,11 +76,16 @@ lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf`
 не делает первую правку конфликтующей. 846 unit-тестов прошли. Полный локальный
 E2E: 144 passed / 1 failed / 9 skips; нестабильный profile Save на iPhone PWA
 остаётся открытым: [контракт и результаты](docs/bootstrap-hydration.md).
-CI опубликованного `ece4e7a` [завершился успешно](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617):
-846 unit-тестов; браузеры — 144 passed, 1 flaky и 9 skips. Тест регистрации
-на iPhone Safari прошёл после повтора; это остаётся открытой проверкой.
-Диагностика Save зафиксировала смену цели между pointerdown и pointerup;
-исправление ещё не реализовано. [Свидетельства и следующие шаги](docs/project-status.md).
+CI `ece4e7a` прошёл с одним flaky регистрации Safari; последующий
+[CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
+прошёл без flaky: 846 unit-тестов, 145 browser passed и 9 skips.
+На `3550cc8` [уведомление сохраняет расположение формы до завершения жеста](docs/profile-persistence.md#стабильность-формы-при-изменении-уведомления).
+Новый регрессионный сценарий прошёл во всех семи проектах; исходный и новый
+Save прошли 20 повторов Safari/PWA без retries. Полная локальная матрица:
+151 passed / 1 failed / 9 skips; единственное падение — Safari page error
+на reload после успешных проверок сохранения и конфликта. CI исправления
+проверяется отдельно; причина page error ещё открыта.
+[Свидетельства и следующие шаги](docs/project-status.md).
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).
 

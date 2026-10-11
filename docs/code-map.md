@@ -1,7 +1,8 @@
 # Карта кода FitFocus
 
-Сверено: 12.10.2026. Исходники клиентского этапа — `dac2de2`, опубликованная
-ревизия документации — `ece4e7a`, ветка `fix/durable-outbox`.
+Сверено: 12.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
+уведомления — `3550cc8`; предыдущая ревизия документации — `57f956d`,
+ветка `fix/durable-outbox`.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -24,7 +25,7 @@
 | Отправка state и profile | [stateSync.ts](../storage/stateSync.ts), [sessionTransport.ts](../storage/sessionTransport.ts) | [Sender](state-sender.md), [state tests](../tests/state_sync.test.ts), [profile sender tests](../tests/profile_sender.test.ts) |
 | Импорт прежней очереди | [legacyQueue.ts](../storage/legacyQueue.ts), [legacyMigration.ts](../storage/legacyMigration.ts) | [Legacy-контракт](legacy-migration.md), [нормализатор](../tests/legacy_queue.test.ts), [импорт](../tests/legacy_migration.test.ts); runtime-подключение ещё открыто |
 | Серверная сессия и данные | [me.ts](../functions/api/me.ts), [bootstrap.ts](../functions/api/bootstrap.ts), [state.ts](../functions/api/state.ts), [profile.ts](../functions/api/profile.ts) | [API-контракты](../API_CONTRACTS.md), [серверные поколения](state-generations.md), [bootstrap tests](../tests/bootstrap_session_guard.test.ts) |
-| Уведомление о сохранении | [StateStorageNotice.tsx](../ui/StateStorageNotice.tsx) | [Storage E2E](../e2e/storage-durability.spec.ts), [profile E2E](../e2e/profile-durability.spec.ts); стабилизация расположения формы при клике ещё не проверена |
+| Уведомление о сохранении | [StateStorageNotice.tsx](../ui/StateStorageNotice.tsx) | [Стабильность формы при жесте](profile-persistence.md#стабильность-формы-при-изменении-уведомления), [storage E2E](../e2e/storage-durability.spec.ts), [profile E2E](../e2e/profile-durability.spec.ts) |
 | PWA и обновление приложения | [sw.ts](../sw.ts), [pwa.ts](../pwa.ts) | [PWA E2E](../e2e/pwa-shell.spec.ts), [выпуск](../RELEASE_CHECKLIST.md); обновление service worker не доказывает остановку старых вкладок |
 
 ## Границы, которые нужно сохранить
