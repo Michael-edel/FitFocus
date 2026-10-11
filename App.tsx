@@ -828,7 +828,7 @@ const App: React.FC = () => {
     setProfileSyncNote('Профиль обновлён из облака.');
   }, []);
 
-  const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
+  const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
       setProfileSyncNote(null);
@@ -838,6 +838,7 @@ const App: React.FC = () => {
       currentUser,
       repository: userProfileRepository,
       isCurrentSession: isCurrentProfileSession,
+      syncStateImpl: id => stateSync.flushPending(id),
       profileEditRevisionRef,
       hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
@@ -925,12 +926,13 @@ const App: React.FC = () => {
     });
   }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
-  // Server-driven: persist profile changes to D1 (debounced)
+  // Edits are already durable. A debounce wakes the current sender without obtaining fresh proof.
   useProfileAutoSync({
     currentUser,
     cloudUserId: googleMe?.sub,
     suppressNextFullProfileSyncRef,
-    pushProfileToCloud,
+    hasPendingProfileChangesRef,
+    pushProfileToCloud: flushPendingProfileToCloud,
     setProfileSyncState,
     setProfileSyncNote,
     setLastProfileSyncAt,

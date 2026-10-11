@@ -31,6 +31,43 @@ function client(mutation: (input: RequestInfo | URL, init?: RequestInit) => Prom
 const ack = (version = 1) => json({ ok: true, items: [{ key, version, exists: true }] }, 200, scope);
 
 describe('durable HTTP sender', () => {
+  it('does not let an automatic queue flush activate or switch an account', async () => {
+    const { instance, fetchFn } = client(async () => ack());
+    expect(await instance.flushPending(account)).toBe(false);
+    expect(fetchFn).not.toHaveBeenCalled();
+    await instance.connect(account);
+    expect(await instance.flushPending('account-b')).toBe(false);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes committed work automatically without starting another proof request', async () => {
+    await write(); const { instance, fetchFn } = client(async () => ack());
+    await instance.connect(account);
+    expect(await instance.flushPending(account)).toBe(true);
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me', '/api/state']);
+    expect(await outbox.list(account)).toEqual([]);
+  });
+
+  it('preserves an auth pause during automatic flush instead of using a timer to reauthorize', async () => {
+    await write(); const { instance, fetchFn } = client(async () => json({ error: 'UNAUTH' }, 401));
+    await instance.connect(account); await instance.flush();
+    const operation = (await outbox.list(account))[0];
+    expect((await outbox.sessionState()).active?.pause).toBe('auth');
+    expect(await instance.flushPending(account)).toBe(false);
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me', '/api/state']);
+    expect((await outbox.list(account))[0].opId).toBe(operation.opId);
+    expect((await outbox.sessionState()).active?.pause).toBe('auth');
+  });
+
+  it('cannot report an automatic flush complete after its sender generation stops', async () => {
+    const { instance } = client(async () => ack()); await instance.connect(account);
+    const drain = outbox.isDrained.bind(outbox);
+    vi.spyOn(outbox, 'isDrained').mockImplementation(async (...args) => {
+      const result = await drain(...args); instance.stop(); return result;
+    });
+    expect(await instance.flushPending(account)).toBe(false);
+  });
+
   it('does not let a captured profile flush switch to another account', async () => {
     const { instance, fetchFn } = client(async () => ack());
     expect(await instance.syncNow(account)).toBe(false);

@@ -80,6 +80,16 @@ export class StateSync {
     if (this.accountId !== accountId) return false;
     const generation = this.generation;
     if (!await this.verify(generation)) return false;
+    return this.drainAndCheck(accountId, generation);
+  }
+
+  /** Automatic edits wake the existing session; a debounce must not obtain proof or clear an auth pause. */
+  flushPending(accountId: string): Promise<boolean> {
+    return this.drainAndCheck(accountId, this.generation);
+  }
+
+  private async drainAndCheck(accountId: string, generation: number): Promise<boolean> {
+    if (generation !== this.generation || this.accountId !== accountId) return false;
     const sessionEpoch = this.session?.sessionEpoch;
     if (!sessionEpoch) return false;
     await this.flush();

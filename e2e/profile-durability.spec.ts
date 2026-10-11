@@ -13,11 +13,13 @@ async function saved(page: Page) {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
     const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
     try {
-      const tx = db.transaction(['values', 'outbox'], 'readonly');
-      const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
+      const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
+      const [value, operations, active] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll()),
+        read(tx.objectStore('outbox_meta').get('active-session'))]);
       return { value: value?.value as string | undefined,
+        pause: active?.pause as string | undefined,
         stateOperationCount: operations.filter(op => op.resource !== 'profile').length,
-        operations: operations.filter(op => op.key === key) as Array<{ status: string; resource: string; baseVersion: number; value: string; serverSnapshot?: { version: number } }> };
+        operations: operations.filter(op => op.key === key) as Array<{ opId: string; status: string; resource: string; baseVersion: number; value: string; serverSnapshot?: { version: number } }> };
     } finally { db.close(); }
   }, key);
 }
@@ -27,7 +29,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
   const expectedHttpErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
-    if (message.type() !== 'error') return;
+    if (message.type() !== 'error' && message.type() !== 'warning') return;
     const injectedStatus = conflict ? 409 : 401;
     if (message.location().url.endsWith('/api/profile')
       && message.text().startsWith('Failed to load resource:') && message.text().includes(`status of ${injectedStatus}`)) {
@@ -64,18 +66,27 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
   return { errors, mutations, expectedHttpErrors };
 }
 test('profile edits survive reload and a different bootstrap snapshot during an auth pause', async ({ page }, testInfo) => {
-  const { errors } = await setup(page, 'auth');
+  const { errors, mutations } = await setup(page, 'auth');
   await openApp(page, '/#settings');
   const name = page.getByPlaceholder('Как к вам обращаться');
   await expect(name).toHaveValue(profile.name);
   expect((await saved(page)).operations).toEqual([]);
   await name.fill('Локальное имя'); await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
   await expect.poll(async () => (await saved(page)).value).toContain('Локальное имя');
-  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('pending');
+  await expect.poll(async () => {
+    const snapshot = await saved(page);
+    return { pause: snapshot.pause, status: snapshot.operations[0]?.status };
+  }).toEqual({ pause: 'auth', status: 'pending' });
+  expect(mutations).toEqual(['PUT']);
+  const operationId = (await saved(page)).operations[0].opId;
   await page.reload(); await expect(name).toHaveValue('Локальное имя');
+  await expect.poll(() => mutations).toEqual(['PUT', 'PUT']);
+  await expect.poll(async () => (await saved(page)).pause).toBe('auth');
   expect((await saved(page)).operations).toHaveLength(1);
+  expect((await saved(page)).operations[0].opId).toBe(operationId);
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
+  await name.scrollIntoViewIfNeeded(); await expect(name).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: testInfo.outputPath('profile-local-reload.png') });
 });
 test('a profile conflict retains the local name and never retries against the cloud version', async ({ page }, testInfo) => {
