@@ -23,7 +23,7 @@ Google/Apple, push, поддержка и административные фу�
 | [Сохранение профиля](docs/profile-persistence.md) | Редактор профиля, постоянная операция, сессии и несохранённая форма |
 | [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
 | [Загрузка сессии](docs/bootstrap-hydration.md) | Guarded bootstrap, state-hydration, auth-fence и границы приёмки |
-| [Сессия AI и списка покупок](docs/ai-session-guard.md) | Серверный guard и оставшееся подключение клиентских callbacks |
+| [Сессия AI и списка покупок](docs/ai-session-guard.md) | Серверный guard, текущее подключение меню и критерии приёмки |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -55,56 +55,29 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 
 ## Что подтверждено
 
-Описание архитектуры закреплено за `810adb1` из
-[PR #90](https://github.com/Michael-edel/FitFocus/pull/90). Последующие
-изменения перечислены [в журнале](docs/stabilization-progress.md)
-с отдельными ревизиями и границами проверки.
+Опубликованный код сверён с `8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`,
+ветка `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+[CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277)
+завершился успешно: 860 unit-тестов в 179 файлах, 152 browser passed,
+9 skips, без flaky; обязательные проверки прошли.
 
-Код bootstrap/hydration — `dac2de2`, исправление UI — `3550cc8`,
-[draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-[15 управляемых state-ключей](docs/owned-state-writers.md) используют
-атомарный repository, защищённую загрузку и sender с проверкой сессии.
-Map sender удалён из текущей сборки; profile state-upload использует общий
-sender вместо raw-пакета из localStorage. Регистрация (`2e41742`) и
-lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf` исправлено
-неточное ожидание числа запросов в E2E. Последняя ревизия с завершённым CI —
-`6fcce1b347416cf3d7d69fd07254dfb4d704fbe5`;
-[её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38173869573)
-прошёл: 846 unit-тестов в 178 файлах, 152 browser passed и 9 skips, без flaky.
-Результат относится к этому SHA; незавершённые локальные изменения им не проверены.
-История проверок и их ограничения — [в журнале](docs/stabilization-progress.md).
-Новый компонент `dac2de2` проверяет HTTP bootstrap/state по сессии и применяет
-снимки с транзакционным auth-fence; одинаковая загрузка второй вкладки больше
-не делает первую правку конфликтующей. 846 unit-тестов прошли. Полный локальный
-E2E на этой исторической ревизии: 144 passed / 1 failed / 9 skips;
-profile Save на iPhone PWA потребовал следующего исправления:
-[контракт и результаты](docs/bootstrap-hydration.md).
-CI `ece4e7a` прошёл с одним flaky регистрации Safari; последующий
-[CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
-прошёл без flaky: 846 unit-тестов, 145 browser passed и 9 skips.
-На `3550cc8` [уведомление сохраняет расположение формы до завершения жеста](docs/profile-persistence.md#стабильность-формы-при-изменении-уведомления).
-Новый регрессионный сценарий прошёл во всех семи проектах; исходный и новый
-Save прошли 20 повторов Safari/PWA без retries. Полная локальная матрица:
-151 passed / 1 failed / 9 skips; единственное падение — Safari page error
-на reload после успешных проверок сохранения и конфликта. Опубликованное
-исправление входит в прошедший CI `45315d9`; причина локального page error
-ещё открыта, успешный CI сам по себе её не устанавливает.
-[Свидетельства и следующие шаги](docs/project-status.md).
-Серверная зависимость PR #94 объединена коммитом `93f90c0`;
-[контракт и ограничения](docs/state-generations.md).
+В ветке реализованы общая IDB-outbox, 15 управляемых state-ключей,
+сохранение профиля и регистрации, guarded bootstrap/hydration и серверная
+привязка AI/items к сессии. Контракты и границы компонентов доступны
+в [статусе проекта](docs/project-status.md) и [карте кода](docs/code-map.md).
+Архитектурный снимок `810adb1` и результаты прежних этапов сохранены
+в [журнале](docs/stabilization-progress.md).
 
-Редактор profile использует ту же IDB-outbox и guarded sender;
-[его контракт и граница](docs/profile-persistence.md). [Регистрация](docs/registration-persistence.md)
-создаёт постоянную операцию до AI-запроса. Runtime legacy-импорт, полный lifecycle,
-staging и выпуск остаются открытыми. На 12.10.2026 PR #93 не слит
-в защищённую main; готовность ветки не считается готовностью production.
-Актуальные границы и ближайшие шаги — [в статусе проекта](docs/project-status.md).
+Локально идёт подключение персонального недельного меню: свежий proof,
+защита поздних ответов, постоянное сохранение профиля до отдельной отправки
+списка покупок. Эти изменения ещё не входят в опубликованный SHA и его CI.
+Целевые unit-тесты прошли, браузерная приёмка не завершена:
+[текущая работа и оставшиеся проверки](docs/ai-session-guard.md#клиентское-подключение-в-работе).
 
-Серверное дополнение `16d3c34` проверяет переданный account/session в AI
-и записи списка покупок, до лимитов и мутаций. 860 unit-тестов и локальные
-обязательные проверки прошли; [контракт и граница](docs/ai-session-guard.md).
-Клиент ещё не передаёт эту привязку; подключение AI/menu/report/family
-callbacks и совместная приёмка остаются в P0.5.
+Runtime legacy-импорт, остальные AI/report/retry/family callbacks,
+конфликты, backup/экспорт/очистка, staging и выпуск остаются открытыми.
+PR #93 не слит в защищённую main; готовность ветки не подтверждает deploy.
+Порядок дальнейшей работы — в [TASKS](TASKS.md).
 
 Предыдущее подробное описание и старые результаты проверок сохранены
 в [архиве README](docs/history/README-2026-08-29.md).

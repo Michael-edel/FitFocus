@@ -43,20 +43,22 @@
 секретов. Результаты прошлых тестов в архивном README относятся к указанным
 там датам и ревизиям.
 
-Предыдущий локально проверенный клиентский этап — `cb6e6cf`:
-[постоянная регистрация](registration-persistence.md) и
-[lifecycle sender](state-sender.md#жизненный-цикл-страницы) и исправление
-ожидания auth-паузы в E2E. Опубликованная ревизия `7f481aa`
-[прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38165704790):
-817 unit-тестов, 117 browser passed и 9 skips, без flaky.
-Предыдущий CI с flaky и последующее исправление сохранены в журнале.
-Компонент `dac2de2` добавляет [guarded bootstrap/hydration](bootstrap-hydration.md)
-и атомарный auth-fence при применении данных. 846 unit-тестов, типы и guards
-прошли. Полный локальный E2E: 144 passed / 1 failed / 9 skips; profile Save
-на iPhone PWA остаётся открытым. CI `7f481aa` этот код не проверяет.
-[Граница 15 управляемых ключей](owned-state-writers.md) описана отдельно.
-Ниже исходный архитектурный снимок и исторические этапы сохраняют свои SHA.
-Актуальные незавершённые задачи находятся в [статусе](project-status.md).
+Базовая опубликованная ревизия кода —
+`8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`, ветка `fix/durable-outbox`.
+[CI 38175438277](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277):
+success, 860 unit-тестов в 179 файлах, 152 browser passed / 9 skips, без flaky.
+Она включает [серверный AI/items guard](ai-session-guard.md),
+[bootstrap/hydration](bootstrap-hydration.md), постоянный profile/registration
+и исправление жеста Save. Предыдущие результаты относятся к своим SHA
+и сохраняются [в журнале](stabilization-progress.md).
+
+В рабочем дереве есть ещё не опубликованное подключение персонального меню.
+Его целевые unit-тесты прошли; браузерный набор дал 11 passed / 4 failed.
+Это не результат CI `8fc0b1b` и не завершение P0.5.
+Перед продолжением сверить HEAD, рабочее дерево и
+[условия приёмки](ai-session-guard.md#клиентское-подключение-в-работе).
+Ниже исторические этапы сохраняют свои ревизии; актуальные следующие шаги —
+в [статусе](project-status.md) и [TASKS](../TASKS.md).
 
 ## Что читать
 
@@ -72,7 +74,7 @@
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
-| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, capabilities и открытое клиентское подключение |
+| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, подключение меню в работе и оставшаяся приёмка |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |

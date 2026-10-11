@@ -1,8 +1,9 @@
 # Карта кода FitFocus
 
 Сверено: 12.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
-уведомления — `3550cc8`; предыдущая ревизия документации — `57f956d`,
-ветка `fix/durable-outbox`.
+уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
+Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
+Ниже локальные изменения меню явно помечены как не опубликованные.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -19,8 +20,9 @@
 | Настройки | [useSettingsPersistence.ts](../features/settings/useSettingsPersistence.ts) | [Управляемые записи](owned-state-writers.md), [проверки настроек](../tests/settings_persistence_feature.test.ts) |
 | Отметки заданий плана | [usePlanTaskState.ts](../features/plan/usePlanTaskState.ts) | [Feature tests](../tests/plan_task_feature.test.ts), [сценарии с reload](../e2e/owned-state.spec.ts) |
 | Избранные рецепты | [useFavoriteRecipes.ts](../features/recipes/useFavoriteRecipes.ts) | [Feature tests](../tests/favorite_recipes_feature.test.ts), [модель данных](data-model.md) |
+| Персональное меню — локальная работа | [useWeeklyMenuGeneration.ts](../features/ai/useWeeklyMenuGeneration.ts), [geminiService.ts](../geminiService.ts); новые `services/aiSession.ts` и `features/ai/actionScope.ts` ещё не опубликованы | [Граница и приёмка](ai-session-guard.md#клиентское-подключение-в-работе); новые unit/E2E пока в рабочем дереве |
 | AI-отчёт за неделю | [useWeeklyAiReport.ts](../features/ai/useWeeklyAiReport.ts) | [Feature tests](../tests/weekly_ai_report_feature.test.ts); защита всех AI callbacks остаётся задачей [P0](../TASKS.md) |
-| Серверная привязка AI и items | [ai_request_handler.ts](../functions/api/_lib/ai_request_handler.ts), [weekly_menu/items.ts](../functions/api/weekly_menu/items.ts), [state_session.ts](../functions/api/_lib/state_session.ts) | [Контракт](ai-session-guard.md), [HTTP-регрессии](../tests/ai_menu_session_guard.test.ts); клиентское подключение ещё открыто |
+| Серверная привязка AI и items | [ai_request_handler.ts](../functions/api/_lib/ai_request_handler.ts), [weekly_menu/items.ts](../functions/api/weekly_menu/items.ts), [state_session.ts](../functions/api/_lib/state_session.ts) | [Контракт](ai-session-guard.md), [HTTP-регрессии](../tests/ai_menu_session_guard.test.ts); персональное меню в работе, остальные callbacks открыты |
 | Семейные запросы | [familyApi.ts](../features/family/familyApi.ts) | [API tests](../tests/family_api.test.ts); полный lifecycle family callbacks ещё не принят |
 | Локальное сохранение и редакторы | [userStateRepository.ts](../storage/userStateRepository.ts), [stateEditor.ts](../storage/stateEditor.ts), [durableOutbox.ts](../storage/durableOutbox.ts), [stateDatabase.ts](../storage/stateDatabase.ts) | [Фундамент P0.8](outbox-implementation.md), [repository tests](../tests/user_state_repository_indexed.test.ts), [outbox tests](../tests/durable_outbox.test.ts) |
 | Отправка state и profile | [stateSync.ts](../storage/stateSync.ts), [sessionTransport.ts](../storage/sessionTransport.ts) | [Sender](state-sender.md), [state tests](../tests/state_sync.test.ts), [profile sender tests](../tests/profile_sender.test.ts) |
