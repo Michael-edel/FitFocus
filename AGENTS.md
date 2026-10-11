@@ -32,10 +32,12 @@
 - Не угадывай accountId legacy-записи по текущему входу. Поздний ответ
   должен относиться к своей операции, попытке, аккаунту и сессии.
 - Цель P0.8 — одна IDB-outbox, атомарные данные/операция и импорт/ledger.
-  Наличие Web Locks не выбирает хранилище. Шесть ключей repository используют
-  атомарные value/операции; sender шести ключей использует свежий /me proof,
-  server session guard и claim/finish. Остальные writers и lifecycle ещё
-  не подключены полностью. Проверенная граница:
+  Наличие Web Locks не выбирает хранилище. Пятнадцать управляемых ключей
+  используют атомарные value/операции; sender использует свежий /me proof,
+  server session guard и claim/finish. Прежний Map sender удалён из текущей
+  сборки; это не барьер для старых сборок. Profile и полный lifecycle ещё
+  не завершены. Проверенная граница:
+  [подключение остальных state-записей](docs/owned-state-writers.md),
   [sender](docs/state-sender.md),
   [текущий клиент](docs/runtime-state.md),
   [фундамент P0.8](docs/outbox-implementation.md).

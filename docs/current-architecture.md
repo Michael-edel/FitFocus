@@ -36,12 +36,12 @@ Profile hooks → profileSync.ts → отдельная Promise-цепочка �
 
 Подробнее: [данные](data-model.md), [синхронизация](sync-model.md).
 
-Последующее изменение в PR #93: шесть ключей UserStateRepository используют
-атомарную value/outbox-транзакцию. Настройки читаются из IDB; managed hydration
-проверяет протокол, локальную ревизию и очередь. Показанный выше путь Map
-сохраняется для остальных writers. [Sender шести ключей](state-sender.md)
-переведён на claim/finish; общая интеграция ещё не завершена.
-[Граница и проверки подключения](runtime-state.md).
+Последующие изменения в PR #93: сначала [шесть ключей repository](runtime-state.md)
+и [HTTP sender](state-sender.md), затем [15 управляемых state-ключей](owned-state-writers.md).
+Они используют атомарную value/outbox-транзакцию. Настройки читаются из IDB;
+managed hydration проверяет протокол, локальную ревизию и очередь.
+Map sender удалён из текущей сборки. Profile остаётся отдельным путём;
+runtime legacy-импорт, барьер старых сборок и общая приёмка ещё не завершены.
 
 ## Сервер
 

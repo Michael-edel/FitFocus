@@ -17,6 +17,7 @@ Google/Apple, push, поддержка и административные фу�
 | Файл | Для чего нужен |
 |---|---|
 | [Текущее состояние](docs/project-status.md) | Проверенный SHA, готовые компоненты, рабочие изменения и ближайшие шаги |
+| [Пользовательские записи](docs/owned-state-writers.md) | 15 управляемых ключей, редакторы и границы profile/legacy |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -53,16 +54,17 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 изменения перечислены [в журнале](docs/stabilization-progress.md)
 с отдельными ревизиями и границами проверки.
 
-Проверенный клиент — `22a7788`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-Шесть ключей используют атомарный repository, защищённую загрузку
-и [sender с проверкой сессии](docs/state-sender.md).
-[CI этого SHA](https://github.com/Michael-edel/FitFocus/actions/runs/37946004565)
-прошёл: 734 unit-теста, 54 браузерных сценария, 9 явных skips, без flaky.
+Код текущего клиентского этапа — `31ec847`,
+[draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+[15 управляемых state-ключей](docs/owned-state-writers.md) используют
+атомарный repository, защищённую загрузку и sender с проверкой сессии.
+Map sender удалён из текущей сборки; profile state-upload использует общий
+sender вместо raw-пакета из localStorage. Результаты проверок каждой ревизии —
+[в журнале](docs/stabilization-progress.md); CI точного опубликованного HEAD — в PR #93.
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).
 
-Перенос остальных writers находится в незакоммиченной рабочей версии
-и ещё не прошёл все проверки. Runtime legacy-импорт, полный lifecycle,
+Сам profile, runtime legacy-импорт, полный lifecycle,
 staging и выпуск остаются открытыми. На 11.10.2026 PR #93 не слит
 в защищённую main; готовность ветки не считается готовностью production.
 Актуальные границы и ближайшие шаги — [в статусе проекта](docs/project-status.md).

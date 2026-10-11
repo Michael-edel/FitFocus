@@ -2,14 +2,15 @@
 
 Снимок: 09.10.2026, `810adb1`. [Область документации](README.md).
 
-Последующее подключение в PR #93: [runtime state](runtime-state.md).
-Шесть ключей repository пишутся атомарно с IDB-outbox, managed hydration
-защищает локальное намерение и читает protocol 2. [Новый sender](state-sender.md)
-использует claim/finish и подтверждение сессии для шести ключей. Другие writers
-пока используют прежние пути; риски исходного снимка ниже не считаются
-исправленными для всего приложения.
+Последующие этапы PR #93: [repository](runtime-state.md),
+[sender](state-sender.md) и [15 управляемых state-ключей](owned-state-writers.md).
+Они используют атомарные value/outbox, managed hydration, claim/finish
+и подтверждённую сессию. Прежний Map sender удалён из текущей сборки.
+Profile, runtime legacy-импорт, барьер старых сборок, экспорт/очистка
+и полный lifecycle ещё открыты. Риски исходного снимка ниже не считаются
+исправленными для всего приложения или уже открытых старых сборок.
 
-## Прежний hybrid sender и оставшиеся пути
+## Прежний hybrid sender исходного снимка
 
 `hybrid.ts` держит одну операцию на ключ в Map, один раз загружает очередь
 из `fitfocus.remote-kv-outbox.v1` и сохраняет Map целиком в localStorage.

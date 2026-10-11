@@ -1,6 +1,6 @@
 # P0.8: подключение пользовательских данных к outbox
 
-Обновлено: 09.10.2026. Ветка fix/durable-outbox, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+Обновлено: 11.10.2026. Ветка fix/durable-outbox, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Серверная зависимость — [PR #94](https://github.com/Michael-edel/FitFocus/pull/94),
 объединённая коммитом 93f90c0. Это промежуточная реализация.
 На описанном ниже снимке HTTP sender ещё не подключён. Следующий этап уже
@@ -10,6 +10,11 @@
 Исполняемый код этого этапа закреплён за
 [`cfcc31b`](https://github.com/Michael-edel/FitFocus/commit/cfcc31bec96a62e1460b80a7a044b47f3efd19b1).
 Последующие изменения только Markdown не меняют этот снимок реализации.
+
+Последующий код расширяет repository и managed hydration до 15 ключей,
+подключает остальные state hooks и удаляет прежний sender текущей сборки.
+[Новая граница](owned-state-writers.md); описание шести ключей ниже относится
+именно к cfcc31b, а не ко всему последующему runtime.
 
 ## Что подключено
 
