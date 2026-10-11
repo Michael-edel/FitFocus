@@ -3,7 +3,8 @@
 Сверено: 12.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
-Последующий локально проверенный компонент меню — `f4b4eee`; CI сверяется отдельно.
+Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
+profile flush — `f3930ec`. CI каждой ревизии сверяется отдельно.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -16,6 +17,7 @@
 | Вход и загрузка данных | [authSession.ts](../authSession.ts), [loginSession.ts](../features/auth/loginSession.ts), [sessionRead.ts](../storage/sessionRead.ts) | [Bootstrap/hydration](bootstrap-hydration.md), [read guard tests](../tests/session_read_guard.test.ts), [браузерные сценарии](../e2e/bootstrap-session.spec.ts) |
 | Регистрация и первоначальный план | [registrationFlow.ts](../registrationFlow.ts) | [Сохранение регистрации](registration-persistence.md), [unit](../tests/registration_flow.test.ts), [E2E](../e2e/registration-durability.spec.ts) |
 | Редактирование и восстановление профиля | [useProfilePersistence.ts](../features/profile/useProfilePersistence.ts), [profileState.ts](../storage/profileState.ts) | [Контракт профиля](profile-persistence.md), [profile tests](../tests/profile_sync.test.ts), [E2E](../e2e/profile-durability.spec.ts) |
+| Автоматический profile flush | [useProfileAutoSync.ts](../features/profile/useProfileAutoSync.ts), [App.tsx](../App.tsx), [stateSync.ts](../storage/stateSync.ts) | `flushPending` сохраняет текущую паузу; ручной `syncNow` проверяет свежий proof. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии) |
 | Дневник питания | [useFoodDiary.ts](../features/diary/useFoodDiary.ts) | [Управляемые записи](owned-state-writers.md), [feature tests](../tests/food_diary_feature.test.ts), [storage tests](../tests/food_diary_storage.test.ts) |
 | Настройки | [useSettingsPersistence.ts](../features/settings/useSettingsPersistence.ts) | [Управляемые записи](owned-state-writers.md), [проверки настроек](../tests/settings_persistence_feature.test.ts) |
 | Отметки заданий плана | [usePlanTaskState.ts](../features/plan/usePlanTaskState.ts) | [Feature tests](../tests/plan_task_feature.test.ts), [сценарии с reload](../e2e/owned-state.spec.ts) |

@@ -55,7 +55,13 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 
 ## Что подтверждено
 
-Опубликованный код сверён с `8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`,
+Последующее исправление [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7) разделяет автоматический flush профиля и
+ручную проверку сессии: debounce больше не снимает auth-паузу повторным `/me`.
+Локально: 905 unit / 183 файла, три typecheck и обязательные проверки;
+201 browser passed / 9 skips без retries. CI нового HEAD проверяется отдельно.
+[Контракт и границы](docs/state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
+
+Базовый опубликованный снимок — `8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`,
 ветка `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277)
 завершился успешно: 860 unit-тестов в 179 файлах, 152 browser passed,

@@ -2,12 +2,17 @@
 
 Обновлено: 12.10.2026. Архитектурный снимок: `810adb1`; bootstrap/hydration —
 `dac2de2`, исправление UI — `3550cc8`, серверный AI/items guard — `16d3c34`.
+Последний компонент — автоматическая синхронизация профиля `f3930ec`:
+локально 905 unit, 201 browser passed / 9 skips, без retries.
+CI нового опубликованного HEAD проверяется отдельно; история ниже сохраняется.
 Базовая проверенная ревизия кода — `8fc0b1b`:
 [CI success](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277),
 860 unit / 179 файлов, 152 browser passed / 9 skips, без flaky.
 Персональное меню подключено на [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e); локально прошли 900 unit.
-Полная браузерная матрица: 200 passed / 1 failed / 9 skips без retries. Его CI проверяется отдельно
-после публикации; остальные AI/items гарантии и весь P0.5 остаются открытыми.
+Полная браузерная матрица этого снимка: 200 passed / 1 failed / 9 skips без retries.
+CI документирующего `cd2e923` завершён success: 900 unit,
+200 browser passed / 1 flaky / 9 skips; успешный retry не считается исправлением.
+Остальные AI/items гарантии и весь P0.5 остаются открытыми.
 Полная область — в [карте документации](docs/README.md),
 текущая работа — в [статусе проекта](docs/project-status.md). Этот файл — очередь реализации.
 Согласованный план не равен готовому коду. Ни один P0 ниже пока не закрыт.
@@ -97,9 +102,9 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   Проверено: удержать нажатие, завершить state-sync и отпустить указатель;
   кнопка остаётся целью, создаётся одна profile-операция, а 409 сохраняет её
   локальный payload и серверный снимок. Повторный клик не считается исправлением.
-- [ ] Разобрать Safari console `due to access control checks` на reload:
-  `/api/me` в локальной диагностике и `/api/profile` в CI регистрации.
-  Проверить сетевую трассу и причину отмены; не подавлять общий класс CORS-ошибок.
+- [ ] Завершить диагностику остальных Safari reload sources, включая `/api/profile`.
+  Источник profile debounce → `/api/me` установлен и исправлен на `f3930ec`;
+  это не объясняет автоматически все исторические сообщения. Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
 - [x] Проверить CI опубликованного исправления Save на точном `45315d9`:
@@ -128,7 +133,8 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
 - [x] Исправить классификацию отмены `/me` и отделить таймаут HTTP от lifetime
   попытки; проверить снятие loading и повтор генерации после таймаута.
 - [x] Пройти 900 unit, три typecheck, guards/schema/privacy/audit/build.
-- [ ] Завершить приёмку полной матрицы: 200 browser passed / 1 failed / 9 skips, без retries.
+- [x] Пройти последующую локальную матрицу на `f3930ec`: 201 browser passed / 9 skips, без retries.
+  Это не закрывает реальный lifecycle/staging или CI нового HEAD.
 - [ ] Проверить workflow итогового опубликованного HEAD.
 - [ ] Защитить achievement HTTP/очередь в `useAchievements.ts` и серверный
   handler: проверка menu use case до вызова не защищает последующий POST.
@@ -138,6 +144,22 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   writers. Unit-проверка двух IDB connections не заменяет old/new bundles.
 
 Ни весь P0.5, ни выпуск этим компонентом не закрыты.
+
+## Последующее исправление автоматической синхронизации профиля
+
+- [x] Установить callback native `/api/me`: debounce → `syncNow` → `verify`
+  после `beforeunload`, до `pagehide`; baseline 3 failed / 13 passed.
+- [x] Заменить автоматический вызов на `flushPending`; сохранить ручной свежий
+  proof, auth-паузу, проверку владельца и защиту старого поколения.
+- [x] Усилить E2E реальной auth-паузой, фактическими PUT/401 и тем же opId
+  после reload; пройти 905 unit и полную матрицу без retries.
+- [x] Не планировать flush для чистого профиля, сохранив cloud refresh и
+  одноразовый suppress; проверить recovery и отсутствие ложной ошибки.
+- [ ] Подтвердить workflow точного нового HEAD и остальные lifecycle-сценарии.
+
+Реализация [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7); [контракт](docs/state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии),
+[журнал](docs/stabilization-progress.md). Прежние падения и retries выше
+сохраняются как история; общий CORS-фильтр не добавлен.
 
 ## P0 — сохранность данных и выпуск
 
@@ -347,6 +369,10 @@ legacy-ключ не используется для новой очереди �
 конфликты/неизвестные legacy-записи не скрыты статусом «миграция завершена».
 
 ## P1 — после P0
+
+- [ ] Исправить контраст native select «Цель» в тёмной теме WebKit:
+  screenshot профиля показывает светлый текст на светлом фоне. Проверить
+  [SettingsScreen](SettingsScreen.tsx) и темы; функциональный E2E не доказывает читаемость.
 
 - [ ] Заменить `Record<string, unknown>` в группах props `AppWorkspace`
   конкретными контрактами; расширять строгую типизацию по модулям.

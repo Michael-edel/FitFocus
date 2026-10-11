@@ -177,8 +177,15 @@ CI итогового опубликованного HEAD проверяется
 Нужны серверный guard, клиентская привязка и late-response тесты;
 полная безопасность всех побочных эффектов меню пока не подтверждена.
 
-Полная приёмка ещё открыта: повторный набор дал 200 passed / 1 failed /
-9 skips. Старый profile reload на desktop WebKit воспроизвёл native сообщение
+На предыдущем снимке `f4b4eee` полная приёмка оставалась открытой:
+200 passed / 1 failed / 9 skips. Старый profile reload на desktop WebKit воспроизвёл native сообщение
 `/api/me due to access control checks` после успешных функциональных проверок.
-Трасса указывает на `verify` sender через `requestJson` во время reload;
-следующий шаг — проверить отмену этого конкретного запроса. Сообщение не скрыто.
+Трасса указывает на `verify` sender через `requestJson` во время reload.
+Последующее исправление этого callback описано ниже; остальные lifecycle
+сценарии остаются открытыми. Сообщение не скрыто.
+
+Последующая полная локальная матрица на [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7) прошла: 201 passed / 9 skips,
+без retries; 905 unit / 183 файла. Исправлен отдельный profile debounce,
+который запускал `/me` при reload. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
+Это не закрывает achievement HTTP, остальные AI writers или настоящий BFCache/staging;
+CI нового опубликованного HEAD проверяется отдельно.

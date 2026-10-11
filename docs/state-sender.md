@@ -119,3 +119,23 @@ Browser API mock и fake IDB не подтверждают реальную OAut
 Проверки: [sender](../tests/state_sync.test.ts),
 [серверная привязка](../tests/state_session_guard.test.ts),
 [браузер](../e2e/storage-durability.spec.ts).
+
+## Автоматическая отправка и ручная проверка сессии
+
+Дополнение [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7): profile debounce вызывает `flushPending(accountId)`.
+Он отправляет уже сохранённые операции через текущий sender, не вызывает
+`verify` как ручной `syncNow` и не снимает auth-паузу таймером. Владение,
+readGuard, epoch, claim/finish и серверный scope остаются обязательными.
+Отсутствующая/другая сессия не активируется таким вызовом; старое поколение
+не может сообщить об успешном завершении. Ручная синхронизация по-прежнему
+вызывает свежий `/me`. Штатная координация sender и legacy не заменяется.
+
+Диагностика выявила profile debounce → `syncNow` → `verify` после
+`beforeunload`, до `pagehide`; WebKit выдавал native access-control сообщение.
+Повторный proof убран именно из автоматического profile callback.
+Глобальный CORS/pageerror фильтр и listener `beforeunload` не добавлены;
+background sender и BFCache-контракт не менялись.
+Чистый bootstrap/refresh не планирует такой flush: нужен pending intent.
+Одноразовый suppress-флаг потребляется и для чистого снимка.
+[Unit](../tests/state_sync.test.ts), [E2E](../e2e/profile-durability.spec.ts),
+[результаты и границы](stabilization-progress.md).

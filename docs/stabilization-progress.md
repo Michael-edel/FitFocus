@@ -1035,3 +1035,60 @@ sender. Reload начался в 172214.473 ms трассы, pageError — в 17
 Проверка Markdown: 27 документов, 612 ссылок и 27 закреплённых путей
 исходников, ошибок нет; `git diff --check` прошёл. Обновлены контракты,
 навигация по коду, статус, задачи и границы проверок этого компонента.
+
+## 12.10.2026 — автоматический profile flush без повторного proof
+
+Код: [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7). CI предыдущего `cd2e923`:
+[38181152086](https://github.com/Michael-edel/FitFocus/actions/runs/38181152086),
+success, 900 unit / 183 файла, 200 browser passed / 1 flaky / 9 skips.
+Flaky — registration reload desktop WebKit с native `/api/me` после успешных
+функциональных проверок, успешный retry не устанавливал исправление.
+
+Внешний диагностический набор воспроизвёл native ошибку 3 раза из 16
+(13 passed / 3 failed). Стек и события: profile debounce → `syncNow` →
+`verify` → `/api/me` после `beforeunload`, до `pagehide`.
+Например, beforeunload=9226 ms, fetch=9236 ms, pagehide=9326 ms.
+Прототип приостановки sender по blur дал 14 passed / 2 failed и удалён:
+он не устранял воспроизводимый путь. Background/BFCache не ограничивались.
+
+Автоматический profile callback теперь вызывает `flushPending` для уже
+сохранённого намерения. Ручной `syncNow` по-прежнему проверяет свежий proof.
+Auth-пауза не снимается таймером; чужой аккаунт и старое поколение не могут
+отправить или подтвердить очередь. Red unit: 4 failed / 39 passed;
+после добавления API целевой набор: 63 passed в 4 файлах.
+
+Повтор внешней диагностики: 14 passed / 2 failed, native ошибок нет.
+Оба падения — initial form timeout под одновременным unit/typecheck;
+screenshot показывает загрузку. Этот набор не объявляется зелёным и сам
+по себе не доказывает исправление. Полная матрица затем запускалась отдельно.
+
+Первый полный набор после queued flush: 199 passed / 2 failed / 9 skips.
+Native `/me` не повторился; два clean-refresh сценария PWA сохранили старое
+имя. Причина: автосинхронизация чистого профиля до готовности sender ставила
+error, и recovery выбирал flush вместо refresh. Теперь debounce требует
+pending changes; suppress-флаг всё равно потребляется. Добавлен unit;
+целевой набор с recovery: 66 passed / 5 файлов.
+
+Итог: 905 unit / 183 файла, три typecheck, admin/auth/API guards, schema
+(21 migrations, 30 tables), privacy (27 tables), audit (0 известных
+уязвимостей), build прошли. Полная Playwright-матрица: **201 passed / 9 skips**,
+workers=3, retries=0. E2E профиля проверяет auth-паузу и pending одним IDB
+снимком, один PUT/401 до reload, второй после свежего входного proof и
+сохранение того же opId. Меню, регистрация, конфликты и прочие сценарии
+входят в эту общую матрицу.
+
+Browser plugin not available: repository Playwright, mock API,
+`http://127.0.0.1:4173`, семь проектов. Фильтры CORS/pageerror не расширялись;
+новый beforeunload listener не добавлялся. Логи и диагностические artifacts
+сохранены вне Git. Основные логи: `profile-queued-flush-final-full-e2e.log`,
+`profile-queued-flush-final-full-unit.log`, `sender-reload-diagnostic.log`.
+CI нового опубликованного HEAD проверяется отдельно. Настоящий OAuth,
+физические устройства, BFCache/staging и остальные P0 не закрыты.
+
+Визуальная проверка desktop WebKit screenshot отдельно обнаружила низкий
+контраст native select «Цель» в тёмной теме: светлый текст на светлом фоне.
+Добавлено в P1; успешная функциональная матрица не считается исправлением
+этого визуального дефекта. Форма и локальное имя читаются, auth-пауза видима.
+
+Проверка Markdown: 27 документов, 637 ссылок и 27 закреплённых путей
+исходников, ошибок нет; `git diff --check` прошёл.

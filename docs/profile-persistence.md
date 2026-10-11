@@ -51,6 +51,17 @@ Generated value публикуется после durable commit. Quota/abort н
 [Сценарий и границы](ai-session-guard.md#клиентское-подключение-в-работе),
 [транзакционные регрессии](../tests/generated_result_commit.test.ts).
 
+## Автоматический flush профиля
+
+На [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7) debounce использует `StateSync.flushPending`, а ручное действие —
+`syncNow` со свежим proof. Таймер не переавторизует auth-паузу и не создаёт
+новый профиль: отправляется существующее намерение outbox.
+Чистый профиль не запускает debounce и не получает ложную ошибку из-за ещё
+не готового sender; cloud recovery продолжает выбирать refresh.
+Проверенный источник native `/api/me` при reload устранён в этом callback;
+исторические результаты ниже сохраняют свои ревизии.
+[Контракт sender](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
+
 ## HTTP и завершение
 
 Прежняя Promise-очередь и прямые PUT/PATCH из profileSync удалены.
