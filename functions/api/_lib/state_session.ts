@@ -15,3 +15,14 @@ export async function requireStateUser(request: Request, env: Parameters<typeof 
     && (account !== user.sub || session !== await stateSessionId(user))) throw new Error('STATE_SESSION_CHANGED');
   return user;
 }
+
+/** A capability marker plus public scope lets a new client verify the guarded response. */
+export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu'): Response {
+  response.headers.set(`X-FitFocus-${resource}-Protocol`, '1');
+  response.headers.set(`X-FitFocus-${resource}-Guard`, '1');
+  for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {
+    const value = request.headers.get(header);
+    if (value !== null) response.headers.set(header, value);
+  }
+  return response;
+}
