@@ -26,6 +26,12 @@ beforeEach(() => {
 afterEach(() => { userStateDatabase.close(); vi.unstubAllGlobals(); });
 
 describe('cloud hydration with the runtime durable repository', () => {
+  it('does not apply a late cloud snapshot after the login attempt was cancelled', async () => {
+    let current = true;
+    await expect(hydrateSessionFromCloud(user, { initialHabits: [], resetUsageIfNewTime: u => u,
+      isCurrentSession: () => current, fetchImpl: async () => { current = false; return response([remote('late')]); } })).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    expect(await new DurableOutbox().snapshot(user.id, key)).toMatchObject({ value: null, revision: 0 });
+  });
   it('hydrates additional managed keys while keeping device AI metadata local', async () => {
     const planKey = `fitfocus_data_${user.id}_plan_task_done`;
     const aiKey = `fitfocus_data_${user.id}_ai_gemini_status`;

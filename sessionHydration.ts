@@ -24,6 +24,7 @@ export type HydrationDeps = {
   resetUsageIfNewTime: (user: UserProfile) => UserProfile;
   initialHabits: UserHabit[];
   fetchImpl?: typeof fetch;
+  isCurrentSession?: () => boolean;
 };
 
 const stripLargePhotoPayloads = (items: FoodItem[]): FoodItem[] => {
@@ -83,10 +84,13 @@ function isCoachCard(value: unknown): value is { title: string; advice: string; 
 }
 
 export async function hydrateSessionFromCloud(user: UserProfile, deps: HydrationDeps): Promise<HydratedSession> {
+  const assertCurrent = () => { if (deps.isCurrentSession?.() === false) throw new Error('LOGIN_SESSION_CHANGED'); };
+  assertCurrent();
   const fetchFn = deps.fetchImpl ?? fetch;
   const repository = new UserStateRepository(user.id);
   // An old bootstrap response must not overwrite a durable profile or its pending edits.
   user = await restoreProfile(repository, user).catch(() => user);
+  assertCurrent();
   const managedKeys: readonly UserStateKey[] = USER_STATE_KEYS;
   const observed = new Map(await Promise.all(managedKeys.map(async (stateKey) => [stateKey,
     await repository.observe(stateKey).then((snapshot) => snapshot.revision, () => 0),
@@ -109,6 +113,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
       const r = await fetchFn(`/api/state?prefix=${encodeURIComponent(prefix)}&includeDeleted=1`, { credentials: 'include' });
       if (!r.ok) continue;
       const rawData: unknown = await r.json().catch(() => null);
+      assertCurrent();
       const data = isRecord(rawData) ? rawData : {};
       const items = Array.isArray(data.items) ? data.items.filter(isRecord) : [];
       const protocolReady = r.headers.get('X-FitFocus-State-Protocol') === '2' && Array.isArray(data.items)
@@ -125,6 +130,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
             if (!protocolReady || hasLegacyIntent(it.key)
               || localStorage.getItem(it.key) !== null || typeof it.exists !== 'boolean'
               || typeof it.version !== 'number') continue;
+            assertCurrent();
             await repository.hydrate(stateKey, { value: it.value, version: it.version, exists: it.exists }, observed.get(stateKey) ?? 0);
             continue;
           }
@@ -135,12 +141,15 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
         for (const stateKey of managedKeys) {
           const key = repository.key(stateKey);
           if (!receivedManagedKeys.has(key) && !hasLegacyIntent(key) && localStorage.getItem(key) === null) {
+            assertCurrent();
             await repository.hydrate(stateKey, { value: '', version: 0, exists: false }, observed.get(stateKey) ?? 0);
           }
         }
       }
     }
   } catch {}
+
+  assertCurrent();
 
   const readKV = async <T,>(suffix: string, fallback: T, validate: (value: unknown) => value is T): Promise<T> => {
     const fullKey = `fitfocus_data_${user.id}_${suffix}`;
@@ -172,6 +181,7 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
   const storedAllUsers = await readKV<UserProfile[]>('all_users', [], (value): value is UserProfile[] => Array.isArray(value) && value.every(isUserProfilePayload));
   const storedWeeklyReports = await readKV<WeeklyStoredReport[]>('weekly_reports', [], (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyReport));
   const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+  assertCurrent();
 
   return {
     repository,

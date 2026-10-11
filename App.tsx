@@ -271,12 +271,15 @@ const App: React.FC = () => {
   const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
+  const registrationAttemptRef = useRef(0);
   const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
   const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
+  const authIdentityRef = useRef(googleMe?.sub);
+  authIdentityRef.current = googleMe?.sub;
   const isAdmin = !!googleMe?.roles?.includes('admin');
   useEffect(() => {
     if (currentUser?.id && currentUser.id === googleMe?.sub) stateSync.start(currentUser.id);
@@ -779,14 +782,10 @@ const App: React.FC = () => {
     const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
       resetUsageIfNewTime: resetUsageIfNewPeriod,
+      isCurrentSession: () => loginAttempt === loginAttemptRef.current && isCurrent(),
     });
     if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
     const profileRepository = prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id);
-    // Creating a new profile is an explicit registration intent, not a write caused by reading defaults.
-    if (!prepared.currentUser.version && !(await profileRepository.observe('profile')).value) {
-      await profileRepository.writeJson('profile', prepared.currentUser);
-      if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
-    }
     const pendingProfile = await profileRepository.hasPending('profile');
     if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
     setUserStateRepository(profileRepository);
@@ -1183,6 +1182,11 @@ const logWeight = useCallback(() => {
   ]);
 
   const handleRegister = useCallback(async () => {
+    const attempt = ++registrationAttemptRef.current;
+    const bootstrap = authBootstrapAttemptRef.current;
+    const accountId = googleMe?.sub;
+    const isCurrent = () => attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
+      && accountId === authIdentityRef.current;
     await runRegistrationFlow({
       regData,
       regNameValid,
@@ -1194,16 +1198,13 @@ const logWeight = useCallback(() => {
       setLastAiAction,
       setDevPlanOverride,
       generatePersonalPlan,
-      loginAsUser,
-      persistUser,
-      setAllUsers,
-      setCurrentUser,
-      setAuthState,
+      loginAsUser: user => loginAsUser(user, googleMe, isCurrent),
+      isCurrentSession: isCurrent,
       setActiveTab,
       setPlanIntroOpen,
       fetchImpl: fetch,
     });
-  }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
+  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
 
   const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
     totalMs: ACTIVATION_TOTAL_MS,

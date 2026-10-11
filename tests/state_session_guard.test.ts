@@ -21,6 +21,7 @@ it('exposes a stable public session binding but never the raw sid', async () => 
   const text = await result.text(); const body = JSON.parse(text);
   expect(body.stateSync).toEqual({ accountId: 'account-a', protocol: 2, guard: 1, sessionId: await stateSessionId(mocks.user) });
   expect(body.profileSync).toEqual({ protocol: 1, guard: 1 });
+  expect(body.inviteSync).toEqual({ protocol: 1, guard: 1 });
   expect(text).not.toContain(mocks.user.sid); expect(body.stateSync.sessionId).toMatch(/^[a-f0-9]{64}$/);
   expect(await stateSessionId({ sub: 'other', sid: mocks.user.sid })).not.toBe(body.stateSync.sessionId);
 });

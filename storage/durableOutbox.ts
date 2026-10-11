@@ -205,7 +205,7 @@ export class DurableOutbox {
     });
   }
 
-  async snapshot(accountId: string, key: string): Promise<{ value: string | null; revision: number; confirmedVersion: number }> {
+  async snapshot(accountId: string, key: string, requireOwnership = false): Promise<{ value: string | null; revision: number; confirmedVersion: number }> {
     requireOwnedKey(accountId, key);
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta], 'readonly', async (tx) => {
@@ -213,6 +213,7 @@ export class DurableOutbox {
       if (owner && owner.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
       const value = await indexedRequest(tx.objectStore(STATE_STORES.values).get(key)) as { value: string; accountId?: string } | undefined;
       if (value?.accountId && value.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      if (requireOwnership && value && (value.accountId !== accountId || owner?.accountId !== accountId)) throw new Error('OUTBOX_KEY_OWNERSHIP');
       const meta = await indexedRequest(tx.objectStore(STATE_STORES.meta).get(keyStateId(accountId, key))) as KeyState | undefined;
       return { value: value?.value ?? null, revision: meta?.valueRevision ?? 0, confirmedVersion: meta?.confirmedVersion ?? 0 };
     });

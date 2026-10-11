@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
 import { bootstrapAuthSession, consumeOAuthContinuationState, ensureInviteCodeIsValid } from '../authSession';
 import { userProfile } from './_helpers/userProfile';
+import { UserStateRepository } from '../storage/userStateRepository';
+import { DurableOutbox } from '../storage/durableOutbox';
+import { userStateDatabase } from '../storage/stateDatabase';
 
 function requestIdFromCall(fetchMock: ReturnType<typeof vi.fn>, callIndex = 0) {
   const init = fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined;
@@ -84,5 +88,59 @@ describe('OAuth continuation state', () => {
     expect(consumeOAuthContinuationState()).toBe(true);
     expect(replaceState).toHaveBeenCalledWith({}, '', 'https://fitfocus.test/?x=1');
     vi.unstubAllGlobals();
+  });
+});
+
+describe('owned profile recovery', () => {
+  beforeEach(() => {
+    userStateDatabase.close(); vi.stubGlobal('indexedDB', new IDBFactory());
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => values.get(k) ?? null,
+      setItem: (k: string, v: string) => { values.set(k, v); }, removeItem: (k: string) => { values.delete(k); },
+      get length() { return values.size; }, key: (i: number) => [...values.keys()][i] ?? null });
+  });
+  afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  const start = async (bootstrap: Response, continueAfterOAuth = false) => {
+    const loginAsUser = vi.fn(async () => {}); const setAuthState = vi.fn();
+    await bootstrapAuthSession({ requireInvite: false, continueAfterOAuth, loginAsUser, setAuthState,
+      setGoogleMe: vi.fn(), setInviteError: vi.fn(), setAllUsers: vi.fn(), setRegData: vi.fn(),
+      fetchImpl: async url => String(url).startsWith('/api/me')
+        ? new Response(JSON.stringify({ user: { sub: 'owner', email: 'same@example.test' }, hasAccess: true })) : bootstrap.clone() });
+    return { loginAsUser, setAuthState };
+  };
+  it.each([200, 503])('restores an own pending registration without an OAuth marker when bootstrap returns %i', async status => {
+    await new UserStateRepository('owner').writeJson('profile', userProfile('owner', { version: 0 }));
+    const result = await start(new Response('{"profile":null}', { status }));
+    expect(result.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'owner', version: 0 }), expect.objectContaining({ sub: 'owner' }));
+    expect(result.setAuthState).not.toHaveBeenCalledWith('register'); expect(await new DurableOutbox().list('owner')).toHaveLength(1);
+  });
+  it('does not infer ownership from a matching email in a legacy snapshot', async () => {
+    const raw = JSON.stringify([userProfile('other', { email: 'same@example.test', googleSub: 'other' })]);
+    localStorage.setItem('fitfocus_data_other_all_users', raw);
+    const result = await start(new Response('{"profile":null}'), true);
+    expect(result.loginAsUser).not.toHaveBeenCalled(); expect(result.setAuthState).toHaveBeenCalledWith('register');
+    expect(localStorage.getItem('fitfocus_data_other_all_users')).toBe(raw);
+  });
+  it('retains an unowned IDB profile for recovery instead of adopting its key or offering registration', async () => {
+    const key = 'fitfocus_data_owner_profile'; const raw = JSON.stringify(userProfile('owner'));
+    const db = await userStateDatabase.open();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('values', 'readwrite');
+      tx.objectStore('values').put({ key, value: raw, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error);
+    });
+    const result = await start(new Response('{"profile":null}'), true);
+    expect(result.loginAsUser).not.toHaveBeenCalled(); expect(result.setAuthState).toHaveBeenCalledWith('auth_choice');
+    expect((await new DurableOutbox().snapshot('owner', key)).value).toBe(raw);
+    expect(await new DurableOutbox().list('owner')).toEqual([]);
+  });
+  it.each([401, 403])('does not activate a local login after bootstrap revoked session/access with %i', async status => {
+    await new UserStateRepository('owner').writeJson('profile', userProfile('owner'));
+    const result = await start(new Response('{}', { status }), true);
+    expect(result.loginAsUser).not.toHaveBeenCalled(); expect(result.setAuthState).toHaveBeenCalledWith('auth_choice');
+  });
+  it('does not offer new registration when the server profile result is malformed', async () => {
+    const result = await start(new Response('{}'), true);
+    expect(result.loginAsUser).not.toHaveBeenCalled(); expect(result.setAuthState).toHaveBeenCalledWith('auth_choice');
   });
 });

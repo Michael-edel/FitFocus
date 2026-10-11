@@ -1,6 +1,8 @@
 import type { UserProfile } from './types';
 import type { RegistrationData } from './RegistrationScreen';
-import { normalizeUserProfiles, readStoredAllUsersSnapshot } from './storage/hybrid';
+import { normalizeUserProfiles } from './storage/hybrid';
+import { readOwnedProfile } from './storage/profileState';
+import { UserStateRepository } from './storage/userStateRepository';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 
@@ -82,33 +84,6 @@ const readJsonRecord = async (response: Response): Promise<UnknownRecord | null>
     return null;
   }
 };
-
-function scoreStoredProfile(profile: UserProfile, serverUser: ServerUser | null | undefined): number {
-  let score = 0;
-  if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) score += 1000;
-  if (serverUser?.email && profile.email && profile.email.toLowerCase() === serverUser.email.toLowerCase()) score += 500;
-  if (profile.googleSub) score += 100;
-  if (profile.email) score += 25;
-  if (profile.aiPlan) score += 15;
-  score += Math.min(30, (profile.weightHistory?.length || 0) * 3);
-  score += Math.min(30, (profile.measurementsHistory?.length || 0) * 3);
-  score += Math.min(10, (profile.tasks?.length || 0));
-  score += Math.min(10, (profile.courseProgress?.completedLessonIds?.length || 0));
-  return score;
-}
-
-function pickBestStoredProfile(all: UserProfile[], serverUser: ServerUser | null | undefined): UserProfile | null {
-  if (!Array.isArray(all) || !all.length) return null;
-  const targeted = serverUser?.sub || serverUser?.email
-    ? all.filter((profile) => {
-        if (serverUser?.sub && profile.googleSub && profile.googleSub === serverUser.sub) return true;
-        if (serverUser?.email && profile.email && profile.email.toLowerCase() === serverUser.email.toLowerCase()) return true;
-        return false;
-      })
-    : all;
-  if (!targeted.length) return null;
-  return [...targeted].sort((a, b) => scoreStoredProfile(b, serverUser) - scoreStoredProfile(a, serverUser))[0] || null;
-}
 
 function authRecoveryReloadKey() {
   return 'fitfocus.auth.oauth-recovery-reloaded.v1';
@@ -209,6 +184,7 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
 
   if (serverUser?.sub) {
     clearAuthRecoveryReloadMarker();
+    let confirmedAbsent = false;
     try {
       const pr = await fetchWithResilience('/api/bootstrap', { credentials: 'include' }, {
         retries: 1,
@@ -217,34 +193,48 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       });
       const pj = await readJsonRecord(pr);
       if (!isCurrent()) return;
+      if (pr.status === 401 || pr.status === 403) {
+        params.setInviteError('Сессия или доступ изменились. Повторите вход.');
+        params.setAuthState('auth_choice');
+        return;
+      }
       if (pr.ok) {
+        confirmedAbsent = pj?.profile === null;
         const profile = isUserProfilePayload(pj?.profile) && pj.profile.id === serverUser.sub ? pj.profile : null;
         if (profile) {
           params.setAllUsers(normalizeUserProfiles([profile]));
           await params.loginAsUser(profile, serverUser);
           return;
         }
-      }
-    } catch {}
-    if (!isCurrent()) return;
-
-    if (!params.continueAfterOAuth) {
-      params.setAuthState('auth_choice');
-      return;
-    }
-
-    try {
-      const all = readStoredAllUsersSnapshot<UserProfile>();
-      if (Array.isArray(all) && all.length > 0) {
-        const normalized = normalizeUserProfiles(all);
-        params.setAllUsers(normalized);
-        const localProfile = pickBestStoredProfile(normalized, serverUser);
-        if (localProfile) {
-          await params.loginAsUser(localProfile, serverUser);
+        if (!confirmedAbsent) {
+          params.setInviteError('Сервер вернул профиль без подтверждённого владельца. Повторите вход.');
+          params.setAuthState('auth_choice');
           return;
         }
       }
     } catch {}
+    if (!isCurrent()) return;
+
+    try {
+      const localProfile = await readOwnedProfile(new UserStateRepository(serverUser.sub));
+      if (!isCurrent()) return;
+      if (localProfile) {
+        params.setAllUsers([localProfile]);
+        await params.loginAsUser(localProfile, serverUser);
+        return;
+      }
+    } catch {
+      if (!isCurrent()) return;
+      params.setInviteError('Не удалось прочитать локальный профиль. Проверьте доступ к хранилищу и повторите вход.');
+      params.setAuthState('auth_choice');
+      return;
+    }
+    if (!isCurrent()) return;
+    if (!confirmedAbsent || !params.continueAfterOAuth) {
+      if (!confirmedAbsent) params.setInviteError('Не удалось проверить профиль. Повторите вход после восстановления соединения.');
+      params.setAuthState('auth_choice');
+      return;
+    }
 
     params.setRegData(prev => ({ ...prev, name: serverUser?.name || prev.name }));
     params.setAuthState('register');

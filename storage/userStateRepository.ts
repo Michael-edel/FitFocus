@@ -78,7 +78,7 @@ export class UserStateRepository {
   observe(stateKey: UserStateKey): Promise<{ value: string | null; revision: number; confirmedVersion: number }> {
     const key = this.key(stateKey);
     return this.track(key, this.serialize(key, async () => {
-      const snapshot = await this.outbox.snapshot(this.accountId, key);
+      const snapshot = await this.outbox.snapshot(this.accountId, key, stateKey === 'profile');
       const operations = await this.outbox.list(this.accountId);
       reportStateQueue(this.accountId, operations);
       for (const operation of operations) {
