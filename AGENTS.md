@@ -40,7 +40,9 @@
   черновик формы не считается сохранённым при отказе commit. Регистрация
   сохраняет canonical profile до AI, затем причинный update; owned IDB-профиль
   восстанавливается без подбора по email или переноса prefix. Полный HTTP
-  bootstrap/hydration, auth-fence и остальные callbacks ещё не завершены. Проверенная граница:
+  bootstrap/hydration, auth-fence и остальные callbacks ещё не завершены.
+  Текущий рабочий контракт и блокеры:
+  [загрузка сессии](docs/bootstrap-hydration.md). Проверенная граница:
   [регистрация](docs/registration-persistence.md),
   [сохранение профиля](docs/profile-persistence.md),
   [подключение остальных state-записей](docs/owned-state-writers.md),

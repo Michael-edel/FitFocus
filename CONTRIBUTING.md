@@ -107,8 +107,11 @@ PR укажите проблему, итоговое поведение, баз�
 |---|---|
 | Пользовательская функция или её готовность | PRODUCT.md |
 | Статус, зависимость или критерий задачи | TASKS.md |
+| Опубликованный SHA, текущая работа или следующий этап | docs/project-status.md |
+| Новый документ или изменение его назначения | docs/README.md; ключевые точки входа также README.md |
 | Проверки конкретной ревизии | docs/stabilization-progress.md |
 | API state/profile/invite | API_CONTRACTS.md; для редактора и создания профиля также docs/profile-persistence.md и docs/registration-persistence.md |
+| Bootstrap, загрузка сессии или применение облачного снимка | docs/bootstrap-hydration.md, API_CONTRACTS.md и соответствующие пункты TASKS.md |
 | Хранилище, версия схемы, владение | docs/data-model.md и затронутый ADR |
 | Очередь, конфликт, retry, сессии | docs/sync-model.md, ADR-005, docs/outbox-implementation.md, docs/runtime-state.md и docs/state-sender.md |
 | Legacy-формат, импорт, ledger или карантин | docs/legacy-migration.md и относящиеся пункты TASKS |

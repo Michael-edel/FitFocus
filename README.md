@@ -21,6 +21,7 @@ Google/Apple, push, поддержка и административные фу�
 | [Пользовательские записи](docs/owned-state-writers.md) | 15 управляемых ключей, редакторы и границы profile/legacy |
 | [Сохранение профиля](docs/profile-persistence.md) | Редактор профиля, постоянная операция, сессии и несохранённая форма |
 | [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
+| [Загрузка сессии — в работе](docs/bootstrap-hydration.md) | Bootstrap, загрузка облачных данных, проверки владельца и незакрытые ошибки |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -64,10 +65,13 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 Map sender удалён из текущей сборки; profile state-upload использует общий
 sender вместо raw-пакета из localStorage. Регистрация (`2e41742`) и
 lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf` исправлено
-неточное ожидание числа запросов в E2E; 817 unit-тестов и 20 повторных
-браузерных сценариев прошли. Предыдущий [CI 4a459ad](https://github.com/Michael-edel/FitFocus/actions/runs/38160554188)
-завершился зелёным с одним flaky-тестом; этот результат сохранён в журнале.
+неточное ожидание числа запросов в E2E. Последняя опубликованная ревизия —
+`4f7b874`; [её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38161777800)
+прошёл: 817 unit-тестов, 117 browser passed и 9 skips, без flaky.
+История предыдущего CI с flaky сохранена в журнале.
 Результаты и ограничения каждой ревизии — [в журнале](docs/stabilization-progress.md);
+Проверки незакоммиченной рабочей версии учитываются отдельно:
+[загрузка сессии и текущие блокеры](docs/bootstrap-hydration.md).
 CI следующего HEAD проверяется отдельно в PR #93.
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).

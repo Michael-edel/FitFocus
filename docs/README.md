@@ -45,9 +45,12 @@
 Последний локально проверенный клиентский этап — `cb6e6cf`:
 [постоянная регистрация](registration-persistence.md) и
 [lifecycle sender](state-sender.md#жизненный-цикл-страницы) и исправление
-ожидания auth-паузы в E2E. Предыдущая опубликованная ревизия `4a459ad`
-[прошла CI с одним flaky-тестом](https://github.com/Michael-edel/FitFocus/actions/runs/38160554188);
-результат и последующее исправление сохранены в журнале.
+ожидания auth-паузы в E2E. Опубликованная ревизия `4f7b874`
+[прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38161777800):
+817 unit-тестов, 117 browser passed и 9 skips, без flaky.
+Предыдущий CI с flaky и последующее исправление сохранены в журнале.
+Незакоммиченный этап [bootstrap/hydration](bootstrap-hydration.md) описан
+отдельно как работа с открытыми блокерами; этот CI его не проверяет.
 [Граница 15 управляемых ключей](owned-state-writers.md) описана отдельно.
 Ниже исходный архитектурный снимок и исторические этапы сохраняют свои SHA.
 Актуальные незавершённые задачи находятся в [статусе](project-status.md).
@@ -64,6 +67,7 @@
 | [Пользовательские записи](owned-state-writers.md) | 15 управляемых ключей, редакторы, удаление старого sender и границы profile/legacy |
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
+| [Bootstrap/hydration — в работе](bootstrap-hydration.md) | Рабочий контракт загрузки сессии, результаты проверок и следующие исправления |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |
