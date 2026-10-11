@@ -18,6 +18,13 @@
 
 ## Что подключено
 
+Дополнение `dac2de2`: [bootstrap/state-hydration](bootstrap-hydration.md)
+проверяют свежий `/me` proof и scope ответа; применение managed state и seed
+профиля проверяет epoch/auth-fence той же транзакцией. Повторное чтение
+идентичного owned-снимка не увеличивает revision. Новая версия всё равно
+защищает независимого редактора. Результаты дополнения отделены от
+исторического контракта шести ключей ниже.
+
 [UserStateRepository](../storage/userStateRepository.ts) используется приложением
 для diary, history, favorite_recipes, weekly_reports, last_coach_card и settings.
 Для этих шести ключей value, локальная ревизия и отдельная операция outbox

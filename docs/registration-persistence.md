@@ -1,6 +1,6 @@
 # Регистрация: постоянный профиль и проверенный владелец
 
-Обновлено: 11.10.2026. Код этапа:
+Обновлено: 12.10.2026. Код этапа:
 [`2e41742`](https://github.com/Michael-edel/FitFocus/commit/2e41742baa8c8dfafc2aa4c8c124940e302dfc03),
 ветка `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93), база #94 → #90.
 Продолжает [редактор профиля](profile-persistence.md). Это регистрация
@@ -73,7 +73,12 @@ POST не повторяется автоматически; повторное 
 заново проверяет сессию исходного аккаунта. Контракт последующего исправления:
 [жизненный цикл страницы](state-sender.md#жизненный-цикл-страницы).
 
-Остаются свежий session proof и guarded HTTP всего bootstrap/state-hydration,
-атомарный auth-fence при их применении и seed профиля, остальные family/AI
+Дополнение `dac2de2`: [bootstrap/state-hydration](bootstrap-hydration.md)
+использует свежий proof, проверяет HTTP scope, epoch и auth-fence; seed
+профиля защищён той же транзакционной границей. Неподтверждённый `/me`
+останавливает вход и на пути без входящего readGuard. Результаты этого
+дополнения учитываются отдельно от проверок `2e41742` и `b723b7d`.
+
+Остаются остальные family/AI
 callbacks и AI-cache, runtime provenance/barrier/import, UI конфликтов,
 backup/экспорт/очистка всех stores, staging и защищённая main. [TASKS](../TASKS.md).

@@ -1,6 +1,6 @@
 # P0.8: отправка операций и подтверждение сессии
 
-Обновлено: 11.10.2026. Ветка fix/durable-outbox, draft PR #93; зависимость
+Обновлено: 12.10.2026. Ветка fix/durable-outbox, draft PR #93; зависимость
 #94 → #90. Это следующий этап после [repository](runtime-state.md),
 а не завершение всего P0. Проверки конкретного изменения — [в журнале](stabilization-progress.md).
 
@@ -14,6 +14,13 @@ profile state-upload запросом `syncNow`. Ниже сохранён ко�
 оставшиеся profile/legacy/lifecycle-задачи уточнены в новом документе.
 
 ## Жизненный цикл страницы
+
+Дополнение `dac2de2`: sender принимает readGuard вместе с auth-fence одной
+IDB-транзакцией, а profile refresh передаёт этот fence в hydrate.
+Увеличение fence даже при прежнем epoch запрещает применение старого ответа.
+Общий ограниченный transport используется отправкой и
+[guarded bootstrap/state-чтением](bootstrap-hydration.md). Ниже сохранён
+контракт lifecycle `b723b7d`; дополнение не закрывает остальные callbacks.
 
 Код последующего исправления:
 [`b723b7d`](https://github.com/Michael-edel/FitFocus/commit/b723b7d1c9112df1f854bac7bdce18b3ff39aa1a).

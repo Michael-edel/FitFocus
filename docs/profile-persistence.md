@@ -1,6 +1,6 @@
 # Профиль: постоянная запись и проверка сессии
 
-Обновлено: 11.10.2026. Ветка `fix/durable-outbox`,
+Обновлено: 12.10.2026. Ветка `fix/durable-outbox`,
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93), база #94 → #90.
 Код этапа: [`fc6bb82`](https://github.com/Michael-edel/FitFocus/commit/fc6bb82a6bfcf6e82cd19e223d66b0e9296896dc).
 Это продолжение [15 state-ключей](owned-state-writers.md).
@@ -83,7 +83,11 @@ auth-паузу, конфликт без перебазирования, чис�
 и сохранение черновика при отказе commit. SHA, результаты и ограничения —
 в [журнале](stabilization-progress.md).
 
-Остаются прямое создание профиля в registrationFlow, полный lifecycle
-bootstrap/hydration и остальных callbacks, legacy provenance/barrier/import,
+Последующие компоненты: [регистрация](registration-persistence.md) на `2e41742`
+сохраняет профиль до AI; [bootstrap/hydration](bootstrap-hydration.md) на
+`dac2de2` проверяет HTTP scope и атомарный auth-fence при refresh/seed профиля.
+Исторические результаты этого документа относятся к указанному выше SHA.
+
+Остаются полный lifecycle остальных callbacks, legacy provenance/barrier/import,
 UI разрешения конфликтов, атомарный backup/экспорт/очистка всех stores,
 реальные OAuth/staging и выпуск в защищённую main. [TASKS](../TASKS.md).

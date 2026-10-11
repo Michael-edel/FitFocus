@@ -1,6 +1,6 @@
 # Документация FitFocus
 
-Обновлено: 11.10.2026.
+Обновлено: 12.10.2026.
 
 Начните с [текущего состояния проекта](project-status.md): проверенный SHA,
 готовые компоненты, оставшаяся работа и ближайшие шаги.
@@ -42,15 +42,17 @@
 секретов. Результаты прошлых тестов в архивном README относятся к указанным
 там датам и ревизиям.
 
-Последний локально проверенный клиентский этап — `cb6e6cf`:
+Предыдущий локально проверенный клиентский этап — `cb6e6cf`:
 [постоянная регистрация](registration-persistence.md) и
 [lifecycle sender](state-sender.md#жизненный-цикл-страницы) и исправление
-ожидания auth-паузы в E2E. Опубликованная ревизия `4f7b874`
-[прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38161777800):
+ожидания auth-паузы в E2E. Опубликованная ревизия `7f481aa`
+[прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38165704790):
 817 unit-тестов, 117 browser passed и 9 skips, без flaky.
 Предыдущий CI с flaky и последующее исправление сохранены в журнале.
-Незакоммиченный этап [bootstrap/hydration](bootstrap-hydration.md) описан
-отдельно как работа с открытыми блокерами; этот CI его не проверяет.
+Компонент `dac2de2` добавляет [guarded bootstrap/hydration](bootstrap-hydration.md)
+и атомарный auth-fence при применении данных. 846 unit-тестов, типы и guards
+прошли. Полный локальный E2E: 144 passed / 1 failed / 9 skips; profile Save
+на iPhone PWA остаётся открытым. CI `7f481aa` этот код не проверяет.
 [Граница 15 управляемых ключей](owned-state-writers.md) описана отдельно.
 Ниже исходный архитектурный снимок и исторические этапы сохраняют свои SHA.
 Актуальные незавершённые задачи находятся в [статусе](project-status.md).
@@ -67,7 +69,7 @@
 | [Пользовательские записи](owned-state-writers.md) | 15 управляемых ключей, редакторы, удаление старого sender и границы profile/legacy |
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
-| [Bootstrap/hydration — в работе](bootstrap-hydration.md) | Рабочий контракт загрузки сессии, результаты проверок и следующие исправления |
+| [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |
@@ -116,7 +118,9 @@ auth/bootstrap/legacy lifecycle этим этапом не закрыты.
 
 Следующий этап [переводит регистрацию](registration-persistence.md) на эту
 outbox до AI-запроса и убирает угадывание владельца/перенос storage prefix
-при входе. Полный HTTP bootstrap/hydration и auth-fence ещё открыты.
+при входе. HTTP bootstrap/state-hydration и auth-fence добавлены следующим
+компонентом `dac2de2`; [проверки и границы](bootstrap-hydration.md).
+Остальные callbacks, runtime legacy и полный lifecycle остаются открытыми.
 
 ## Прежние материалы
 

@@ -27,6 +27,14 @@ dispatch. Схема IDB остаётся v2; отдельного profile-store
 убран. Полный guarded bootstrap/hydration, auth-fence, runtime legacy и выпуск
 этим дополнением не завершены.
 
+Дополнение 12.10.2026, `dac2de2`: [HTTP bootstrap/state-hydration](../bootstrap-hydration.md)
+проверяют account/session и readGuard. При принятии proof auth-fence
+фиксируется в той же транзакции; hydrate/profile seed проверяют его вместе
+с epoch, revision и pending. Повторное чтение идентичного owned-снимка
+той же версии не меняет revision; новая серверная версия по-прежнему
+защищает независимого редактора. Остальные callbacks, runtime legacy и
+приёмка выпуска остаются открытыми. Это уточнение реализации принятого ADR.
+
 ## Причина
 
 Текущая Map + localStorage-очередь теряет изменения при конкуренции вкладок,
