@@ -114,6 +114,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Добавление, перенос или переименование модулей | docs/code-map.md и ссылки затронутого контракта |
 | Проверки конкретной ревизии | docs/stabilization-progress.md |
 | API state/profile/invite | API_CONTRACTS.md; для редактора и создания профиля также docs/profile-persistence.md и docs/registration-persistence.md |
+| API AI/weekly-menu items, capabilities и защита их callbacks | API_CONTRACTS.md и docs/ai-session-guard.md; отдельно подтвердить серверный и клиентский этапы |
 | Bootstrap, загрузка сессии или применение облачного снимка | docs/bootstrap-hydration.md, API_CONTRACTS.md и соответствующие пункты TASKS.md |
 | Хранилище, версия схемы, владение | docs/data-model.md и затронутый ADR |
 | Очередь, конфликт, retry, сессии | docs/sync-model.md, ADR-005, docs/outbox-implementation.md, docs/runtime-state.md и docs/state-sender.md |

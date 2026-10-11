@@ -23,6 +23,7 @@ Google/Apple, push, поддержка и административные фу�
 | [Сохранение профиля](docs/profile-persistence.md) | Редактор профиля, постоянная операция, сессии и несохранённая форма |
 | [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
 | [Загрузка сессии](docs/bootstrap-hydration.md) | Guarded bootstrap, state-hydration, auth-fence и границы приёмки |
+| [Сессия AI и списка покупок](docs/ai-session-guard.md) | Серверный guard и оставшееся подключение клиентских callbacks |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -67,8 +68,8 @@ Map sender удалён из текущей сборки; profile state-upload �
 sender вместо raw-пакета из localStorage. Регистрация (`2e41742`) и
 lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf` исправлено
 неточное ожидание числа запросов в E2E. Последняя ревизия с завершённым CI —
-`45315d9120a2e6d05b658560b20a901e19ac57b3`;
-[её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267)
+`6fcce1b347416cf3d7d69fd07254dfb4d704fbe5`;
+[её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38173869573)
 прошёл: 846 unit-тестов в 178 файлах, 152 browser passed и 9 skips, без flaky.
 Результат относится к этому SHA; незавершённые локальные изменения им не проверены.
 История проверок и их ограничения — [в журнале](docs/stabilization-progress.md).
@@ -98,6 +99,12 @@ Save прошли 20 повторов Safari/PWA без retries. Полная л
 staging и выпуск остаются открытыми. На 12.10.2026 PR #93 не слит
 в защищённую main; готовность ветки не считается готовностью production.
 Актуальные границы и ближайшие шаги — [в статусе проекта](docs/project-status.md).
+
+Серверное дополнение `16d3c34` проверяет переданный account/session в AI
+и записи списка покупок, до лимитов и мутаций. 860 unit-тестов и локальные
+обязательные проверки прошли; [контракт и граница](docs/ai-session-guard.md).
+Клиент ещё не передаёт эту привязку; подключение AI/menu/report/family
+callbacks и совместная приёмка остаются в P0.5.
 
 Предыдущее подробное описание и старые результаты проверок сохранены
 в [архиве README](docs/history/README-2026-08-29.md).

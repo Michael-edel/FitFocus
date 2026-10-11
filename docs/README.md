@@ -72,6 +72,7 @@
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
+| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, capabilities и открытое клиентское подключение |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |

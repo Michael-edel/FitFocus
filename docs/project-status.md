@@ -22,8 +22,9 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | Архитектурный снимок | `810adb1`, PR #90; исходная точка технического описания |
 | Код bootstrap/hydration | `dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`, ветка `fix/durable-outbox`; [guarded bootstrap/hydration](bootstrap-hydration.md), auth-fence и повторная загрузка во второй вкладке |
 | Текущее исправление UI | `3550cc8fc81002cd0fcb127a398d73a5536f31bb`: [область notice сохраняет высоту до завершения жеста](profile-persistence.md#стабильность-формы-при-изменении-уведомления) |
+| Серверная привязка AI/items | `16d3c34fb3c659c2b51a1473d241bfc438c46291`: [guard и capabilities](ai-session-guard.md), 860 unit / 179 файлов и локальные обязательные проверки прошли; клиент ещё не подключён |
 | Предыдущая опубликованная проверенная ревизия | `57f956db505b352fcde19d0e263d444d07bdc664`: карта кода и открытые задачи до исправления UI |
-| Опубликованная ревизия текущего этапа | `45315d9120a2e6d05b658560b20a901e19ac57b3`: исправление `3550cc8`, контракты и результаты; CI success |
+| Последняя опубликованная ревизия с завершённым CI | `6fcce1b347416cf3d7d69fd07254dfb4d704fbe5`: актуализация MD после исправления `3550cc8`; CI success |
 | Локальная проверка dac2de2 | 846 unit-тестов в 178 файлах, три режима typecheck и guards прошли; E2E: 144 passed / 1 failed / 9 skips, profile Save на iPhone PWA исследуется |
 | Серверная зависимость | PR #94, объединён с клиентской веткой коммитом `93f90c0` |
 | Текущий PR клиента | [#93](https://github.com/Michael-edel/FitFocus/pull/93), открыт как draft, база `fix/state-generations` |
@@ -32,6 +33,7 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | CI на ece4e7a | [Запуск 38168916617](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617): success, 846 unit-тестов в 178 файлах; 144 browser passed, 1 flaky, 9 skips; регистрация iPhone Safari прошла после повтора |
 | CI на 57f956d | [Запуск 38170218508](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508): success, 846 unit в 178 файлах; 145 browser passed / 9 skips, без flaky; это предыдущая ревизия до исправления UI |
 | CI на 45315d9 | [Запуск 38172605267](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267): success, 846 unit в 178 файлах; 152 browser passed / 9 skips, без flaky; включает исправление UI `3550cc8` |
+| CI на 6fcce1b | [Запуск 38173869573](https://github.com/Michael-edel/FitFocus/actions/runs/38173869573): success, 846 unit в 178 файлах; 152 browser passed / 9 skips, без flaky; предшествует серверному AI/items guard |
 | Локальная проверка 3550cc8 | 846 unit, три typecheck, guards, schema/privacy и audit прошли; новый сценарий — 7/7 проектов, исходный и новый — 20 повторов Safari/PWA без retries; полная матрица: 151 passed / 1 failed / 9 skips, Safari page error на reload |
 | Локальные проверки cb6e6cf | 817 unit-тестов в 175 файлах, typecheck и 20 повторных registration/quota-сценариев на Firefox/iPhone PWA, без retries |
 | Полная локальная браузерная проверка b723b7d | 117 passed / 9 явных skips, без retries; историческая граница сохранена [в журнале](stabilization-progress.md) |
@@ -112,7 +114,10 @@ CI регистрации выявил похожее сообщение для 
 
 ## Что делаем дальше
 
-1. Завершить приёмку [bootstrap/hydration](bootstrap-hydration.md#приёмка-компонента-и-оставшаяся-работа),
+1. Подключить [AI/items guard](ai-session-guard.md#что-нужно-подключить-на-клиенте)
+   к недельному меню и остальным AI/report/retry/family callbacks. Проверить
+   свежий proof, lifecycle, постоянный profile commit и независимые изменения.
+   Завершить приёмку [bootstrap/hydration](bootstrap-hydration.md#приёмка-компонента-и-оставшаяся-работа),
    проверив полный набор после исправления Save и разобрав Safari page errors при reload;
    затем остальные family/AI callbacks и cache с привязкой к исходной сессии.
    Не выдавать сохранение профиля за подтверждение всей очереди.
