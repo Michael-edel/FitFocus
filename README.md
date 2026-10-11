@@ -57,15 +57,16 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 изменения перечислены [в журнале](docs/stabilization-progress.md)
 с отдельными ревизиями и границами проверки.
 
-Код текущего клиентского этапа — `b723b7d`,
+Код текущего клиентского этапа — `cb6e6cf`,
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 [15 управляемых state-ключей](docs/owned-state-writers.md) используют
 атомарный repository, защищённую загрузку и sender с проверкой сессии.
 Map sender удалён из текущей сборки; profile state-upload использует общий
-sender вместо raw-пакета из localStorage. Предыдущая опубликованная ревизия
-`56f5337` [прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38156409684);
-новая регистрация (`2e41742`) и lifecycle sender (`b723b7d`) проверены локально:
-816 unit-тестов, 117 браузерных сценариев и 9 явных skips.
+sender вместо raw-пакета из localStorage. Регистрация (`2e41742`) и
+lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf` исправлено
+неточное ожидание числа запросов в E2E; 817 unit-тестов и 20 повторных
+браузерных сценариев прошли. Предыдущий [CI 4a459ad](https://github.com/Michael-edel/FitFocus/actions/runs/38160554188)
+завершился зелёным с одним flaky-тестом; этот результат сохранён в журнале.
 Результаты и ограничения каждой ревизии — [в журнале](docs/stabilization-progress.md);
 CI следующего HEAD проверяется отдельно в PR #93.
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;

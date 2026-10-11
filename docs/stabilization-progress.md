@@ -617,3 +617,35 @@ MD-файлы сверены с кодом: добавлен контракт р
 статус, задачи, API, решения и чек-лист. Исторические SHA/результаты сохранены.
 Полный guarded bootstrap/hydration, атомарный auth-fence, runtime legacy,
 остальные callbacks, UI конфликтов, backup/экспорт/очистка и выпуск открыты.
+
+## Исправление ожидания auth-паузы в E2E
+
+Дата: 11.10.2026. Документация и runtime опубликованы на
+`4a459ada286a0b8563e16bfea1ca8fd2512c6732`.
+[CI 38160554188](https://github.com/Michael-edel/FitFocus/actions/runs/38160554188)
+завершился success: 816 unit, guards/types/audit/schema/privacy/build успешны,
+GitGuardian и Cloudflare Pages успешны. Браузерный итог — 116 passed,
+1 flaky и 9 skips. Это не прогон без flaky: Firefox registration-reload
+на первой попытке получил два profile PUT при ожидании ровно одного.
+
+Анализ кода показывает допустимую последовательность: старт sender отправляет
+профиль, 401 ставит auth-паузу, отложенный profile auto-sync получает свежий
+`/me` proof и может повторить ту же операцию. Число запросов до проверки UI
+зависит от времени рендера и 500 ms debounce. Оно не является признаком
+потери данных или обхода session guard.
+
+E2E теперь ожидает сохранённую auth-паузу в IDB до и после reload, затем
+проверяет профиль и обе операции. На каждом PUT сохранены проверки account,
+session, canonical id и baseVersion=0; запись до AI, один AI-запрос, quota
+rollback и все console/pageerror проверки остаются. Runtime не изменён.
+Дополнительный unit-тест подтверждает: flush на auth-паузе не отправляет
+запрос, syncNow требует свежий proof; повторный 401 сохраняет операцию
+pending без расходования retryCount и без подтверждения версии.
+
+Код проверки:
+[`cb6e6cfec96cd431c56f25415cc2bfcd4bab1571`](https://github.com/Michael-edel/FitFocus/commit/cb6e6cfec96cd431c56f25415cc2bfcd4bab1571).
+817 unit-тестов в 175 файлах и root typecheck прошли. Playwright повторил
+оба registration/quota-сценария по пять раз на desktop Firefox и iPhone PWA:
+20 passed, без retries. Browser plugin not available; API mock, локальная
+quota-инъекция и границы backend/staging прежние. Новый опубликованный HEAD
+требует отдельного CI; прежний success с flaky не считается чистым прогоном.
