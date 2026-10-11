@@ -13,9 +13,10 @@ export type SessionReadOptions = {
   isCurrentSession?: () => boolean;
   timeoutMs?: number;
   retryDelayMs?: number;
+  signal?: AbortSignal;
 };
 const current = (options: SessionReadOptions) => {
-  if (options.isCurrentSession?.() === false) throw new SessionReadError('session');
+  if (options.signal?.aborted || options.isCurrentSession?.() === false) throw new SessionReadError('session');
 };
 export async function assertReadSession(guard: OutboxReadGuard, options: SessionReadOptions = {}): Promise<void> {
   current(options);
@@ -28,6 +29,9 @@ async function readJson(url: string, headers: HeadersInit, options: SessionReadO
   const controller = new AbortController();
   let hidden = false;
   const onHide = () => { hidden = true; controller.abort(); };
+  const onAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted) controller.abort();
   const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
   target?.addEventListener('pagehide', onHide);
   const deadline = Date.now() + (options.timeoutMs ?? 12_000);
@@ -50,9 +54,12 @@ async function readJson(url: string, headers: HeadersInit, options: SessionReadO
     }
     throw new Error('STATE_REQUEST_FAILED');
   } catch (error) {
-    if (hidden) throw new SessionReadError('session');
+    if (hidden || options.signal?.aborted) throw new SessionReadError('session');
     throw error;
-  } finally { target?.removeEventListener('pagehide', onHide); }
+  } finally {
+    target?.removeEventListener('pagehide', onHide);
+    options.signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /** A /me result cannot cross logout or another accepted account/session in IDB. */

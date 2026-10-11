@@ -5,6 +5,7 @@ import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS
 import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 import { fetchWithResilience } from './services/httpClient';
+import { postScopedAiJson, type AiSession } from './services/aiSession';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -346,7 +347,8 @@ async function callAiProxy(
   model: string,
   contents: unknown,
   feature: string,
-  config?: AiProxyConfig
+  config?: AiProxyConfig,
+  session?: AiSession,
 ): Promise<AiProxyResponse> {
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
@@ -385,6 +387,10 @@ async function callAiProxy(
 
   const doReq = async (m: string) => {
     const payload = { ...basePayload, model: m };
+    if (session) {
+      const result = await postScopedAiJson(session, '/api/ai', payload);
+      return { res: result.response, data: asRecord(result.body) };
+    }
     const res = await fetchWithResilience("/api/ai", {
       method: "POST",
       credentials: "include",
@@ -657,7 +663,8 @@ export const getLastAiAction = (): { feature: string; type: string; userId: stri
 /**
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
-export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promise<WeeklyMenu> {
+export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, session: AiSession): Promise<WeeklyMenu> {
+  if (session.guard.accountId !== user.id) throw new Error('LOGIN_SESSION_CHANGED');
   const schema = {
     type: "OBJECT",
     properties: {
@@ -717,7 +724,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "weekly_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   const obj = safeJsonObject(res.text);
 
@@ -752,21 +759,19 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     return date.toISOString().slice(0, 10);
   })();
 
-  // Best-effort: store normalized items server-side for aggregated shopping list + CSV export
-  try {
-    await fetchWithResilience("/api/weekly_menu/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems })
-    });
-  } catch {}
-
   // Legacy list fallback from items if shoppingList empty
   const legacyFromItems = shoppingListItems.map((it) => `${it.name} — ${it.grams} г`);
   const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
 
   return { days: normDays, shoppingList: finalShoppingList, shoppingListItems, weekStart };
+}
+
+/** Secondary projection is sent explicitly after the caller's durable profile commit. */
+export async function storePersonalWeeklyMenuItems(menu: WeeklyMenu, session: AiSession): Promise<void> {
+  const result = await postScopedAiJson(session, '/api/weekly_menu/items', {
+    week_start: menu.weekStart, items: menu.shoppingListItems ?? [],
+  });
+  if (!result.response.ok || result.body?.ok !== true) throw new Error('WEEKLY_MENU_ITEMS_SAVE_FAILED');
 }
 
 /**

@@ -1,5 +1,6 @@
 import { UserStateRepository, type UserStateKey } from './userStateRepository';
 import { reportStateSaveIssue } from './stateSaveStatus';
+import type { OutboxCommitGuard } from './durableOutbox';
 
 export type StateCodec<T> = { decode: (raw: string | null, fallback: T) => T; encode: (value: T) => string };
 type Snapshot<T> = { value: T; phase: 'local' | 'loading' | 'ready' | 'error' };
@@ -42,6 +43,19 @@ export class StateEditor<T> {
     this.editRevision += 1;
     this.publish({ ...this.snapshot, value });
     return this.repository ? this.repository.writeRaw(this.key, raw, this.unobservedEdit) : Promise.resolve(null);
+  }
+  /** Generated data becomes visible only after its scoped commit and never replaces a newer edit. */
+  async commitGenerated(action: T | ((value: T) => T), guard: OutboxCommitGuard) {
+    const captured = { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit };
+    await this.load();
+    if (!this.repository || this.snapshot.phase !== 'ready' || !captured.canCommit()) throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+    const editRevision = this.editRevision;
+    const canCommit = () => captured.canCommit() && editRevision === this.editRevision;
+    const value = typeof action === 'function' ? (action as (value: T) => T)(this.snapshot.value) : action;
+    const operation = await this.repository.writeRaw(this.key, this.codec.encode(value), this.unobservedEdit, { ...captured, canCommit });
+    if (!canCommit()) return null;
+    if (operation.status === 'pending') { this.editRevision += 1; this.publish({ value, phase: 'ready' }); }
+    return operation;
   }
   async remove() {
     const editRevision = ++this.editRevision;

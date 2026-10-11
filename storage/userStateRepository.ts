@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard } from './durableOutbox';
+import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard, type OutboxCommitGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
@@ -104,7 +104,8 @@ export class UserStateRepository {
     return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch, expectedAuthFence)));
   }
 
-  private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false): Promise<OutboxOperation> {
+  private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+    const capturedGuard = guard ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit } : undefined;
     const key = this.key(stateKey);
     return this.track(key, this.serialize(key, async () => {
       // An editor that has not loaded existing data cannot silently claim its revision.
@@ -115,6 +116,7 @@ export class UserStateRepository {
         expectedRevision: observation.revision, baseVersion: observation.confirmedVersion,
         ...(retainAsConflict ? { conflictReason: 'editor-not-loaded' as const } : {}),
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
+        ...capturedGuard,
       });
       reportStateOperation(this.accountId, operation);
       if (operation.status === 'conflicted') {
@@ -135,8 +137,8 @@ export class UserStateRepository {
     return this.writeRaw(stateKey, raw);
   }
 
-  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false): Promise<OutboxOperation> {
-    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict);
+  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict, guard);
   }
 
   async readRawAsync(stateKey: UserStateKey): Promise<string | null> {

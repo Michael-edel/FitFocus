@@ -3,6 +3,9 @@ import type { UserProfile } from '../../types';
 import { normalizeUserProfiles } from '../../storage/hybrid';
 import { StateEditor } from '../../storage/stateEditor';
 import { UserStateRepository } from '../../storage/userStateRepository';
+import type { OutboxCommitGuard } from '../../storage/durableOutbox';
+
+export type ProfileUpdate = UserProfile | ((profile: UserProfile) => UserProfile);
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 const codec = {
@@ -27,8 +30,32 @@ export function useProfilePersistence({ repository, currentUser, isCurrentSessio
   // The initial profile belongs to this repository/login, not to subsequent React renders.
   const editor = useMemo(() => repository && currentUser ? new StateEditor(repository, 'profile', currentUser, codec) : null, [repository]);
   useEffect(() => { void editor?.load(); }, [editor]);
-  return useCallback((action: UserProfile | ((profile: UserProfile) => UserProfile)) => {
+  return useCallback((action: ProfileUpdate, guard?: OutboxCommitGuard) => {
     if (!editor || !repository || !isCurrentSession()) return Promise.resolve(null);
+    if (guard) {
+      const editRevision = profileEditRevisionRef.current;
+      const current = guard.canCommit;
+      const canCommit = () => isCurrentSession() && current() && editRevision === profileEditRevisionRef.current;
+      const committed = editor.commitGenerated(previous => {
+        const update = typeof action === 'function' ? action(previous) : action;
+        if (update.id !== repository.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+        return update;
+      }, { readGuard: { ...guard.readGuard }, canCommit }).then(operation => {
+        if (!canCommit()) return null;
+        if (operation?.status !== 'pending') return operation;
+        const update = editor.getSnapshot().value;
+        if (update.id !== repository.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+        profileEditRevisionRef.current += 1;
+        setCurrentUser(update);
+        setAllUsers(previous => normalizeUserProfiles(previous.some(user => user.id === update.id)
+          ? previous.map(user => user.id === update.id ? update : user) : [update, ...previous]));
+        hasPendingProfileChangesRef.current = true;
+        setProfileSyncState('saving');
+        return operation;
+      });
+      void committed.catch(() => { if (canCommit()) setProfileSyncState('error'); });
+      return committed;
+    }
     const update = typeof action === 'function' ? action(editor.getSnapshot().value) : action;
     if (update.id !== repository.accountId) return Promise.resolve(null);
     profileEditRevisionRef.current += 1;

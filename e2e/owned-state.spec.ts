@@ -50,7 +50,11 @@ test('plan task changes survive reload without repopulating the old queue', asyn
   await page.reload();
   await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
   await expect(task).toHaveClass(/border-emerald-500/);
-  const saved = await state(page, 'plan_task_done');
+  let saved = await state(page, 'plan_task_done');
+  await expect.poll(async () => {
+    saved = await state(page, 'plan_task_done');
+    return { pause: saved.pause, status: saved.operations[0]?.status };
+  }).toEqual({ pause: 'legacy', status: 'pending' });
   expect(saved.source).toBe(source); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'put', accountId: account, status: 'pending' });
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);

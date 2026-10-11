@@ -682,6 +682,8 @@ const App: React.FC = () => {
     currentUser,
     persistUser,
     checkAchievements,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
   });
 
   const targets = useMemo(() => {
