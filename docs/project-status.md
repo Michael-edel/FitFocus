@@ -22,8 +22,8 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | Архитектурный снимок | `810adb1`, PR #90; исходная точка технического описания |
 | Код bootstrap/hydration | `dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`, ветка `fix/durable-outbox`; [guarded bootstrap/hydration](bootstrap-hydration.md), auth-fence и повторная загрузка во второй вкладке |
 | Текущее исправление UI | `3550cc8fc81002cd0fcb127a398d73a5536f31bb`: [область notice сохраняет высоту до завершения жеста](profile-persistence.md#стабильность-формы-при-изменении-уведомления) |
-| Предыдущая опубликованная проверенная ревизия | `7f481aa34dc03c8aceefa2928d9573d9632e2414`: карта документации, статус и открытые задачи |
-| Опубликованная ревизия текущего этапа | `ece4e7a62159bbfae53ccfe4b19da211fb9d298e`: код `dac2de2` и обновлённые контракты |
+| Предыдущая опубликованная проверенная ревизия | `57f956db505b352fcde19d0e263d444d07bdc664`: карта кода и открытые задачи до исправления UI |
+| Опубликованная ревизия текущего этапа | `45315d9120a2e6d05b658560b20a901e19ac57b3`: исправление `3550cc8`, контракты и результаты; CI success |
 | Локальная проверка dac2de2 | 846 unit-тестов в 178 файлах, три режима typecheck и guards прошли; E2E: 144 passed / 1 failed / 9 skips, profile Save на iPhone PWA исследуется |
 | Серверная зависимость | PR #94, объединён с клиентской веткой коммитом `93f90c0` |
 | Текущий PR клиента | [#93](https://github.com/Michael-edel/FitFocus/pull/93), открыт как draft, база `fix/state-generations` |
@@ -31,6 +31,7 @@ FitFocus — PWA для питания, привычек и прогресса. 
 | CI на 7f481aa | [Запуск 38165704790](https://github.com/Michael-edel/FitFocus/actions/runs/38165704790): success, 817 unit-тестов в 175 файлах; 117 browser passed, 9 skips, без flaky |
 | CI на ece4e7a | [Запуск 38168916617](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617): success, 846 unit-тестов в 178 файлах; 144 browser passed, 1 flaky, 9 skips; регистрация iPhone Safari прошла после повтора |
 | CI на 57f956d | [Запуск 38170218508](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508): success, 846 unit в 178 файлах; 145 browser passed / 9 skips, без flaky; это предыдущая ревизия до исправления UI |
+| CI на 45315d9 | [Запуск 38172605267](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267): success, 846 unit в 178 файлах; 152 browser passed / 9 skips, без flaky; включает исправление UI `3550cc8` |
 | Локальная проверка 3550cc8 | 846 unit, три typecheck, guards, schema/privacy и audit прошли; новый сценарий — 7/7 проектов, исходный и новый — 20 повторов Safari/PWA без retries; полная матрица: 151 passed / 1 failed / 9 skips, Safari page error на reload |
 | Локальные проверки cb6e6cf | 817 unit-тестов в 175 файлах, typecheck и 20 повторных registration/quota-сценариев на Firefox/iPhone PWA, без retries |
 | Полная локальная браузерная проверка b723b7d | 117 passed / 9 явных skips, без retries; историческая граница сохранена [в журнале](stabilization-progress.md) |
@@ -41,9 +42,10 @@ CI `7f481aa` также проверил audit, три проверки типо
 сохранены в журнале со своими ревизиями. Результаты нового компонента с 846
 unit-тестами учитываются отдельно. CI `ece4e7a` также прошёл обязательные
 проверки, но имеет один flaky: console error `/api/profile due to access
-control checks` после reload. Следующий CI `57f956d` прошёл без flaky,
-но успешный запуск не устанавливает причину сообщения и не подтверждает
-ещё не проверенный CI исправления `3550cc8`.
+control checks` после reload. Следующие CI `57f956d` и `45315d9` прошли без flaky;
+второй включает исправление `3550cc8`. Успешные запуски не устанавливают
+причину сообщения из локального Safari-прогона. Незавершённые локальные
+диагностические изменения результатом CI `45315d9` не проверены.
 Наличие реализации в ветке не подтверждает
 её выпуск в main или production.
 
@@ -101,7 +103,8 @@ Chromium/Firefox/iPhone PWA. На `3550cc8` высота области сохр
 Полная матрица исправления: 151 passed / 1 failed / 9 skips. Все новые
 сценарии прошли; profile-conflict на iPhone Safari упал после функциональных
 проверок на сообщении `/api/me due to access control checks` при reload.
-CI исправления проверяется отдельно. Второе историческое падение:
+[CI опубликованного исправления `45315d9`](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267)
+прошёл: 846 unit, 152 browser passed / 9 skips, без flaky. Второе историческое падение:
 console `/api/me due to access control checks` при reload; причина не установлена.
 CI регистрации выявил похожее сообщение для `/api/profile`; объединять
 эти случаи до проверки трасс нельзя. [Результаты и границы](stabilization-progress.md).

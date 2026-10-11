@@ -9,7 +9,11 @@
 [CI `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617)
 прошёл с одним flaky; следующий [CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
 прошёл без flaky. Оба предшествуют исправлению UI.
-Результат предыдущей ревизии на этот код не переносится.
+[CI `45315d9`](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267),
+включающий исправление `3550cc8`, прошёл: 846 unit в 178 файлах,
+152 browser passed / 9 skips, без flaky. Локальное падение Safari на reload
+сохранено в журнале и остаётся открытым; успешный CI не устанавливает его причину.
+Результат опубликованной ревизии не переносится на незавершённые локальные изменения.
 Общий порядок: [TASKS](../TASKS.md); опубликованное состояние:
 [статус проекта](project-status.md).
 

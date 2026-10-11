@@ -66,16 +66,18 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 Map sender удалён из текущей сборки; profile state-upload использует общий
 sender вместо raw-пакета из localStorage. Регистрация (`2e41742`) и
 lifecycle sender (`b723b7d`) проверены локально. На `cb6e6cf` исправлено
-неточное ожидание числа запросов в E2E. Предыдущая опубликованная ревизия —
-`7f481aa`; [её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38165704790)
-прошёл: 817 unit-тестов, 117 browser passed и 9 skips, без flaky.
-История предыдущего CI с flaky сохранена в журнале.
-Результаты и ограничения каждой ревизии — [в журнале](docs/stabilization-progress.md);
+неточное ожидание числа запросов в E2E. Последняя ревизия с завершённым CI —
+`45315d9120a2e6d05b658560b20a901e19ac57b3`;
+[её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267)
+прошёл: 846 unit-тестов в 178 файлах, 152 browser passed и 9 skips, без flaky.
+Результат относится к этому SHA; незавершённые локальные изменения им не проверены.
+История проверок и их ограничения — [в журнале](docs/stabilization-progress.md).
 Новый компонент `dac2de2` проверяет HTTP bootstrap/state по сессии и применяет
 снимки с транзакционным auth-fence; одинаковая загрузка второй вкладки больше
 не делает первую правку конфликтующей. 846 unit-тестов прошли. Полный локальный
-E2E: 144 passed / 1 failed / 9 skips; нестабильный profile Save на iPhone PWA
-остаётся открытым: [контракт и результаты](docs/bootstrap-hydration.md).
+E2E на этой исторической ревизии: 144 passed / 1 failed / 9 skips;
+profile Save на iPhone PWA потребовал следующего исправления:
+[контракт и результаты](docs/bootstrap-hydration.md).
 CI `ece4e7a` прошёл с одним flaky регистрации Safari; последующий
 [CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
 прошёл без flaky: 846 unit-тестов, 145 browser passed и 9 skips.
@@ -83,8 +85,9 @@ CI `ece4e7a` прошёл с одним flaky регистрации Safari; п�
 Новый регрессионный сценарий прошёл во всех семи проектах; исходный и новый
 Save прошли 20 повторов Safari/PWA без retries. Полная локальная матрица:
 151 passed / 1 failed / 9 skips; единственное падение — Safari page error
-на reload после успешных проверок сохранения и конфликта. CI исправления
-проверяется отдельно; причина page error ещё открыта.
+на reload после успешных проверок сохранения и конфликта. Опубликованное
+исправление входит в прошедший CI `45315d9`; причина локального page error
+ещё открыта, успешный CI сам по себе её не устанавливает.
 [Свидетельства и следующие шаги](docs/project-status.md).
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).
@@ -92,7 +95,7 @@ Save прошли 20 повторов Safari/PWA без retries. Полная л
 Редактор profile использует ту же IDB-outbox и guarded sender;
 [его контракт и граница](docs/profile-persistence.md). [Регистрация](docs/registration-persistence.md)
 создаёт постоянную операцию до AI-запроса. Runtime legacy-импорт, полный lifecycle,
-staging и выпуск остаются открытыми. На 11.10.2026 PR #93 не слит
+staging и выпуск остаются открытыми. На 12.10.2026 PR #93 не слит
 в защищённую main; готовность ветки не считается готовностью production.
 Актуальные границы и ближайшие шаги — [в статусе проекта](docs/project-status.md).
 
