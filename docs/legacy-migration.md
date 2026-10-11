@@ -1,10 +1,37 @@
 # Компонент импорта старой очереди
 
-Обновлено: 09.10.2026. Реализация: `storage/legacyMigration.ts`,
+Обновлено: 11.10.2026. Реализация: `storage/legacyMigration.ts`,
 проверки: `tests/legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Это компонент [P0.8](../TASKS.md), реализующий согласованный
 [ADR-005](adr/ADR-005-durable-outbox.md). Подключение к runtime не завершено.
+
+## Формат legacy-записи
+
+Контракт согласованного нормализатора уже реализован в
+[storage/legacyQueue.ts на проверенной ревизии 22a7788](https://github.com/Michael-edel/FitFocus/blob/22a77889f131b554f52519515efc7ac811f6169f/storage/legacyQueue.ts).
+
+| Поле | Условие |
+|---|---|
+| record | Объект, не null; иначе `not-an-object` |
+| type | `put` или `delete`; иначе `invalid-type` |
+| key | Непустая строка; иначе `invalid-key` |
+| value для put | Обязательная строка; иначе `put-without-value` |
+| value для delete | Поле должно отсутствовать, даже `value: undefined` отклоняется как `delete-with-value` |
+| baseVersion | Отсутствие нормализуется в 0; присутствующее поле — целое неотрицательное число, иначе `invalid-baseVersion` |
+| retryCount | Отсутствие нормализуется в 0; присутствующее поле — целое неотрицательное число, иначе `invalid-retryCount` |
+
+Нормализованный delete возвращается без поля value. Отрицательные,
+дробные и нечисловые значения, включая NaN/Infinity, отклоняются.
+Все семь причин входят в `UnknownLegacyRecord.reason`; повреждённое
+намерение сохраняется в `outbox_migration_unknown` с исходной записью,
+fingerprint и временем обнаружения.
+
+Fingerprint вычисляется из нормализованных полей:
+`JSON.stringify([type, key, valueOrNull, baseVersion])` → SHA-256.
+Для delete используется null. Индекс элемента, retryCount и порядок свойств
+объекта не участвуют. Отсутствующий baseVersion эквивалентен явному 0.
+Совпавший hash дополнительно сверяется по каноническим полям при импорте.
 
 ## Входные данные и граница доверия
 
