@@ -137,6 +137,7 @@ import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
+import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
@@ -282,8 +283,8 @@ const App: React.FC = () => {
   authIdentityRef.current = googleMe?.sub;
   const isAdmin = !!googleMe?.roles?.includes('admin');
   useEffect(() => {
-    if (currentUser?.id && currentUser.id === googleMe?.sub) stateSync.start(currentUser.id);
-    return () => stateSync.stop();
+    if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
+    stateSync.stop();
   }, [currentUser?.id, googleMe?.sub]);
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
