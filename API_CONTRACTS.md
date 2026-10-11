@@ -5,7 +5,7 @@
 интеграционной ветки `fix/durable-outbox`.
 Серверная ветка объединена с клиентской коммитом `93f90c0`;
 слияние в main и deploy не подтверждены. [Область](docs/README.md).
-Это ограниченный реестр state/profile, не полная спецификация всех endpoints.
+Это ограниченный реестр state/profile и привязки invite, не полная спецификация всех endpoints.
 
 Источники этой ветки: [state.ts](functions/api/state.ts),
 [state_write.ts](functions/api/_lib/state_write.ts),
@@ -15,7 +15,9 @@
 
 ## Общие условия в этих endpoints
 
-Проверяются пользовательская сессия/поддерживаемый bearer token и beta access.
+State/profile проверяют пользовательскую сессию/поддерживаемый bearer token
+и beta access. Invite redeem проверяет сессию и сам код приглашения;
+уже выданный beta access для активации кода не требуется.
 State дополнительно проверяет разрешённое пространство ключей пользователя.
 `X-Request-ID` возвращается заголовком; это не поле общей JSON-обёртки.
 Тела ответов ниже сохраняют действующие формы.
@@ -39,12 +41,26 @@ State принимает парные `X-FitFocus-State-Account` и `X-FitFocus-
 только с проверенными scope, key, exists, ok и версией своей операции.
 [Порядок отправки и паузы](docs/state-sender.md).
 
+Общие ошибки state/profile:
 | Ответ | Значение |
 |---|---|
 | 401 `{"error":"UNAUTH"}` | Не удалось подтвердить пользователя |
 | 403 `{"error":"ACCESS_REQUIRED"}` | Нет требуемого доступа |
 | 403 `{"error":"FORBIDDEN_KEYSPACE"}` | Запрещённое пространство ключей |
 | 413 `{"error":"PAYLOAD_TOO_LARGE","message":"Payload too large"}` | Превышен лимит JSON-body 512 KiB |
+
+### Активация приглашения при регистрации
+
+`/api/me` также возвращает `inviteSync: { protocol: 1, guard: 1 }`.
+Новая регистрация требует эту capability и свежий state account/session proof
+перед POST `/api/invite/redeem`. [Обработчик](functions/api/invite/redeem.ts)
+проверяет парные заголовки до body/DB/consume; смена аккаунта, cookie или
+неполная привязка → 401 `{"ok":false,"error":"UNAUTH"}`.
+Ответ содержит `X-FitFocus-Invite-Guard: 1` и переданные account/session.
+Новый клиент требует совпадающий scope и ok=true для подтверждения успеха.
+Запрос без заголовков поддерживается для прежних клиентов; это не writer barrier.
+Profile создаётся локальной операцией, затем отправляется общим sender,
+без прямого PUT из регистрации. [Порядок и границы](docs/registration-persistence.md).
 
 ## GET /api/state?prefix=…
 

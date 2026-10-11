@@ -42,9 +42,10 @@
 секретов. Результаты прошлых тестов в архивном README относятся к указанным
 там датам и ревизиям.
 
-Последний локально проверенный клиентский этап — `fc6bb82`,
-[постоянное сохранение профиля](profile-persistence.md). Предыдущая
-опубликованная ревизия `fdaa5ea` [прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38151565193).
+Последний локально проверенный клиентский этап — `b723b7d`:
+[постоянная регистрация](registration-persistence.md) и
+[lifecycle sender](state-sender.md#жизненный-цикл-страницы). Предыдущая
+опубликованная ревизия `56f5337` [прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38156409684).
 [Граница 15 управляемых ключей](owned-state-writers.md) описана отдельно.
 Ниже исходный архитектурный снимок и исторические этапы сохраняют свои SHA.
 Актуальные незавершённые задачи находятся в [статусе](project-status.md).
@@ -60,6 +61,7 @@
 | [Текущее состояние](project-status.md) | Краткий статус проекта и следующий этап с границей проверенного кода |
 | [Пользовательские записи](owned-state-writers.md) | 15 управляемых ключей, редакторы, удаление старого sender и границы profile/legacy |
 | [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
+| [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |
@@ -105,6 +107,10 @@ value/outbox, managed hydration сохраняет локальное намер
 IDB-outbox и sender. Удалена прежняя Promise-очередь profileSync; конфликт
 не повторяется с новой базой. Создание профиля в registrationFlow и полный
 auth/bootstrap/legacy lifecycle этим этапом не закрыты.
+
+Следующий этап [переводит регистрацию](registration-persistence.md) на эту
+outbox до AI-запроса и убирает угадывание владельца/перенос storage prefix
+при входе. Полный HTTP bootstrap/hydration и auth-fence ещё открыты.
 
 ## Прежние материалы
 

@@ -503,3 +503,117 @@ family/AI callbacks, runtime provenance/barrier/import legacy, UI разреше
 конфликтов, атомарный backup/экспорт/очистка всех stores, staging и защищённая
 main. Старые запросы без scope пока совместимы; guard не останавливает
 старую сборку. PR остаётся draft, весь P0 не закрыт.
+
+## Постоянная регистрация и собственный профиль при входе
+
+Дата сверки: 11.10.2026. Код этапа —
+[`2e41742baa8c8dfafc2aa4c8c124940e302dfc03`](https://github.com/Michael-edel/FitFocus/commit/2e41742baa8c8dfafc2aa4c8c124940e302dfc03),
+ветка `fix/durable-outbox`, draft PR #93 с базой #94 → #90.
+[Контракт регистрации](registration-persistence.md) продолжает профиль `fc6bb82`.
+
+Прежде регистрация создавала user-<timestamp>, ожидала прямой profile PUT,
+затем писала localStorage-снимок и переименовывала id/prefix при входе.
+Сеть или закрытие страницы до cloud-save оставляли профиль без постоянного
+намерения. Старый fallback также подбирал legacy-профиль по email/истории.
+
+Теперь canonical account берётся при подтверждённом входе с первого шага.
+Профиль с базовым планом атомарно сохраняется в прежней IDB-outbox до AI;
+version/baseVersion=0 обозначает создание. AI-result — причинное продолжение
+того же writer. Ошибка первого commit оставляет форму без AI/перехода;
+ошибка AI-commit сохраняет исходный базовый профиль. Нет прямого profile PUT,
+localStorage all_users-записи или создания outgoing intent от чтения defaults.
+
+Поздние registration/AI/invite/login callbacks проверяют актуальную попытку,
+bootstrap-поколение и аккаунт. Уже закоммиченная операция сохраняет владельца
+после выхода. Вход отвергает другой id без переименования prefix. Own IDB-profile
+требует accountId записи, owner-meta и точного payload id; унаследованная
+запись без доказанного владельца остаётся нетронутой и не активирует сессию.
+Pending-регистрация восстанавливается после reload без OAuth-маркера.
+Bootstrap 401/403 и некорректный профиль не активируют локальный вход.
+Неопределённый ответ без собственного IDB-профиля не считается отсутствием
+профиля и не предлагает новое создание.
+
+Invite redeem требует свежий `/me` account/session proof и inviteSync capability;
+сервер проверяет binding до расходования кода. Ack проверяет invite guard
+и scope. Старые запросы без scope пока совместимы. Порядок выкладки capability
+и guard добавлен в чек-лист; сама регистрация не заменяет legacy writer barrier.
+
+### Проверка компонента 2e41742
+
+- Регрессии сначала воспроизведены: 5 из 6 новых registration-тестов упали
+  на прежнем коде, включая durable-before-AI и вход без прямого profile HTTP.
+- Финальные unit: 814 passed в 174 файлах. Проверяются quota/rollback,
+  причинный AI-update, сохранность fallback при отказе второй записи,
+  поздний ответ после выхода, собственный IDB-профиль без OAuth-маркера,
+  отказ подбора по email и принятия unowned IDB, wrong/absent invite scope,
+  cookie/account смена до consume и отмена login hydration.
+- Target Playwright: 6 passed, без retries — два новых сценария и onboarding
+  на desktop Chromium и Android Chrome. Profile записан до AI; reload
+  сохраняет intent при внедрённом 401; quota не запускает AI/profile HTTP.
+- Все три режима typecheck, auth/API/admin guards, schema parity
+  (21 migration / 30 tables), privacy (27 tables), audit
+  (0 известных уязвимостей) и production build прошли.
+- Browser plugin not available: использован Playwright проекта на
+  `http://127.0.0.1:4173`. Title/URL, значимое содержимое, отсутствие
+  неожиданного overlay, действия и console/page errors проверены;
+  desktop/Android screenshots просмотрены. Только специально внедрённый
+  resource error `/api/profile` 401 признаётся ожидаемым.
+
+Проверка использует mock API и точечную quota-инъекцию. Настоящие OAuth,
+физическое заполнение диска, deploy и staging этим не подтверждены.
+Предыдущий точный HEAD `56f53378cf76ff53609d3a6fabae5ae87a82205c` отдельно
+прошёл [CI 38156409684](https://github.com/Michael-edel/FitFocus/actions/runs/38156409684):
+790 unit / 103 browser / 9 явных skips, без flaky; guards/types/audit/build
+и schema/privacy успешны. Новый опубликованный HEAD проверяется отдельно в PR.
+
+Следующий незавершённый этап — свежий session proof и guarded HTTP
+bootstrap/state-hydration, атомарный auth-fence при применении и seed профиля.
+Клиентские проверки поколения до/после await не заменяют этот транзакционный
+guard. Также открыты остальные family/AI callbacks и AI-cache, runtime legacy
+provenance/barrier/import, UI конфликтов, backup/экспорт/очистка, staging
+и защищённая main. Весь P0 и выпуск не закрыты; PR #93 остаётся draft.
+
+## Sender при reload и возврате из BFCache
+
+Дата: 11.10.2026. Код:
+[`b723b7d1c9112df1f854bac7bdce18b3ff39aa1a`](https://github.com/Michael-edel/FitFocus/commit/b723b7d1c9112df1f854bac7bdce18b3ff39aa1a),
+продолжает регистрацию `2e41742`; ветка и draft PR #93 прежние.
+
+Полная локальная браузерная проверка `2e41742` дала 115 passed, 9 skips
+и два сбоя: profile reload на desktop WebKit и registration reload на iPhone PWA.
+UI/IDB-проверки проходили, но pageerror фиксировал access-control fetch ошибки
+`/api/me` и `/api/profile`. Trace связывает их с моментом reload.
+Проверку ошибок не ослабляли и исключения для таких pageerror не добавляли.
+
+App теперь связывает sender с жизненным циклом страницы: pagehide вызывает
+stop/abort, BFCache pageshow.persisted запускает свежую проверку сессии
+исходного accountId, cleanup удаляет обработчики прежнего аккаунта.
+Обычный pageshow не дублирует start. Локальные pending-операции сохраняются.
+[Контракт и тесты](state-sender.md#жизненный-цикл-страницы).
+
+После исправления:
+
+- Те же два сценария на desktop WebKit/iPhone PWA: 20 passed, каждый
+  повторён пять раз на двух проектах; без retries.
+- Полный unit: 816 passed в 175 файлах. Новый тест дожидается завершения
+  отменённого proof и проверяет, что поздний ответ не активировал сессию.
+- Все три режима typecheck и production build прошли.
+- Полный Playwright: 117 passed / 9 предусмотренных skips, без retries.
+  Chromium, Firefox, WebKit, Android Chrome/PWA и iPhone Safari/PWA.
+- Browser plugin not available: использован Playwright на
+  `http://127.0.0.1:4173`. Title/URL, содержимое, overlay, взаимодействия и
+  console/page errors проверены в целевых сценариях. Просмотрены новые
+  desktop/mobile screenshots: quota оставляет доступную кнопку и ошибку,
+  reload показывает сохранённый план и auth-паузу без наложений.
+
+Локальный preview не запускает настоящий backend; его лог содержит
+proxy ECONNREFUSED для `/api/me`. Успех mock-сценариев не подтверждает здоровье
+реального сервера. OAuth, настоящая нехватка диска, deploy и staging остаются
+отдельной приёмкой. Guards/schema/privacy/audit этапа регистрации перечислены
+выше; CI публикуемого HEAD проверяется отдельно, результат предыдущего
+`56f5337` на него не переносится.
+
+MD-файлы сверены с кодом: добавлен контракт регистрации, обновлены карта,
+статус, задачи, API, решения и чек-лист. Исторические SHA/результаты сохранены.
+Полный guarded bootstrap/hydration, атомарный auth-fence, runtime legacy,
+остальные callbacks, UI конфликтов, backup/экспорт/очистка и выпуск открыты.

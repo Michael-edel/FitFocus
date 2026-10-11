@@ -42,7 +42,8 @@ Profile hooks → profileSync.ts → отдельная Promise-цепочка �
 managed hydration проверяет протокол, локальную ревизию и очередь.
 Map sender удалён из текущей сборки. Следующий этап
 [подключает редактор профиля](profile-persistence.md) к общей IDB-outbox
-и sender с явным HTTP dispatch; регистрация остаётся отдельным путём;
+и sender с явным HTTP dispatch. Следующая [регистрация](registration-persistence.md)
+сохраняет профиль до AI-запроса в эту же outbox без прямого profile PUT;
 runtime legacy-импорт, барьер старых сборок и общая приёмка ещё не завершены.
 
 ## Сервер

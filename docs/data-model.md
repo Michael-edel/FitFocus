@@ -36,7 +36,9 @@ hybrid также зеркалирует часть глобальных AI-кл
 использует тот же IDB v2: values по ключу `fitfocus_data_<accountId>_profile`
 и outbox-операцию с явным resource=profile. Нового store или второй очереди
 нет. Profile не входит в prefix-hydration state. Наблюдение и конфликт
-сохраняют отдельные серверные версии profile; регистрация, legacy и полный
+сохраняют отдельные серверные версии profile; [регистрация](registration-persistence.md)
+создаёт value/операцию до AI. Восстановление требует явного accountId и owner-meta;
+старый profile без владельца не принимается по имени ключа. Legacy и полный
 экспорт/очистка ещё открыты. Описание прежних этапов ниже сохраняет их границы.
 
 Шесть ключей UserStateRepository, включая settings, теперь коммитят значение

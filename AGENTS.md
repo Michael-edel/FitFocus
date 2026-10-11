@@ -38,7 +38,10 @@
   сборки; это не барьер для старых сборок. Редактор существующего profile
   использует ту же outbox с resource: profile и отдельным guarded HTTP;
   черновик формы не считается сохранённым при отказе commit. Регистрация
-  и полный lifecycle ещё не завершены. Проверенная граница:
+  сохраняет canonical profile до AI, затем причинный update; owned IDB-профиль
+  восстанавливается без подбора по email или переноса prefix. Полный HTTP
+  bootstrap/hydration, auth-fence и остальные callbacks ещё не завершены. Проверенная граница:
+  [регистрация](docs/registration-persistence.md),
   [сохранение профиля](docs/profile-persistence.md),
   [подключение остальных state-записей](docs/owned-state-writers.md),
   [sender](docs/state-sender.md),

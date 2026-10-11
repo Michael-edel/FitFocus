@@ -10,10 +10,10 @@
 | Решение | Статус | Основание и критерий реализации |
 |---|---|---|
 | D-001. Стабилизация до новых крупных функций | Согласовано | Сначала закрыть [P0](TASKS.md); затем расширять продукт |
-| D-002. Сохранять локальное намерение при конфликте | Согласовано, реализация ожидается | 409 не является успешной синхронизацией; [модель](docs/sync-model.md) |
-| D-003. Разделить владельца операции и сессию попытки | Согласовано, реализация ожидается | accountId постоянен; sessionEpoch защищает попытку и поздний ответ |
-| D-004. Сохранить поколения удалённых серверных записей | Серверный компонент реализован в fix/state-generations; клиент, staging и выпуск ожидаются | Очищенный tombstone в user_kv, CAS и RETURNING; [контракт P0.7](docs/state-generations.md) |
-| ADR-005. Одна outbox в IndexedDB | На 11.10.2026 подключены 15 state-ключей и редактор существующего профиля; sender проверяет сессию; Map sender удалён из новой сборки. Регистрация, полный lifecycle, runtime legacy-импорт и приёмка ещё открыты | [Полное решение](docs/adr/ADR-005-durable-outbox.md), [state writers](docs/owned-state-writers.md), [профиль](docs/profile-persistence.md); Web Locks необязательны |
+| D-002. Сохранять локальное намерение при конфликте | Реализовано для 15 state-ключей и profile в outbox; UI разрешения, legacy и полный lifecycle открыты | 409 не является успешной синхронизацией; [модель](docs/sync-model.md) |
+| D-003. Разделить владельца операции и сессию попытки | Реализовано в guarded sender; весь bootstrap/callback lifecycle и runtime legacy ещё открыты | accountId постоянен; sessionEpoch защищает попытку и поздний ответ; [sender](docs/state-sender.md) |
+| D-004. Сохранить поколения удалённых серверных записей | Серверный компонент и protocol 2 sender реализованы; полная интеграция, staging и выпуск ожидаются | Очищенный tombstone в user_kv, CAS и RETURNING; [контракт P0.7](docs/state-generations.md) |
+| ADR-005. Одна outbox в IndexedDB | На 11.10.2026 подключены 15 state-ключей, редактор и регистрация профиля; sender проверяет сессию; Map sender удалён из новой сборки. Полный bootstrap/hydration/lifecycle, runtime legacy-импорт и приёмка ещё открыты | [Полное решение](docs/adr/ADR-005-durable-outbox.md), [state writers](docs/owned-state-writers.md), [профиль](docs/profile-persistence.md), [регистрация](docs/registration-persistence.md); Web Locks необязательны |
 | D-006. Маленькие проверяемые изменения | Согласовано | Отдельные PR с явными зависимостями, CI на точном SHA, выпуск по чек-листу |
 
 Нумерация ADR-005 продолжает согласованное обозначение решения об outbox.

@@ -61,6 +61,14 @@ Actions, наличие workflow в нужной ветке и состояни�
   scope ответа, ack-версия, 409, reload и quota; отсутствие capability
   сохраняет операцию в protocol-паузе. Совместимость старых запросов
   без заголовков не считается барьером старых writers.
+- [ ] Для [регистрации](docs/registration-persistence.md) invite guard и
+  `inviteSync: { protocol: 1, guard: 1 }` выпущены до нового клиента;
+  проверены смена cookie перед redeem, потерянный ответ и повтор того же кода.
+  Проверены profile create с baseVersion=0, локальный commit до AI,
+  quota/rollback, auth-пауза и reload без OAuth-маркера.
+- [ ] Проверен [lifecycle sender](docs/state-sender.md#жизненный-цикл-страницы):
+  reload/закрытие отменяет запросы старой страницы, BFCache-возврат проверяет
+  сессию заново, обработчик прежнего аккаунта не запускает его после смены входа.
 - [ ] Подтверждены отдельный адрес среды, D1 binding и безопасные тестовые данные.
 - [ ] Preview не перенаправляет тест в production: проверить редирект
   неканонических `*.pages.dev` в `index.tsx`.

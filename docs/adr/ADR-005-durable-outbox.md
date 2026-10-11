@@ -21,6 +21,12 @@ dispatch. Схема IDB остаётся v2; отдельного profile-store
 нет. HTTP требует собственной capability и проверенной привязки к сессии.
 Регистрация и полный lifecycle остаются отдельной незавершённой интеграцией.
 
+Следующий этап 11.10.2026: [регистрация](../registration-persistence.md)
+создаёт canonical profile с baseVersion=0 до AI-запроса; AI-update продолжает
+ту же причинную цепочку. Автоматический перенос legacy-id/prefix при входе
+убран. Полный guarded bootstrap/hydration, auth-fence, runtime legacy и выпуск
+этим дополнением не завершены.
+
 ## Причина
 
 Текущая Map + localStorage-очередь теряет изменения при конкуренции вкладок,

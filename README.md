@@ -20,6 +20,7 @@ Google/Apple, push, поддержка и административные фу�
 | [Текущее состояние](docs/project-status.md) | Проверенный SHA, готовые компоненты, рабочие изменения и ближайшие шаги |
 | [Пользовательские записи](docs/owned-state-writers.md) | 15 управляемых ключей, редакторы и границы profile/legacy |
 | [Сохранение профиля](docs/profile-persistence.md) | Редактор профиля, постоянная операция, сессии и несохранённая форма |
+| [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -56,22 +57,23 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 изменения перечислены [в журнале](docs/stabilization-progress.md)
 с отдельными ревизиями и границами проверки.
 
-Код текущего клиентского этапа — `fc6bb82`,
+Код текущего клиентского этапа — `b723b7d`,
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 [15 управляемых state-ключей](docs/owned-state-writers.md) используют
 атомарный repository, защищённую загрузку и sender с проверкой сессии.
 Map sender удалён из текущей сборки; profile state-upload использует общий
 sender вместо raw-пакета из localStorage. Предыдущая опубликованная ревизия
-`fdaa5ea` [прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38151565193);
-новое сохранение профиля проверено локально на `fc6bb82`.
+`56f5337` [прошла CI](https://github.com/Michael-edel/FitFocus/actions/runs/38156409684);
+новая регистрация (`2e41742`) и lifecycle sender (`b723b7d`) проверены локально:
+816 unit-тестов, 117 браузерных сценариев и 9 явных skips.
 Результаты и ограничения каждой ревизии — [в журнале](docs/stabilization-progress.md);
 CI следующего HEAD проверяется отдельно в PR #93.
 Серверная зависимость PR #94 объединена коммитом `93f90c0`;
 [контракт и ограничения](docs/state-generations.md).
 
 Редактор profile использует ту же IDB-outbox и guarded sender;
-[его контракт и граница](docs/profile-persistence.md). Регистрация,
-runtime legacy-импорт, полный lifecycle,
+[его контракт и граница](docs/profile-persistence.md). [Регистрация](docs/registration-persistence.md)
+создаёт постоянную операцию до AI-запроса. Runtime legacy-импорт, полный lifecycle,
 staging и выпуск остаются открытыми. На 11.10.2026 PR #93 не слит
 в защищённую main; готовность ветки не считается готовностью production.
 Актуальные границы и ближайшие шаги — [в статусе проекта](docs/project-status.md).

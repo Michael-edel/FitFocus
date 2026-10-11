@@ -13,6 +13,23 @@
 profile state-upload запросом `syncNow`. Ниже сохранён контракт снимка 2a72801;
 оставшиеся profile/legacy/lifecycle-задачи уточнены в новом документе.
 
+## Жизненный цикл страницы
+
+Код последующего исправления:
+[`b723b7d`](https://github.com/Michael-edel/FitFocus/commit/b723b7d1c9112df1f854bac7bdce18b3ff39aa1a).
+[stateSyncLifecycle](../features/auth/stateSyncLifecycle.ts)
+останавливает sender на `pagehide`: таймеры отменяются, активные запросы
+прерываются, поздний ответ старого поколения не принимается. При возврате
+из BFCache (`pageshow.persisted`) sender запускается для исходного accountId
+и заново проверяет сессию. Обычный `pageshow` не создаёт второй запуск;
+cleanup эффекта удаляет обработчики прежнего аккаунта. Локальные операции
+при закрытии страницы сохраняются. Это не замена logout/auth-fence.
+
+Исправление продолжает [регистрацию](registration-persistence.md) и редактор
+профиля. [Тесты lifecycle](../tests/state_sync_lifecycle.test.ts) проверяют
+abort и поздний proof, обработчики BFCache и удаление старых слушателей.
+Ревизия и браузерные результаты указаны [в журнале](stabilization-progress.md).
+
 ## Подключение
 
 [StateSync](../storage/stateSync.ts) запускается приложением для точного

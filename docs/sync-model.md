@@ -7,7 +7,8 @@
 Они используют атомарные value/outbox, managed hydration, claim/finish
 и подтверждённую сессию. Прежний Map sender удалён из текущей сборки.
 Редактор [profile](profile-persistence.md) также подключён к этой outbox;
-HTTP dispatch использует явный resource. Регистрация, runtime legacy-импорт,
+HTTP dispatch использует явный resource. [Регистрация](registration-persistence.md)
+создаёт эту операцию до AI с каноническим ID. Runtime legacy-импорт,
 барьер старых сборок, экспорт/очистка
 и полный lifecycle ещё открыты. Риски исходного снимка ниже не считаются
 исправленными для всего приложения или уже открытых старых сборок.
