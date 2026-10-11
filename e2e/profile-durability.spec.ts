@@ -15,11 +15,13 @@ async function saved(page: Page) {
     try {
       const tx = db.transaction(['values', 'outbox'], 'readonly');
       const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
-      return { value: value?.value as string | undefined, operations: operations.filter(op => op.key === key) as Array<{ status: string; resource: string; baseVersion: number; value: string; serverSnapshot?: { version: number } }> };
+      return { value: value?.value as string | undefined,
+        stateOperationCount: operations.filter(op => op.resource !== 'profile').length,
+        operations: operations.filter(op => op.key === key) as Array<{ status: string; resource: string; baseVersion: number; value: string; serverSnapshot?: { version: number } }> };
     } finally { db.close(); }
   }, key);
 }
-async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh') {
+async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGate?: { started: () => void; wait: Promise<void> }) {
   const conflict = mode === 'conflict';
   const errors: string[] = []; const mutations: string[] = [];
   const expectedHttpErrors: string[] = [];
@@ -53,6 +55,8 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh') {
     if (path === '/api/state' && request.method() === 'GET') return json({ items: [] });
     if (path === '/api/state' && request.method() === 'PUT') {
       const body = request.postDataJSON() as { items: Array<{ key: string; baseVersion: number }> };
+      stateGate?.started();
+      if (stateGate) await stateGate.wait;
       return json({ ok: true, items: body.items.map(item => ({ key: item.key, exists: true, version: item.baseVersion + 1 })) });
     }
     return route.fallback();
@@ -85,6 +89,51 @@ test('a profile conflict retains the local name and never retries against the cl
   expect(mutations).toEqual(['PUT']); expect((await saved(page)).operations).toHaveLength(1);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('profile-conflict.png') });
+});
+
+test('a held profile Save survives the state notice disappearing before pointer release', async ({ page }, testInfo) => {
+  let release!: () => void; let started!: () => void;
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  const sending = new Promise<void>(resolve => { started = resolve; });
+  const { errors, mutations } = await setup(page, 'conflict', { started, wait });
+  await openApp(page, '/#settings');
+  const name = page.getByPlaceholder('Как к вам обращаться');
+  await expect(name).toHaveValue(profile.name);
+  await name.fill('Один клик при синхронизации');
+  await page.getByRole('button', { name: 'Светлая', exact: false }).click();
+  await sending;
+  await expect.poll(async () => (await saved(page)).stateOperationCount).toBeGreaterThan(0);
+  const notice = page.getByRole('status').filter({ hasText: 'Изменения сохранены на устройстве' });
+  await expect(notice).toBeVisible();
+  await name.fill('Один клик при синхронизации');
+  const save = page.getByRole('button', { name: 'Сохранить профиль', exact: true });
+  await expect(save).toBeEnabled(); await save.scrollIntoViewIfNeeded();
+  const before = (await save.boundingBox())!;
+  const documentY = before.y + await page.evaluate(() => window.scrollY);
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.mouse.down();
+  try {
+    release();
+    await expect.poll(async () => (await saved(page)).stateOperationCount).toBe(0);
+    await expect(notice).toHaveCount(0);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.screenshot({ path: testInfo.outputPath('profile-held-save.png') });
+    const after = (await save.boundingBox())!;
+    expect(after.y + await page.evaluate(() => window.scrollY)).toBeCloseTo(documentY, 1);
+    expect(after.y).toBeCloseTo(before.y, 1);
+  } finally { release(); await page.mouse.up(); }
+  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+  const snapshot = await saved(page);
+  expect(snapshot.operations).toHaveLength(1);
+  expect(snapshot.operations[0].serverSnapshot?.version).toBe(8);
+  expect(JSON.parse(snapshot.value!).name).toBe('Один клик при синхронизации');
+  expect(mutations).toEqual(['PUT']);
+  const conflictNotice = page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт данных' });
+  await conflictNotice.scrollIntoViewIfNeeded();
+  await expect(conflictNotice).toBeInViewport({ ratio: 1 });
+  await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('profile-held-save-conflict.png') });
 });
 
 test('a clean refresh replaces the profile editor and subsequent edits use its observed version', async ({ page }, testInfo) => {
