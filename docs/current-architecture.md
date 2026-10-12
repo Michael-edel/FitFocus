@@ -146,5 +146,7 @@ auth-shell и forward update прошли по 7/7; реальный OAuth пр�
 архив собран, локально прошли 28/28 fresh-install/rollback/forward на семи
 конфигурациях без retries. HTTP/D1-переход `bd763ec` → архив `98d4910`
 прошёл 23 запроса; server functions/migrations этих SHA одинаковы.
-CI компонента и staging ещё требуются. Детали и актуальный CI —
+CI `5b90249` прошёл HTTP/D1-проверку и сохранил архив; digest и inventory
+скачанного архива проверены. Flaky WebKit fresh install и staging открыты.
+Детали и актуальный CI —
 в [статусе](project-status.md) и [контракте артефакта](release-artifacts.md).

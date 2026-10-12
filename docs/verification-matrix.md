@@ -6,22 +6,29 @@
 
 ## Проверенная граница
 
-Последний подтверждённый [CI `5828f29`](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224):
-1047 unit / 193 файла, 341 browser passed / 9 skips, workflow success.
-В summary нет flaky; четыре preview `ECONNREFUSED` и прежний Firefox PWA
-timeout на `98d4910` остаются открытыми. Код включает семейный
+Последний подтверждённый [CI `5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
+1053 unit / 194 файла, 361 browser passed / 1 flaky / 9 skips, workflow success.
+WebKit fresh rollback install прошёл с retry; один preview `ECONNREFUSED`
+и прежний Firefox PWA timeout на `98d4910` остаются открытыми. Код включает семейный
 CAS `405238b`, явное PWA-обновление `8d32f12` и поправку первого SW-клиента
 `574de76`. Это не подтверждает защищённую main, staging или production.
 
 Последующий опубликованный код `98d4910` удаляет неиспользуемый Google SDK;
 локально прошли 7/7 auth-shell и 7/7 forward real-SW сценариев.
-Этот код включён в `5828f29`. Два прежних полных прогона архива `574de76`
+Этот код включён в `5b90249`. Два прежних полных прогона архива `574de76`
 дали 26/28 каждый; эта база не принята. Новый компонент закрепляет `98d4910`
 и сохраняет полный client/SW/Pages Worker. Локально архив прошёл проверку
 82 файлов и 28/28 fresh-install/rollback/forward на семи конфигурациях
 без retries. HTTP/D1-переход `bd763ec` → архив `98d4910` прошёл 23 запроса;
-CI компонента, сохранение архива в CI и staging открыты.
+Компонент опубликован в `bd763ec`, поправка CI — в `5b90249`.
+Итог CI, 23 HTTP/D1-запроса и сохранение архива подтверждены; скачанный
+архив проверен по digest и inventory. Flaky WebKit и staging открыты.
 [Текущий статус](project-status.md), [границы отката](release-artifacts.md).
+
+Рабочая mock-фикстура отдельно дала 4/4 в диагностике и 3/3 в двухвкладочном
+сценарии без proxy-ошибок; расширенный семейный прогон дал 97 passed / 1 failed.
+Это не результат опубликованного CI и не закрытие P0;
+[условия и незакрытое падение](mock-api-lifecycle.md).
 
 ### История предшествующих компонентов
 

@@ -10,15 +10,50 @@ browser/HTTP-проверки и CI-хранение; ветка `fix/durable-ou
 `bd763ece5897e5718eb05dd6567bb986f3a34f45` → этот архив прошёл 23 запроса
 на одном локальном origin/D1. Server functions/migrations SHA одинаковы;
 это проверка сохранённого release, а не изменения серверных алгоритмов.
-CI компонента и загрузка проверенного архива ещё требуются.
-Последний подтверждённый [CI базы ветки `5828f29`](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224):
-1047 unit / 193 файла, 341 browser passed / 9 skips. Он не проверяет новый
-компонент. В логе четыре preview `ECONNREFUSED`; прежний Firefox timeout
-также остаётся открытым. Staging и выпуск не подтверждены.
+Компонент опубликован в `bd763ec`; поправка workflow — в `5b90249`.
+Его [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753) завершился success:
+1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips.
+HTTP/D1-проверка прошла 23 запроса, архив и browser diagnostics загружены.
+Скачанный rollback ZIP проверен по digest, inventory `.tar` — 82 файла.
+WebKit fresh rollback install прошёл с retry после access-control ошибки
+`/api/family/menu/state`; в preview один `ECONNREFUSED`. Прежний Firefox
+timeout также не объяснён. Staging и выпуск не подтверждены.
 
 Прежний архив `574de76` сохранён для диагностики и не принят:
 оба его полных прогона дали 26/28 из-за внешнего SDK/предыдущего trace race.
 История сохранена в [журнале](stabilization-progress.md).
+
+## Артефакт из CI
+
+Проверен run [38249434753](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753), head `5b90249`, job 114812141481,
+terminal success. HTTP-check выполнялся на PR merge-кандидате
+`61bd073b4c5fe22fe5e80aac7e36227815e73235` → retained source
+`98d49101e15ad652e1960381ce00e00e8dac0d44`, одном локальном origin/D1.
+
+- [Rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753/artifacts/11748940847):
+  `fitfocus-rollback-98d4910-38249434753-1`, ID 11748940847,
+  ZIP 3 890 931 байт; expires 10.01.2027 по metadata GitHub.
+- ZIP SHA-256 (совпала с GitHub digest):
+  `00ce587920b50a243e3fe2b0538aa4fdaf09355735d6fce68cb25e814b03c7c5`.
+- SHA-256 содержащегося `.tar`:
+  `2fc554c80227cd86e3afb9747bfff440a07fadea233cbea0f5328d11d8e4b959`.
+- Manifest: source `98d4910`, builtAt `2026-10-12T12:34:27.253Z`,
+  Node v24.21.0, Wrangler 4.149.0, IDB 3 / D1 0021.
+- [Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753/artifacts/11748676231):
+  ID 11748676231, ZIP 58 532 184 байта; expires 26.10.2026.
+
+Rollback ZIP скачан через GitHub connector, digest сверена, `.tar` извлечён
+в отдельную внешнюю папку и проверен командой:
+
+```text
+node scripts/release-artifact.mjs --verify "C:/Users/User/Documents/Codex/2026-09-17/yf/outputs/fitfocus-rollback-ci-38249434753/release"
+```
+
+Результат: `Verified 98d49101e15ad652e1960381ce00e00e8dac0d44: 82 files`.
+Этот CI-архив отличается от прежней локальной сборки (Node v24.19.0);
+их хеши и байты не отождествляются. Скачивание и hash inventory не закрывают
+flaky WebKit, реальные устройства или staging. Browser ZIP перечислен
+по metadata; содержимое его trace в этой сверке ещё не разобрано.
 
 ## Что сохраняется
 

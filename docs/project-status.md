@@ -6,14 +6,19 @@
 [журнале стабилизации](stabilization-progress.md).
 
 Последний подтверждённый CI опубликованной ветки —
-`5828f29a519d7350241f24c6acb8f83f78aac13e`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224),
-1047 unit / 193 файла; browser — 341 passed / 9 skips, 11,1 мин.
-Сверены head_sha, terminal run/job 114801439248 и логи 12.10.2026.
-В summary нет flaky; в логе четыре preview `ECONNREFUSED`. Это MD-коммит
-поверх кода `98d4910`, чей предыдущий Firefox PWA timeout прошёл с retry.
-Его причина не установлена; успешный MD-прогон не закрывает проблему.
-Незакоммиченный компонент отката проверяется отдельно.
+`5b902499705e17b85045234ff952b0ede8944a70`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753),
+1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, 20,2 мин.
+Сверены head_sha, terminal run/job 114812141481 и логи 12.10.2026.
+Flaky: desktop WebKit fresh rollback install, ошибка access control на
+`/api/family/menu/state`; прошёл с retry. В preview один `ECONNREFUSED`.
+Причины этого сбоя и прежнего Firefox PWA timeout на `98d4910` не установлены.
+Компонент отката опубликован в `bd763ec`, HTTP-результаты — в `66b4de7`,
+поправка workflow — в `5b90249`. CI HTTP/D1 прошёл 23 запроса с merge-кандидатом
+`61bd073` → архив `98d4910`; оба CI-артефакта загружены. Rollback ZIP скачан,
+его SHA-256 сверена с GitHub digest, inventory извлечённого `.tar` проверен:
+82 файла. [Идентификаторы и ограничения](release-artifacts.md#артефакт-из-ci).
+Рабочие изменения E2E-фикстуры не входят в этот SHA и его CI.
 Подготовительный сервер `dde4c71` и переход
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
@@ -106,8 +111,11 @@ Merge и deploy
 API-запросы при закрытии контекста. Два прогона по четыре сценария прошли
 функциональные проверки, но в каждом осталось три preview `ECONNREFUSED`.
 Явное закрытие страницы не устранило ошибку. Временные диагностические hooks
-удалены; исправление fixture остаётся открытым и не считается продуктовым
-исправлением PWA. [Запись проверки](stabilization-progress.md#сверка-md-и-диагностики-teardown--12102026).
+удалены. Следующая рабочая фикстура с переходом на `about:blank` прошла
+четыре диагностических сценария без proxy-ошибок; расширенный прогон дал
+97 passed / 1 failed. Исправление fixture остаётся открытым и не считается
+продуктовым исправлением PWA. [Текущая проверка](mock-api-lifecycle.md),
+[прежняя диагностика](stabilization-progress.md#сверка-md-и-диагностики-teardown--12102026).
 
 ## Опубликованное исправление — неиспользуемый Google SDK
 
@@ -120,7 +128,7 @@ pending-oauth. Forward update прошёл 7/7: обе вкладки загру
 Только внешний SDK исторического v2-клиента в forward-тесте получает
 синтетический ответ до первого SW control. Текущий клиент SDK не запрашивает.
 Реальный OAuth, устройства и staging не проверены. CI нового SHA завершился
-success с одним flaky Firefox PWA-update; точные числа приведены выше.
+success с одним flaky Firefox PWA-update; исторические числа сохранены в журнале.
 [Контракт PWA](pwa-updates.md), [журнал](stabilization-progress.md).
 
 ## Артефакт отката — приёмка
@@ -160,8 +168,9 @@ HTTP/D1-переход `bd763ec` → неизменённый worker из `.tar`
 прошёл 23 запроса на одном origin/D1. Проверены canonical profile/family,
 проекции покупок, CAS после отката, session/owner, старые writers=409,
 пустые поколения и legacy retention. Ревизии различаются; функции/миграции
-одинаковы. Следующий шаг — CI точного компонента, получение проверенного `.tar`
-и staging. До этих проверок откат не принят для выпуска. Main/deploy открыты.
+одинаковы. CI `5b90249` выполнил 23 HTTP/D1-запроса и сохранил проверенный
+`.tar`; скачанный архив проверен по digest и inventory. Flaky WebKit fresh
+install и staging остаются открытыми. Откат не принят для выпуска; main/deploy открыты.
 
 ## Предыдущий проверенный компонент — сессии и форма
 

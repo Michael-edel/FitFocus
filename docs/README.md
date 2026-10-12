@@ -19,6 +19,7 @@
 | Как запустить, проверить и выпустить изменение? | [CONTRIBUTING](../CONTRIBUTING.md), затем [чек-лист выпуска](../RELEASE_CHECKLIST.md) |
 | Как перейти на новую схему личных покупок? | [Подготовительный сервер и миграция 0020](profile-cas-rollout.md) |
 | Как подготовить и проверить совместимый откат? | [Артефакт клиента, SW и Pages Worker](release-artifacts.md) |
+| Что проверяется в завершении mock API-тестов? | [Жизненный цикл mock API](mock-api-lifecycle.md) |
 | С чего начать помощнику при следующей работе? | [AGENTS](../AGENTS.md), текущий статус, задача и её контракт |
 
 Сначала выбирается конкретная задача и её критерии готовности. После изменения
@@ -46,10 +47,10 @@
 ## Подтверждённая ревизия
 
 Последний подтверждённый CI опубликованной ветки —
-[`5828f29`](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224):
-1047 unit / 193 файла; browser — 341 passed / 9 skips, 11,1 мин, success.
-В summary нет flaky, в логе четыре preview `ECONNREFUSED`. Прежний Firefox
-timeout на `98d4910` и проблема teardown остаются открытыми.
+[`5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
+1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, success.
+WebKit fresh rollback install прошёл с retry; в preview один `ECONNREFUSED`.
+Эта нестабильность, прежний Firefox timeout и mock teardown остаются открытыми.
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).
@@ -65,7 +66,11 @@ SDK опубликовано в `98d4910`; локально до CI прошли
 [Новый артефакт отката](release-artifacts.md) закреплён за `98d4910`:
 82 файла; локально 28/28 fresh-install/rollback/forward на семи конфигурациях,
 workers=1/retries=0. HTTP/D1-переход `bd763ec` → архив `98d4910` прошёл
-23 запроса. CI компонента, сохранение архива в CI и staging остаются открытыми.
+23 запроса. Компонент опубликован в `bd763ec`, поправка workflow — в `5b90249`.
+CI выполнил 23 HTTP/D1-запроса и сохранил архив; скачанный ZIP и inventory
+82 файлов проверены. Flaky WebKit и staging остаются открытыми.
+Незакоммиченная mock-фикстура и её незавершённая приёмка описаны
+[отдельно](mock-api-lifecycle.md).
 
 ## Область и достоверность
 

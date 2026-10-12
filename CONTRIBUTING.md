@@ -115,6 +115,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Новый документ или изменение его назначения | docs/README.md; ключевые точки входа также README.md |
 | Добавление, перенос или переименование модулей | docs/code-map.md и ссылки затронутого контракта |
 | Проверки конкретной ревизии | docs/stabilization-progress.md |
+| Завершение mock API-сценариев и их диагностика | docs/mock-api-lifecycle.md; отдельно фиксировать функциональный итог и proxy-ошибки |
 | API state/profile/invite | API_CONTRACTS.md; для редактора и создания профиля также docs/profile-persistence.md и docs/registration-persistence.md |
 | API AI/weekly-menu items, capabilities и защита их callbacks | API_CONTRACTS.md и docs/ai-session-guard.md; отдельно подтвердить серверный и клиентский этапы |
 | Личные меню/покупки, projection capability или SQL triggers | docs/personal-menu-projection.md, ADR-007, API_CONTRACTS.md, data-model и RELEASE_CHECKLIST.md |

@@ -39,6 +39,7 @@ Google/Apple, push, поддержка и административные фу�
 | [DECISIONS.md](DECISIONS.md) и [ADR-005](docs/adr/ADR-005-durable-outbox.md) | Решения и статус внедрения |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Проверка, выпуск и откат |
 | [Журнал стабилизации](docs/stabilization-progress.md) | Изменения, SHA и результаты проверок |
+| [Жизненный цикл mock API](docs/mock-api-lifecycle.md) | Рабочая E2E-фикстура, результаты диагностики и незакрытое падение |
 | [Артефакт отката](docs/release-artifacts.md) | Сохранённая сборка клиента/SW/Pages Worker, контрольные суммы и проверка canonical readers |
 | [Реализация P0.8](docs/outbox-implementation.md) | Проверенный фундамент очереди, оставшаяся работа и приёмка |
 | [Импорт старой очереди](docs/legacy-migration.md) | Формат legacy, карантин, восстановление и условия отправки |
@@ -68,10 +69,10 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `5828f29`](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224):
-1047 unit / 193 файла; browser — 341 passed / 9 skips, 11,1 мин, success.
-В summary нет flaky; в логе четыре preview `ECONNREFUSED`. Прежний Firefox
-timeout на `98d4910` и проблема teardown остаются открытыми.
+Подтверждённый [CI опубликованной ревизии `5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
+1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, success.
+WebKit fresh rollback install прошёл с retry; в preview один `ECONNREFUSED`.
+Причины этой нестабильности и прежнего Firefox timeout остаются открытыми.
 В `98d4910` удалён неиспользуемый Google SDK; локально до CI прошли
 7/7 auth-shell и 7/7 real-SW обновлений без retries.
 Локальные неуспешные прогоны и границы actual-bundle smoke сохранены
@@ -85,7 +86,11 @@ timeout на `98d4910` и проблема teardown остаются откры�
 Новый архив проверен локально: 82 файла, 28 browser passed на семи
 конфигурациях, workers=1/retries=0. Прежние неуспешные прогоны `574de76`
 сохранены в журнале. HTTP/D1-переход `bd763ec` → архив `98d4910` прошёл
-23 запроса. CI компонента, сохранение архива в CI и staging ещё требуют подтверждения.
+23 запроса. Компонент опубликован в `bd763ec`, поправка workflow — в `5b90249`.
+CI прошёл HTTP/D1-проверку из 23 запросов и сохранил архив; скачанный
+артефакт проверен по GitHub digest и inventory 82 файлов. Staging и приёмка
+нестабильного WebKit-сценария остаются открытыми. Незакоммиченная E2E-фикстура проверяется
+[отдельно](docs/mock-api-lifecycle.md): 97 passed / 1 failed в расширенном прогоне.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`
