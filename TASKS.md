@@ -1,12 +1,11 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 12.10.2026. Текущий компонент — завершение mock API-сценариев
-и проверка их lifecycle, ветка `fix/durable-outbox`;
-[контракт](docs/mock-api-lifecycle.md).
-Фикстура опубликована в `085fcc1`; полный CI итогового HEAD ещё требуется.
-Последний подтверждённый [CI опубликованной ветки `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
-В summary нет flaky, в preview один `ECONNREFUSED` на `/api/family`.
+Обновлено: 12.10.2026. Текущий компонент — origin preview и приёмка staging,
+ветка `fix/durable-outbox`; [контракт](docs/staging-origin.md).
+Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
+Последний подтверждённый [CI опубликованной ветки `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
 Предыдущие WebKit access-control и Firefox timeout также остаются открытыми.
 Исправление неиспользуемого Google SDK опубликовано в `98d4910`.
 Компонент артефакта отката опубликован в `bd763ec`; поправка CI — в `5b90249`.
@@ -23,16 +22,28 @@
 текущая работа — в [статусе проекта](docs/project-status.md). Этот файл — очередь реализации.
 Согласованный план не равен готовому коду. Ни один P0 ниже пока не закрыт.
 
+## Подготовленный компонент — preview origin
+
+- [x] Воспроизвести клиентский переход preview → production и убрать его
+  из entry point; сохранить URL и относительные API выбранного origin.
+- [x] Локально проверить три hostname на семи конфигурациях и native PWA-shell:
+  28/28, workers=1/retries=0; typecheck и admin guards прошли.
+- [ ] Подтвердить CI коммита компонента после публикации.
+- [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
+
+База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
+Это локальная часть подготовки staging, а не закрытие P0 или выпуск.
+
 ## Порядок работы
 
-CI `3bf595f` завершился success без flaky в summary; прежние WebKit и Firefox сбои ещё требуют диагностики. Два полных прогона rollback artifact `574de76`
+CI `aefc463` завершился success без flaky и proxy-ошибок; прежние native WebKit и Firefox сбои ещё требуют диагностики. Два полных прогона rollback artifact `574de76`
 дали 26 passed / 2 failed каждый; база содержит лишний Google SDK и не принята.
 В `98d4910` SDK удалён из HTML. В новом компоненте обновлены закреплённый SHA
 и workflow-пути, собран архив `98d4910`: 82 файла, 28 browser passed на семи
 конфигурациях, workers=1/retries=0, 13,2 мин. HTTP/D1-переход `bd763ec`
 → архив `98d4910` прошёл 23 запроса. CI `5b90249` также прошёл 23 HTTP/D1
 запроса и сохранил `.tar`; скачанный архив проверен. Ближайший шаг —
-подтвердить полный CI рабочей mock-фикстуры, разобрать native WebKit и пройти staging.
+подтвердить CI preview-компонента, разобрать native WebKit и пройти staging.
 Тест восстановления pending теперь учитывает сохранённые `Retry-After`
 и lease; проверяет время приёма на HTTP-фикстуре. Production backoff/claim
 не изменены. Диагностика с Retry-After прошла 3/3 в desktop-движках.
@@ -44,8 +55,8 @@ CI `3bf595f` завершился success без flaky в summary; прежни�
 исправлением. Рабочая фикстура с выгрузкой документа дала 4/4 без proxy-ошибок.
 Первый расширенный прогон — 97 passed / 1 failed на iPhone PWA. После отдельного
 ожидания самого экрана перед семейными данными прошли 98/98 на семи конфигурациях,
-workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полный CI нового SHA
-ещё нужен. [Доказательства и следующий шаг](docs/mock-api-lifecycle.md).
+workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полный CI mock-фикстуры
+подтверждён на `aefc463`. [Доказательства и следующий шаг](docs/mock-api-lifecycle.md).
 Затем продолжить открытые критерии P0: совместимый rollback
 artifact, runtime legacy с доказанным владельцем и остановкой старых writers,
 остальные callbacks, UI конфликтов и приёмку lifecycle/staging.

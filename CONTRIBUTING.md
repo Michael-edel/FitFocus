@@ -67,6 +67,11 @@ npx wrangler pages dev dist --port 8788 --ip localhost
 
 ## Проверка изменения
 
+Для preview используйте её собственный origin; клиент не переводит её на
+основной hostname. До тестирования реальных данных отдельно подтвердите D1
+binding, серверный APP_URL и OAuth callback URLs. Удаление клиентского redirect
+не создаёт изолированный backend. [Порядок приёмки](docs/staging-origin.md).
+
 Команды берите из текущих `package.json` и `.github/workflows/ci.yml`.
 Полный набор для кандидата на выпуск приведён в
 [RELEASE_CHECKLIST](RELEASE_CHECKLIST.md#код-готов-к-проверке).
@@ -132,6 +137,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Серверные поколения, tombstones, protocol 2 или порядок их выпуска | docs/state-generations.md, API_CONTRACTS.md и RELEASE_CHECKLIST.md |
 | Существенное архитектурное решение | DECISIONS.md и новый/изменённый ADR |
 | Порядок выпуска или отката | RELEASE_CHECKLIST.md |
+| Origin preview и настройки staging | docs/staging-origin.md, RELEASE_CHECKLIST.md и docs/current-architecture.md |
 | Упаковка, проверка или хранение release/rollback artifact | docs/release-artifacts.md, scripts/release-artifact.mjs и затронутый gate RELEASE_CHECKLIST.md |
 | API, login proof или lifetime семейных запросов | docs/family-session.md, API_CONTRACTS.md, TASKS и краткий статус; отдельно учитывать ещё прежний AI-путь и CAS |
 

@@ -39,8 +39,9 @@ Google/Apple, push, поддержка и административные фу�
 | [DECISIONS.md](DECISIONS.md) и [ADR-005](docs/adr/ADR-005-durable-outbox.md) | Решения и статус внедрения |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Проверка, выпуск и откат |
 | [Журнал стабилизации](docs/stabilization-progress.md) | Изменения, SHA и результаты проверок |
-| [Жизненный цикл mock API](docs/mock-api-lifecycle.md) | Рабочая E2E-фикстура, результаты диагностики и незакрытое падение |
+| [Жизненный цикл mock API](docs/mock-api-lifecycle.md) | Опубликованная E2E-фикстура, результаты диагностики и границы приёмки |
 | [Артефакт отката](docs/release-artifacts.md) | Сохранённая сборка клиента/SW/Pages Worker, контрольные суммы и проверка canonical readers |
+| [Preview и staging](docs/staging-origin.md) | Сохранение origin, настройки APP_URL/D1 и отдельная приёмка окружения |
 | [Реализация P0.8](docs/outbox-implementation.md) | Проверенный фундамент очереди, оставшаяся работа и приёмка |
 | [Импорт старой очереди](docs/legacy-migration.md) | Формат legacy, карантин, восстановление и условия отправки |
 | [Серверные поколения P0.7](docs/state-generations.md) | Версии после удаления, новый API и условия выпуска |
@@ -69,9 +70,9 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
-В summary нет flaky; в preview один `ECONNREFUSED` на `/api/family`.
+Подтверждённый [CI опубликованной ревизии `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
 Причины прежних WebKit access-control и Firefox timeout остаются открытыми.
 В `98d4910` удалён неиспользуемый Google SDK; локально до CI прошли
 7/7 auth-shell и 7/7 real-SW обновлений без retries.
@@ -93,7 +94,8 @@ CI прошёл HTTP/D1-проверку из 23 запросов и сохра�
 в `085fcc1` и проверяется
 [отдельно](docs/mock-api-lifecycle.md): после уточнения предусловия экрана
 98 passed на семи конфигурациях без retries/proxy-ошибок; исходный 97/1 сохранён.
-CI точного нового компонента ещё требуется.
+Полный CI mock-фикстуры подтверждён на `aefc463`; новый preview-компонент
+прошёл локально 28/28 и требует собственного CI после публикации.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`

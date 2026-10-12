@@ -1985,3 +1985,41 @@ production retry/claim, main/deploy и остальные критерии P0 н
 Следующая MD-поправка фиксирует факт публикации: отметка «незакоммиченная»
 в карте документации устарела после commit/push. Она не меняет тестовую
 фикстуру; workflow итогового MD HEAD проверяется отдельно от CI `3bf595f`.
+
+## Preview origin и обновление MD — 12.10.2026
+
+Компонент поверх `aefc46320de11b83ffdb274e7dae1a911e69612e`.
+Entry point переводил branch/commit `*.pages.dev` на production до монтажа
+приложения. RED на прежнем коде дал 1 failed: preview HTML=200, затем
+запрещённый самим тестом production-переход=502. После удаления redirect
+тот же сценарий прошёл 1/1. Реальные Pages и production не запрашивались.
+
+Первая расширенная матрица — 25 passed / 3 failed: Firefox-фикстура сохраняла
+исходный Host при загрузке байтов с localhost, и Vite возвращал 403.
+Исправлен заголовок локального fetch, allowedHosts не менялся. Повтор Firefox
+прошёл 3/3. Итоговая матрица — 28 passed, 2,8 мин, workers=1/retries=0:
+21 origin-сценарий и семь native PWA-shell на семи конфигурациях.
+В итоговом логе нет preview ECONNREFUSED/proxy errors. Root typecheck и
+15 admin guards прошли после исправления фикстуры. Итоговые desktop/iPhone
+снимки просмотрены; успешное переключение темы не доказывает её серверный ack.
+
+Добавлен [контракт preview/staging](staging-origin.md), обновлены карта MD,
+правила разработки, карта кода, статус, TASKS, матрица и release checklist.
+Документы разделяют локальный код, завершённый CI и фактический deployment.
+При подготовке записи CI базы `aefc463` ещё выполнялся; до публикации
+подтверждено его завершение success. Этот результат не перенесён на новый компонент.
+D1 binding, APP_URL, provider callbacks, edge rules и реальный lifecycle
+остаются открытыми критериями staging. Основной план P0 не закрыт.
+
+## Полный CI mock-фикстуры aefc463 — 12.10.2026
+
+[Run 38256100623](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623),
+head `aefc46320de11b83ffdb274e7dae1a911e69612e`, job 114834593231:
+success, terminal updated 13:53:52 UTC (18:53:52 Екатеринбург).
+1053 unit / 194 файла; browser — 362 passed / 9 skips, 19,6 мин.
+В полном логе нет flaky, ECONNREFUSED и preview proxy errors. Это подтверждает
+общую mock-фикстуру `085fcc1`; прежние native WebKit/Firefox причины остаются
+неустановленными. HTTP/D1 прошёл 23 запроса, PR merge-кандидат `218d47e`
+→ retained `98d4910`. Оба артефакта загружены;
+[ID, digest и ограничения проверки](release-artifacts.md#ci-mock-фикстуры-aefc463).
+Новый preview-компонент проверен локально отдельно и требует своего CI.

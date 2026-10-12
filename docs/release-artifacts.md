@@ -181,6 +181,25 @@ Pages использует скомпилированный `_worker.js` из ou
 хранилищ. Клиент v2 и reader только прежних weekly_menu_items для отката
 после новых canonical записей несовместимы.
 
+## CI mock-фикстуры aefc463
+
+[Run 38256100623](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623)
+и job 114834593231 завершены success; head
+`aefc46320de11b83ffdb274e7dae1a911e69612e`.
+1053 unit / 194 файла, 362 browser passed / 9 skips, без flaky/proxy-ошибок.
+HTTP/D1: 23 запроса, кандидат `218d47eba96720d3079c966ec71a4a37bbd5030c`
+→ retained `98d49101e15ad652e1960381ce00e00e8dac0d44`.
+
+| Артефакт | GitHub ID | ZIP bytes | SHA-256 ZIP | Срок хранения |
+|---|---|---|---|---|
+| fitfocus-browser-38256100623-1 | 11751831312 | 53953602 | b3878851be33b294bec59c58f41749062247adf55d2f89541d69153674d66604 | 26.10.2026 13:53:24 UTC |
+| fitfocus-rollback-98d4910-38256100623-1 | 11751596969 | 3888249 | b1f60fd266a7682491498dbb1cb57fe541c1bc2b39d26b1f03f099aeb817622e | 10.01.2027 13:30:02 UTC |
+
+Проверены завершение run/job, логи и metadata загрузки. Эти ZIP не скачивались
+в рамках данной сверки; digest из metadata не объявляется локальной проверкой
+их содержимого. Ранее скачанный архив `5b90249` остаётся отдельным артефактом.
+Этот CI не содержит последующего preview-origin компонента и не подтверждает deploy.
+
 Результаты конкретных прогонов — в [журнале](stabilization-progress.md),
 оставшаяся приёмка — в [TASKS](../TASKS.md) и [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md).
 Реальные устройства, OAuth/BFCache, runtime legacy, удалённая D1, staging,

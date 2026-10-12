@@ -44,6 +44,15 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 | PWA и обновление приложения | [sw.ts](../sw.ts), [pwa.ts](../pwa.ts), [pwaRegistration](../services/pwaRegistration.ts), [pwaUpdate](../services/pwaUpdate.ts), [PwaUpdateNotice](../ui/PwaUpdateNotice.tsx) | [Контракт обновления](pwa-updates.md), [unit регистрации](../tests/pwa_registration.test.ts), [unit повторов](../tests/pwa_update.test.ts), [real SW E2E](../e2e/pwa-update.spec.ts), [shell E2E](../e2e/pwa-shell.spec.ts); активация SW не доказывает остановку всех прежних writers |
 | Сборка и проверка отката | [Упаковщик](../scripts/release-artifact.mjs), [HTTP-проверка](../scripts/check-release-rollback.mjs) | [Контракт](release-artifacts.md), [целостность](../tests/release_artifact.test.ts), [откат pending/conflict](../e2e/pwa-rollback.spec.ts), [свежая установка](../e2e/pwa-rollback-install.spec.ts), [CI](../.github/workflows/ci.yml), [выпуск](../RELEASE_CHECKLIST.md) |
 
+## Origin приложения и staging
+
+[index.tsx](../index.tsx) монтирует приложение на исходном origin;
+клиентский redirect preview → production удалён в компоненте поверх `aefc463`.
+[preview-origin.spec.ts](../e2e/preview-origin.spec.ts) проверяет три hostname,
+относительные API и переключение темы с локальными байтами сборки.
+[Контракт](staging-origin.md) отделяет эту регрессию от настроек D1,
+серверного APP_URL, OAuth и фактического deployment.
+
 ## Браузерные фикстуры
 
 Mock-наборы используют [mockTest](../e2e/support/mockTest.ts) для выгрузки

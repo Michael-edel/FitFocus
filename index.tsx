@@ -4,19 +4,7 @@ import App from './App';
 import { ensurePWAStarted } from './pwa';
 import { PwaUpdateNotice } from './ui/PwaUpdateNotice';
 
-const CANONICAL_APP_HOST = 'fitfocus.pages.dev';
-const isPreviewPagesHost =
-  typeof window !== 'undefined' &&
-  window.location.hostname.endsWith('.pages.dev') &&
-  window.location.hostname !== CANONICAL_APP_HOST;
-
-if (isPreviewPagesHost) {
-  const target = new URL(window.location.href);
-  target.protocol = 'https:';
-  target.host = CANONICAL_APP_HOST;
-  window.location.replace(target.toString());
-}
-
+// Keep this deployment's origin for relative API requests and browser storage.
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('Could not find root element to mount to');

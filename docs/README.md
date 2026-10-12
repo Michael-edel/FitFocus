@@ -19,6 +19,7 @@
 | Как запустить, проверить и выпустить изменение? | [CONTRIBUTING](../CONTRIBUTING.md), затем [чек-лист выпуска](../RELEASE_CHECKLIST.md) |
 | Как перейти на новую схему личных покупок? | [Подготовительный сервер и миграция 0020](profile-cas-rollout.md) |
 | Как подготовить и проверить совместимый откат? | [Артефакт клиента, SW и Pages Worker](release-artifacts.md) |
+| Как проверить origin preview и изоляцию staging? | [Origin и приёмка окружения](staging-origin.md) |
 | Что проверяется в завершении mock API-тестов? | [Жизненный цикл mock API](mock-api-lifecycle.md) |
 | С чего начать помощнику при следующей работе? | [AGENTS](../AGENTS.md), текущий статус, задача и её контракт |
 
@@ -47,12 +48,12 @@
 ## Подтверждённая ревизия
 
 Последний подтверждённый CI опубликованной ветки —
-[`3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
-В summary нет flaky; один preview `ECONNREFUSED` на `/api/family`.
-Прежние WebKit/Firefox сбои остаются открытыми. Рабочая mock-фикстура
-локально прошла 98 семейных сценариев без retries/proxy-ошибок;
-её полный CI ещё требуется. [Контракт](mock-api-lifecycle.md).
+[`aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+В итоговом логе нет flaky и preview proxy errors/ECONNREFUSED.
+Mock-фикстура `085fcc1` проверена в полном CI;
+прежние native WebKit/Firefox сбои остаются открытыми.
+[Контракт и границы](mock-api-lifecycle.md).
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).
@@ -71,7 +72,7 @@ workers=1/retries=0. HTTP/D1-переход `bd763ec` → архив `98d4910` �
 23 запроса. Компонент опубликован в `bd763ec`, поправка workflow — в `5b90249`.
 CI выполнил 23 HTTP/D1-запроса и сохранил архив; скачанный ZIP и inventory
 82 файлов проверены. Flaky WebKit и staging остаются открытыми.
-Mock-фикстура опубликована в `085fcc1`; её незавершённая полная приёмка описана
+Mock-фикстура опубликована в `085fcc1`; её приёмка и оставшиеся ограничения описаны
 [отдельно](mock-api-lifecycle.md).
 
 ## Область и достоверность
