@@ -49,7 +49,7 @@
 | Часть | Исходник |
 |---|---|
 | Режим prompt и custom worker | [vite.config.ts](../vite.config.ts), [sw.ts](../sw.ts) |
-| Регистрация и предложение обновления | [pwa.ts](../pwa.ts) |
+| Регистрация, предложение и смена controller | [pwa.ts](../pwa.ts), [pwaRegistration](../services/pwaRegistration.ts), [unit](../tests/pwa_registration.test.ts) |
 | Состояние попытки, deadline и поздний ответ | [services/pwaUpdate.ts](../services/pwaUpdate.ts) |
 | Уведомление | [ui/PwaUpdateNotice.tsx](../ui/PwaUpdateNotice.tsx), [index.tsx](../index.tsx) |
 | Регрессии попыток активации | [unit-тесты](../tests/pwa_update.test.ts) |
@@ -104,3 +104,20 @@ Standalone моделируется через display mode; это не уст�
 Реальный BFCache, старый Map writer, runtime legacy-импорт, совместимый
 rollback artifact, protected-main интеграция и выпуск остаются открытыми.
 Подробные условия — в [TASKS](../TASKS.md) и [чек-листе](../RELEASE_CHECKLIST.md).
+
+## Последующая проверка первого SW-клиента — 12.10.2026
+
+На базе 15b29c8 сценарий отката воспроизвёл ошибку 8d32f12: controller
+заменялся, но вкладка, которая установила первый SW, не перезагружалась.
+Workbox isUpdate относился к первоначальной регистрации. Native регистрация
+теперь отслеживает реальную смену controller; первая установка не вызывает
+reload, замена перезагружает вкладки. Установка нового worker сама не
+активирует его. injectRegister: false предотвращает вторую регистрацию из HTML.
+
+Четыре unit-проверки новой регистрации прошли. Все семь real-SW сценариев
+прямого обновления прошли в составе прогона 19 passed / 2 failed; два
+rollback-сценария Firefox упали из-за layout-warning при раннем DOM-обращении
+во время reload. После ожидания framenavigated/load до DOM-проверок
+диагностика Firefox/iPhone Safari с двумя вкладками прошла 4/4, workers=1,
+retries=0. Предупреждение не фильтровалось. Подготовка и полная приёмка
+совместимого rollback artifact продолжаются отдельно. Staging и выпуск открыты.

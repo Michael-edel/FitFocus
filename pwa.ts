@@ -7,7 +7,7 @@
  */
 import { isRecord } from './safeJson';
 import { fetchWithResilience } from './services/httpClient';
-import { offerPwaUpdate } from './services/pwaUpdate';
+import { registerPwaUpdates } from './services/pwaRegistration';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
@@ -101,35 +101,9 @@ async function initPWA() {
   } catch {}
 
   try {
-    const mod = await import('virtual:pwa-register');
-    type RegisterSw = (options: {
-      immediate: boolean;
-      onNeedRefresh: () => void;
-      onRegisteredSW: (swScriptUrl: string, registration?: ServiceWorkerRegistration) => void;
-      onRegisterError: (error: unknown) => void;
-    }) => (reloadPage?: boolean) => Promise<void>;
-    const registerSW = mod.registerSW as RegisterSw;
-    let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
-    updateSW = registerSW({
-      immediate: true,
-      onNeedRefresh() {
-        offerPwaUpdate(async () => {
-          if (!updateSW) throw new Error('PWA_UPDATE_NOT_READY');
-          await updateSW(true);
-        });
-      },
-      onRegisteredSW(_swScriptUrl: string, registration?: ServiceWorkerRegistration) {
-        // Check availability without activating/reloading a form behind the user.
-        if (registration) {
-          // Offline availability checks must not become unhandled rejections.
-          void registration.update?.().catch(() => undefined);
-        }
-      },
-      onRegisterError(error: unknown) {
-        console.error('SW registration error', error);
-      },
-    });
-
+    if (!env.PROD || !('serviceWorker' in navigator)) return;
+    const scriptURL = new URL('sw.js', new URL(env.BASE_URL, window.location.href)).href;
+    await registerPwaUpdates(navigator.serviceWorker, scriptURL, () => window.location.reload());
   } catch (e) {
     // В dev-среде без плагина или при проблемах с билдом — не валим приложение.
     console.warn('PWA registration skipped:', e);
