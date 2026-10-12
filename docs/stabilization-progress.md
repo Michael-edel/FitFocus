@@ -1627,3 +1627,38 @@ MD-проверка: 36 документов, учтено 924 ссылки; л�
 Browser plugin not available; используется repository Playwright/production
 build. Реальные устройства/OAuth/BFCache, old Map writer, runtime legacy,
 совместимый rollback artifact, staging, protected-main merge и deploy открыты.
+
+## Сверка MD и диагностики teardown — 12.10.2026
+
+Ветка `fix/durable-outbox`, опубликованный код
+`8d32f12279039e5d549c6e3534f741b601084812`. В этом изменении обновляется
+документация: карта MD получила рабочий цикл, README/TASKS/статус/контракт PWA
+различают опубликованный код, локальные проверки и подтверждённый CI.
+[Workflow 38224847501](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)
+завершился success: 1043 unit / 192 файла, 341 browser passed / 9 skips,
+16,6 мин browser, без flaky в итоговом summary. Проверены статус workflow
+и логи job 114730233874. Этот результат относится к `8d32f12`;
+следующий MD-коммит проверяется отдельно.
+
+Legacy-нормализатор повторно сверен с `storage/legacyQueue.ts` и
+`tests/legacy_queue.test.ts`: согласованные проверки присутствуют, delete
+возвращается без value, fingerprint не зависит от retryCount. Это проверка
+исходников; unit-тесты для изменения MD повторно не запускались. Runtime
+определение владельца legacy и остановка старых writers остаются открытыми.
+
+Завершены два ранее запущенных диагностических прогона двух семейных
+сценариев на desktop WebKit/iPhone Safari: workers=1, retries=0, trace=on.
+В обоих 4 passed, но по три preview `http proxy error`/`ECONNREFUSED`.
+В первом `/api/me` появился через 132 мс после начала context.close, пока
+страница ещё не закрылась. В сравнительном прогоне явный page.close перед
+teardown контекста не устранил ошибки. Логи `pwa-proxy-close-observe.log`
+и `pwa-proxy-close-page.log` сохранены во внешнем outputs рабочей задачи.
+Временные диагностические hooks удалены; файл теста совпадает с HEAD.
+Исправление fixture не объявляется выполненным, ошибки не фильтруются.
+
+Для текущего MD-изменения проверяются содержание, UTF-8, ссылки/якоря,
+закреплённые исходники и diff; повторный production build не требуется.
+Результат: 36 документов, учтено 938 ссылок; локальные ссылки/якоря
+и 33 закреплённых source paths проверены, ошибок нет; diff прошёл.
+Приёмка P0, реальные устройства, staging, совместимый откат, merge и deploy
+остаются открытыми.
