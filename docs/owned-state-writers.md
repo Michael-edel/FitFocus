@@ -74,7 +74,7 @@ IDB-транзакцией. Pending, conflicted, failed, пауза или см�
 подключение требует владельца из свежего `/api/me` и подтверждение Service Worker
 от всех same-origin вкладок; незнакомые записи остаются в карантине. Источник
 не удаляется ради возобновления отправки. Фактическая миграция pending legacy
-intent между old/new bundles ещё требует браузерной приёмки.
+intent между old/new bundles прошла в [браузерном smoke](legacy-migration.md#browser-acceptance--13102026).
 
 ## Проверки и оставшаяся работа
 
@@ -87,7 +87,7 @@ Unit-проверки: [редактор](../tests/state_editor.test.ts),
 удаление истории с reload и отказ хранения с сохранением видимого значения.
 Конкретные результаты ревизии и ограничения — [в журнале](stabilization-progress.md).
 
-Остаются old/new bundle smoke с настоящим legacy intent, полный
+Old/new bundle smoke с настоящим legacy intent пройден. Остаются полный
 profile/auth/bootstrap lifecycle, UI повтора и разрешения, атомарный backup,
 экспорт/очистка всех stores, staging и выпуск в защищённую main.
 Порядок и критерии закрытия — [TASKS](../TASKS.md).

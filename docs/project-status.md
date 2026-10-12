@@ -22,12 +22,10 @@ Firefox повторён 12/12 с тестовой диагностикой. Д�
 После `47da77c` к runtime подключён импорт legacy-очереди: владелец берётся
 из свежего `/api/me`, all-client Service Worker fence удерживает отправку до
 обновления старых вкладок, а read guard перепроверяется после миграции.
-Локальная PWA-приёмка проверяет old/new worker update и сохранение family intent;
-реальный legacy-record из старого bundle остаётся отдельным критерием.
-На 13.10 локально прошли 1068 unit / 196 файлов, три typecheck, API/auth/schema/privacy
-checks, build и PWA update smoke в Chromium, Firefox и WebKit. Полный CI выше
-проверяет опубликованный код sender; реальная legacy-запись из старого bundle
-в old/new smoke остаётся открытым критерием.
+Настоящая pending-запись, созданная действием старого bundle, теперь проходит
+old/new migration smoke на одном origin. Локально прошли все семь Playwright-
+проектов (`workers=1/retries=0`); CI этой новой проверки ещё ожидается.
+Полный CI `c724bce` (run 38318876304) завершился success перед добавлением smoke.
 
 Первый полный CI runtime-изменений на `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9`
 [завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884).
@@ -44,7 +42,7 @@ Unit, типизация, schema/privacy/auth/API checks и build прошли; 
 `conflicted`, а retry прошёл. Исправляется сама E2E-фикстура: теперь для этого
 сценария backend отвечает 409 на первую запись, без перехода через 503/backoff.
 Этот вариант локально прошёл 3/3 на desktop WebKit; CI ещё не запускался.
-Ни один из этих прогонов не закрывает миграцию настоящей legacy-записи.
+Эти прогоны завершились до old/new migration smoke и его не включают.
 
 Предыдущий CI —
 `7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
@@ -371,7 +369,7 @@ audit (0 известных уязвимостей), build и полная бр�
 | Guarded bootstrap/state-hydration, readGuard и атомарный auth-fence | [Bootstrap/hydration](bootstrap-hydration.md), код `dac2de2` |
 | Стабильное расположение формы при удержанном Save | [Исправление UI](profile-persistence.md#стабильность-формы-при-изменении-уведомления), код `3550cc8` |
 | Серверная привязка account/session для AI/items и capabilities | [AI/items guard](ai-session-guard.md), код `16d3c34` |
-| Legacy-нормализатор, атомарный importer/ledger, auth-derived owner и Service Worker all-client fence | [Legacy migration](legacy-migration.md); actual old/new bundle migration smoke ещё открыт |
+| Legacy-нормализатор, атомарный importer/ledger, auth-derived owner и Service Worker all-client fence | [Legacy migration](legacy-migration.md); настоящий old/new migration smoke прошёл 7/7 локально |
 | Серверные поколения и tombstones | [P0.7](state-generations.md); совместный выпуск остаётся открытым |
 
 Наличие этих компонентов не закрывает целиком P0.5, P0.7, P0.8 или выпуск.

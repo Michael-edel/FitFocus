@@ -1,12 +1,14 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Текущий компонент — runtime-интеграция P0.8
-в ветке `fix/durable-outbox`; [контракт миграции](docs/legacy-migration.md).
+Обновлено: 13.10.2026. Текущий компонент — браузерная приёмка runtime-интеграции
+P0.8 в ветке `fix/durable-outbox`; [контракт миграции](docs/legacy-migration.md).
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
 Последний подтверждённый [CI опубликованной ветки `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
 1053 unit / 194 файла; browser — 383 passed / 9 skips, success, 20,3 мин.
-В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED. Этот CI
-предшествует текущим незакоммиченным изменениям P0.8.
+В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED. Полный
+[CI run 38318876304](https://github.com/Michael-edel/FitFocus/actions/runs/38318876304)
+на `c724bce` также завершился success. После него настоящий old/new bundle smoke
+прошёл локально на всех семи Playwright-проектах; CI новой проверки ожидается.
 Исправление неиспользуемого Google SDK опубликовано в `98d4910`.
 Компонент артефакта отката опубликован в `bd763ec`; поправка CI — в `5b90249`.
 Полная приёмка проверяется отдельно;
@@ -20,8 +22,9 @@ Mock-фикстура опубликована в `085fcc1` и проверен�
 
 Полная область — в [карте документации](docs/README.md),
 текущая работа — в [статусе проекта](docs/project-status.md). Этот файл — очередь реализации.
-P0.8 уже подключён к runtime в рабочем дереве, но реальная миграция pending legacy intent
-из старого bundle остаётся отдельным критерием; ни один P0 целиком не закрыт.
+P0.8 подключён к runtime; реальная миграция pending legacy intent из старого
+bundle проверена локально на семи Playwright-проектах. CI новой проверки ещё
+ожидается; ни один P0 целиком не закрыт.
 
 ## Подготовленный компонент — preview origin
 
@@ -64,8 +67,8 @@ workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полн
 подтверждение build id от всех same-origin вкладок перед отправкой legacy-операций.
 В unit/integration проверках покрыты владелец, карантин, отсутствие proof и закрытый
 send gate; настоящий PWA update-тест проверяет fence и сохранность очереди/профиля.
-Остаётся провести миграцию настоящей legacy-записи между старой и новой сборками.
-Далее — остальные callbacks P0.2–P0.6, UI конфликтов, backup/экспорт/очистка stores,
+Smoke настоящей legacy-записи между старой и новой сборками прошёл локально 7/7;
+CI нового commit ещё ожидается. Далее — остальные callbacks P0.2–P0.6, UI конфликтов, backup/экспорт/очистка stores,
 совместимый rollback artifact и staging.
 Интеграция P0.1 и серверной части P0.7 в защищённую main остаётся открытой.
 P0.9 пополняется тестами каждого исправления и завершается проверкой
@@ -319,8 +322,9 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [ ] Завершить приёмку компонента отката: CI `5b90249` и сохранение архива
       подтверждены, flaky WebKit и staging остаются открытыми;
   затем проверить целевое окружение и принять отдельный staging gate.
-- [ ] Завершить old/new bundle smoke для настоящей pending legacy-записи;
-  также остаются реальный lifecycle/staging и совместимый rollback artifact.
+- [x] Проверить old/new bundle smoke для настоящей pending legacy-записи на одном
+  origin и в одном browser context: 7/7 Playwright-проектов, `workers=1/retries=0`.
+  Остались полный lifecycle, staging и совместимый rollback artifact.
 
 Клиент подключён; отказ старых menu/items writers, конфликт после reload
 и локальная совместная работа настоящих v2/v3 bundles проверены. CI семейного
@@ -370,7 +374,8 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   409 сохраняет локальную операцию и доступный проверенный снимок, без rebase.
 - [x] Создавать профиль регистрации постоянной операцией с baseVersion=0;
   AI-update — причинный child, ошибки и конфликты не требуют raw profile PUT.
-- [ ] Пройти настоящую old/new migration-приёмку legacy intent и полный lifecycle.
+- [x] Пройти old/new migration smoke реального legacy intent; полный lifecycle
+  остаётся отдельной открытой задачей P0.8.
 
 Готово, когда update/delete-конфликты и failed-операции доступны после reload;
 совпадение текущего локального значения с исходящей записью не скрывает конфликт.
@@ -448,8 +453,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   свежую session-привязку до расходования кода.
 - [ ] Завершить эти гарантии для profile и остальных API callbacks; runtime legacy
   уже использует auth-derived owner и all-client Service Worker fence.
-- [ ] Проверить две вкладки без Web Locks, включая старую и новую сборки,
-  конкурентные записи разных и одинаковых ключей, logout/login и смену аккаунта.
+- [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
+  [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
+- [ ] Проверить конкурентные записи разных и одинаковых ключей, logout/login
+  и смену аккаунта; завершить profile и остальные API callbacks.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи
 всей очереди одной вкладкой.
@@ -520,13 +527,16 @@ LegacyQueueMigration: порции импорта, карантин, ledger и �
 - [x] Сохранять регистрацию и причинный AI-update в этой outbox; исключить
   угадывание владельца при входе и прямой profile PUT; проверить reload/quota.
 - [x] Подключить guarded bootstrap/state-hydration и auth-fence (`dac2de2`).
-- [ ] Проверить runtime-импорт старого и нового bundle на одном origin с
-  pending intent; миграция должна сохранить владельца, ledger и старый источник,
-  а прежний bundle до обновления должен закрывать отправку.
+- [x] Проверить runtime-импорт старого и нового bundle на одном origin с
+  реальным pending intent: сохраняются владелец, ledger и исходный legacy-ключ;
+  неизвестный владелец помещён в карантин; прежний bundle до обновления не
+  отправляет запись. [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7.
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
 - [ ] Завершить UI повтора/разрешения конфликтов, экспорт и очистку всех stores;
   проверить полный lifecycle. [Граница текущего runtime](docs/runtime-state.md).
-- [ ] Проверить старую и новую сборку на одном origin в одном browser context.
+- [x] Проверить старую и новую сборку на одном origin в одном browser context;
+  оба окна обновляются и после all-client fence отправляют только известную
+  операцию новой очереди. [Browser smoke](e2e/legacy-outbox-migration.spec.ts).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;
 legacy-ключ не используется для новой очереди и не удаляется до проверенного

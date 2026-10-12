@@ -8,14 +8,21 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
-export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; conflictFirstFamilyPut?: boolean } = {}) {
+export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
+  conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
   let available = options.conflictFirstFamilyPut === true, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
-  let firstFamilyConflictInjected = false;
-  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null, oauth: 0, familyPutAborted: 0 };
-  return { unexpectedApi, counts, recover: (conflict = false) => {
+  let firstFamilyConflictInjected = false, stateAvailable = options.stateUnavailable !== true;
+  let currentStateAvailable = options.currentStateUnavailable !== true;
+  const stateWriteKeys: string[] = [];
+  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null,
+    oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
+    currentStatePutAttempts: 0, currentStatePutAccepted: 0 };
+  return { unexpectedApi, counts, stateWriteKeys, recoverState: () => { stateAvailable = true; },
+    recoverCurrentState: () => { currentStateAvailable = true; }, recover: (conflict = false) => {
     available = true;
+    stateAvailable = true;
     if (conflict) { familyVersion += 1; familyMenu = familyTestMenu(account, 900, week); }
   }, async respond(request: IncomingMessage, response: ServerResponse, url: URL) {
     const path = url.pathname, method = request.method;
@@ -23,8 +30,14 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const raw = Buffer.concat(chunks).toString('utf8');
     const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    const legacySingleStateWrite = path === '/api/state' && method === 'PUT' && typeof body.key === 'string';
+    if (legacySingleStateWrite) {
+      counts.legacyStatePutAttempts += 1;
+      if (!stateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
+    }
     if (method !== 'GET' && !['/api/achievements/check'].includes(path) && path !== '/api/ai'
       && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sid)) {
+      if (legacySingleStateWrite) { counts.legacyStateScopeRejected += 1; return json({ error: 'INVALID_SCOPE' }, 403); }
       unexpectedApi.push(`INVALID_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
     }
     if (path === '/api/env') return json({ requireInvite: false });
@@ -47,10 +60,17 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     }
     if (path === '/api/state') {
       if (method === 'GET') return json({ items: [] });
+      if (method !== 'PUT' || legacySingleStateWrite || !Array.isArray(body.items)) {
+        unexpectedApi.push(`INVALID_STATE_WRITE:${method}`); return json({ error: 'INVALID_STATE_WRITE' }, 400);
+      }
       const items = body.items as Array<{ key: string; baseVersion: number }>;
+      counts.currentStatePutAttempts += 1;
+      if (!currentStateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
       if (items.some(item => item.key.includes('_family_menu:'))) {
         unexpectedApi.push('WRONG_FAMILY_RESOURCE'); return json({ error: 'WRONG_RESOURCE' }, 403);
       }
+      counts.currentStatePutAccepted += 1;
+      stateWriteKeys.push(...items.map(item => item.key));
       return json({ ok: true, items: items.map(item => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
     }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },

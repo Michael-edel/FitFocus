@@ -49,12 +49,12 @@ settings и сообщения об отказе/ожидании. [Границ
 
 | Порядок | Что сделать | Критерий проверки |
 |---|---|---|
-| 1. Доказательства для импорта | Runtime использует свежий `/api/me` для владельца и Service Worker all-client fence; проверить настоящий old/new bundle migration smoke | Чужой аккаунт остаётся в карантине; старый/unresponsive client закрывает send gate; после обновления неизменённый source импортируется без потери opId |
+| 1. Доказательства для импорта | Runtime использует свежий `/api/me` для владельца и Service Worker all-client fence; настоящий old/new bundle migration smoke прошёл 7/7 локально | Чужой аккаунт остаётся в карантине; старая вкладка закрывает send gate; после обновления исходный snapshot сохраняется, известная запись получает ack |
 | 2. Repository и writers | Шесть ключей уже используют DurableOutbox; перевести оставшиеся account-owned writers, profile/localStorage | Ошибка commit не выглядит успехом; delete сохраняет намерение; все вызовы проинвентаризированы |
 | 3. Интеграция сервера P0.7 | Компонент проверен на `237f862` в PR #94; подключить protocol 2, tombstone-чтение и подтверждённый ack | Совместная ревизия проходит delete/recreate/stale CAS; старые поколения, writers и порядок выпуска проверены |
 | 4. Sender и сессии | Шесть ключей подключены к claim/finish и server session guard; проверить оставшиеся пути | Новые правки при auth-паузе сохраняются; поздний ответ и смена аккаунта безопасны |
 | 5. Hydration, UI и данные | Шесть ключей защищены, ошибки/ожидание показаны; завершить остальные пути, повтор/разрешение, экспорт/очистку | Reload/login/online сохраняют локальное намерение; очищаются данные только выбранного владельца |
-| 6. Браузерная приёмка | Две вкладки без Web Locks; старый/новый bundle на одном origin с настоящим legacy source | Реальные blocked/versionchange, lease recovery, reload, quarantine и отсутствие дописывания legacy после завершения |
+| 6. Браузерная приёмка | Old/new bundle migration и две вкладки без Web Locks прошли 7/7; [тест](../e2e/legacy-outbox-migration.spec.ts) | Дополнительно остаются реальные blocked/versionchange, lease recovery, конкурентные записи и полный reload lifecycle |
 
 Порядок 3–4 учитывает два контракта. На исходном `810adb1`
 [DELETE](../API_CONTRACTS.md#delete-apistatekeybaseversion) возвращает только

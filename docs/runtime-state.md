@@ -127,5 +127,5 @@ bundle на одном origin. Прежний hybrid sender ещё активе�
 свежего `/api/me`. Он сопоставляет только записи точного аккаунт-префикса и
 открывает отправку лишь после ответа Service Worker и всех вкладок текущим
 build id. Источник сохраняется; неответившая или старая вкладка закрывает gate.
-Actual old/new bundle migration с сохранённым pending intent остаётся отдельной
-браузерной проверкой.
+Actual old/new bundle migration с сохранённым pending intent проверен в
+[browser smoke](legacy-migration.md#browser-acceptance--13102026) на семи проектах.

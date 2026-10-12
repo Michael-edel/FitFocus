@@ -271,5 +271,15 @@ claim и finish теперь ставятся заранее. Commit `8fae1008d2
 193 относящихся unit-теста и typecheck. Полный [CI run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963)
 на опубликованной ревизии `ca8ecb1`, содержащей этот код, завершился success:
 1068 unit / 196 файлов и 383 browser passed / 9 skipped за 13,9 мин.
-Проверка пока не содержит реальную legacy-запись старого bundle, поэтому P0.8
-migration smoke остаётся открытым.
+В описанном прогоне на `ca8ecb1` настоящая legacy-запись старого bundle ещё не
+проверялась; следующий smoke добавлен ниже.
+
+## Old/new legacy intent migration — 13.10.2026
+
+Последующий [smoke](legacy-migration.md#browser-acceptance--13102026) создаёт
+pending intent действием старого bundle и проверяет реальный импорт в новой
+сборке на одном origin. Он прошёл 7/7 Playwright-проектов, включая desktop,
+Android/iPhone и PWA-конфигурации (`workers=1/retries=0`). Подтверждены owner,
+quarantine, неизменность legacy snapshot, закрытый send gate до обновления всех
+same-origin вкладок и ack новой операции после update. Новый CI ещё ожидается;
+этот API fixture не подтверждает OAuth/D1 или staging.

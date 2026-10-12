@@ -109,7 +109,7 @@ source snapshot и ledger. Если worker или любая вкладка не
 сохраняются в IDB, а отправка остаётся на паузе. Legacy-источник не удаляется.
 Полный контракт описан [в документации миграции](legacy-migration.md).
 
-Остаются old/new bundle smoke с настоящей legacy-операцией, остальные
+Old/new bundle smoke с настоящей legacy-операцией пройден. Остаются остальные
 writers/profile callbacks, UI повтора/разрешения, полный экспорт/импорт/очистка
 и staging. Эта ветка не готова к выпуску. Browser API mock и fake IDB не
 подтверждают реальную OAuth/D1-интеграцию.

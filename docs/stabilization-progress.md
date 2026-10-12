@@ -2178,5 +2178,34 @@ claim и finish; ack и retry-пауза также читают нужные з
 383 browser passed / 9 skips за 13,9 мин. В этом CI проверен тот же код sender;
 `ca8ecb1` добавляет документацию поверх `8fae100`.
 
-Настоящий legacy pending record из old bundle в этом наборе не создаётся;
-P0.8 migration acceptance остаётся открытой до smoke двух сборок на одном origin.
+В наборе на `ca8ecb1` настоящий legacy pending record из old bundle ещё не
+создавался; последующий old/new smoke зафиксирован ниже.
+
+## P0.8 — реальная запись из old bundle, 13.10.2026
+
+Добавлен [old/new migration smoke](../e2e/legacy-outbox-migration.spec.ts) на
+закреплённой legacy-сборке `22a77889f131b554f52519515efc7ac811f6169f` и текущей
+сборке. Обе отдаются native HTTP сервером с одного origin в одном browser
+context. Старая страница создаёт pending запись настоящим действием плана через
+старый Map/localStorage writer; тест не подставляет эту основную запись вручную.
+
+До обновления current bundle импортирует известный ключ с точным owner из
+`/api/me`, оставляет синтетический foreign-owner ключ в quarantine, сохраняет
+точный исходный legacy snapshot и не отправляет очередь, пока открыта старая
+вкладка. Старый single-key запрос до обновления отклоняется по scope. После
+обновления обе вкладки показывают одинаковый build id; новая очередь отправляет
+известный ключ пакетным `/api/state`, получает ack/version 1 и удаляет только
+outbox operation после подтверждения. Исходный localStorage ключ остаётся
+неизменным; foreign-owner запись не уходит на сервер.
+
+Smoke прошёл на всех семи Playwright-проектах — Chromium, Firefox, WebKit,
+Android Chrome, Android PWA Chrome, iPhone Safari и iPhone PWA — `7/7`,
+`workers=1/retries=0`; Android Chrome дополнительно прошёл 3/3 повторных запусков.
+API fixture возвращает временный 503 новым пакетным writes до подтверждения
+текущего build id обоими окнами и паузы после навигации, а затем принимает их.
+Проверки рабочего дерева также прошли: 1068 unit в 196 файлах, общий/domain-
+strict/storage-strict typecheck, admin guards, API invariants, auth scope, schema
+parity и privacy coverage. PWA E2E использовал production build. HTTP API fixture
+не подтверждает реальный OAuth/D1, staging или полный P0.8 lifecycle. CI на
+предыдущем docs commit `c724bce` завершился success (run 38318876304); новый
+коммит со smoke ожидает workflow.

@@ -5,8 +5,30 @@
 `tests/state_sync_legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Это компонент [P0.8](../TASKS.md), реализующий согласованный
-[ADR-005](adr/ADR-005-durable-outbox.md). Runtime подключён в рабочем дереве;
-приёмка настоящей legacy-записи между старой и новой сборками ещё открыта.
+[ADR-005](adr/ADR-005-durable-outbox.md). Runtime подключён; old/new bundle
+smoke с настоящей записью прошёл локально на семи Playwright-проектах.
+Полный CI новой проверки и оставшийся lifecycle P0.8 открыты.
+
+## Browser acceptance — 13.10.2026
+
+[Тест](../e2e/legacy-outbox-migration.spec.ts) собирает закреплённый legacy
+bundle `22a77889f131b554f52519515efc7ac811f6169f` и текущую сборку, отдаёт обе
+с одного native HTTP origin и запускает их в одном browser context. Старая
+страница создаёт pending intent действием «Записать первый завтрак» через свой
+реальный UI и legacy Map/localStorage writer; запись в legacy-ключ тест вручную
+не подменяет. Пока открыта старая вкладка, новая сборка импортирует intent,
+сопоставляет точного владельца из `/api/me`, оставляет чужой ключ в quarantine,
+сохраняет исходный legacy snapshot и не отправляет операцию.
+
+После явного обновления обе вкладки подтверждают один текущий build id. Новая
+очередь отправляет известную операцию пакетным `/api/state`, получает ack и
+сохраняет версию в ledger; legacy-ключ остаётся без изменений, чужая запись не
+отправляется. Старый single-key запрос получает отказ по scope до обновления.
+API fixture отвечает 503 на новые пакетные записи до подтверждения build id
+обоих окон и короткой паузы после навигации; после этого backend принимает их.
+Проверка прошла в Chromium, Firefox, WebKit, Android Chrome, Android PWA Chrome,
+iPhone Safari и iPhone PWA: 7/7, `workers=1/retries=0`. Используется HTTP API
+fixture; реальный OAuth/D1/staging и полный lifecycle этим smoke не подтверждены.
 
 ## Формат legacy-записи
 
@@ -161,13 +183,13 @@ ack не импортирует её повторно. Недействител�
 потерю ledger/операции перед финальным audit и восстановление старых снимков.
 Используется fake IndexedDB; это не проверка настоящих browser bundle.
 
-Runtime-источник владельца и Service Worker fence подключены к StateSync.
-Остаются old/new bundle smoke с реальным legacy intent, profile и остальные
-callbacks, полный auth/hydration, экспорт и очистка новых stores.
+Runtime-источник владельца и Service Worker fence подключены к StateSync;
+реальный old/new bundle migration smoke пройден. Остаются profile и остальные
+callbacks, полный auth/hydration lifecycle, экспорт и очистка новых stores.
 [15 управляемых state-ключей](owned-state-writers.md) подключены;
-прежний sender текущей сборки удалён. Runtime fence действительно проверяет
-старые вкладки, но unit-тесты не заменяют миграцию pending legacy-записи между
-двумя реальными сборками на одном origin и в одном browser context.
+прежний sender текущей сборки удалён. Unit-тесты дополняет проверенный выше
+old/new bundle smoke между двумя реальными сборками на одном origin и в одном
+browser context.
 [Сервер P0.7](state-generations.md) реализован;
 [sender шести ключей](state-sender.md) уже использует DELETE-версию и
 приостанавливает отправку при необработанном legacy-источнике. Общая

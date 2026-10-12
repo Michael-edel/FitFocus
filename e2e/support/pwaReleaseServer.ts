@@ -7,7 +7,7 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
-export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; conflictFirstFamilyPut?: boolean } = {}) {
+export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
   let directory = resolve(previous);
   const api = createPwaApiFixture(options);
   const server = createServer(async (request, response) => {
@@ -33,9 +33,11 @@ export async function startPwaReleaseServer(previous: string, current: string, o
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No PWA fixture address');
-  return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts,
+  return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts, stateWriteKeys: api.stateWriteKeys,
     release: () => { directory = resolve(current); },
     rollback: () => { directory = resolve(previous); },
+    recoverState: api.recoverState,
+    recoverCurrentState: api.recoverCurrentState,
     recover: api.recover,
     close: () => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }),
   };
