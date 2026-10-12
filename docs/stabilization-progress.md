@@ -2123,3 +2123,26 @@ console текст. Все остальные ошибки остаются фа
 Результаты локальные, незакоммиченные; CI новой ревизии ещё не запускался.
 Следующий критерий P0.8 — old/new bundle smoke с реальной legacy-записью,
 подтверждением владельца, карантином и сохранением источника.
+
+## Повтор E2E после полного CI `d28b3e4` — 13.10.2026
+
+Полный [CI 38295991884](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884)
+проверил `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9` и завершился failure.
+Проверки npm audit, schema parity, privacy, auth scope, API invariants,
+1068 unit-тестов в 196 файлах, три typecheck и production build прошли.
+E2E дал 360 passed, 22 failed, 9 skipped и один flaky за 26,5 минуты.
+
+Причины были в новых E2E-ожиданиях и браузерной диагностике: `owned-state`
+ожидал legacy-паузу вместо `protocol` после намеренно не подтверждаемой mock API
+записи; weekly-menu один раз превысил timeout в Firefox; iPhone-проекты не
+распознавались как WebKit по `browserName`; PWA rollback не классифицировал
+отменённые навигацией запросы `/api/me` и точный Firefox IDB warning.
+Обновлены только E2E-проверки: ожидания `protocol`, ожидание завершения readonly
+IDB-транзакции, определение WebKit по имени проекта, точные фильтры ожидаемых
+предупреждений и проверка свежего `/api/me` обеими вкладками после rollback.
+
+После этих изменений локальные прогоны с `retries=0` прошли: owned-state и
+weekly-menu — 77/77 на семи Playwright-проектах; PWA update — 7/7; PWA rollback —
+14/14. Таймаут weekly-menu повторно не проявился; это не устанавливает его
+первопричину. Полный CI нового коммита ожидается. Настоящая запись legacy-очереди
+в old/new bundle smoke по-прежнему не проверена, поэтому P0.8 не закрыт.

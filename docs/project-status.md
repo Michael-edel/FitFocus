@@ -5,7 +5,7 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Последний подтверждённый CI опубликованной ветки —
+Последний успешный CI опубликованной ветки —
 `47da77cdf6a7a8c72223a914545fa2724ab6263d`:
 [success](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353),
 job 114917387935, завершён 12.10.2026 в 17:18:53 UTC.
@@ -25,6 +25,16 @@ HTTP/D1 прошёл 23 запроса: кандидат `cf310dd` → retained 
 На 13.10 локально прошли 1068 unit / 196 файлов, три typecheck, API/auth/schema/privacy
 checks, build и PWA update smoke в Chromium, Firefox и WebKit. Эти изменения
 не входят в опубликованный CI выше.
+
+Первый полный CI runtime-изменений на `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9`
+[завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884).
+Unit, типизация, schema/privacy/auth/API checks и build прошли; E2E завершился
+с 360 passed / 22 failed / 9 skipped и одним flaky за 26,5 мин. Локально
+исправлены ожидания `pause: protocol`, Firefox-чтение IDB и точная классификация
+предупреждений/отмены `/api/me` в PWA-сценариях. После этих правок целевые
+прогоны прошли: owned-state + weekly menu — 77/77 на семи проектах, PWA update —
+7/7, PWA rollback — 14/14, все без retries. Полный CI нового коммита ещё ожидается;
+этот результат не закрывает миграцию настоящей legacy-записи.
 
 Предыдущий CI —
 `7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:

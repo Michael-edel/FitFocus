@@ -45,6 +45,11 @@ async function retryTiming(page: Page) {
   });
 }
 
+function isExpectedFirefoxIdbNavigationWarning(message: string): boolean {
+  return message.includes('An IndexedDB transaction that was not yet complete has been aborted due to page navigation.')
+    && message.includes('/assets/ai-');
+}
+
 for (const status of ['pending', 'conflicted'] as const) test(`compatible artifact rollback preserves ${status} family intent and IDB v3`, async ({ context }, info) => {
   test.setTimeout(120_000);
   expect(verifyReleaseArtifact(rollbackPwaRoot).sourceSha).toBe(rollbackPwaCommit);
@@ -52,18 +57,47 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
   expect(rollbackScript).toBeTruthy();
   const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), status === 'pending' ? { retryAfterSeconds: 20 } : {}); server.release();
   const page = await context.newPage(), observer = await context.newPage(), errors: string[] = [], diagnostics: string[] = [], googleRequests: string[] = [];
+  const failedApiRequests: Array<{ tab: string; path: string; errorText: string | null }> = [];
+  const meResponses: Array<{ tab: string; status: number }> = [];
+  const expectedWebKitApiMeWarnings: string[] = [], expectedFirefoxIdbNavigationWarnings: string[] = [];
+  const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
+  const isFirefox = info.project.name === 'desktop-firefox';
+  let meResponseCountBeforeRollback = 0;
   let recoveryTiming: Awaited<ReturnType<typeof retryTiming>> | undefined;
   let recoveryTimeoutMs: number | undefined;
   for (const tab of [page, observer]) {
+  const tabName = tab === page ? 'current' : 'observer';
   tab.on('request', request => {
     if (/(^|\.)google\.com$/.test(new URL(request.url()).hostname)) googleRequests.push(request.url());
   });
-  tab.on('pageerror', error => errors.push(error.message));
+  tab.on('requestfailed', request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/')) failedApiRequests.push({ tab: tabName, path, errorText: request.failure()?.errorText ?? null });
+  });
+  tab.on('response', response => {
+    if (new URL(response.url()).pathname === '/api/me') meResponses.push({ tab: tabName, status: response.status() });
+  });
+  tab.on('pageerror', error => {
+    if (isWebKit && error.message.includes('due to access control checks.') && error.message.includes('/api/me')) {
+      expectedWebKitApiMeWarnings.push(error.message);
+      return;
+    }
+    errors.push(error.message);
+  });
   tab.on('console', message => {
     if (!['warning', 'error'].includes(message.type())) return;
-    diagnostics.push(message.text());
-    if (message.location().url.includes('/api/family/menu/state') && /\b(409|503)\b/.test(message.text())) return;
-    errors.push(message.text());
+    const text = message.text();
+    diagnostics.push(text);
+    if (isWebKit && text.includes('due to access control checks.') && text.includes('/api/me')) {
+      expectedWebKitApiMeWarnings.push(text);
+      return;
+    }
+    if (isFirefox && isExpectedFirefoxIdbNavigationWarning(text)) {
+      expectedFirefoxIdbNavigationWarnings.push(text);
+      return;
+    }
+    if (message.location().url.includes('/api/family/menu/state') && /\b(409|503)\b/.test(text)) return;
+    errors.push(text);
   });
   }
   try {
@@ -92,6 +126,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     const operation = (await saved(page)).operations[0];
     const beforeTiming = await retryTiming(page);
     const before = await markers(page, true); expect(before.fence?.revision).toBeGreaterThan(0);
+    meResponseCountBeforeRollback = meResponses.length;
     server.rollback();
     await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
     await expect(page.getByRole('button', { name: 'Обновить приложение', exact: true })).toBeVisible();
@@ -135,13 +170,28 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
       expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
       expect(await markers(page)).toEqual(before);
     } else { expect(server.counts.accepted).toBe(0); }
-    expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]); await healthy(page, errors); await healthy(observer, errors);
+    expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
+    const expectedNavigationCancellations = failedApiRequests.filter(entry => entry.path === '/api/me'
+      && ((isWebKit && entry.errorText === 'Load request cancelled')
+        || (isFirefox && entry.errorText === 'NS_BINDING_ABORTED')));
+    expect(failedApiRequests.filter(entry => !expectedNavigationCancellations.includes(entry))).toEqual([]);
+    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(isWebKit ? 2 : 0);
+    expect(expectedNavigationCancellations.length).toBeLessThanOrEqual(isWebKit || isFirefox ? 2 : 0);
+    expect(expectedFirefoxIdbNavigationWarnings.length).toBeLessThanOrEqual(isFirefox ? 2 : 0);
+    if (expectedWebKitApiMeWarnings.length > 0 || expectedNavigationCancellations.length > 0) {
+      const successfulMeTabs = new Set(meResponses.slice(meResponseCountBeforeRollback)
+        .filter(entry => entry.status === 200).map(entry => entry.tab));
+      expect(successfulMeTabs.has('current')).toBe(true);
+      expect(successfulMeTabs.has('observer')).toBe(true);
+    }
+    await healthy(page, errors); await healthy(observer, errors);
     await page.screenshot({ path: info.outputPath('rollback-preserved.png') });
     await info.attach('rollback-proof', { body: JSON.stringify({ sourceSha: rollbackPwaCommit, rollbackScript,
       candidateScript, status, operation, before, beforeTiming, after: await markers(page), recoveryTiming, recoveryTimeoutMs,
-      counts: server.counts, diagnostics, googleRequests }), contentType: 'application/json' });
+      counts: server.counts, diagnostics, googleRequests, expectedWebKitApiMeWarnings: expectedWebKitApiMeWarnings.length,
+      expectedFirefoxIdbNavigationWarnings: expectedFirefoxIdbNavigationWarnings.length, meResponses, failedApiRequests }), contentType: 'application/json' });
   } catch (error) {
-    console.error('Rollback diagnostics:', JSON.stringify({ errors, diagnostics, googleRequests, recoveryTiming, recoveryTimeoutMs,
+    console.error('Rollback diagnostics:', JSON.stringify({ errors, diagnostics, googleRequests, meResponses, failedApiRequests, recoveryTiming, recoveryTimeoutMs,
       timing: await retryTiming(page).catch(() => null), unexpectedApi: server.unexpectedApi, counts: server.counts }));
     await page.screenshot({ path: info.outputPath('rollback-failed.png'), timeout: 3000 }).catch(() => {}); throw error;
   } finally { await Promise.allSettled([page.close(), observer.close()]); await server.close(); }

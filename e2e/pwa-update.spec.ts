@@ -250,12 +250,13 @@ test('real service worker waits for an explicit update and preserves durable fam
     expect(cachedApi).toEqual([]); expect(server.unexpectedApi).toEqual([]);
     expect(legacyIdentityLoads).toBeGreaterThan(0); expect(currentIdentityRequests).toEqual([]);
     await expect(page).toHaveTitle(/FitFocus/);
+    const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
     const expectedWebKitApiMeWarnings = errors.filter(error => error.includes('due to access control checks.') && error.includes('/api/me'));
-    if (info.project.name === 'desktop-webkit' && expectedWebKitApiMeWarnings.length > 0) {
+    if (isWebKit && expectedWebKitApiMeWarnings.length > 0) {
       expect(meResponses.some(entry => entry.tab === 'new' && entry.status === 200)).toBe(true);
       expect(failedApiRequests.filter(entry => entry.tab === 'new' && entry.path === '/api/me')).toEqual([]);
     }
-    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-webkit' ? 2 : 0);
+    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(isWebKit ? 2 : 0);
     const currentPageIdbNavigationWarnings = errors.filter(isExpectedFirefoxIdbNavigationWarning);
     expect(currentPageIdbNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
     await healthy(page, errors.filter(error => !expectedWebKitApiMeWarnings.includes(error)

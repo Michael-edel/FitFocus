@@ -52,10 +52,12 @@ test('plan task changes survive reload without repopulating the old queue', asyn
   await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
   await expect(task).toHaveClass(/border-emerald-500/);
   let saved = await state(page, 'plan_task_done');
+  // The fake worker proves this tab is current; the mock API then pauses the
+  // upload because it deliberately does not acknowledge /api/state writes.
   await expect.poll(async () => {
     saved = await state(page, 'plan_task_done');
     return { pause: saved.pause, status: saved.operations[0]?.status };
-  }).toEqual({ pause: 'legacy', status: 'pending' });
+  }).toEqual({ pause: 'protocol', status: 'pending' });
   expect(saved.source).toBe(source); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'put', accountId: account, status: 'pending' });
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -77,10 +79,12 @@ test('cleared council history stays deleted despite a stale localStorage copy', 
   await expect(page.getByRole('button', { name: 'Очистить', exact: true })).toBeVisible();
   await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
   let saved = await state(page, 'council_history');
+  // The fake worker proves this tab is current; the mock API then pauses the
+  // upload because it deliberately does not acknowledge /api/state writes.
   await expect.poll(async () => {
     saved = await state(page, 'council_history');
     return { pause: saved.pause, status: saved.operations[0]?.status };
-  }).toEqual({ pause: 'legacy', status: 'pending' });
+  }).toEqual({ pause: 'protocol', status: 'pending' });
   expect(saved.value).toBeNull(); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'delete', accountId: account, status: 'pending' });
   expect(saved.source).toBe(source);

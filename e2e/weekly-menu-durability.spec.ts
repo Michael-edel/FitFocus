@@ -20,8 +20,13 @@ async function saved(page: Page) {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
     try {
       const tx = db.transaction(['values', 'outbox'], 'readonly');
+      const transactionComplete = new Promise<void>((resolve, reject) => {
+        tx.addEventListener('complete', () => resolve(), { once: true });
+        tx.addEventListener('abort', () => reject(tx.error), { once: true });
+      });
       const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
       const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
+      await transactionComplete;
       return { profile: value ? JSON.parse(value.value) as { name: string; aiPlan?: { weeklyMenu?: { days: Array<{ breakfast: string }> } } } : null,
         operations: operations.filter(op => op.key === key && op.type === 'put' && op.value.includes('"weeklyMenu"'))
           .map(op => ({ opId: op.opId as string, status: op.status as string, retryCount: op.retryCount as number })),
