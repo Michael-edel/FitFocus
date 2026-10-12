@@ -5,22 +5,17 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Последний полный CI исходной ветки перед текущим исправлением —
-`649056db8ebbcfc3b9a62b7864c74d0d118dde79`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601),
-job 115010066010. Прошли 1068 unit / 196 файлов; browser — 382 passed / 9 skips,
-14,9 мин. Сводка отметила один flaky в desktop Firefox weekly-menu: первая
-попытка не отправила profile operation, retry прошёл. Предыдущий flaky WebKit
-rollback после детерминированного 409 в этой проверке не повторился.
-
-Локальное продолжение — commit
-`8fae1008d2a9b220cc0052499271b07441ac29ac`: Firefox иногда закрывал IndexedDB
-транзакцию между независимыми чтениями sender (`TransactionInactiveError`).
-`sessionState`, принятие сессии, claim и finish теперь ставят независимые
-чтения до `await`. На этом коде прошли 193 профильных unit-теста в пяти файлах,
-storage-strict, общий typecheck и 56 weekly-menu browser-сценариев в семи
-проектах без retries. Повтор Firefox 12/12 прошёл с тестовой диагностикой.
-Полный CI новой ревизии ожидается; детали — в [журнале](stabilization-progress.md).
+Полный CI на коде исправления sender завершился success в
+[run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
+job 115035254691, на опубликованной ревизии `ca8ecb1`. Прошли 1068 unit / 196
+файлов и 383 browser-теста; 9 browser-сценариев пропущены, E2E занял 13,9 мин.
+Проверенный код включает commit
+`8fae1008d2a9b220cc0052499271b07441ac29ac`: независимые чтения IndexedDB sender
+ставятся до `await`, устраняя воспроизведённый Firefox `TransactionInactiveError`.
+Локально дополнительно прошли 193 профильных unit-теста, storage-strict, общий
+typecheck и 56 weekly-menu browser-сценариев в семи проектах без retries;
+Firefox повторён 12/12 с тестовой диагностикой. Детали и открытая миграционная
+приёмка — в [журнале](stabilization-progress.md).
 
 ## Рабочее дерево — P0.8 runtime
 
@@ -30,8 +25,9 @@ storage-strict, общий typecheck и 56 weekly-menu browser-сценарие�
 Локальная PWA-приёмка проверяет old/new worker update и сохранение family intent;
 реальный legacy-record из старого bundle остаётся отдельным критерием.
 На 13.10 локально прошли 1068 unit / 196 файлов, три typecheck, API/auth/schema/privacy
-checks, build и PWA update smoke в Chromium, Firefox и WebKit. Эти изменения
-не входят в опубликованный CI выше.
+checks, build и PWA update smoke в Chromium, Firefox и WebKit. Полный CI выше
+проверяет опубликованный код sender; реальная legacy-запись из старого bundle
+в old/new smoke остаётся открытым критерием.
 
 Первый полный CI runtime-изменений на `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9`
 [завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884).

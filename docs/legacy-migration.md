@@ -23,6 +23,37 @@
 | baseVersion | Отсутствие нормализуется в 0; присутствующее поле — целое неотрицательное число, иначе `invalid-baseVersion` |
 | retryCount | Отсутствие нормализуется в 0; присутствующее поле — целое неотрицательное число, иначе `invalid-retryCount` |
 
+Входной тип и тип неизвестной записи:
+
+```ts
+type LegacyQueueRecord = {
+  type: 'put' | 'delete';
+  key: string;
+  value?: string;
+  baseVersion?: number;
+  retryCount?: number;
+};
+
+type UnknownLegacyRecord = {
+  fingerprint: string;
+  rawRecord: unknown;
+  reason:
+    | 'not-an-object'
+    | 'invalid-type'
+    | 'invalid-key'
+    | 'put-without-value'
+    | 'delete-with-value'
+    | 'invalid-baseVersion'
+    | 'invalid-retryCount';
+  detectedAt: string;
+};
+```
+
+Успешный результат нормализатора имеет различимые варианты: `put` всегда
+содержит строковый `value`; `delete` не имеет этого свойства вообще. В обоих
+вариантах `baseVersion` и `retryCount` уже присутствуют как целые числа,
+включая значения `0`, подставленные при отсутствии полей в legacy-записи.
+
 Нормализованный delete возвращается без поля value. Отрицательные,
 дробные и нечисловые значения, включая NaN/Infinity, отклоняются.
 Все семь причин входят в `UnknownLegacyRecord.reason`; повреждённое

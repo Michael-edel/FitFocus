@@ -2173,7 +2173,10 @@ claim и finish; ack и retry-пауза также читают нужные з
 На commit `8fae1008d2a9b220cc0052499271b07441ac29ac` прошли 193 профильных unit-теста
 в пяти файлах, `typecheck`, `storage-strict` и все 56 weekly-menu browser-сценариев
 в семи проектах без retries. Повтор Firefox — 12/12 при включённом тестовом
-сборе диагностики. Полный CI нового commit ожидается.
+сборе диагностики. Полный [CI run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963)
+на опубликованной ревизии `ca8ecb1` завершился success: 1068 unit / 196 файлов,
+383 browser passed / 9 skips за 13,9 мин. В этом CI проверен тот же код sender;
+`ca8ecb1` добавляет документацию поверх `8fae100`.
 
 Настоящий legacy pending record из old bundle в этом наборе не создаётся;
 P0.8 migration acceptance остаётся открытой до smoke двух сборок на одном origin.

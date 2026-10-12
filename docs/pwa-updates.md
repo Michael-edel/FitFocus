@@ -268,6 +268,8 @@ retry прошёл. WebKit rollback flaky из предыдущего CI пос�
 В `storage/durableOutbox.ts` независимые чтения `sessionState`, принятия сессии,
 claim и finish теперь ставятся заранее. Commit `8fae1008d2a9b220cc0052499271b07441ac29ac`
 прошёл 56 сценариев weekly-menu на семи браузерных проектах (`retries=0`),
-193 относящихся unit-теста и typecheck. CI этой ревизии ожидается. Проверка
-пока не содержит реальную legacy-запись старого bundle, поэтому P0.8 migration
-smoke остаётся открытым.
+193 относящихся unit-теста и typecheck. Полный [CI run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963)
+на опубликованной ревизии `ca8ecb1`, содержащей этот код, завершился success:
+1068 unit / 196 файлов и 383 browser passed / 9 skipped за 13,9 мин.
+Проверка пока не содержит реальную legacy-запись старого bundle, поэтому P0.8
+migration smoke остаётся открытым.
