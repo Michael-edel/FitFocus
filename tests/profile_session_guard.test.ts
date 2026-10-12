@@ -35,3 +35,15 @@ it('rejects wrong accounts and incomplete scope, and echoes a validated binding'
   expect(response.status).toBe(200); expect(response.headers.get('X-FitFocus-Profile-Protocol')).toBe('1');
   expect(response.headers.get('X-FitFocus-Profile-Guard')).toBe('1'); expect(response.headers.get('X-FitFocus-State-Session')).toBe(session);
 });
+it.each(['PUT', 'PATCH'])('returns a guarded validation failure instead of retryable failure for invalid menu %s', async method => {
+  mocks.write.mockResolvedValue({ kind: 'invalid-weekly-menu' });
+  const session = await stateSessionId(mocks.user);
+  const response = await invoke(method === 'PUT' ? onRequestPut : onRequestPatch,
+    new Request('https://example.test/api/profile', { method,
+      headers: { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': mocks.user.sub, 'X-FitFocus-State-Session': session },
+      body: '{"aiPlan":{"weeklyMenu":{}},"baseVersion":1}' }));
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ error: 'PROFILE_INVALID_WEEKLY_MENU' });
+  expect(response.headers.get('X-FitFocus-Profile-Guard')).toBe('1');
+  expect(response.headers.get('X-FitFocus-State-Session')).toBe(session);
+});

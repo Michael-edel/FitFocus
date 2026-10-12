@@ -6,6 +6,7 @@ import {
 } from './legacy_sync';
 import { loadActivePlan, loadActivePlanByEmail } from './plans';
 import { writeProfileCas } from './profile_cas';
+import { isProjectableWeeklyMenu } from './personal_menu_projection';
 import { normalizeProfileRecord } from './profile_contract';
 import { isAllowedStateKey } from './state_keyspace';
 
@@ -28,6 +29,7 @@ export type ProfileWriteOutcome =
   | { kind: 'state-items-not-supported' }
   | { kind: 'empty-patch' }
   | { kind: 'bad-base-version' }
+  | { kind: 'invalid-weekly-menu' }
   | { kind: 'conflict'; profile: JsonObject; version: number };
 
 const EDITABLE_PROFILE_FIELDS = new Set([
@@ -167,6 +169,7 @@ export async function writeProfile(
 
   const baseVersion = parseBaseVersion(body.baseVersion);
   if (baseVersion === null) return { kind: 'bad-base-version' };
+  if (!isProjectableWeeklyMenu(patch)) return { kind: 'invalid-weekly-menu' };
 
   const currentMeta = await loadProfileMeta(db, user.sub);
   if (!currentMeta.profile) await migrateLegacyAccountByEmail(db, user);
@@ -187,6 +190,7 @@ export async function writeProfile(
     version,
   });
 
+  if (!isProjectableWeeklyMenu(profile)) return { kind: 'invalid-weekly-menu' };
   const written = await writeProfileCas(db, user.sub, profile, baseVersion, nowMs());
   if (!written) {
     const latest = await loadProfileMeta(db, user.sub);

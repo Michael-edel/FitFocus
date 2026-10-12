@@ -1,8 +1,16 @@
-import { isJsonObject } from './json';
+import { isJsonObject, type JsonObject } from './json';
 import { normalizeShoppingIngredient } from './ingredients';
 
 type ShoppingRow = { name?: unknown; grams?: unknown };
 type ProjectionRow = { items_json: string; profile_version: number };
+
+/** Match the SQL trigger's shape check before returning a permanent HTTP validation failure. */
+export function isProjectableWeeklyMenu(profile: JsonObject): boolean {
+  const menu = isJsonObject(profile.aiPlan) ? profile.aiPlan.weeklyMenu : undefined;
+  return menu === undefined || menu === null || (isJsonObject(menu)
+    && typeof menu.weekStart === 'string' && menu.weekStart.length === 10
+    && /^\d{4}-\d{2}-\d{2}$/.test(menu.weekStart) && Array.isArray(menu.shoppingListItems));
+}
 
 /** Announce the stronger contract only after the table and both atomic writers are deployed. */
 export async function personalMenuProjectionReady(db: D1Database | undefined): Promise<boolean> {

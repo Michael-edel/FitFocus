@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { sanitizeProfilePatch, writeProfile } from '../functions/api/_lib/profile_write';
 
 type StoredProfile = { userId: string; profileJson: string; version: number };
@@ -100,5 +100,26 @@ describe('profile write use case', () => {
     }, 'replace');
 
     expect(result).toEqual({ kind: 'forbidden-keyspace' });
+  });
+
+  it.each([[], false, {}, { weekStart: '2026-10-12' },
+    { weekStart: 'invalid', shoppingListItems: [] },
+    { weekStart: '2026-10-12\n', shoppingListItems: [] },
+    { weekStart: '2026-10-12', shoppingListItems: 'invalid' }])('rejects an unprojectable menu before persistence: %j', async weeklyMenu => {
+    const prepare = vi.fn(() => { throw new Error('Unexpected persistence for invalid menu'); });
+    const result = await writeProfile({ prepare } as unknown as D1Database, { sub: 'user-1' },
+      { baseVersion: 3, aiPlan: { weeklyMenu } }, 'replace');
+    expect(result).toEqual({ kind: 'invalid-weekly-menu' }); expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects an inherited invalid menu but accepts an explicit removal without guessing a week', async () => {
+    const original = JSON.stringify({ name: 'До', aiPlan: { weeklyMenu: { days: [] } } });
+    const db = makeDb({ userId: 'user-1', profileJson: original, version: 3 });
+    expect(await writeProfile(db, { sub: 'user-1' }, { name: 'После', baseVersion: 3 }, 'patch'))
+      .toEqual({ kind: 'invalid-weekly-menu' });
+    expect(db.stored).toMatchObject({ profileJson: original, version: 3 });
+    expect(await writeProfile(db, { sub: 'user-1' }, { aiPlan: { weeklyMenu: null }, baseVersion: 3 }, 'patch'))
+      .toMatchObject({ kind: 'saved', version: 4 });
+    expect(JSON.parse(db.stored!.profileJson).aiPlan.weeklyMenu).toBeNull();
   });
 });

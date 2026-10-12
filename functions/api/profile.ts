@@ -43,6 +43,7 @@ function profileWriteResponse(request: Request, requestId: string, result: Profi
   if (result.kind === 'forbidden-keyspace') return respond(request, requestId, { error: 'FORBIDDEN_KEYSPACE' }, 403);
   if (result.kind === 'state-items-not-supported') return respond(request, requestId, { error: 'STATE_ITEMS_USE_STATE_ENDPOINT' }, 400);
   if (result.kind === 'empty-patch') return respond(request, requestId, { error: 'EMPTY_PATCH' }, 400);
+  if (result.kind === 'invalid-weekly-menu') return respond(request, requestId, { error: 'PROFILE_INVALID_WEEKLY_MENU' }, 422);
   return respond(request, requestId, { error: 'BAD_BASE_VERSION' }, 400);
 }
 
