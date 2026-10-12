@@ -63,15 +63,16 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 Рабочая ветка — `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Реализованы общая IDB-outbox, 15 управляемых state-ключей, сохранение профиля
 и регистрации, guarded bootstrap/hydration, персональное меню и привязка
-HTTP достижений и `useFamilyCloud` к исходной сессии. Границы реализации и точные результаты
-проверок — в [статусе проекта](docs/project-status.md).
+HTTP достижений и `useFamilyCloud` к исходной сессии. Семейное меню на `405238b`
+сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
+Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI семейного кода `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936):
-1009 unit / 189 файлов, 278 browser passed / 9 skips, success, без flaky в итоговом summary.
-Компонент `9c44c21` также прошёл 23 HTTP-запроса локального Worker/D1.
-Первая локальная матрица со сбоями iPhone и последующая диагностика сохранены
-[в контракте семьи](docs/family-session.md) и [журнале](docs/stabilization-progress.md).
-Каждый последующий HEAD требует отдельной проверки CI.
+Подтверждённый [CI опубликованной ревизии `1d9cb89`](https://github.com/Michael-edel/FitFocus/actions/runs/38211291529):
+1039 unit / 191 файл, 334 browser passed / 9 skips, success, без flaky в итоговом summary.
+Это документирующий коммит после семейного кода `405238b`.
+Локальные неуспешные прогоны и границы actual-bundle smoke сохранены
+[в контракте меню](docs/family-menu-state.md) и [журнале](docs/stabilization-progress.md).
+Рабочее дерево с подготовкой PWA-обновления этим CI не проверено.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`
@@ -80,9 +81,9 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 [Подготовительный CI `c39904c`](https://github.com/Michael-edel/FitFocus/actions/runs/38196258543)
 прошёл отдельно: 952 unit, 229 browser passed / 9 skips.
 
-Следующие задачи: завершить текущую приёмку, защитить остальные AI/report/retry/family
-callbacks, определить CAS и постоянный порядок вторичной items-проекции,
-подключить runtime legacy-импорт, разрешение конфликтов и backup/экспорт/очистку.
+Следующие задачи: завершить PWA/lifecycle-приёмку и совместимый откат,
+защитить остальные AI/report/retry/family callbacks, подключить runtime
+legacy-импорт, разрешение конфликтов и backup/экспорт/очистку.
 Порядок и критерии готовности — в [TASKS](TASKS.md).
 
 PR #93 не слит в защищённую main. Реальные OAuth, BFCache на устройствах,

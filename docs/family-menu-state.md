@@ -66,13 +66,15 @@ INSERT/UPDATE прежних семейных menus/items после перек�
 IDB повышена с версии 2 до 3, stores не добавлены. Прежняя v2-сборка закрывает
 соединение на versionchange и не может открыть v3 с запросом версии 2.
 Проверки сохранности values, pending, ledger, quarantine и auth-fence есть
-на fake IndexedDB; это ещё не проверка двух настоящих bundles.
+на fake IndexedDB. Отдельный локальный smoke двух настоящих v2/v3 bundles
+описан в результатах ниже; в нём Service Worker отключён, API замокан.
 
 Порядок выпуска: совместимый сервер до 0021 → миграция и capability smoke →
 клиент v3. После новых записей откат требует reader канонического поколения
 и v3-aware sender. Откат к старому reader или удаление/понижение IDB недопустимы.
-Фактические old/new bundles, staging, повреждённые legacy-строки и совместимый
-rollback artifact должны быть проверены до выпуска.
+До выпуска нужны old/new bundles с настоящим SW/PWA, staging, повреждённые
+legacy-строки и совместимый rollback artifact. Локальный bundle smoke ниже
+покрывает только явно перечисленные сценарии с отключённым SW.
 
 ## Проверки и открытая приёмка
 
