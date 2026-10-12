@@ -16,15 +16,15 @@ function setup() {
     currentUser: user, isCurrentSession: () => current, canCommitProfile: () => profileCurrent, controller: session.controller,
     prepareSession: vi.fn().mockResolvedValue(session), requestMenu: vi.fn().mockResolvedValue(menu),
     persistUser: vi.fn().mockResolvedValue({ status: 'pending' } as OutboxOperation),
-    storeItems: vi.fn().mockResolvedValue(undefined), checkAchievements: vi.fn(), setLoading: vi.fn(), setError: vi.fn(),
+    checkAchievements: vi.fn(), setLoading: vi.fn(), setError: vi.fn(),
   };
   return { input, close: () => { current = false; session.controller.abort(); }, edit: () => { profileCurrent = false; } };
 }
 
-it('does not send AI, persist, or write items for a stale action', async () => {
+it('does not send AI or persist for a stale action', async () => {
   const { input, close } = setup(); close();
   expect(await generatePersonalWeeklyMenu(input)).toBeNull();
-  for (const call of [input.prepareSession, input.requestMenu, input.persistUser, input.storeItems, input.checkAchievements, input.setLoading, input.setError]) {
+  for (const call of [input.prepareSession, input.requestMenu, input.persistUser, input.checkAchievements, input.setLoading, input.setError]) {
     expect(call).not.toHaveBeenCalled();
   }
 });
@@ -34,7 +34,7 @@ it.each(['success', 'failure'])('ignores delayed AI %s after the original login 
   const pending = generatePersonalWeeklyMenu(input); await vi.waitFor(() => expect(input.requestMenu).toHaveBeenCalledOnce());
   close(); if (outcome === 'success') request.resolve(menu); else request.reject(new Error('late failure'));
   expect(await pending).toBeNull();
-  expect(input.persistUser).not.toHaveBeenCalled(); expect(input.storeItems).not.toHaveBeenCalled();
+  expect(input.persistUser).not.toHaveBeenCalled();
   expect(input.checkAchievements).not.toHaveBeenCalled();
   expect(input.setLoading.mock.calls).toEqual([[true]]); expect(input.setError.mock.calls).toEqual([[null]]);
 });
@@ -43,29 +43,29 @@ it('does not replace a profile edited during generation', async () => {
   const { input, edit } = setup(); const request = deferred<WeeklyMenu>(); input.requestMenu.mockReturnValue(request.promise);
   const pending = generatePersonalWeeklyMenu(input); await vi.waitFor(() => expect(input.requestMenu).toHaveBeenCalledOnce());
   edit(); request.resolve(menu); expect(await pending).toBeNull();
-  expect(input.persistUser).not.toHaveBeenCalled(); expect(input.storeItems).not.toHaveBeenCalled();
+  expect(input.persistUser).not.toHaveBeenCalled();
   expect(input.setError).toHaveBeenLastCalledWith(expect.stringContaining('Профиль изменился'));
 });
 
-it('waits for a durable commit before achievements and the secondary write', async () => {
+it('waits for a durable profile commit before achievements', async () => {
   const { input } = setup(); const commit = deferred<OutboxOperation>(); input.persistUser.mockReturnValue(commit.promise);
   const pending = generatePersonalWeeklyMenu(input); await vi.waitFor(() => expect(input.persistUser).toHaveBeenCalledOnce());
-  expect(input.checkAchievements).not.toHaveBeenCalled(); expect(input.storeItems).not.toHaveBeenCalled();
+  expect(input.checkAchievements).not.toHaveBeenCalled();
   commit.resolve({ status: 'pending' } as OutboxOperation);
-  expect(await pending).toBe(menu); expect(input.storeItems).toHaveBeenCalledWith(menu, expect.anything());
+  expect(await pending).toBe(menu);
   expect(input.checkAchievements).toHaveBeenCalledOnce();
 });
 
-it.each(['quota', 'conflicted', 'obsolete'])('sends no items or achievement after a %s commit', async kind => {
+it.each(['quota', 'conflicted', 'obsolete'])('does not notify achievements after a %s profile commit', async kind => {
   const { input } = setup();
   if (kind === 'quota') input.persistUser.mockRejectedValue(new Error('quota'));
   else input.persistUser.mockResolvedValue(kind === 'obsolete' ? null : { status: 'conflicted' });
   expect(await generatePersonalWeeklyMenu(input)).toBeNull();
-  expect(input.storeItems).not.toHaveBeenCalled(); expect(input.checkAchievements).not.toHaveBeenCalled();
+  expect(input.checkAchievements).not.toHaveBeenCalled();
 });
 
-it('keeps the committed menu and explains a secondary projection failure', async () => {
-  const { input } = setup(); input.storeItems.mockRejectedValue(new Error('network'));
+it('requires the atomic profile projection capability before requesting a menu', async () => {
+  const { input } = setup();
   expect(await generatePersonalWeeklyMenu(input)).toBe(menu);
-  expect(input.setError).toHaveBeenLastCalledWith(expect.stringContaining('Меню сохранено'));
+  expect(input.prepareSession).toHaveBeenCalledWith(user.id, input.controller, expect.any(Function), { requireMenuProjection: true });
 });

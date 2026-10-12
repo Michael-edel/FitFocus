@@ -2,7 +2,7 @@ export const testSessionId = 'a'.repeat(64);
 export function sessionMe(accountId: string, extraUser: Record<string, unknown> = {}) {
   return { user: { sub: accountId, ...extraUser }, hasAccess: true,
     stateSync: { protocol: 2, guard: 1, accountId, sessionId: testSessionId },
-    bootstrapSync: { protocol: 1, guard: 1 }, profileSync: { protocol: 1, guard: 1 } };
+    bootstrapSync: { protocol: 1, guard: 1 }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } };
 }
 export function sessionHeaders(accountId: string, resource: 'state' | 'bootstrap') {
   const name = resource === 'state' ? 'State' : 'Bootstrap';

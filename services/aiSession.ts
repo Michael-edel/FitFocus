@@ -11,7 +11,7 @@ export type AiSession = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
-type AiSessionOptions = Pick<AiSession, 'fetchImpl' | 'timeoutMs'> & { outbox?: DurableOutbox };
+type AiSessionOptions = Pick<AiSession, 'fetchImpl' | 'timeoutMs'> & { outbox?: DurableOutbox; requireMenuProjection?: boolean };
 
 export async function assertAiSession(session: AiSession): Promise<void> {
   await assertReadSession(session.guard, {
@@ -33,6 +33,8 @@ export async function prepareAiSession(accountId: string, controller: AbortContr
     const capability = body?.[name];
     if (!isRecord(capability) || capability.protocol !== 1 || capability.guard !== 1) throw new SessionReadError('protocol');
   }
+  if (options.requireMenuProjection && (!isRecord(body?.profileSync) || body.profileSync.protocol !== 1
+    || body.profileSync.guard !== 1 || body.profileSync.weeklyMenuProjection !== 1)) throw new SessionReadError('protocol');
   const session = { ...options, guard: Object.freeze({ ...guard }), controller, isCurrentSession, outbox };
   await assertAiSession(session);
   return session;

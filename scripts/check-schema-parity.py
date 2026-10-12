@@ -43,6 +43,12 @@ def indexes(con, table):
     return sorted(result)
 
 
+def schema_objects(con):
+    return con.execute(
+        "SELECT type, name, sql FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY type, name"
+    ).fetchall()
+
+
 def main():
     migration_files = sorted((ROOT / "migrations").glob("*.sql"))
     if not migration_files:
@@ -55,6 +61,8 @@ def main():
     migration_tables = tables(migrations_db)
     schema_tables = tables(schema_db)
     errors = []
+    if schema_objects(migrations_db) != schema_objects(schema_db):
+        errors.append("Trigger/view definitions differ between migrations and db/schema.sql")
 
     if migration_tables != schema_tables:
         errors.append(

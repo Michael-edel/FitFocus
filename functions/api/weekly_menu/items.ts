@@ -28,6 +28,8 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
     }
     const result = await saveWeeklyMenuItems({ db, userId: user.sub, body });
     if (result.kind === 'invalid') return tracedJsonResponse('weekly-menu.items.response', requestId, { error: result.error }, 400);
+    if (result.kind === 'profile-required') return tracedJsonResponse('weekly-menu.items.response', requestId,
+      { error: 'PERSONAL_MENU_PROFILE_REQUIRED' }, 409);
     return tracedJsonResponse('weekly-menu.items.response', requestId, { ok: true, stored: result.stored, week_start: result.weekStart }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);

@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useState, type MutableRefObject } from 'react';
-import { generateWeeklyMenu, storePersonalWeeklyMenuItems } from '../../geminiService';
+import { generateWeeklyMenu } from '../../geminiService';
 import type { UserProfile, WeeklyMenu } from '../../types';
 import { prepareAiSession } from '../../services/aiSession';
 import type { useProfilePersistence } from '../profile/useProfilePersistence';
@@ -8,7 +8,6 @@ import { AiActionScope } from './actionScope';
 export const WEEKLY_MENU_GENERATION_ERROR = 'Не удалось сгенерировать меню на неделю.';
 export const WEEKLY_MENU_SAVE_ERROR = 'Меню не сохранено. Проверьте сообщение о хранилище и повторите попытку.';
 export const WEEKLY_MENU_PROFILE_CHANGED = 'Профиль изменился. Сгенерируйте меню ещё раз.';
-export const WEEKLY_MENU_ITEMS_ERROR = 'Меню сохранено на устройстве. Список покупок не отправлен на сервер.';
 
 export type WeeklyMenuGenerationParams = {
   currentUser: UserProfile | null;
@@ -21,7 +20,6 @@ export type WeeklyMenuGenerationParams = {
   setError: (error: string | null) => void;
   requestMenu?: typeof generateWeeklyMenu;
   prepareSession?: typeof prepareAiSession;
-  storeItems?: typeof storePersonalWeeklyMenuItems;
 };
 
 /** Generates and persists a personal weekly menu as one recoverable UI action. */
@@ -36,7 +34,6 @@ export async function generatePersonalWeeklyMenu({
   setError,
   requestMenu = generateWeeklyMenu,
   prepareSession = prepareAiSession,
-  storeItems = storePersonalWeeklyMenuItems,
 }: WeeklyMenuGenerationParams): Promise<WeeklyMenu | null> {
   const current = () => !controller.signal.aborted && isCurrentSession();
   if (!currentUser?.aiPlan || !current()) return null;
@@ -45,7 +42,7 @@ export async function generatePersonalWeeklyMenu({
   setLoading(true);
   let saving = false;
   try {
-    const session = await prepareSession(currentUser.id, controller, current);
+    const session = await prepareSession(currentUser.id, controller, current, { requireMenuProjection: true });
     if (!current()) return null;
     if (!canCommitProfile()) throw new Error(WEEKLY_MENU_PROFILE_CHANGED);
     const weeklyMenu = await requestMenu(currentUser, currentUser.aiPlan, session);
@@ -59,8 +56,6 @@ export async function generatePersonalWeeklyMenu({
     if (!current()) return null;
     if (!operation || operation.status !== 'pending') { setError(WEEKLY_MENU_SAVE_ERROR); return null; }
     void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
-    try { await storeItems(weeklyMenu, session); }
-    catch { if (current()) setError(WEEKLY_MENU_ITEMS_ERROR); }
     if (!current()) return null;
     return weeklyMenu;
   } catch {

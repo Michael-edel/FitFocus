@@ -23,6 +23,16 @@ const json = (body: unknown, scope: HeadersInit = {}, status = 200) => new Respo
 const prepare = (fetchImpl: typeof fetch, controller = new AbortController()) =>
   prepareAiSession(account, controller, () => true, { outbox, fetchImpl, timeoutMs: 200 });
 
+it('requires an atomic projection capability for a personal menu action', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me()));
+  await expect(prepareAiSession(account, new AbortController(), () => true,
+    { outbox, fetchImpl, requireMenuProjection: true })).rejects.toThrow('PROTOCOL');
+  expect(fetchImpl).toHaveBeenCalledOnce();
+  fetchImpl.mockResolvedValue(json(me({ profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } })));
+  await expect(prepareAiSession(account, new AbortController(), () => true,
+    { outbox, fetchImpl, requireMenuProjection: true })).resolves.toMatchObject({ guard: { accountId: account } });
+});
+
 it.each(['aiSync', 'weeklyMenuSync'])('fails closed without %s capability', async name => {
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me({ [name]: undefined })));
   await expect(prepare(fetchImpl).then(session => postScopedAiJson(session, '/api/ai', {}))).rejects.toThrow('PROTOCOL');

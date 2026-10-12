@@ -766,14 +766,6 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, sessio
   return { days: normDays, shoppingList: finalShoppingList, shoppingListItems, weekStart };
 }
 
-/** Secondary projection is sent explicitly after the caller's durable profile commit. */
-export async function storePersonalWeeklyMenuItems(menu: WeeklyMenu, session: AiSession): Promise<void> {
-  const result = await postScopedAiJson(session, '/api/weekly_menu/items', {
-    week_start: menu.weekStart, items: menu.shoppingListItems ?? [],
-  });
-  if (!result.response.ok || result.body?.ok !== true) throw new Error('WEEKLY_MENU_ITEMS_SAVE_FAILED');
-}
-
 /**
  * Семейное меню на неделю: одно блюдо на всех + порции под разные калории.
  * ВАЖНО: исключения семьи учитываются (общие + индивидуальные).

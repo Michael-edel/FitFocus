@@ -9,6 +9,7 @@ type WeeklyMenuItemsValidationError = 'BAD_JSON' | 'BAD_WEEK';
 
 export type WeeklyMenuItemsSaveResult =
   | { kind: 'invalid'; error: WeeklyMenuItemsValidationError }
+  | { kind: 'profile-required' }
   | { kind: 'saved'; stored: number; weekStart: string };
 
 function isIsoDay(value: string) {
@@ -30,6 +31,8 @@ export async function saveWeeklyMenuItems({
   const familyId = body.family_id ? asString(body.family_id) : null;
   const items = Array.isArray(body.items) ? body.items : [];
   if (!isIsoDay(weekStart)) return { kind: 'invalid', error: 'BAD_WEEK' };
+  // A delayed old client must not replace the projection of a newer accepted profile.
+  if (!familyId) return { kind: 'profile-required' };
 
   if (familyId) {
     const family = await requireFamilyMember(db, familyId, userId);

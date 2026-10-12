@@ -1,8 +1,9 @@
 import { requireFamilyMember } from './family_access';
 import { aggregateShoppingRows, ingredientKey } from './ingredients';
 import { requireFamilyPlan } from './plans';
+import { readPersonalMenuItems } from './personal_menu_projection';
 
-type ShoppingRow = { name?: string | null; grams?: number | null };
+type ShoppingRow = { name?: unknown; grams?: unknown };
 type CheckedRow = { name?: string | null; checked?: number | boolean | null };
 
 export type ShoppingListResult =
@@ -71,15 +72,7 @@ export async function readShoppingList({
   }
 
   const [rows, checkedRows] = await Promise.all([
-    db
-      .prepare(
-        `SELECT w.ingredient_name as name, w.grams as grams
-         FROM weekly_menu_items w
-         WHERE w.user_id = ? AND w.week_start = ? AND w.family_id IS NULL
-         ORDER BY w.ingredient_name`,
-      )
-      .bind(userId, weekStart)
-      .all<ShoppingRow>(),
+    readPersonalMenuItems(db, userId, weekStart),
     db
       .prepare(
         `SELECT ingredient_name as name, checked
@@ -89,6 +82,6 @@ export async function readShoppingList({
       .bind(shoppingScopeId(userId, null), weekStart)
       .all<CheckedRow>(),
   ]);
-  const items = mergedItems(rows.results || [], checkedRows.results || []);
+  const items = mergedItems(rows, checkedRows.results || []);
   return { kind: 'loaded', weekStart, items, totalGrams: items.reduce((total, item) => total + item.grams, 0) };
 }

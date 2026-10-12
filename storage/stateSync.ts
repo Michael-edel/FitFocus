@@ -38,6 +38,7 @@ export class StateSync {
   private session?: ActiveOutboxSession;
   private readGuard?: OutboxReadGuard;
   private profileProtocol = false;
+  private profileProjectionProtocol = false;
   private readonly requests = new Set<AbortController>();
   private running?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
@@ -57,6 +58,7 @@ export class StateSync {
     this.accountId = undefined; this.session = undefined;
     this.readGuard = undefined;
     this.profileProtocol = false;
+    this.profileProjectionProtocol = false;
     for (const request of this.requests) request.abort();
     this.requests.clear();
     if (this.timer) clearInterval(this.timer);
@@ -158,6 +160,7 @@ export class StateSync {
     this.session = undefined;
     this.readGuard = undefined;
     this.profileProtocol = false;
+    this.profileProjectionProtocol = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const before = await this.outbox.sessionState();
       if (generation !== this.generation || accountId !== this.accountId) return false;
@@ -184,6 +187,7 @@ export class StateSync {
         this.readGuard = accepted;
         this.session = { id: 'active-session', ...accepted };
         this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
+        this.profileProjectionProtocol = isRecord(body.profileSync) && body.profileSync.weeklyMenuProjection === 1;
         reportStateSyncPause(accountId, null);
         return true;
       }
@@ -223,7 +227,7 @@ export class StateSync {
           await this.finish(claim, { kind: 'retry', reason: 'legacy-import-required', pause: 'legacy', nextAttemptAtMs: this.now() });
           continue;
         }
-        if (claim.resource === 'profile' && !this.profileProtocol) {
+        if (claim.resource === 'profile' && (!this.profileProtocol || !this.profileProjectionProtocol)) {
           await this.finish(claim, { kind: 'retry', reason: 'profile-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
           continue;
         }

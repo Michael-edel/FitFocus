@@ -240,6 +240,7 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE created_by_user_id = ?)").bind(userId),
     db.prepare("DELETE FROM weekly_menus WHERE created_by_user_id = ?").bind(userId),
     db.prepare("DELETE FROM weekly_menu_items WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM personal_menu_projections WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM shopping_checked WHERE scope_id = ? OR scope_id = ?").bind(`personal:${userId}`, userId),
     db.prepare("DELETE FROM family_invites WHERE created_by_user_id = ? OR used_by_user_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM weekly_menu_portions WHERE user_id = ?").bind(userId),

@@ -15,10 +15,10 @@ beforeEach(async () => { db = new StateDatabase({ factory: new IDBFactory() }); 
   const guard = (await outbox.acceptReadSession(account, sid, (await outbox.sessionState()).fence))!;
   await restoreProfile(repo, profile, guard); });
 afterEach(() => { sync?.stop(); db.close(); vi.restoreAllMocks(); });
-function client(mutation: typeof fetch, capability = true, options: { now?: () => number } = {}) {
+function client(mutation: typeof fetch, capability = true, options: { now?: () => number } = {}, projectionCapability = true) {
   const fetchFn = vi.fn<typeof fetch>(async (url, init) => String(url) === '/api/me'
     ? json({ user: { sub: account }, hasAccess: true, stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
-      ...(capability ? { profileSync: { protocol: 1, guard: 1 } } : {}) }) : mutation(url, init));
+      ...(capability ? { profileSync: { protocol: 1, guard: 1, ...(projectionCapability ? { weeklyMenuProjection: 1 } : {}) } } : {}) }) : mutation(url, init));
   sync = new StateSync({ outbox, fetchImpl: fetchFn, legacyPending: () => false, ...options }); return fetchFn;
 }
 it('uses one finish time for an immediate auth pause even as the wall clock advances', async () => {
@@ -85,4 +85,22 @@ it('applies a clean refresh without creating an outgoing operation', async () =>
   client(async () => json({ profile: { ...profile, name: 'Обновлённый профиль', version: 9 } }));
   await sync.connect(account); expect(JSON.parse((await sync.refreshProfile(account))!).name).toBe('Обновлённый профиль');
   expect(await outbox.list(account)).toEqual([]);
+});
+it('keeps a pending profile without sending it when the projection capability is absent', async () => {
+  await repo.writeJson('profile', { ...profile, name: 'Сохранено локально' });
+  const fetchFn = client(async () => { throw new Error('Unexpected profile mutation'); }, true, {}, false);
+  await sync.connect(account); expect(await sync.syncNow(account)).toBe(false);
+  expect((await outbox.list(account))[0]).toMatchObject({ status: 'pending', reason: 'profile-protocol-required' });
+  expect((await outbox.sessionState()).active?.pause).toBe('protocol');
+  expect(fetchFn.mock.calls.some(([url]) => String(url) === '/api/profile')).toBe(false);
+});
+it('still accepts a guarded clean profile refresh without the projection write capability', async () => {
+  const fetchFn = client(async () => json({ profile: { ...profile, name: 'Прочитано из облака', version: 9 } }), true, {}, false);
+  await sync.connect(account);
+  const refreshed = await sync.refreshProfile(account);
+  expect(refreshed).not.toBeNull();
+  expect(JSON.parse(refreshed!).name).toBe('Прочитано из облака');
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(9);
+  expect(await outbox.list(account)).toEqual([]);
+  expect(fetchFn.mock.calls.find(([url]) => String(url) === '/api/profile')?.[1]?.method ?? 'GET').toBe('GET');
 });

@@ -5,14 +5,17 @@ import { requireUser, json } from "./_lib/auth";
 import { hasBetaAccess } from "./_lib/access";
 import { stateSessionId } from './_lib/state_session';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
+import { personalMenuProjectionReady } from './_lib/personal_menu_projection';
 
 const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
     const hasAccess = await hasBetaAccess(env, u);
+    const menuProjection = await personalMenuProjectionReady(env.DB);
     return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles }, hasAccess,
       stateSync: { protocol: 2, guard: 1, accountId: u.sub, sessionId: await stateSessionId(u) },
-      profileSync: { protocol: 1, guard: 1 }, inviteSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 },
+      profileSync: { protocol: 1, guard: 1, ...(menuProjection ? { weeklyMenuProjection: 1 } : {}) },
+      inviteSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
       achievementSync: { protocol: 1, guard: 1 } }, 200);
   } catch {

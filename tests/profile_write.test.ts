@@ -17,6 +17,10 @@ function makeDb(initial: StoredProfile | null) {
           return this;
         },
         async first() {
+          if (sql.startsWith('UPDATE user_profiles')) {
+            const result = await this.run();
+            return result.meta.changes === 1 ? { version: stored?.version } : null;
+          }
           if (sql.startsWith('SELECT profile_json, version FROM user_profiles')) {
             return stored ? { profile_json: stored.profileJson, version: stored.version } : null;
           }

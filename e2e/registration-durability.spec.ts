@@ -33,7 +33,7 @@ async function setup(page: Page) {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me') return json({ user: { sub: account, name: 'Registration owner', email: 'e2e@example.com' }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
     if (path === '/api/bootstrap' || path === '/api/profile' && request.method() === 'GET') return json({ user: { sub: account }, profile: null, items: [] });
     if (path === '/api/ai' && request.postDataJSON()?.feature === 'personal_plan') {
       requests.ai += 1;

@@ -27,7 +27,7 @@ async function setup(page: Page, mode: 'normal' | 'held-read' | 'held-check') {
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, bootstrapSync: { protocol: 1, guard: 1 },
-      profileSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+      profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
       achievementSync: { protocol: 1, guard: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/state') return json(request.method() === 'GET' ? { items: [] } : { ok: true,

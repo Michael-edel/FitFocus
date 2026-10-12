@@ -18,7 +18,7 @@ function scope() {
   const session: AiSession = { guard: { accountId: user.id, sessionEpoch: 'scope', serverSessionId: 'a'.repeat(64), authFence: 1 },
     controller, isCurrentSession: () => true, outbox: new DurableOutbox() };
   return { controller, isCurrentSession: () => true, canCommitProfile: () => true,
-    prepareSession: async () => session, storeItems: async () => {} };
+    prepareSession: async () => session };
 }
 
 describe('weekly menu generation feature', () => {

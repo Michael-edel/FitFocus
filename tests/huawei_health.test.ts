@@ -53,6 +53,10 @@ function makeDb(connection?: Record<string, unknown>) {
           return this;
         },
         async first() {
+          if (sql.includes('UPDATE user_profiles SET profile_json') && sql.includes('RETURNING version')) {
+            runs.push({ sql, binds: this.binds });
+            return { version: Number(this.binds[2]) };
+          }
           if (sql.includes('FROM sessions WHERE id = ? AND user_id = ? LIMIT 1')) {
             return { id: String(this.binds[0] || ''), revoked: 0, expires_at: NOW + 3600 };
           }
