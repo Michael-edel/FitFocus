@@ -1,7 +1,7 @@
 // /api/family
 // GET: returns current user's family (if any) and members (active)
 // POST: create a new family (owner) and add creator as member
-import { requireUser } from "../_lib/auth";
+import { requireStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { createFamily } from "../_lib/family_create";
 import { readActiveFamilyContext } from "../_lib/family_read";
@@ -11,24 +11,24 @@ import { familyResponse } from '../_lib/family_response';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
     return familyResponse('family.read', requestId, await readActiveFamilyContext(db, user.sub), 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return familyResponse('family.read', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : 400);
+    return familyResponse('family.read', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : 400);
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -47,6 +47,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return familyResponse('family.create', requestId, { family: result.family }, 201);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return familyResponse('family.create', requestId, { error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return familyResponse('family.create', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
+
+export const onRequestGet: PagesFunction<Env> = async context =>
+  withSessionGuard(await handleGet(context), context.request, 'Family');
+
+export const onRequestPost: PagesFunction<Env> = async context =>
+  withSessionGuard(await handlePost(context), context.request, 'Family');

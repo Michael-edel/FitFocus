@@ -284,6 +284,10 @@ const App: React.FC = () => {
 >(null);
   const authIdentityRef = useRef(googleMe?.sub);
   authIdentityRef.current = googleMe?.sub;
+  const isCurrentProfileSession = useMemo(() => {
+    const attempt = loginAttemptRef.current;
+    return () => attempt === loginAttemptRef.current;
+  }, [userProfileRepository]);
   const isAdmin = !!googleMe?.roles?.includes('admin');
   useEffect(() => {
     if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
@@ -320,6 +324,8 @@ const App: React.FC = () => {
     setCloudFamilyMembers,
   } = useFamilyCloud({
     currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     planScope,
     setPlanScope,
     weekStartISO,
@@ -609,11 +615,6 @@ const App: React.FC = () => {
     hasProfileDraftRef.current = dirty;
     if (dirty) profileEditRevisionRef.current += 1;
   }, []);
-  const isCurrentProfileSession = useMemo(() => {
-    const attempt = loginAttemptRef.current;
-    return () => attempt === loginAttemptRef.current;
-  }, [userProfileRepository]);
-
   const persistUser = useProfilePersistence({
     repository: userProfileRepository,
     currentUser,

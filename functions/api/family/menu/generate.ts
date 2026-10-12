@@ -1,6 +1,6 @@
 // /api/family/menu/generate
 // POST: generate a shared weekly menu and personalized portions for active family members.
-import { requireUser } from '../../_lib/auth';
+import { requireStateUser, withSessionGuard } from '../../_lib/state_session';
 import { ensureUserRow, requireDB, toApiError } from '../../_lib/db';
 import { familyResponse } from '../../_lib/family_response';
 import { defaultFamilyMenuWeekStart } from '../../_lib/family_menu';
@@ -9,10 +9,10 @@ import { requestIdFor } from '../../_lib/observability';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
     const weekStart = new URL(request.url).searchParams.get('week') || defaultFamilyMenuWeekStart();
@@ -29,6 +29,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.generate', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.generate', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };
+
+export const onRequestPost: PagesFunction<Env> = async context =>
+  withSessionGuard(await handlePost(context), context.request, 'Family');

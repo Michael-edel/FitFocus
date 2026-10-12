@@ -315,7 +315,7 @@ export default function FamilyScreen({
                         type="checkbox"
                         className="accent-indigo-400 shrink-0"
                         checked={!!it.checked}
-                        onChange={(e) => void toggleFamilyShoppingItem(it.name, e.target.checked)}
+                        onChange={(e) => void toggleFamilyShoppingItem(it.name, e.target.checked).catch(error => setCloudFamilyError(error?.message || 'Не удалось обновить покупку.'))}
                       />
                       <span className="truncate">• {it.name}</span>
                     </span>

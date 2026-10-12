@@ -1,7 +1,7 @@
 // /api/family/menu
 // GET: returns shared menu for week + personalized portions for current user
 // POST: saves the family's weekly menu as the server source of truth
-import { requireUser } from '../_lib/auth';
+import { requireStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from '../_lib/db';
 import { defaultFamilyMenuWeekStart, readFamilyMenu, saveFamilyMenu } from '../_lib/family_menu';
 import { familyResponse } from '../_lib/family_response';
@@ -11,10 +11,10 @@ import { readJsonRequest, RequestBodyTooLargeError } from '../_lib/request_body'
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const FAMILY_MENU_JSON_BODY_LIMIT_BYTES = 256 * 1024;
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -33,14 +33,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.read', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.read', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -59,6 +59,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return familyResponse('family.menu.save', requestId, { ok: true, weekStart: result.weekStart, menuId: result.menuId }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.save', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.save', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };
+
+export const onRequestGet: PagesFunction<Env> = async context =>
+  withSessionGuard(await handleGet(context), context.request, 'Family');
+
+export const onRequestPost: PagesFunction<Env> = async context =>
+  withSessionGuard(await handlePost(context), context.request, 'Family');
