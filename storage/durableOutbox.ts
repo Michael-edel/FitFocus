@@ -174,8 +174,9 @@ export class DurableOutbox {
     const db = await this.connection.open();
     return stateTransaction(db, [STATE_STORES.meta], 'readonly', async (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
-      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number } | undefined;
-      const active = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
+      const fenceRequest = indexedRequest(store.get('auth-fence')) as Promise<{ revision: number } | undefined>;
+      const activeRequest = indexedRequest(store.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
+      const [fence, active] = await Promise.all([fenceRequest, activeRequest]);
       return { fence: fence?.revision ?? 0, active };
     });
   }
@@ -196,9 +197,10 @@ export class DurableOutbox {
     const db = await this.connection.open();
     return stateTransaction(db, [STATE_STORES.meta], 'readwrite', async (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
-      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
+      const fenceRequest = indexedRequest(store.get('auth-fence')) as Promise<{ revision: number; loggedOutSession?: string } | undefined>;
+      const currentRequest = indexedRequest(store.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
+      const [fence, current] = await Promise.all([fenceRequest, currentRequest]);
       if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
-      const current = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
       // Refreshing an existing read action cannot clear a pause or replace its attempt while /me was in flight.
       if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
         || previous.authFence !== expectedFence || current?.accountId !== previous.accountId
@@ -349,10 +351,11 @@ export class DurableOutbox {
     const attemptId = crypto.randomUUID();
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
-      const session = await indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as ActiveSession | undefined;
-      if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch || session.pause) return null;
+      const sessionRequest = indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as Promise<ActiveSession | undefined>;
       const store = tx.objectStore(STATE_STORES.outbox);
-      const operations = await indexedRequest(store.index('accountId').getAll(input.accountId)) as OutboxOperation[];
+      const operationsRequest = indexedRequest(store.index('accountId').getAll(input.accountId)) as Promise<OutboxOperation[]>;
+      const [session, operations] = await Promise.all([sessionRequest, operationsRequest]);
+      if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch || session.pause) return null;
       // Revisions define per-key order even if the wall clock moves backwards.
       operations.sort((a, b) => a.revision - b.revision || a.createdAtMs - b.createdAtMs || a.opId.localeCompare(b.opId));
       const seenKeys = new Set<string>();
@@ -360,8 +363,9 @@ export class DurableOutbox {
         if (seenKeys.has(operation.key)) continue;
         seenKeys.add(operation.key);
         if (operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical) {
-          const gate = await indexedRequest(tx.objectStore(STATE_STORES.meta).get(LEGACY_MIGRATION_META_ID)) as LegacyGate | undefined;
-          const receipt = await indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(operation.migrationFingerprint ?? ''))) as LegacyReceipt | undefined;
+          const gateRequest = indexedRequest(tx.objectStore(STATE_STORES.meta).get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>;
+          const receiptRequest = indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(operation.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>;
+          const [gate, receipt] = await Promise.all([gateRequest, receiptRequest]);
           if (!canSendLegacy(operation, gate, receipt)) continue;
         }
         if (operation.status === 'sending') {
@@ -388,8 +392,26 @@ export class DurableOutbox {
     return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
       const store = tx.objectStore(STATE_STORES.outbox);
       const metaStore = tx.objectStore(STATE_STORES.meta);
-      const current = await indexedRequest(store.get(claim.opId)) as OutboxOperation | undefined;
-      const session = await indexedRequest(metaStore.get('active-session')) as ActiveSession | undefined;
+      const currentRequest = indexedRequest(store.get(claim.opId)) as Promise<OutboxOperation | undefined>;
+      const sessionRequest = indexedRequest(metaStore.get('active-session')) as Promise<ActiveSession | undefined>;
+      const fenceRequest = outcome.kind === 'retry' && outcome.pause
+        ? indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>
+        : Promise.resolve(undefined);
+      const migrationGateRequest = claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical
+        ? indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>
+        : Promise.resolve(undefined);
+      const migrationReceiptRequest = claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical
+        ? indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(claim.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>
+        : Promise.resolve(undefined);
+      const keyStateRequest = outcome.kind === 'acknowledged'
+        ? indexedRequest(metaStore.get(keyStateId(claim.accountId, claim.key))) as Promise<KeyState | undefined>
+        : Promise.resolve(undefined);
+      const siblingsRequest = outcome.kind === 'acknowledged'
+        ? indexedRequest(store.index('accountKey').getAll([claim.accountId, claim.key])) as Promise<OutboxOperation[]>
+        : Promise.resolve([] as OutboxOperation[]);
+      const [current, session, fence, gate, receipt, ackMeta, ackSiblings] = await Promise.all([
+        currentRequest, sessionRequest, fenceRequest, migrationGateRequest, migrationReceiptRequest, keyStateRequest, siblingsRequest,
+      ]);
       if (!current || current.status !== 'sending' || current.accountId !== claim.accountId || current.revision !== claim.revision
         || current.key !== claim.key || current.baseVersion !== claim.baseVersion || current.writerId !== claim.writerId
         || current.type !== claim.type || (current.type === 'put' && (claim.type !== 'put' || current.value !== claim.value))
@@ -400,20 +422,15 @@ export class DurableOutbox {
         || current.attempt.owner !== claim.attempt.owner || current.attempt.startedAtMs !== claim.attempt.startedAtMs
         || current.attempt.sessionEpoch !== claim.attempt.sessionEpoch
         || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch || session.pause) return false;
-      let receipt: LegacyReceipt | undefined;
       if (current.migrationSourceKey || current.migrationFingerprint || current.migrationCanonical) {
-        const gate = await indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as LegacyGate | undefined;
-        receipt = await indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(current.migrationFingerprint ?? ''))) as LegacyReceipt | undefined;
         if (!canSendLegacy(current, gate, receipt)) return false;
       }
       const updated: OutboxOperation = { ...current, updatedAtMs: nowMs };
       delete updated.attempt;
       if (outcome.kind === 'acknowledged') {
-        const id = keyStateId(current.accountId, current.key);
-        const meta = await indexedRequest(metaStore.get(id)) as KeyState | undefined;
+        const meta = ackMeta;
         if (!meta) throw new Error('OUTBOX_MISSING_KEY_STATE');
-        const siblings = await indexedRequest(store.index('accountKey').getAll([current.accountId, current.key])) as OutboxOperation[];
-        for (const child of siblings) {
+        for (const child of ackSiblings) {
           if (child.parentOpId === current.opId && child.resource === current.resource && child.writerId === current.writerId && child.status === 'pending') {
             store.put({ ...child, baseVersion: outcome.version, updatedAtMs: nowMs });
           }
@@ -433,7 +450,6 @@ export class DurableOutbox {
           if (!outcome.pause) updated.retryCount += 1;
           updated.nextAttemptAtMs = outcome.nextAttemptAtMs;
           if (outcome.pause) {
-            const fence = await indexedRequest(metaStore.get('auth-fence')) as { revision: number } | undefined;
             const revision = (fence?.revision ?? 0) + 1;
             if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
             metaStore.put({ id: 'auth-fence', revision });
