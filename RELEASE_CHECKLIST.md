@@ -176,8 +176,9 @@ Actions, наличие workflow в нужной ветке и состояни�
   отсутствует, новый state endpoint не принимает запись.
 - [ ] Применить 0021 и проверить таблицу, четыре SQL-barrier triggers,
   capability, scoped GET/PUT, own RETURNING version и старые writers=409.
-- [ ] Проверить actual old/new bundles на одном origin: v2 sender не получает
-  новый resource, v3 сохраняет pending/conflict/ledger/quarantine/auth-fence.
+- [ ] Повторить actual old/new bundle smoke в staging с SW/PWA: v2 sender не
+  получает новый resource, v3 сохраняет pending/conflict/ledger/quarantine/auth-fence.
+  Локально Chromium/mock API/SW blocked прошли 2/2 на `3baac01` и `405238b`.
 - [ ] Проверить standalone/PWA, реальный lifecycle/OAuth и повтор после сбоя.
 - [ ] Подготовить rollback artifact с canonical reader и v3-aware sender;
   не удалять и не понижать IDB, не возвращать legacy reader после новых записей.

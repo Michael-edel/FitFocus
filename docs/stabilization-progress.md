@@ -1478,3 +1478,54 @@ compatible rollback и recovery повреждённых/конфликтных 
 Добавлены [контракт](family-menu-state.md) и [ADR-008](adr/ADR-008-family-menu-generation.md).
 Результат предыдущего документационного CI dbb22aa — success; он проверяет
 прежний семейный session-код и не относится к новым локальным исходникам.
+
+## 12.10.2026 — публикация и приёмка семейного поколения 405238b
+
+Код опубликован: `405238b9fd4d59b9ed76fcc4563b7850943df1a4`, ветка
+fix/durable-outbox, draft PR #93 с базой fix/state-generations (#94).
+[CI точного SHA](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392)
+завершился success: 1039 unit / 191 файл, все guards/typecheck/schema/privacy,
+audit/build, 334 browser passed / 9 skips. Семь конфигураций, два worker,
+13,9 мин browser, без flaky в итоговом summary. Дублирующий push-run
+отменён штатной concurrency.
+
+Полный локальный production-preview прогон того же кода:
+332 passed / 2 failed / 9 skips, workers=2, retries=0, 30,8 мин.
+Registration/desktop WebKit превысил общий timeout 45 с; trace показывает
+newPage 9,2 с, click 9,1 с и ожидания AI-экрана 12,5/5,5 с. Введённый profile
+401 присутствовал; неожиданных console/page ошибок не обнаружено.
+Family server-preview/iPhone PWA не дождался названия семьи за 10 с:
+снимок оставался loading, API ответили 200, console/page errors отсутствовали.
+В preview также зарегистрированы native `/api/me` и `/api/achievements`
+proxy ECONNREFUSED рядом с teardown; причина отдельно не доказана и логи
+не фильтровались ради зелёного статуса.
+
+Те же два сценария на desktop WebKit и iPhone PWA с одним worker,
+retries=0 и неизменными кодом/таймаутами прошли 4/4 (1,8 мин).
+Это диагностический результат; полный локальный прогон остаётся 332/2/9.
+Нагрузка хоста — предположение. Скриншоты успешных desktop/iPhone покупок
+проверены визуально: 700 г видны, мобильная навигация не перекрывает строку.
+
+Actual bundles: 2/2 Chromium, один origin/context/IDB, старый `3baac01`
+и текущий `405238b`, отдельно pending и conflicted. Старые исходники из
+git archive собраны без изменения исполняемого кода; lockfile совпадает.
+После versionchange 2→3 реальный старый v2-код получил VersionError при
+reopen; старые мутации после upgrade=0. После reload сохранились family
+opId/value/status и remote version 8 для conflict, прежний pending profile,
+пять stores, marker ledger/quarantine, account/session и неубывающий fence.
+Manifest содержит реальные script requests и SHA-256 assets/HTML.
+Page errors=0, console errors соответствуют введённым 503/409.
+
+Первый внешний bundle-fixture получил protocol pause от неполного общего
+state mock ack. После явного state=503 итоговый запуск прошёл 2/2;
+продуктовый код не менялся. Исходный неудачный лог и итоговые артефакты
+сохранены вне Git. Собственный preview остановлен, порт 4173 закрыт.
+
+Границы: mock API, Service Worker blocked; настоящий legacy import,
+Map/localStorage writer, SW/PWA-кэш, BFCache/OAuth, staging, совместимый
+rollback artifact и protected-main интеграция ещё открыты. Точная область —
+[контракт семейного меню](family-menu-state.md). После `405238b` этот follow-up
+меняет только Markdown и не переносит CI реализации на новый MD HEAD.
+
+MD-проверка: 35 документов, 885 ссылок/anchors и 33 pinned source paths,
+ошибок нет; diff проверен, изменений исполняемого кода после `405238b` нет.

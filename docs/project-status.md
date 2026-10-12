@@ -5,9 +5,9 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Последний подтверждённый CI опубликованной ветки — `dbb22aa57668dc9064fddee18e5bcfebfdbadaf4`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38204076306),
-1009 unit / 189 файлов, 278 browser passed / 9 skips, без flaky в итоговом summary.
+Последний подтверждённый CI опубликованной ветки — `405238b9fd4d59b9ed76fcc4563b7850943df1a4`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392),
+1039 unit / 191 файл, 334 browser passed / 9 skips, без flaky в итоговом summary.
 Последующие HEAD проверяются отдельно. Подготовительный сервер `dde4c71` и переход
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
@@ -46,7 +46,7 @@ CAS/постоянная доставка и реальный staging остаю
 
 ## Текущая работа — семейное меню
 
-В рабочем дереве реализованы family/week CAS, единый серверный снимок меню,
+В `405238b` реализованы family/week CAS, единый серверный снимок меню,
 порций и покупок, а также resource `familyMenu` в существующей IDB-outbox.
 AI-клиент `useFamilyMenu` подключён к этому сохранению; серверная генерация
 возвращает preview для той же очереди. Ошибка хранения сохраняет прежнее меню,
@@ -55,15 +55,22 @@ AI-клиент `useFamilyMenu` подключён к этому сохране�
 
 Прошли 1039 unit / 191 файл, три typecheck, обязательные guards/schema/privacy,
 audit (0), 16 browser-сценариев в Chromium/iPhone Safari и 33 HTTP локального
-workerd/D1 с двумя синтетическими аккаунтами. Полная browser matrix и CI
-нового кода ещё не подтверждены. [Контракт](family-menu-state.md),
+workerd/D1 с двумя синтетическими аккаунтами. [CI точного SHA завершился успешно](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392):
+1039 unit и полная матрица 334 browser passed / 9 skips, семь конфигураций,
+два worker, без flaky в итоговом summary. Полный локальный прогон: 332 passed,
+2 failed, 9 skips (30,8 мин, workers=2, retries=0). Диагностический прогон двух
+сценариев на desktop WebKit/iPhone PWA: 4/4, workers=1, retries=0,
+без изменения кода и таймаутов; он не заменяет полный локальный результат.
+Нагрузка хоста — предположение. Реальные v2/v3 bundles на одном origin
+прошли 2/2 локальных сценария с mock API и отключённым Service Worker.
+[Контракт](family-menu-state.md),
 [решение](adr/ADR-008-family-menu-generation.md).
 
-CI `dbb22aa` относится к опубликованному коду семейных сессий и MD-файлам.
-Он не проверяет эти локальные изменения. Критерии завершения остаются
-открытыми в [TASKS](../TASKS.md); после локальных проверок конфликтов и reload
-нужны прежняя и новая сборки на одном origin, полный browser-набор
-и CI точного коммита. Staging, merge и deploy
+CI `405238b` проверяет опубликованную реализацию семейного меню.
+Критерии завершения остаются открытыми в [TASKS](../TASKS.md):
+нужны PWA/Service Worker и реальный lifecycle, совместимый откат
+и staging. Локальный bundle smoke не проверяет прежний Map writer.
+Merge и deploy
 этого этапа не выполнялись.
 
 ## Предыдущий проверенный компонент — сессии и форма

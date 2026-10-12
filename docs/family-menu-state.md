@@ -1,7 +1,7 @@
 # Семейное меню: версия, сохранение и доставка
 
-Сверено: 12.10.2026. Реализация в рабочем дереве ветки `fix/durable-outbox`
-после `dbb22aa`; ещё не опубликована. Это продолжение
+Сверено: 12.10.2026. Реализация опубликована в ветке `fix/durable-outbox`
+коммитом `405238b9fd4d59b9ed76fcc4563b7850943df1a4`. Это продолжение
 [семейных сессий](family-session.md), а не закрытие всего P0.
 Архитектурное решение — [ADR-008](adr/ADR-008-family-menu-generation.md).
 
@@ -87,10 +87,49 @@ Browser plugin not available: repository Playwright, mock API,
 Локальный workerd/D1 smoke прошёл 33 HTTP-запроса: два синтетических аккаунта,
 один origin/database, capability, ранние отказы, preview без записи, CAS,
 чтение участником, чужая цель, отказ прежних writers и пустое поколение.
-Удалённая база не использовалась. Полная browser matrix, CI нового кода,
-реальные bundles, staging и совместимый выпуск ещё не подтверждены.
+Удалённая база не использовалась. [CI реализации `405238b`](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392)
+завершился успешно: 1039 unit / 191 файл, 334 browser passed / 9 skips,
+семь конфигураций, два worker, без flaky в итоговом summary (13,9 мин browser).
+Полная локальная матрица: 332 passed, 2 failed, 9 skips (30,8 мин,
+workers=2, retries=0). Registration/desktop WebKit превысил общий timeout 45 с;
+server-preview/iPhone PWA не дождался названия семьи за 10 с при успешных API.
+Диагностический прогон тех же двух сценариев на desktop WebKit и iPhone PWA:
+4 passed, workers=1, retries=0, 1,8 мин; код и таймауты не изменялись.
+Это не заменяет полный локальный результат. Нагрузка хоста — предположение,
+а не установленная причина. Staging и совместимый выпуск ещё не подтверждены.
 Также открыты явные цели invite/member, остальные AI/report/retry callbacks,
 runtime legacy-импорт, UI конфликтов, backup/экспорт/очистка всех IDB stores.
+
+## Настоящие bundles на одном origin
+
+Локальный Chromium smoke: 2/2, последовательно pending и conflicted.
+Старая сборка — опубликованный `3baac01c98bd82ab7a87c0e9c2999914db194590`
+с IDB v2; текущая — `405238b9fd4d59b9ed76fcc4563b7850943df1a4` с IDB v3.
+Старые исходники получены через git archive; исполняемый код не правился.
+У package-lock один Git blob `82e7e5a71a0e3c6187c60c602f348f0caaeaa225`;
+сборка использовала те же установленные зависимости и отдельный base path.
+
+Обе вкладки работали в одном browser context на `http://127.0.0.1:4173`.
+Старая HTML/JS отдавалась под `/__compat_v2__/`; новые assets — под `/assets/`.
+Зафиксированы реальные script requests и SHA-256 assets/HTML в manifest.
+Наблюдатель IDB регистрировал события, но не закрывал соединение за приложение.
+
+До обновления старый UI создал pending profile intent. После открытия v3
+старый код получил versionchange и VersionError при versioned reopen v2;
+попытка сохранить старую форму не отправила мутаций. Новая family-операция
+сохранила opId/value/status после reload; conflicted сохранила remote version 8.
+Сохранились profile intent, пять stores, синтетические marker-записи
+ledger/quarantine, текущая account/session-привязка и неубывающий auth-fence.
+Page errors отсутствовали; console errors соответствовали введённым 503/409.
+
+Артефакты вне Git: `family-real-bundles-smoke.ts`, build helper,
+`real-bundles-result.json`, screenshots и logs. Первый запуск внешнего fixture
+получил protocol pause из общего mock ack state; fixture исправлен на явный
+503. Это не изменение продукта. Итоговый запуск прошёл 2/2.
+
+Mock API и отключённый Service Worker ограничивают вывод: не проверены
+старый Map/localStorage sender, настоящий legacy import, SW/PWA-кэш,
+BFCache/OAuth, удалённый D1, staging или rollback artifact.
 
 Реализация и проверки: [repository](../storage/familyMenuRepository.ts),
 [sender](../storage/stateSync.ts), [server CAS](../functions/api/_lib/family_menu_state.ts),

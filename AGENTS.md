@@ -93,7 +93,7 @@
   сессию для старого callback. [Контракт](docs/family-session.md) отдельно отмечает
   историю прежнего AI-пути на `9c44c21`. В текущей рабочей реализации
   [семейное меню](docs/family-menu-state.md) использует ту же outbox, family/week
-  CAS и guarded commit; реальные bundles и выпуск ещё не приняты.
+  CAS и guarded commit; локальный v2/v3 bundle smoke не подтверждает SW/PWA и выпуск.
   [ADR-008](docs/adr/ADR-008-family-menu-generation.md) требует SQL-барьер старых
   writers и versioned IDB v3; не понижай/не удаляй IDB при откате.
   Account/session guard не фиксирует членство и целевую семью мутации.

@@ -2,8 +2,8 @@
 
 Обновлено: 12.10.2026. Текущий компонент — семейное меню, ветка
 `fix/durable-outbox`; [контракт и результаты](docs/family-menu-state.md).
-Последний подтверждённый [CI опубликованной ветки `dbb22aa`](https://github.com/Michael-edel/FitFocus/actions/runs/38204076306):
-1009 unit / 189 файлов, 278 browser passed / 9 skips, без flaky в итоговом summary.
+Последний подтверждённый [CI опубликованной ветки `405238b`](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392):
+1039 unit / 191 файл, 334 browser passed / 9 skips, без flaky в итоговом summary.
 Последующие HEAD требуют отдельного CI; этот результат относится к указанной ревизии.
 
 Предыдущий компонент — [личные покупки](docs/personal-menu-projection.md)
@@ -223,7 +223,7 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [ ] Перевести AI-сценарий `useFamilyMenu`, family/week CAS и постоянную
   доставку через существующую IDB-outbox; пройти реальные bundles/staging.
 
-Следующая семейная часть реализована локально и ещё проходит общую приёмку.
+Следующая семейная часть опубликована как `405238b` и ещё проходит общую приёмку.
 [Точная граница текущей работы](docs/project-status.md#текущая-работа--семейное-меню).
 - [x] Подключить AI и server-preview к единственному familyMenu intent с исходным
   login guard, captured revision/baseVersion и guarded локальным commit.
@@ -233,13 +233,17 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   проверить preservation старых stores на fake IndexedDB.
 - [x] Пройти 1039 unit, три typecheck, guards/schema/privacy/audit, 16 новых
   Chromium/iPhone browser-сценариев и 33 HTTP локального workerd/D1.
-- [ ] Пройти полную browser matrix и CI точного опубликованного кода.
-- [ ] Проверить настоящие old/new bundles на одном origin, повреждённые legacy
-  записи, реальный lifecycle/staging и совместимый rollback artifact.
+- [x] Пройти полную browser matrix и [CI точного опубликованного кода `405238b`](https://github.com/Michael-edel/FitFocus/actions/runs/38208076392):
+  1039 unit / 191 файл, 334 browser passed / 9 skips, без flaky в итоговом summary.
+- [x] Проверить настоящие v2/v3 bundles на одном origin локально: 2/2,
+  pending/conflicted, старый reopen=VersionError, старые мутации=0,
+  профиль/marker ledger/quarantine/auth-fence сохранены; mock API, SW отключён.
+- [ ] Проверить повреждённые legacy записи, старый Map writer, SW/PWA,
+  реальный lifecycle/staging и совместимый rollback artifact.
 
-Клиент подключён; отказ старых menu/items writers и сохранение конфликта после
-reload проверены локально. До закрытия нужны старые и новые сборки на одном
-origin, совместимый откат и CI нового кода. Явная семейная цель invite/member
+Клиент подключён; отказ старых menu/items writers, конфликт после reload
+и локальная совместная работа настоящих v2/v3 bundles проверены. CI нового
+кода прошёл. До закрытия нужны SW/PWA/staging и совместимый откат. Явная семейная цель invite/member
 и остальные callbacks также остаются открытыми.
 
 Это не закрывает P0.4–P0.6 целиком. Прежние unscoped clients остаются совместимыми
