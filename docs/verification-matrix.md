@@ -6,7 +6,23 @@
 
 ## Проверенная граница
 
-Подтверждённая опубликованная ревизия с семейным кодом —
+Последний подтверждённый [CI `98d4910`](https://github.com/Michael-edel/FitFocus/actions/runs/38243684629):
+1047 unit / 193 файла, 340 browser passed / 1 flaky / 9 skips, workflow success.
+Firefox PWA-update прошёл с retry; preview `ECONNREFUSED` остаётся открытым.
+Это не чистый browser-прогон. Код включает семейный
+CAS `405238b`, явное PWA-обновление `8d32f12` и поправку первого SW-клиента
+`574de76`. Это не подтверждает защищённую main, staging или production.
+
+Последующий опубликованный код `98d4910` удаляет неиспользуемый Google SDK;
+локально прошли 7/7 auth-shell и 7/7 forward real-SW сценариев.
+Результат CI нового SHA приведён выше. Инструменты отката ещё в рабочем дереве:
+два полных прогона архива `574de76` дали 26/28 каждый, итоговая база не принята.
+Следующая приёмка должна использовать новый архив `98d4910`.
+[Текущий статус](project-status.md), [границы отката](release-artifacts.md).
+
+### История предшествующих компонентов
+
+Ранее подтверждённая опубликованная ревизия с семейным кодом —
 [`0eae743a33544d4cd707efb825ea24ae30c2a7fd`](https://github.com/Michael-edel/FitFocus/commit/0eae743a33544d4cd707efb825ea24ae30c2a7fd),
 ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011)
 завершился success: 1009 unit / 189 файлов, 278 browser passed / 9 skips.
@@ -14,9 +30,9 @@
 Локальный неудачный прогон и последующая диагностика сохранены ниже и в журнале.
 Это не подтверждает staging, production или слияние в main.
 
-Начатая в рабочем дереве доработка family/week CAS и семейной доставки ещё
-не включена в эту проверенную границу. Подключение AI-клиента, совместимость
-старой/новой сборок и полные проверки остаются открытыми;
+На `0eae743` family/week CAS, AI-клиент и постоянная семейная доставка
+ещё не входили в проверенную границу. Они реализованы позднее в `405238b`;
+полная приёмка выпуска и совместимый откат остаются открытыми;
 [статус реализации](project-status.md#текущая-работа--семейное-меню).
 
 Предыдущий CI документационного `14ca638` также прошёл:
@@ -43,21 +59,22 @@ CI `2d1f480` подтвердил новый компонент. Следующ�
 прошли. Диагностика шести сценариев на обоих iPhone-проектах: 12 passed,
 workers=1/retries=0, без изменения кода. Полный CI `3baac01` затем прошёл:
 278 browser passed / 9 skips, workers=2, без flaky в итоговом summary. Это охват
-`useFamilyCloud`; AI-путь, CAS и постоянная семейная доставка ещё открыты.
+`useFamilyCloud` на указанном историческом SHA; AI-путь, CAS и постоянная
+семейная доставка добавлены позднее в `405238b`.
 
 ## P0: что проверено и что ещё требуется
 
 | Пункт | Подтверждённая часть | Где смотреть проверки | Условие, которое ещё не закрыто |
 |---|---|---|---|
 | P0.1 — CI и зависимости | Исправление audit и push; зелёный CI опубликованной ветки | [Журнал](stabilization-progress.md), [workflow](../.github/workflows/ci.yml) | Интеграция зависимостей через защищённую main; CI release SHA |
-| P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей и profile | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора, runtime legacy и полный lifecycle |
+| P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей, profile и familyMenu | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора, runtime legacy и полный lifecycle |
 | P0.3 — auth-пауза | Локальная запись продолжается; отправка требует подтверждения владельца | [State sender](../tests/state_sync.test.ts), [profile E2E](../e2e/profile-durability.spec.ts), [контракт](state-sender.md) | Остальные callbacks и legacy; реальный повторный вход на staging |
-| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; отдельный семейный AI-путь |
-| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; личные покупки следуют profile CAS на `4736ff5` | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | AI/report/retry и `useFamilyMenu`; family CAS, долговечность и порядок вторичных записей |
+| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; сценарии приглашения/смены членства и явной цели семьи |
+| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; личные покупки следуют profile CAS на `4736ff5`, familyMenu использует исходный guard и family/week CAS на `405238b` | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | Остальные AI/report/retry producers; явная цель/членство семьи и полный lifecycle |
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [контракт](sync-model.md) | Доказанное владение legacy и барьер реально работающих старых writers |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
-| P0.8 — постоянная очередь | Одна IDB-outbox; value/операция и import/ledger атомарны; legacy-нормализатор реализован | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Runtime-импорт с доказательствами; old/new bundles на одном origin; backup/экспорт/очистка всех stores |
-| P0.9 — приёмка | Есть unit и браузерные сценарии отдельных компонентов | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md) | Полная приёмка точного release SHA, реальные устройства/BFCache/OAuth/staging и проверка отката |
+| P0.8 — постоянная очередь | Одна IDB-outbox; value/операция и import/ledger атомарны; legacy-нормализатор реализован | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Runtime-импорт с доказательствами владельца и барьера старых writers; итоговый rollback artifact; backup/экспорт/очистка всех stores |
+| P0.9 — приёмка | Есть unit и браузерные сценарии отдельных компонентов | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md) | Чистая browser-приёмка точного release SHA, Firefox PWA timeout и mock teardown, реальные устройства/BFCache/OAuth/staging и проверка отката |
 
 Все P0 остаются открытыми в целом. Успешные части и оставшиеся условия
 нужно читать вместе; результаты mock API не подтверждают поведение реального D1.

@@ -1709,6 +1709,68 @@ source paths: ошибок нет. `git diff --check` прошёл. Runtime-те
 изменения документации повторно не запускались; новый CI проверяется
 после commit/push именно этого набора MD-файлов.
 
+## Сохранённый client/SW/Pages Worker — 12.10.2026
+
+База реализации — `d3a9496d8bdc40c8389ff5fbba0df142b3a0dbbc`,
+ветка `fix/durable-outbox`. [Её CI](https://github.com/Michael-edel/FitFocus/actions/runs/38236933880)
+завершился success: 1047 unit / 193 файла, 341 browser passed / 9 skips,
+16,6 мин browser. Проверены head_sha, статус и логи job 114770239074;
+в summary нет flaky, в этом логе нет preview `ECONNREFUSED`. Прежняя
+воспроизведённая проблема teardown остаётся открытой.
+
+Добавлены `release:build`, `release:verify`, `release:check`, точный
+Wrangler 4.149.0 в devDependencies и CI gate сохранения проверенного архива
+на 90 дней. Упаковка берёт точный Git SHA, полный Pages Worker и client/SW,
+сохраняет исходники/миграции/config/lockfile и inventory с SHA-256.
+Артефакты находятся вне Git. Существующие записи lockfile не изменены;
+добавлены только Wrangler и его зависимости. Контрольные суммы подтверждают
+целостность, но не заменяют проверку совместимости.
+
+Локальные unit: 1053 passed / 194 файла, maxWorkers=2, 56,57 с.
+Шесть новых проверок покрывают inventory/tamper/extra/missing, junction,
+неподдерживаемую схему, mutable ref и путь output внутри checkout.
+Три typecheck, guards/schema/privacy и audit (0) прошли;
+общий typecheck повторён после последних изменений E2E и прошёл.
+Схема: 23 миграции / 32 таблицы, privacy: 29 таблиц.
+
+`release:check` распаковал сохранённый `.tar`, сверил manifest, собрал
+кандидат из Git, затем поочерёдно запустил два настоящих Pages Worker
+на одном локальном origin/D1. Для `d3a9496` → `574de76` прошли 23 HTTP:
+canonical profile/family и покупки, CAS после отката, owner/session guard,
+отказ старых writers, пустые поколения без legacy fallback, сохранность
+legacy 333/999. SHA различаются, но server functions/migrations одинаковы.
+Лог: `rollback-http-d3a9496-final.log`; worker-процессы остановлены своим
+finally, production и удалённая D1 не использовались.
+
+После доказанного RED с Retry-After 20 с исправлен бюджет восстановления
+pending по сохранённому nextAttemptAtMs/startedAtMs и lease. HTTP-фикстура
+фиксирует acceptedAtMs; приём проверяется не раньше persisted deadline.
+Production sender/claim/backoff не изменены. Диагностика: 3/3 desktop-движка,
+`rollback-retry-budget-green.log`, 2,5 мин.
+
+Первый полный прогон новой базы `574de76`: 26 passed / 2 failed,
+14,9 мин, workers=1/retries=0 (`rollback-574-seven-final.log`). Firefox
+forward-сценарий получил layout-warning от Playwright after-action snapshot
+во время reload (debugger eval line 393). Android pending-сценарий сохранил
+и доставил операцию после deadline, но получил четыре DNS-ошибки
+`accounts.google.com/gsi/client`; это подтверждено network trace.
+Консоль не фильтровалась. Успешный click теперь возвращается до навигации;
+сценарии отдельно ждут framenavigated/load перед чтением нового DOM.
+Forward-сценарий проверяет JS кандидата в обеих вкладках. Временная подмена
+внешнего GIS-loader дала 4/4 Firefox/Android, workers=1/retries=0, 1,9 мин
+(`rollback-reload-oauth-diagnostic.log`). Второй полный прогон
+`rollback-574-seven-acceptance.log`: 26 passed / 2 failed, 15,0 мин.
+Свежая установка и pending на iPhone Safari снова получили DNS-ошибки SDK;
+запросы после SW control обходили page.route. Подмена удалена из appHarness;
+общая синтетическая замена SDK не считается решением. Assets/API/SW
+не перехватываются. Архив `574de76` не принят; продуктовая поправка ниже.
+
+Browser plugin not available; использованы repository Playwright и production
+build. Скриншоты уведомления desktop/Android визуально проверены: читаемый
+текст, непрозрачный фон, доступные кнопки. Реальные устройства, OAuth/BFCache,
+runtime legacy ownership/writers-stopped, staging, protected main и deploy
+этим компонентом не закрываются. CI его точного опубликованного SHA требуется.
+
 ## Удаление лишней сетевой зависимости PWA — 12.10.2026
 
 Изменение поверх `d3a9496d8bdc40c8389ff5fbba0df142b3a0dbbc`.
@@ -1741,4 +1803,14 @@ click не ждёт навигацию, затем обе вкладки дож�
 build выполнен browser-прогонами. Реальные Google OAuth/устройства/staging
 не проверены. Артефакт `574de76` ещё содержит лишний SDK и не принимается
 итоговой базой: после публикации этого исправления нужна новая сохранённая
-сборка и её полная приёмка. CI точного нового SHA проверяется отдельно.
+сборка и её полная приёмка. Исправление опубликовано отдельным коммитом
+`98d49101e15ad652e1960381ce00e00e8dac0d44`;
+[CI](https://github.com/Michael-edel/FitFocus/actions/runs/38243684629) завершился
+success: 1047 unit / 193 файла, 340 browser passed / 1 flaky / 9 skips,
+16,9 мин browser. Сверены head_sha, статус run/job 114792725549 и его лог.
+Firefox PWA-update в первой попытке превысил 90 секунд на `saved(page)`
+(`familyHarness.ts:11`, вызов `pwa-update.spec.ts:56`) до активации SW,
+затем прошёл с retry. Это не устанавливает причину IDB-зависания; trace
+и lifecycle требуют отдельной диагностики. В логе также один preview
+`ECONNREFUSED` на `/api/me`; исправление teardown не подтверждено.
+Незакоммиченный артефактный компонент пока закрепляет прежний `574de76`.
