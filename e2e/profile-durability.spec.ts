@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 const account = 'google-e2e-sub'; const sid = 'a'.repeat(64);
 const key = `fitfocus_data_${account}_profile`;

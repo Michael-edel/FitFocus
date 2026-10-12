@@ -1,11 +1,12 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 12.10.2026. Текущий компонент — совместимый артефакт отката
-и регистрация SW, ветка `fix/durable-outbox`; [контракт](docs/release-artifacts.md).
-Последний подтверждённый [CI опубликованной ветки `5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
-1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, success.
-WebKit fresh rollback install прошёл с retry; в логе один preview
-`ECONNREFUSED`. Прежний Firefox timeout на `98d4910` также остаётся открытым.
+Обновлено: 12.10.2026. Текущий компонент — завершение mock API-сценариев
+и проверка их lifecycle, ветка `fix/durable-outbox`;
+[контракт](docs/mock-api-lifecycle.md).
+Последний подтверждённый [CI опубликованной ветки `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
+В summary нет flaky, в preview один `ECONNREFUSED` на `/api/family`.
+Предыдущие WebKit access-control и Firefox timeout также остаются открытыми.
 Исправление неиспользуемого Google SDK опубликовано в `98d4910`.
 Компонент артефакта отката опубликован в `bd763ec`; поправка CI — в `5b90249`.
 Полная приёмка проверяется отдельно;
@@ -23,14 +24,14 @@ WebKit fresh rollback install прошёл с retry; в логе один previe
 
 ## Порядок работы
 
-CI `5b90249` завершился success с одним flaky WebKit; он и прежний Firefox timeout ещё требуют диагностики. Два полных прогона rollback artifact `574de76`
+CI `3bf595f` завершился success без flaky в summary; прежние WebKit и Firefox сбои ещё требуют диагностики. Два полных прогона rollback artifact `574de76`
 дали 26 passed / 2 failed каждый; база содержит лишний Google SDK и не принята.
 В `98d4910` SDK удалён из HTML. В новом компоненте обновлены закреплённый SHA
 и workflow-пути, собран архив `98d4910`: 82 файла, 28 browser passed на семи
 конфигурациях, workers=1/retries=0, 13,2 мин. HTTP/D1-переход `bd763ec`
 → архив `98d4910` прошёл 23 запроса. CI `5b90249` также прошёл 23 HTTP/D1
 запроса и сохранил `.tar`; скачанный архив проверен. Ближайший шаг —
-разобрать flaky native WebKit и падение рабочей mock-фикстуры, затем staging.
+подтвердить полный CI рабочей mock-фикстуры, разобрать native WebKit и пройти staging.
 Тест восстановления pending теперь учитывает сохранённые `Retry-After`
 и lease; проверяет время приёма на HTTP-фикстуре. Production backoff/claim
 не изменены. Диагностика с Retry-After прошла 3/3 в desktop-движках.
@@ -39,9 +40,11 @@ CI `5b90249` завершился success с одним flaky WebKit; он и п
 в [журнале](docs/stabilization-progress.md).
 Отдельно остаётся воспроизведённый выход mock API-запросов при WebKit teardown:
 явное закрытие страницы проблему не устранило; фильтрация ошибок не является
-исправлением. Рабочая фикстура с выгрузкой документа дала 4/4 без proxy-ошибок,
-но расширенный прогон — 97 passed / 1 failed на iPhone PWA. Компонент
-не принят; [доказательства и следующий шаг](docs/mock-api-lifecycle.md).
+исправлением. Рабочая фикстура с выгрузкой документа дала 4/4 без proxy-ошибок.
+Первый расширенный прогон — 97 passed / 1 failed на iPhone PWA. После отдельного
+ожидания самого экрана перед семейными данными прошли 98/98 на семи конфигурациях,
+workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полный CI нового SHA
+ещё нужен. [Доказательства и следующий шаг](docs/mock-api-lifecycle.md).
 Затем продолжить открытые критерии P0: совместимый rollback
 artifact, runtime legacy с доказанным владельцем и остановкой старых writers,
 остальные callbacks, UI конфликтов и приёмку lifecycle/staging.

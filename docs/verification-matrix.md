@@ -6,10 +6,11 @@
 
 ## Проверенная граница
 
-Последний подтверждённый [CI `5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
-1053 unit / 194 файла, 361 browser passed / 1 flaky / 9 skips, workflow success.
-WebKit fresh rollback install прошёл с retry; один preview `ECONNREFUSED`
-и прежний Firefox PWA timeout на `98d4910` остаются открытыми. Код включает семейный
+Последний подтверждённый [CI `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
+1053 unit / 194 файла, 362 browser passed / 9 skips, workflow success.
+В summary нет flaky; один preview `ECONNREFUSED` на `/api/family`.
+Прежние WebKit access-control и Firefox timeout остаются открытыми.
+Код включает семейный
 CAS `405238b`, явное PWA-обновление `8d32f12` и поправку первого SW-клиента
 `574de76`. Это не подтверждает защищённую main, staging или production.
 
@@ -26,7 +27,9 @@ CAS `405238b`, явное PWA-обновление `8d32f12` и поправку
 [Текущий статус](project-status.md), [границы отката](release-artifacts.md).
 
 Рабочая mock-фикстура отдельно дала 4/4 в диагностике и 3/3 в двухвкладочном
-сценарии без proxy-ошибок; расширенный семейный прогон дал 97 passed / 1 failed.
+сценарии без proxy-ошибок. Первый расширенный семейный прогон — 97/1; после
+разделения ожиданий bootstrap/экрана прошли 98/98 на семи конфигурациях,
+workers=2/retries=0, без proxy-ошибок. Root typecheck прошёл.
 Это не результат опубликованного CI и не закрытие P0;
 [условия и незакрытое падение](mock-api-lifecycle.md).
 

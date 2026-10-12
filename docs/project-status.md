@@ -6,19 +6,20 @@
 [журнале стабилизации](stabilization-progress.md).
 
 Последний подтверждённый CI опубликованной ветки —
-`5b902499705e17b85045234ff952b0ede8944a70`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753),
-1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, 20,2 мин.
-Сверены head_sha, terminal run/job 114812141481 и логи 12.10.2026.
-Flaky: desktop WebKit fresh rollback install, ошибка access control на
-`/api/family/menu/state`; прошёл с retry. В preview один `ECONNREFUSED`.
-Причины этого сбоя и прежнего Firefox PWA timeout на `98d4910` не установлены.
-Компонент отката опубликован в `bd763ec`, HTTP-результаты — в `66b4de7`,
-поправка workflow — в `5b90249`. CI HTTP/D1 прошёл 23 запроса с merge-кандидатом
-`61bd073` → архив `98d4910`; оба CI-артефакта загружены. Rollback ZIP скачан,
-его SHA-256 сверена с GitHub digest, inventory извлечённого `.tar` проверен:
-82 файла. [Идентификаторы и ограничения](release-artifacts.md#артефакт-из-ci).
-Рабочие изменения E2E-фикстуры не входят в этот SHA и его CI.
+`3bf595fc80cc14da76f120bc93438cbb6f82ef85`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795),
+1053 unit / 194 файла; browser — 362 passed / 9 skips, 15,8 мин.
+Сверены head_sha, terminal run/job 114823598359 и логи 12.10.2026.
+В summary нет flaky; в preview один `ECONNREFUSED` на `/api/family`.
+Причины прежнего WebKit access-control сбоя `5b90249` и Firefox timeout
+`98d4910` не установлены. Успешный MD-прогон не объявляется их исправлением.
+CI HTTP/D1 прошёл 23 запроса: PR merge-кандидат `a33ed5f` → архив `98d4910`;
+browser diagnostics и rollback `.tar` загружены. Скачанный архив прежнего CI
+`5b90249` проверен по GitHub digest и inventory 82 файлов; артефакты разных
+запусков не отождествляются. [Идентификаторы и границы](release-artifacts.md#артефакт-из-ci).
+Рабочая mock-фикстура в этот CI не входит: после отдельного ожидания экрана
+семейные наборы прошли 98/98 без retries/proxy-ошибок; полный CI нового SHA
+ещё нужен. [Контракт](mock-api-lifecycle.md).
 Подготовительный сервер `dde4c71` и переход
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
@@ -112,8 +113,10 @@ API-запросы при закрытии контекста. Два прого
 функциональные проверки, но в каждом осталось три preview `ECONNREFUSED`.
 Явное закрытие страницы не устранило ошибку. Временные диагностические hooks
 удалены. Следующая рабочая фикстура с переходом на `about:blank` прошла
-четыре диагностических сценария без proxy-ошибок; расширенный прогон дал
-97 passed / 1 failed. Исправление fixture остаётся открытым и не считается
+четыре диагностических сценария без proxy-ошибок; первый расширенный прогон дал
+97 passed / 1 failed. После уточнения предусловия экрана локально прошли 98/98,
+workers=2/retries=0, без proxy-ошибок. Полный CI компонента ещё требуется;
+эта тестовая поправка не считается
 продуктовым исправлением PWA. [Текущая проверка](mock-api-lifecycle.md),
 [прежняя диагностика](stabilization-progress.md#сверка-md-и-диагностики-teardown--12102026).
 

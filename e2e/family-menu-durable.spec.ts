@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/mockTest';
 import { saved, setup, navigate, healthy } from './support/familyHarness';
 
 test('server preview becomes one durable family menu and purchases operation', async ({ page }, info) => {

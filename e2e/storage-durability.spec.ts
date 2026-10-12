@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp } from './support/appHarness';
 
 async function storedSettings(page: Page) {
@@ -140,6 +141,8 @@ test('two tabs without Web Locks retain an independent edit as a conflict', asyn
   expect(server.get('fitfocus_data_google-e2e-sub_settings')?.version).toBe(1);
   expect(settingsRequests).toEqual([0]); // The independent stale edit stays local; no duplicate settings claim is hidden.
   expect(errors).toEqual([]);
+  // This observer closes before the shared fixture; unload it while its mocks remain active.
+  await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
   await second.close();
 });
 

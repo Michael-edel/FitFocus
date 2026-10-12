@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp } from './support/appHarness';
 
 const account = 'google-e2e-sub';

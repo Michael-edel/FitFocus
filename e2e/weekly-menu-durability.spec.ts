@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 import type { WeeklyMenu } from '../types';
 import { WEEKLY_MENU_GENERATION_ERROR, WEEKLY_MENU_PROFILE_CHANGED, WEEKLY_MENU_SAVE_ERROR } from '../features/ai/useWeeklyMenuGeneration';

@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp } from './support/appHarness';
 
 test.describe('push settings across target platforms', () => {

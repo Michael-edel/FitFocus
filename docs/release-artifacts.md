@@ -19,6 +19,15 @@ WebKit fresh rollback install прошёл с retry после access-control о
 `/api/family/menu/state`; в preview один `ECONNREFUSED`. Прежний Firefox
 timeout также не объяснён. Staging и выпуск не подтверждены.
 
+Последующий [CI `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795) завершился success:
+1053 unit / 194 файла; 362 browser passed / 9 skips, 15,8 мин, без flaky
+в summary, один preview ECONNREFUSED на `/api/family`. HTTP/D1 — 23 запроса,
+merge-кандидат `a33ed5f5af1bee055f64d92ae04d86c0bbb3803d` → `98d4910`.
+Архив ID [11749801093](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795/artifacts/11749801093)
+и browser diagnostics ID [11750405380](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795/artifacts/11750405380)
+загружены (metadata проверены); локально ниже скачан и проверен именно архив
+предыдущего run `5b90249`. Зелёный MD-прогон не устраняет прежнюю нестабильность.
+
 Прежний архив `574de76` сохранён для диагностики и не принят:
 оба его полных прогона дали 26/28 из-за внешнего SDK/предыдущего trace race.
 История сохранена в [журнале](stabilization-progress.md).
@@ -52,8 +61,10 @@ node scripts/release-artifact.mjs --verify "C:/Users/User/Documents/Codex/2026-0
 Результат: `Verified 98d49101e15ad652e1960381ce00e00e8dac0d44: 82 files`.
 Этот CI-архив отличается от прежней локальной сборки (Node v24.19.0);
 их хеши и байты не отождествляются. Скачивание и hash inventory не закрывают
-flaky WebKit, реальные устройства или staging. Browser ZIP перечислен
-по metadata; содержимое его trace в этой сверке ещё не разобрано.
+flaky WebKit, реальные устройства или staging. Browser ZIP также скачан, его SHA-256 совпала с GitHub digest. Извлечён
+trace desktop-webkit fresh install: pageerror старого sender возник после
+нажатия обновления, до окончания reload. Проверка с удержанным native PUT
+локально прошла, но CI-ошибка не воспроизведена и не считается устранённой.
 
 ## Что сохраняется
 

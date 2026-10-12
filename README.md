@@ -69,10 +69,10 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
-1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, success.
-WebKit fresh rollback install прошёл с retry; в preview один `ECONNREFUSED`.
-Причины этой нестабильности и прежнего Firefox timeout остаются открытыми.
+Подтверждённый [CI опубликованной ревизии `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
+В summary нет flaky; в preview один `ECONNREFUSED` на `/api/family`.
+Причины прежних WebKit access-control и Firefox timeout остаются открытыми.
 В `98d4910` удалён неиспользуемый Google SDK; локально до CI прошли
 7/7 auth-shell и 7/7 real-SW обновлений без retries.
 Локальные неуспешные прогоны и границы actual-bundle smoke сохранены
@@ -89,8 +89,10 @@ WebKit fresh rollback install прошёл с retry; в preview один `ECONNR
 23 запроса. Компонент опубликован в `bd763ec`, поправка workflow — в `5b90249`.
 CI прошёл HTTP/D1-проверку из 23 запросов и сохранил архив; скачанный
 артефакт проверен по GitHub digest и inventory 82 файлов. Staging и приёмка
-нестабильного WebKit-сценария остаются открытыми. Незакоммиченная E2E-фикстура проверяется
-[отдельно](docs/mock-api-lifecycle.md): 97 passed / 1 failed в расширенном прогоне.
+нестабильного WebKit-сценария остаются открытыми. Рабочая E2E-фикстура проверяется
+[отдельно](docs/mock-api-lifecycle.md): после уточнения предусловия экрана
+98 passed на семи конфигурациях без retries/proxy-ошибок; исходный 97/1 сохранён.
+CI точного нового компонента ещё требуется.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`

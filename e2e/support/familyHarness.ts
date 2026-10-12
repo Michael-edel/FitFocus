@@ -92,6 +92,8 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     };
   });
   await openApp(page, options.url ?? '/#family'); await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
+  // #root also renders the bootstrap shell; start the data assertion on the actual family screen.
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
   return { errors, counts, restore: () => { available = true; }, release, close: () => { active = false; } };

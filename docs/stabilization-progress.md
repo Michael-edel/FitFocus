@@ -1942,3 +1942,41 @@ Rollback ZIP скачан; SHA-256 совпала с GitHub digest, `.tar` из�
 CI проверяет опубликованный компонент; незакоммиченная mock-фикстура в него
 не входит. Неуспешный локальный прогон 97/1 и прежние результаты сохранены.
 Main/deploy/staging и полная приёмка P0 остаются открытыми.
+
+## Завершение mock API и фазовое ожидание экрана — 12.10.2026
+
+Рабочее дерево поверх `3bf595fc80cc14da76f120bc93438cbb6f82ef85`.
+Общая test-фикстура выгружает живой документ до закрытия context, при
+действующих routes; при падении прикладывает PNG до unload. Подключены
+12 mock-наборов, native PWA-наборы сохранены на стандартном test.
+Вторая вкладка storage-теста выгружается до своего явного close.
+Ни API, ни lifecycle приложения, ни логи не подавляются.
+
+Семейная диагностика до фикстуры: 4 passed / 4 proxy errors. После unload:
+4 passed / 0 proxy errors. Первый расширенный прогон: 97 passed / 1 failed,
+0 proxy errors; trace показал ожидание данных ещё до bootstrap. Отдельный
+повтор iPhone без изменения кода: 2/2. Затем familyHarness стал отдельно
+ожидать заголовок экрана перед семейными данными; таймауты/retries/assertions
+данных не менялись. Итог: **98 passed, 7,8 мин, workers=2/retries=0**, семь
+конфигураций, **0 ECONNREFUSED**. Исходный 97/1 не удалён и не заменён.
+Две вкладки без Web Locks ранее прошли 3/3 с той же unload-фикстурой.
+Root typecheck/15 admin guards: exit 0. PNG контролируемого намеренного
+падения просмотрен: meaningful auth UI вместо about:blank. Desktop/Android
+скриншоты доставки и quota просмотрены; отсутствие overlay и сохранение
+прежнего меню дополнительно проверены assertions. [Логи и границы](mock-api-lifecycle.md).
+
+Тем временем [CI `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795) завершился success,
+head_sha проверен, terminal job 114823598359: 1053 unit / 194 файла,
+362 browser passed / 9 skips, 15,8 мин, без flaky в summary. В preview один
+ECONNREFUSED `/api/family`. HTTP/D1 23 запроса passed: merge `a33ed5f` → `98d4910`.
+Архив ID 11749801093 и diagnostics ID 11750405380 загружены, metadata сверены.
+Этот CI не содержит текущую mock-фикстуру; её новый SHA проверяется отдельно.
+
+Скачанный browser ZIP прежнего CI `5b90249` проверен по digest. Trace native
+WebKit показывает pageerror старого sender после update-click и до reload.
+Внешняя проверка с удержанным native PUT прошла 1/1, сохранив opId, без pageerror;
+она не воспроизводит и не устраняет исходный CI-сбой. Начальный диагностический
+setup с дефолтными 5 с и окончательный 10-секундный вариант сохранены вне Git.
+Причины прежних Firefox/WebKit ошибок и задержки приложения остаются открытыми.
+Текущий компонент меняет только E2E-инфраструктуру и MD; storage/schema,
+production retry/claim, main/deploy и остальные критерии P0 не менялись.

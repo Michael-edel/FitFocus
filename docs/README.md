@@ -47,10 +47,12 @@
 ## Подтверждённая ревизия
 
 Последний подтверждённый CI опубликованной ветки —
-[`5b90249`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753):
-1053 unit / 194 файла; browser — 361 passed / 1 flaky / 9 skips, success.
-WebKit fresh rollback install прошёл с retry; в preview один `ECONNREFUSED`.
-Эта нестабильность, прежний Firefox timeout и mock teardown остаются открытыми.
+[`3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
+1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
+В summary нет flaky; один preview `ECONNREFUSED` на `/api/family`.
+Прежние WebKit/Firefox сбои остаются открытыми. Рабочая mock-фикстура
+локально прошла 98 семейных сценариев без retries/proxy-ошибок;
+её полный CI ещё требуется. [Контракт](mock-api-lifecycle.md).
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).

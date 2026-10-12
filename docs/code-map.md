@@ -44,6 +44,14 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 | PWA и обновление приложения | [sw.ts](../sw.ts), [pwa.ts](../pwa.ts), [pwaRegistration](../services/pwaRegistration.ts), [pwaUpdate](../services/pwaUpdate.ts), [PwaUpdateNotice](../ui/PwaUpdateNotice.tsx) | [Контракт обновления](pwa-updates.md), [unit регистрации](../tests/pwa_registration.test.ts), [unit повторов](../tests/pwa_update.test.ts), [real SW E2E](../e2e/pwa-update.spec.ts), [shell E2E](../e2e/pwa-shell.spec.ts); активация SW не доказывает остановку всех прежних writers |
 | Сборка и проверка отката | [Упаковщик](../scripts/release-artifact.mjs), [HTTP-проверка](../scripts/check-release-rollback.mjs) | [Контракт](release-artifacts.md), [целостность](../tests/release_artifact.test.ts), [откат pending/conflict](../e2e/pwa-rollback.spec.ts), [свежая установка](../e2e/pwa-rollback-install.spec.ts), [CI](../.github/workflows/ci.yml), [выпуск](../RELEASE_CHECKLIST.md) |
 
+## Браузерные фикстуры
+
+Mock-наборы используют [mockTest](../e2e/support/mockTest.ts) для выгрузки
+документа до снятия routes. [familyHarness](../e2e/support/familyHarness.ts)
+разделяет появление экрана и загрузку семейных данных. Native PWA-наборы
+сохраняют стандартный test и [HTTP-сервер](../e2e/support/pwaReleaseServer.ts).
+Доказательства и границы — в [контракте mock lifecycle](mock-api-lifecycle.md).
+
 ## Границы, которые нужно сохранить
 
 - Пользовательские изменения проходят через repository/editor и атомарную
