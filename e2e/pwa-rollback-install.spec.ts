@@ -8,10 +8,29 @@ import { saved, healthy } from './support/familyHarness';
 
 test('fresh rollback installation can explicitly update to the candidate and preserve its family intent', async ({ context }, info) => {
   test.setTimeout(90_000);
-  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'));
+  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { familyPutDelayMs: 5_000 });
   const page = await context.newPage(), errors: string[] = [], googleRequests: string[] = [];
   let navigations = 0;
   page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    const key = '__fitfocusPwaRollbackLifecycle';
+    const record = (type: string, detail: Record<string, unknown> = {}) => {
+      try {
+        const events = JSON.parse(sessionStorage.getItem(key) ?? '[]') as unknown[];
+        events.push({ type, time: performance.now(), url: location.href, detail });
+        sessionStorage.setItem(key, JSON.stringify(events.slice(-40)));
+      } catch { /* Diagnostics must not change the app's storage behavior. */ }
+    };
+    window.addEventListener('pagehide', event => record('pagehide', { persisted: event.persisted }));
+    window.addEventListener('unhandledrejection', event => {
+      const reason = event.reason;
+      record('unhandledrejection', { name: reason instanceof Error ? reason.name : null,
+        message: reason instanceof Error ? reason.message : String(reason), stack: reason instanceof Error ? reason.stack : null });
+    });
+    window.addEventListener('error', event => record('error', {
+      message: event.message, filename: event.filename, line: event.lineno, column: event.colno,
+    }));
+  });
   page.on('request', request => {
     if (/(^|\.)google\.com$/.test(new URL(request.url()).hostname)) googleRequests.push(request.url());
   });
@@ -30,7 +49,8 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     const candidateScript = readFileSync(resolve('dist/index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
     expect(candidateScript).toBeTruthy(); expect(installedScript).not.toBe(candidateScript);
     await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
-    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('pending');
+    // Hold the native request open so this check exercises the exact pagehide/abort boundary.
+    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('sending');
     const operation = (await saved(page)).operations[0];
     page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations += 1; });
     server.release(); await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
@@ -44,11 +64,17 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(operation.opId);
     expect((await saved(page)).operations[0].value).toBe(operation.value); expect((await saved(page)).version).toBe(3);
+    await expect.poll(() => server.counts.familyPutAborted).toBeGreaterThan(0);
     await healthy(page, errors); expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
+    const lifecycle = await page.evaluate(() => sessionStorage.getItem('__fitfocusPwaRollbackLifecycle'));
     await page.screenshot({ path: info.outputPath('fresh-rollback-updated.png') });
-    await info.attach('fresh-rollback-proof', { body: JSON.stringify({ installedScript, candidateScript, navigations, operation, googleRequests }), contentType: 'application/json' });
+    await info.attach('fresh-rollback-proof', { body: JSON.stringify({ installedScript, candidateScript, navigations, operation,
+      counts: server.counts, googleRequests, lifecycle }), contentType: 'application/json' });
   } catch (error) {
-    console.error('Fresh rollback diagnostics:', JSON.stringify({ navigations, errors, googleRequests, unexpectedApi: server.unexpectedApi }));
+    const lifecycle = await page.evaluate(() => sessionStorage.getItem('__fitfocusPwaRollbackLifecycle')).catch(() => null);
+    console.error('Fresh rollback diagnostics:', JSON.stringify({ navigations, errors, googleRequests,
+      unexpectedApi: server.unexpectedApi, lifecycle }));
+    await info.attach('fresh-rollback-browser-lifecycle', { body: lifecycle ?? '[]', contentType: 'application/json' });
     await page.screenshot({ path: info.outputPath('fresh-rollback-failed.png'), timeout: 3000 }).catch(() => {}); throw error;
   } finally { await page.close(); await server.close(); }
 });

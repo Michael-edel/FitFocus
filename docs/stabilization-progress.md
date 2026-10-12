@@ -2050,3 +2050,18 @@ passed with `retries=0` (3+6+8+1); no new failure trace was captured. Root typec
 and the final focused run passed. This narrows
 the failure boundary but does not prove its cause or fix; P0.9 remains open.
 Evidence directories are recorded in [the PWA contract](pwa-updates.md#повторное-исследование-firefox-indexeddb-timeout--12102026).
+
+## Повторная проверка WebKit sender при обновлении PWA — 12.10.2026
+
+Опубликованный `7109dcfe13d1c8d065c8de11f842d34ffc894fa6` прошёл
+[CI 38274180638](https://github.com/Michael-edel/FitFocus/actions/runs/38274180638),
+job 114896068538: 1053 unit / 194 файла, 383 browser passed / 9 skips,
+20,1 мин; в итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
+
+После CI рабочая E2E-проверка на этой базе задерживает native family PUT
+на 5 секунд и запускает настоящее SW-обновление при `status: sending`.
+Desktop WebKit прошёл 3/3 (`workers=1/retries=0`), 1,5 мин; операция сохранила
+`opId` и payload, fixture подтвердила разрыв задержанного native-ответа,
+pageerror не было. Проверка сценария не установила причину
+исторического pageerror из `5b90249`; P0.9 открыт. Изменения теста/фикстуры
+и это дополнение к MD ожидают коммита и отдельного CI.

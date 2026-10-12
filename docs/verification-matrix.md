@@ -16,10 +16,11 @@ passed / 9 skips и 23 HTTP/D1 запроса. Реальный staging, D1/APP_
 
 ## Проверенная граница
 
-Последний подтверждённый [CI `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+Последний подтверждённый [CI `7109dcf`](https://github.com/Michael-edel/FitFocus/actions/runs/38274180638):
 1053 unit / 194 файла, 383 browser passed / 9 skips, workflow success.
-В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
-Прежние WebKit access-control и Firefox timeout остаются открытыми.
+В итоговых логах нет flaky, preview proxy errors и ECONNREFUSED.
+Причины прежних WebKit access-control и Firefox timeout остаются открытыми;
+локальная WebKit проверка на рабочем дереве пока не входит в CI.
 Код включает семейный
 CAS `405238b`, явное PWA-обновление `8d32f12` и поправку первого SW-клиента
 `574de76`. Это не подтверждает защищённую main, staging или production.
@@ -99,7 +100,7 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [контракт](sync-model.md) | Доказанное владение legacy и барьер реально работающих старых writers |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; value/операция и import/ledger атомарны; legacy-нормализатор реализован | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Runtime-импорт с доказательствами владельца и барьера старых writers; итоговый rollback artifact; backup/экспорт/очистка всех stores |
-| P0.9 — приёмка | Есть unit и браузерные сценарии отдельных компонентов | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md) | Чистая browser-приёмка точного release SHA, Firefox PWA timeout и mock teardown, реальные устройства/BFCache/OAuth/staging и проверка отката |
+| P0.9 — приёмка | Есть unit и браузерные сценарии отдельных компонентов; mock teardown проходит CI без preview proxy errors; локальный WebKit held-PUT rollback — 3/3 | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026) | Firefox PWA timeout и исторический WebKit sender error с неизвестными причинами, реальные устройства/BFCache/OAuth/staging и проверка отката |
 
 Все P0 остаются открытыми в целом. Успешные части и оставшиеся условия
 нужно читать вместе; результаты mock API не подтверждают поведение реального D1.

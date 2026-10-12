@@ -173,3 +173,24 @@ Typecheck прошёл. Логи и trace — в `outputs/pwa-firefox-repeat3-07
 `outputs/pwa-firefox-idb-diagnostics`, `outputs/pwa-firefox-idb-trace6`,
 `outputs/pwa-firefox-idb-trace8` и `outputs/pwa-firefox-saved-diagnostics-final`
 внешнего каталога `C:\Users\User\Documents\Codex\2026-09-17\yf`.
+
+## Повторная проверка WebKit pageerror при PWA update — 12.10.2026
+
+Исторический desktop WebKit pageerror `/api/family/menu/state` возник
+в CI `5b90249` после ожидаемого ответа 503 и во время нажатия явного обновления.
+На локальном trace этого CI виден один 503 PUT перед pageerror. Последующий CI
+`7109dcf` прошёл полностью без flaky, но сам по себе не доказывает исправление.
+
+На рабочем дереве поверх `7109dcf` E2E fixture удерживает native HTTP PUT
+на 5 секунд. Тест дожидается `status: sending`, предлагает обновление настоящего
+Service Worker, затем проверяет reload, сохранённые `opId` и payload, ошибки
+страницы и неожиданную сетевую активность. Fixture считает разорванный native
+ответ; каждый повтор требует увидеть такой разрыв. Desktop WebKit прошёл 3/3,
+`workers=1/retries=0`, за 1,5 мин. В итоговом рабочем прогоне pageerror не было.
+Рабочий каталог старого release artifact —
+`C:\Users\User\Documents\Codex\2026-09-17\yf\outputs\rollback-98d4910-v1`.
+
+Проверка подтверждает только сценарий обновления при отправляемой семейной
+операции. Исторический pageerror не воспроизведён, его первопричина не
+установлена; P0.9 остаётся открытым. Изменения E2E fixture и diagnostics
+находятся в незакоммиченном рабочем дереве; их CI ещё не запускался.

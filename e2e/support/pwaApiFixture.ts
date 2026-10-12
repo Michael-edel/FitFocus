@@ -8,11 +8,11 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
-export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean } = {}) {
+export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number } = {}) {
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
   let available = false, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
-  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null, oauth: 0 };
+  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null, oauth: 0, familyPutAborted: 0 };
   return { unexpectedApi, counts, recover: (conflict = false) => {
     available = true;
     if (conflict) { familyVersion += 1; familyMenu = familyTestMenu(account, 900, week); }
@@ -61,6 +61,8 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     if (path === '/api/family/menu/state') {
       if (method === 'PUT') {
         counts.put += 1;
+        if (options.familyPutDelayMs) await new Promise(resolve => setTimeout(resolve, options.familyPutDelayMs));
+        if (response.destroyed) { counts.familyPutAborted += 1; return; }
         if (!available) return json({ error: 'INJECTED_OFFLINE' }, 503,
           options.retryAfterSeconds === undefined ? {} : { 'Retry-After': String(options.retryAfterSeconds) });
         if (body.familyId !== familyId || body.weekStart !== week) {

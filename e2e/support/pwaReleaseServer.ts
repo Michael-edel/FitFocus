@@ -7,7 +7,7 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
-export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean } = {}) {
+export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number } = {}) {
   let directory = resolve(previous);
   const api = createPwaApiFixture(options);
   const server = createServer(async (request, response) => {

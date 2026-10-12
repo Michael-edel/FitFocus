@@ -6,26 +6,25 @@
 [журнале стабилизации](stabilization-progress.md).
 
 Последний подтверждённый CI опубликованной ветки —
+`7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38274180638),
+job 114896068538, завершён 12.10.2026 в 16:23:15 UTC.
+1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,1 мин.
+В итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
+Локальная диагностика WebKit ниже проводится на рабочем дереве и требует
+отдельного CI после публикации.
+
+Предыдущий CI —
 `076f4aca8e9855bb328a3fe695cb0bcd085ddd6f`:
 [success](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999),
-job 114853979454, завершён 12.10.2026 в 14:40:40 UTC.
 1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,3 мин.
-В итоговом логе нет flaky, ECONNREFUSED и preview proxy errors.
-Проверены preview-origin компонент и опубликованная mock-фикстура `085fcc1`.
-HTTP/D1: 23 запроса, merge-кандидат `8a2a9e9` → архив `98d4910`.
-Browser diagnostics и архив отката загружены;
-[метаданные](release-artifacts.md#ci-preview-origin-076f4ac).
-
-Предыдущий подтверждённый CI —
-`3bf595fc80cc14da76f120bc93438cbb6f82ef85`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795),
-1053 unit / 194 файла; browser — 362 passed / 9 skips, 15,8 мин.
-Сверены head_sha, terminal run/job 114823598359 и логи 12.10.2026.
-В summary нет flaky; в preview один `ECONNREFUSED` на `/api/family`.
+В итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
 Причины прежнего WebKit access-control сбоя `5b90249` и Firefox timeout
 `98d4910` не установлены. Успешный MD-прогон не объявляется их исправлением.
-CI HTTP/D1 прошёл 23 запроса: PR merge-кандидат `a33ed5f` → архив `98d4910`;
-browser diagnostics и rollback `.tar` загружены. Скачанный архив прежнего CI
+Для `076f4ac` HTTP/D1 прошёл 23 запроса: merge-кандидат `8a2a9e9` → архив
+`98d4910`; browser diagnostics и rollback `.tar` загружены;
+[метаданные](release-artifacts.md#ci-preview-origin-076f4ac).
+Скачанный архив прежнего CI
 `5b90249` проверен по GitHub digest и inventory 82 файлов; артефакты разных
 запусков не отождествляются. [Идентификаторы и границы](release-artifacts.md#артефакт-из-ci).
 Mock-фикстура опубликована в `085fcc1` и в предыдущий CI `3bf595f` не входит.
@@ -37,6 +36,12 @@ Mock-фикстура опубликована в `085fcc1` и в предыду
 Подготовительный сервер `dde4c71` и переход
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
+
+На базе `7109dcf` WebKit rollback-сценарий проверен отдельно: 3/3 на рабочем
+E2E-дереве с задержанным native PUT, `workers=1/retries=0`. Во время обновления
+SW операция сохранила `opId` и payload; pageerror не возник. Историческая ошибка
+из `5b90249` не воспроизведена, её первопричина остаётся неизвестной.
+[Протокол проверки](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026).
 
 ## Опубликованный компонент — origin preview
 
