@@ -56,6 +56,21 @@ it('rejects a late response after another tab invalidates the IDB fence', async 
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
   await outbox.invalidateSessions(); release(json({ newlyUnlocked: [{ key: 'old' }] }, headers())); await result;
 });
+
+it('an automatic proof already in flight cannot clear a newly established auth pause', async () => {
+  let release!: (response: Response) => void;
+  const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => { release = resolve; }));
+  const pending = prepare(fetchImpl);
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+  const connection = await db.open();
+  const tx = connection.transaction('outbox_meta', 'readwrite'), store = tx.objectStore('outbox_meta');
+  const read = store.get('active-session'); read.onsuccess = () => store.put({ ...read.result, pause: 'auth' });
+  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error); });
+  const paused = await outbox.sessionState();
+  release(json(me()));
+  await expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  expect(await outbox.sessionState()).toEqual(paused);
+});
 it('cancels a held body on pagehide even if the transport ignores AbortSignal', async () => {
   const target = new EventTarget(); vi.stubGlobal('window', target);
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));

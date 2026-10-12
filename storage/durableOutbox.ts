@@ -178,13 +178,13 @@ export class DurableOutbox {
     return (await this.acceptSessionState(accountId, serverSessionId, expectedFence))?.session ?? null;
   }
 
-  async acceptReadSession(accountId: string, serverSessionId: string, expectedFence: number): Promise<OutboxReadGuard | null> {
-    const accepted = await this.acceptSessionState(accountId, serverSessionId, expectedFence);
+  async acceptReadSession(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard): Promise<OutboxReadGuard | null> {
+    const accepted = await this.acceptSessionState(accountId, serverSessionId, expectedFence, previous);
     return accepted ? { accountId, serverSessionId, sessionEpoch: accepted.session.sessionEpoch, authFence: accepted.authFence } : null;
   }
 
   /** Accept proof and capture its fence in the same transaction; later reads cannot adopt a newer fence. */
-  private async acceptSessionState(accountId: string, serverSessionId: string, expectedFence: number): Promise<{ session: ActiveOutboxSession; authFence: number } | null> {
+  private async acceptSessionState(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard): Promise<{ session: ActiveOutboxSession; authFence: number } | null> {
     requireText(accountId); requireText(serverSessionId);
     if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
     const db = await this.connection.open();
@@ -193,6 +193,10 @@ export class DurableOutbox {
       const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
       if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
       const current = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
+      // Refreshing an existing read action cannot clear a pause or replace its attempt while /me was in flight.
+      if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
+        || previous.authFence !== expectedFence || current?.accountId !== previous.accountId
+        || current.serverSessionId !== previous.serverSessionId || current.sessionEpoch !== previous.sessionEpoch || current.pause)) return null;
       if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return { session: current, authFence: expectedFence };
       const revision = (fence?.revision ?? 0) + 1;
       if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');

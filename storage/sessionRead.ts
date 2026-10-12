@@ -83,7 +83,7 @@ export async function verifyReadSession(options: SessionReadOptions & {
     || options.previous && (proof.accountId !== options.previous.accountId || proof.sessionId !== options.previous.serverSessionId)) {
     throw new SessionReadError('session');
   }
-  const accepted = await outbox.acceptReadSession(proof.accountId, proof.sessionId, before.fence);
+  const accepted = await outbox.acceptReadSession(proof.accountId, proof.sessionId, before.fence, options.previous);
   current(options);
   if (!accepted) throw new SessionReadError('session');
   await assertReadSession(accepted, { ...options, outbox });
