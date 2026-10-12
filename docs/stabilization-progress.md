@@ -1708,3 +1708,37 @@ runtime legacy, staging, protected-main merge и deploy остаются отк�
 source paths: ошибок нет. `git diff --check` прошёл. Runtime-тесты для
 изменения документации повторно не запускались; новый CI проверяется
 после commit/push именно этого набора MD-файлов.
+
+## Удаление лишней сетевой зависимости PWA — 12.10.2026
+
+Изменение поверх `d3a9496d8bdc40c8389ff5fbba0df142b3a0dbbc`.
+Из `index.html` удалён безусловный `accounts.google.com/gsi/client`:
+в клиенте нет вызовов GIS, а [кнопка входа](../OAuthSignInButton.tsx)
+переходит на [серверный OAuth start](../functions/api/auth/google/start.ts).
+Лишний запрос мог падать по DNS даже в авторизованной PWA. Удаление SDK
+не заменяет реальный Google OAuth или его staging-проверку.
+
+Расширенный [auth-shell E2E](../e2e/pwa-shell.spec.ts) проверяет отсутствие
+запросов к Google при загрузке, manifest/настоящий SW, нажатие Google-входа,
+invite/redirect и pending-oauth в sessionStorage. API и подставной OAuth
+endpoint обслуживаются native HTTP; page.route не подменяет SW-запросы.
+RED до исправления: один запрос к GIS, `oauth-unused-sdk-red.log`.
+Первое расширение с page.route дало 3 passed / 4 failed из-за обхода маршрута
+SW. Первый native HTTP прогон двух сценариев: 13/14, единственный отказ —
+Firefox Quirks Mode у тестового endpoint без doctype. Фикстура исправлена.
+Финальная auth-shell матрица: 7/7, workers=1/retries=0;
+`oauth-unused-sdk-auth-final.log`. Консоль не фильтруется.
+
+[Forward E2E](../e2e/pwa-update.spec.ts) прошёл 7/7 в native HTTP прогоне:
+старые v2 app/SW bytes сохранены; только внешний неиспользуемый SDK старого
+первого uncontrolled-клиента получает синтетический ответ. Текущий клиент
+вообще не запрашивает GIS. Перед активацией подписаны navigation listeners;
+click не ждёт навигацию, затем обе вкладки дожидаются load. Их JS сверяется
+с кандидатом; pending opId/value, профиль и IDB v3 сохраняются. Это исправляет
+гонку trace-снимка при reload без фильтрации Firefox warning.
+
+Шесть unit-проверок OAuth start/state прошли; typecheck прошёл. Production
+build выполнен browser-прогонами. Реальные Google OAuth/устройства/staging
+не проверены. Артефакт `574de76` ещё содержит лишний SDK и не принимается
+итоговой базой: после публикации этого исправления нужна новая сохранённая
+сборка и её полная приёмка. CI точного нового SHA проверяется отдельно.

@@ -24,6 +24,15 @@ test('real service worker waits for an explicit update and preserves durable fam
   test.setTimeout(90_000);
   const server = await startPwaReleaseServer(previousPwaDist, resolve('dist'));
   const oldPage = await context.newPage(), page = await context.newPage();
+  let legacyIdentityLoads = 0;
+  const currentIdentityRequests: string[] = [];
+  // The retained v2 HTML has an unused GIS loader. Its first, uncontrolled page
+  // uses a synthetic login; isolate that external SDK, preserving all v2 app/SW bytes.
+  await oldPage.route('https://accounts.google.com/gsi/client', route => {
+    legacyIdentityLoads += 1;
+    return route.fulfill({ contentType: 'text/javascript', body: '/* Synthetic legacy OAuth session. */' });
+  });
+  page.on('request', request => { if (new URL(request.url()).hostname === 'accounts.google.com') currentIdentityRequests.push(request.url()); });
   const diagnostics: string[] = [];
   for (const tab of [oldPage, page]) {
     tab.on('pageerror', error => diagnostics.push(error.message));
@@ -38,6 +47,9 @@ test('real service worker waits for an explicit update and preserves durable fam
     server.release();
     // A release query bypasses the old precached index while retaining the same origin/scope/IDB.
     const errors = await openNative(page, server.origin + '/?release=next#family', standalone);
+    const candidateScript = await page.locator('script[type="module"][src]').getAttribute('src');
+    expect(candidateScript).toBeTruthy();
+    expect(await oldPage.locator('script[type="module"][src]').getAttribute('src')).not.toBe(candidateScript);
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state)).toBe('installed');
     await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
     await expect.poll(() => server.counts.put).toBeGreaterThan(0);
@@ -82,10 +94,15 @@ test('real service worker waits for an explicit update and preserves durable fam
     await page.screenshot({ path: info.outputPath('pwa-update-retry-preserved-draft.png') });
     await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Черновик перед обновлением');
-    await update.click();
-    await expect.poll(() => navigations).toBeGreaterThan(0);
-    await expect.poll(() => oldNavigations).toBeGreaterThan(0);
+    const reloaded = [page, oldPage].map(tab => tab.waitForEvent('framenavigated', frame => frame === tab.mainFrame()));
+    // Waiting for navigation inside click can snapshot the new DOM before its CSS loads.
+    // Subscribe first, return from the click on the old document, then wait for both loads.
+    await update.click({ noWaitAfter: true });
+    await Promise.all(reloaded);
     await Promise.all([page.waitForLoadState('load'), oldPage.waitForLoadState('load')]);
+    expect(navigations).toBeGreaterThan(0); expect(oldNavigations).toBeGreaterThan(0);
+    await expect(page.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
+    await expect(oldPage.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting === null)).toBe(true);
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Черновик перед обновлением');
     // In-app tab selection does not change the original #family deep link.
@@ -103,11 +120,13 @@ test('real service worker waits for an explicit update and preserves durable fam
       return requests.flat().filter(request => new URL(request.url).pathname.startsWith('/api/')).map(request => request.url);
     });
     expect(cachedApi).toEqual([]); expect(server.unexpectedApi).toEqual([]);
+    expect(legacyIdentityLoads).toBeGreaterThan(0); expect(currentIdentityRequests).toEqual([]);
     await expect(page).toHaveTitle(/FitFocus/); await healthy(page, errors); await healthy(oldPage, oldErrors);
     await page.getByPlaceholder('Как к вам обращаться').evaluate(element => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: info.outputPath('pwa-updated-preserved-profile.png') });
     await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi,
-      counts: server.counts, idbVersion: (await saved(page)).version, preservedFamilyOpId: pending.opId }), contentType: 'application/json' });
+      counts: server.counts, legacyIdentityLoads, currentIdentityRequests, candidateScript,
+      idbVersion: (await saved(page)).version, preservedFamilyOpId: pending.opId }), contentType: 'application/json' });
   } catch (error) {
     console.error('PWA runtime diagnostics:', JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi }));
     await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi }), contentType: 'application/json' });

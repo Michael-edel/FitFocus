@@ -8,13 +8,17 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
-export function createPwaApiFixture() {
+export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean } = {}) {
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
-  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0 };
-  return { unexpectedApi, counts, async respond(request: IncomingMessage, response: ServerResponse, url: URL) {
+  let available = false, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
+  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null, oauth: 0 };
+  return { unexpectedApi, counts, recover: (conflict = false) => {
+    available = true;
+    if (conflict) { familyVersion += 1; familyMenu = familyTestMenu(account, 900, week); }
+  }, async respond(request: IncomingMessage, response: ServerResponse, url: URL) {
     const path = url.pathname, method = request.method;
-    const json = (body: unknown, status = 200) => { response.writeHead(status, headers); response.end(JSON.stringify(body)); };
+    const json = (body: unknown, status = 200, extra: Record<string, string> = {}) => { response.writeHead(status, { ...headers, ...extra }); response.end(JSON.stringify(body)); };
     const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const raw = Buffer.concat(chunks).toString('utf8');
     const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
@@ -23,6 +27,13 @@ export function createPwaApiFixture() {
       unexpectedApi.push(`INVALID_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
     }
     if (path === '/api/env') return json({ requireInvite: false });
+    if (options.unauthenticated && path === '/api/me') return json({ user: null, hasAccess: false });
+    if (options.unauthenticated && path === '/api/auth/google/start') {
+      counts.oauth += 1;
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>OAuth fixture</title></head><body><h1>Server OAuth endpoint</h1></body></html>');
+      return;
+    }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
       ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'familySync'].map(name =>
@@ -45,17 +56,26 @@ export function createPwaApiFixture() {
       members: [{ user_id: account, role: 'owner', status: 'active' }] });
     if (path === '/api/family/menu') {
       week = url.searchParams.get('week') ?? week;
-      return json({ weekStart: week, shared: { familyId, version: 1, menu: familyTestMenu(account, 400, week) }, portions: null });
+      return json({ weekStart: week, shared: { familyId, version: familyVersion, menu: { ...familyMenu, weekStart: week } }, portions: null });
     }
     if (path === '/api/family/menu/state') {
-      if (method === 'PUT') { counts.put += 1; return json({ error: 'INJECTED_OFFLINE' }, 503); }
-      return json({ ok: true, snapshot: { familyId, weekStart: week, version: 1, menu: familyTestMenu(account, 400, week) } });
+      if (method === 'PUT') {
+        counts.put += 1;
+        if (!available) return json({ error: 'INJECTED_OFFLINE' }, 503,
+          options.retryAfterSeconds === undefined ? {} : { 'Retry-After': String(options.retryAfterSeconds) });
+        if (body.familyId !== familyId || body.weekStart !== week) {
+          unexpectedApi.push('WRONG_FAMILY_TARGET'); return json({ error: 'WRONG_TARGET' }, 403);
+        }
+        if (body.baseVersion !== familyVersion) return json({ snapshot: { familyId, weekStart: week, version: familyVersion, menu: familyMenu } }, 409);
+        familyMenu = body.menu as typeof familyMenu; familyVersion += 1; counts.accepted += 1; counts.acceptedAtMs = Date.now();
+      }
+      return json({ ok: true, snapshot: { familyId, weekStart: week, version: familyVersion, menu: { ...familyMenu, weekStart: week } } });
     }
     if (path === '/api/family/menu/generate' && body.preview === true && body.familyId === familyId) {
       counts.preview += 1; return json({ preview: true, shared: { familyId, weekStart: week, menu: familyTestMenu(account, 700, week) } });
     }
     if (path === '/api/shopping/list') return json({ family_id: familyId, week_start: week,
-      items: familyTestMenu(account, 400, week).shoppingListItems?.map(item => ({ ...item, checked: false })) });
+      items: familyMenu.shoppingListItems?.map(item => ({ ...item, checked: false })) });
     if (path === '/api/achievements' || path === '/api/achievements/check') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai' && body.feature === 'wis_text') return json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
     if (path === '/api/wearable/huawei/status') return json({ connected: false, configured: false });
