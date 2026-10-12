@@ -191,3 +191,13 @@ Durable-порядок/CAS items и остальные producers остаютс�
 в [отдельном `57da2cf`](achievement-session.md). Остальные AI writers и настоящий
 BFCache/staging остаются открытыми. CI `bf01d87` для profile-компонента прошёл:
 905 unit, 201 browser passed / 9 skips, без flaky; новые изменения проверяются отдельно.
+
+
+## Последующий компонент 4736ff5: личные покупки
+
+Прежний явный личный items POST после IDB commit заменён SQL-проекцией
+принятого profile CAS. Используется одна постоянная profile-операция;
+генерация и sender дополнительно требуют projection capability.
+Scoped личный POST отклоняется кодом PERSONAL_MENU_PROFILE_REQUIRED,
+семейный путь остаётся отдельным. Исторические результаты этого документа
+не переносятся на новый код. [Текущий контракт и свидетельства](personal-menu-projection.md).

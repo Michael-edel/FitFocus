@@ -67,8 +67,11 @@
   переданную account/session-привязку до прикладных эффектов. Персональный
   menu-сценарий подключён на `f4b4eee`; остальные callbacks ещё открыты.
   Не переноси CI прежнего `8fc0b1b` на эту реализацию; сверяй точный HEAD.
-  Требуй свежий proof, capabilities, lifetime и атомарный profile commit до
-  явного items writer. Scope не обеспечивает CAS вторичной проекции;
+  Требуй свежий proof, capabilities, lifetime и атомарный profile commit.
+  Личные покупки на `4736ff5` следуют profile CAS через SQL-проекцию;
+  [контракт](docs/personal-menu-projection.md), [ADR-007](docs/adr/ADR-007-personal-menu-projection.md).
+  Не возвращай отдельный личный items POST. Семейный путь ещё открыт.
+  Scope не обеспечивает CAS произвольной вторичной проекции;
   запросы прежнего клиента без scope остаются незащищёнными этим guard.
 - Автоматический profile debounce вызывает `flushPending`, ручная синхронизация —
   `syncNow` со свежим proof. Не переавторизуй auth-паузу таймером; сохраняй

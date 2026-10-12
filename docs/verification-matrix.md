@@ -14,8 +14,15 @@
 полная матрица кода `724ecf1` — 3 workers, retries=0, с теми же итогами.
 Это не подтверждает staging, production или слияние в main.
 
-Рабочие изменения личного списка покупок не входят в эту ревизию.
-Их отдельный статус — в [контракте проекции](personal-menu-projection.md).
+Последующий CI документационного `14ca638` также прошёл:
+[запуск](https://github.com/Michael-edel/FitFocus/actions/runs/38191713675),
+950 unit, 229 browser passed / 9 skips. Новый компонент `4736ff5` проверяется
+отдельно: 966 unit / 187 файлов, все обязательные guards/typecheck и 16 HTTP
+локального Worker/D1 прошли. Полная browser matrix `4736ff5`: 236 passed /
+9 skips, 7 проектов, workers=3, retries=0. После серверной валидации `830caf4`
+прошли 976 unit и повторный Worker/D1 smoke; клиент/E2E не менялись.
+CI итогового опубликованного HEAD проверяется отдельно.
+Подробные доказательства и условия выпуска — в [контракте проекции](personal-menu-projection.md).
 
 ## P0: что проверено и что ещё требуется
 
@@ -25,7 +32,7 @@
 | P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей и profile | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора, runtime legacy и полный lifecycle |
 | P0.3 — auth-пауза | Локальная запись продолжается; отправка требует подтверждения владельца | [State sender](../tests/state_sync.test.ts), [profile E2E](../e2e/profile-durability.spec.ts), [контракт](state-sender.md) | Остальные callbacks и legacy; реальный повторный вход на staging |
 | P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [контракт](bootstrap-hydration.md) | Остальные cloud callbacks и cache |
-| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, личное меню и достижения в указанной области | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | AI/report/retry/family producers; долговечность и порядок вторичных записей |
+| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню и достижения; личные покупки следуют profile CAS на `4736ff5` | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | AI/report/retry/family producers; долговечность и порядок вторичных записей |
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [контракт](sync-model.md) | Доказанное владение legacy и барьер реально работающих старых writers |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; value/операция и import/ledger атомарны; legacy-нормализатор реализован | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Runtime-импорт с доказательствами; old/new bundles на одном origin; backup/экспорт/очистка всех stores |

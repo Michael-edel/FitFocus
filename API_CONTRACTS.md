@@ -128,9 +128,12 @@ baseVersion конфликтует; клиент не выдумывает ack �
 
 ## /api/profile
 
-`/api/me` дополнительно сообщает `profileSync: { protocol: 1, guard: 1 }`.
+`/api/me` сообщает `profileSync: { protocol: 1, guard: 1 }`; после миграции
+0020 и проверки таблицы/обоих triggers добавляет `weeklyMenuProjection: 1`.
 Проверенные accountId/sessionId берутся из stateSync того же ответа /me.
-Новый sender требует обе capabilities перед отправкой profile-операции.
+Sender `4736ff5` требует state/profile capabilities и новый projection marker
+для отправки profile. Без него операция остаётся pending с protocol-паузой.
+Guarded GET чистого profile требует прежний read-контракт без нового marker.
 GET/PUT/PATCH поддерживают парные X-FitFocus-State-Account/Session с той же
 серверной проверкой, что state; изменение cookie возвращает 401 до работы
 с профилем. Ответ profile содержит X-FitFocus-Profile-Protocol: 1,
@@ -156,6 +159,10 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 [Граница редактора и общей outbox](docs/profile-persistence.md).
 409: `{ "error": "PROFILE_CONFLICT", "profile": …, "version": … }`.
 400: `BAD_JSON`, `BAD_BASE_VERSION`, `EMPTY_PATCH`, `STATE_ITEMS_USE_STATE_ENDPOINT`.
+422: `PROFILE_INVALID_WEEKLY_MENU` на `830caf4`: присутствующее меню должно
+содержать weekStart в форме YYYY-MM-DD и массив shoppingListItems.
+Неверный input отклоняется до persistence, унаследованная неверная форма —
+до CAS. Явное удаление допускается; SQL triggers сохраняют атомарную защиту.
 Загрузка state и сохранение профиля — отдельные пути, которые нужно тестировать
 по отдельности; наличие `stateItems` в ответе не означает общую атомарную outbox.
 
@@ -188,17 +195,23 @@ POST `/api/ai` и `/api/weekly_menu/items` проверяют парные
 `X-FitFocus-Weekly-Menu-Protocol` / `-Guard` со значением 1 и переданный scope.
 Заголовки присутствуют также на ошибках; клиент проверяет статус и текущую
 сессию отдельно. Прежние запросы без обоих headers остаются без этой защиты.
-Персональный menu-сценарий на `f4b4eee` проверяет свежий proof и обе
-capabilities, передаёт scope, ждёт guarded profile commit и только затем
-отправляет items. Таймаут запроса сохраняет возможность показать ошибку и
+Исторический персональный menu-сценарий на `f4b4eee` проверял свежий proof и обе
+capabilities, передавал scope, ждал guarded profile commit и только затем
+отправлял items. Таймаут запроса сохраняет возможность показать ошибку и
 повторить действие; logout/pagehide отменяют прежнюю попытку.
 Остальные callbacks, CAS и durable-порядок вторичной проекции остаются открытыми. [Полный контракт и приёмка](docs/ai-session-guard.md).
 Capabilities должны быть развёрнуты и проверены до выпуска нового клиента.
 
-Последующее незакоммиченное решение связывает личные покупки с profile CAS
-и убирает вторичный личный items POST. Его [рабочий контракт](docs/personal-menu-projection.md)
-содержит предполагаемые capability, миграцию и условия приёмки. Они пока
-не входят в опубликованный API `42ee434`; семейный путь остаётся открытым.
+Компонент `4736ff5` связывает личные покупки с profile CAS и убирает
+вторичный личный items POST. Profile CAS и запись `personal_menu_projections`
+атомарны; покупки и CSV читают проекцию, а legacy — только при отсутствии
+её строки. Пустой/повреждённый канонический снимок не включает legacy fallback.
+Личный POST `/api/weekly_menu/items` с корректным `week_start` возвращает
+409 `{ "error": "PERSONAL_MENU_PROFILE_REQUIRED", "requestId": "…" }` без записи
+покупок. Семейный POST с `family_id` сохраняет прежний путь и требует отдельной
+приёмки CAS/lifecycle. [Контракт, проверки и порядок выпуска](docs/personal-menu-projection.md).
+Реализация в ветке не подтверждает deploy; подготовительный сервер с RETURNING
+должен предшествовать миграции 0020.
 
 ## Достижения
 

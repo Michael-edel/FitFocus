@@ -15,6 +15,7 @@
 | D-004. Сохранить поколения удалённых серверных записей | Серверный компонент и protocol 2 sender реализованы; полная интеграция, staging и выпуск ожидаются | Очищенный tombstone в user_kv, CAS и RETURNING; [контракт P0.7](docs/state-generations.md) |
 | ADR-005. Одна outbox в IndexedDB | На 12.10.2026 подключены 15 state-ключей, редактор и регистрация профиля; bootstrap/hydration используют auth-fence. Остальные callbacks/lifecycle, runtime legacy-импорт и приёмка выпуска открыты | [Полное решение](docs/adr/ADR-005-durable-outbox.md), [state writers](docs/owned-state-writers.md), [профиль](docs/profile-persistence.md), [регистрация](docs/registration-persistence.md), [загрузка](docs/bootstrap-hydration.md); Web Locks необязательны |
 | D-006. Маленькие проверяемые изменения | Согласовано | Отдельные PR с явными зависимостями, CI на точном SHA, выпуск по чек-листу |
+| ADR-007. Личные покупки — проекция принятого profile | Реализовано на `4736ff5`; полная приёмка и выпуск проверяются | [Решение](docs/adr/ADR-007-personal-menu-projection.md), [контракт и свидетельства](docs/personal-menu-projection.md); одна profile-outbox, SQL-атомарность и capability |
 
 Нумерация ADR-005 продолжает согласованное обозначение решения об outbox.
 D-001–D-004 — краткие записи этого журнала; отдельных ранее существующих

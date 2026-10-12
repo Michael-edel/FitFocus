@@ -97,3 +97,13 @@ JS уже открытой вкладки и закрытия её IDB-соед�
 Источники: [дерево проверенной ревизии](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b),
 [storage](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b/storage),
 [серверные модули](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b/functions/api/_lib).
+
+
+## Последующий компонент: личные покупки 4736ff5
+
+Меню и ингредиенты хранятся в profile и доставляются существующей IDB-outbox.
+Принятый сервером profile CAS атомарно обновляет personal_menu_projections
+через SQL triggers. Личное чтение и CSV используют проекцию, пустая генерация
+не поднимает старые данные; отдельный личный items POST отклоняется.
+Семейный путь и остальные producers остаются открытыми.
+[Контракт и приёмка](personal-menu-projection.md), [ADR-007](adr/ADR-007-personal-menu-projection.md).

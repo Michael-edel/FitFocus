@@ -6,7 +6,8 @@
 Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
 profile flush — `f3930ec`; сессия/очередь достижений — `57da2cf`,
 атомарная проверка позднего proof — `4528e2b`, постоянная область notice — `724ecf1`.
-CI каждой ревизии сверяется отдельно.
+Личные покупки следуют profile CAS на `4736ff5`; валидация меню дополнена
+на `830caf4`. CI каждой ревизии сверяется отдельно.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -26,6 +27,7 @@ CI каждой ревизии сверяется отдельно.
 | Отметки заданий плана | [usePlanTaskState.ts](../features/plan/usePlanTaskState.ts) | [Feature tests](../tests/plan_task_feature.test.ts), [сценарии с reload](../e2e/owned-state.spec.ts) |
 | Избранные рецепты | [useFavoriteRecipes.ts](../features/recipes/useFavoriteRecipes.ts) | [Feature tests](../tests/favorite_recipes_feature.test.ts), [модель данных](data-model.md) |
 | Персональное недельное меню | [useWeeklyMenuGeneration.ts](../features/ai/useWeeklyMenuGeneration.ts), [geminiService.ts](../geminiService.ts), [aiSession.ts](../services/aiSession.ts), [actionScope.ts](../features/ai/actionScope.ts) | [Контракт](ai-session-guard.md), [HTTP](../tests/ai_session_transport.test.ts), [lifetime](../tests/weekly_menu_lifetime.test.ts), [E2E](../e2e/weekly-menu-durability.spec.ts) |
+| Личные покупки как проекция profile | [personal_menu_projection.ts](../functions/api/_lib/personal_menu_projection.ts), [profile_cas.ts](../functions/api/_lib/profile_cas.ts), [0020](../migrations/0020_personal_menu_projections.sql) | [Контракт](personal-menu-projection.md), [ADR-007](adr/ADR-007-personal-menu-projection.md), [SQLite tests](../tests/personal_menu_projection.test.ts); семейный путь остаётся открытым |
 | Guarded generated commit | [stateEditor.ts](../storage/stateEditor.ts), [durableOutbox.ts](../storage/durableOutbox.ts), [useProfilePersistence.ts](../features/profile/useProfilePersistence.ts) | [Профиль](profile-persistence.md#сохранение-сгенерированного-результата), [транзакционные проверки](../tests/generated_result_commit.test.ts) |
 | Прокрутка desktop-панели | [SidebarNavigation.tsx](../SidebarNavigation.tsx) | Переход к настройкам/правке/logout в [menu E2E](../e2e/weekly-menu-durability.spec.ts); pointer/viewport проверяются без force click |
 | AI-отчёт за неделю | [useWeeklyAiReport.ts](../features/ai/useWeeklyAiReport.ts) | [Feature tests](../tests/weekly_ai_report_feature.test.ts); защита всех AI callbacks остаётся задачей [P0](../TASKS.md) |
