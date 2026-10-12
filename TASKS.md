@@ -2,7 +2,7 @@
 
 Обновлено: 12.10.2026. Текущий компонент — семейные сессии `9c44c21`, ветка
 `fix/durable-outbox`; [контракт и результаты](docs/family-session.md).
-Подтверждённый [CI семейного кода `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936):
+Последний подтверждённый [CI опубликованной ветки `0eae743`](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011):
 1009 unit / 189 файлов, 278 browser passed / 9 skips, без flaky в итоговом summary.
 Последующие HEAD требуют отдельного CI; этот результат относится к указанной ревизии.
 
@@ -218,8 +218,17 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   семь проектов, workers=2, без flaky в итоговом summary. Первый локальный
   прогон 272 passed / 6 failed / 9 skips и диагностика 12 passed сохранены в журнале.
 - [x] Подтвердить [CI опубликованного `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936).
+- [x] Подтвердить последующий [CI `0eae743`](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011):
+  1009 unit / 189 файлов, 278 browser passed / 9 skips; без flaky в итоговом summary.
 - [ ] Перевести AI-сценарий `useFamilyMenu`, family/week CAS и постоянную
   доставку через существующую IDB-outbox; пройти реальные bundles/staging.
+
+Реализация следующей семейной части начата в рабочем дереве и ещё не готова.
+[Точная граница текущей работы](docs/project-status.md#текущая-работа--семейное-меню).
+До закрытия пункта нужны подключённый клиент, отказ старых menu/items writers,
+сохранение конфликта после reload, проверка старой и новой сборок на одном
+origin, совместимый откат и CI нового кода. Явная семейная цель invite/member
+и остальные callbacks также остаются открытыми.
 
 Это не закрывает P0.4–P0.6 целиком. Прежние unscoped clients остаются совместимыми
 и не защищены opt-in guard; отмена fetch не устанавливает порядок SQL-записей.

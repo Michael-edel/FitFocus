@@ -7,12 +7,17 @@
 ## Проверенная граница
 
 Подтверждённая опубликованная ревизия с семейным кодом —
-[`3baac01c98bd82ab7a87c0e9c2999914db194590`](https://github.com/Michael-edel/FitFocus/commit/3baac01c98bd82ab7a87c0e9c2999914db194590),
-ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936)
+[`0eae743a33544d4cd707efb825ea24ae30c2a7fd`](https://github.com/Michael-edel/FitFocus/commit/0eae743a33544d4cd707efb825ea24ae30c2a7fd),
+ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011)
 завершился success: 1009 unit / 189 файлов, 278 browser passed / 9 skips.
 В итоговом browser summary нет flaky; семь проектов, workers=2.
 Локальный неудачный прогон и последующая диагностика сохранены ниже и в журнале.
 Это не подтверждает staging, production или слияние в main.
+
+Начатая в рабочем дереве доработка family/week CAS и семейной доставки ещё
+не включена в эту проверенную границу. Подключение AI-клиента, совместимость
+старой/новой сборок и полные проверки остаются открытыми;
+[статус реализации](project-status.md#текущая-работа--семейное-меню).
 
 Предыдущий CI документационного `14ca638` также прошёл:
 [запуск](https://github.com/Michael-edel/FitFocus/actions/runs/38191713675),

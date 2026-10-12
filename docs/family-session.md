@@ -93,6 +93,13 @@ iPhone-проектах прошёл: 12 passed (workers=1, retries=0), без �
 указанного опубликованного SHA; последующие HEAD проверяются отдельно.
 Подробности и последующие проверки — в [журнале](stabilization-progress.md).
 
+Последующий [CI `0eae743`](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011)
+также завершился success: 1009 unit / 189 файлов, 278 browser passed /
+9 skips, семь проектов, workers=2; flaky в итоговом summary нет.
+Исполняемый код семейных сессий не менялся. Незавершённая локальная
+доработка семейного меню в эти результаты не входит;
+[граница текущей работы](project-status.md#текущая-работа--семейное-меню).
+
 Browser plugin not available: используется repository Playwright,
 `http://127.0.0.1:4173` и mock API. События pagehide/pageshow в тесте
 не доказывают реальный BFCache на устройстве. Эти проверки не подтверждают
