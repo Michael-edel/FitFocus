@@ -3,6 +3,7 @@
 Обновлено: 12.10.2026. Текущий компонент — завершение mock API-сценариев
 и проверка их lifecycle, ветка `fix/durable-outbox`;
 [контракт](docs/mock-api-lifecycle.md).
+Фикстура опубликована в `085fcc1`; полный CI итогового HEAD ещё требуется.
 Последний подтверждённый [CI опубликованной ветки `3bf595f`](https://github.com/Michael-edel/FitFocus/actions/runs/38252938795):
 1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 15,8 мин.
 В summary нет flaky, в preview один `ECONNREFUSED` на `/api/family`.
