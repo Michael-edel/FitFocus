@@ -7,8 +7,8 @@
 ## Проверенная граница
 
 Опубликованная ревизия —
-[`2d1f480a71b4c8d6cb90e90e1308074a08082371`](https://github.com/Michael-edel/FitFocus/commit/2d1f480a71b4c8d6cb90e90e1308074a08082371),
-ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398)
+[`d7ef1afed37487fc4af75ccb568d11251bd9bb08`](https://github.com/Michael-edel/FitFocus/commit/d7ef1afed37487fc4af75ccb568d11251bd9bb08),
+ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38196327356)
 завершился success: 976 unit / 187 файлов, 236 browser passed / 9 skips.
 В итоговом browser summary нет flaky. CI использовал 2 workers; локальная
 полная матрица кода `4736ff5` — 3 workers, retries=0, с теми же browser итогами.
@@ -28,7 +28,16 @@ CI `2d1f480` подтвердил новый компонент. Следующ�
 обязательные проверки/build и локальный переход 0019 → 0020 → сервер проекции
 на одной БД (30 HTTP). Негативный откат воспроизвёл устаревшее чтение;
 [инструкция и свидетельства](profile-cas-rollout.md). Это отдельная ветка:
-её CI, реальные bundles, staging и совместимый откат ещё требуют подтверждения.
+реальные bundles, staging и совместимый откат ещё требуют подтверждения.
+
+Последующий CI `d7ef1af` завершился success: 976 unit и 236 browser passed / 9 skips.
+Подготовительный CI `c39904c` также success: 952 unit и 229 browser passed / 9 skips.
+[Семейные сессии](family-session.md), код `9c44c21`, прошли 1009 unit и обязательные
+проверки, 23 HTTP локального workerd/D1. Первая полная browser matrix:
+272 passed / 6 failed / 9 skips (workers=3, retries=0); все 42 семейных сценария
+прошли. Диагностика шести сценариев на обоих iPhone-проектах: 12 passed,
+workers=1/retries=0, без изменения кода. Полный CI нового HEAD проверяется отдельно. Это охват
+`useFamilyCloud`; AI-путь, CAS и постоянная семейная доставка ещё открыты.
 
 ## P0: что проверено и что ещё требуется
 

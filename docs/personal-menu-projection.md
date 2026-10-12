@@ -100,7 +100,9 @@ capability, legacy fallback, успешный CAS с triggers, конкурен�
   976 unit / 187 файлов, 236 browser passed / 9 skips, success.
 - [x] Подготовить совместимый CAS-сервер `dde4c71` и проверить локальный
   переход на одной БД; [инструкция и свидетельства](profile-cas-rollout.md).
-- [ ] Подтвердить CI подготовительного HEAD, проверить staging и совместимый откат.
+- [x] Подтвердить [CI подготовительного `c39904c`](https://github.com/Michael-edel/FitFocus/actions/runs/38196258543):
+  952 unit, 229 browser passed / 9 skips, success.
+- [ ] Проверить staging и совместимый откат.
 - [ ] Продолжить семейные writers, runtime legacy и остальную приёмку P0.
 
 До миграции 0020 требуется отдельный подготовительный серверный выпуск:

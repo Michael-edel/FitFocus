@@ -16,6 +16,7 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 
 | Область | Основные исходники | Контракт и проверки |
 |---|---|---|
+| Сессии семейных запросов | [useFamilyCloud.ts](../useFamilyCloud.ts), [familySession.ts](../services/familySession.ts), [familyApi.ts](../features/family/familyApi.ts), [actionScope.ts](../features/family/actionScope.ts) | [Контракт и открытые writers](family-session.md), [server guard](../tests/family_session_guard.test.ts), [transport](../tests/family_session_transport.test.ts), [E2E](../e2e/family-session.spec.ts) |
 | Сборка интерфейса и сценариев | [App.tsx](../App.tsx), [AppWorkspace.tsx](../AppWorkspace.tsx) | [Продукт](../PRODUCT.md), [архитектура](current-architecture.md); feature hooks находятся в `features/` |
 | Вход и загрузка данных | [authSession.ts](../authSession.ts), [loginSession.ts](../features/auth/loginSession.ts), [sessionRead.ts](../storage/sessionRead.ts) | [Bootstrap/hydration](bootstrap-hydration.md), [read guard tests](../tests/session_read_guard.test.ts), [браузерные сценарии](../e2e/bootstrap-session.spec.ts) |
 | Регистрация и первоначальный план | [registrationFlow.ts](../registrationFlow.ts) | [Сохранение регистрации](registration-persistence.md), [unit](../tests/registration_flow.test.ts), [E2E](../e2e/registration-durability.spec.ts) |

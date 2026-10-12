@@ -1345,3 +1345,58 @@ privacy: 27 таблиц. CI опубликованного подготовит
 Документационная проверка: 32 основных MD-файла, 795 ссылок/якорей и
 28 закреплённых исходников; ошибок нет. Проверены имена npm-команд,
 JSON-примеры и `git diff --check`. Исполняемый код в этом изменении не менялся.
+
+## 12.10.2026 — семейные запросы и исходный login proof
+
+Подтверждены CI предыдущих опубликованных веток:
+[основной `d7ef1af`](https://github.com/Michael-edel/FitFocus/actions/runs/38196327356) —
+976 unit / 187 файлов, 236 browser passed / 9 skips;
+[подготовительный `c39904c`](https://github.com/Michael-edel/FitFocus/actions/runs/38196258543) —
+952 unit / 186 файлов, 229 browser passed / 9 skips. Оба success, workers=2,
+без flaky в итоговых summary. Это не подтверждает новый семейный код.
+
+Код `9c44c2118749275cbb8ecaa11c520c43e4220000` добавляет семейную capability,
+server scope до эффектов, fresh proof каждой HTTP-попытки и исходный login
+guard из hydration для `useFamilyCloud`. React-state/setters и controllers
+принадлежат своему входу/странице; покупки дополнительно проверяют familyId.
+Неверные family/week и повреждённые ответы отклоняются до применения.
+Отказ отметки восстанавливает её состояние и обрабатывается в UI.
+[Контракт и границы](family-session.md).
+
+До поправки 14 server regression tests падали. Первоначальный targeted прогон
+после изменения: 32 passed / 1 failed — тест вызывал несуществующий helper
+`pauseAccount`; он исправлен на фактическую IDB-транзакцию auth-паузы.
+После исправления 33 targeted tests прошли. Пять Chromium-сценариев прошли
+до последующего усиления target/data validation и добавления отказа checkbox.
+
+Итоговый unit-прогон: 1009 passed / 189 файлов. Три typecheck,
+admin/auth/API guards, schema (22 миграции / 31 таблица), privacy (28 таблиц)
+и audit (0 известных уязвимостей) прошли. Production browser matrix `9c44c21`:
+семь проектов, workers=3, retries=0; 272 passed / 6 failed / 9 skips (20,4 мин).
+Все 42 семейных сценария прошли. Отказы profile/storage/weekly-menu на iPhone
+сохранены вместе с trace/screenshots. В трассировках видны ожидания отсутствующих
+контролов и общего timeout; новый page создавался до 12 секунд, click занимал
+до 16 секунд. Неожиданных page/console errors в этих трассировках нет;
+один 409 — намеренный конфликт. Диагностический прогон шести сценариев на обоих
+iPhone-проектах прошёл: 12 passed (3,8 мин), workers=1, retries=0, без изменения
+кода и без увеличения timeout. Нагрузка хоста — возможное объяснение по
+трассировкам; успешная диагностика не заменяет полную проверку нового HEAD в CI.
+
+На локальном workerd/D1 код `9c44c21` прошёл 23 HTTP-запроса с двумя
+синтетическими аккаунтами, одним origin и одной базой. Проверены capability,
+десять ранних отказов неверного scope, отсутствие случайного создания семьи,
+create/invite/join/member, save/generate/read, shared shopping/check и
+чужая account/session-привязка. Приватный sid не появляется в ответах.
+Собственные процессы fixture остановлены, порт 8799 закрыт; удалённая база
+и production не использовались.
+
+Browser plugin not available: repository Playwright на `127.0.0.1:4173`,
+mock API. Desktop, Android и iPhone screenshots просмотрены; сценарии проверяют
+приглашение/checkbox, неверную capability, новый login того же аккаунта,
+logout и синтетические pagehide/pageshow. Это не реальный BFCache/OAuth/D1/staging.
+AI-путь `useFamilyMenu`, семейные CAS/durable-порядок, остальные callbacks,
+runtime legacy и общая приёмка P0 остаются открытыми. Main/deploy не выполнялись.
+
+MD-контракты и точки входа обновлены вместе с компонентом. Проверены
+33 документа, 830 ссылок/якорей и 33 закреплённых исходника; ошибок нет.
+Проверены имена npm-команд, JSON-примеры и `git diff --check`.

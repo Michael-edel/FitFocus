@@ -235,3 +235,21 @@ Capabilities должны быть развёрнуты и проверены д
 но не локальное сохранение. 403 разбирается по коду причины. Эти требования
 к новому клиенту описаны в [модели синхронизации](docs/sync-model.md);
 текущий клиент им полностью не соответствует.
+
+## Семейные запросы: исходная сессия
+
+Компонент `9c44c21` добавляет `familySync: { protocol: 1, guard: 1 }` в `/api/me`.
+`useFamilyCloud` получает исходный login guard из hydration и обновляет proof
+перед каждым HTTP, не принимая другой вход того же аккаунта. Запросы передают
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session`; family handlers и
+shopping list/check проверяют их до прикладных эффектов. Неверная привязка — 401.
+
+Ответы этих handlers содержат `X-FitFocus-Family-Protocol: 1`,
+`X-FitFocus-Family-Guard: 1` и публичный scope. Клиент проверяет headers,
+IDB epoch/auth-fence, familyId/week и форму загружаемых данных до применения.
+Mutation HTTP не повторяется автоматически. Запросы без scope сохраняют
+прежнюю совместимость и этой привязкой не защищены.
+
+Это не вводит family CAS или постоянную очередь. AI-путь `useFamilyMenu`
+пока использует прежние writers; полные границы, методы и проверки —
+в [контракте семьи](docs/family-session.md).

@@ -107,3 +107,12 @@ JS уже открытой вкладки и закрытия её IDB-соед�
 не поднимает старые данные; отдельный личный items POST отклоняется.
 Семейный путь и остальные producers остаются открытыми.
 [Контракт и приёмка](personal-menu-projection.md), [ADR-007](adr/ADR-007-personal-menu-projection.md).
+
+## Семейные сессии 9c44c21
+
+`useFamilyCloud` получает login guard из hydration, обновляет proof перед
+каждым HTTP и сохраняет принадлежность React-state/setters. `familySession`
+использует bounded transport; `FamilyActionScope` отменяет прежнюю попытку
+того же действия и все попытки при уходе страницы. Сервер проверяет scope
+до family/shopping effects. [Контракт и границы](family-session.md).
+Отдельный AI-путь, family/week CAS и постоянная доставка меню ещё открыты.
