@@ -1,8 +1,8 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 12.10.2026. Текущий компонент — семейные сессии `9c44c21`, ветка
-`fix/durable-outbox`; [контракт и результаты](docs/family-session.md).
-Последний подтверждённый [CI опубликованной ветки `0eae743`](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011):
+Обновлено: 12.10.2026. Текущий компонент — семейное меню, ветка
+`fix/durable-outbox`; [контракт и результаты](docs/family-menu-state.md).
+Последний подтверждённый [CI опубликованной ветки `dbb22aa`](https://github.com/Michael-edel/FitFocus/actions/runs/38204076306):
 1009 unit / 189 файлов, 278 browser passed / 9 skips, без flaky в итоговом summary.
 Последующие HEAD требуют отдельного CI; этот результат относится к указанной ревизии.
 
@@ -223,10 +223,22 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [ ] Перевести AI-сценарий `useFamilyMenu`, family/week CAS и постоянную
   доставку через существующую IDB-outbox; пройти реальные bundles/staging.
 
-Реализация следующей семейной части начата в рабочем дереве и ещё не готова.
+Следующая семейная часть реализована локально и ещё проходит общую приёмку.
 [Точная граница текущей работы](docs/project-status.md#текущая-работа--семейное-меню).
-До закрытия пункта нужны подключённый клиент, отказ старых menu/items writers,
-сохранение конфликта после reload, проверка старой и новой сборок на одном
+- [x] Подключить AI и server-preview к единственному familyMenu intent с исходным
+  login guard, captured revision/baseVersion и guarded локальным commit.
+- [x] Принимать family/week CAS одной SQL-записью, читать покупки из того же
+  поколения и не восстанавливать legacy для empty/corrupt canonical.
+- [x] Добавить 0021 SQL-барьер прежних writers и versioned IDB v3 opens;
+  проверить preservation старых stores на fake IndexedDB.
+- [x] Пройти 1039 unit, три typecheck, guards/schema/privacy/audit, 16 новых
+  Chromium/iPhone browser-сценариев и 33 HTTP локального workerd/D1.
+- [ ] Пройти полную browser matrix и CI точного опубликованного кода.
+- [ ] Проверить настоящие old/new bundles на одном origin, повреждённые legacy
+  записи, реальный lifecycle/staging и совместимый rollback artifact.
+
+Клиент подключён; отказ старых menu/items writers и сохранение конфликта после
+reload проверены локально. До закрытия нужны старые и новые сборки на одном
 origin, совместимый откат и CI нового кода. Явная семейная цель invite/member
 и остальные callbacks также остаются открытыми.
 

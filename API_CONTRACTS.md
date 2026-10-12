@@ -253,3 +253,20 @@ Mutation HTTP не повторяется автоматически. Запро
 Это не вводит family CAS или постоянную очередь. AI-путь `useFamilyMenu`
 пока использует прежние writers; полные границы, методы и проверки —
 в [контракте семьи](docs/family-session.md).
+
+## Семейное меню: рабочий CAS-протокол 12.10.2026
+
+[Контракт](docs/family-menu-state.md), [ADR-008](docs/adr/ADR-008-family-menu-generation.md).
+Компонент реализован локально; общий CI и выпуск ещё не приняты.
+`familyMenuSync` требует protocol=1, guard=1, cas=1. Capability отсутствует
+до полного 0021; неполная миграция не включает прежний writer.
+GET/PUT `/api/family/menu/state` требуют state account/session headers и
+подтверждают Family-Menu protocol/guard. PUT принимает явные familyId,
+weekStart, baseVersion и полный menu; только владелец с family plan пишет.
+Один SQL CAS сохраняет menu/portions/structured shopping; возвращает собственный
+RETURNING version. 409 содержит проверенный snapshot без удаления local intent.
+Серверный `/api/family/menu/generate` на новой схеме принимает preview:true
+и явный familyId, возвращает shared.menu и ничего не сохраняет.
+Старые menu/items POST и генерация без preview после 0021 возвращают 409.
+Generic state отклоняет family-menu key с 403. Empty canonical не читает
+legacy; повреждённый canonical возвращает ошибку и требует восстановления.

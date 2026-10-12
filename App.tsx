@@ -288,6 +288,25 @@ const App: React.FC = () => {
     const attempt = loginAttemptRef.current;
     return () => attempt === loginAttemptRef.current;
   }, [userProfileRepository]);
+  const suppressNextFullProfileSyncRef = useRef(false);
+  const hasPendingProfileChangesRef = useRef(false);
+  const profileEditRevisionRef = useRef(0);
+  const hasProfileDraftRef = useRef(false);
+  const onProfileDraftChange = useCallback((dirty: boolean) => {
+    hasProfileDraftRef.current = dirty;
+    if (dirty) profileEditRevisionRef.current += 1;
+  }, []);
+  const persistUser = useProfilePersistence({
+    repository: userProfileRepository,
+    currentUser,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    hasPendingProfileChangesRef,
+    setCurrentUser,
+    setAllUsers,
+    setProfileSyncState,
+  });
+
   const isAdmin = !!googleMe?.roles?.includes('admin');
   useEffect(() => {
     if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
@@ -322,6 +341,7 @@ const App: React.FC = () => {
     setFamilyShoppingLoading,
     setCloudFamilyMenu,
     setCloudFamilyMembers,
+    familyMenuRepository,
   } = useFamilyCloud({
     currentUser,
     loginGuard: loginReadGuard,
@@ -337,22 +357,15 @@ const App: React.FC = () => {
     familyMenuLoading,
     familyMenuPrefs,
     familyMenuPrefsOpen,
+    familyMenuProfiles,
     handleGenerateFamilyWeeklyMenu,
     setFamilyMenuError,
     setFamilyMenuPrefs,
     setFamilyMenuPrefsOpen,
   } = useFamilyMenu({
-    allUsers,
-    cloudFamily,
-    cloudFamilyMenu,
-    currentUser,
-    generateFamilyWeeklyMenu,
-    loadCloudFamily,
-    loadFamilyShopping,
-    setAllUsers,
-    setCloudFamilyMenu,
-    setCurrentUser,
-    weekStartISO,
+    cloudFamily, cloudFamilyMembers, cloudFamilyMenu, currentUser, generateFamilyWeeklyMenu,
+    familyMenuRepository, loginGuard: loginReadGuard, isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef, persistUser, setCloudFamilyMenu, setFamilyShopping, weekStartISO,
   });
 
   useEffect(() => {
@@ -607,25 +620,6 @@ const App: React.FC = () => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
 
-  const suppressNextFullProfileSyncRef = useRef(false);
-  const hasPendingProfileChangesRef = useRef(false);
-  const profileEditRevisionRef = useRef(0);
-  const hasProfileDraftRef = useRef(false);
-  const onProfileDraftChange = useCallback((dirty: boolean) => {
-    hasProfileDraftRef.current = dirty;
-    if (dirty) profileEditRevisionRef.current += 1;
-  }, []);
-  const persistUser = useProfilePersistence({
-    repository: userProfileRepository,
-    currentUser,
-    isCurrentSession: isCurrentProfileSession,
-    profileEditRevisionRef,
-    hasPendingProfileChangesRef,
-    setCurrentUser,
-    setAllUsers,
-    setProfileSyncState,
-  });
-
   const getAchievementContext = useCallback(() => buildAchievementContext({
     currentUser,
     foodDiary,
@@ -683,6 +677,7 @@ const App: React.FC = () => {
     handleGenerateWeeklyMenu,
   } = useWeeklyMenuGeneration({
     currentUser,
+    loginGuard: loginReadGuard,
     persistUser,
     checkAchievements,
     isCurrentSession: isCurrentProfileSession,
@@ -1275,13 +1270,13 @@ const logWeight = useCallback(() => {
   }, [checkAchievements, joinFamilyCloud]);
 
   const generateFamilyMenuNowWithAchievements = useCallback(async () => {
-    await generateFamilyMenuNow();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await generateFamilyMenuNow();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, generateFamilyMenuNow]);
 
   const handleGenerateFamilyWeeklyMenuWithAchievements = useCallback(async () => {
-    await handleGenerateFamilyWeeklyMenu();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await handleGenerateFamilyWeeklyMenu();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, handleGenerateFamilyWeeklyMenu]);
 
   const toggleFamilyShoppingItemWithAchievements = useCallback(async (name: string, checked: boolean) => {
@@ -1632,7 +1627,7 @@ const logWeight = useCallback(() => {
       {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
           <FamilyMenuPrefsModal
-            allUsers={allUsers}
+            allUsers={familyMenuProfiles}
             familyMenuPrefs={familyMenuPrefs}
             setFamilyMenuPrefs={setFamilyMenuPrefs}
             onClose={() => setFamilyMenuPrefsOpen(false)}

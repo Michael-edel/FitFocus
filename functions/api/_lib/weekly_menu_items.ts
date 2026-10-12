@@ -3,6 +3,7 @@ import { requireFamilyMember } from './family_access';
 import { normalizeShoppingIngredient } from './ingredients';
 import { asString, isJsonObject } from './json';
 import { requireFamilyPlan } from './plans';
+import { familyMenuStateReady } from './family_menu_state';
 
 type WeeklyMenuItemInput = { name: string; grams: number; key: string };
 type WeeklyMenuItemsValidationError = 'BAD_JSON' | 'BAD_WEEK';
@@ -10,6 +11,7 @@ type WeeklyMenuItemsValidationError = 'BAD_JSON' | 'BAD_WEEK';
 export type WeeklyMenuItemsSaveResult =
   | { kind: 'invalid'; error: WeeklyMenuItemsValidationError }
   | { kind: 'profile-required' }
+  | { kind: 'family-state-required' }
   | { kind: 'saved'; stored: number; weekStart: string };
 
 function isIsoDay(value: string) {
@@ -37,6 +39,7 @@ export async function saveWeeklyMenuItems({
   if (familyId) {
     const family = await requireFamilyMember(db, familyId, userId);
     await requireFamilyPlan(db, family.owner_user_id);
+    if (await familyMenuStateReady(db)) return { kind: 'family-state-required' };
   }
 
   const normalized: WeeklyMenuItemInput[] = items

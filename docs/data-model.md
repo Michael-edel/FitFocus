@@ -161,3 +161,22 @@ profile. Нового клиентского store/outbox нет: доставк
 снимка. Повреждение проекции не переключает чтение на старые данные.
 Новая таблица включена в GDPR export/delete; семейный путь остаётся отдельным.
 [Контракт и проверки](personal-menu-projection.md), [ADR-007](adr/ADR-007-personal-menu-projection.md).
+
+## Семейное поколение — рабочая версия 12.10.2026
+
+Миграция 0021 добавляет `family_menu_generations`: family_id/week_start —
+составной первичный ключ; version — положительная CAS-версия; menu_json —
+один снимок меню, порций и структурированных покупок. Старые weekly_menus
+сохраняются и копируются verbatim с version=1 без перезаписи новой canonical.
+Четыре triggers запрещают прежние INSERT/UPDATE семейных menus/items;
+личные items и deletion для cleanup остаются доступны.
+
+IDB v3 сохраняет прежние пять stores. Resource familyMenu использует ту же
+outbox и key `fitfocus_data_<accountId>_family_menu:[familyId,weekStart]`,
+где суффикс — точный JSON tuple. Значение — JSON `{familyId,weekStart,menu}`.
+Generic `/api/state` не принимает этот ресурс. Export и owner cleanup
+учитывают новую серверную таблицу; до 0021 отсутствие таблицы допустимо,
+при ошибке/неполной миграции частичный fallback не выполняется.
+Это не подтверждает backup/экспорт всех IDB stores или полноту удаления
+вложенных ссылок на бывшего участника из чужих общих JSON-снимков.
+[Контракт, проверки и открытые условия](family-menu-state.md).

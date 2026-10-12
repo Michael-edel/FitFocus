@@ -1,6 +1,7 @@
 import { requireActiveFamilyForUser, requireFamilyOwner } from './family_access';
 import { isJsonObject, safeJsonParse, type JsonObject } from './json';
 import { requireFamilyPlan } from './plans';
+import { familyMenuStateReady, readFamilyMenuGeneration, writeFamilyMenuState, type FamilyMenuWriteResult } from './family_menu_state';
 
 type WeeklyMenuRow = {
   id: string;
@@ -18,17 +19,18 @@ type WeeklyPortionsRow = {
 
 export type FamilyMenuReadResult =
   | { kind: 'invalid-week' }
-  | { kind: 'empty'; weekStart: string }
+  | { kind: 'empty'; weekStart: string; version?: number }
   | {
       kind: 'loaded';
       weekStart: string;
-      shared: { id: string; familyId: string; weekStart: string; menu: unknown | null };
+      shared: { id: string; familyId: string; weekStart: string; menu: unknown | null; version?: number };
       portions: { portions: unknown | null; totals: unknown | null; updatedAt?: number } | null;
     };
 
 type FamilyMenuValidationError = 'BAD_JSON' | 'BAD_MENU' | 'BAD_MENU_DAYS' | 'BAD_WEEK';
 
 export type FamilyMenuSaveResult =
+  | FamilyMenuWriteResult
   | { kind: 'invalid'; error: FamilyMenuValidationError }
   | { kind: 'saved'; weekStart: string; menuId: string };
 
@@ -63,6 +65,17 @@ export async function readFamilyMenu({
   const family = await requireActiveFamilyForUser(db, userId).catch(() => null);
   if (!family) return { kind: 'empty', weekStart };
   await requireFamilyPlan(db, family.owner_user_id);
+
+  if (await familyMenuStateReady(db)) {
+    const snapshot = await readFamilyMenuGeneration(db, family.id, weekStart);
+    if (!snapshot.menu) return { kind: 'empty', weekStart, version: 0 };
+    return { kind: 'loaded', weekStart,
+      shared: { id: `${family.id}:${weekStart}`, familyId: family.id, weekStart, menu: snapshot.menu, version: snapshot.version },
+      portions: { portions: snapshot.menu.days.map(day => ({ day: day.day,
+        ...Object.fromEntries(['breakfast', 'lunch', 'dinner', 'snack'].map(key => [key, day[key as 'breakfast'].portions[userId] ?? null])),
+      })), totals: null },
+    };
+  }
 
   const shared = await db
     .prepare('SELECT id, family_id, week_start, menu_json, created_at FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1')
@@ -117,6 +130,7 @@ export async function saveFamilyMenu({
   userId: string;
   body: unknown;
 }): Promise<FamilyMenuSaveResult> {
+  if (await familyMenuStateReady(db)) return writeFamilyMenuState(db, userId, body);
   const input = menuSaveInput(body);
   if (input.ok === false) return { kind: 'invalid', error: input.error };
 

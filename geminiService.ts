@@ -773,8 +773,10 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, sessio
 export async function generateFamilyWeeklyMenu(
   owner: UserProfile,
   familyProfiles: UserProfile[],
-  prefs: FamilyMenuPrefs
+  prefs: FamilyMenuPrefs,
+  session: AiSession,
 ): Promise<FamilyWeeklyMenu> {
+  if (session.guard.accountId !== owner.id) throw new Error('LOGIN_SESSION_CHANGED');
   // Источник семьи: зарегистрированные профили (Family тариф)
   const uniqueById = new Map<string, UserProfile>();
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
@@ -907,7 +909,7 @@ const dietaryBlock = (() => {
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "family_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   const obj = safeJsonObject(res.text);
 
@@ -968,7 +970,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
     const rep = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt, "family_menu_repair", {
       responseMimeType: "application/json",
       responseSchema: schema
-    });
+    }, session);
 
     const robj = safeJsonObject(rep.text);
     const rdaysRaw = Array.isArray(robj.days) ? robj.days : [];

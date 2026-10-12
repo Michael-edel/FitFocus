@@ -36,6 +36,7 @@ EXPECTED_USER_RELATED_TABLES = {
     "weekly_menu_portions",
     "weekly_menu_items",
     "personal_menu_projections",
+    "family_menu_generations",
     "shopping_checked",
     "admin_events",
     "admin_sessions",

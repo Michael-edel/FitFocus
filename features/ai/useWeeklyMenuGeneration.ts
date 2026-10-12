@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { generateWeeklyMenu } from '../../geminiService';
 import type { UserProfile, WeeklyMenu } from '../../types';
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
 import { prepareAiSession } from '../../services/aiSession';
 import type { useProfilePersistence } from '../profile/useProfilePersistence';
 import { AiActionScope } from './actionScope';
@@ -20,6 +21,7 @@ export type WeeklyMenuGenerationParams = {
   setError: (error: string | null) => void;
   requestMenu?: typeof generateWeeklyMenu;
   prepareSession?: typeof prepareAiSession;
+  loginGuard?: OutboxReadGuard;
 };
 
 /** Generates and persists a personal weekly menu as one recoverable UI action. */
@@ -34,6 +36,7 @@ export async function generatePersonalWeeklyMenu({
   setError,
   requestMenu = generateWeeklyMenu,
   prepareSession = prepareAiSession,
+  loginGuard,
 }: WeeklyMenuGenerationParams): Promise<WeeklyMenu | null> {
   const current = () => !controller.signal.aborted && isCurrentSession();
   if (!currentUser?.aiPlan || !current()) return null;
@@ -42,7 +45,7 @@ export async function generatePersonalWeeklyMenu({
   setLoading(true);
   let saving = false;
   try {
-    const session = await prepareSession(currentUser.id, controller, current, { requireMenuProjection: true });
+    const session = await prepareSession(currentUser.id, controller, current, { requireMenuProjection: true, previous: loginGuard });
     if (!current()) return null;
     if (!canCommitProfile()) throw new Error(WEEKLY_MENU_PROFILE_CHANGED);
     const weeklyMenu = await requestMenu(currentUser, currentUser.aiPlan, session);
@@ -69,7 +72,7 @@ export async function generatePersonalWeeklyMenu({
 type UseWeeklyMenuGenerationParams = Pick<
   WeeklyMenuGenerationParams,
   'currentUser' | 'persistUser' | 'checkAchievements' | 'isCurrentSession'
-> & { profileEditRevisionRef: MutableRefObject<number> };
+> & { profileEditRevisionRef: MutableRefObject<number>; loginGuard: OutboxReadGuard | null };
 
 export function useWeeklyMenuGeneration({
   currentUser,
@@ -77,6 +80,7 @@ export function useWeeklyMenuGeneration({
   checkAchievements,
   isCurrentSession,
   profileEditRevisionRef,
+  loginGuard,
 }: UseWeeklyMenuGenerationParams) {
   const scope = useMemo(() => new AiActionScope(isCurrentSession), [currentUser?.id, isCurrentSession]);
   const [status, setStatus] = useState({ scope, loading: false, error: null as string | null });
@@ -92,16 +96,17 @@ export function useWeeklyMenuGeneration({
   }, [scope]);
 
   const handleGenerateWeeklyMenu = useCallback(() => {
+    if (!loginGuard) return Promise.resolve(null);
     const attempt = scope.begin();
     if (!attempt) return Promise.resolve(null);
     const revision = profileEditRevisionRef.current;
     return generatePersonalWeeklyMenu({
-      currentUser, persistUser, checkAchievements, controller: attempt.controller,
+      currentUser, persistUser, checkAchievements, controller: attempt.controller, loginGuard,
       isCurrentSession: attempt.isCurrent, canCommitProfile: () => revision === profileEditRevisionRef.current,
       setLoading: loading => setStatus(previous => ({ scope, loading, error: previous.scope === scope ? previous.error : null })),
       setError: error => setStatus(previous => ({ scope, error, loading: previous.scope === scope && previous.loading })),
     }).finally(attempt.finish);
-  }, [checkAchievements, currentUser, persistUser, profileEditRevisionRef, scope]);
+  }, [checkAchievements, currentUser, persistUser, profileEditRevisionRef, loginGuard, scope]);
 
   return {
     weeklyMenuLoading: status.scope === scope && status.loading,

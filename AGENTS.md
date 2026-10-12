@@ -91,7 +91,11 @@
 - Семейный `useFamilyCloud` получает исходный login guard, обновляет его proof
   перед каждым HTTP и сохраняет scope своих React-setters. Не подбирай текущую
   сессию для старого callback. [Контракт](docs/family-session.md) отдельно отмечает
-  ещё прежний AI-путь `useFamilyMenu` и открытые family CAS/durable-порядок.
+  историю прежнего AI-пути на `9c44c21`. В текущей рабочей реализации
+  [семейное меню](docs/family-menu-state.md) использует ту же outbox, family/week
+  CAS и guarded commit; реальные bundles и выпуск ещё не приняты.
+  [ADR-008](docs/adr/ADR-008-family-menu-generation.md) требует SQL-барьер старых
+  writers и versioned IDB v3; не понижай/не удаляй IDB при откате.
   Account/session guard не фиксирует членство и целевую семью мутации.
 - Автоматическое обновление read proof передаёт исходный guard в IDB-транзакцию
   принятия сессии. Поздний proof не снимает auth-паузу. Не удаляй эту проверку

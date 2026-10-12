@@ -3,6 +3,7 @@ import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxO
 import { reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
 import { isUserProfilePayload } from '../profileValidation';
+import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuSnapshot } from '../familyMenuValidation';
 
 import { requestJson, type JsonResponse } from './sessionTransport';
 type Options = { outbox?: DurableOutbox; fetchImpl?: typeof fetch; now?: () => number; random?: () => number; timeoutMs?: number; legacyPending?: () => boolean };
@@ -39,6 +40,7 @@ export class StateSync {
   private readGuard?: OutboxReadGuard;
   private profileProtocol = false;
   private profileProjectionProtocol = false;
+  private familyMenuProtocol = false;
   private readonly requests = new Set<AbortController>();
   private running?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
@@ -59,6 +61,7 @@ export class StateSync {
     this.readGuard = undefined;
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
+    this.familyMenuProtocol = false;
     for (const request of this.requests) request.abort();
     this.requests.clear();
     if (this.timer) clearInterval(this.timer);
@@ -161,6 +164,7 @@ export class StateSync {
     this.readGuard = undefined;
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
+    this.familyMenuProtocol = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const before = await this.outbox.sessionState();
       if (generation !== this.generation || accountId !== this.accountId) return false;
@@ -188,6 +192,8 @@ export class StateSync {
         this.session = { id: 'active-session', ...accepted };
         this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
         this.profileProjectionProtocol = isRecord(body.profileSync) && body.profileSync.weeklyMenuProjection === 1;
+        this.familyMenuProtocol = isRecord(body.familyMenuSync) && body.familyMenuSync.protocol === 1
+          && body.familyMenuSync.guard === 1 && body.familyMenuSync.cas === 1;
         reportStateSyncPause(accountId, null);
         return true;
       }
@@ -231,17 +237,27 @@ export class StateSync {
           await this.finish(claim, { kind: 'retry', reason: 'profile-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
           continue;
         }
+        if (claim.resource === 'familyMenu' && !this.familyMenuProtocol) {
+          await this.finish(claim, { kind: 'retry', reason: 'family-menu-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
+          continue;
+        }
         const controller = new AbortController(); this.requests.add(controller);
         let outcome: OutboxOutcome;
         try {
           const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': accountId,
             'X-FitFocus-State-Session': session.serverSessionId! };
           const profile = profileIntent(claim);
+          let family: unknown;
+          if (claim.resource === 'familyMenu' && claim.type === 'put') { try { family = JSON.parse(claim.value); } catch {} }
           if (claim.resource === 'profile' && (!isUserProfilePayload(profile) || profile.id !== accountId || claim.key !== `fitfocus_data_${accountId}_profile`)) {
             outcome = { kind: 'failed', reason: 'invalid-profile-intent' };
+          } else if (claim.resource === 'familyMenu' && (!isFamilyMenuIntent(family) || claim.key !== familyMenuStorageKey(accountId, family))) {
+            outcome = { kind: 'failed', reason: 'invalid-family-menu-intent' };
           } else {
-            const url = claim.resource === 'profile' ? '/api/profile' : claim.type === 'put' ? '/api/state' : `/api/state?key=${encodeURIComponent(claim.key)}&baseVersion=${claim.baseVersion}`;
-            const init: RequestInit = claim.resource === 'profile'
+            const url = claim.resource === 'familyMenu' ? '/api/family/menu/state' : claim.resource === 'profile' ? '/api/profile' : claim.type === 'put' ? '/api/state' : `/api/state?key=${encodeURIComponent(claim.key)}&baseVersion=${claim.baseVersion}`;
+            const init: RequestInit = claim.resource === 'familyMenu'
+              ? { method: 'PUT', headers, body: JSON.stringify({ ...(family as Record<string, unknown>), baseVersion: claim.baseVersion }) }
+              : claim.resource === 'profile'
               ? { method: 'PUT', headers, body: JSON.stringify({ ...(profile as Record<string, unknown>), baseVersion: claim.baseVersion }) }
               : claim.type === 'put'
                 ? { method: 'PUT', headers, body: JSON.stringify({ items: [{ key: claim.key, value: claim.value, baseVersion: claim.baseVersion }] }) }
@@ -282,6 +298,25 @@ export class StateSync {
     const pause = (reason: 'auth' | 'access' | 'protocol'): OutboxOutcome => ({ kind: 'retry', reason, pause: reason, nextAttemptAtMs: this.now() });
     if (response.status === 401) return pause('auth');
     if (response.status === 403 && body?.error === 'ACCESS_REQUIRED') return pause('access');
+    if (claim.resource === 'familyMenu') {
+      let intent: unknown;
+      try { intent = claim.type === 'put' ? JSON.parse(claim.value) : null; } catch {}
+      const snapshot = body?.snapshot;
+      const valid = response.headers.get('X-FitFocus-Family-Menu-Protocol') === '1'
+        && response.headers.get('X-FitFocus-Family-Menu-Guard') === '1'
+        && response.headers.get('X-FitFocus-State-Account') === claim.accountId
+        && response.headers.get('X-FitFocus-State-Session') === serverSessionId
+        && isFamilyMenuIntent(intent) && isFamilyMenuSnapshot(snapshot)
+        && snapshot.familyId === intent.familyId && snapshot.weekStart === intent.weekStart;
+      if (response.status === 409) return { kind: 'conflicted', reason: 'server-version-conflict',
+        ...(valid && isFamilyMenuSnapshot(snapshot) ? { serverSnapshot: {
+          version: snapshot.version, exists: snapshot.menu !== null,
+          value: snapshot.menu ? JSON.stringify({ familyId: snapshot.familyId, weekStart: snapshot.weekStart, menu: snapshot.menu }) : '',
+        } } : {}),
+      };
+      if (response.ok) return valid && isFamilyMenuSnapshot(snapshot) && snapshot.version > claim.baseVersion
+        ? { kind: 'acknowledged', version: snapshot.version } : pause('protocol');
+    }
     if (claim.resource === 'profile') {
       const valid = this.profileScope(response, claim.accountId, serverSessionId)
         && isUserProfilePayload(body?.profile) && body.profile.id === claim.accountId

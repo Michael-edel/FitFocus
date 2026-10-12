@@ -6,7 +6,7 @@ import type { FamilySession } from '../services/familySession';
 import {
   loadFamilyContext,
   loadFamilyShopping,
-  saveFamilyShoppingItems,
+  generateFamilyMenu,
   setFamilyShoppingItem,
 } from '../features/family/familyApi';
 import type { FamilyWeeklyMenu } from '../types';
@@ -69,19 +69,11 @@ describe('family API client', () => {
     }));
   });
 
-  it('saves the structured shopping list with its family and week context', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  it('requires the family CAS capability before requesting a generated preview', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(me), { headers }));
     vi.stubGlobal('fetch', fetchMock);
-
-    await saveFamilyShoppingItems('2026-10-05', 'family-1', [{ name: 'Овсянка', grams: 400 }]);
-    expect(fetchMock).toHaveBeenCalledWith('/api/weekly_menu/items', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        week_start: '2026-10-05',
-        family_id: 'family-1',
-        items: [{ name: 'Овсянка', grams: 400 }],
-      }),
-    }));
+    await expect(generateFamilyMenu('2026-10-05', 'family-1', session)).rejects.toThrow('Сервер пока не поддерживает');
+    expect(fetchMock.mock.calls).toHaveLength(1);
   });
 
   it.each(['week', 'family', 'items'])('refuses mismatched shopping %s instead of replacing the local list', async change => {

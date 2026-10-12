@@ -7,6 +7,7 @@ import { defaultFamilyMenuWeekStart, readFamilyMenu, saveFamilyMenu } from '../_
 import { familyResponse } from '../_lib/family_response';
 import { requestIdFor } from '../_lib/observability';
 import { readJsonRequest, RequestBodyTooLargeError } from '../_lib/request_body';
+import { familyMenuStateReady } from '../_lib/family_menu_state';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const FAMILY_MENU_JSON_BODY_LIMIT_BYTES = 256 * 1024;
@@ -25,7 +26,8 @@ const handleGet: PagesFunction<Env> = async ({ request, env }) => {
       weekStart: requestedWeek || defaultFamilyMenuWeekStart(),
     });
     if (result.kind === 'invalid-week') return familyResponse('family.menu.read', requestId, { error: 'BAD_WEEK' }, 400);
-    if (result.kind === 'empty') return familyResponse('family.menu.read', requestId, { weekStart: result.weekStart, shared: null, portions: null }, 200);
+    if (result.kind === 'empty') return familyResponse('family.menu.read', requestId, { weekStart: result.weekStart, shared: null, portions: null,
+      ...(result.version === undefined ? {} : { version: result.version }) }, 200);
     return familyResponse('family.menu.read', requestId, {
       weekStart: result.weekStart,
       shared: result.shared,
@@ -42,6 +44,7 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireStateUser(request, env);
     const db = requireDB(env);
+    if (await familyMenuStateReady(db)) return familyResponse('family.menu.save', requestId, { error: 'FAMILY_MENU_STATE_REQUIRED' }, 409);
     await ensureUserRow(db, user);
 
     let body: unknown = {};
@@ -55,8 +58,12 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const result = await saveFamilyMenu({ db, userId: user.sub, body });
-    if (result.kind === 'invalid') return familyResponse('family.menu.save', requestId, { error: result.error }, 400);
-    return familyResponse('family.menu.save', requestId, { ok: true, weekStart: result.weekStart, menuId: result.menuId }, 200);
+    if (result.kind === 'invalid') return familyResponse('family.menu.save', requestId, { error: result.error },
+      result.error === 'FAMILY_MENU_STATE_REQUIRED' ? 409 : result.error === 'BAD_MENU' ? 422 : 400);
+    if (result.kind === 'conflicted') return familyResponse('family.menu.save', requestId, { error: 'VERSION_CONFLICT', snapshot: result.snapshot }, 409);
+    return familyResponse('family.menu.save', requestId, { ok: true, weekStart: result.weekStart, menuId: result.menuId,
+      ...('version' in result ? { version: result.version, snapshot: result.snapshot } : {}),
+    }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
     return familyResponse('family.menu.save', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);

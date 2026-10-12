@@ -1,11 +1,12 @@
 import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields } from './legacyQueue';
+import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
 
 export type OutboxIntent = { type: 'put'; key: string; value: string } | { type: 'delete'; key: string };
 export type OutboxAttempt = { attemptId: string; owner: string; sessionEpoch: string; startedAtMs: number };
 export type OutboxOperation = OutboxIntent & {
   /** Missing on pre-profile operations: those are state writes. */
-  resource?: 'profile';
+  resource?: 'profile' | 'familyMenu';
   opId: string;
   accountId: string;
   writerId: string;
@@ -58,7 +59,7 @@ function requireOwnedKey(accountId: string, key: string): void {
 
 export type OutboxWrite = {
   accountId: string; writerId: string; intent: OutboxIntent; expectedRevision: number;
-  resource?: 'profile';
+  resource?: 'profile' | 'familyMenu';
   baseVersion: number; parentOpId?: string;
   conflictReason?: 'editor-not-loaded';
   /** Generated results require the captured proof; ordinary offline edits omit it. */
@@ -78,6 +79,11 @@ export async function writeOutboxInTransaction(
   requireOwnedKey(input.accountId, input.intent.key);
   if (input.resource === 'profile' && (input.intent.type !== 'put' || input.intent.key !== `fitfocus_data_${input.accountId}_profile`)) {
     throw new Error('OUTBOX_INVALID_PROFILE_INTENT');
+  }
+  if (input.resource === 'familyMenu') {
+    let value: unknown;
+    try { value = input.intent.type === 'put' ? JSON.parse(input.intent.value) : null; } catch {}
+    if (!isFamilyMenuIntent(value) || input.intent.key !== familyMenuStorageKey(input.accountId, value)) throw new Error('OUTBOX_INVALID_FAMILY_MENU_INTENT');
   }
   const metaStore = tx.objectStore(STATE_STORES.meta);
   const outbox = tx.objectStore(STATE_STORES.outbox);

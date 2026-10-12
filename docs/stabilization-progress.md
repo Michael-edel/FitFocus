@@ -1440,3 +1440,41 @@ flaky в итоговом summary нет. Отдельный push-run отмен
 ошибок нет. Имена npm-команд, JSON-примеры и `git diff --check` проверены.
 Содержимое 27 ранее изменённых файлов кода и схемы сверено по SHA-256:
 документационная задача их не изменила.
+
+## 12.10.2026 — семейное меню: CAS, одна очередь и guarded AI
+
+В рабочей версии после dbb22aa реализованы единое family/week поколение,
+SQL CAS RETURNING и покупки из того же JSON. AI и server-preview сохраняют
+одно familyMenu intent в существующей IDB-outbox. Убраны два прямых family
+writers и общий snapshot кэша аккаунтов; shared profiles строятся только из
+явных family данных. Personal weekly AI дополнительно передаёт исходный
+login guard вместо возможного принятия другой текущей IDB-сессии.
+
+1039 unit / 191 файл прошли. Первые три real-SQL теста CAS были RED до
+реализации; новая проверка частичной миграции не включает legacy writer.
+Три typecheck, guards, schema (23 миграции / 32 таблицы), privacy (29 таблиц)
+и полный npm audit (0) прошли. IDB тесты v2→v3 сохраняют старые values,
+pending, ledger, quarantine и fence; это ещё не две настоящие сборки.
+
+Первый Chromium-прогон: 4 passed / 1 failed. Logout показал реальный
+стартовый экран FitFocus, а тест искал отсутствующую Google-кнопку.
+Ожидание исправлено по DOM без изменения runtime. После добавления recovery,
+profile-edit и pagehide сценариев: 16 passed, Chromium/iPhone Safari,
+workers=2, retries=0, 2,0 мин. Browser plugin not available: repository
+Playwright/mock API на 127.0.0.1:4173. Новые сценарии проверяют реальные UI
+контролы, loading/error и данные/операции IDB, а не только число HTTP.
+В логах preview при teardown есть один native `/api/me?t=…` proxy
+ECONNREFUSED. Page/console health прошёл; причина этого запроса отдельно
+не доказана и сообщение не скрыто. Реальные BFCache/OAuth не подтверждены.
+
+Актуальный серверный bundle на локальном workerd/D1 повторно прошёл 33 HTTP
+с двумя синтетическими аккаунтами на одном origin/database: capability,
+ранние 401, preview без persistence, CAS/409, member read/owner-only write,
+чужая цель, старые menu/items/generate=409, generic state=403, empty generation.
+Собственные fixture-процессы остановлены, порт 8799 закрыт; remote/production
+не использовались. Полная browser matrix, новый CI, actual bundles, staging,
+compatible rollback и recovery повреждённых/конфликтных данных ещё открыты.
+
+Добавлены [контракт](family-menu-state.md) и [ADR-008](adr/ADR-008-family-menu-generation.md).
+Результат предыдущего документационного CI dbb22aa — success; он проверяет
+прежний семейный session-код и не относится к новым локальным исходникам.

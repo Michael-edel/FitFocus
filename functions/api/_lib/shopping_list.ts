@@ -2,6 +2,7 @@ import { requireFamilyMember } from './family_access';
 import { aggregateShoppingRows, ingredientKey } from './ingredients';
 import { requireFamilyPlan } from './plans';
 import { readPersonalMenuItems } from './personal_menu_projection';
+import { familyMenuStateReady, readFamilyMenuGeneration } from './family_menu_state';
 
 type ShoppingRow = { name?: unknown; grams?: unknown };
 type CheckedRow = { name?: string | null; checked?: number | boolean | null };
@@ -49,7 +50,9 @@ export async function readShoppingList({
     const family = await requireFamilyMember(db, familyId, userId);
     await requireFamilyPlan(db, family.owner_user_id);
     const [rows, checkedRows] = await Promise.all([
-      db
+      await familyMenuStateReady(db)
+        ? readFamilyMenuGeneration(db, familyId, weekStart).then(snapshot => ({ results: snapshot.menu?.shoppingListItems ?? [] }))
+        : db
         .prepare(
           `SELECT w.ingredient_name as name, w.grams as grams
            FROM weekly_menu_items w

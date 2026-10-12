@@ -164,3 +164,22 @@ Actions, наличие workflow в нужной ветке и состояни�
 
 Связанные документы: [TASKS](TASKS.md), [наблюдаемость](docs/observability.md),
 [ADR-005](docs/adr/ADR-005-durable-outbox.md).
+
+## Дополнительный gate семейного меню 0021 — 12.10.2026
+
+[Контракт](docs/family-menu-state.md), [ADR-008](docs/adr/ADR-008-family-menu-generation.md).
+Новая реализация пока не подтверждает выпуск.
+
+- [ ] Проверить legacy JSON на staging и подготовить восстановление corrupt
+  canonical; источник и резервную копию сохранить.
+- [ ] Развернуть совместимый сервер до 0021; до миграции familyMenu capability
+  отсутствует, новый state endpoint не принимает запись.
+- [ ] Применить 0021 и проверить таблицу, четыре SQL-barrier triggers,
+  capability, scoped GET/PUT, own RETURNING version и старые writers=409.
+- [ ] Проверить actual old/new bundles на одном origin: v2 sender не получает
+  новый resource, v3 сохраняет pending/conflict/ledger/quarantine/auth-fence.
+- [ ] Проверить standalone/PWA, реальный lifecycle/OAuth и повтор после сбоя.
+- [ ] Подготовить rollback artifact с canonical reader и v3-aware sender;
+  не удалять и не понижать IDB, не возвращать legacy reader после новых записей.
+- [ ] Подтвердить полную browser matrix и CI точного кандидата, затем protected
+  main и отдельный staging/production smoke.

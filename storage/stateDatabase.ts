@@ -1,5 +1,6 @@
 export const STATE_DATABASE_NAME = 'fitfocus-user-state-v1';
-export const STATE_DATABASE_VERSION = 2;
+// Versioned opens stop older senders from claiming a resource they cannot route.
+export const STATE_DATABASE_VERSION = 3;
 export const STATE_STORES = {
   values: 'values',
   outbox: 'outbox',

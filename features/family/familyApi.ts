@@ -1,5 +1,5 @@
 import { isRecord, responseErrorMessage } from '../../safeJson';
-import { fetchWithResilience } from '../../services/httpClient';
+import { isFamilyMenuPayload, isFamilyMenuSnapshot, type FamilyMenuSnapshot } from '../../familyMenuValidation';
 import type { FamilyWeeklyMenu } from '../../types';
 import { familyErrorMessage, requestFamilyJson, type FamilySession } from '../../services/familySession';
 import { SessionReadError } from '../../storage/sessionRead';
@@ -41,6 +41,7 @@ type FamilyContext = {
   family: CloudFamily | null;
   members: CloudFamilyMember[];
   menu: FamilyWeeklyMenu | null;
+  snapshot?: FamilyMenuSnapshot;
 };
 
 function isCloudFamily(value: unknown): value is CloudFamily {
@@ -68,10 +69,6 @@ function isFamilyShoppingItem(value: unknown): value is FamilyShoppingItem {
   return isRecord(value) && typeof value.name === 'string' && Number.isFinite(Number(value.grams)) && (value.checked === undefined || typeof value.checked === 'boolean');
 }
 
-async function responseJson(response: Response): Promise<unknown> {
-  return response.json().catch(() => null);
-}
-
 function requestOptions(method = 'GET', body?: unknown): RequestInit {
   return {
     method,
@@ -86,13 +83,6 @@ function requestOptions(method = 'GET', body?: unknown): RequestInit {
 async function apiFetch(input: string, init: RequestInit, session: FamilySession) {
   if (!session) throw new Error(familyErrorMessage(new SessionReadError('session')));
   return requestFamilyJson(session, input, init).catch(error => { throw new Error(familyErrorMessage(error)); });
-}
-
-// Remaining AI-family writer: replaced with durable delivery in the next component.
-async function legacyApiFetch(input: string, init: RequestInit) {
-  const method = (init.method ?? 'GET').toUpperCase();
-  const response = await fetchWithResilience(input, init, { retries: method === 'GET' ? 1 : 0 });
-  return { response, body: await responseJson(response) };
 }
 
 export async function loadFamilyContext(week: string, session: FamilySession): Promise<FamilyContext> {
@@ -115,10 +105,22 @@ export async function loadFamilyContext(week: string, session: FamilySession): P
     throw new Error('Не удалось проверить семейное меню. Повторите загрузку.');
   }
 
+  let snapshot: FamilyMenuSnapshot | undefined;
+  // The durable read binds the explicit family/week and uses its own capability.
+  // A server before the migration can still display its old snapshot.
+  if (isCloudFamily(familyData.family) && (menuData.version === 0 || typeof shared?.version === 'number')) {
+    const proof = await apiFetch(`/api/family/menu/state?familyId=${encodeURIComponent(familyData.family.id)}&week=${encodeURIComponent(week)}`, requestOptions(), session);
+      if (!proof.response.ok || !isRecord(proof.body) || !isFamilyMenuSnapshot(proof.body.snapshot)
+        || proof.body.snapshot.familyId !== familyData.family.id || proof.body.snapshot.weekStart !== week) {
+        throw new Error(responseErrorMessage(proof.body, 'Не удалось проверить версию семейного меню.'));
+      }
+      snapshot = proof.body.snapshot;
+  }
   return {
     family: isCloudFamily(familyData.family) ? familyData.family : null,
     members: Array.isArray(familyData.members) ? familyData.members.filter(isCloudFamilyMember) : [],
-    menu: isFamilyWeeklyMenu(shared?.menu) ? shared.menu : null,
+    menu: snapshot ? snapshot.menu : isFamilyWeeklyMenu(shared?.menu) ? shared.menu : null,
+    ...(snapshot ? { snapshot } : {}),
   };
 }
 
@@ -176,25 +178,11 @@ export async function updateFamilyGoal(goal: 'LOSS' | 'MAINTAIN', session: Famil
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось обновить цель'));
 }
 
-export async function generateFamilyMenu(week: string, session: FamilySession): Promise<void> {
-  const { response, body: data } = await apiFetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`, requestOptions('POST'), session);
+export async function generateFamilyMenu(week: string, familyId: string, session: FamilySession): Promise<FamilyWeeklyMenu> {
+  const { response, body: data } = await apiFetch(`/api/family/menu/generate?week=${encodeURIComponent(week)}`,
+    requestOptions('POST', { preview: true, familyId }), session);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось сгенерировать семейное меню'));
-}
-
-export async function saveFamilyMenu(week: string, menu: FamilyWeeklyMenu): Promise<void> {
-  const { response, body: data } = await legacyApiFetch('/api/family/menu', requestOptions('POST', { weekStart: week, menu }));
-  if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось сохранить семейное меню на сервере'));
-}
-
-export async function saveFamilyShoppingItems(
-  week: string,
-  familyId: string,
-  items: NonNullable<FamilyWeeklyMenu['shoppingListItems']>,
-): Promise<void> {
-  const { response, body: data } = await legacyApiFetch('/api/weekly_menu/items', requestOptions('POST', {
-    week_start: week,
-    family_id: familyId,
-    items,
-  }));
-  if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось синхронизировать семейный список покупок'));
+  if (!isRecord(data) || data.preview !== true || !isRecord(data.shared) || data.shared.familyId !== familyId
+    || data.shared.weekStart !== week || !isFamilyMenuPayload(data.shared.menu, week)) throw new Error('Не удалось проверить семейное меню.');
+  return data.shared.menu;
 }

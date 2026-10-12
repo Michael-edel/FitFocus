@@ -27,7 +27,7 @@ describe('shared IndexedDB schema and lifecycle', () => {
     (await oldDatabase(factory)).close();
     const manager = connection(factory);
     const database = await manager.open();
-    expect(database.version).toBe(2);
+    expect(database.version).toBe(3);
     expect(Array.from(database.objectStoreNames)).toEqual(Object.values(STATE_STORES).sort());
     expect(await stateTransaction(database, ['values'], 'readonly', (tx) => indexedRequest(tx.objectStore('values').get('fitfocus_data_owner_diary'))))
       .toMatchObject({ value: '["preserved"]' });
@@ -47,7 +47,7 @@ describe('shared IndexedDB schema and lifecycle', () => {
     expect(manager.status).toBe('blocked');
     expect(manager.open()).toBe(pending);
     old.close();
-    expect((await pending).version).toBe(2);
+    expect((await pending).version).toBe(3);
     expect(statuses).toEqual(['opening', 'blocked', 'ready']);
   });
 
@@ -55,12 +55,38 @@ describe('shared IndexedDB schema and lifecycle', () => {
     const factory = new IDBFactory();
     const manager = connection(factory);
     await manager.open();
-    const request = factory.open(STATE_DATABASE_NAME, 3);
+    const request = factory.open(STATE_DATABASE_NAME, 4);
     const newer = await indexedRequest(request);
     opened.push(newer);
-    expect(newer.version).toBe(3);
+    expect(newer.version).toBe(4);
     expect(manager.status).toBe('closed');
     await expect(manager.open()).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('preserves version-2 values, pending intents and migration evidence while refusing a version-2 reopen', async () => {
+    const factory = new IDBFactory();
+    const request = factory.open(STATE_DATABASE_NAME, 2);
+    request.onupgradeneeded = () => {
+      for (const name of Object.values(STATE_STORES)) {
+        const store = request.result.createObjectStore(name, { keyPath: name === STATE_STORES.values ? 'key' : name === STATE_STORES.outbox ? 'opId' : 'id' });
+        if (name === STATE_STORES.outbox) { store.createIndex('accountId', 'accountId'); store.createIndex('accountKey', ['accountId', 'key']); }
+      }
+    };
+    const old = await indexedRequest(request); opened.push(old);
+    old.onversionchange = () => old.close();
+    await stateTransaction(old, Object.values(STATE_STORES), 'readwrite', tx => {
+      tx.objectStore(STATE_STORES.values).put({ key: 'original', value: 'keep' });
+      tx.objectStore(STATE_STORES.outbox).put({ opId: 'pending-legacy-state', status: 'pending' });
+      tx.objectStore(STATE_STORES.migrationItems).put({ id: 'migration-proof', fingerprint: 'stable' });
+      tx.objectStore(STATE_STORES.migrationUnknown).put({ id: 'quarantine', rawRecord: { key: 'unknown' } });
+      tx.objectStore(STATE_STORES.meta).put({ id: 'auth-fence', revision: 9 });
+    });
+    const upgraded = await connection(factory).open(); expect(upgraded.version).toBe(3);
+    for (const [store, key] of [[STATE_STORES.values, 'original'], [STATE_STORES.outbox, 'pending-legacy-state'],
+      [STATE_STORES.migrationItems, 'migration-proof'], [STATE_STORES.migrationUnknown, 'quarantine'], [STATE_STORES.meta, 'auth-fence']] as const) {
+      expect(await stateTransaction(upgraded, [store], 'readonly', tx => indexedRequest(tx.objectStore(store).get(key)))).toBeDefined();
+    }
+    await expect(indexedRequest(factory.open(STATE_DATABASE_NAME, 2))).rejects.toMatchObject({ name: 'VersionError' });
   });
 
   it('can retry after storage was unavailable instead of caching a failed open', async () => {
@@ -69,7 +95,7 @@ describe('shared IndexedDB schema and lifecycle', () => {
     await expect(manager.open()).rejects.toMatchObject({ kind: 'unavailable' });
     expect(manager.status).toBe('unavailable');
     vi.stubGlobal('indexedDB', new IDBFactory());
-    expect((await manager.open()).version).toBe(2);
+    expect((await manager.open()).version).toBe(3);
   });
 
   it('returns a rejected promise when the browser denies access to indexedDB', async () => {
@@ -107,7 +133,7 @@ describe('shared IndexedDB schema and lifecycle', () => {
     manager.close();
     await rejected;
     old.close();
-    expect((await manager.open()).version).toBe(2);
+    expect((await manager.open()).version).toBe(3);
   });
 
   it('rejects only after rollback and can start a fresh transaction', async () => {

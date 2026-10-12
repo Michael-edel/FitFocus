@@ -11,7 +11,9 @@ export type AiSession = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
-type AiSessionOptions = Pick<AiSession, 'fetchImpl' | 'timeoutMs'> & { outbox?: DurableOutbox; requireMenuProjection?: boolean };
+type AiSessionOptions = Pick<AiSession, 'fetchImpl' | 'timeoutMs'> & {
+  outbox?: DurableOutbox; previous?: OutboxReadGuard; requireMenuProjection?: boolean; requireFamilyMenu?: boolean;
+};
 
 export async function assertAiSession(session: AiSession): Promise<void> {
   await assertReadSession(session.guard, {
@@ -26,7 +28,9 @@ export async function prepareAiSession(accountId: string, controller: AbortContr
   const outbox = options.outbox ?? new DurableOutbox();
   const { active, fence } = await outbox.sessionState();
   if (active?.accountId !== accountId || active.pause || !active.serverSessionId) throw new SessionReadError('session');
-  const previous = { accountId, sessionEpoch: active.sessionEpoch, serverSessionId: active.serverSessionId, authFence: fence };
+  const previous = options.previous ?? { accountId, sessionEpoch: active.sessionEpoch, serverSessionId: active.serverSessionId, authFence: fence };
+  if (previous.accountId !== accountId) throw new SessionReadError('session');
+  await assertReadSession(previous, { outbox, isCurrentSession, signal: controller.signal });
   const { body, guard } = await verifyReadSession({ ...options, outbox, accountId, previous, isCurrentSession, signal: controller.signal });
   if (!guard) throw new SessionReadError('auth');
   for (const name of ['aiSync', 'weeklyMenuSync']) {
@@ -35,6 +39,8 @@ export async function prepareAiSession(accountId: string, controller: AbortContr
   }
   if (options.requireMenuProjection && (!isRecord(body?.profileSync) || body.profileSync.protocol !== 1
     || body.profileSync.guard !== 1 || body.profileSync.weeklyMenuProjection !== 1)) throw new SessionReadError('protocol');
+  if (options.requireFamilyMenu && (!isRecord(body?.familyMenuSync) || body.familyMenuSync.protocol !== 1
+    || body.familyMenuSync.guard !== 1 || body.familyMenuSync.cas !== 1)) throw new SessionReadError('protocol');
   const session = { ...options, guard: Object.freeze({ ...guard }), controller, isCurrentSession, outbox };
   await assertAiSession(session);
   return session;

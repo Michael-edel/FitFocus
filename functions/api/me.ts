@@ -6,18 +6,22 @@ import { hasBetaAccess } from "./_lib/access";
 import { stateSessionId } from './_lib/state_session';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { personalMenuProjectionReady } from './_lib/personal_menu_projection';
+import { familyMenuStateReady } from './_lib/family_menu_state';
 
 const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
     const hasAccess = await hasBetaAccess(env, u);
-    const menuProjection = await personalMenuProjectionReady(env.DB);
+    const [menuProjection, familyMenuState] = await Promise.all([
+      personalMenuProjectionReady(env.DB), env.DB ? familyMenuStateReady(env.DB).catch(() => false) : Promise.resolve(false),
+    ]);
     return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles }, hasAccess,
       stateSync: { protocol: 2, guard: 1, accountId: u.sub, sessionId: await stateSessionId(u) },
       profileSync: { protocol: 1, guard: 1, ...(menuProjection ? { weeklyMenuProjection: 1 } : {}) },
       inviteSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
-      familySync: { protocol: 1, guard: 1 }, achievementSync: { protocol: 1, guard: 1 } }, 200);
+      familySync: { protocol: 1, guard: 1 }, ...(familyMenuState ? { familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : {}),
+      achievementSync: { protocol: 1, guard: 1 } }, 200);
   } catch {
     return json({ user: null }, 200);
   }
