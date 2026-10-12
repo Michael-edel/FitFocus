@@ -24,6 +24,7 @@ Google/Apple, push, поддержка и административные фу�
 | [Регистрация](docs/registration-persistence.md) | Commit до AI, canonical account, guarded invite и восстановление после reload |
 | [Загрузка сессии](docs/bootstrap-hydration.md) | Guarded bootstrap, state-hydration, auth-fence и границы приёмки |
 | [Сессия AI и списка покупок](docs/ai-session-guard.md) | Серверный guard, текущее подключение меню и критерии приёмки |
+| [Сессия достижений](docs/achievement-session.md) | Guarded GET/POST, исходный login proof, очередь и отмена старых callbacks |
 | [PRODUCT.md](PRODUCT.md) | Функции, пользовательский цикл и приоритеты |
 | [TASKS.md](TASKS.md) | Порядок P0/P1 и критерии готовности |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Запуск, проверки и порядок изменений |
@@ -53,42 +54,28 @@ Vite запускает клиент на `http://localhost:5173` и прокс�
 `http://localhost:8788`. Для входа и серверных функций требуется настроенный
 backend; порядок и ограничения описаны в [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Что подтверждено
+## Состояние разработки
 
-Последующее исправление [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7) разделяет автоматический flush профиля и
-ручную проверку сессии: debounce больше не снимает auth-паузу повторным `/me`.
-Локально: 905 unit / 183 файла, три typecheck и обязательные проверки;
-201 browser passed / 9 skips без retries. CI нового HEAD проверяется отдельно.
-[Контракт и границы](docs/state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
+Рабочая ветка — `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+Реализованы общая IDB-outbox, 15 управляемых state-ключей, сохранение профиля
+и регистрации, guarded bootstrap/hydration, персональное меню и привязка
+HTTP достижений к исходной сессии. Границы реализации и точные результаты
+проверок — в [статусе проекта](docs/project-status.md).
 
-Базовый опубликованный снимок — `8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`,
-ветка `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-[CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277)
-завершился успешно: 860 unit-тестов в 179 файлах, 152 browser passed,
-9 skips, без flaky; обязательные проверки прошли.
+Последний подтверждённый CI перед компонентом достижений —
+[`bf01d87`](https://github.com/Michael-edel/FitFocus/actions/runs/38184851075):
+905 unit, 201 browser passed / 9 skips, без flaky. Последующая полная
+локальная матрица `57da2cf` выявила три падения; они не скрыты успешными
+повторами. Текущие исправления и их приёмка описываются отдельно
+[в журнале](docs/stabilization-progress.md).
 
-В ветке реализованы общая IDB-outbox, 15 управляемых state-ключей,
-сохранение профиля и регистрации, guarded bootstrap/hydration и серверная
-привязка AI/items к сессии. Контракты и границы компонентов доступны
-в [статусе проекта](docs/project-status.md) и [карте кода](docs/code-map.md).
-Архитектурный снимок `810adb1` и результаты прежних этапов сохранены
-в [журнале](docs/stabilization-progress.md).
+Следующие задачи: завершить текущую приёмку, защитить остальные AI/report/retry/family
+callbacks, определить CAS и постоянный порядок вторичной items-проекции,
+подключить runtime legacy-импорт, разрешение конфликтов и backup/экспорт/очистку.
+Порядок и критерии готовности — в [TASKS](TASKS.md).
 
-Следующий компонент [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e) подключает персональное недельное меню:
-свежий proof, защита поздних ответов, постоянный profile commit до явной
-отправки items, ошибка вторичной записи и повтор после таймаута.
-Также исправлена прокрутка desktop-панели к настройкам. Локально прошли
-900 unit / 183 файла, три typecheck и обязательные проверки; полная браузерная
-матрица — 200 passed / 1 failed / 9 skips, без retries.
-[Контракт и границы](docs/ai-session-guard.md#клиентское-подключение-в-работе).
-Это отдельная ревизия: её CI проверяется после публикации, результат `8fc0b1b`
-на неё не переносится. CI документирующего `59a3630` также прошёл: 860 unit,
-152 browser passed / 9 skips, без flaky; код меню в него ещё не входил.
-
-Runtime legacy-импорт, остальные AI/report/retry/family и achievement callbacks,
-конфликты, backup/экспорт/очистка, staging и выпуск остаются открытыми.
-PR #93 не слит в защищённую main; готовность ветки не подтверждает deploy.
-Порядок дальнейшей работы — в [TASKS](TASKS.md).
+PR #93 не слит в защищённую main. Реальные OAuth, BFCache на устройствах,
+staging и выпуск этой интеграционной версии ещё требуют проверки.
 
 Предыдущее подробное описание и старые результаты проверок сохранены
 в [архиве README](docs/history/README-2026-08-29.md).

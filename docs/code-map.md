@@ -4,7 +4,9 @@
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
 Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
-profile flush — `f3930ec`. CI каждой ревизии сверяется отдельно.
+profile flush — `f3930ec`; сессия/очередь достижений — `57da2cf`,
+атомарная проверка позднего proof — `4528e2b`, постоянная область notice — `724ecf1`.
+CI каждой ревизии сверяется отдельно.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -18,6 +20,7 @@ profile flush — `f3930ec`. CI каждой ревизии сверяется �
 | Регистрация и первоначальный план | [registrationFlow.ts](../registrationFlow.ts) | [Сохранение регистрации](registration-persistence.md), [unit](../tests/registration_flow.test.ts), [E2E](../e2e/registration-durability.spec.ts) |
 | Редактирование и восстановление профиля | [useProfilePersistence.ts](../features/profile/useProfilePersistence.ts), [profileState.ts](../storage/profileState.ts) | [Контракт профиля](profile-persistence.md), [profile tests](../tests/profile_sync.test.ts), [E2E](../e2e/profile-durability.spec.ts) |
 | Автоматический profile flush | [useProfileAutoSync.ts](../features/profile/useProfileAutoSync.ts), [App.tsx](../App.tsx), [stateSync.ts](../storage/stateSync.ts) | `flushPending` сохраняет текущую паузу; ручной `syncNow` проверяет свежий proof. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии) |
+| Уведомление о сохранении и стабильность формы | [StateStorageNotice.tsx](../ui/StateStorageNotice.tsx) | [Контракт](profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026), [E2E](../e2e/profile-durability.spec.ts): область учитывает все переносы сообщений и не двигает Save после фонового ack |
 | Дневник питания | [useFoodDiary.ts](../features/diary/useFoodDiary.ts) | [Управляемые записи](owned-state-writers.md), [feature tests](../tests/food_diary_feature.test.ts), [storage tests](../tests/food_diary_storage.test.ts) |
 | Настройки | [useSettingsPersistence.ts](../features/settings/useSettingsPersistence.ts) | [Управляемые записи](owned-state-writers.md), [проверки настроек](../tests/settings_persistence_feature.test.ts) |
 | Отметки заданий плана | [usePlanTaskState.ts](../features/plan/usePlanTaskState.ts) | [Feature tests](../tests/plan_task_feature.test.ts), [сценарии с reload](../e2e/owned-state.spec.ts) |
@@ -27,7 +30,7 @@ profile flush — `f3930ec`. CI каждой ревизии сверяется �
 | Прокрутка desktop-панели | [SidebarNavigation.tsx](../SidebarNavigation.tsx) | Переход к настройкам/правке/logout в [menu E2E](../e2e/weekly-menu-durability.spec.ts); pointer/viewport проверяются без force click |
 | AI-отчёт за неделю | [useWeeklyAiReport.ts](../features/ai/useWeeklyAiReport.ts) | [Feature tests](../tests/weekly_ai_report_feature.test.ts); защита всех AI callbacks остаётся задачей [P0](../TASKS.md) |
 | Серверная привязка AI и items | [ai_request_handler.ts](../functions/api/_lib/ai_request_handler.ts), [weekly_menu/items.ts](../functions/api/weekly_menu/items.ts), [state_session.ts](../functions/api/_lib/state_session.ts) | [Контракт](ai-session-guard.md), [HTTP-регрессии](../tests/ai_menu_session_guard.test.ts); персональное меню подключено, остальные callbacks открыты |
-| Достижения | [useAchievements.ts](../useAchievements.ts), [achievement_check.ts](../functions/api/_lib/achievement_check.ts) | POST/очередь и callbacks ещё требуют account/session guard и lifetime; текущий menu commit не защищает последующий achievement HTTP |
+| Достижения | [useAchievements.ts](../useAchievements.ts), [achievementClient.ts](../features/achievements/achievementClient.ts), [achievementSession.ts](../services/achievementSession.ts), [achievement_handlers.ts](../functions/api/_lib/achievement_handlers.ts) | [Контракт](achievement-session.md), [client tests](../tests/achievement_client.test.ts), [HTTP guard tests](../tests/achievement_session_guard.test.ts), [E2E](../e2e/achievement-session.spec.ts); исходный login proof и page/attempt lifetime на `57da2cf`, прочие producers ещё требуют приёмки |
 | Семейные запросы | [familyApi.ts](../features/family/familyApi.ts) | [API tests](../tests/family_api.test.ts); полный lifecycle family callbacks ещё не принят |
 | Локальное сохранение и редакторы | [userStateRepository.ts](../storage/userStateRepository.ts), [stateEditor.ts](../storage/stateEditor.ts), [durableOutbox.ts](../storage/durableOutbox.ts), [stateDatabase.ts](../storage/stateDatabase.ts) | [Фундамент P0.8](outbox-implementation.md), [repository tests](../tests/user_state_repository_indexed.test.ts), [outbox tests](../tests/durable_outbox.test.ts) |
 | Отправка state и profile | [stateSync.ts](../storage/stateSync.ts), [sessionTransport.ts](../storage/sessionTransport.ts) | [Sender](state-sender.md), [state tests](../tests/state_sync.test.ts), [profile sender tests](../tests/profile_sender.test.ts) |

@@ -170,11 +170,11 @@ CI итогового опубликованного HEAD проверяется
 Контракты данных и выпуска: [API](../API_CONTRACTS.md),
 [профиль](profile-persistence.md), [release checklist](../RELEASE_CHECKLIST.md).
 
-Отдельный оставшийся writer — достижения: после успешного commit меню
-вызывает `checkAchievements`, но HTTP/очередь внутри `useAchievements.ts`
-ещё не имеют account/session guard и lifetime запроса. Проверка menu use case
-до вызова не защищает последующий achievement POST при смене cookie.
-Нужны серверный guard, клиентская привязка и late-response тесты;
+Отдельный writer — достижения: после успешного commit меню вызывает
+`checkAchievements`. На снимке `f4b4eee` проверка menu use case до вызова
+не защищала последующий HTTP при смене cookie. Компонент `57da2cf` добавляет
+[собственные server/client guard, очередь и lifetime](achievement-session.md).
+Durable-порядок/CAS items и остальные producers остаются открытыми;
 полная безопасность всех побочных эффектов меню пока не подтверждена.
 
 На предыдущем снимке `f4b4eee` полная приёмка оставалась открытой:
@@ -187,5 +187,7 @@ CI итогового опубликованного HEAD проверяется
 Последующая полная локальная матрица на [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7) прошла: 201 passed / 9 skips,
 без retries; 905 unit / 183 файла. Исправлен отдельный profile debounce,
 который запускал `/me` при reload. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
-Это не закрывает achievement HTTP, остальные AI writers или настоящий BFCache/staging;
-CI нового опубликованного HEAD проверяется отдельно.
+Сам profile-компонент не закрывает achievement HTTP; он подключён позднее
+в [отдельном `57da2cf`](achievement-session.md). Остальные AI writers и настоящий
+BFCache/staging остаются открытыми. CI `bf01d87` для profile-компонента прошёл:
+905 unit, 201 browser passed / 9 skips, без flaky; новые изменения проверяются отдельно.

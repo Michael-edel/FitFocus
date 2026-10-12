@@ -1092,3 +1092,115 @@ CI нового опубликованного HEAD проверяется от�
 
 Проверка Markdown: 27 документов, 637 ссылок и 27 закреплённых путей
 исходников, ошибок нет; `git diff --check` прошёл.
+
+## 12.10.2026 — CI автоматического profile flush
+
+Workflow [38184851075](https://github.com/Michael-edel/FitFocus/actions/runs/38184851075)
+для опубликованного head `bf01d87f754eb553689c7479ca9739da35a76263` завершился
+success. PR workflow проверял merge `60d01019117b0381b9444bd27cc3ab96303e7cdb`
+с базой `237f862`; job `114604881706`: 905 unit / 183 файла,
+201 browser passed / 9 skips, без flaky, обязательные проверки прошли.
+Дублирующий push run отменён штатной concurrency-группой. В защищённую main
+эти изменения ещё не объединены. Этот CI предшествует следующему компоненту.
+
+## 12.10.2026 — исходная сессия и временная очередь достижений
+
+Код [`57da2cf`](https://github.com/Michael-edel/FitFocus/commit/57da2cf3d8bcb682242db87994126d1c816158d4).
+Прежде GET/POST выбирали аккаунт по текущей cookie, а throttle-очередь
+очищалась только при unmount. Добавленные server-регрессии до исправления:
+13 failed / 2 passed. Scope проверяется до feature/application DB effects;
+`/me` объявляет независимую achievement capability, ответ подтверждает scope.
+Повреждённый POST JSON получает 400 до check use case.
+
+Клиент получает исходную login-привязку из принятого hydration proof,
+проверяет свежий proof и IDB epoch/auth-fence каждой попытки. Он не принимает
+другой serverSessionId, включая same-account login и восстановленную страницу.
+Очередь, снимки контекста, таймеры и ожидающие вызовы принадлежат своему
+экземпляру. Cleanup/pagehide завершают их без unlock; late GET/POST не меняют
+UI другого lifetime. Auth-пауза не переавторизуется; явный resume того же
+серверного входа разрешает новую попытку. Поздний GET не стирает успешный unlock.
+
+Первый новый E2E прогон: 21 failed — каждый на предупреждении Recharts
+`width(-1)/height(-1)` при первом render графиков обзора. Функциональные
+assertions прошли. Вместо фильтра console в двух `ResponsiveContainer`
+задана фактическая высота существующих контейнеров 220 px. Следующий кандидат:
+21 passed во всех семи проектах, 3 workers, retries=0, console errors/warnings
+пусты. Затем login proof закреплён в App, добавлены регрессии уже сменившегося
+IDB login, явного resume и гонки GET/POST; итоговые unit: 948 passed / 186 файлов.
+Три typecheck, guards, schema/privacy, audit прошли; известных уязвимостей 0.
+Полная браузерная матрица compiled bundle `57da2cf` завершилась:
+219 passed / 3 failed / 9 skips, 3 workers, retries=0. Все 21 achievement
+E2E прошли. Падения: Android profile auth-pause, iPhone Safari menu logout,
+iPhone PWA profile conflict. Это не успешная приёмка компонента.
+
+Последующая проверка до React cleanup обнаружила незавершённый caller:
+таймер видел устаревший login lifetime и возвращался без завершения очереди.
+Регрессия `achievement-queued-expiry-red.log` дала 1 failed; поправка
+[`a407373`](https://github.com/Michael-edel/FitFocus/commit/a4073731ea2d30c107b49ff8cf7170dbffc8ed83)
+отменяет именно своё поколение и завершает ожидающие вызовы. Все 14 client
+тестов прошли (`achievement-queued-expiry-green.log`). Полный прогон,
+который уже выполнялся, относится к compiled bundle `57da2cf`; результат
+не переносится на новую поправку без её отдельных проверок.
+
+Диагностика Android показала `/me` после PUT/profile 401. Отдельно новый unit
+подтвердил реальный дефект: уже запущенный scoped proof мог снять auth-паузу,
+появившуюся во время HTTP. В working tree приём scoped proof проверяет previous
+account/session/epoch и pause в той же IDB-транзакции. RED: 1 failed;
+после поправки прошли 62 storage/read/AI/achievement tests. Это ещё не
+устанавливает caller Android `/me`: sender также умеет намеренно получать
+свежий proof на focus/online. Сбор событий продолжен отдельно.
+
+Доказательства вне Git: `achievement-guard-red.log`, `achievement-e2e.log`,
+`achievement-e2e-clean-console.log`, `achievement-final-unit.log`,
+`achievement-final-full-e2e.log`. Browser plugin not available: используется
+repository Playwright/production preview `http://127.0.0.1:4173` с mock API.
+Настоящие BFCache/devices/OAuth/staging этим не подтверждены. Временная
+achievement-очередь и best effort localStorage counters не стали durable outbox;
+остальные producers, items CAS/order, runtime legacy, conflict/backup и main
+остаются открытыми. [Подробный контракт](achievement-session.md).
+
+## 12.10.2026 — поздний proof и положение формы до нажатия
+
+Код: [`4528e2b`](https://github.com/Michael-edel/FitFocus/commit/4528e2bba08c7868ad2b24be2285c9547140b865)
+и [`724ecf1`](https://github.com/Michael-edel/FitFocus/commit/724ecf1aad05461d86644789f773ffca73f6efad).
+Первый сохраняет auth-паузу при позднем автоматическом proof; второй резервирует
+максимальную высоту уведомления, включая отсутствие сообщения. Контракты:
+[достижения](achievement-session.md), [профиль](profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026).
+
+Повторная диагностика трёх прежних падений: 18 selected passed, 198 исключённых
+сценариев, без retries. Это отдельный диагностический прогон, не полная матрица
+и не доказательство исправления. Детерминированная проверка до pointerdown
+выявила сдвиг кнопки Save на iPhone PWA на 106 px: 1 failed до поправки.
+После поправки положение кнопки сохранилось во всех семи проектах.
+
+Auth-fixture уточнён: после profile PUT/401 `/me` возвращает 401 до следующей
+загрузки документа. Focus проверяет отказ proof без повторного PUT; reload
+получает новый действующий proof и сохраняет opId. Промежуточный прогон:
+85 passed / 6 failed. Все шесть ошибок относились к учёту намеренного HTTP 401
+`/api/me?t=…`: сравнение URL по окончанию строки не учитывало query, а проверка
+флага текущего document lifetime была нестабильна при отложенном console event.
+Теперь сверяется pathname и факт инъекции отказа proof. Общие CORS/pageerror,
+неожиданные статусы и другие URL не фильтруются.
+
+Итоговые unit: 950 passed / 186 файлов. Три typecheck, admin/auth/API guards,
+schema (21 migrations, 30 tables), privacy (27 tables) и audit прошли;
+0 известных уязвимостей по audit. Unit/guards выполнены на рабочем дереве
+с теми же исполняемыми изменениями до их коммита. Production build затем
+скомпилировал `724ecf1`; полная матрица этого runtime прошла:
+229 passed / 9 explicit skips, 7 проектов, workers=3, retries=0, 12.8m.
+Включены 21 achievement, 42 profile и 49 menu-сценариев. Это локальный результат;
+CI нового опубликованного HEAD проверяется после push отдельно.
+
+Markdown: сокращено дублирование истории в README и индексе документов;
+добавлен контракт достижений, обновлены карта кода, правила помощника,
+API, задачи, статус, чек-лист выпуска и границы приёмки. История SHA и неуспешных проверок сохранена.
+
+Просмотрены `profile-stable-notice-idle.png` (первый viewport desktop)
+и `profile-stable-notice-conflict.png` (desktop Chromium и Android).
+Предупреждение читается и целиком видно; проверяются title/URL, отсутствие
+Vite overlay, актуальные console errors и реальный Save → persistent conflict.
+Среда: production preview `http://127.0.0.1:4173`, mock API, Playwright;
+Browser plugin not available в текущем наборе skills.
+На снимках светлой темы видны тёмные подписи sidebar/нижней навигации на
+тёмном фоне. Дефект записан в P1, наряду с прежним WebKit native select.
+Его не относим к исправленному notice и не объявляем весь визуальный QA успешным.

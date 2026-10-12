@@ -1,18 +1,21 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 12.10.2026. Архитектурный снимок: `810adb1`; bootstrap/hydration —
-`dac2de2`, исправление UI — `3550cc8`, серверный AI/items guard — `16d3c34`.
-Последний компонент — автоматическая синхронизация профиля `f3930ec`:
-локально 905 unit, 201 browser passed / 9 skips, без retries.
-CI нового опубликованного HEAD проверяется отдельно; история ниже сохраняется.
-Базовая проверенная ревизия кода — `8fc0b1b`:
-[CI success](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277),
-860 unit / 179 файлов, 152 browser passed / 9 skips, без flaky.
-Персональное меню подключено на [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e); локально прошли 900 unit.
-Полная браузерная матрица этого снимка: 200 passed / 1 failed / 9 skips без retries.
-CI документирующего `cd2e923` завершён success: 900 unit,
-200 browser passed / 1 flaky / 9 skips; успешный retry не считается исправлением.
-Остальные AI/items гарантии и весь P0.5 остаются открытыми.
+Обновлено: 12.10.2026. Текущий кандидат — `724ecf1`, ветка `fix/durable-outbox`.
+Компонент достижений `57da2cf` дополнен отменой истёкшей очереди `a407373`,
+атомарной проверкой позднего proof `4528e2b` и стабильной областью уведомления.
+Локально прошли 950 unit / 186 файлов и обязательные проверки;
+полная матрица текущего кандидата: 229 passed / 9 skips, без retries.
+CI нового опубликованного HEAD проверяется отдельно.
+[Контракты достижений](docs/achievement-session.md) и
+[формы](docs/profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026).
+
+Последний подтверждённый CI до этого компонента —
+[`bf01d87`](https://github.com/Michael-edel/FitFocus/actions/runs/38184851075):
+905 unit, 201 browser passed / 9 skips, без flaky. Полная локальная проверка
+`57da2cf` выявила 3 failed / 219 passed / 9 skips; прежние результаты и
+диагностика сохранены [в журнале](docs/stabilization-progress.md).
+CI прежнего SHA не переносится на новый код.
+
 Полная область — в [карте документации](docs/README.md),
 текущая работа — в [статусе проекта](docs/project-status.md). Этот файл — очередь реализации.
 Согласованный план не равен готовому коду. Ни один P0 ниже пока не закрыт.
@@ -138,6 +141,9 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
 - [ ] Проверить workflow итогового опубликованного HEAD.
 - [ ] Защитить achievement HTTP/очередь в `useAchievements.ts` и серверный
   handler: проверка menu use case до вызова не защищает последующий POST.
+  Реализовано в `57da2cf` с поправками до `724ecf1`; локально прошли 950 unit
+  и полная матрица 229 passed / 9 skips. Пункт остаётся открыт до нового CI.
+  [Контракт и границы](docs/achievement-session.md).
 - [ ] Версионировать вторичную items-проекцию и определить durable-порядок
   конкурирующих writers; scoped HTTP не заменяет CAS или постоянную очередь.
 - [ ] Пройти реальные BFCache/OAuth/staging-сценарии и остальные AI/report/retry/family
@@ -156,6 +162,8 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
 - [x] Не планировать flush для чистого профиля, сохранив cloud refresh и
   одноразовый suppress; проверить recovery и отсутствие ложной ошибки.
 - [ ] Подтвердить workflow точного нового HEAD и остальные lifecycle-сценарии.
+- [x] Подтвердить CI profile-компонента на `bf01d87`: 905 unit,
+  201 browser passed / 9 skips, без flaky; последующие компоненты проверяются отдельно.
 
 Реализация [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7); [контракт](docs/state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии),
 [журнал](docs/stabilization-progress.md). Прежние падения и retries выше
@@ -370,6 +378,11 @@ legacy-ключ не используется для новой очереди �
 
 ## P1 — после P0
 
+- [ ] Исправить контраст sidebar и нижней навигации в светлой теме:
+  снимки desktop Chromium и Android после переключения на «Светлая» показывают
+  тёмные подписи на тёмном фоне. Проверить [SidebarNavigation](SidebarNavigation.tsx),
+  [App](App.tsx), глобальные стили и [theme hook](features/settings/useDocumentTheme.ts).
+  Предупреждение конфликта читается; весь визуальный QA этим не закрыт.
 - [ ] Исправить контраст native select «Цель» в тёмной теме WebKit:
   screenshot профиля показывает светлый текст на светлом фоне. Проверить
   [SettingsScreen](SettingsScreen.tsx) и темы; функциональный E2E не доказывает читаемость.

@@ -43,34 +43,19 @@
 секретов. Результаты прошлых тестов в архивном README относятся к указанным
 там датам и ревизиям.
 
-Базовая опубликованная ревизия кода —
-`8fc0b1b1adc44975396578e2ee60a4e7d1873eb7`, ветка `fix/durable-outbox`.
-[CI 38175438277](https://github.com/Michael-edel/FitFocus/actions/runs/38175438277):
-success, 860 unit-тестов в 179 файлах, 152 browser passed / 9 skips, без flaky.
-Она включает [серверный AI/items guard](ai-session-guard.md),
-[bootstrap/hydration](bootstrap-hydration.md), постоянный profile/registration
-и исправление жеста Save. Предыдущие результаты относятся к своим SHA
-и сохраняются [в журнале](stabilization-progress.md).
-
-Следующий компонент [`f4b4eee`](https://github.com/Michael-edel/FitFocus/commit/f4b4eee1e577292019481b711b097941df27558e) подключает персональное недельное меню и
-атомарный generated-profile commit. Локальная приёмка: 900 unit / 183 файла,
-три typecheck и обязательные проверки; 200 browser passed / 1 failed / 9 skips без retries.
-CI этого компонента проверяется после публикации отдельно от `8fc0b1b` и
-документирующего `59a3630` (его CI: 860 unit, 152 browser passed / 9 skips).
-[Контракт и оставшаяся работа](ai-session-guard.md#клиентское-подключение-в-работе).
-Ниже исторические этапы сохраняют свои ревизии; актуальные следующие шаги —
-в [статусе](project-status.md) и [TASKS](../TASKS.md).
+Актуальные SHA и результаты находятся в [статусе проекта](project-status.md).
+Исторические этапы и неуспешные проверки сохраняются в
+[журнале стабилизации](stabilization-progress.md); результат прежнего
+коммита не подтверждает новую рабочую версию.
 
 ## Что читать
 
-Последующее исправление [`f3930ec`](https://github.com/Michael-edel/FitFocus/commit/f3930ec64f7fa74f3aad352246aa18b92d2542b7): автоматический flush профиля не вызывает
-ручной `verify` и сохраняет auth-паузу. Локально прошли 905 unit / 183 файла
-и 201 browser passed / 9 skips без retries; CI этого HEAD проверяется отдельно.
-[Контракт sender](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии).
-
-Последующее изменение к исходному снимку: [серверные поколения P0.7](state-generations.md)
-в ветке `fix/state-generations`. [Контракт API](../API_CONTRACTS.md) описывает
-эту ветку после миграции 0019; слияние и deploy проверяются отдельно.
+Для текущего изменения читайте [контракт достижений](achievement-session.md)
+и [дополнение о стабильности формы](profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026).
+Точная ревизия, приёмка и оставшиеся шаги — в [статусе проекта](project-status.md).
+История предыдущих компонентов, включая неуспешные проверки, находится
+[в журнале](stabilization-progress.md). Условия совместимого серверного
+выпуска — в [API](../API_CONTRACTS.md) и [чек-листе](../RELEASE_CHECKLIST.md).
 
 | Документ | Назначение |
 |---|---|
@@ -81,6 +66,7 @@ CI этого компонента проверяется после публи�
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
+| [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |

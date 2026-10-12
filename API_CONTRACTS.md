@@ -195,7 +195,17 @@ capabilities, передаёт scope, ждёт guarded profile commit и тол�
 Остальные callbacks, CAS и durable-порядок вторичной проекции остаются открытыми. [Полный контракт и приёмка](docs/ai-session-guard.md).
 Capabilities должны быть развёрнуты и проверены до выпуска нового клиента.
 
-## Изменения, которые ещё предстоит внедрить
+## Достижения
+
+Компонент достижений `57da2cf` добавляет capability
+`achievementSync: { protocol: 1, guard: 1 }` в `/api/me` и account/session guard
+для GET `/api/achievements` и POST `/api/achievements/check` до прикладных
+эффектов. Ответы содержат `X-FitFocus-Achievements-Protocol` / `-Guard: 1`
+и переданный scope. Новый клиент требует исходный login proof и проверяет
+поздние ответы; POST требует JSON-объект. Старые unscoped-запросы не получают
+подтверждения владельца. [Подробный контракт](docs/achievement-session.md).
+
+## Оставшиеся условия выпуска
 
 Серверный компонент P0.7 реализован и проверяется в этой ветке; его
 [условия выпуска](docs/state-generations.md#условия-выпуска-и-отката)
