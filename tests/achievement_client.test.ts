@@ -54,6 +54,14 @@ it('settles every queued resolver on page/login cleanup and old producers cannot
   expect(fetchImpl.mock.calls.filter(([url]) => url === '/api/achievements/check')).toHaveLength(1);
   expect(storage.size).toBe(0);
 });
+
+it('settles queued callers when the login lifetime expires before React cleanup', async () => {
+  const fetchImpl = transport(); const value = client(fetchImpl); await value.check('app_open');
+  const pending = value.check('weekly_menu_generated'); current = false;
+  const result = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve('unsettled'), 750))]);
+  expect(result).toEqual([]);
+  expect(fetchImpl.mock.calls.filter(([url]) => url === '/api/achievements/check')).toHaveLength(1);
+});
 it.each(['load', 'check'])('ignores a held %s response after the original login expires', async action => {
   let release!: (response: Response) => void;
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? me() : new Promise<Response>(resolve => { release = resolve; }));

@@ -153,7 +153,11 @@ export class AchievementClient {
         const generation = this.generation;
         this.timer = setTimeout(() => {
           this.timer = undefined;
-          if (!this.current(generation)) return;
+          if (!this.current(generation)) {
+            // Login invalidation can precede React cleanup (for example a failed replacement login).
+            if (generation === this.generation) this.invalidate();
+            return;
+          }
           const queue = this.queue; this.queue = []; this.lastCheckAt = Date.now();
           void this.run(queue, generation);
         }, Math.max(0, CHECK_THROTTLE_MS - elapsed));
