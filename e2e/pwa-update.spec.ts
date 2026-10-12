@@ -36,8 +36,40 @@ test('real service worker waits for an explicit update and preserves durable fam
   const diagnostics: string[] = [];
   for (const tab of [oldPage, page]) {
     tab.on('pageerror', error => diagnostics.push(error.message));
-    tab.on('console', message => { if (['warning', 'error'].includes(message.type())) diagnostics.push(message.text()); });
+    tab.on('console', message => {
+      if (message.text().startsWith('[FITFOCUS-IDB]') || message.text().startsWith('[FITFOCUS-SAVED]')
+        || ['warning', 'error'].includes(message.type())) diagnostics.push(message.text());
+    });
     tab.on('response', response => { if (response.status() >= 400) diagnostics.push(`${response.status()} ${response.url()}`); });
+    // Preserve real IDB/SW behavior while recording blocked upgrades and which tab
+    // closes its connection; this makes Firefox's intermittent open() hang diagnosable.
+    await tab.addInitScript(() => {
+      (window as Window & { __fitfocusE2eIdbDiagnostics?: boolean }).__fitfocusE2eIdbDiagnostics = true;
+      const originalOpen = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function(name: string, version?: number) {
+        const request = version === undefined
+          ? originalOpen.call(this, name)
+          : originalOpen.call(this, name, version);
+        const report = (event: string, detail: Record<string, unknown> = {}) => {
+          console.log('[FITFOCUS-IDB]', JSON.stringify({ name, requestedVersion: version ?? null, event, ...detail }));
+        };
+        request.addEventListener('blocked', () => report('blocked'));
+        request.addEventListener('upgradeneeded', event => report('upgradeneeded', {
+          oldVersion: event.oldVersion, newVersion: event.newVersion,
+        }));
+        request.addEventListener('error', () => report('error', { error: request.error?.name ?? null }));
+        request.addEventListener('success', () => {
+          const database = request.result;
+          report('success', { databaseVersion: database.version });
+          database.addEventListener('versionchange', event => report('versionchange', {
+            databaseVersion: database.version, newVersion: event.newVersion,
+          }));
+          const close = database.close.bind(database);
+          database.close = () => { report('close', { databaseVersion: database.version }); close(); };
+        });
+        return request;
+      };
+    });
   }
   try {
     const standalone = info.project.name.includes('-pwa');

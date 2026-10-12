@@ -48,10 +48,10 @@
 ## Подтверждённая ревизия
 
 Последний подтверждённый CI опубликованной ветки —
-[`aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+[`076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+1053 unit / 194 файла; browser — 383 passed / 9 skips, success, 20,3 мин.
 В итоговом логе нет flaky и preview proxy errors/ECONNREFUSED.
-Mock-фикстура `085fcc1` проверена в полном CI;
+Mock-фикстура `085fcc1` проверена в полном CI `aefc463`;
 прежние native WebKit/Firefox сбои остаются открытыми.
 [Контракт и границы](mock-api-lifecycle.md).
 Семейное меню в `405238b`

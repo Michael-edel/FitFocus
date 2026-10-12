@@ -3,8 +3,8 @@
 Обновлено: 12.10.2026. Текущий компонент — origin preview и приёмка staging,
 ветка `fix/durable-outbox`; [контракт](docs/staging-origin.md).
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
-Последний подтверждённый [CI опубликованной ветки `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+Последний подтверждённый [CI опубликованной ветки `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+1053 unit / 194 файла; browser — 383 passed / 9 skips, success, 20,3 мин.
 В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
 Предыдущие WebKit access-control и Firefox timeout также остаются открытыми.
 Исправление неиспользуемого Google SDK опубликовано в `98d4910`.
@@ -28,7 +28,9 @@ Mock-фикстура опубликована в `085fcc1` и проверен�
   из entry point; сохранить URL и относительные API выбранного origin.
 - [x] Локально проверить три hostname на семи конфигурациях и native PWA-shell:
   28/28, workers=1/retries=0; typecheck и admin guards прошли.
-- [ ] Подтвердить CI коммита компонента после публикации.
+- [x] Подтвердить [CI компонента `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+  success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
+  23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
@@ -36,23 +38,23 @@ Mock-фикстура опубликована в `085fcc1` и проверен�
 
 ## Порядок работы
 
-CI `aefc463` завершился success без flaky и proxy-ошибок; прежние native WebKit и Firefox сбои ещё требуют диагностики. Два полных прогона rollback artifact `574de76`
+CI `076f4ac` завершился success без flaky и proxy-ошибок; причины прежних native WebKit/Firefox сбоев ещё требуют отдельной диагностики. Два полных прогона rollback artifact `574de76`
 дали 26 passed / 2 failed каждый; база содержит лишний Google SDK и не принята.
 В `98d4910` SDK удалён из HTML. В новом компоненте обновлены закреплённый SHA
 и workflow-пути, собран архив `98d4910`: 82 файла, 28 browser passed на семи
 конфигурациях, workers=1/retries=0, 13,2 мин. HTTP/D1-переход `bd763ec`
 → архив `98d4910` прошёл 23 запроса. CI `5b90249` также прошёл 23 HTTP/D1
-запроса и сохранил `.tar`; скачанный архив проверен. Ближайший шаг —
-подтвердить CI preview-компонента, разобрать native WebKit и пройти staging.
+запроса и сохранил `.tar`; скачанный архив проверен. Ближайшие шаги —
+разобрать Firefox IDB timeout и native WebKit sender error, затем пройти staging.
 Тест восстановления pending теперь учитывает сохранённые `Retry-After`
 и lease; проверяет время приёма на HTTP-фикстуре. Production backoff/claim
 не изменены. Диагностика с Retry-After прошла 3/3 в desktop-движках.
 Временная подмена внешнего SDK дала 4/4 Firefox/Android, но не устранила
 ошибки полного повторного прогона; подмена удалена. История сохранена
 в [журнале](docs/stabilization-progress.md).
-Отдельно остаётся воспроизведённый выход mock API-запросов при WebKit teardown:
-явное закрытие страницы проблему не устранило; фильтрация ошибок не является
-исправлением. Рабочая фикстура с выгрузкой документа дала 4/4 без proxy-ошибок.
+- [x] Устранить выход mock API-запросов при WebKit teardown без фильтрации
+  ошибок: общая фикстура выгружает документ до снятия маршрутов; полный CI
+  `aefc463`/`076f4ac` прошёл без preview ECONNREFUSED/proxy errors.
 Первый расширенный прогон — 97 passed / 1 failed на iPhone PWA. После отдельного
 ожидания самого экрана перед семейными данными прошли 98/98 на семи конфигурациях,
 workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полный CI mock-фикстуры
@@ -293,9 +295,15 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [ ] Исследовать Firefox timeout в `pwa-update.spec.ts` на `saved(page)`
   до активации SW: CI `98d4910` прошёл этот сценарий только с retry.
   Установить причину по trace/IDB lifecycle и подтвердить без retries;
-  не считать повтор или увеличение таймаута исправлением.
-- [ ] Устранить выход mock API-запросов при teardown семейных WebKit-тестов;
-  сохранить функциональные проверки и сообщения об ошибках.
+  не считать повтор или увеличение таймаута исправлением. На базе `076f4ac`
+  локально воспроизведён 1 timeout / 3 повтора (`retries=0`); затем прошли
+  17 попыток с IDB open/versionchange logging и одна с полной стадийной
+  диагностикой. Причина пока не установлена.
+  Working tree пишет IDB open/blocked/upgrade, versionchange/close и стадии
+  transaction/read в failure attachment.
+- [ ] Разобрать исторический native WebKit sender pageerror после PWA update
+  из trace CI `5b90249`. Позднейший CI `076f4ac` и внешний held-PUT probe
+  прошли без повтора; первопричина исходной ошибки не установлена.
 - [x] Реализовать локальный прототип упаковки полного client/SW/Pages Worker из точного Git SHA,
   manifest SHA-256, проверки целостности и настоящий локальный HTTP/D1 smoke
   распакованного `.tar`. База `574de76`, кандидат `d3a9496`, 23 HTTP прошли;

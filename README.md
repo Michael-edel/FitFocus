@@ -70,8 +70,8 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
-1053 unit / 194 файла; browser — 362 passed / 9 skips, success, 19,6 мин.
+Подтверждённый [CI опубликованной ревизии `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+1053 unit / 194 файла; browser — 383 passed / 9 skips, success, 20,3 мин.
 В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
 Причины прежних WebKit access-control и Firefox timeout остаются открытыми.
 В `98d4910` удалён неиспользуемый Google SDK; локально до CI прошли
@@ -94,8 +94,8 @@ CI прошёл HTTP/D1-проверку из 23 запросов и сохра�
 в `085fcc1` и проверяется
 [отдельно](docs/mock-api-lifecycle.md): после уточнения предусловия экрана
 98 passed на семи конфигурациях без retries/proxy-ошибок; исходный 97/1 сохранён.
-Полный CI mock-фикстуры подтверждён на `aefc463`; новый preview-компонент
-прошёл локально 28/28 и требует собственного CI после публикации.
+CI preview-компонента подтверждён на `076f4ac`; mock-фикстура подтверждена
+на предыдущем `aefc463`. Локальная origin-матрица прошла 28/28.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`

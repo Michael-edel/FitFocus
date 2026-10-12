@@ -9,12 +9,28 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
 
 export async function saved(page: Page) {
   return page.evaluate(async account => {
+    const report = (event: string, detail: Record<string, unknown> = {}) => {
+      if ((window as Window & { __fitfocusE2eIdbDiagnostics?: boolean }).__fitfocusE2eIdbDiagnostics) {
+        console.log('[FITFOCUS-SAVED]', JSON.stringify({ event, ...detail }));
+      }
+    };
     const request = indexedDB.open('fitfocus-user-state-v1');
+    report('open-requested');
+    request.addEventListener('blocked', () => report('open-blocked'));
+    request.addEventListener('error', () => report('open-error', { error: request.error?.name ?? null }));
     const db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    report('open-success', { version: db.version });
     try {
       const tx = db.transaction(['values', 'outbox'], 'readonly');
-      const get = <T,>(read: IDBRequest<T>) => new Promise<T>((resolve, reject) => { read.onsuccess = () => resolve(read.result); read.onerror = () => reject(read.error); });
+      report('transaction-created');
+      tx.addEventListener('complete', () => report('transaction-complete'));
+      tx.addEventListener('abort', () => report('transaction-abort', { error: tx.error?.name ?? null }));
+      const get = <T,>(read: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+        read.onsuccess = () => { report('read-success', { store: (read.source as IDBObjectStore | null)?.name ?? null }); resolve(read.result); };
+        read.onerror = () => { report('read-error', { error: read.error?.name ?? null }); reject(read.error); };
+      });
       const [values, operations] = await Promise.all([get(tx.objectStore('values').getAll()), get(tx.objectStore('outbox').getAll())]);
+      report('read-complete', { values: values.length, operations: operations.length });
       return { version: db.version, menus: values.filter(value => value.key.includes('_family_menu:')).map(value => JSON.parse(value.value)),
         profiles: values.filter(value => value.key === `fitfocus_data_${account}_profile`).map(value => JSON.parse(value.value)),
         operations: operations.filter(op => op.resource === 'familyMenu').map(op => ({ opId: op.opId, status: op.status, value: op.value, serverSnapshot: op.serverSnapshot })) };

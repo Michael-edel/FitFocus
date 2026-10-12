@@ -200,6 +200,24 @@ HTTP/D1: 23 запроса, кандидат `218d47eba96720d3079c966ec71a4a37bb
 их содержимого. Ранее скачанный архив `5b90249` остаётся отдельным артефактом.
 Этот CI не содержит последующего preview-origin компонента и не подтверждает deploy.
 
+## CI preview-origin 076f4ac
+
+[Run 38261672999](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999),
+job 114853979454, завершился success на head
+`076f4aca8e9855bb328a3fe695cb0bcd085ddd6f`: 1053 unit / 194 файла,
+383 browser passed / 9 skips. HTTP/D1 прошёл 23 запроса, candidate
+`8a2a9e9525799d76403c07aeeb5b4463900c3aa8` → retained
+`98d49101e15ad652e1960381ce00e00e8dac0d44`.
+
+| Артефакт | GitHub ID | ZIP bytes | SHA-256 ZIP | Срок хранения |
+|---|---:|---:|---|---|
+| fitfocus-browser-38261672999-1 | 11753738236 | 57115503 | aa19f9abc5cc9362c02f2feaa64b5c3744f6901293013b3bea2f0f6aff100a83 | 26.10.2026 14:40:12 UTC |
+| fitfocus-rollback-98d4910-38261672999-1 | 11754550614 | 3890891 | f49f990499cd821de18a407030654431b1cbac63eb094ac0d04e2b5f08e74a3a | 10.01.2027 14:16:13 UTC |
+
+Значения взяты из GitHub artifact metadata; ZIP-файлы этого запуска не
+скачивались и не проверялись локально. Download digest не заменяет проверку
+содержимого. Артефакты предыдущего CI `5b90249` проверены отдельно.
+
 Результаты конкретных прогонов — в [журнале](stabilization-progress.md),
 оставшаяся приёмка — в [TASKS](../TASKS.md) и [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md).
 Реальные устройства, OAuth/BFCache, runtime legacy, удалённая D1, staging,

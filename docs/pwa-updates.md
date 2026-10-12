@@ -147,3 +147,29 @@ App/SW bytes остаются исходными. Обе вкладки посл
 по JS кандидата, а DOM читается после reload/load.
 Результаты RED/GREEN, ошибки фикстуры и новая база отката описаны
 [в журнале](stabilization-progress.md#удаление-лишней-сетевой-зависимости-pwa--12102026).
+
+## Повторное исследование Firefox IndexedDB timeout — 12.10.2026
+
+Исторический Firefox timeout на `saved(page)` перед активацией SW остаётся
+открытым: старый CI `98d4910` прошёл сценарий лишь с retry, а его начальный
+trace не сохранён. На опубликованном `076f4ac` точечный локальный запуск
+`pwa-update.spec.ts` в desktop Firefox с `workers=1/retries=0` прошёл 1/1.
+Три повтора дали 2 passed / 1 timeout на третьем `saved(page)` (строка 56);
+trace, видео, два снимка и DOM error context сохранены во внешнем каталоге.
+
+Failure snapshot показывает живой экран семьи; fixture получила ожидаемые
+503 от удерживаемого API. Ошибка произошла внутри `page.evaluate` вокруг
+`indexedDB.open('fitfocus-user-state-v1')`; старый trace не различает pending
+open и запросы последующей readonly-транзакции. Он не доказывает блокировку
+versionchange. После этого добавлена тестовая диагностика `blocked`,
+`upgradeneeded`, `versionchange`, close и отдельных стадий чтения, не меняющая
+продуктовый storage или таймауты.
+
+После добавления логов open/versionchange следующие прогоны дали 3/3, 6/6,
+8/8 (17 проходов); со стадиями readonly-чтения дополнительно прошёл 1/1.
+Все без retries. Сбой с новыми событиями пока не воспроизведён,
+поэтому причина не установлена и критерий задачи остаётся открытым.
+Typecheck прошёл. Логи и trace — в `outputs/pwa-firefox-repeat3-076`,
+`outputs/pwa-firefox-idb-diagnostics`, `outputs/pwa-firefox-idb-trace6`,
+`outputs/pwa-firefox-idb-trace8` и `outputs/pwa-firefox-saved-diagnostics-final`
+внешнего каталога `C:\Users\User\Documents\Codex\2026-09-17\yf`.

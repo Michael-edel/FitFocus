@@ -2023,3 +2023,30 @@ success, terminal updated 13:53:52 UTC (18:53:52 Екатеринбург).
 → retained `98d4910`. Оба артефакта загружены;
 [ID, digest и ограничения проверки](release-artifacts.md#ci-mock-фикстуры-aefc463).
 Новый preview-компонент проверен локально отдельно и требует своего CI.
+
+## Диагностика Firefox PWA IndexedDB после preview CI — 12.10.2026
+
+Preview-коммит `076f4aca8e9855bb328a3fe695cb0bcd085ddd6f` прошёл
+[CI 38261672999](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999),
+job 114853979454: success, 1053 unit / 194 файла, 383 browser passed / 9 skips,
+20,3 мин; без flaky, preview ECONNREFUSED и proxy errors. HTTP/D1 завершился
+23 запросами, кандидат `8a2a9e9525799d76403c07aeeb5b4463900c3aa8` → retained
+`98d49101e15ad652e1960381ce00e00e8dac0d44`. Artifacts metadata:
+browser ZIP `11753738236`, 57115503 bytes, SHA-256
+`aa19f9abc5cc9362c02f2feaa64b5c3744f6901293013b3bea2f0f6aff100a83`,
+expiry 26.10.2026 14:40:12 UTC; rollback ZIP `11754550614`, 3890891 bytes,
+SHA-256 `f49f990499cd821de18a407030654431b1cbac63eb094ac0d04e2b5f08e74a3a`,
+expiry 10.01.2027 14:16:13 UTC. Metadata checked; ZIPs from this run were not
+downloaded or locally reverified.
+
+Firefox diagnostic run on exact published base `076f4ac` reproduced the older
+`saved(page)` timeout once in three attempts with retries disabled. It timed out
+inside `page.evaluate` at `indexedDB.open`; the page snapshot remained on the
+family screen and held API returned expected 503s. This trace did not show
+whether open, readonly requests or a versionchange was stalled. Further E2E-only
+instrumentation now records IDB open events; a second layer records transaction/read
+stages on failure. Seventeen open-instrumented runs and one fully instrumented run
+passed with `retries=0` (3+6+8+1); no new failure trace was captured. Root typecheck
+and the final focused run passed. This narrows
+the failure boundary but does not prove its cause or fix; P0.9 remains open.
+Evidence directories are recorded in [the PWA contract](pwa-updates.md#повторное-исследование-firefox-indexeddb-timeout--12102026).

@@ -6,16 +6,15 @@
 [журнале стабилизации](stabilization-progress.md).
 
 Последний подтверждённый CI опубликованной ветки —
-`aefc46320de11b83ffdb274e7dae1a911e69612e`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623),
-job 114834593231, завершён 12.10.2026 в 13:53:52 UTC.
-1053 unit / 194 файла; browser — 362 passed / 9 skips, 19,6 мин.
+`076f4aca8e9855bb328a3fe695cb0bcd085ddd6f`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999),
+job 114853979454, завершён 12.10.2026 в 14:40:40 UTC.
+1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,3 мин.
 В итоговом логе нет flaky, ECONNREFUSED и preview proxy errors.
-Проверена опубликованная mock-фикстура `085fcc1`; этот результат не
-доказывает исправление прежних native WebKit/Firefox ошибок.
-HTTP/D1: 23 запроса, merge-кандидат `218d47e` → архив `98d4910`.
-Оба артефакта загружены; [метаданные](release-artifacts.md#ci-mock-фикстуры-aefc463).
-Новый preview-компонент ниже в этот CI не входит.
+Проверены preview-origin компонент и опубликованная mock-фикстура `085fcc1`.
+HTTP/D1: 23 запроса, merge-кандидат `8a2a9e9` → архив `98d4910`.
+Browser diagnostics и архив отката загружены;
+[метаданные](release-artifacts.md#ci-preview-origin-076f4ac).
 
 Предыдущий подтверждённый CI —
 `3bf595fc80cc14da76f120bc93438cbb6f82ef85`:
@@ -31,26 +30,36 @@ browser diagnostics и rollback `.tar` загружены. Скачанный а
 запусков не отождествляются. [Идентификаторы и границы](release-artifacts.md#артефакт-из-ci).
 Mock-фикстура опубликована в `085fcc1` и в предыдущий CI `3bf595f` не входит.
 Локально семейные наборы прошли 98/98 без retries/proxy-ошибок;
-её полный CI `aefc463` подтверждён выше. [Контракт](mock-api-lifecycle.md).
+её полный CI `aefc463` [завершился success](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
+1053 unit / 194 файлов, 362 browser passed / 9 skips, без flaky/proxy-ошибок.
+Затем mock-fixture проверена повторно в CI текущего preview SHA `076f4ac`.
+[Контракт](mock-api-lifecycle.md).
 Подготовительный сервер `dde4c71` и переход
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
 
-## Текущий компонент — origin preview
+## Опубликованный компонент — origin preview
 
-Поверх `aefc46320de11b83ffdb274e7dae1a911e69612e` подготовлено удаление
-клиентского перехода с branch/commit `*.pages.dev` на production.
+Коммит `076f4aca8e9855bb328a3fe695cb0bcd085ddd6f` удаляет клиентский переход
+с branch/commit `*.pages.dev` на production.
 Регрессия сначала воспроизвела переход, затем прошла: итоговая локальная
 матрица — 28/28, семь конфигураций, workers=1/retries=0; root typecheck
 и 15 admin guards прошли. Первая матрица 25/28 выявила ошибку Host в новой
 Firefox-фикстуре; после её исправления итоговый прогон прошёл полностью.
 [Поведение, доказательства и ограничения](staging-origin.md).
 
-[CI опубликованной базы `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623)
-завершился success. Он включает mock-фикстуру `085fcc1`, но не этот компонент.
-CI нового preview-компонента требуется после публикации. Локальные результаты
+[CI этого компонента](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999)
+завершился success. Локальные результаты и CI не подтверждают deployment,
 не подтверждают deployment, его D1 binding, APP_URL, OAuth и edge-правила.
 Приёмка staging и выпуск остаются открытыми.
+
+Отдельная локальная диагностика Firefox IndexedDB не закрыта: на базе `076f4ac`
+в первом `retries=0` прогоне из трёх таймаут воспроизвёлся; далее прошло
+17 запусков с IDB open/versionchange logging и ещё один со стадийной диагностикой,
+все без retry. Тест теперь прикладывает события
+IDB open/blocked/upgrade, connection lifecycle и этапы чтения при сбое.
+Поскольку сбой пока не повторился с новым журналом, первопричина неизвестна;
+[условия и trace](pwa-updates.md#повторное-исследование-firefox-indexeddb-timeout--12102026).
 
 ## Что это за проект
 

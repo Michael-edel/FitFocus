@@ -10,13 +10,14 @@
 Итоговая матрица: 21 origin-сценарий и семь native PWA-shell, 28/28,
 семь конфигураций, workers=1/retries=0, 2,8 мин; root typecheck и 15 admin
 guards прошли. RED и первая ошибка Firefox-фикстуры сохранены в
-[контракте](staging-origin.md). CI этого компонента, реальный staging,
-D1/APP_URL/OAuth и выпуск ещё не подтверждены.
+[контракте](staging-origin.md). CI компонента `076f4ac` прошёл: 383 browser
+passed / 9 skips и 23 HTTP/D1 запроса. Реальный staging, D1/APP_URL/OAuth
+и выпуск ещё не подтверждены.
 
 ## Проверенная граница
 
-Последний подтверждённый [CI `aefc463`](https://github.com/Michael-edel/FitFocus/actions/runs/38256100623):
-1053 unit / 194 файла, 362 browser passed / 9 skips, workflow success.
+Последний подтверждённый [CI `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
+1053 unit / 194 файла, 383 browser passed / 9 skips, workflow success.
 В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED.
 Прежние WebKit access-control и Firefox timeout остаются открытыми.
 Код включает семейный
@@ -39,8 +40,9 @@ CAS `405238b`, явное PWA-обновление `8d32f12` и поправку
 сценарии без proxy-ошибок. Первый расширенный семейный прогон — 97/1; после
 разделения ожиданий bootstrap/экрана прошли 98/98 на семи конфигурациях,
 workers=2/retries=0, без proxy-ошибок. Root typecheck прошёл.
-Эти локальные результаты дополнены полным CI `aefc463`: 362 passed / 9 skips,
-19,6 мин, без flaky/proxy-ошибок. Это не закрытие P0;
+Эти локальные результаты дополнены CI `aefc463` и последующим preview CI
+`076f4ac`: 383 passed / 9 skips, 20,3 мин, без flaky/proxy-ошибок.
+Это не закрытие P0;
 [условия и оставшиеся ограничения](mock-api-lifecycle.md).
 
 ### История предшествующих компонентов
