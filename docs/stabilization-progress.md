@@ -2157,3 +2157,23 @@ Commit `a048289287b90e752b1db47bdab3f0f502f5a5c9` прошёл
 возвращает намеренный 409 на первой family-записи, чтобы проверить перевод
 операции в `conflicted` без ожидания сетевого backoff. Три локальных повтора
 этого сценария в desktop WebKit прошли без retries; полный CI фикстуры ожидается.
+
+## Sender IDB stability — 13.10.2026
+
+Commit `649056db8ebbcfc3b9a62b7864c74d0d118dde79` прошёл+[CI 38309057601](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601),
+job 115010066010: success, 1068 unit / 196 файлов, 382 browser passed / 9 skips,
+14,9 мин. Предыдущая WebKit rollback гонка не повторилась после ответа 409 на
+первый family PUT. Сводка CI отметила один Firefox weekly-menu flaky: первая
+попытка не отправила durable profile operation в пределах timeout, retry прошёл.
+
+Повтор локально показал `TransactionInactiveError` в IndexedDB sender при
+последовательном добавлении независимых чтений после `await`. Исправление
+`storage/durableOutbox.ts` заранее ставит чтения `sessionState`, принятия сессии,
+claim и finish; ack и retry-пауза также читают нужные записи в той же группе.
+На commit `8fae1008d2a9b220cc0052499271b07441ac29ac` прошли 193 профильных unit-теста
+в пяти файлах, `typecheck`, `storage-strict` и все 56 weekly-menu browser-сценариев
+в семи проектах без retries. Повтор Firefox — 12/12 при включённом тестовом
+сборе диагностики. Полный CI нового commit ожидается.
+
+Настоящий legacy pending record из old bundle в этом наборе не создаётся;
+P0.8 migration acceptance остаётся открытой до smoke двух сборок на одном origin.

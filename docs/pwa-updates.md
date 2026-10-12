@@ -254,3 +254,20 @@ menu теперь ждёт завершения readonly-транзакции.
 полный CI следует за новым коммитом. Тест update по-прежнему не помещает реальную
 legacy-запись в `fitfocus.remote-kv-outbox.v1`, поэтому миграционный smoke остаётся
 открытым.
+
+## CI `649056d` и sender follow-up — 13.10.2026
+
+Полный [CI run 38309057601](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601)
+на `649056db8ebbcfc3b9a62b7864c74d0d118dde79` завершился success: 382 browser
+passed / 9 skipped за 14,9 мин. Summary отметил один flaky в Firefox weekly-menu;
+retry прошёл. WebKit rollback flaky из предыдущего CI после детерминированного
+ответа 409 в фикстуре здесь не повторился.
+
+После CI локально установлен источник Firefox сбоя sender: `TransactionInactiveError`
+возникал, когда независимый IDB-запрос ставился после `await` предыдущего запроса.
+В `storage/durableOutbox.ts` независимые чтения `sessionState`, принятия сессии,
+claim и finish теперь ставятся заранее. Commit `8fae1008d2a9b220cc0052499271b07441ac29ac`
+прошёл 56 сценариев weekly-menu на семи браузерных проектах (`retries=0`),
+193 относящихся unit-теста и typecheck. CI этой ревизии ожидается. Проверка
+пока не содержит реальную legacy-запись старого bundle, поэтому P0.8 migration
+smoke остаётся открытым.

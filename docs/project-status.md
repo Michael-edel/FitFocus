@@ -5,12 +5,22 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Последний успешный полный CI опубликованной ветки —
-`a048289287b90e752b1db47bdab3f0f502f5a5c9`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38305940088),
-job 115000326636. Прошли 1068 unit / 196 файлов; browser — 382 passed / 9 skips,
-17,6 мин. Summary отметил один flaky в desktop WebKit rollback; повтор прошёл.
-Детали и исправление тестовой гонки приведены ниже.
+Последний полный CI исходной ветки перед текущим исправлением —
+`649056db8ebbcfc3b9a62b7864c74d0d118dde79`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601),
+job 115010066010. Прошли 1068 unit / 196 файлов; browser — 382 passed / 9 skips,
+14,9 мин. Сводка отметила один flaky в desktop Firefox weekly-menu: первая
+попытка не отправила profile operation, retry прошёл. Предыдущий flaky WebKit
+rollback после детерминированного 409 в этой проверке не повторился.
+
+Локальное продолжение — commit
+`8fae1008d2a9b220cc0052499271b07441ac29ac`: Firefox иногда закрывал IndexedDB
+транзакцию между независимыми чтениями sender (`TransactionInactiveError`).
+`sessionState`, принятие сессии, claim и finish теперь ставят независимые
+чтения до `await`. На этом коде прошли 193 профильных unit-теста в пяти файлах,
+storage-strict, общий typecheck и 56 weekly-menu browser-сценариев в семи
+проектах без retries. Повтор Firefox 12/12 прошёл с тестовой диагностикой.
+Полный CI новой ревизии ожидается; детали — в [журнале](stabilization-progress.md).
 
 ## Рабочее дерево — P0.8 runtime
 
