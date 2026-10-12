@@ -41,8 +41,10 @@ http://localhost:8788; в Docker-режиме цель — http://wrangler:8788.
 ## Локальные серверные функции
 
 Конфигурация Pages/D1 находится в `wrangler.toml`, binding базы — `DB`,
-миграции — в `migrations/`. Wrangler не включён в package.json:
-следующие команды предполагают доступный и настроенный Wrangler.
+миграции — в `migrations/`. В опубликованном `574de76` Wrangler не включён
+в package.json: команды предполагают доступный и настроенный Wrangler.
+Рабочий компонент [артефакта отката](docs/release-artifacts.md) добавляет
+точно закреплённую devDependency; до его коммита это не часть опубликованной установки.
 
 ```text
 npm run build
@@ -123,6 +125,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Серверные поколения, tombstones, protocol 2 или порядок их выпуска | docs/state-generations.md, API_CONTRACTS.md и RELEASE_CHECKLIST.md |
 | Существенное архитектурное решение | DECISIONS.md и новый/изменённый ADR |
 | Порядок выпуска или отката | RELEASE_CHECKLIST.md |
+| Упаковка, проверка или хранение release/rollback artifact | docs/release-artifacts.md, scripts/release-artifact.mjs и затронутый gate RELEASE_CHECKLIST.md |
 | API, login proof или lifetime семейных запросов | docs/family-session.md, API_CONTRACTS.md, TASKS и краткий статус; отдельно учитывать ещё прежний AI-путь и CAS |
 
 Каждый статус должен различать «согласовано», «реализовано в ветке»,

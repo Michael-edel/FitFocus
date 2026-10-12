@@ -183,7 +183,13 @@ Actions, наличие workflow в нужной ветке и состояни�
   прошёл семь real-SW/native HTTP сценариев на семи конфигурациях.
   Это синтетический API и эмуляция standalone; staging gate остаётся открытым.
 - [ ] Проверить standalone/PWA, реальный lifecycle/OAuth и повтор после сбоя.
-- [ ] Подготовить rollback artifact с canonical reader и v3-aware sender;
-  не удалять и не понижать IDB, не возвращать legacy reader после новых записей.
+- [ ] Подготовить и принять [rollback artifact](docs/release-artifacts.md)
+  с canonical reader и v3-aware sender. Локальная база `574de76` собрана;
+  первая установка/обновление, полная browser matrix, разные серверные SHA
+  и CI компонента должны быть подтверждены до закрытия пункта.
+  Не удалять и не понижать IDB, не возвращать legacy reader после новых записей.
+  Pending после восстановления API соблюдает сохранённые Retry-After/lease.
+  Сохранить проверенный `.tar`, SHA, контрольные суммы и CI run отдельно
+  до истечения срока хранения CI; повторная сборка не заменяет этот архив.
 - [ ] Подтвердить полную browser matrix и CI точного кандидата, затем protected
   main и отдельный staging/production smoke.

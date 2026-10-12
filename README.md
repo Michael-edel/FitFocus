@@ -39,6 +39,7 @@ Google/Apple, push, поддержка и административные фу�
 | [DECISIONS.md](DECISIONS.md) и [ADR-005](docs/adr/ADR-005-durable-outbox.md) | Решения и статус внедрения |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Проверка, выпуск и откат |
 | [Журнал стабилизации](docs/stabilization-progress.md) | Изменения, SHA и результаты проверок |
+| [Артефакт отката](docs/release-artifacts.md) | Сохранённая сборка клиента/SW/Pages Worker, контрольные суммы и проверка canonical readers |
 | [Реализация P0.8](docs/outbox-implementation.md) | Проверенный фундамент очереди, оставшаяся работа и приёмка |
 | [Импорт старой очереди](docs/legacy-migration.md) | Формат legacy, карантин, восстановление и условия отправки |
 | [Серверные поколения P0.7](docs/state-generations.md) | Версии после удаления, новый API и условия выпуска |
@@ -67,14 +68,18 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `8d32f12`](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501):
-1043 unit / 192 файла, 341 browser passed / 9 skips, success, без flaky в итоговом summary.
-Это PWA-компонент после семейного кода `405238b`.
+Подтверждённый [CI опубликованной ревизии `574de76`](https://github.com/Michael-edel/FitFocus/actions/runs/38234201581):
+1047 unit / 193 файла, 341 browser passed / 9 skips, success.
+В логах остались два preview `ECONNREFUSED` при завершении mock-сценариев;
+эта проблема ещё открыта. Ревизия содержит поправку первого SW-клиента.
 Локальные неуспешные прогоны и границы actual-bundle smoke сохранены
 [в контракте меню](docs/family-menu-state.md) и [журнале](docs/stabilization-progress.md).
 [Явное PWA-обновление](docs/pwa-updates.md) опубликовано в `8d32f12`.
 Его CI подтверждает локально разработанное поведение; реальные устройства,
 совместимый откат и staging остаются открытыми.
+Поправка первого SW-клиента опубликована в `574de76` и прошла CI.
+Следующий компонент — [сохранённый артефакт отката](docs/release-artifacts.md);
+его инструменты и сценарии находятся в незавершённом рабочем дереве.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`
