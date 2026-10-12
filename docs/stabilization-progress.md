@@ -1886,3 +1886,16 @@ worker log `C:\Users\User\AppData\Local\Temp\fitfocus-rollback-http-37zvMz\worke
 Следующий MD-коммит фиксирует доказательства без изменения исполняемого кода.
 CI точного итогового HEAD и загрузка `.tar` ещё проверяются отдельно.
 Реальные устройства/OAuth/BFCache/staging, runtime legacy, main и deploy открыты.
+
+## Поправка контекста workflow артефакта — 12.10.2026
+
+Первый push `66b4de7` создал [run 38249159418](https://github.com/Michael-edel/FitFocus/actions/runs/38249159418),
+который завершился failure до создания jobs (список jobs пуст). В добавленном
+job-level env использовался runner.temp. По [таблице контекстов GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability)
+runner недоступен в jobs.<job_id>.env, но доступен в steps.env/with.
+Переменная FITFOCUS_ROLLBACK_ARTIFACT перенесена в env шагов E2E и HTTP;
+путь upload-artifact в with остаётся тем же. Версия upload-artifact v7.0.2
+проверена через официальный Git ref; тег существует. Приложение, архив и
+тестовые сценарии не менялись; повторная browser matrix не требуется.
+Новый push должен подтвердить создание job и полный CI; предыдущий failure
+не скрыт перезапуском и не считается успешной приёмкой компонента.
