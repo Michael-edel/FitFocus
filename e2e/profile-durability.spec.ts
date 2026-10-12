@@ -25,13 +25,21 @@ async function saved(page: Page) {
 }
 async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGate?: { started: () => void; wait: Promise<void> }) {
   const conflict = mode === 'conflict';
+  let expired = false;
+  let rejectedProofs = 0;
+  // A new document can start with a restored server login; focus within the old document cannot.
+  page.on('request', request => {
+    if (request.isNavigationRequest() && request.resourceType() === 'document' && request.frame() === page.mainFrame()) expired = false;
+  });
   const errors: string[] = []; const mutations: string[] = [];
   const expectedHttpErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
     if (message.type() !== 'error' && message.type() !== 'warning') return;
     const injectedStatus = conflict ? 409 : 401;
-    if (message.location().url.endsWith('/api/profile')
+    const source = message.location().url;
+    const path = source.startsWith('http') ? new URL(source).pathname : source;
+    if ((path === '/api/profile' || rejectedProofs > 0 && path === '/api/me')
       && message.text().startsWith('Failed to load resource:') && message.text().includes(`status of ${injectedStatus}`)) {
       expectedHttpErrors.push(message.text());
     } else errors.push(message.text());
@@ -40,6 +48,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
   await page.route('**/api/**', async route => {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
+    if (path === '/api/me' && expired) { rejectedProofs += 1; return json({ error: 'UNAUTH' }, 401); }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
@@ -50,6 +59,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
       expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
       expect(body.baseVersion).toBe(mode === 'refresh' ? 9 : 2);
       if (mode === 'refresh') return json({ profile: { ...body, id: account, version: 10 }, version: 10 });
+      if (mode === 'auth') expired = true;
       return conflict ? json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409)
         : json({ error: 'UNAUTH' }, 401);
     }
@@ -79,6 +89,11 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
   }).toEqual({ pause: 'auth', status: 'pending' });
   expect(mutations).toEqual(['PUT']);
   const operationId = (await saved(page)).operations[0].opId;
+  const proofRejected = page.waitForResponse(response => new URL(response.url()).pathname === '/api/me' && response.status() === 401);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await proofRejected;
+  await expect.poll(async () => ({ pause: (await saved(page)).pause, mutations: [...mutations] }))
+    .toEqual({ pause: 'auth', mutations: ['PUT'] });
   await page.reload(); await expect(name).toHaveValue('Локальное имя');
   await expect.poll(() => mutations).toEqual(['PUT', 'PUT']);
   await expect.poll(async () => (await saved(page)).pause).toBe('auth');
@@ -145,6 +160,35 @@ test('a held profile Save survives the state notice disappearing before pointer 
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('profile-held-save-conflict.png') });
+});
+
+test('a completed background save does not move the profile Save before pointerdown', async ({ page }, testInfo) => {
+  let release!: () => void; let started!: () => void;
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  const sending = new Promise<void>(resolve => { started = resolve; });
+  const { errors } = await setup(page, 'conflict', { started, wait });
+  try {
+    await openApp(page, '/#settings');
+    const name = page.getByPlaceholder('Как к вам обращаться'); await expect(name).toHaveValue(profile.name);
+    await page.screenshot({ path: testInfo.outputPath('profile-stable-notice-idle.png') });
+    await name.fill('Один клик после фонового сохранения');
+    await page.getByRole('button', { name: 'Светлая', exact: false }).click(); await sending;
+    const save = page.getByRole('button', { name: 'Сохранить профиль', exact: true });
+    await save.scrollIntoViewIfNeeded();
+    const position = () => save.evaluate(button => button.getBoundingClientRect().top + window.scrollY);
+    const before = await position();
+    release(); await expect.poll(async () => (await saved(page)).stateOperationCount).toBe(0);
+    await expect(page.getByText('Изменения сохранены на устройстве и ожидают синхронизации.', { exact: true })).toHaveCount(0);
+    expect(await position()).toBeCloseTo(before, 1);
+    await save.click();
+    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+    const notice = page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт данных' });
+    await notice.scrollIntoViewIfNeeded(); await expect(notice).toBeInViewport({ ratio: 1 });
+    await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('profile-stable-notice-conflict.png') });
+    expect(errors).toEqual([]);
+  } finally { release(); }
 });
 
 test('a clean refresh replaces the profile editor and subsequent edits use its observed version', async ({ page }, testInfo) => {
