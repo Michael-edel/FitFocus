@@ -6,12 +6,12 @@
 
 ## Проверенная граница
 
-Опубликованная ревизия —
-[`d7ef1afed37487fc4af75ccb568d11251bd9bb08`](https://github.com/Michael-edel/FitFocus/commit/d7ef1afed37487fc4af75ccb568d11251bd9bb08),
-ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38196327356)
-завершился success: 976 unit / 187 файлов, 236 browser passed / 9 skips.
-В итоговом browser summary нет flaky. CI использовал 2 workers; локальная
-полная матрица кода `4736ff5` — 3 workers, retries=0, с теми же browser итогами.
+Подтверждённая опубликованная ревизия с семейным кодом —
+[`3baac01c98bd82ab7a87c0e9c2999914db194590`](https://github.com/Michael-edel/FitFocus/commit/3baac01c98bd82ab7a87c0e9c2999914db194590),
+ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936)
+завершился success: 1009 unit / 189 файлов, 278 browser passed / 9 skips.
+В итоговом browser summary нет flaky; семь проектов, workers=2.
+Локальный неудачный прогон и последующая диагностика сохранены ниже и в журнале.
 Это не подтверждает staging, production или слияние в main.
 
 Предыдущий CI документационного `14ca638` также прошёл:
@@ -36,7 +36,8 @@ CI `2d1f480` подтвердил новый компонент. Следующ�
 проверки, 23 HTTP локального workerd/D1. Первая полная browser matrix:
 272 passed / 6 failed / 9 skips (workers=3, retries=0); все 42 семейных сценария
 прошли. Диагностика шести сценариев на обоих iPhone-проектах: 12 passed,
-workers=1/retries=0, без изменения кода. Полный CI нового HEAD проверяется отдельно. Это охват
+workers=1/retries=0, без изменения кода. Полный CI `3baac01` затем прошёл:
+278 browser passed / 9 skips, workers=2, без flaky в итоговом summary. Это охват
 `useFamilyCloud`; AI-путь, CAS и постоянная семейная доставка ещё открыты.
 
 ## P0: что проверено и что ещё требуется
@@ -46,8 +47,8 @@ workers=1/retries=0, без изменения кода. Полный CI нов�
 | P0.1 — CI и зависимости | Исправление audit и push; зелёный CI опубликованной ветки | [Журнал](stabilization-progress.md), [workflow](../.github/workflows/ci.yml) | Интеграция зависимостей через защищённую main; CI release SHA |
 | P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей и profile | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора, runtime legacy и полный lifecycle |
 | P0.3 — auth-пауза | Локальная запись продолжается; отправка требует подтверждения владельца | [State sender](../tests/state_sync.test.ts), [profile E2E](../e2e/profile-durability.spec.ts), [контракт](state-sender.md) | Остальные callbacks и legacy; реальный повторный вход на staging |
-| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [контракт](bootstrap-hydration.md) | Остальные cloud callbacks и cache |
-| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню и достижения; личные покупки следуют profile CAS на `4736ff5` | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | AI/report/retry/family producers; долговечность и порядок вторичных записей |
+| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; отдельный семейный AI-путь |
+| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; личные покупки следуют profile CAS на `4736ff5` | [Read guard](../tests/session_read_guard.test.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | AI/report/retry и `useFamilyMenu`; family CAS, долговечность и порядок вторичных записей |
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [контракт](sync-model.md) | Доказанное владение legacy и барьер реально работающих старых writers |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; value/операция и import/ledger атомарны; legacy-нормализатор реализован | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Runtime-импорт с доказательствами; old/new bundles на одном origin; backup/экспорт/очистка всех stores |

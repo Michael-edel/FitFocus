@@ -63,27 +63,22 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 Рабочая ветка — `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Реализованы общая IDB-outbox, 15 управляемых state-ключей, сохранение профиля
 и регистрации, guarded bootstrap/hydration, персональное меню и привязка
-HTTP достижений к исходной сессии. Границы реализации и точные результаты
+HTTP достижений и `useFamilyCloud` к исходной сессии. Границы реализации и точные результаты
 проверок — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI `2d1f480`](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398):
-976 unit / 187 файлов, 236 browser passed / 9 skips, success.
-Прежние неуспешные прогоны и причины исправлений сохранены
-[в журнале](docs/stabilization-progress.md). Переработка личных
-покупок `4736ff5` описана [отдельно](docs/personal-menu-projection.md);
-локально прошли 976 unit и полная browser matrix `4736ff5`: 236 passed / 9 skips.
-Подготовительный сервер `dde4c71` прошёл 952 unit и локальный переход
-0019 → 0020 → сервер проекции; [порядок и границы](docs/profile-cas-rollout.md).
+Подтверждённый [CI семейного кода `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936):
+1009 unit / 189 файлов, 278 browser passed / 9 skips, success, без flaky в итоговом summary.
+Компонент `9c44c21` также прошёл 23 HTTP-запроса локального Worker/D1.
+Первая локальная матрица со сбоями iPhone и последующая диагностика сохранены
+[в контракте семьи](docs/family-session.md) и [журнале](docs/stabilization-progress.md).
 Каждый последующий HEAD требует отдельной проверки CI.
 
-Последующий [CI `d7ef1af`](https://github.com/Michael-edel/FitFocus/actions/runs/38196327356)
-также прошёл: 976 unit, 236 browser passed / 9 skips.
+Личные покупки следуют одной profile-операции и SQL-проекции;
+[контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`
+прошёл локальный переход 0019 → 0020 → сервер проекции (30 HTTP);
+[порядок и границы](docs/profile-cas-rollout.md).
 [Подготовительный CI `c39904c`](https://github.com/Michael-edel/FitFocus/actions/runs/38196258543)
 прошёл отдельно: 952 unit, 229 browser passed / 9 skips.
-Компонент семейных сессий `9c44c21` прошёл 1009 unit, обязательные проверки
-и 23 HTTP-запроса локального Worker/D1. Первая полная browser matrix выявила
-шесть сбоев iPhone вне семейных сценариев; итоговые проверки и CI фиксируются
-[в контракте](docs/family-session.md) и журнале.
 
 Следующие задачи: завершить текущую приёмку, защитить остальные AI/report/retry/family
 callbacks, определить CAS и постоянный порядок вторичной items-проекции,

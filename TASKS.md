@@ -2,9 +2,9 @@
 
 Обновлено: 12.10.2026. Текущий компонент — семейные сессии `9c44c21`, ветка
 `fix/durable-outbox`; [контракт и результаты](docs/family-session.md).
-Последний подтверждённый [CI `d7ef1af`](https://github.com/Michael-edel/FitFocus/actions/runs/38196327356):
-976 unit / 187 файлов, 236 browser passed / 9 skips. Он предшествует семейному
-коду; результаты прежнего SHA не переносятся на последующий HEAD.
+Подтверждённый [CI семейного кода `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936):
+1009 unit / 189 файлов, 278 browser passed / 9 skips, без flaky в итоговом summary.
+Последующие HEAD требуют отдельного CI; этот результат относится к указанной ревизии.
 
 Предыдущий компонент — [личные покупки](docs/personal-menu-projection.md)
 `4736ff5` с серверной поправкой `830caf4`. Подготовительная версия и переход
@@ -214,10 +214,10 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [x] Снимать необработанный Promise отметки, восстанавливать checkbox при отказе.
 - [x] Пройти 1009 unit / 189 файлов, три typecheck, guards/schema/privacy и audit.
 - [x] Пройти 23 HTTP-запроса локального workerd/D1 с двумя синтетическими аккаунтами.
-- [ ] Подтвердить полную browser matrix: первый прогон — 272 passed / 6 failed / 9 skips;
-  все 42 семейных сценария прошли. Диагностика iPhone без изменения кода —
-  12 passed с workers=1/retries=0; полный CI нового HEAD проверяется отдельно.
-- [ ] Подтвердить CI опубликованного HEAD этого компонента.
+- [x] Подтвердить полную browser matrix в CI `3baac01`: 278 passed / 9 skips,
+  семь проектов, workers=2, без flaky в итоговом summary. Первый локальный
+  прогон 272 passed / 6 failed / 9 skips и диагностика 12 passed сохранены в журнале.
+- [x] Подтвердить [CI опубликованного `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936).
 - [ ] Перевести AI-сценарий `useFamilyMenu`, family/week CAS и постоянную
   доставку через существующую IDB-outbox; пройти реальные bundles/staging.
 
