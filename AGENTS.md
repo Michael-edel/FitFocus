@@ -70,6 +70,8 @@
   Требуй свежий proof, capabilities, lifetime и атомарный profile commit.
   Личные покупки на `4736ff5` следуют profile CAS через SQL-проекцию;
   [контракт](docs/personal-menu-projection.md), [ADR-007](docs/adr/ADR-007-personal-menu-projection.md).
+  Порядок промежуточного серверного выпуска и границы локальных проверок —
+  в [инструкции перехода 0020](docs/profile-cas-rollout.md).
   Не возвращай отдельный личный items POST. Семейный путь ещё открыт.
   Scope не обеспечивает CAS произвольной вторичной проекции;
   запросы прежнего клиента без scope остаются незащищёнными этим guard.

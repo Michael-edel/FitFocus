@@ -7,22 +7,28 @@
 ## Проверенная граница
 
 Опубликованная ревизия —
-[`42ee4348113e94d43cb24d6950ccd1bd7be597bc`](https://github.com/Michael-edel/FitFocus/commit/42ee4348113e94d43cb24d6950ccd1bd7be597bc),
-ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38189490979)
-завершился success: 950 unit / 186 файлов, 229 browser passed / 9 skips.
+[`2d1f480a71b4c8d6cb90e90e1308074a08082371`](https://github.com/Michael-edel/FitFocus/commit/2d1f480a71b4c8d6cb90e90e1308074a08082371),
+ветка `fix/durable-outbox`. [CI этой ревизии](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398)
+завершился success: 976 unit / 187 файлов, 236 browser passed / 9 skips.
 В итоговом browser summary нет flaky. CI использовал 2 workers; локальная
-полная матрица кода `724ecf1` — 3 workers, retries=0, с теми же итогами.
+полная матрица кода `4736ff5` — 3 workers, retries=0, с теми же browser итогами.
 Это не подтверждает staging, production или слияние в main.
 
-Последующий CI документационного `14ca638` также прошёл:
+Предыдущий CI документационного `14ca638` также прошёл:
 [запуск](https://github.com/Michael-edel/FitFocus/actions/runs/38191713675),
 950 unit, 229 browser passed / 9 skips. Новый компонент `4736ff5` проверяется
 отдельно: 966 unit / 187 файлов, все обязательные guards/typecheck и 16 HTTP
 локального Worker/D1 прошли. Полная browser matrix `4736ff5`: 236 passed /
 9 skips, 7 проектов, workers=3, retries=0. После серверной валидации `830caf4`
 прошли 976 unit и повторный Worker/D1 smoke; клиент/E2E не менялись.
-CI итогового опубликованного HEAD проверяется отдельно.
+CI `2d1f480` подтвердил новый компонент. Следующие HEAD требуют отдельного CI.
 Подробные доказательства и условия выпуска — в [контракте проекции](personal-menu-projection.md).
+
+Подготовительный код `dde4c71` на базе до проекции прошёл 952 unit,
+обязательные проверки/build и локальный переход 0019 → 0020 → сервер проекции
+на одной БД (30 HTTP). Негативный откат воспроизвёл устаревшее чтение;
+[инструкция и свидетельства](profile-cas-rollout.md). Это отдельная ветка:
+её CI, реальные bundles, staging и совместимый откат ещё требуют подтверждения.
 
 ## P0: что проверено и что ещё требуется
 

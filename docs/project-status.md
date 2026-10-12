@@ -5,6 +5,13 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+Проверенный опубликованный HEAD — `2d1f480a71b4c8d6cb90e90e1308074a08082371`:
+[CI success](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398),
+976 unit / 187 файлов, 236 browser passed / 9 skips. Новая документационная
+ревизия проверяется отдельно. Подготовительный сервер `dde4c71` и переход
+0019 → 0020 → проекция проверены локально;
+[инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
+
 ## Что это за проект
 
 FitFocus — PWA для питания, привычек и прогресса. Основной цикл:
@@ -54,15 +61,19 @@ clean refresh работает без новой write-capability, pending-оп�
 [`830caf4`](https://github.com/Michael-edel/FitFocus/commit/830caf43895fe00bd9eddf2b58cf254afbe847c8)
 возвращает 422 до persistence вместо общей ошибки для некорректного меню.
 После неё прошли 976 unit / 187 файлов, обязательные проверки и повторный
-16-request Worker/D1 smoke. Клиент и E2E не изменились. CI нового опубликованного
-HEAD подтверждается отдельно; его результат фиксируется в PR.
+16-request Worker/D1 smoke. Клиент и E2E не изменились.
+[CI опубликованного `2d1f480`](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398)
+прошёл: 976 unit и 236 browser passed / 9 skips; в итоговом summary нет flaky.
 
 Подтверждённый CI предыдущего документационного `14ca638`:
 [success](https://github.com/Michael-edel/FitFocus/actions/runs/38191713675),
 950 unit / 186 файлов, 229 browser passed / 9 skips, без flaky в итоговом summary.
 Он не подтверждает код нового компонента. Для выпуска 0020 требуется
 подготовительный сервер с RETURNING до triggers, затем сервер проекции
-и capability smoke до клиента. Staging и откат ещё не выполнены.
+и capability smoke до клиента. Подготовительный код `dde4c71` прошёл 952 unit,
+обязательные проверки и build. На одной локальной БД переход и негативный
+откат reader прошли 30 HTTP-запросов. Staging и совместимый откат ещё открыты;
+[проверенные этапы](profile-cas-rollout.md).
 [Контракт и следующий шаг](personal-menu-projection.md), [матрица P0](verification-matrix.md).
 
 ## Компонент — сессия и очередь достижений
