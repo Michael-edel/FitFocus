@@ -2,7 +2,7 @@
 
 Обновлено: 12.10.2026. Текущий компонент — семейное меню, ветка
 `fix/durable-outbox`; [контракт и результаты](docs/family-menu-state.md).
-Последний подтверждённый [CI опубликованной ветки `1d9cb89`](https://github.com/Michael-edel/FitFocus/actions/runs/38211291529):
+Последний подтверждённый [CI опубликованной ветки `60c5421`](https://github.com/Michael-edel/FitFocus/actions/runs/38214518560):
 1039 unit / 191 файл, 334 browser passed / 9 skips, без flaky в итоговом summary.
 Это MD-коммит после семейного кода `405238b`. Последующие HEAD и рабочее
 дерево с подготовкой PWA требуют отдельной проверки; [текущий статус](docs/project-status.md#рабочее-дерево--обновление-pwa).
@@ -239,12 +239,21 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [x] Проверить настоящие v2/v3 bundles на одном origin локально: 2/2,
   pending/conflicted, старый reopen=VersionError, старые мутации=0,
   профиль/marker ledger/quarantine/auth-fence сохранены; mock API, SW отключён.
+- [x] Локально проверить предложение обновления и сохранность profile/family
+  intent с настоящими v2/v3 SW и native HTTP: 7/7 в составе 63 связанных
+  сценариев на семи конфигурациях, workers=1/retries=0. [Контракт](docs/pwa-updates.md).
+  Standalone эмулируется; это не staging и не установка на устройстве.
+- [x] Проверить потерю первого SKIP_WAITING, deadline, сохранность черновика
+  и успешный повтор: 7/7 real-SW/native HTTP; затем 1043 unit / 192 файла,
+  три typecheck, guards/schema/privacy и audit (0).
+- [ ] Подтвердить CI опубликованного кандидата PWA по его точному SHA.
 - [ ] Проверить повреждённые legacy записи, старый Map writer, SW/PWA,
   реальный lifecycle/staging и совместимый rollback artifact.
 
 Клиент подключён; отказ старых menu/items writers, конфликт после reload
 и локальная совместная работа настоящих v2/v3 bundles проверены. CI нового
-кода прошёл. До закрытия нужны SW/PWA/staging и совместимый откат. Явная семейная цель invite/member
+кода прошёл. Локальный real-SW smoke добавлен; до закрытия нужны PWA на
+устройствах/staging и совместимый откат. Явная семейная цель invite/member
 и остальные callbacks также остаются открытыми.
 
 Это не закрывает P0.4–P0.6 целиком. Прежние unscoped clients остаются совместимыми

@@ -179,6 +179,9 @@ Actions, наличие workflow в нужной ветке и состояни�
 - [ ] Повторить actual old/new bundle smoke в staging с SW/PWA: v2 sender не
   получает новый resource, v3 сохраняет pending/conflict/ledger/quarantine/auth-fence.
   Локально Chromium/mock API/SW blocked прошли 2/2 на `3baac01` и `405238b`.
+  Следующий компонент [явного PWA-обновления](docs/pwa-updates.md) локально
+  прошёл семь real-SW/native HTTP сценариев на семи конфигурациях.
+  Это синтетический API и эмуляция standalone; staging gate остаётся открытым.
 - [ ] Проверить standalone/PWA, реальный lifecycle/OAuth и повтор после сбоя.
 - [ ] Подготовить rollback artifact с canonical reader и v3-aware sender;
   не удалять и не понижать IDB, не возвращать legacy reader после новых записей.

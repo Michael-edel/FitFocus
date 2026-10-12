@@ -58,19 +58,13 @@ export default defineConfig(({ mode }) => {
 
       VitePWA({
         strategies: 'injectManifest',
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         srcDir: '.',
         filename: 'sw.ts',
         devOptions: { enabled: false },
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,svg,png,webmanifest,woff2}'],
         },
-        workbox: {
-          cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: true,
-        },
-
         manifest: {
           name: 'FitFocus',
           short_name: 'FitFocus',

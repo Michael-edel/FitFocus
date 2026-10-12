@@ -13,6 +13,10 @@ type PushMockConfig = {
 type MockAppOptions = {
   session: MockSessionMode;
   push?: PushMockConfig;
+  /** Update/precache tests must retain the browser's actual SW objects. */
+  realServiceWorker?: boolean;
+  /** Native SW flows serve API fixtures over HTTP, including worker-originated requests. */
+  nativeApi?: boolean;
 };
 
 const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
@@ -97,12 +101,13 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
     ...options.push,
   };
 
-  if (options.session === 'app' || options.session === 'register') {
+  if (!options.realServiceWorker && (options.session === 'app' || options.session === 'register')) {
     await installPushMocks(page, push);
   } else if (push.standalone) {
     await installStandaloneModeMock(page, true);
   }
 
+  if (options.nativeApi) return;
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());

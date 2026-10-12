@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ensurePWAStarted } from './pwa';
+import { PwaUpdateNotice } from './ui/PwaUpdateNotice';
 
 const CANONICAL_APP_HOST = 'fitfocus.pages.dev';
 const isPreviewPagesHost =
@@ -29,5 +30,6 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <App />
+    <PwaUpdateNotice />
   </React.StrictMode>
 );

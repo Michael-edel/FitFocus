@@ -111,6 +111,14 @@ clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+// injectManifest requires its own activation handler. Do not skip waiting on install:
+// the client first asks the user to save edits in every open FitFocus tab.
+sw.addEventListener('message', (event) => {
+  if (isRecord(event.data) && event.data.type === 'SKIP_WAITING') {
+    event.waitUntil(sw.skipWaiting());
+  }
+});
+
 registerRoute(
   ({ request }) => request.mode === 'navigate',
   new NetworkFirst({

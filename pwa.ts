@@ -7,6 +7,7 @@
  */
 import { isRecord } from './safeJson';
 import { fetchWithResilience } from './services/httpClient';
+import { offerPwaUpdate } from './services/pwaUpdate';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
@@ -112,12 +113,16 @@ async function initPWA() {
     updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        void updateSW?.(true);
+        offerPwaUpdate(async () => {
+          if (!updateSW) throw new Error('PWA_UPDATE_NOT_READY');
+          await updateSW(true);
+        });
       },
       onRegisteredSW(_swScriptUrl: string, registration?: ServiceWorkerRegistration) {
-        // Показываем новую сборку при следующем обновлении, не оставляя старые чанки висеть.
+        // Check availability without activating/reloading a form behind the user.
         if (registration) {
-          void registration.update?.();
+          // Offline availability checks must not become unhandled rejections.
+          void registration.update?.().catch(() => undefined);
         }
       },
       onRegisterError(error: unknown) {

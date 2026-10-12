@@ -67,12 +67,13 @@ HTTP достижений и `useFamilyCloud` к исходной сессии. 
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
-Подтверждённый [CI опубликованной ревизии `1d9cb89`](https://github.com/Michael-edel/FitFocus/actions/runs/38211291529):
+Подтверждённый [CI опубликованной ревизии `60c5421`](https://github.com/Michael-edel/FitFocus/actions/runs/38214518560):
 1039 unit / 191 файл, 334 browser passed / 9 skips, success, без flaky в итоговом summary.
 Это документирующий коммит после семейного кода `405238b`.
 Локальные неуспешные прогоны и границы actual-bundle smoke сохранены
 [в контракте меню](docs/family-menu-state.md) и [журнале](docs/stabilization-progress.md).
-Рабочее дерево с подготовкой PWA-обновления этим CI не проверено.
+Следующий компонент — [явное PWA-обновление](docs/pwa-updates.md);
+результаты его рабочего дерева этим CI не подтверждаются.
 
 Личные покупки следуют одной profile-операции и SQL-проекции;
 [контракт](docs/personal-menu-projection.md). Подготовительный сервер `dde4c71`
