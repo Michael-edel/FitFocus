@@ -23,13 +23,19 @@ export async function saved(page: Page) {
     try {
       const tx = db.transaction(['values', 'outbox'], 'readonly');
       report('transaction-created');
-      tx.addEventListener('complete', () => report('transaction-complete'));
-      tx.addEventListener('abort', () => report('transaction-abort', { error: tx.error?.name ?? null }));
+      const transactionComplete = new Promise<void>((resolve, reject) => {
+        tx.addEventListener('complete', () => { report('transaction-complete'); resolve(); }, { once: true });
+        tx.addEventListener('abort', () => {
+          report('transaction-abort', { error: tx.error?.name ?? null });
+          reject(tx.error ?? new DOMException('IndexedDB read transaction aborted', 'AbortError'));
+        }, { once: true });
+      });
       const get = <T,>(read: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
         read.onsuccess = () => { report('read-success', { store: (read.source as IDBObjectStore | null)?.name ?? null }); resolve(read.result); };
         read.onerror = () => { report('read-error', { error: read.error?.name ?? null }); reject(read.error); };
       });
       const [values, operations] = await Promise.all([get(tx.objectStore('values').getAll()), get(tx.objectStore('outbox').getAll())]);
+      await transactionComplete;
       report('read-complete', { values: values.length, operations: operations.length });
       return { version: db.version, menus: values.filter(value => value.key.includes('_family_menu:')).map(value => JSON.parse(value.value)),
         profiles: values.filter(value => value.key === `fitfocus_data_${account}_profile`).map(value => JSON.parse(value.value)),

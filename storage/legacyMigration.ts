@@ -1,6 +1,7 @@
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId,
   legacyFingerprint, legacyFingerprintFields, normalizeLegacyRecord,
   type LegacyInvalidReason, type NormalizedLegacyQueueRecord } from './legacyQueue';
+import { isCurrentLegacyWriterFenceProof, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { outboxKeyOwnerId, writeOutboxInTransaction, type OutboxOperation } from './durableOutbox';
 import { StateDatabase, StateStorageError, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 
@@ -149,12 +150,11 @@ export class LegacyQueueMigration {
         .filter((entry) => entry.sourceKey === LEGACY_QUEUE_SOURCE_KEY));
   }
 
-  /** writersStopped is a verified integration precondition; omission never authorizes sending. */
-  async migrate(options: { verifiedOwners: VerifiedLegacyOwners; writersStopped?: boolean; batchSize?: number }): Promise<MigrationProgress> {
+  /** A fresh all-client proof is checked after import and immediately before the final audit. */
+  async migrate(options: { verifiedOwners: VerifiedLegacyOwners; verifyWritersStopped?: () => Promise<LegacyWriterFenceProof | null>; batchSize?: number }): Promise<MigrationProgress> {
     const batchSize = options.batchSize ?? 100;
     if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) throw new Error('LEGACY_INVALID_BATCH_SIZE');
     const verifiedOwners = new Map([...options.verifiedOwners].map(([key, accounts]) => [key, [...accounts]]));
-    const writersStopped = options.writersStopped === true;
     const database = await this.connection.open();
     // Close a previous gate before reading/hashing: source access can fail, too.
     const previousSnapshots = await stateTransaction(database, [STATE_STORES.meta], 'readwrite', async (tx) => {
@@ -184,7 +184,7 @@ export class LegacyQueueMigration {
     let progress: StoredProgress = {
       id: LEGACY_MIGRATION_META_ID, runId, sourceKey: LEGACY_QUEUE_SOURCE_KEY, snapshotId: prepared.snapshotId,
       status: 'importing', totalRecords: prepared.total, processedRecords: 0, importedRecords: 0, unresolvedRecords: 0, pendingSnapshotRecords: historicalPending,
-      sourceMatches: false, writersStopped, sendAllowed: false, snapshotAuditComplete: false,
+      sourceMatches: false, writersStopped: false, sendAllowed: false, snapshotAuditComplete: false,
     };
     await stateTransaction(database, [STATE_STORES.meta], 'readwrite', async (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
@@ -197,7 +197,7 @@ export class LegacyQueueMigration {
         // Concurrent tabs may join the same immutable snapshot. Ledger transactions deduplicate their work.
         runId = current.runId;
         // Joining/restarting does not inherit a potentially stale writer fence from disk.
-        progress = { ...current, writersStopped, sendAllowed: false, snapshotAuditComplete: false };
+        progress = { ...current, writersStopped: false, sendAllowed: false, snapshotAuditComplete: false };
       }
       store.put(progress);
     });
@@ -234,6 +234,9 @@ export class LegacyQueueMigration {
         return next;
       });
     }
+    let writerFence: LegacyWriterFenceProof | null = null;
+    try { writerFence = await options.verifyWritersStopped?.() ?? null; } catch { /* Missing proof keeps sending closed. */ }
+    const writersStopped = isCurrentLegacyWriterFenceProof(writerFence);
     return stateTransaction(database, Object.values(STATE_STORES), 'readwrite', async (tx) => {
       const meta = tx.objectStore(STATE_STORES.meta);
       const current = await indexedRequest(meta.get(LEGACY_MIGRATION_META_ID)) as StoredProgress;
@@ -264,8 +267,8 @@ export class LegacyQueueMigration {
         .filter((entry) => entry.sourceKey === LEGACY_QUEUE_SOURCE_KEY && !entry.resolved);
       // This synchronous source check complements the externally established writer fence.
       const sourceMatches = this.readSource() === raw;
-      const sendAllowed = current.writersStopped && sourceMatches && processedRecords === prepared.total && pendingSnapshotRecords === 0 && !unauditedSnapshot;
-      const final: StoredProgress = { ...current, status: sendAllowed && unknown.length === 0 ? 'completed' : 'partial',
+      const sendAllowed = writersStopped && sourceMatches && processedRecords === prepared.total && pendingSnapshotRecords === 0 && !unauditedSnapshot;
+      const final: StoredProgress = { ...current, writersStopped, status: sendAllowed && unknown.length === 0 ? 'completed' : 'partial',
         processedRecords, pendingSnapshotRecords, snapshotAuditComplete: !unauditedSnapshot,
         importedRecords: imported, unresolvedRecords: unknown.length, sourceMatches, sendAllowed };
       meta.put(final);

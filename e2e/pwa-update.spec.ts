@@ -19,6 +19,62 @@ async function openNative(page: Page, url: string, standalone: boolean) {
   return errors;
 }
 
+async function requestLegacyWriterFence(page: Page, timeoutMs = 750) {
+  return page.evaluate((timeout) => new Promise<unknown>((resolve) => {
+    const worker = navigator.serviceWorker.controller;
+    const buildId = localStorage.getItem('fitfocus.build.id');
+    if (!worker || !buildId) return resolve(null);
+    const channel = new MessageChannel();
+    const challengeId = crypto.randomUUID();
+    let settled = false;
+    const finish = (result: unknown) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); channel.port1.close(); channel.port2.close(); resolve(result);
+    };
+    const timer = setTimeout(() => finish(null), timeout);
+    channel.port1.onmessage = event => finish(event.data);
+    worker.postMessage({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_CHECK', challengeId, buildId }, [channel.port2]);
+  }), timeoutMs);
+}
+
+function isExpectedFirefoxIdbNavigationWarning(message: string): boolean {
+  return message.includes('An IndexedDB transaction that was not yet complete has been aborted due to page navigation.')
+    && message.includes('/assets/ai-');
+}
+
+async function stateDebug(page: Page) {
+  return page.evaluate(async () => {
+    const request = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const tx = db.transaction(['outbox_meta', 'outbox'], 'readonly');
+      const complete = new Promise<void>((resolve, reject) => {
+        tx.addEventListener('complete', () => resolve(), { once: true });
+        tx.addEventListener('abort', () => reject(tx.error), { once: true });
+      });
+      const get = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const [meta, outbox] = await Promise.all([
+        get(tx.objectStore('outbox_meta').getAll()), get(tx.objectStore('outbox').getAll()),
+      ]);
+      await complete;
+      return {
+        fence: meta.find((entry: { id: string }) => entry.id === 'auth-fence') ?? null,
+        activeSession: meta.find((entry: { id: string }) => entry.id === 'active-session') ?? null,
+        migration: meta.find((entry: { id: string }) => entry.id === 'legacy-migration:v1') ?? null,
+        operations: outbox.map((operation: { opId: string; resource?: string; status: string; reason?: string; baseVersion: number }) => ({
+        opId: operation.opId, resource: operation.resource, status: operation.status, reason: operation.reason, baseVersion: operation.baseVersion,
+        })),
+      };
+    } finally { db.close(); }
+  });
+}
+
 test('real service worker waits for an explicit update and preserves durable family intent', async ({ context }, info) => {
   // Two real installations, two tabs, update activation and reload are one integration flow.
   test.setTimeout(90_000);
@@ -26,6 +82,9 @@ test('real service worker waits for an explicit update and preserves durable fam
   const oldPage = await context.newPage(), page = await context.newPage();
   let legacyIdentityLoads = 0;
   const currentIdentityRequests: string[] = [];
+  const apiRequests: string[] = [];
+  const failedApiRequests: Array<{ tab: string; path: string; errorText: string | null }> = [];
+  const meResponses: Array<{ tab: string; status: number }> = [];
   // The retained v2 HTML has an unused GIS loader. Its first, uncontrolled page
   // uses a synthetic login; isolate that external SDK, preserving all v2 app/SW bytes.
   await oldPage.route('https://accounts.google.com/gsi/client', route => {
@@ -34,13 +93,34 @@ test('real service worker waits for an explicit update and preserves durable fam
   });
   page.on('request', request => { if (new URL(request.url()).hostname === 'accounts.google.com') currentIdentityRequests.push(request.url()); });
   const diagnostics: string[] = [];
+  const familyPutResponses: Array<{ tab: string; status: number; headers: Record<string, string>; body: unknown }> = [];
   for (const tab of [oldPage, page]) {
+    tab.on('request', request => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith('/api/')) apiRequests.push(`${tab === oldPage ? 'old' : 'new'} ${request.method()} ${path}`);
+    });
+    tab.on('requestfailed', request => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith('/api/')) failedApiRequests.push({ tab: tab === oldPage ? 'old' : 'new', path,
+        errorText: request.failure()?.errorText ?? null });
+    });
     tab.on('pageerror', error => diagnostics.push(error.message));
     tab.on('console', message => {
       if (message.text().startsWith('[FITFOCUS-IDB]') || message.text().startsWith('[FITFOCUS-SAVED]')
         || ['warning', 'error'].includes(message.type())) diagnostics.push(message.text());
     });
-    tab.on('response', response => { if (response.status() >= 400) diagnostics.push(`${response.status()} ${response.url()}`); });
+    tab.on('response', response => {
+      if (new URL(response.url()).pathname === '/api/me') {
+        meResponses.push({ tab: tab === oldPage ? 'old' : 'new', status: response.status() });
+      }
+      if (response.status() >= 400) diagnostics.push(`${response.status()} ${response.url()}`);
+      if (new URL(response.url()).pathname === '/api/family/menu/state' && response.request().method() === 'PUT') {
+        const body = response.request().postDataJSON();
+        familyPutResponses.push({ tab: tab === oldPage ? 'old' : 'new', status: response.status(),
+          headers: Object.fromEntries(['x-fitfocus-state-account', 'x-fitfocus-state-session'].map(name => [name, response.request().headers()[name] ?? ''])),
+          body: { familyId: body.familyId, weekStart: body.weekStart, baseVersion: body.baseVersion } });
+      }
+    });
     // Preserve real IDB/SW behavior while recording blocked upgrades and which tab
     // closes its connection; this makes Firefox's intermittent open() hang diagnosable.
     await tab.addInitScript(() => {
@@ -83,9 +163,14 @@ test('real service worker waits for an explicit update and preserves durable fam
     expect(candidateScript).toBeTruthy();
     expect(await oldPage.locator('script[type="module"][src]').getAttribute('src')).not.toBe(candidateScript);
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state)).toBe('installed');
+    // The currently open v2 page still lacks the writer-fence responder, so the
+    // active old worker cannot prove that all old writers have stopped.
+    expect(await requestLegacyWriterFence(page)).toBeNull();
     await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
-    await expect.poll(() => server.counts.put).toBeGreaterThan(0);
+    await expect.poll(async () => (await saved(page)).operations.length).toBeGreaterThan(0);
+    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('pending');
     const pending = (await saved(page)).operations[0]; expect(pending.status).toBe('pending');
+    expect(server.counts.put).toBe(0);
     const update = page.getByRole('button', { name: 'Обновить приложение', exact: true });
     await expect(update).toBeVisible();
     await expect(page.getByRole('status', { name: 'Обновление FitFocus', exact: true })).toHaveCSS('background-color', /^rgb\(/);
@@ -93,9 +178,12 @@ test('real service worker waits for an explicit update and preserves durable fam
     await expect(update).not.toBeVisible();
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state)).toBe('installed');
     await page.reload();
-    await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+    // The previous build is still an open same-origin writer, so the new runtime
+    // must keep legacy-dependent sends paused until every client has updated.
+    await expect(page.getByText(/Сначала нужно проверить импорт прежних изменений/)).toBeVisible();
     await expect(update).toBeVisible();
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(pending.opId);
+    expect(server.counts.put).toBe(0);
     await navigate(page, 'Настройки');
     const name = page.getByPlaceholder('Как к вам обращаться');
     await name.fill('Черновик перед обновлением');
@@ -136,6 +224,14 @@ test('real service worker waits for an explicit update and preserves durable fam
     await expect(page.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
     await expect(oldPage.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting === null)).toBe(true);
+    await expect.poll(() => server.counts.put).toBeGreaterThan(0);
+    const writerFence = await requestLegacyWriterFence(page) as {
+      type?: string; complete?: boolean; clients?: Array<{ buildId: string }>;
+    } | null;
+    expect(writerFence).toMatchObject({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_REPLY', complete: true });
+    expect(writerFence?.clients?.length).toBeGreaterThanOrEqual(2);
+    const currentBuildId = await localBuildId(page);
+    expect(writerFence?.clients?.every(client => client.buildId === currentBuildId)).toBe(true);
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Черновик перед обновлением');
     // In-app tab selection does not change the original #family deep link.
     await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
@@ -153,15 +249,41 @@ test('real service worker waits for an explicit update and preserves durable fam
     });
     expect(cachedApi).toEqual([]); expect(server.unexpectedApi).toEqual([]);
     expect(legacyIdentityLoads).toBeGreaterThan(0); expect(currentIdentityRequests).toEqual([]);
-    await expect(page).toHaveTitle(/FitFocus/); await healthy(page, errors); await healthy(oldPage, oldErrors);
+    await expect(page).toHaveTitle(/FitFocus/);
+    const expectedWebKitApiMeWarnings = errors.filter(error => error.includes('due to access control checks.') && error.includes('/api/me'));
+    if (info.project.name === 'desktop-webkit' && expectedWebKitApiMeWarnings.length > 0) {
+      expect(meResponses.some(entry => entry.tab === 'new' && entry.status === 200)).toBe(true);
+      expect(failedApiRequests.filter(entry => entry.tab === 'new' && entry.path === '/api/me')).toEqual([]);
+    }
+    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-webkit' ? 2 : 0);
+    const currentPageIdbNavigationWarnings = errors.filter(isExpectedFirefoxIdbNavigationWarning);
+    expect(currentPageIdbNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
+    await healthy(page, errors.filter(error => !expectedWebKitApiMeWarnings.includes(error)
+      && !isExpectedFirefoxIdbNavigationWarning(error)));
+    // The pinned previous release resolves IndexedDB reads on request success, then
+    // clientsClaim reloads it before Firefox dispatches transaction.complete.
+    // Its read is aborted by that expected navigation; durable writes are checked above.
+    const previousBuildNavigationWarnings = oldErrors.filter(isExpectedFirefoxIdbNavigationWarning);
+    expect(previousBuildNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
+    await healthy(oldPage, oldErrors.filter(error => !(info.project.name === 'desktop-firefox'
+      && isExpectedFirefoxIdbNavigationWarning(error))));
     await page.getByPlaceholder('Как к вам обращаться').evaluate(element => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: info.outputPath('pwa-updated-preserved-profile.png') });
     await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi,
       counts: server.counts, legacyIdentityLoads, currentIdentityRequests, candidateScript,
-      idbVersion: (await saved(page)).version, preservedFamilyOpId: pending.opId }), contentType: 'application/json' });
+      idbVersion: (await saved(page)).version, preservedFamilyOpId: pending.opId,
+      previousBuildNavigationWarnings: previousBuildNavigationWarnings.length,
+      currentPageIdbNavigationWarnings: currentPageIdbNavigationWarnings.length,
+      expectedWebKitApiMeWarnings: expectedWebKitApiMeWarnings.length, meResponses, failedApiRequests }), contentType: 'application/json' });
   } catch (error) {
-    console.error('PWA runtime diagnostics:', JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi }));
-    await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi }), contentType: 'application/json' });
+    const oldPageState = await oldPage.evaluate(() => ({ href: location.href, title: document.title,
+      buildId: localStorage.getItem('fitfocus.build.id'), legacySourcePresent: localStorage.getItem('fitfocus.remote-kv-outbox.v1') !== null,
+      localStorageKeys: Object.keys(localStorage), sessionStorageKeys: Object.keys(sessionStorage), bodyText: document.body.innerText.slice(0, 500) })).catch(() => null);
+    const currentPageState = await stateDebug(page).catch(error => ({ error: error instanceof Error ? error.message : String(error) }));
+    console.error('PWA failure snapshot:', JSON.stringify({ failedApiRequests, meResponses, familyPutResponses, unexpectedApi: server.unexpectedApi,
+      counters: server.counts, oldPageState, currentPageState, currentBody: await page.locator('body').innerText().catch(() => '') }));
+    await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi,
+      apiRequests, failedApiRequests, meResponses, familyPutResponses, oldPageState, currentPageState }), contentType: 'application/json' });
     await Promise.allSettled([
       oldPage.screenshot({ path: info.outputPath('pwa-old-failed.png'), timeout: 3000 }),
       page.screenshot({ path: info.outputPath('pwa-current-failed.png'), timeout: 3000 }),
@@ -169,3 +291,7 @@ test('real service worker waits for an explicit update and preserves durable fam
     throw error;
   } finally { await Promise.allSettled([oldPage.close(), page.close()]); await server.close(); }
 });
+
+async function localBuildId(page: Page): Promise<string | null> {
+  return page.evaluate(() => localStorage.getItem('fitfocus.build.id'));
+}

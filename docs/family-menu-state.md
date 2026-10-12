@@ -100,7 +100,8 @@ server-preview/iPhone PWA не дождался названия семьи за
 Это не заменяет полный локальный результат. Нагрузка хоста — предположение,
 а не установленная причина. Staging и совместимый выпуск ещё не подтверждены.
 Также открыты явные цели invite/member, остальные AI/report/retry callbacks,
-runtime legacy-импорт, UI конфликтов, backup/экспорт/очистка всех IDB stores.
+old/new migration smoke с legacy intent, UI конфликтов и backup/экспорт/очистка
+всех IDB stores. Runtime legacy owner proof и Service Worker fence уже подключены.
 
 ## Настоящие bundles на одном origin
 

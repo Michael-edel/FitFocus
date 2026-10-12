@@ -1,12 +1,25 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome, type OutboxReadGuard } from './durableOutbox';
 import { reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
-import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
+import { LegacyQueueMigration } from './legacyMigration';
+import { checkLegacyWriterFence, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { isUserProfilePayload } from '../profileValidation';
 import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuSnapshot } from '../familyMenuValidation';
 
 import { requestJson, type JsonResponse } from './sessionTransport';
-type Options = { outbox?: DurableOutbox; fetchImpl?: typeof fetch; now?: () => number; random?: () => number; timeoutMs?: number; legacyPending?: () => boolean };
+type Options = {
+  outbox?: DurableOutbox;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  random?: () => number;
+  timeoutMs?: number;
+  legacyPending?: () => boolean;
+  legacyRuntime?: boolean;
+  legacyMigration?: LegacyQueueMigration;
+  legacySource?: Pick<Storage, 'getItem'>;
+  verifyLegacyWritersStopped?: () => Promise<LegacyWriterFenceProof | null>;
+};
 const LEASE_MS = 30_000;
 const MAX_RETRIES = 8;
 const MAX_RETRY_DELAY_MS = 15 * 60_000;
@@ -15,14 +28,28 @@ function profileIntent(claim: OutboxClaim): unknown {
   try { return JSON.parse(claim.value); } catch { return null; }
 }
 
-/** Until runtime migration proves its writer barrier, a nonempty/unknown old source blocks sending. */
-function legacyPending(): boolean {
+/** Fallback for sender instances that do not own the runtime migration. */
+function legacySourceHasPendingRecords(): boolean {
   try {
     const raw = localStorage.getItem(LEGACY_QUEUE_SOURCE_KEY);
     if (raw === null) return false;
     const records: unknown = JSON.parse(raw);
     return !Array.isArray(records) || records.length > 0;
   } catch { return true; }
+}
+
+function verifiedLegacyOwners(rawSource: string | null, authenticatedAccountId: string): ReadonlyMap<string, readonly string[]> {
+  const owners = new Map<string, readonly string[]>();
+  if (rawSource === null) return owners;
+  let parsed: unknown;
+  try { parsed = JSON.parse(rawSource); } catch { return owners; }
+  if (!Array.isArray(parsed)) return owners;
+  const prefix = `fitfocus_data_${authenticatedAccountId}_`;
+  for (const candidate of parsed) {
+    const normalized = normalizeLegacyRecord(candidate);
+    if (normalized.ok && normalized.value.key.startsWith(prefix)) owners.set(normalized.value.key, [authenticatedAccountId]);
+  }
+  return owners;
 }
 
 
@@ -32,7 +59,13 @@ export class StateSync {
   private readonly now: () => number;
   private readonly random: () => number;
   private readonly timeoutMs: number;
-  private readonly legacyPending: () => boolean;
+  private readonly legacyPendingOverride?: () => boolean;
+  private readonly legacyRuntime: boolean;
+  private readonly legacyMigration?: LegacyQueueMigration;
+  private readonly legacySource: Pick<Storage, 'getItem'>;
+  private readonly verifyLegacyWritersStopped: () => Promise<LegacyWriterFenceProof | null>;
+  private legacySourceSnapshot: string | null | undefined;
+  private legacyFenceReady = false;
   private readonly owner = crypto.randomUUID();
   private generation = 0;
   private accountId?: string;
@@ -43,6 +76,7 @@ export class StateSync {
   private familyMenuProtocol = false;
   private readonly requests = new Set<AbortController>();
   private running?: Promise<void>;
+  private verification?: { generation: number; promise: Promise<boolean> };
   private timer?: ReturnType<typeof setInterval>;
   private unsubscribe?: () => void;
 
@@ -52,13 +86,61 @@ export class StateSync {
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.timeoutMs = options.timeoutMs ?? 12_000;
-    this.legacyPending = options.legacyPending ?? legacyPending;
+    this.legacyPendingOverride = options.legacyPending;
+    this.legacyRuntime = options.legacyRuntime === true;
+    this.legacySource = options.legacySource ?? { getItem: (key) => {
+      if (typeof localStorage === 'undefined') throw new Error('LEGACY_STORAGE_UNAVAILABLE');
+      return localStorage.getItem(key);
+    } };
+    this.legacyMigration = options.legacyMigration ?? (this.legacyRuntime ? new LegacyQueueMigration(this.legacySource) : undefined);
+    this.verifyLegacyWritersStopped = options.verifyLegacyWritersStopped ?? (async () => {
+      if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+      return checkLegacyWriterFence(navigator.serviceWorker, __FITFOCUS_BUILD_ID__);
+    });
+  }
+
+  private legacyPending(): boolean {
+    if (!this.legacyRuntime) return (this.legacyPendingOverride ?? legacySourceHasPendingRecords)();
+    if (!this.legacyFenceReady || this.legacySourceSnapshot === undefined) return true;
+    try { return this.legacySource.getItem(LEGACY_QUEUE_SOURCE_KEY) !== this.legacySourceSnapshot; }
+    catch { return true; }
+  }
+
+  private async migrateLegacyQueue(accountId: string, generation: number): Promise<boolean> {
+    this.legacyFenceReady = false;
+    this.legacySourceSnapshot = undefined;
+    if (!this.legacyRuntime) return true;
+    if (!this.legacyMigration) return false;
+    let sourceSnapshot: string | null;
+    try { sourceSnapshot = this.legacySource.getItem(LEGACY_QUEUE_SOURCE_KEY); }
+    catch { reportStateSyncPause(accountId, 'legacy'); return false; }
+    try {
+      const progress = await this.legacyMigration.migrate({
+        verifiedOwners: verifiedLegacyOwners(sourceSnapshot, accountId),
+        verifyWritersStopped: this.verifyLegacyWritersStopped,
+      });
+      let currentSource: string | null | undefined;
+      try { currentSource = this.legacySource.getItem(LEGACY_QUEUE_SOURCE_KEY); }
+      catch { currentSource = undefined; }
+      const ready = progress.sendAllowed && progress.sourceMatches && currentSource === sourceSnapshot;
+      if (generation === this.generation && this.accountId === accountId) {
+        this.legacyFenceReady = ready;
+        this.legacySourceSnapshot = ready ? sourceSnapshot : undefined;
+      }
+      reportStateSyncPause(accountId, ready ? null : 'legacy');
+      return ready;
+    } catch {
+      reportStateSyncPause(accountId, 'legacy');
+      return false;
+    }
   }
 
   stop(): void {
     this.generation += 1;
     this.accountId = undefined; this.session = undefined;
     this.readGuard = undefined;
+    this.legacyFenceReady = false;
+    this.legacySourceSnapshot = undefined;
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
     this.familyMenuProtocol = false;
@@ -70,6 +152,10 @@ export class StateSync {
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.reverify);
       window.removeEventListener('focus', this.reverify);
+      window.removeEventListener('storage', this.legacySourceChanged);
+    }
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.removeEventListener('controllerchange', this.reverify);
     }
   }
 
@@ -137,6 +223,10 @@ export class StateSync {
     this.timer = setInterval(this.wake, 1_000);
     window.addEventListener('online', this.reverify);
     window.addEventListener('focus', this.reverify);
+    window.addEventListener('storage', this.legacySourceChanged);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', this.reverify);
+    }
   }
 
   private storageError(accountId: string): void {
@@ -150,6 +240,12 @@ export class StateSync {
     if (accountId) void this.verify(generation).then(() => this.wake()).catch(() => { if (generation === this.generation) this.storageError(accountId); });
   };
 
+  private readonly legacySourceChanged = (event: Event) => {
+    const storageEvent = event as StorageEvent;
+    if (storageEvent.key !== null && storageEvent.key !== LEGACY_QUEUE_SOURCE_KEY) return;
+    this.reverify();
+  };
+
   private readonly wake = () => {
     if (!this.accountId || this.running) return;
     const accountId = this.accountId;
@@ -157,9 +253,22 @@ export class StateSync {
     void this.flush().catch(() => { if (generation === this.generation) this.storageError(accountId); });
   };
 
-  private async verify(generation: number): Promise<boolean> {
+  private verify(generation: number): Promise<boolean> {
+    if (this.verification?.generation === generation) return this.verification.promise;
+    const promise = this.verifySession(generation).finally(() => {
+      if (this.verification?.promise === promise) this.verification = undefined;
+    });
+    this.verification = { generation, promise };
+    return promise;
+  }
+
+  private async verifySession(generation: number): Promise<boolean> {
     const accountId = this.accountId;
     if (!accountId) return false;
+    if (this.legacyRuntime) {
+      this.legacyFenceReady = false;
+      this.legacySourceSnapshot = undefined;
+    }
     this.session = undefined;
     this.readGuard = undefined;
     this.profileProtocol = false;
@@ -195,7 +304,14 @@ export class StateSync {
         this.familyMenuProtocol = isRecord(body.familyMenuSync) && body.familyMenuSync.protocol === 1
           && body.familyMenuSync.guard === 1 && body.familyMenuSync.cas === 1;
         reportStateSyncPause(accountId, null);
-        return true;
+        await this.migrateLegacyQueue(accountId, generation);
+        if (generation !== this.generation || accountId !== this.accountId) return false;
+        if (await this.outbox.isReadSessionCurrent(accepted)) return true;
+        this.session = undefined;
+        this.readGuard = undefined;
+        // The all-client fence and migration await can overlap with another tab's
+        // auth/session update. Never expose a stale read guard to hydration callers.
+        continue;
       }
       // A competing proof changed the fence: obtain a new server observation, never adopt the old response.
     }
@@ -213,6 +329,11 @@ export class StateSync {
   private async drain(generation: number): Promise<void> {
     const accountId = this.accountId;
     if (!accountId) return;
+    if (this.legacyRuntime && !this.legacyFenceReady) {
+      const verification = this.verification;
+      if (!verification || verification.generation !== generation || !await verification.promise
+        || generation !== this.generation || !this.legacyFenceReady) return;
+    }
     try {
       for (let count = 0; count < 20 && generation === this.generation; count += 1) {
         const state = await this.outbox.sessionState();
@@ -351,4 +472,4 @@ export class StateSync {
   }
 }
 
-export const stateSync = new StateSync();
+export const stateSync = new StateSync({ legacyRuntime: true });

@@ -1,6 +1,6 @@
 # Текущее состояние FitFocus
 
-Сверено: 12.10.2026. Это краткая точка входа: функции — в
+Сверено: 13.10.2026. Это краткая точка входа: функции — в
 [PRODUCT](../PRODUCT.md), порядок и критерии готовности — в
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
@@ -14,6 +14,17 @@ job 114917387935, завершён 12.10.2026 в 17:18:53 UTC.
 HTTP/D1 прошёл 23 запроса: кандидат `cf310dd` → retained `98d4910`.
 Артефакты загружены;
 [метаданные](release-artifacts.md#ci-webkit-pwa-update-47da77c).
+
+## Рабочее дерево — P0.8 runtime
+
+После `47da77c` к runtime подключён импорт legacy-очереди: владелец берётся
+из свежего `/api/me`, all-client Service Worker fence удерживает отправку до
+обновления старых вкладок, а read guard перепроверяется после миграции.
+Локальная PWA-приёмка проверяет old/new worker update и сохранение family intent;
+реальный legacy-record из старого bundle остаётся отдельным критерием.
+На 13.10 локально прошли 1068 unit / 196 файлов, три typecheck, API/auth/schema/privacy
+checks, build и PWA update smoke в Chromium, Firefox и WebKit. Эти изменения
+не входят в опубликованный CI выше.
 
 Предыдущий CI —
 `7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
@@ -340,7 +351,7 @@ audit (0 известных уязвимостей), build и полная бр�
 | Guarded bootstrap/state-hydration, readGuard и атомарный auth-fence | [Bootstrap/hydration](bootstrap-hydration.md), код `dac2de2` |
 | Стабильное расположение формы при удержанном Save | [Исправление UI](profile-persistence.md#стабильность-формы-при-изменении-уведомления), код `3550cc8` |
 | Серверная привязка account/session для AI/items и capabilities | [AI/items guard](ai-session-guard.md), код `16d3c34` |
-| Legacy-нормализатор, fingerprint, карантин и атомарный importer/ledger | [Legacy migration](legacy-migration.md); runtime-владелец и барьер ещё не подключены |
+| Legacy-нормализатор, атомарный importer/ledger, auth-derived owner и Service Worker all-client fence | [Legacy migration](legacy-migration.md); actual old/new bundle migration smoke ещё открыт |
 | Серверные поколения и tombstones | [P0.7](state-generations.md); совместный выпуск остаётся открытым |
 
 Наличие этих компонентов не закрывает целиком P0.5, P0.7, P0.8 или выпуск.
@@ -393,8 +404,9 @@ callbacks. Весь P0.5 остаётся открытым.
 2. Продолжить приёмку lifecycle остальных callbacks. CI profile debounce
    на `bf01d87` прошёл. Исторические `/api/profile` и другие
    источники не считать автоматически объяснёнными этим изменением.
-3. Подключить runtime legacy-импорт с доказанным владельцем и фактической
-   остановкой старых writers; проверить старую и новую сборки на одном origin.
+3. Проверить runtime legacy-импорт на настоящей паре старой и новой сборок
+   одного origin: pending intent, точный владелец, карантин, сохранённый источник,
+   Service Worker fence и повтор после обновления.
 4. Завершить UI повтора/разрешения конфликтов, backup, экспорт и очистку
    всех stores без потери ожидающих операций.
 5. Пройти полную [матрицу lifecycle](sync-model.md#матрица-приёмки), staging

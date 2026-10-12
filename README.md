@@ -68,6 +68,9 @@ backend; порядок и ограничения описаны в [CONTRIBUTIN
 и регистрации, guarded bootstrap/hydration, персональное меню и привязка
 HTTP достижений и `useFamilyCloud` к исходной сессии. Семейное меню на `405238b`
 сохраняет меню, порции и покупки одним family/week CAS через ту же outbox.
+Runtime P0.8 также подключает legacy-импорт после свежего `/api/me` и закрывает
+отправку, пока Service Worker не подтвердит все same-origin вкладки. Реальная
+миграция pending legacy-записи между old/new bundles остаётся открытой.
 Границы реализации и точные результаты — в [статусе проекта](docs/project-status.md).
 
 Подтверждённый [CI опубликованной ревизии `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
@@ -105,8 +108,9 @@ CI preview-компонента подтверждён на `076f4ac`; mock-фи
 прошёл отдельно: 952 unit, 229 browser passed / 9 skips.
 
 Следующие задачи: завершить PWA/lifecycle-приёмку и совместимый откат,
-защитить остальные AI/report/retry/family callbacks, подключить runtime
-legacy-импорт, разрешение конфликтов и backup/экспорт/очистку.
+защитить остальные AI/report/retry/family callbacks, проверить old/new
+legacy migration на настоящей pending-записи, завершить разрешение конфликтов
+и backup/экспорт/очистку.
 Порядок и критерии готовности — в [TASKS](TASKS.md).
 
 PR #93 не слит в защищённую main. Реальные OAuth, BFCache на устройствах,

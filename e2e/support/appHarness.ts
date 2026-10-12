@@ -378,10 +378,24 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
       ...(options.supported ? { pushManager } : {}),
       async update() {},
     });
+    const controller = {
+      scriptURL: '/sw.js',
+      postMessage(message: unknown, transfer: Transferable[] = []) {
+        if (!message || typeof message !== 'object' || !('type' in message)
+          || message.type !== 'FITFOCUS_LEGACY_WRITER_FENCE_CHECK') return;
+        const request = message as { challengeId?: unknown; buildId?: unknown };
+        const port = transfer[0] as MessagePort | undefined;
+        if (!port || typeof request.challengeId !== 'string' || typeof request.buildId !== 'string') return;
+        port.postMessage({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_REPLY', challengeId: request.challengeId,
+          workerBuildId: request.buildId, complete: true,
+          clients: [{ id: 'e2e-current-client', buildId: request.buildId }] });
+      },
+    };
 
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
       value: Object.assign(new EventTarget(), {
+        controller,
         async getRegistration() {
           return registration;
         },

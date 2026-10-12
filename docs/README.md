@@ -1,6 +1,6 @@
 # Документация FitFocus
 
-Обновлено: 12.10.2026.
+Обновлено: 13.10.2026.
 
 Начните с [текущего состояния проекта](project-status.md): проверенный SHA,
 готовые компоненты, оставшаяся работа и ближайшие шаги.
@@ -190,7 +190,10 @@ auth/bootstrap/legacy lifecycle этим этапом не закрыты.
 outbox до AI-запроса и убирает угадывание владельца/перенос storage prefix
 при входе. HTTP bootstrap/state-hydration и auth-fence добавлены следующим
 компонентом `dac2de2`; [проверки и границы](bootstrap-hydration.md).
-Остальные callbacks, runtime legacy и полный lifecycle остаются открытыми.
+Runtime legacy уже подключён: владелец выводится только из свежего `/api/me`,
+а отправка требует Service Worker подтверждения всех same-origin вкладок.
+Открыта проверка настоящей legacy-записи на паре old/new bundles; также остаются
+другие callbacks и полный lifecycle.
 
 ## Прежние материалы
 

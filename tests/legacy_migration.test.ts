@@ -17,7 +17,8 @@ let migration: LegacyQueueMigration;
 let outbox: DurableOutbox;
 let source: { getItem: ReturnType<typeof vi.fn<(key: string) => string | null>> };
 const verifiedOwners = () => new Map([[key, [accountId]], [otherKey, [accountId]]]);
-const options = () => ({ verifiedOwners: verifiedOwners(), writersStopped: true });
+const currentWriterFence = () => ({ buildId: 'test-build', checkedAtMs: Date.now(), challengeId: crypto.randomUUID(), clientIds: ['test-client'] });
+const options = () => ({ verifiedOwners: verifiedOwners(), verifyWritersStopped: async () => currentWriterFence() });
 
 beforeEach(() => {
   rawSource = JSON.stringify([put]);
@@ -66,6 +67,13 @@ describe('atomic resumable legacy migration', () => {
     expect(await migration.migrate(options())).toMatchObject({ status: 'completed', sendAllowed: true });
     expect(await outbox.list(accountId)).toHaveLength(1);
     expect(await claim()).not.toBeNull();
+  });
+
+  it('keeps sending closed when the all-client writer proof is stale', async () => {
+    expect(await migration.migrate({ verifiedOwners: verifiedOwners(), verifyWritersStopped: async () => ({
+      ...currentWriterFence(), checkedAtMs: Date.now() - 6_000,
+    }) })).toMatchObject({ status: 'partial', writersStopped: false, sendAllowed: false });
+    expect(await claim()).toBeNull();
   });
 
   it('does not duplicate imported operations after reload, array reorder or retry metadata changes', async () => {
@@ -299,11 +307,11 @@ describe('migration completion and concurrent recovery', () => {
       if (this.name === STATE_STORES.migrationItems) throw new DOMException('Interrupted import', 'AbortError');
       return originalPut.apply(this, args);
     });
-    await expect(migration.migrate({ verifiedOwners: verifiedOwners(), writersStopped: previousFence })).rejects.toMatchObject({ kind: 'aborted' });
+    await expect(migration.migrate({ verifiedOwners: verifiedOwners(), verifyWritersStopped: previousFence ? async () => currentWriterFence() : undefined })).rejects.toMatchObject({ kind: 'aborted' });
     vi.restoreAllMocks();
-    const writersStopped = !previousFence;
-    expect(await migration.migrate({ verifiedOwners: verifiedOwners(), writersStopped })).toMatchObject({
-      status: writersStopped ? 'completed' : 'partial', writersStopped, sendAllowed: writersStopped,
+    const writerFenceVerified = !previousFence;
+    expect(await migration.migrate({ verifiedOwners: verifiedOwners(), verifyWritersStopped: writerFenceVerified ? async () => currentWriterFence() : undefined })).toMatchObject({
+      status: writerFenceVerified ? 'completed' : 'partial', writersStopped: writerFenceVerified, sendAllowed: writerFenceVerified,
     });
   });
 

@@ -40,7 +40,9 @@ export async function readIndexedUserStateRaw(key: string): Promise<string | nul
   if (!database) return null;
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly');
+    const completed = transactionDone(transaction);
     const result = await requestResult(transaction.objectStore(STORE_NAME).get(key));
+    if (!await completed) return null;
     return result && typeof (result as IndexedValue).value === 'string' ? (result as IndexedValue).value : null;
   } catch {
     return null;
@@ -84,6 +86,7 @@ export async function listIndexedUserStateRaw(): Promise<Record<string, string>>
   if (!database) return {};
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly');
+    const completed = transactionDone(transaction);
     const store = transaction.objectStore(STORE_NAME);
     const entries: Record<string, string> = {};
     await new Promise<void>((resolve) => {
@@ -102,6 +105,7 @@ export async function listIndexedUserStateRaw(): Promise<Record<string, string>>
       };
       request.onerror = () => resolve();
     });
+    if (!await completed) return {};
     return entries;
   } catch {
     return {};

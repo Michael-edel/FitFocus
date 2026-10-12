@@ -2092,3 +2092,34 @@ IDB diagnostics и 3+8 раз без них, все `workers=1/retries=0`.
 Эти результаты не объясняют прежние WebKit/Firefox сбои и не закрывают P0.9.
 Browser ZIP ID 11761719261 и rollback ZIP ID 11762830605 сохранены GitHub;
 их metadata приведена в [реестре артефактов](release-artifacts.md#ci-webkit-pwa-update-47da77c).
+
+## 13.10.2026 — runtime P0.8 и all-client writer fence
+
+На базе `ca9482f` runtime legacy-импорт подключён к `StateSync`. Владельцем
+становятся только записи с точным префиксом accountId из свежего `/api/me`;
+прочие записи остаются в карантине. Service Worker перед отправкой требует
+ответ всех same-origin вкладок с одним текущим build id. Параллельные проверки
+одной вкладки объединяются, sender ждёт завершения миграции, а после неё
+повторно проверяется read guard.
+
+Проверки рабочего дерева:
+
+- 1068 unit-тестов в 196 файлах — passed;
+- `typecheck`, domain-strict и storage-strict — passed;
+- API invariants, auth scope, schema parity, privacy coverage и 15 admin guards — passed;
+- production build — passed;
+- настоящий old/new PWA update smoke с durable family intent: Chromium, Firefox и WebKit — 1/1 каждый, без retries.
+
+В браузерном smoke старая открытая вкладка держит send gate закрытым; после
+обновления обе вкладки доказывают текущий build id. Family operation и профиль
+переживают reload. Legacy source содержит 0 записей в этой фикстуре: реальная
+pending запись из старого Map/legacy bundle ещё не проверена. Firefox сообщает
+о прерванном навигацией IndexedDB transaction, но тест отдельно проверяет
+сохранённые данные и допускает только точное сообщение browser warning.
+WebKit access-control сообщение для `/api/me` не совпало с failed request;
+same-origin ответ `/api/me` успешен, поэтому учитывается только этот точный
+console текст. Все остальные ошибки остаются фатальными.
+
+Результаты локальные, незакоммиченные; CI новой ревизии ещё не запускался.
+Следующий критерий P0.8 — old/new bundle smoke с реальной legacy-записью,
+подтверждением владельца, карантином и сохранением источника.

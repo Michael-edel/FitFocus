@@ -63,8 +63,10 @@
 dev-tool Wrangler и native регистрацию SW вместо виртуального клиента Workbox.
 `injectRegister: false` предотвращает вторую регистрацию из HTML.
 Семейное намерение продолжает использовать существующую outbox и IDB v3.
-Этот механизм обновления не доказывает остановку старого Map writer и не
-заменяет SQL-барьер старых семейных writers или доказательства legacy-импорта.
+Само обновление worker не доказывает остановку старого Map writer. Текущий
+runtime отдельно опрашивает все same-origin окна по build id перед открытием
+legacy send gate; этот протокол описан в [контракте миграции](legacy-migration.md).
+Он не заменяет SQL-барьер старых семейных writers.
 
 ## Проверки и границы
 
@@ -106,8 +108,8 @@ workers=1, retries=0, 12,2 мин. Из них семь используют н�
 
 Standalone моделируется через display mode; это не установка на устройстве.
 Синтетический HTTP API не подтверждает OAuth, Worker/D1 или staging.
-Реальный BFCache, старый Map writer, runtime legacy-импорт, совместимый
-rollback artifact, protected-main интеграция и выпуск остаются открытыми.
+Реальный BFCache, миграция legacy intent через настоящую пару old/new bundles,
+совместимый rollback artifact, protected-main интеграция и выпуск остаются открытыми.
 Подробные условия — в [TASKS](../TASKS.md) и [чек-листе](../RELEASE_CHECKLIST.md).
 
 ## Последующая проверка первого SW-клиента — 12.10.2026
@@ -203,3 +205,26 @@ Service Worker, затем проверяет reload, сохранённые `op
 установлена; P0.9 остаётся открытым. E2E fixture и diagnostics опубликованы
 в `47da77c`; [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353)
 завершился success: 383 browser passed / 9 skips, без flaky и proxy errors.
+
+## Runtime legacy writer fence — 13.10.2026
+
+В новой сборке StateSync запускает legacy-импорт после свежего `/api/me` proof.
+Service Worker опрашивает каждое same-origin окно; пока хотя бы одна вкладка
+не подтверждает текущий build id, runtime сохраняет операцию локально и не
+отправляет её. Sender ждёт окончания миграции и повторно проверяет read guard,
+чтобы две стартующие вкладки не создавали друг другу ложную auth-паузу.
+
+Локальный `pwa-update.spec.ts` проверяет настоящие старую/новую PWA-сборки на
+одном origin. До обновления старая вкладка закрывает отправку; после reload
+обе вкладки подтверждают текущий build id, durable family intent и профиль
+сохранены. Chromium, Firefox и WebKit прошли по одному запуску. API-фикстура
+оставлена в offline-состоянии, поэтому очередь остаётся pending. Сценарий пока
+не помещает настоящую запись в `fitfocus.remote-kv-outbox.v1`; полный legacy
+record migration smoke остаётся открытым.
+
+В Firefox во время навигации возникает сообщение об IndexedDB-транзакции,
+прерванной переходом страницы; тест принимает только этот точный browser warning
+после проверки сохранённых `opId` и profile. В WebKit встречается сообщение
+access-control для `/api/me`, но Playwright не фиксирует failed request, а
+same-origin ответ имеет статус 200; тест оставляет узкий фильтр, остальные
+ошибки консоли продолжают валить сценарий. Полный CI этой версии ещё не запускался.

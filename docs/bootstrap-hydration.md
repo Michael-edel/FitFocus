@@ -142,6 +142,7 @@ payload: независимый редактор со старой версие�
   его причина ещё не подтверждена.
 - [ ] Получить полную приёмку без retries и проверить CI итогового HEAD.
 
-Остальные family/AI callbacks, runtime legacy-импорт с доказательствами
-владельца и остановки старых writers, UI конфликтов, backup/экспорт/очистка
-и выпуск остаются отдельными незакрытыми задачами в [TASKS](../TASKS.md).
+После этого снимка runtime legacy подключён: owner берётся из свежего `/api/me`,
+а Service Worker fence ждёт подтверждения всех same-origin вкладок. Остаются
+old/new migration smoke с настоящим intent, остальные family/AI callbacks,
+UI конфликтов, backup/экспорт/очистка и выпуск; критерии — в [TASKS](../TASKS.md).

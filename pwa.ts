@@ -8,10 +8,12 @@
 import { isRecord } from './safeJson';
 import { fetchWithResilience } from './services/httpClient';
 import { registerPwaUpdates } from './services/pwaRegistration';
+import { respondToLegacyWriterFence } from './storage/legacyWriterFence';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
 let pushRecoveryInFlight: Promise<void> | null = null;
+let legacyWriterFenceListenerInstalled = false;
 
 export function ensurePWAStarted() {
   if (!pwaInitPromise) {
@@ -78,11 +80,20 @@ export function installPushSubscriptionRecovery(): void {
   });
 }
 
+function installLegacyWriterFenceResponder(): void {
+  if (legacyWriterFenceListenerInstalled || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  legacyWriterFenceListenerInstalled = true;
+  navigator.serviceWorker.addEventListener('message', (event: MessageEvent<unknown>) => {
+    respondToLegacyWriterFence(event, __FITFOCUS_BUILD_ID__);
+  });
+}
+
 async function initPWA() {
   const env = import.meta.env;
   if (!env) return;
 
   installPushSubscriptionRecovery();
+  installLegacyWriterFenceResponder();
 
   try {
     const storedBuildId = localStorage.getItem('fitfocus.build.id');
