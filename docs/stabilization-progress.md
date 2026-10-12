@@ -1864,3 +1864,25 @@ Desktop/Android screenshots просмотрены: читаемый непро�
 на 14 дней добавлено для будущих CI-падений, rollback .tar — на 90 после приёмки.
 HTTP/D1-переход точного нового кандидата и CI компонента ещё выполняются отдельно.
 Runtime legacy/old writers, protected main, staging и deploy остаются открытыми.
+
+## HTTP/D1 нового сохранённого архива — 12.10.2026
+
+Компонент опубликования подготовлен коммитом
+`bd763ece5897e5718eb05dd6567bb986f3a34f45` (21 файл, включая инструменты,
+npm/lock, workflow, проверки и MD). После коммита `npm run release:check --
+<outputs/rollback-98d4910-v1>` завершился exit 0: **23 HTTP** для кандидата
+`bd763ece5897e5718eb05dd6567bb986f3a34f45` → сохранённого `.tar` `98d49101e15ad652e1960381ce00e00e8dac0d44`.
+Архив распакован и проверен; два полных Pages Worker запущены поочерёдно
+на `http://127.0.0.1:62511` с одной локальной D1 и синтетическими аккаунтами.
+Canonical profile/family и shopping читают 700 вместо legacy 333/999,
+CAS и новый commit после отката работают; stale=409, не-владелец=403,
+неверная session=401, старые writers=409. Пустые canonical поколения
+возвращают пустой список, legacy строки 333/999 сохранены. Inventory worker
+после выполнения проверен. Процессы остановлены собственным finally.
+Server functions/migrations между SHA одинаковы (git diff --quiet); этот
+результат подтверждает сохранённые release bytes и совместимость данных,
+но не разные серверные алгоритмы. Лог `rollback-98d4910-http-final.log`,
+worker log `C:\Users\User\AppData\Local\Temp\fitfocus-rollback-http-37zvMz\worker.log`; внешнее outputs/temp, production не использован.
+Следующий MD-коммит фиксирует доказательства без изменения исполняемого кода.
+CI точного итогового HEAD и загрузка `.tar` ещё проверяются отдельно.
+Реальные устройства/OAuth/BFCache/staging, runtime legacy, main и deploy открыты.
