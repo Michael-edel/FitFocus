@@ -55,7 +55,10 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
   expect(verifyReleaseArtifact(rollbackPwaRoot).sourceSha).toBe(rollbackPwaCommit);
   const rollbackScript = readFileSync(resolve(rollbackPwaDist, 'index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
   expect(rollbackScript).toBeTruthy();
-  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), status === 'pending' ? { retryAfterSeconds: 20 } : {}); server.release();
+  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), {
+    ...(status === 'pending' ? { retryAfterSeconds: 20 } : {}),
+    ...(status === 'conflicted' ? { conflictFirstFamilyPut: true } : {}),
+  }); server.release();
   const page = await context.newPage(), observer = await context.newPage(), errors: string[] = [], diagnostics: string[] = [], googleRequests: string[] = [];
   const failedApiRequests: Array<{ tab: string; path: string; errorText: string | null }> = [];
   const meResponses: Array<{ tab: string; status: number }> = [];
@@ -118,10 +121,6 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await page.getByPlaceholder('Как к вам обращаться').fill('Профиль перед откатом');
     await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Профиль перед откатом');
-    if (status === 'conflicted') {
-      server.recover(true);
-      await page.getByRole('button', { name: /Синхронизировать сейчас/ }).click();
-    }
     await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe(status);
     const operation = (await saved(page)).operations[0];
     const beforeTiming = await retryTiming(page);

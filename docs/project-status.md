@@ -5,15 +5,12 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Последний успешный CI опубликованной ветки —
-`47da77cdf6a7a8c72223a914545fa2724ab6263d`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353),
-job 114917387935, завершён 12.10.2026 в 17:18:53 UTC.
-1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,6 мин.
-В итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
-HTTP/D1 прошёл 23 запроса: кандидат `cf310dd` → retained `98d4910`.
-Артефакты загружены;
-[метаданные](release-artifacts.md#ci-webkit-pwa-update-47da77c).
+Последний успешный полный CI опубликованной ветки —
+`a048289287b90e752b1db47bdab3f0f502f5a5c9`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38305940088),
+job 115000326636. Прошли 1068 unit / 196 файлов; browser — 382 passed / 9 skips,
+17,6 мин. Summary отметил один flaky в desktop WebKit rollback; повтор прошёл.
+Детали и исправление тестовой гонки приведены ниже.
 
 ## Рабочее дерево — P0.8 runtime
 
@@ -33,8 +30,15 @@ Unit, типизация, schema/privacy/auth/API checks и build прошли; 
 исправлены ожидания `pause: protocol`, Firefox-чтение IDB и точная классификация
 предупреждений/отмены `/api/me` в PWA-сценариях. После этих правок целевые
 прогоны прошли: owned-state + weekly menu — 77/77 на семи проектах, PWA update —
-7/7, PWA rollback — 14/14, все без retries. Полный CI нового коммита ещё ожидается;
-этот результат не закрывает миграцию настоящей legacy-записи.
+7/7, PWA rollback — 14/14, все без retries. Следующий коммит
+`a048289287b90e752b1db47bdab3f0f502f5a5c9` прошёл
+[полный CI](https://github.com/Michael-edel/FitFocus/actions/runs/38305940088):
+1068 unit / 196 файлов; 382 browser passed / 9 skips, 17,6 мин. В summary
+отмечен один flaky: WebKit rollback сначала оставил операцию `pending` вместо
+`conflicted`, а retry прошёл. Исправляется сама E2E-фикстура: теперь для этого
+сценария backend отвечает 409 на первую запись, без перехода через 503/backoff.
+Этот вариант локально прошёл 3/3 на desktop WebKit; CI ещё не запускался.
+Ни один из этих прогонов не закрывает миграцию настоящей legacy-записи.
 
 Предыдущий CI —
 `7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
