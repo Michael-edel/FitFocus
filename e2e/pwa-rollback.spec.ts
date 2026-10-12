@@ -1,0 +1,148 @@
+import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { rollbackPwaDist, rollbackPwaRoot, rollbackPwaCommit } from './support/preparePwaFixture';
+import { verifyReleaseArtifact } from '../scripts/release-artifact.mjs';
+import { startPwaReleaseServer } from './support/pwaReleaseServer';
+import { mockApp, openApp } from './support/appHarness';
+import { healthy, navigate, saved } from './support/familyHarness';
+
+async function markers(page: Page, seed = false) {
+  return page.evaluate(async seed => {
+    const open = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); });
+    try {
+      const tx = db.transaction(['outbox_migration_items', 'outbox_migration_unknown', 'outbox_meta'], seed ? 'readwrite' : 'readonly');
+      if (seed) {
+        // Sentinels test store retention, not runtime migration ownership/import.
+        tx.objectStore('outbox_migration_items').put({ id: 'rollback-ledger', marker: 'keep-import-receipt' });
+        tx.objectStore('outbox_migration_unknown').put({ id: 'rollback-quarantine', rawRecord: null, reason: 'not-an-object' });
+      }
+      const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      const [ledger, quarantine, fence] = await Promise.all([
+        read(tx.objectStore('outbox_migration_items').get('rollback-ledger')),
+        read(tx.objectStore('outbox_migration_unknown').get('rollback-quarantine')),
+        read(tx.objectStore('outbox_meta').get('auth-fence')),
+      ]);
+      await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error); });
+      return { version: db.version, stores: Array.from(db.objectStoreNames), ledger, quarantine, fence };
+    } finally { db.close(); }
+  }, seed);
+}
+
+async function retryTiming(page: Page) {
+  return page.evaluate(async () => {
+    const open = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); });
+    try {
+      const rows = await new Promise<Array<{ resource: string; opId: string; status: string; retryCount: number; nextAttemptAtMs: number;
+        attempt?: { startedAtMs: number } }>>((resolve, reject) => {
+        const get = db.transaction('outbox').objectStore('outbox').getAll(); get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error);
+      });
+      return { nowMs: Date.now(), rows: rows.filter(row => row.resource === 'familyMenu').map(({ opId, status, retryCount, nextAttemptAtMs, attempt }) =>
+        ({ opId, status, retryCount, nextAttemptAtMs, startedAtMs: attempt?.startedAtMs })) };
+    } finally { db.close(); }
+  });
+}
+
+for (const status of ['pending', 'conflicted'] as const) test(`compatible artifact rollback preserves ${status} family intent and IDB v3`, async ({ context }, info) => {
+  test.setTimeout(120_000);
+  expect(verifyReleaseArtifact(rollbackPwaRoot).sourceSha).toBe(rollbackPwaCommit);
+  const rollbackScript = readFileSync(resolve(rollbackPwaDist, 'index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
+  expect(rollbackScript).toBeTruthy();
+  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), status === 'pending' ? { retryAfterSeconds: 20 } : {}); server.release();
+  const page = await context.newPage(), observer = await context.newPage(), errors: string[] = [], diagnostics: string[] = [], googleRequests: string[] = [];
+  let recoveryTiming: Awaited<ReturnType<typeof retryTiming>> | undefined;
+  let recoveryTimeoutMs: number | undefined;
+  for (const tab of [page, observer]) {
+  tab.on('request', request => {
+    if (/(^|\.)google\.com$/.test(new URL(request.url()).hostname)) googleRequests.push(request.url());
+  });
+  tab.on('pageerror', error => errors.push(error.message));
+  tab.on('console', message => {
+    if (!['warning', 'error'].includes(message.type())) return;
+    diagnostics.push(message.text());
+    if (message.location().url.includes('/api/family/menu/state') && /\b(409|503)\b/.test(message.text())) return;
+    errors.push(message.text());
+  });
+  }
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true,
+      push: { standalone: info.project.name.includes('-pwa') } });
+    await openApp(page, server.origin + '/#family'); await expect(page).toHaveTitle(/FitFocus/);
+    await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
+    await mockApp(observer, { session: 'app', realServiceWorker: true, nativeApi: true,
+      push: { standalone: info.project.name.includes('-pwa') } });
+    await openApp(observer, server.origin + '/#family');
+    await expect(observer.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+    const candidateScript = await page.locator('script[type="module"][src]').getAttribute('src');
+    expect(candidateScript).not.toBe(rollbackScript);
+    await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+    await expect.poll(() => server.counts.put).toBeGreaterThan(0);
+    await navigate(page, 'Настройки');
+    await page.getByPlaceholder('Как к вам обращаться').fill('Профиль перед откатом');
+    await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Профиль перед откатом');
+    if (status === 'conflicted') {
+      server.recover(true);
+      await page.getByRole('button', { name: /Синхронизировать сейчас/ }).click();
+    }
+    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe(status);
+    const operation = (await saved(page)).operations[0];
+    const beforeTiming = await retryTiming(page);
+    const before = await markers(page, true); expect(before.fence?.revision).toBeGreaterThan(0);
+    server.rollback();
+    await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
+    await expect(page.getByRole('button', { name: 'Обновить приложение', exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state)).toBe('installed');
+    await page.screenshot({ path: info.outputPath('rollback-ready.png') });
+    const reloaded = [page, observer].map(tab => tab.waitForEvent('framenavigated', frame => frame === tab.mainFrame()));
+    await page.getByRole('button', { name: 'Обновить приложение', exact: true }).click({ noWaitAfter: true });
+    await Promise.all(reloaded);
+    await Promise.all([page.waitForLoadState('load'), observer.waitForLoadState('load')]);
+    await expect(page.locator('script[type="module"][src]')).toHaveAttribute('src', rollbackScript!);
+    await expect(observer.locator('script[type="module"][src]')).toHaveAttribute('src', rollbackScript!);
+    await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+    await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe(status);
+    const restored = (await saved(page)).operations[0];
+    expect(restored.opId).toBe(operation.opId); expect(restored.value).toBe(operation.value);
+    expect(restored.serverSnapshot).toEqual(operation.serverSnapshot);
+    const beforeRetry = beforeTiming.rows.find(row => row.opId === operation.opId)!;
+    const restoredRetry = (await retryTiming(page)).rows.find(row => row.opId === operation.opId)!;
+    expect(restoredRetry.retryCount).toBeGreaterThanOrEqual(beforeRetry.retryCount);
+    expect(restoredRetry.nextAttemptAtMs).toBeGreaterThanOrEqual(beforeRetry.nextAttemptAtMs);
+    expect(await markers(page)).toEqual(before);
+    await expect.poll(async () => (await saved(observer)).operations[0]?.opId).toBe(operation.opId);
+    expect(await markers(observer)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+    await navigate(page, 'Настройки');
+    await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль перед откатом');
+    if (status === 'pending') {
+      server.recover(); await page.getByRole('button', { name: /Синхронизировать сейчас/ }).click();
+      recoveryTiming = await retryTiming(page);
+      // Manual sync refreshes proof; it must not erase persisted Retry-After or a live claim.
+      const row = recoveryTiming.rows.find(row => row.opId === operation.opId);
+      const eligibleAtMs = row?.status === 'sending' && row.startedAtMs !== undefined
+        ? row.startedAtMs + 30_000 // Production sender lease, including recovery of an interrupted attempt.
+        : row?.nextAttemptAtMs ?? recoveryTiming.nowMs;
+      recoveryTimeoutMs = Math.max(10_000, eligibleAtMs - recoveryTiming.nowMs + 5_000);
+      await expect.poll(() => server.counts.accepted, { timeout: recoveryTimeoutMs }).toBe(1);
+      if (row?.status === 'pending') expect(server.counts.acceptedAtMs).toBeGreaterThanOrEqual(row.nextAttemptAtMs);
+      await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+      await page.reload(); await page.waitForLoadState('load');
+      await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+      expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+      expect(await markers(page)).toEqual(before);
+    } else { expect(server.counts.accepted).toBe(0); }
+    expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]); await healthy(page, errors); await healthy(observer, errors);
+    await page.screenshot({ path: info.outputPath('rollback-preserved.png') });
+    await info.attach('rollback-proof', { body: JSON.stringify({ sourceSha: rollbackPwaCommit, rollbackScript,
+      candidateScript, status, operation, before, beforeTiming, after: await markers(page), recoveryTiming, recoveryTimeoutMs,
+      counts: server.counts, diagnostics, googleRequests }), contentType: 'application/json' });
+  } catch (error) {
+    console.error('Rollback diagnostics:', JSON.stringify({ errors, diagnostics, googleRequests, recoveryTiming, recoveryTimeoutMs,
+      timing: await retryTiming(page).catch(() => null), unexpectedApi: server.unexpectedApi, counts: server.counts }));
+    await page.screenshot({ path: info.outputPath('rollback-failed.png'), timeout: 3000 }).catch(() => {}); throw error;
+  } finally { await Promise.allSettled([page.close(), observer.close()]); await server.close(); }
+});

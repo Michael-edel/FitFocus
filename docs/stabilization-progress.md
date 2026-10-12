@@ -1814,3 +1814,53 @@ Firefox PWA-update в первой попытке превысил 90 секун
 и lifecycle требуют отдельной диагностики. В логе также один preview
 `ECONNREFUSED` на `/api/me`; исправление teardown не подтверждено.
 Незакоммиченный артефактный компонент пока закрепляет прежний `574de76`.
+
+## Сверка CI документации 5828f29 — 12.10.2026
+
+[Run 38246462224](https://github.com/Michael-edel/FitFocus/actions/runs/38246462224)
+завершился success; сверены head_sha `5828f29a519d7350241f24c6acb8f83f78aac13e`,
+terminal job 114801439248 и лог. 1047 unit / 193 файла; browser — 341 passed /
+9 skips, 11,1 мин, без flaky в summary. В логе четыре preview `ECONNREFUSED`;
+teardown и прежний Firefox timeout не считаются исправленными MD-коммитом.
+Артефакты run `98d4910` отдельно запрошены через GitHub: список пустой,
+поэтому trace первой неуспешной Firefox-попытки этим run не сохранён.
+Следующий workflow добавляет сохранение browser report/test-results на 14 дней.
+
+## Новый архив 98d4910: browser-приёмка — 12.10.2026
+
+Рабочий компонент на HEAD `5828f29a519d7350241f24c6acb8f83f78aac13e`
+переносит preparer/HTTP checker/workflow на точную базу
+`98d49101e15ad652e1960381ce00e00e8dac0d44`. Старый v2 `3baac01` не заменён.
+Добавлены упаковщик, HTTP checker, шесть integrity unit и 21 rollback/install
+сценарий; Wrangler 4.149.0 закреплён как devDependency. Старые записи lockfile
+не изменены/не удалены; добавлены 85 записей Wrangler и его зависимостей.
+
+Архив `rollback-98d4910-v1.tar` во внешнем outputs: 12529664 байта,
+SHA-256 `d1778970dbd34313c7c9f9b849bb1c8e549d9fb39ea04218446e6671f8f86060`. Manifest: 82 файла,
+Node v24.19.0/Wrangler 4.149.0,
+IDB v3/D1 0021. Сборка через точный git archive, полный Pages Worker успешно
+скомпилирован; release:verify прошёл. Source, lock, migrations, assets и worker
+сохранены вместе. Безусловный Google SDK отсутствует в HTML.
+
+`npm run test:e2e -- e2e/pwa-rollback-install.spec.ts e2e/pwa-rollback.spec.ts
+e2e/pwa-update.spec.ts --workers=1 --retries=0 --reporter=list` с
+FITFOCUS_ROLLBACK_ARTIFACT, указывающим на этот архив: **28 passed (13,2 мин)**,
+по четыре сценария на Chromium/Firefox/WebKit/Android/Android PWA/iPhone Safari/
+iPhone PWA. Лог `rollback-98d4910-seven-final.log`, процесс завершился exit 0.
+Проверены fresh install/явное обновление, pending/conflicted rollback,
+обе вкладки, JS артефакта/кандидата, профиль, IDB v3, opId/value/serverSnapshot,
+ledger/quarantine/auth-fence. Pending доставлен после восстановления API
+не раньше сохранённого Retry-After; production claim/backoff не изменены.
+Новый rollback-клиент не запрашивает Google SDK; подмены SDK в этих тестах нет.
+Исторический v2 forward-тест сохраняет только ранее описанную внешнюю подмену.
+
+Root typecheck и шесть integrity unit прошли; предыдущий полный прогон этого
+компонента — 1053 unit / 194 файла — сохранён выше. Browser plugin not available;
+использован repository Playwright, production build и настоящий SW/native HTTP.
+Desktop/Android screenshots просмотрены: читаемый непрозрачный баннер,
+доступные кнопки, framework overlay отсутствует. API synthetic; это не OAuth,
+реальное устройство или staging. Прежний CI Firefox timeout не воспроизведён
+этой матрицей и не считается исправленным. Сохранение browser diagnostics
+на 14 дней добавлено для будущих CI-падений, rollback .tar — на 90 после приёмки.
+HTTP/D1-переход точного нового кандидата и CI компонента ещё выполняются отдельно.
+Runtime legacy/old writers, protected main, staging и deploy остаются открытыми.
