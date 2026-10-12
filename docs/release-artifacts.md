@@ -222,3 +222,24 @@ job 114853979454, завершился success на head
 оставшаяся приёмка — в [TASKS](../TASKS.md) и [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md).
 Реальные устройства, OAuth/BFCache, runtime legacy, удалённая D1, staging,
 защищённая main и production-выпуск этим локальным компонентом не закрываются.
+
+## CI WebKit PWA update `47da77c`
+
+[Run 38280645353](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353),
+job 114917387935, завершился success на head
+`47da77cdf6a7a8c72223a914545fa2724ab6263d`: 1053 unit / 194 файла,
+383 browser passed / 9 skips, 20,6 мин. В job log нет flaky, preview proxy
+errors или ECONNREFUSED. HTTP/D1 прошёл 23 запроса; кандидат
+`cf310dd305fd15a957ab24188f40060f3790f9fe` → retained
+`98d49101e15ad652e1960381ce00e00e8dac0d44`.
+
+| Артефакт | GitHub ID | ZIP bytes | SHA-256 ZIP | Срок хранения |
+|---|---:|---:|---|---|
+| fitfocus-browser-38280645353-1 | 11761719261 | 57091750 | 2aa9d8b2c7ffc3d4fe7fa6675b3c039ea0cb54fb4a33a37ff61563e7f581015e | 26.10.2026 17:18:26 UTC |
+| fitfocus-rollback-98d4910-38280645353-1 | 11762830605 | 3889665 | 8f872545b63f418aedb0dd00ec8ce8563ac00ce709aac4303c088cf24f805e13 | 10.01.2027 16:54:30 UTC |
+
+Значения взяты из GitHub artifact metadata; ZIP-файлы этого запуска отдельно
+не скачивались и локально не проверялись. Эта CI включает delayed native PUT
+rollback-test, но не воспроизводит исторический WebKit pageerror. Диагностика
+Firefox на той же ветке дала 11/11 повторов как с IDB-логами, так и без них;
+причина timeout `076f4ac` остаётся неизвестной.

@@ -174,6 +174,14 @@ Typecheck прошёл. Логи и trace — в `outputs/pwa-firefox-repeat3-07
 `outputs/pwa-firefox-idb-trace8` и `outputs/pwa-firefox-saved-diagnostics-final`
 внешнего каталога `C:\Users\User\Documents\Codex\2026-09-17\yf`.
 
+На рабочей ветке `47da77c` desktop Firefox сценарий дополнительно прошёл
+3/3 и 8/8 с IDB-логами (`workers=1/retries=0`). Для сравнения без влияния
+диагностических listeners временно восстановили `pwa-update.spec.ts` и
+`familyHarness.ts` из `076f4ac`; этот uninstrumented вариант на том же
+клиентском bundle прошёл 3/3 и 8/8, также без retries. Исторический сбой
+не воспроизвёлся ни в одной из 22 попыток на этой базе; это не доказывает
+исправление, поскольку первичная причина по-прежнему неизвестна.
+
 ## Повторная проверка WebKit pageerror при PWA update — 12.10.2026
 
 Исторический desktop WebKit pageerror `/api/family/menu/state` возник
@@ -192,5 +200,6 @@ Service Worker, затем проверяет reload, сохранённые `op
 
 Проверка подтверждает только сценарий обновления при отправляемой семейной
 операции. Исторический pageerror не воспроизведён, его первопричина не
-установлена; P0.9 остаётся открытым. Изменения E2E fixture и diagnostics
-находятся в незакоммиченном рабочем дереве; их CI ещё не запускался.
+установлена; P0.9 остаётся открытым. E2E fixture и diagnostics опубликованы
+в `47da77c`; [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353)
+завершился success: 383 browser passed / 9 skips, без flaky и proxy errors.

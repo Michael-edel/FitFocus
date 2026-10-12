@@ -2063,5 +2063,32 @@ job 114896068538: 1053 unit / 194 файла, 383 browser passed / 9 skips,
 Desktop WebKit прошёл 3/3 (`workers=1/retries=0`), 1,5 мин; операция сохранила
 `opId` и payload, fixture подтвердила разрыв задержанного native-ответа,
 pageerror не было. Проверка сценария не установила причину
-исторического pageerror из `5b90249`; P0.9 открыт. Изменения теста/фикстуры
-и это дополнение к MD ожидают коммита и отдельного CI.
+исторического pageerror из `5b90249`; P0.9 открыт. E2E fixture и diagnostics
+опубликованы в `47da77c`; полный CI ниже включил этот сценарий.
+
+## Повтор Firefox IndexedDB без диагностических listeners — 12.10.2026
+
+После push `47da77c` точечный `pwa-update.spec.ts` в desktop Firefox
+прошёл 3/3 и затем 8/8 с IDB-инструментацией (`workers=1/retries=0`). Чтобы
+проверить её влияние на тайминг, тест и `familyHarness.ts` были временно
+восстановлены из опубликованного `076f4ac`, а затем возвращены к HEAD.
+Без listeners тот же Firefox сценарий прошёл 3/3 и 8/8; приложение и
+rollback artifact остались текущими. Все 22 попытки на этой ветке прошли,
+но исторический timeout остаётся необъяснённым и не считается исправленным.
+
+## CI WebKit rollback и Firefox диагностики `47da77c` — 12.10.2026
+
+Опубликованный `47da77cdf6a7a8c72223a914545fa2724ab6263d` прошёл
+[CI 38280645353](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353),
+job 114917387935: success, 1053 unit / 194 файла, 383 browser passed / 9 skips,
+20,6 мин. Полный job log не содержит flaky, preview proxy errors или
+ECONNREFUSED. HTTP/D1 завершился 23 запросами: merge-кандидат
+`cf310dd305fd15a957ab24188f40060f3790f9fe` → retained
+`98d49101e15ad652e1960381ce00e00e8dac0d44`.
+
+Локальный held-PUT WebKit rollback test прошёл 3/3 с подтверждённым разрывом
+native HTTP response. Firefox `pwa-update` на той же ветке прошёл 3+8 раз с
+IDB diagnostics и 3+8 раз без них, все `workers=1/retries=0`.
+Эти результаты не объясняют прежние WebKit/Firefox сбои и не закрывают P0.9.
+Browser ZIP ID 11761719261 и rollback ZIP ID 11762830605 сохранены GitHub;
+их metadata приведена в [реестре артефактов](release-artifacts.md#ci-webkit-pwa-update-47da77c).

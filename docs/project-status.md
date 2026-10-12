@@ -6,18 +6,19 @@
 [журнале стабилизации](stabilization-progress.md).
 
 Последний подтверждённый CI опубликованной ветки —
-`7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38274180638),
-job 114896068538, завершён 12.10.2026 в 16:23:15 UTC.
-1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,1 мин.
+`47da77cdf6a7a8c72223a914545fa2724ab6263d`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353),
+job 114917387935, завершён 12.10.2026 в 17:18:53 UTC.
+1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,6 мин.
 В итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
-Локальная диагностика WebKit ниже проводится на рабочем дереве и требует
-отдельного CI после публикации.
+HTTP/D1 прошёл 23 запроса: кандидат `cf310dd` → retained `98d4910`.
+Артефакты загружены;
+[метаданные](release-artifacts.md#ci-webkit-pwa-update-47da77c).
 
 Предыдущий CI —
-`076f4aca8e9855bb328a3fe695cb0bcd085ddd6f`:
-[success](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999),
-1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,3 мин.
+`7109dcfe13d1c8d065c8de11f842d34ffc894fa6`:
+[success](https://github.com/Michael-edel/FitFocus/actions/runs/38274180638),
+1053 unit / 194 файла; browser — 383 passed / 9 skips, 20,1 мин.
 В итоговых логах нет flaky, ECONNREFUSED и preview proxy errors.
 Причины прежнего WebKit access-control сбоя `5b90249` и Firefox timeout
 `98d4910` не установлены. Успешный MD-прогон не объявляется их исправлением.
@@ -37,10 +38,11 @@ Mock-фикстура опубликована в `085fcc1` и в предыду
 0019 → 0020 → проекция проверены локально;
 [инструкция выпуска](profile-cas-rollout.md). Staging и выпуск ещё открыты.
 
-На базе `7109dcf` WebKit rollback-сценарий проверен отдельно: 3/3 на рабочем
-E2E-дереве с задержанным native PUT, `workers=1/retries=0`. Во время обновления
-SW операция сохранила `opId` и payload; pageerror не возник. Историческая ошибка
-из `5b90249` не воспроизведена, её первопричина остаётся неизвестной.
+В опубликованный `47da77c` вошёл WebKit rollback-сценарий с задержанным native
+PUT. Локально он прошёл 3/3 (`workers=1/retries=0`), полный CI тоже завершился
+success. Во время обновления SW операция сохранила `opId` и payload; pageerror
+не возник. Историческая ошибка из `5b90249` не воспроизведена, её первопричина
+остаётся неизвестной.
 [Протокол проверки](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026).
 
 ## Опубликованный компонент — origin preview
@@ -55,15 +57,17 @@ Firefox-фикстуре; после её исправления итоговы�
 
 [CI этого компонента](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999)
 завершился success. Локальные результаты и CI не подтверждают deployment,
-не подтверждают deployment, его D1 binding, APP_URL, OAuth и edge-правила.
+его D1 binding, APP_URL, OAuth и edge-правила.
 Приёмка staging и выпуск остаются открытыми.
 
 Отдельная локальная диагностика Firefox IndexedDB не закрыта: на базе `076f4ac`
 в первом `retries=0` прогоне из трёх таймаут воспроизвёлся; далее прошло
 17 запусков с IDB open/versionchange logging и ещё один со стадийной диагностикой,
-все без retry. Тест теперь прикладывает события
+все без retry. На рабочей ветке `47da77c` дополнительно прошли 3+8 запусков
+с IDB-логами и 3+8 без них; для последнего сравнения временно восстановлены
+исторические тест/helper из `076f4ac`, затем возвращены файлы HEAD. Тест теперь прикладывает события
 IDB open/blocked/upgrade, connection lifecycle и этапы чтения при сбое.
-Поскольку сбой пока не повторился с новым журналом, первопричина неизвестна;
+Все новые повторы прошли; поскольку сбой снова не воспроизвёлся, первопричина неизвестна;
 [условия и trace](pwa-updates.md#повторное-исследование-firefox-indexeddb-timeout--12102026).
 
 ## Что это за проект
