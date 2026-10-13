@@ -4,13 +4,14 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Последний полный CI на `92a5be2` завершился success
-([run `38444933538`](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538)):
-1115 unit / 198 файлов, 484 browser passed / 25 skipped, guards, typecheck,
-build и rollback/CAS на 23 запросах прошли. Два E2E были flaky и прошли retry;
-их точные симптомы и локальные повторы описаны в [журнале](stabilization-progress.md).
-Новая P0.5 achievement account-switch acceptance из `b44d46e` прошла локально
-7/7 browser/PWA-профилей с `retries=0`; полный CI этого SHA ожидается.
+Последний полный CI проверил SHA [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
+и завершился success ([run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)):
+unit прошли во всех 198 файлах; Playwright сообщил 501 passed / 29 skipped и
+два flaky-теста, прошедших retry; rollback/CAS job прошёл. Локальные повторы этих
+двух сценариев прошли 10/10 каждый, но первопричины не установлены; см.
+[журнал](stabilization-progress.md). P0.5 achievement account-switch acceptance
+из `b44d46e` включена в этот HEAD; профильный локальный прогон прошёл 7/7
+browser/PWA-проектов с `retries=0`.
 
 ## P0.8 — IndexedDB outbox transaction stability
 
@@ -117,20 +118,17 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 | P0.1 — CI и зависимости | Исправление audit и push; зелёный CI опубликованной ветки | [Журнал](stabilization-progress.md), [workflow](../.github/workflows/ci.yml) | Интеграция зависимостей через защищённую main; CI release SHA |
 | P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей, profile и familyMenu | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора и полный lifecycle |
 | P0.3 — auth-пауза | Локальная запись продолжается; отправка требует подтверждения владельца; runtime legacy использует свежий `/api/me` и all-client fence | [State sender](../tests/state_sync.test.ts), [runtime migration](../tests/state_sync_legacy_migration.test.ts), [profile E2E](../e2e/profile-durability.spec.ts), [контракт](state-sender.md) | Остальные callbacks, old/new legacy migration smoke и повторный вход на staging |
-| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week; delayed invite и family AI callbacks после входа другого аккаунта проверены на `f9c8425`/`bca2eda` | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; смена членства и явная цель семьи |
-| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; личные покупки следуют profile CAS на `4736ff5`, familyMenu использует исходный guard и family/week CAS на `405238b`; недельный AI-отчёт и его retry защищены; Coach/plateau account-switch E2E прошло локально 6/6 в трёх desktop engines, точный CI `9bc98ee` — success ([run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)); delayed family invite/AI и personal-plan retry прошли; полный CI HEAD `e96025d` — success, personal-plan acceptance included, 483 browser passed / 25 skipped, 3 flaky (all retries passed) ([run 38440675173](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173)) | [Read guard](../tests/session_read_guard.test.ts), [AI account-switch E2E](../e2e/ai-callback-account-switch.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [weekly report unit/E2E](weekly-ai-report-session.md), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | Остальные AI retry и family producers; явная цель/членство семьи, полная browser-матрица и общий lifecycle |
+| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week; delayed invite и family AI callbacks после входа другого аккаунта проверены на `f9c8425`/`bca2eda`; invite/member используют явную семью на `2bbec11` | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; приёмка смены членства и целей семьи в оставшихся writers |
+| P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; личные покупки следуют profile CAS на `4736ff5`, familyMenu использует исходный guard и family/week CAS на `405238b`; недельный AI-отчёт и его retry защищены; Coach/plateau account-switch E2E прошло локально 6/6 в трёх desktop engines, точный CI `9bc98ee` — success ([run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)); delayed family invite/AI, personal-plan retry, achievement account-switch и explicit family target включены в полный CI `9bdeb47` ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)); этот запуск сообщил 2 flaky E2E, оба прошли retry | [Read guard](../tests/session_read_guard.test.ts), [AI account-switch E2E](../e2e/ai-callback-account-switch.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [weekly report unit/E2E](weekly-ai-report-session.md), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts) | Остальные AI retry и family producers; staging, общий lifecycle и приёмка release |
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks; runtime проверяет владельца legacy и build id всех вкладок | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [runtime migration](../tests/state_sync_legacy_migration.test.ts), [legacy browser smoke](../e2e/legacy-outbox-migration.spec.ts), [контракт](sync-model.md) | Конкурентные записи old/new разных и одинаковых ключей, повтор после reload, logout/login и смена аккаунта |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; атомарные import/ledger; свежий auth proof владельца; Service Worker all-client fence; old/new smoke прошёл локально 7/7 и включён в успешный CI `00cd005`; JSON backup v3 экспортирует и атомарно восстанавливает все пять stores; CI `2aff6c3` passed | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [runtime integration](../tests/state_sync_legacy_migration.test.ts), [backup](backup-restore.md), [browser smoke](../e2e/legacy-outbox-migration.spec.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Staging и полный rollback/release acceptance; account-scoped очистка всех stores и conflict UI |
 | P0.9 — приёмка | Есть unit и browser сценарии отдельных компонентов; mock teardown проходит CI без preview proxy errors; опубликованный WebKit held-PUT rollback прошёл CI | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026) | Firefox PWA timeout и исторический WebKit sender error с неизвестными причинами, реальные устройства/BFCache/OAuth/staging и проверка отката |
 
-Последний полный CI на проверенном HEAD `e96025d` завершился success
-([run `38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173)):
-1115 unit / 198 файлов, 483 browser passed / 25 skipped и все guards, typecheck,
-build и rollback/CAS на 23 запросах прошли. Три E2E были flaky и прошли retry;
-локальные повторы соответствующих Chromium, Firefox и iPhone PWA сценариев
-прошли 5/5, 5/5 и 3/3. Первопричины не установлены; [журнал](stabilization-progress.md)
-содержит симптомы и ограничения.
+Предыдущий полный CI на проверенном HEAD `e96025d` завершился success
+([run `38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173))
+с тремя flaky E2E, прошедшими retry. Его симптомы и повторы сохранены в
+[журнале](stabilization-progress.md); актуальная проверка — `9bdeb47` выше.
 
 Все P0 остаются открытыми в целом. Успешные части и оставшиеся условия
 нужно читать вместе; результаты mock API не подтверждают поведение реального D1.

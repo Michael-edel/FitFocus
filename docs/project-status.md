@@ -7,16 +7,28 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последний завершённый полный CI относится к SHA
-[`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)
-([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538));
-P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
-исправил последовательные чтения из одной
-IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
-`await`, а parent/head операции выбираются из одного индексного снимка.
-E2E-диагностика сохраняет вложенную причину `Error.cause`.
+Последний завершённый полный CI проверил текущий SHA
+[`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
+([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051))
+и завершился success. Unit прошли во всех 198 файлах; Playwright сообщил 501
+passed, 29 skipped и два flaky-теста, прошедших retry. Rollback/CAS job прошёл,
+артефакт сохранён в CI как `11847145964`.
 
-Полный CI `92a5be2` завершился success: 1115 unit-тестов / 198 файлов,
+Оба flaky-сценария повторены локально по 10 раз с `retries=0`, все повторы
+прошли. В Android PWA Chrome тест quota fault увидел фоновый
+`WEEKLY_AI_REPORT_FAILED` во время проверки ошибок; в iPhone PWA после reload
+появился WebKit access-control warning для `/api/profile`. Причины нестабильности
+под CI не установлены; локальные повторы не доказывают устранение источника.
+
+Предыдущий полный CI на SHA
+[`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)
+([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538))
+исправил последовательные чтения из одной IndexedDB-транзакции: независимые
+запросы ставятся в очередь до первого `await`, а parent/head операции
+выбираются из одного индексного снимка. E2E-диагностика сохраняет вложенную
+причину `Error.cause`.
+
+Тот предыдущий CI `92a5be2` завершился success: 1115 unit-тестов / 198 файлов,
 484 E2E passed / 25 skipped, audit без известных уязвимостей,
 schema/privacy/auth/API guards, три typecheck, build и HTTP/D1 rollback-проверка
 на 23 запросах прошли. Два E2E были flaky и прошли retry: settings durability
@@ -33,7 +45,7 @@ family-menu recovery в desktop WebKit обнаружил access-control warning
 позднего ответа coach/plateau и смены аккаунта добавлены в `9bc98ee` и локально
 прошли 6/6 на desktop Chromium, Firefox и WebKit. Точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
 завершился success. Коммиты [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469) и
-[`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) добавили delayed family invite и AI-menu account-switch E2E; каждый прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный CI для `b66dcb4` прошёл, точный CI для нового AI-сценария `bca2eda` ожидается.
+[`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) добавили delayed family invite и AI-menu account-switch E2E; каждый прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный CI для `b66dcb4` прошёл; оба сценария также входят в проверенный полный HEAD `9bdeb47`.
 PR #93 остаётся draft и не слит в `main`.
 
 Следующая family mutation поправка закоммичена на текущей ветке как
@@ -41,8 +53,10 @@ PR #93 остаётся draft и не слит в `main`.
 целевую семью и `familySync.target`, а UI не принимает поздний invite после
 переключения семьи тем же аккаунтом. Локально прошли 1128 unit / 198 файлов,
 27 family E2E, 7 capability E2E-проектов, typecheck/guards/schema/privacy/audit/build
-и 23 HTTP rollback/CAS запроса. Точный CI после push ещё не завершён; staging
-и реальные старые/новые bundles остаются открытыми.
+и 23 HTTP rollback/CAS запроса. Изменение включено в успешный полный CI
+`9bdeb47` ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051));
+в запуске отмечены два других flaky-сценария, описанных выше. Staging и реальные
+старые/новые bundles для family target остаются открытыми.
 
 Локальная приёмка personal-plan retry после смены аккаунта добавлена в
 `e2e/ai-callback-account-switch.spec.ts`: поздний ответ A не меняет профиль,
@@ -56,8 +70,8 @@ success с тремя flaky каждый, а `38444933538` завершился 
 установлена. Новый E2E для позднего achievement callback добавлен в
 [`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3): при входе B в соседней вкладке тест отпускает положительный
 ответ A со старым scope и проверяет отсутствие unlock в обеих сессиях. Локально
-прошло 7/7 browser/PWA-профилей с `retries=0`, общий typecheck прошёл; точный CI
-для этого изменения ещё не завершён. Предыдущий run
+прошло 7/7 browser/PWA-профилей с `retries=0`, общий typecheck прошёл; изменение
+включено в успешный полный CI `9bdeb47` ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)). Предыдущий run
 `38425515018` для `c6ebbdc` отменён concurrency после push нового HEAD.
 
 ## Предыдущий компонент — P0.5 client AI callbacks

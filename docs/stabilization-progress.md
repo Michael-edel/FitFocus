@@ -2648,6 +2648,30 @@ build. Две family E2E suites прошли 27/27 на desktop Chromium, Firefo
 запроса на одном локальном workerd/D1, включая сохранение profile/family CAS,
 отказы legacy writers и проверку session/owner guards.
 
-Этот коммит подготовлен к push для запуска CI; точный workflow ещё не завершён.
-Staging, старые/новые bundles именно для family target и общий lifecycle
-P0.5/P0.8 остаются открытыми.
+На момент этого кодового коммита точный workflow ещё ожидался. Последующая
+проверка полного CI на документирующем HEAD приведена ниже. Staging, старые/новые
+bundles именно для family target и общий lifecycle P0.5/P0.8 остаются открытыми.
+
+## Полный CI после family target — `9bdeb47`, 14.10.2026
+
+Полный PR workflow [run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)
+завершился success на точном SHA
+[`9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11).
+Unit прошли во всех 198 файлах; Playwright выполнил 532 сценария: 501 passed,
+29 skipped и два flaky, прошедших retry. Rollback/CAS job прошёл; rollback
+artifact `11847145964` сохранён в workflow.
+
+Flaky были в двух независимых E2E:
+
+- Android PWA Chrome, `storage-durability.spec.ts:316`: проверка quota fault
+  увидела фоновый `WEEKLY_AI_REPORT_FAILED` с `StateStorageError` в сборе ошибок.
+- iPhone PWA, `weekly-menu-durability.spec.ts:185`: после reload helper `healthy()`
+  зафиксировал WebKit access-control warning для `/api/profile`.
+
+Оба сценария локально повторены по 10 раз с `workers=1/retries=0`; каждый прошёл
+10/10. Точная причина CI-only нестабильности не установлена, поэтому повторы
+не считаются доказательством устранения flaky. Следующий шаг — отдельно проверить
+синхронизацию фонового weekly-report в первом тесте и завершение profile route
+до reload во втором, не ослабляя проверку неожиданных ошибок. Полный CI
+подтверждает включённые family-target и account-switch изменения, но staging,
+old/new family bundle smoke и общая lifecycle-приёмка остаются открытыми.

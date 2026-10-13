@@ -1,17 +1,14 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 14.10.2026. Последний полный CI на опубликованном SHA
-[`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)
-([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538))
-завершился success: 1115 unit / 198 файлов, 484 browser passed / 25 skipped,
-audit без известных уязвимостей, guards, три typecheck, build и rollback/CAS
-на 23 запросах прошли. Два E2E были flaky и прошли retry: Chromium ожидал
-`pending`, но увидел `sending` в IndexedDB; WebKit поймал access-control warning
-при семейном menu state. Точные сценарии локально прошли по 5/5; причина CI
-нестабильности не установлена. Новый P0.5 achievement account-switch тест
-закоммичен в [`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3)
-и локально прошёл 7/7 browser/PWA-профилей без retries; общий typecheck прошёл.
-Для этого нового SHA полный CI ещё ожидается.
+Обновлено: 14.10.2026. Последний полный CI на SHA
+[`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
+([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051))
+завершился success: unit прошли во всех 198 файлах; Playwright — 501 passed /
+29 skipped и два flaky-теста, прошедших retry; rollback/CAS job прошёл. Два
+flaky-сценария повторены локально по 10 раз с `retries=0`, но причины под CI
+не установлены. Подробности записаны в [журнале](docs/stabilization-progress.md).
+Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
+приёмки lifecycle/release.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
@@ -482,7 +479,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   guard и durable commit; локальные профильные проверки описаны в
   [контракте](docs/weekly-ai-report-session.md). GitHub CI коммита `0b7062d`
   упал на E2E (343 failed из 476) в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143);
-  локальный follow-up прошёл 49/49 связанных тестов Chromium; полный CI нового SHA ожидается.
+  локальный follow-up прошёл 49/49 связанных тестов Chromium; последующий полный
+  CI HEAD `9bdeb47` завершился success ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)).
 - [x] Локально перевести coach, личный план и объяснение плато с повторами на
   общий `AiSession`/lifecycle guard; профиль и usage сохранять только через
   guarded commit. Unit-suite: 1115 passed / 198 файлов, typecheck и два strict
@@ -508,15 +506,16 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить поздний achievement unlock из аккаунта A после входа B в
   соседней вкладке: ответ A со старым scope не показывает toast ни старой, ни
   новой сессии; active session остаётся B. Commit `b44d46e`; 7/7 browser/PWA-профилей,
-  `workers=3`, `retries=0`; `npm run typecheck` прошёл. Точный CI ожидается.
+  `workers=3`, `retries=0`; `npm run typecheck` прошёл. Последующий полный CI
+  `9bdeb47` завершился success ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)).
 - [x] Закрепить invite и member mutations за явным `familyId`: `/api/me`
   объявляет `familySync.target`; старый сервер без capability блокируется до
   запроса. Сервер проверяет точное членство/владельца, UI отбрасывает поздний
   invite после смены семьи при том же login. `2bbec11`: 1128 unit / 198 файлов,
   27 family E2E на трёх desktop-браузерах, target-capability 7/7 проектов,
   typecheck/guards/schema/privacy/audit/build и 23 rollback/CAS HTTP прошли.
-  Точный CI ожидается; staging и реальные old/new bundle для этого изменения
-  остаются открытыми.
+  Полный CI `9bdeb47` завершился success ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)); два unrelated E2E были flaky и прошли retry.
+  Staging и реальные old/new bundle для этого изменения остаются открытыми.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 
