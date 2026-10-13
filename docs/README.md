@@ -47,9 +47,9 @@
 если существующий документ его не покрывает. Секреты, токены и реальные
 пользовательские данные в MD не помещают.
 
-## Подтверждённая ревизия
+## Предыдущая успешная ревизия до P0.5
 
-Последний подтверждённый CI PR-head — [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6):
+Последний успешный CI до P0.5 callbacks — [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6):
 [run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
 завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
 audit без уязвимостей, три typecheck, build и rollback-проверка прошли.
@@ -58,15 +58,23 @@ migration smoke `00cd005`; каждый результат подтвержда�
 SHA. См. [статус проекта](project-status.md). Более ранние проверки ниже
 привязаны к отдельным ревизиям.
 
-Текущий компонент — защита недельного AI-отчёта свежей сессией и durable
-commit: локально прошли 1095 unit / 197 файлов и 14 browser-сценариев на семи
-проектах без retries; общий и оба strict typecheck прошли. Коммит `0b7062d`
-отправлен в ветку; CI SHA 0b7062d завершился с ошибкой E2E: 343 failed из
-476; [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143).
-[Контракт и пределы](weekly-ai-report-session.md). Локальный follow-up обновил
-E2E fixtures и убрал шум для ожидаемых auth/session отмен. Связанные
-сценарии прошли 49/49 в desktop Chromium; полный unit-набор — 1095 тестов / 197 файлов. Полный E2E и CI нового SHA
-ожидаются.
+Текущий компонент — client AI callbacks для coach, плана и плато. Реализация
+опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e).
+Точный [PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+завершился E2E failure: 463 browser passed / 9 skipped, один failed и три flaky;
+остальные CI-проверки прошли. Причина единственного failure — отсутствующий в
+weekly-menu fixture ответ на фоновый AI-report `wis_text`. После добавления
+mock-ответа локально прошёл weekly-menu spec Firefox 8/8, основной сценарий —
+5/5 повторов без retries. Фикстура закоммичена в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
+точный [PR CI run 38385161995](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
+Один flaky тест — iPhone PWA preview-origin, с `route.fetch: socket hang up`; retry
+прошёл, причина неизвестна. Browser acceptance
+coach/plateau остаётся открытой. [Контракт](ai-callback-sessions.md).
+
+Предыдущий компонент — недельный AI-отчёт, коммит `0b7062d`; его CI завершился
+E2E failure в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143).
+Локальные проверки и ограничения этого компонента: [отдельный контракт](weekly-ai-report-session.md).
 Recovery UI acceptance расширена в [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5):
 три основных E2E-файла прошли 189/189; после добавления multi-edit сценария
 `storage-durability.spec.ts` прошёл 70/70 на семи проектах, совокупно подтверждены
@@ -164,7 +172,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
-| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт и локальная реализация coach, личного плана, плато и их повторов; browser acceptance отдельных callbacks и CI ещё открыты |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт, реализация coach, плана, плато и повторов; mock follow-up `ec29f41` прошёл CI, прямые callback browser acceptance остаются открытыми |
 | [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |

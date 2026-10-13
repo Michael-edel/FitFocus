@@ -1,9 +1,20 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Текущий локальный компонент — P0.5 client AI callbacks
-в рабочем дереве `fix/durable-outbox`, основанном на `d3f5c8a`; [контракт](docs/ai-callback-sessions.md).
-Код ещё не закоммичен. Unit и три targeted browser spec прошли; CI нового SHA
-отсутствует. Полная приёмка P0.8 runtime-интеграции также остаётся открытой;
+Обновлено: 13.10.2026. Текущий компонент — P0.5 client AI callbacks,
+закоммичен в `fix/durable-outbox` как [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e); [контракт](docs/ai-callback-sessions.md).
+Локально прошли 1115 unit-тестов / 198 файлов, общий и два strict typecheck,
+browser — 32 passed / 3 skipped на семи профилях. Push-run отменён concurrency
+после старта PR-события. Точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+завершился с E2E-ошибкой: 463 passed / 9 skipped, один failed и три flaky;
+audit, guards, unit, typecheck и build прошли. E2E fixture получил явный ответ
+для фонового `wis_text`; после локальной поправки weekly-menu spec прошёл 8/8
+на Firefox, затронутый сценарий — 5/5 повторов. Фикс опубликован в
+[`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
+точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit, 466 browser passed / 9 skipped. Один flaky —
+iPhone PWA preview-origin (`route.fetch: socket hang up`), retry прошёл;
+причина не установлена.
+Полная приёмка P0.8 runtime-интеграции также остаётся открытой;
 [контракт миграции](docs/legacy-migration.md).
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
 Последний подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
@@ -464,8 +475,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   общий `AiSession`/lifecycle guard; профиль и usage сохранять только через
   guarded commit. Unit-suite: 1115 passed / 198 файлов, typecheck и два strict
   typecheck прошли. Browser-приёмка регистрации, onboarding и weekly report
-  прошла: 32 passed / 3 skipped на 7 browser/PWA-профилях; CI нового состояния
-  ещё не запущен.
+  прошла: 32 passed / 3 skipped на 7 browser/PWA-профилях. CI исходного SHA
+  `75e4d35` завершился ошибкой weekly-menu Firefox E2E в [run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644):
+  mock не отвечал на фоновый `wis_text`; 463 E2E прошли, 9 пропущены, три flaky.
+  После добавления fixture локально прошли весь weekly-menu spec Firefox 8/8
+  и пять повторов падавшего сценария. Фикс закоммичен в `ec29f41`; точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+  завершился success: 466 browser passed / 9 skipped и один flaky в iPhone PWA
+  preview-origin (`route.fetch: socket hang up`, retry прошёл; причина неизвестна).
 - [ ] Добавить browser acceptance позднего ответа coach/plateau и смены аккаунта;
   затем подтвердить CI на точном SHA.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения

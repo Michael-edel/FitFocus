@@ -1,9 +1,19 @@
 # Защита клиентских AI callbacks
 
-Обновлено: 13.10.2026. Контракт и описание текущей локальной реализации
-в рабочем дереве `fix/durable-outbox`, основанном на `d3f5c8a`. Изменения
-ещё не закоммичены; результаты CI нового состояния отсутствуют. Не переносите
-исторические проверки базового SHA на текущую реализацию.
+Обновлено: 13.10.2026. Реализация контракта опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
+ветки `fix/durable-outbox`. Push-run отменён concurrency после старта PR-события.
+Точный [PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+завершился ошибкой E2E: 463 passed / 9 skipped, один failed и три flaky; audit,
+guards, unit, три typecheck и build прошли. Единственный failed сценарий был
+Firefox weekly-menu: fixture не отвечал на фоновый `/api/ai` feature `wis_text`,
+и проверка консоли считала ошибку недельного отчёта ошибкой меню. После явного
+mock-ответа локально прошли все 8 сценариев weekly-menu на Firefox и 5 повторов
+затронутого сценария. Фикс тестовой фикстуры закоммичен в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
+его точный [PR CI run 38385161995](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
+Один flaky — iPhone PWA preview-origin (`route.fetch: socket hang up`), retry
+прошёл; причина не установлена. Не переносите исторические
+проверки базовых SHA на текущую реализацию.
 
 ## Область
 
@@ -69,7 +79,7 @@ React недостаточно.
 
 ## Текущее состояние реализации
 
-В рабочем дереве клиентские пути coach, личного плана и плато переведены на
+В коммите `75e4d35` клиентские пути coach, личного плана и плато переведены на
 свежий `AiSession` и lifecycle scope. `getCoachAdvice`, `generatePersonalPlan`
 и `generatePlateauExplanation` передают одну сессию каждому `/api/ai` запросу,
 в том числе повторным запросам внутри генератора. Ошибка proof или response
@@ -99,12 +109,15 @@ scope не запускает unscoped запрос.
 общий, domain-strict и storage-strict typecheck прошли. Browser-проверки
 registration, onboarding и weekly report прошли 32 сценария; 3 пропущены
 проектной конфигурацией. Матрица выполнена на 7 browser/PWA-профилях без retries.
-Прямые browser-тесты coach/plateau остаются открытыми, CI нового коммита пока
-не существует. Результаты и границы: [статус проекта](project-status.md) и
+Follow-up E2E mock также прошёл weekly-menu spec 8/8 на desktop Firefox и 5/5
+повторов основного сценария. CI `75e4d35` имел один E2E failure и три flaky;
+PR CI исправления `ec29f41` прошёл с одним unrelated flaky в preview-origin.
+Прямые browser-тесты coach/plateau
+остаются открытыми; результаты и границы: [статус проекта](project-status.md) и
 [журнал](stabilization-progress.md).
 
 Прямые browser-сценарии для задержанного coach/plateau ответа и смены аккаунта
-ещё не добавлены. Поэтому этот локальный компонент не закрывает весь [P0.5](../TASKS.md):
+ещё не добавлены. Поэтому этот компонент не закрывает весь [P0.5](../TASKS.md):
 семейные callbacks, остальные writers, browser acceptance и CI остаются
 открытыми.
 

@@ -5,10 +5,10 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Рабочее дерево — P0.5 client AI callbacks
+## Текущий компонент — P0.5 client AI callbacks
 
-Текущая работа в `fix/durable-outbox` основана на `d3f5c8a` и пока не
-закоммичена. Coach, личный план и объяснение плато используют свежий session
+Текущий компонент опубликован в коммите [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
+ветки `fix/durable-outbox`. Coach, личный план и объяснение плато используют свежий session
 proof, scoped `/api/ai` transport и attempt/lifecycle guards. Coach card, usage
 и generated plan используют guarded commits; stale retry и поздний результат
 не должны менять данные. Hydration AI-task тоже не делает unscoped POST.
@@ -20,7 +20,16 @@ registration durability и weekly AI report — завершились с 32 pas
 `workers=1/retries=0`. Повтор после исправления mock-заголовков и классификации
 ожидаемого session-cancel прошёл чисто.
 
-GitHub CI для текущего рабочего дерева ещё не запускался. Прямые browser tests
+Push CI был отменён concurrency после запуска PR-события; точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+завершился с E2E-ошибкой: 463 passed / 9 skipped, один failed и три flaky.
+Остальные CI-проверки прошли. Единственный failed — weekly-menu Firefox,
+где fixture не отвечал на фоновый `wis_text` отчёта. После добавления ответа
+локально прошли весь weekly-menu spec Firefox 8/8 и пять повторов основного
+сценария. Фикс mock опубликован в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
+точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
+Один flaky — iPhone PWA preview-origin (`route.fetch: socket hang up`), retry
+прошёл; причина не установлена. Прямые browser tests
 для позднего coach/plateau ответа и смены аккаунта пока отсутствуют, поэтому
 весь P0.5 остаётся открытым; см. [контракт](ai-callback-sessions.md) и
 [план](../TASKS.md). PR #93 не слит в `main`.

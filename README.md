@@ -70,9 +70,18 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Текущее локальное изменение продолжает P0.5: session/lifecycle guard для coach,
-личного плана и объяснения плато. Оно пока не закоммичено; browser-приёмка
-специализированных coach/plateau гонок и CI нового SHA остаются открытыми.
+Текущий компонент P0.5 для coach, личного плана и объяснения плато опубликован
+в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e).
+PR CI этого SHA завершился с ошибкой E2E: 463 passed / 9 skipped, один failed
+и три flaky. Все проверки до E2E прошли. Ошибка возникла в Firefox weekly-menu
+сценарии: его API fixture не отвечал на фоновый AI-запрос отчёта `wis_text`.
+После добавления явного ответа локально прошли этот spec 8/8 и пять повторов
+затронутого сценария. В [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070)
+обновлена E2E-фикстура; [полный PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit, 466 browser passed / 9 skipped. Один retry
+отмечен flaky в iPhone PWA preview-origin: `route.fetch` получил `socket hang up`,
+повтор прошёл, причина не установлена. Browser-приёмка
+специализированных coach/plateau гонок также остаётся открытой.
 
 PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
 и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).

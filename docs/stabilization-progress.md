@@ -1,6 +1,6 @@
 # Стабилизация: проверяемые изменения
 
-## Рабочее дерево — session guard недельного AI-отчёта, 13.10.2026
+## Предыдущий компонент — session guard недельного AI-отчёта, 13.10.2026
 
 Генерация недельного AI-отчёта и её retry используют свежую account/session
 привязку и lifetime guard. Сохранение проходит через проверяемый durable
@@ -2373,7 +2373,9 @@ outbox добавлена проверка rollback при отказе IDB во
 
 ## P0.5 — scoped coach, plan и plateau callbacks, 13.10.2026
 
-В рабочем дереве `fix/durable-outbox` поверх базового `d3f5c8a` действия coach,
+Коммит [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
+в ветке `fix/durable-outbox` включает следующие изменения поверх базового `d3f5c8a`:
+действия coach,
 личного плана и объяснения плато подключены к свежему `AiSession` и собственному
 attempt/lifecycle guard. Повтор получает ожидаемый action и проверяет его после
 proof; weekly retry также сверяет новый actionId перед и после запроса и в
@@ -2393,8 +2395,23 @@ AI report — 32 passed / 3 skipped на 7 профилях, `workers=1/retries=
 отмене страницы; отмена добавлена в классификатор soft error, после чего полный
 targeted прогон завершился чисто.
 
-Прямые браузерные тесты задержанного coach/plateau ответа и смены аккаунта ещё
-не добавлены. Изменения не закоммичены; CI этого состояния, staging, merge в
-`main` и выпуск не проверены. Детальный контракт и границы —
+Push run 38379441325 отменён concurrency после старта PR-события. Точный
+[PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+того же SHA завершился с ошибкой E2E: 463 passed / 9 skipped, один failed и три
+flaky. Audit, schema/privacy/auth/API checks, unit, три typecheck и build прошли.
+Единственный failed — Firefox weekly-menu: E2E fixture не отвечал на фоновый
+`/api/ai` feature `wis_text`, поэтому console assertion получал ошибку
+недельного AI-отчёта. Добавлен явный mock-ответ и расширена диагностика; после
+этой локальной поправки весь weekly-menu spec прошёл 8/8 в desktop Firefox,
+основной сценарий — 5/5 повторов (`workers=2`, `retries=0`). Фикс тестовой
+фикстуры опубликован в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070).
+Точный [PR CI run 38385161995](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped,
+audit без уязвимостей, guards, все три typecheck, build и остальные jobs прошли.
+В полном прогоне остался один flaky — iPhone PWA preview-origin: `route.fetch`
+получил `socket hang up`, retry прошёл. Причина не установлена; три flaky из
+предыдущего SHA в этом прогоне не повторились.
+Прямые браузерные тесты задержанного coach/plateau ответа и смены аккаунта ещё не добавлены.
+Staging, merge в `main` и выпуск не проверены. Детальный контракт и границы —
 [client AI callbacks](ai-callback-sessions.md); остаются пункты P0.5 в
 [TASKS](../TASKS.md).
