@@ -7,6 +7,13 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
+Целевая локальная сверка на кодовой ревизии [`48cf797`](https://github.com/Michael-edel/FitFocus/commit/48cf797b2b08cd4b62bdf59c265c4d85a4db863f)
+прошла: 124/124 теста нормализации/миграции legacy-очереди и
+`npm run typecheck`. PR workflow [38470475102](https://github.com/Michael-edel/FitFocus/actions/runs/38470475102)
+выполнялся при записи результата; push-run отменён конкурирующим PR-run.
+Предыдущий завершённый полный CI ниже относится к `9bdeb47`; текущие проверки
+смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+
 Последний завершённый полный CI проверил текущий SHA
 [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
 ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051))

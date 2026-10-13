@@ -1,6 +1,6 @@
 # Компонент импорта старой очереди
 
-Обновлено: 13.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
+Обновлено: 14.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
 `storage/stateSync.ts`, проверки: `tests/legacy_migration.test.ts` и
 `tests/state_sync_legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
@@ -44,7 +44,7 @@ fixture; реальный OAuth/D1/staging и полный lifecycle этим sm
 ## Формат legacy-записи
 
 Контракт согласованного нормализатора уже реализован в
-[storage/legacyQueue.ts на проверенной ревизии 22a7788](https://github.com/Michael-edel/FitFocus/blob/22a77889f131b554f52519515efc7ac811f6169f/storage/legacyQueue.ts).
+[storage/legacyQueue.ts на ревизии сверки](https://github.com/Michael-edel/FitFocus/blob/48cf797b2b08cd4b62bdf59c265c4d85a4db863f/storage/legacyQueue.ts).
 
 | Поле | Условие |
 |---|---|
@@ -98,6 +98,14 @@ Fingerprint вычисляется из нормализованных поле�
 Для delete используется null. Индекс элемента, retryCount и порядок свойств
 объекта не участвуют. Отсутствующий baseVersion эквивалентен явному 0.
 Совпавший hash дополнительно сверяется по каноническим полям при импорте.
+
+Сверка кода и тестов на `48cf797` подтвердила все правила выше: отсутствующие
+`baseVersion`/`retryCount` превращаются в `0`, повреждённые записи сохраняют
+причину, delete не получает поле `value`, а fingerprint не зависит от индекса и
+`retryCount`. Целевые два unit-файла прошли 124/124 теста, `npm run typecheck`
+прошёл. Полный workflow этого SHA ещё выполняется; эти локальные проверки не
+закрывают общую миграцию или lifecycle P0.8. Результат и CI-ссылка записаны в
+[журнале стабилизации](stabilization-progress.md).
 
 ## Входные данные и граница доверия
 

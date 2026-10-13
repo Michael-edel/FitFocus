@@ -2711,4 +2711,22 @@ production-релиз. Эффект тестовых барьеров под CI 
 с target-семьёй A не применяется к UI другой семьи, загруженной тем же login.
 Полный spec прошёл 12/12 на desktop Chromium, Firefox и WebKit, `workers=1`,
 `retries=0`; общий `npm run typecheck` прошёл. Это локальное свидетельство;
-точный CI и другие семейные callbacks остаются открытыми.
+
+## P0.8 — финальная сверка legacy-нормализатора, `48cf797`, 14.10.2026
+
+Согласованный контракт из `docs/legacy-migration.md` сверён с текущими
+`storage/legacyQueue.ts` и `tests/legacy_queue.test.ts`. Реализация принимает
+только `put`/`delete`, требует непустой ключ, требует строковое значение для
+`put` и запрещает поле `value` для `delete`, включая явно заданное `undefined`.
+Отсутствующие `baseVersion` и `retryCount` нормализуются в `0`; присутствующие
+поля должны быть целыми неотрицательными числами. Все семь причин отказа
+типизированы и покрыты тестами. Fingerprint строится из нормализованных
+`type/key/value-or-null/baseVersion`; индекс и `retryCount` на него не влияют.
+
+На точном локальном HEAD `48cf797b2b08cd4b62bdf59c265c4d85a4db863f`
+`npx vitest run tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
+завершился успешно: 2 файла, 124 теста. `npm run typecheck` также прошёл.
+Полный PR workflow [38470475102](https://github.com/Michael-edel/FitFocus/actions/runs/38470475102)
+при записи результата ещё выполнялся на этом SHA; push-run `38470467012`
+отменён concurrency после запуска PR workflow. Это подтверждает проверку
+нормализатора, но не полный CI, runtime lifecycle, staging или готовность P0.8.
