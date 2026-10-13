@@ -6,7 +6,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 интеграции с поддерживаемыми сервисами. Полный перечень функций и их статус —
 в [PRODUCT.md](PRODUCT.md).
 
-Обновлено: 13.10.2026. Текущий этап — стабилизация хранения пользовательских
+Обновлено: 14.10.2026. Текущий этап — стабилизация хранения пользовательских
 данных, синхронизации между вкладками и восстановления после ошибок. Проверенный
 статус, точные ревизии и ограничения собраны в [docs/project-status.md](docs/project-status.md).
 
@@ -71,15 +71,9 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний полный CI на [`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f) — [run `38444933538`](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538) — завершился success: 1115 unit / 198 файлов, 484 browser passed / 25 skipped, guards, typecheck, build и rollback/CAS на 23 запросах прошли. Два E2E были flaky и прошли retry; локально оба прошли по 5/5, причина не установлена. Следующий тест P0.5 — поздний achievement callback после смены аккаунта — добавлен в `b44d46e` и локально прошёл 7/7 browser/PWA-профилей без retries; его полный CI ожидается.
+Последний завершённый полный CI на [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11) — [run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051) — завершился success: unit прошли во всех 198 файлах, 501 browser passed / 29 skipped, два E2E прошли retry как flaky; rollback/CAS-проверка прошла.
 
-Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
-обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий
-прошёл 3/3 без retries, поэтому причина пока не воспроизведена. Сам outbox fix
-проверен двумя затронутыми Firefox-сценариями 30/30 и полным Firefox spec 8/8.
-P0.5 и полный lifecycle P0.8 остаются открытыми из-за семейных/прочих callbacks
-и остатка lifecycle-приёмки. Подробный статус и следующие критерии: [статус
-проекта](docs/project-status.md) и [план](TASKS.md).
+Кодовая ревизия тестового follow-up — [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98); её полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712) на момент обновления выполнялся. Локальный follow-up для двух flaky-сценариев прошёл: целевые повторы — 10/10, полные затронутые specs — 10/10 на Android PWA Chrome и 8/8 на iPhone PWA, `npm run typecheck` — успешно. Cloudflare preview этой ревизии развернулся успешно; это не production-релиз и не результат полного CI. Подробности и оставшиеся критерии — в [статусе проекта](docs/project-status.md), [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).
 
 PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
 и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).

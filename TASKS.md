@@ -12,6 +12,10 @@ flaky-сценария повторены локально по 10 раз с `re
 Локальный E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54)
 добавил барьеры для двух flaky-сценариев: целевые повторы прошли 10/10 каждый,
 затронутые specs — 10/10 и 8/8; точный CI этого follow-up ещё не подтверждён.
+Кодовая ревизия [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
+содержит эти результаты; её полный [CI run 38466153712](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
+на момент проверки ещё выполнялся. До завершения CI follow-up подтверждён
+локально, но не полным workflow.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox

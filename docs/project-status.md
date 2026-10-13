@@ -20,8 +20,11 @@ passed, 29 skipped и два flaky-теста, прошедших retry. Rollbac
 добавил барьер записи недельного отчёта перед fault injection и ожидание
 завершённого 503-ответа перед reload. После этого целевые повторы прошли 10/10
 на каждом проекте; полные затронутые specs прошли 10/10 на Android PWA Chrome
-и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Новый полный CI для follow-up
-ещё не завершён, поэтому устранение flaky пока не подтверждено CI.
+и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Полный CI для follow-up
+выполняется в [run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
+для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98).
+Поэтому устранение flaky пока подтверждено локальными повторами, но не полным CI.
+Cloudflare preview этого SHA развернулся; это не production-релиз.
 
 Предыдущий полный CI на SHA
 [`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)

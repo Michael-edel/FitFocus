@@ -2692,3 +2692,13 @@ old/new family bundle smoke и общая lifecycle-приёмка остают�
 `weekly-menu-durability.spec.ts` прошёл 8/8 на iPhone PWA; `npm run typecheck`
 прошёл. Это подтверждает детерминированность тестового порядка локально, но не
 устраняет неизвестность CI-only причины до полного CI exact SHA.
+
+## CI follow-up для flaky-тестов — `a99ab7b`, 14.10.2026
+
+Документационный HEAD [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
+содержит локальные результаты синхронизации двух E2E-сценариев из `7753d87`.
+Полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
+запущен для точного SHA и на момент последней проверки ещё выполнялся.
+Cloudflare preview завершился успешно; это не подтверждает завершение CI или
+production-релиз. До результата workflow эффект тестовых барьеров под CI
+остаётся неподтверждённым.
