@@ -48,12 +48,13 @@
 
 ## Подтверждённая ревизия
 
-Последний подтверждённый CI на рабочей ветке —
-[`00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
-1068 unit / 196 файлов; browser — 390 passed / 9 skips, success, 20,1 мин.
-Проверки dependency audit, schema/privacy/auth/API, три typecheck и build тоже
-успешны. Ветка затем получила локальные backup v3 изменения; их текущие
-результаты ещё не входят в этот CI и указаны в [статусе проекта](project-status.md).
+Последний подтверждённый CI PR-head на рабочей ветке —
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270):
+1073 unit / 196 файлов; browser — 390 passed / 9 skips за 15,7 мин; audit,
+schema/privacy/auth/API, три typecheck и build прошли. Дополнительно CI проверил
+23 HTTP/D1 rollback-запроса и сохранил rollback artifact. Предыдущий old/new
+migration smoke `00cd005` тоже прошёл CI (390 passed / 9 skips); он подтверждает
+этот smoke, а не последующий backup-код. См. [статус проекта](project-status.md).
 Более ранние результаты и проверки отдельных компонентов ниже привязаны к SHA.
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
@@ -179,9 +180,11 @@ value/outbox, managed hydration сохраняет локальное намер
 
 Следующее изменение [подключает остальные state-записи](owned-state-writers.md):
 15 управляемых ключей и удаление прежнего sender из текущей сборки.
-Исторические документы runtime state и state sender сохраняют границы своих
-ревизий; новый код и его проверки описаны отдельно. Profile, runtime legacy-импорт,
-старые сборки, экспорт/очистка и приёмка выпуска остаются открытыми.
+Фраза о незакрытых profile и runtime legacy-импорте относилась к той ревизии.
+Поздние изменения profile, registration, bootstrap и legacy runtime описаны ниже
+в отдельных контрактах. JSON backup v3 добавлен в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)
+([формат и восстановление](backup-restore.md)); account-scoped очистка и UI
+конфликтов остаются открытыми по [текущему статусу](project-status.md).
 
 Следующий этап [подключает редактор профиля](profile-persistence.md) к той же
 IDB-outbox и sender. Удалена прежняя Promise-очередь profileSync; конфликт
@@ -195,8 +198,9 @@ outbox до AI-запроса и убирает угадывание владе�
 Runtime legacy уже подключён: владелец выводится только из свежего `/api/me`,
 а отправка требует Service Worker подтверждения всех same-origin вкладок.
 Проверка настоящей legacy-записи на паре old/new bundles прошла локально 7/7;
-CI нового smoke ожидается. Также остаются
-другие callbacks и полный lifecycle.
+полный CI точного smoke SHA `00cd005` завершился success: 390 browser passed /
+9 skipped, 20,1 минуты ([run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965)).
+Также остаются другие callbacks и полный lifecycle.
 
 ## Прежние материалы
 

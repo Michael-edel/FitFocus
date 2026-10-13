@@ -54,6 +54,12 @@ unknown legacy-записи, недействительность старого
 импорт, rollback всех IDB stores при конфликте, возврат localStorage к
 прежнему значению, старый формат и пригодный для чтения скачиваемый JSON.
 
+Реализация опубликована в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Локально прошли 7/7 backup-тестов, все 1073 unit / 196 файлов, три typecheck и
+production build. [Полный CI PR-head](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
+завершился success: 390 browser passed / 9 skipped, audit и обязательные guards
+прошли; rollback HTTP/D1-проверка выполнила 23 запроса.
+
 Это локальная переносимая копия браузерных данных. Она не содержит OAuth
 сессию, не меняет серверный `/api/export` и не является удалённым staging
 backup. Очистка данных аккаунта и UI разрешения конфликтов остаются отдельными

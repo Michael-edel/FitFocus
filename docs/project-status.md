@@ -26,10 +26,14 @@ Firefox повторён 12/12 с тестовой диагностикой. Д�
 old/new migration smoke на одном origin. Локально прошли все семь Playwright-
 проектов (`workers=1/retries=0`); полный CI точного smoke SHA `00cd005`
 завершился success в [run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).
-Следующая рабочая часть P0.8 добавляет JSON backup v3 со снимком всех пяти
-долговечных IDB stores и атомарным restore; локально прошли 1073 unit / 196
-файлов, общий/domain-strict/storage-strict typecheck. CI backup-изменения ещё
-не запускался. Полный CI `c724bce` (run 38318876304) также прошёл до smoke.
+JSON backup v3 со снимком всех пяти долговечных IDB stores и атомарным restore
+опубликован в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Локально прошли 1073 unit / 196 файлов, общий/domain-strict/storage-strict
+typecheck, production build и 7/7 backup-тестов. [CI PR-head `2aff6c3`](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
+завершился success: 1073 unit / 196 файлов, 390 browser passed / 9 skips
+(15,7 мин), audit, guards, schema/privacy, все три typecheck и build прошли;
+HTTP/D1 rollback smoke прошёл 23 запроса, artifact сохранён. Предыдущий
+полный CI `c724bce` (run 38318876304) также прошёл до smoke.
 
 Первый полный CI runtime-изменений на `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9`
 [завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884).
@@ -426,12 +430,10 @@ callbacks. Весь P0.5 остаётся открытым.
 2. Продолжить приёмку lifecycle остальных callbacks. CI profile debounce
    на `bf01d87` прошёл. Исторические `/api/profile` и другие
    источники не считать автоматически объяснёнными этим изменением.
-3. Проверить runtime legacy-импорт на настоящей паре старой и новой сборок
-   одного origin: pending intent, точный владелец, карантин, сохранённый источник,
-   Service Worker fence и повтор после обновления.
-4. Завершить UI повтора/разрешения конфликтов, backup, экспорт и очистку
-   всех stores без потери ожидающих операций.
-5. Пройти полную [матрицу lifecycle](sync-model.md#матрица-приёмки), staging
+3. Завершить UI повтора/разрешения конфликтов и account-scoped очистку всех
+   связанных stores без потери чужих данных или ожидающих операций. Локальный
+   JSON backup v3 уже реализован и прошёл CI: [контракт](backup-restore.md).
+4. Пройти полную [матрицу lifecycle](sync-model.md#матрица-приёмки), staging
    и [выпуск](../RELEASE_CHECKLIST.md) через защищённую main.
 
 Подробные условия находятся в TASKS. После P0 — типизация, границы модулей,

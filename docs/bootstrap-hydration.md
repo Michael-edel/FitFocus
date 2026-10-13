@@ -144,5 +144,8 @@ payload: независимый редактор со старой версие�
 
 После этого снимка runtime legacy подключён: owner берётся из свежего `/api/me`,
 а Service Worker fence ждёт подтверждения всех same-origin вкладок. Остаются
-old/new migration smoke с настоящим intent, остальные family/AI callbacks,
-UI конфликтов, backup/экспорт/очистка и выпуск; критерии — в [TASKS](../TASKS.md).
+остальные family/AI callbacks и полный lifecycle. Old/new migration smoke с
+настоящим intent прошёл локально 7/7 и полный [CI на `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965); JSON backup v3
+реализован в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+UI конфликтов, account-scoped очистка всех связанных stores и выпуск остаются
+открытыми; критерии — в [TASKS](../TASKS.md).

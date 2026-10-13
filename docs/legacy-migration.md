@@ -183,9 +183,14 @@ ack не импортирует её повторно. Недействител�
 потерю ledger/операции перед финальным audit и восстановление старых снимков.
 Используется fake IndexedDB; это не проверка настоящих browser bundle.
 
-Runtime-источник владельца и Service Worker fence подключены к StateSync;
-реальный old/new bundle migration smoke пройден. Остаются profile и остальные
-callbacks, полный auth/hydration lifecycle, экспорт и очистка новых stores.
+Runtime-источник владельца и Service Worker fence подключены к StateSync.
+Реальный old/new bundle migration smoke прошёл локально 7/7 и полный [CI точного
+SHA `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
+390 browser passed / 9 skipped. JSON backup v3 для долговечных stores реализован
+отдельно ([контракт](backup-restore.md), commit
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)).
+Остаются остальные callbacks, полный auth/hydration lifecycle, account-scoped
+очистка новых stores и общая приёмка P0.8.
 [15 управляемых state-ключей](owned-state-writers.md) подключены;
 прежний sender текущей сборки удалён. Unit-тесты дополняет проверенный выше
 old/new bundle smoke между двумя реальными сборками на одном origin и в одном

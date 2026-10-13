@@ -1,13 +1,15 @@
 # ADR-005: одна постоянная outbox в IndexedDB
 
 Дата: 09.10.2026. Статус: **согласовано; нормализатор, транзакционный
-фундамент и компонент импорта реализованы в PR #93; runtime подключён частично**.
+фундамент, импорт и runtime интегрированы в PR #93; полный lifecycle ещё открыт**.
 Задача: [P0.8](../../TASKS.md). Область кода: [карта документации](../README.md).
 
-Текущая граница: [шесть ключей repository и managed hydration](../runtime-state.md).
-Sender шести ключей подключён: [HTTP и подтверждение сессии](../state-sender.md).
-Остальные writers/profile, барьер legacy, экспорт/очистка и приёмка
-жизненного цикла ещё не завершены.
+Текущая граница: [управляемые записи](../owned-state-writers.md),
+[runtime migration](../legacy-migration.md) и [backup v3](../backup-restore.md).
+Реальный old/new smoke прошёл полный CI; backup-компонент опубликован в
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Остаются UI конфликтов, account-scoped очистка, остальные callbacks и полный
+lifecycle выпуска.
 
 Дополнение 11.10.2026: [15 управляемых state-ключей](../owned-state-writers.md)
 подключены, прежний sender текущей сборки удалён. Profile state-upload

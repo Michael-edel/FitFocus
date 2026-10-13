@@ -78,5 +78,7 @@ logout при held GET и новый page lifetime при held POST во все�
 Все 21 achievement E2E включены. CI нового HEAD проверяется отдельно.
 Предыдущий кандидат прошёл 21 новый E2E после исправления высоты графиков.
 Синтетические pagehide/pageshow не подтверждают реальный BFCache/OAuth/devices.
-Остальные AI/report/retry/family producers, durable items/CAS, legacy-барьер,
-конфликты, backup и выпуск остаются в [TASKS](../TASKS.md).
+Остальные AI/report/retry/family producers, полный UI разрешения конфликтов
+и выпуск остаются в [TASKS](../TASKS.md).
+Локальный JSON backup v3 реализован отдельно в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5);
+его текущие результаты и открытая account-scoped очистка — в [статусе проекта](project-status.md).

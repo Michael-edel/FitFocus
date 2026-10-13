@@ -73,8 +73,12 @@ owner и числовой startedAtMs. Установить владельца l
 Дополнение 11.10.2026: [15 управляемых state-ключей](owned-state-writers.md)
 используют общую схему IDB v2 и явный repository. Raw-форматы date/flag/code
 сохранены; прежний Map sender удалён из текущей сборки. Подключение шести
-ключей ниже — исторический промежуточный этап. Profile, полный backup,
-экспорт/очистка и реальная old/new migration-приёмка legacy остаются открытыми.
+ключей ниже — исторический промежуточный этап. На момент этого дополнения
+profile, backup и реальная old/new migration-приёмка ещё не были подключены.
+Profile и runtime migration описаны в более поздних контрактах; JSON backup v3
+для всех долговечных stores реализован в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)
+([подробности](backup-restore.md)). Account-scoped очистка всех stores и
+остальная приёмка остаются открытыми в [TASKS](../TASKS.md).
 
 Эта часть относится к ветке `fix/durable-outbox`, а таблица существующих
 хранилищ выше — к исходному снимку `810adb1`. Новая схема IDB — версия 2:

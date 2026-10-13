@@ -109,11 +109,13 @@ source snapshot и ledger. Если worker или любая вкладка не
 сохраняются в IDB, а отправка остаётся на паузе. Legacy-источник не удаляется.
 Полный контракт описан [в документации миграции](legacy-migration.md).
 
-Old/new bundle smoke с настоящей legacy-операцией пройден. Остаются остальные
-writers/profile callbacks, UI повтора/разрешения, полный экспорт/импорт/очистка
-и staging. Эта ветка не готова к выпуску. Browser API mock и fake IDB не
-подтверждают реальную OAuth/D1-интеграцию.
-Browser API mock и fake IDB не подтверждают реальную OAuth/D1-интеграцию.
+Old/new bundle smoke с настоящей legacy-операцией прошёл локально 7/7 и полный
+[CI точного SHA `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
+390 browser passed / 9 skipped. Profile и runtime legacy-интеграция описаны в
+[контрактах профиля](profile-persistence.md) и [миграции](legacy-migration.md).
+Остаются другие writers/callbacks, UI повтора/разрешения, account-scoped
+очистка и staging. Эта ветка не готова к выпуску. Browser API mock и fake IDB
+не подтверждают реальную OAuth/D1-интеграцию.
 
 Проверки: [sender](../tests/state_sync.test.ts),
 [серверная привязка](../tests/state_session_guard.test.ts),

@@ -69,10 +69,14 @@ workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полн
 send gate; настоящий PWA update-тест проверяет fence и сохранность очереди/профиля.
 Smoke настоящей legacy-записи между старой и новой сборками прошёл локально 7/7;
 CI точного SHA `00cd005` завершился success в [run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).
-Следующий шаг реализует формат backup v3 для всех пяти IDB stores и атомарный
-restore; локально прошли 1073 unit / 196 файлов и три typecheck. CI этой правки
-ещё не запускался. Далее — остальные callbacks P0.2–P0.6, UI конфликтов,
-очистка stores, совместимый rollback artifact и staging.
+Формат backup v3 для всех пяти IDB stores и атомарный restore реализованы и
+опубликованы в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Локально прошли 1073 unit / 196 файлов, три typecheck, production build и 7/7
+тестов backup. [Полный CI PR-head `2aff6c3`](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
+завершился success: 1073 unit / 196 файлов, 390 browser passed / 9 skips
+(15,7 мин), audit/typechecks/guards/schema/privacy/build и 23 HTTP/D1 rollback
+проверки прошли. Далее — остальные callbacks P0.2–P0.6, UI конфликтов,
+account-scoped очистка stores и staging/rollback acceptance.
 Интеграция P0.1 и серверной части P0.7 в защищённую main остаётся открытой.
 P0.9 пополняется тестами каждого исправления и завершается проверкой
 всего жизненного цикла и выпуска. [Подробный статус](docs/project-status.md),

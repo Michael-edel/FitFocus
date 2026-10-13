@@ -87,7 +87,10 @@ Unit-проверки: [редактор](../tests/state_editor.test.ts),
 удаление истории с reload и отказ хранения с сохранением видимого значения.
 Конкретные результаты ревизии и ограничения — [в журнале](stabilization-progress.md).
 
-Old/new bundle smoke с настоящим legacy intent пройден. Остаются полный
-profile/auth/bootstrap lifecycle, UI повтора и разрешения, атомарный backup,
-экспорт/очистка всех stores, staging и выпуск в защищённую main.
+На момент этой границы полный profile/auth/bootstrap lifecycle и backup
+оставались отдельными этапами. Последующие документы фиксируют завершённые
+profile/registration/bootstrap/runtime migration и JSON backup v3
+([контракт](backup-restore.md), commit [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)).
+Открыты UI повтора и разрешения конфликтов, account-scoped очистка связанных
+stores, полный lifecycle, staging и выпуск в защищённую main.
 Порядок и критерии закрытия — [TASKS](../TASKS.md).

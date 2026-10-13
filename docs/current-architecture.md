@@ -10,6 +10,12 @@ headers и атомарный auth-fence в IDB при применении сн
 расширяет гарантии исходного снимка; не подтверждает весь lifecycle,
 runtime legacy или выпуск. Историческое описание ниже сохраняет свою ревизию.
 
+Дополнение 13.10.2026: runtime legacy-импорт и all-client Service Worker fence
+проверены настоящим old/new smoke на одном origin; CI точного smoke SHA `00cd005`
+успешен. Backup v3 всех долговечных IDB stores опубликован в
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Открытые критерии — в [статусе проекта](project-status.md) и [TASKS](../TASKS.md).
+
 ## Клиент
 
 React 19, TypeScript, Vite, Tailwind CSS и PWA. Исходники находятся в корне
@@ -46,7 +52,7 @@ Profile hooks → profileSync.ts → отдельная Promise-цепочка �
 и [HTTP sender](state-sender.md), затем [15 управляемых state-ключей](owned-state-writers.md).
 Они используют атомарную value/outbox-транзакцию. Настройки читаются из IDB;
 managed hydration проверяет протокол, локальную ревизию и очередь.
-Map sender удалён из текущей сборки. Следующий этап
+Map sender удалён из текущей сборки. На дату этого снимка следующий этап
 [подключает редактор профиля](profile-persistence.md) к общей IDB-outbox
 и sender с явным HTTP dispatch. Следующая [регистрация](registration-persistence.md)
 сохраняет профиль до AI-запроса в эту же outbox без прямого profile PUT;

@@ -2224,11 +2224,15 @@ localStorage. Импорт v1/v2 сохранён. Migration `sendAllowed` сб�
 restore: записанный в файле writer proof не считается текущим, пока runtime
 не перепроверит legacy source и все открытые окна.
 
-Проверки текущего дерева: полный unit — 1073 passed / 196 файлов; общий,
-domain-strict и storage-strict typecheck, 7/7 backup unit и production build
-прошли; `git diff --check` чистый. Old/new smoke точного SHA `00cd005`
-[прошёл CI](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
-390 browser passed / 9 skipped, 20,1 минуты; CI этот новый backup-код не
-содержит. Для backup-компонента workflow запускается после push.
+Проверки опубликованного `2aff6c33d638052d9a084902895df822efb269e5`:
+полный unit — 1073 passed / 196 файлов; общий, domain-strict и storage-strict
+typecheck, 7/7 backup unit и production build прошли. Old/new smoke предыдущего
+SHA `00cd005` [прошёл CI](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
+390 browser passed / 9 skipped, 20,1 минуты; он не содержит backup-код.
+[CI backup-коммита](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
+завершился success на PR-head `2aff6c3`: 1073 unit / 196 файлов, 390 browser
+passed / 9 skips за 15,7 минуты; dependency audit (0 уязвимостей), guards,
+schema/privacy, три typecheck и build прошли. Последующая HTTP/D1 rollback-
+проверка прошла 23 запроса; rollback artifact сохранён в [workflow](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270/artifacts/11781863243).
 Контракт: [backup/restore](backup-restore.md). Очистка stores, conflict UI,
 остальные callbacks и staging остаются открытыми.
