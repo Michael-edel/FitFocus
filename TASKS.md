@@ -485,6 +485,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Добавить browser acceptance позднего ответа coach/plateau и смены аккаунта:
   локально 6/6 в desktop Chromium, Firefox и WebKit на `9bc98ee`.
 - [x] Подтвердить CI для точного SHA `9bc98ee`: [run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498) завершился success.
+- [x] Добавить browser acceptance задержанного семейного callback: после входа B
+  в соседней вкладке ответ приглашения A не появляется в старой вкладке; ревизия
+  `f9c8425` прошла 3/3 на desktop Chromium, Firefox и WebKit без retries.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

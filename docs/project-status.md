@@ -7,8 +7,10 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
-ветки `fix/durable-outbox`. Исправлены последовательные чтения из одной
+Последняя полная CI-проверка кода в `fix/durable-outbox` — коммит
+[`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc);
+P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+исправил последовательные чтения из одной
 IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
 `await`, а parent/head операции выбираются из одного индексного снимка.
 E2E-диагностика сохраняет вложенную причину `Error.cause`.
@@ -26,7 +28,9 @@ HTTP/D1 rollback-проверка на 23 запросах прошли. Два 
 уведомления. P0.8 остаётся открытым до полной lifecycle-приёмки. Для P0.5 тесты
 позднего ответа coach/plateau и смены аккаунта добавлены в `9bc98ee` и локально
 прошли 6/6 на desktop Chromium, Firefox и WebKit. Точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
-завершился success: E2E, все статические проверки, build и rollback/CAS jobs прошли.
+завершился success. Коммит [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469)
+добавил семейный delayed-invite account-switch E2E; typecheck и 3/3 desktop
+Chromium/Firefox/WebKit прошли локально, его точный CI ещё ожидается.
 PR #93 остаётся draft и не слит в `main`.
 
 ## Предыдущий компонент — P0.5 client AI callbacks
@@ -39,7 +43,7 @@ Coach, личный план и объяснение плато использу
 [журнале стабилизации](stabilization-progress.md). Два новых сценария позднего
 ответа локально прошли 6/6 на трёх desktop engines; точный CI `9bc98ee` завершился
 success в [run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498).
-Полная приёмка P0.5 открыта из-за оставшихся family callbacks и writers; см.
+Полная приёмка P0.5 открыта из-за остальных family callbacks и writers; см.
 [контракт](ai-callback-sessions.md) и [план](../TASKS.md).
 
 Последующий документационный SHA `75159f5` тоже прошёл CI

@@ -70,13 +70,12 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний проверенный кодовый коммит — [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
-в `fix/durable-outbox`. Он добавляет browser acceptance позднего coach/plateau
-ответа при входе второго аккаунта в соседней вкладке. Локально прошло 6/6 в
-desktop Chromium, Firefox и WebKit; [полный CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
-завершился success: E2E, dependency audit, schema/privacy/auth/API checks,
-typechecks, build, canonical readers/CAS после rollback и сохранение артефактов
-прошли.
+Последний коммит с подтверждённым полным CI — [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc): browser acceptance позднего coach/plateau
+ответа при входе второго аккаунта в соседней вкладке прошла 6/6, а [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success. Более новый коммит [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469)
+добавляет такой же account-switch сценарий для задержанного семейного invite:
+typecheck и 3/3 desktop Chromium, Firefox и WebKit прошли локально; точный CI
+этой ревизии ещё ожидается.
 
 Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий

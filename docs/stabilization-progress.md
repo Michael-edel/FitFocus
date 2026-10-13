@@ -2494,3 +2494,20 @@ rollback и сохранение rollback-артефакта прошли.
 Приёмка охватывает coach retry и прямое объяснение плато, но не повтор личного
 плана, все callbacks, реальный OAuth, устройство/BFCache, staging или выпуск.
 P0.5 и P0.8 в целом остаются открытыми; PR #93 остаётся draft, `main` не менялся.
+
+## P0.5 — задержанный family callback при смене аккаунта, `f9c8425`, 13.10.2026
+
+Коммит [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469)
+добавил `e2e/family-callback-account-switch.spec.ts`. Вкладка A начинает создание
+приглашения и получает удержанный ответ. В соседней вкладке тот же origin
+принимает вход аккаунта B; после этого тест отпускает ответ A и проверяет, что
+код приглашения A не появился в старой вкладке, а active-session остаётся B.
+
+Локально `npm run typecheck` прошёл. Команда
+`npx playwright test e2e/family-callback-account-switch.spec.ts --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit`
+завершилась 3/3 без retries; production preview использовался на
+`http://127.0.0.1:4173`. Первый Chromium прогон выявил только неполные AI
+capabilities в тестовом mock; после исправления fixture чисто прошли все три
+браузера. Это не требовало изменения runtime-кода. Точный CI для `f9c8425`
+ещё не подтверждён; явная цель invite/member, остальные callbacks, staging,
+merge и release остаются открытыми.
