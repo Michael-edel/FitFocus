@@ -492,19 +492,15 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 
 ### P0.8 — единая постоянная очередь в IndexedDB
 
-Первый компонент реализован в `storage/legacyQueue.ts`: нормализация всех
-согласованных случаев и fingerprint по JSON-массиву с SHA-256. 62 unit-проверки
-и все три режима typecheck прошли после исправления сужения типа в тестовом
-помощнике (первый CI выявил TS2339). Компонент пока не подключён к runtime;
-ни импорт legacy, ни смена хранилища очереди этим шагом не завершены.
-
-В [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) добавлен общий
-менеджер схемы IDB v2 и транзакционный API DurableOutbox. Существующее
-хранение values использует этот менеджер; UserStateRepository переведён
-на атомарную запись шести ключей; их сетевой отправитель уже подключён
-и проверен на `22a7788`. Добавлен компонент
-LegacyQueueMigration: порции импорта, карантин, ledger и сохранённые снимки
-источника. 59 новых unit-проверок проходят; вызов из runtime ещё не подключён.
+В текущей ветке реализованы общий IDB DurableOutbox и транзакционная запись
+данных с операцией, claim/lease и guarded finish. К ней подключены 15 управляемых
+state-ключей, профиль, регистрация и guarded bootstrap; старый Map sender удалён
+из текущей сборки. Runtime-импорт legacy-очереди использует свежий `/api/me`,
+all-client Service Worker fence, атомарные migration items и quarantine.
+Старый и новый browser bundle проверены на одном origin с реальной pending-записью.
+Формат JSON backup v3 сохраняет пять долговечных IDB stores и поддерживает
+атомарное восстановление. Контракты и результаты проверок: [legacy migration](docs/legacy-migration.md),
+[backup/restore](docs/backup-restore.md), [статус проекта](docs/project-status.md).
 
 - [x] Обновить существующую IDB до v2, сохранив values; создать outbox,
   migration_items, migration_unknown и outbox_meta.
@@ -536,8 +532,9 @@ LegacyQueueMigration: порции импорта, карантин, ledger и �
 - [x] Подключить guarded bootstrap/state-hydration и auth-fence (`dac2de2`).
 - [x] Проверить runtime-импорт старого и нового bundle на одном origin с
   реальным pending intent: сохраняются владелец, ledger и исходный legacy-ключ;
-  неизвестный владелец помещён в карантин; прежний bundle до обновления не
-  отправляет запись. [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7.
+  неизвестный владелец помещён в карантин; старое окно не отправляет запись до
+  обновления, а новая очередь отправляет её после all-client fence.
+  [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7.
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
@@ -545,16 +542,15 @@ LegacyQueueMigration: порции импорта, карантин, ledger и �
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
 - [ ] Завершить UI повтора/разрешения конфликтов, очистку всех stores и
   проверить полный lifecycle. [Граница текущего runtime](docs/runtime-state.md).
-- [x] Проверить старую и новую сборку на одном origin в одном browser context;
-  оба окна обновляются и после all-client fence отправляют только известную
-  операцию новой очереди. [Browser smoke](e2e/legacy-outbox-migration.spec.ts).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;
 legacy-ключ не используется для новой очереди и не удаляется до проверенного
 импорта. Неизвестное владение не определяется по активному аккаунту.
 
 Контракт компонента и оставшиеся условия подключения:
-[legacy migration](docs/legacy-migration.md). P0.8 целиком остаётся открытым.
+[legacy migration](docs/legacy-migration.md). P0.8 остаётся открытым до завершения
+остальных callbacks и полного lifecycle, UI повтора/разрешения конфликтов,
+account-scoped очистки всех связанных stores и общей приёмки.
 
 ### P0.9 — приёмка жизненного цикла
 
