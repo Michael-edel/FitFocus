@@ -2415,3 +2415,20 @@ audit без уязвимостей, guards, все три typecheck, build и �
 Staging, merge в `main` и выпуск не проверены. Детальный контракт и границы —
 [client AI callbacks](ai-callback-sessions.md); остаются пункты P0.5 в
 [TASKS](../TASKS.md).
+
+## Исправление Firefox IndexedDB snapshot, 13.10.2026
+
+Документационный SHA `75159f5` прошёл [CI run 38388730336](https://github.com/Michael-edel/FitFocus/actions/runs/38388730336)
+с одним flaky в сценарии `weekly menu preserves an independent profile edit
+made while AI is pending`: фоновое чтение завершилось `STATE_STORAGE_TRANSACTION`.
+Локальный прогон того же Firefox-сценария без retries воспроизвёл 2 ошибки из 20.
+Stack указывал на `DurableOutbox.snapshot()`: три независимых запроса в одной
+read-only транзакции ожидались последовательно, и Firefox иногда завершал
+транзакцию до постановки следующего запроса.
+
+В рабочем дереве запросы owner, value и metadata ставятся в очередь до
+`Promise.all`. После изменения сценарий прошёл 20/20 повторов, полный
+`weekly-menu-durability.spec.ts` в desktop Firefox — 8/8 без retries. Unit
+прошёл 1115/1115 (198 файлов), общий, domain-strict и storage-strict typecheck
+и production build прошли. Новый код и документация пока не закоммичены;
+результат CI исправленного SHA ещё не подтверждён.
