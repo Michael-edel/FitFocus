@@ -5,10 +5,10 @@
 `useDeleteUserProfile.ts`; тесты — `tests/account_state_cleanup.test.ts`,
 `tests/local_privacy.test.ts` и `tests/authSession_logout.test.ts`.
 
-Статус: реализация находится в незакоммиченном рабочем дереве ветки
-`fix/durable-outbox` поверх `d987c846bbfd128fb358325b3bfe15e61236893c`.
-Локальные проверки прошли; CI этого пакета ещё не запускался. Это контракт
-текущей реализации, а не заявление о полном стирании всех копий данных.
+Статус: коммит [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
+опубликован в ветке `fix/durable-outbox`. Его точный [CI run](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131)
+завершился success. Этот контракт описывает текущую реализацию и не утверждает,
+что все копии данных аккаунта полностью стёрты.
 
 ## Область очистки
 
@@ -65,12 +65,12 @@ IndexedDB не открылась за 5 секунд, пользователь 
 конфликтующем владельце и отказ позднего sender ack. Другие тесты проверяют
 точные localStorage-префиксы и ожидание очистки перед logout.
 
-В рабочем дереве прошли 1079 unit-тестов в 197 файлах, общий,
-`domain-strict` и `storage-strict` typecheck, production build и
-`git diff --check`. Workflow базового `d987c846` завершился success ([run
-38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660)),
-но не включает эти изменения. Результаты относятся к незакоммиченному
-состоянию; CI, staging и выпуск cleanup-пакета не подтверждены.
+Локально и в точном CI `b53a55e` прошли 1079 unit-тестов / 197 файлов,
+общий, `domain-strict` и `storage-strict` typecheck, production build; CI также
+прошёл audit, guards и 23 HTTP/D1-запроса. E2E: 390 browser passed / 9 skipped,
+20,1 минуты. [Workflow](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131);
+[rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131/artifacts/11784907304).
+Staging и выпуск не подтверждены.
 
 Открытые критерии: безопасно исключить данные удалённого аккаунта из общего
 legacy-источника и сохранённых снимков; проверить повторный вход того же ID и

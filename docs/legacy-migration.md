@@ -7,8 +7,8 @@
 Это компонент [P0.8](../TASKS.md), реализующий согласованный
 [ADR-005](adr/ADR-005-durable-outbox.md). Runtime подключён; old/new bundle
 smoke с настоящей записью прошёл на семи Playwright-проектах. Локальная
-account-scoped очистка пяти IDB stores уже реализована в незакоммиченном
-пакете, но global legacy source и snapshots сохраняются. Поэтому удаление
+account-scoped очистка пяти IDB stores реализована в `b53a55e`, CI компонента
+прошёл; global legacy source и snapshots сохраняются. Поэтому удаление
 данных аккаунта из общей миграционной evidence и оставшийся lifecycle P0.8
 открыты. [Контракт очистки](account-data-cleanup.md).
 
@@ -192,8 +192,9 @@ SHA `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965
 390 browser passed / 9 skipped. JSON backup v3 для долговечных stores реализован
 отдельно ([контракт](backup-restore.md), commit
 [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)).
-Локальная очистка подтверждённо account-owned строк уже реализована в рабочем
-пакете ([контракт](account-data-cleanup.md)); общий исходный ключ и snapshots
+Локальная очистка подтверждённо account-owned строк реализована в коммите
+[`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
+([контракт](account-data-cleanup.md)); общий исходный ключ и snapshots
 не меняются. Они сохраняются для безопасной миграции и могут содержать
 незавершённые записи удалённого аккаунта. Уже импортированные записи с
 утраченным ledger уходят в `missing-imported-operation`; незавершённые могут

@@ -5,21 +5,22 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Незакоммиченный пакет — account-scoped cleanup
+## Account-scoped cleanup — опубликованный компонент `b53a55e`
 
-На ветке `fix/durable-outbox`, поверх базового `d987c846`, локальная очистка
-удаляет точные account-owned localStorage-ключи и данные из всех пяти
-долговечных IDB stores одной транзакцией. При удалении активной сессии
-увеличивается auth-fence; чужие и неоднозначные данные сохраняются. Общий
-legacy-источник и snapshots не фильтруются и могут содержать данные аккаунта,
-поэтому UI показывает предупреждение, а полное стирание пока не подтверждено.
+Коммит [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
+опубликован в `fix/durable-outbox`. Локальная очистка удаляет точные
+account-owned localStorage-ключи и записи всех пяти долговечных IDB stores одной
+транзакцией. При удалении активной сессии увеличивается auth-fence; чужие и
+неоднозначные данные сохраняются. Общий legacy-источник и snapshots не
+фильтруются и могут содержать данные аккаунта, поэтому приложение предупреждает
+о неполной очистке, а полное стирание пока не подтверждено.
 
-На текущем рабочем дереве прошли 1079 unit-тестов / 197 файлов, общий,
-`domain-strict` и `storage-strict` typecheck и production build. Изменения ещё
-не закоммичены. Workflow базового `d987c846` завершился success ([run
-38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660)),
-но этот SHA не включает текущие изменения. CI пакета, staging и выпуск не
-подтверждены. Полный контракт и остаточный риск: [очистка локальных данных](account-data-cleanup.md).
+Точный [CI run 38334411131](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131)
+завершился success: 1079 unit / 197 файлов, 390 browser passed / 9 skipped за
+20,1 минуты, audit/guards, три typecheck, build и 23 HTTP/D1-запроса прошли.
+Rollback-артефакт [сохранён в CI](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131/artifacts/11784907304).
+Staging и выпуск не выполнялись. Полный контракт и остаточный риск: [очистка
+локальных данных](account-data-cleanup.md).
 
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
@@ -448,7 +449,7 @@ callbacks. Весь P0.5 остаётся открытым.
    источники не считать автоматически объяснёнными этим изменением.
 3. Завершить UI повтора/разрешения конфликтов. Account-scoped очистка
    доказанно принадлежащих строк пяти IDB stores и scoped localStorage
-   реализована в незакоммиченном пакете; определить безопасное подавление или
+   опубликована в `b53a55e` и прошла CI; определить безопасное подавление или
    удаление account data из общего legacy source/snapshots и проверить повторный
    вход того же ID. [Контракт очистки](account-data-cleanup.md). JSON backup v3
    реализован и прошёл CI: [backup/restore](backup-restore.md).

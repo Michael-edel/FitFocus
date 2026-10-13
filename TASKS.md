@@ -10,8 +10,8 @@ Mock-фикстура опубликована в `085fcc1` и проверен�
 на `c724bce` также завершился success. После него настоящий old/new bundle smoke
 прошёл на семи Playwright-проектах и проверен полным [CI `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).
 Последующий CI базового docs SHA `d987c846` тоже завершился success ([run
-38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660)); оба запуска
-предшествуют незакоммиченному пакету account cleanup.
+38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660)).
+Cleanup-компонент затем опубликован в [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b); его точный CI прошёл.
 Исправление неиспользуемого Google SDK опубликовано в `98d4910`.
 Компонент артефакта отката опубликован в `bd763ec`; поправка CI — в `5b90249`.
 Полная приёмка проверяется отдельно;
@@ -23,20 +23,19 @@ Mock-фикстура опубликована в `085fcc1` и проверен�
 История достижений, формы, прежних прогонов и исправлений сохранена
 [в журнале](docs/stabilization-progress.md) и контрактах компонентов.
 
-Текущий локальный пакет на базе `d987c846` реализует account-scoped очистку
-локальных ключей и доказанно принадлежащих строк всех пяти IDB stores. Прошли
-1079 unit-тестов / 197 файлов, три typecheck и build; пакет не закоммичен,
-CI нового пакета ещё не запускался. Workflow базового `d987c846` завершился
-success ([run 38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660));
-этот SHA не включает текущие локальные изменения.
+Пакет account-scoped cleanup опубликован в [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b).
+Точный [CI run 38334411131](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131)
+завершился success: 1079 unit / 197 файлов, 390 browser passed / 9 skipped,
+20,1 мин; audit, guards, три typecheck, build и 23 HTTP/D1-запроса прошли.
+Rollback-артефакт сохранён в [run](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131/artifacts/11784907304).
 Общий legacy-источник и снимки сохраняются, поэтому полное удаление локальных
 копий не подтверждено. Контракт: [очистка данных аккаунта](docs/account-data-cleanup.md).
 
 Полная область — в [карте документации](docs/README.md),
 текущая работа — в [статусе проекта](docs/project-status.md). Этот файл — очередь реализации.
 P0.8 подключён к runtime; реальная миграция pending legacy intent из старого
-bundle проверена на семи Playwright-проектах и прошла CI на `00cd005`;
-cleanup-пакет ещё ждёт публикации и проверки. Ни один P0 целиком не закрыт.
+bundle проверена на семи Playwright-проектах и прошла CI на `00cd005`; cleanup
+опубликован в `b53a55e` и прошёл точный CI. Ни один P0 целиком не закрыт.
 
 ## Подготовленный компонент — preview origin
 

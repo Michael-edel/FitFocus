@@ -2240,12 +2240,13 @@ schema/privacy, три typecheck и build прошли. Последующая H
 
 ## Account-scoped локальная очистка — 13.10.2026
 
-В незакоммиченном рабочем дереве `fix/durable-outbox` поверх `d987c846`
-реализована локальная очистка точных account-owned localStorage keys и строк всех
-пяти долговечных IDB stores. IDB-удаление выполняется одной транзакцией; она
-удаляет outbox и разрешённые migration rows владельца, увеличивает auth-fence
-при очистке его активной сессии и оставляет чужие/конфликтные строки нетронутыми.
-Вызовы удаления ждут очистку и показывают предупреждение при неполном результате.
+Коммит [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
+опубликован в `fix/durable-outbox`. Реализована очистка точных account-owned
+localStorage keys и строк всех пяти долговечных IDB stores. IDB-удаление
+выполняется одной транзакцией; она удаляет outbox и разрешённые migration rows
+владельца, увеличивает auth-fence при очистке его активной сессии и оставляет
+чужие/конфликтные строки нетронутыми. Вызовы ждут очистку и предупреждают при
+неполном результате.
 
 Общий legacy localStorage source и snapshots остаются без изменений согласно
 ADR-005. Если там найдены записи целевого аккаунта или повреждённые данные,
@@ -2253,10 +2254,10 @@ ADR-005. Если там найдены записи целевого аккау
 означает, что полное локальное стирание не подтверждено; безопасное подавление
 legacy-записей после удаления и защита от повторного импорта остаются открытыми.
 
-Локально прошли 1079 unit-тестов / 197 файлов, общий, domain-strict и
-storage-strict typecheck, production build и `git diff --check`. Workflow базового
-`d987c846` завершился success ([run 38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660));
-он не включает этот пакет. Новые целевые
-тесты прошли 4 файла / 12 тестов. Код и MD на момент этой записи не
-закоммичены; CI exact SHA ещё не запускался. Подробности и ограничения:
-[контракт account cleanup](account-data-cleanup.md).
+Точный [CI run 38334411131](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131)
+завершился success: 1079 unit-тестов / 197 файлов; 390 browser passed / 9 skipped
+за 20,1 минуты; dependency audit, guards, три typecheck и build прошли. Локальный
+HTTP/D1 rollback smoke прошёл 23 запроса. [Артефакт отката](https://github.com/Michael-edel/FitFocus/actions/runs/38334411131/artifacts/11784907304).
+Локально также прошли новые целевые тесты: 4 файла / 12 тестов, `git diff --check`
+и относительные Markdown-ссылки. Staging, merge в main и выпуск не выполнялись.
+Подробности и ограничения: [контракт account cleanup](account-data-cleanup.md).
