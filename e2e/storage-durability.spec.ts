@@ -16,6 +16,27 @@ async function storedSettings(page: Page) {
   });
 }
 
+async function storedWeeklyReportCount(page: Page) {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    try {
+      const tx = db.transaction('values', 'readonly');
+      const value = await new Promise<{ value?: string } | undefined>((resolve, reject) => {
+        const request = tx.objectStore('values').get('fitfocus_data_google-e2e-sub_weekly_reports');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return value?.value ? JSON.parse(value.value).length as number : 0;
+    } finally {
+      db.close();
+    }
+  });
+}
+
 test('settings edit survives reload in IndexedDB with its outgoing intent', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -317,8 +338,17 @@ test('quota fault rolls back settings and displays a visible storage error', asy
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  const weeklyReportResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    return new URL(response.url()).pathname === '/api/ai'
+      && request.method() === 'POST'
+      && request.postDataJSON()?.feature === 'wis_text';
+  });
   await mockApp(page, { session: 'app' });
   await openApp(page, '/#settings');
+  const reportResponse = await weeklyReportResponse;
+  await reportResponse.finished();
+  await expect.poll(() => storedWeeklyReportCount(page)).toBeGreaterThan(0);
   await page.getByRole('button', { name: /^Светлая/ }).click();
   await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"light"');
   const previous = await storedSettings(page);

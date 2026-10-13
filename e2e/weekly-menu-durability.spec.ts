@@ -184,11 +184,19 @@ test('weekly menu preserves an independent profile edit made while AI is pending
 });
 test('weekly menu resumes the same durable profile operation after a cloud failure and reload', async ({ page }, info) => {
   const { errors, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
+  const failedProfileResponse = page.waitForResponse(response => {
+    const request = response.request();
+    return new URL(response.url()).pathname === '/api/profile'
+      && request.method() === 'PUT'
+      && response.status() === 503;
+  });
   try {
     await generate(page); await expect.poll(() => counts.profileFailures).toBeGreaterThanOrEqual(1);
     const before = await saved(page); expect(before.profile?.aiPlan?.weeklyMenu?.days).toHaveLength(7);
     expect(before.operations).toHaveLength(1); const opId = before.operations[0].opId;
     expect(cloudProfile().aiPlan?.weeklyMenu).toBeUndefined();
+    const response = await failedProfileResponse;
+    await response.finished();
     await page.reload();
     await expect.poll(async () => (await saved(page)).profile?.aiPlan?.weeklyMenu?.days.length).toBe(7);
     expect((await saved(page)).operations.map(op => op.opId)).toEqual([opId]);
