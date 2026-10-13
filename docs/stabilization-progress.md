@@ -2675,3 +2675,20 @@ Flaky были в двух независимых E2E:
 до reload во втором, не ослабляя проверку неожиданных ошибок. Полный CI
 подтверждает включённые family-target и account-switch изменения, но staging,
 old/new family bundle smoke и общая lifecycle-приёмка остаются открытыми.
+
+## Локальный E2E follow-up двух CI flaky — `7753d87`, 14.10.2026
+
+Диагностика показала, что счётчик `profileFailures` увеличивался до
+`route.fulfill(503)`, и тест мог вызвать reload до завершения ответа. В тесте
+теперь ожидается `Response.finished()` для точного `PUT /api/profile` с HTTP 503.
+В quota fault сценарии тест ждёт завершения `wis_text` response и появления
+сохранённого weekly report в IndexedDB до внедрения искусственного отказа
+записи настроек; проверка неожиданных ошибок сохранена.
+
+На точном локальном follow-up SHA
+[`7753d87fe99a07b7fa555dac5ab2a5c487d44d54`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54)
+целевые сценарии прошли 10/10 каждый с `workers=1/retries=0`. Полный
+`storage-durability.spec.ts` прошёл 10/10 на Android PWA Chrome; полный
+`weekly-menu-durability.spec.ts` прошёл 8/8 на iPhone PWA; `npm run typecheck`
+прошёл. Это подтверждает детерминированность тестового порядка локально, но не
+устраняет неизвестность CI-only причины до полного CI exact SHA.

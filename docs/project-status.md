@@ -14,11 +14,14 @@
 passed, 29 skipped и два flaky-теста, прошедших retry. Rollback/CAS job прошёл,
 артефакт сохранён в CI как `11847145964`.
 
-Оба flaky-сценария повторены локально по 10 раз с `retries=0`, все повторы
-прошли. В Android PWA Chrome тест quota fault увидел фоновый
-`WEEKLY_AI_REPORT_FAILED` во время проверки ошибок; в iPhone PWA после reload
-появился WebKit access-control warning для `/api/profile`. Причины нестабильности
-под CI не установлены; локальные повторы не доказывают устранение источника.
+В Android PWA Chrome тест quota fault увидел фоновый `WEEKLY_AI_REPORT_FAILED`;
+в iPhone PWA после reload появился WebKit access-control warning для
+`/api/profile`. Тестовый follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54)
+добавил барьер записи недельного отчёта перед fault injection и ожидание
+завершённого 503-ответа перед reload. После этого целевые повторы прошли 10/10
+на каждом проекте; полные затронутые specs прошли 10/10 на Android PWA Chrome
+и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Новый полный CI для follow-up
+ещё не завершён, поэтому устранение flaky пока не подтверждено CI.
 
 Предыдущий полный CI на SHA
 [`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)

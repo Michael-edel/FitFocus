@@ -9,6 +9,9 @@ flaky-сценария повторены локально по 10 раз с `re
 не установлены. Подробности записаны в [журнале](docs/stabilization-progress.md).
 Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
 приёмки lifecycle/release.
+Локальный E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54)
+добавил барьеры для двух flaky-сценариев: целевые повторы прошли 10/10 каждый,
+затронутые specs — 10/10 и 8/8; точный CI этого follow-up ещё не подтверждён.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox

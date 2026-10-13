@@ -13,6 +13,11 @@ unit прошли во всех 198 файлах; Playwright сообщил 501 
 из `b44d46e` включена в этот HEAD; профильный локальный прогон прошёл 7/7
 browser/PWA-проектов с `retries=0`.
 
+После CI локально проверен E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54):
+оба flaky-сценария повторены 10/10 каждый; полные затронутые specs прошли 10/10
+на Android PWA Chrome и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Полный
+CI этого follow-up ещё ожидается.
+
 ## P0.8 — IndexedDB outbox transaction stability
 
 Текущий кодовый SHA [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
