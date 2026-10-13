@@ -207,3 +207,8 @@ BFCache/staging остаются открытыми. CI `bf01d87` для profile
 Scoped личный POST отклоняется кодом PERSONAL_MENU_PROFILE_REQUIRED,
 семейный путь остаётся отдельным. Исторические результаты этого документа
 не переносятся на новый код. [Текущий контракт и свидетельства](personal-menu-projection.md).
+
+Клиентские
+Клиентские AI callbacks, которые ещё не подключены к этому протоколу, описаны
+в [отдельном контракте coach/plan/plateau](ai-callback-sessions.md); требования
+к недельному отчёту находятся в [его контракте](weekly-ai-report-session.md).

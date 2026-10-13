@@ -52,7 +52,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
     if (path === '/api/me' && expired) { rejectedProofs += 1; return json({ error: 'UNAUTH' }, 401); }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 } });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile' && request.method() === 'PUT') {
       mutations.push(request.method());

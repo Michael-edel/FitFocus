@@ -12,8 +12,15 @@ account/session-привязку, проверку lifetime и guarded запи�
 Поздний ответ после logout не применяется к UI и не создаёт durable-операцию.
 Проверки: 24 профильных unit-теста, полный набор 1095/197 файлов, общий и оба
 strict typecheck, admin guards; новый browser spec — 14/14 на семи проектах,
-без retries, production build прошёл. CI для рабочего дерева ещё не запускался. Это не
+без retries, production build прошёл. GitHub CI для `0b7062d` завершился ошибкой E2E в
+[run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143),
+предыдущие CI-шаги прошли, но Playwright отметил 343 из 476 сценариев как failed.
+Причина — E2E /api/me mocks без AI-capabilities и ожидаемые auth/session отмены,
+записанные как console errors. Локальный follow-up обновил fixtures и
+классификацию: полный unit-набор (1095/197), общий typecheck и 49/49 связанных Chromium E2E
+прошли; полный прогон и CI нового SHA ещё ожидаются. Это не
 закрывает P0.5: прочие AI retry, семейные callbacks и staging остаются открыты.
+Требования к оставшимся AI-действиям: [контракт](ai-callback-sessions.md).
 Подробности: [контракт недельного AI-отчёта](weekly-ai-report-session.md).
 
 ## Account-scoped cleanup — опубликованный компонент `b53a55e`

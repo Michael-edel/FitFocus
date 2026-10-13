@@ -50,7 +50,7 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
     stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
-    bootstrapSync: { protocol: 1, guard: 1 },
+    bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
   }) }));
   await page.route('**/api/state*', async (route) => {
     const request = route.request(); const headers = request.headers();

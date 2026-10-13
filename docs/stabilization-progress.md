@@ -11,8 +11,14 @@ commit в IndexedDB outbox; поздний ответ после logout не с�
 Профильные unit-тесты прошли: 24 проверки в четырёх файлах; полный unit-набор —
 1095 тестов / 197 файлов. Общий, `domain-strict` и `storage-strict` typecheck
 и admin guards прошли. Новый browser spec прошёл 14/14 на семи проектах,
-`workers=1/retries=0`; production build прошёл. CI этого рабочего дерева пока
-не запускался. Изменения ещё не имеют commit SHA. Остальные AI
+`workers=1/retries=0`; production build прошёл. GitHub CI для `0b7062d`
+завершился ошибкой E2E в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143);
+В логе 343 failed из 476 E2E после успешных audit, schema/privacy/auth/API
+checks, unit, трёх typecheck и build. Причина — неполные AI-capabilities в
+mock /api/me и штатные auth/session отказы, записанные как console errors.
+Рабочая копия обновляет fixtures и классификацию ожидаемой отмены. Локально
+прошли полный unit-набор 1095/197, общий typecheck и 49/49 связанных E2E в desktop Chromium.
+Полный E2E и CI нового SHA ещё не запускались. Остальные AI
 retry, family callbacks, staging и общая приёмка P0.5 остаются открытыми.
 [Контракт](weekly-ai-report-session.md); [список задач](../TASKS.md).
 

@@ -27,6 +27,8 @@ export function classifyWisShareFailure(error: unknown): string {
 export function isSoftWeeklyAiError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
+    message === 'login_session_changed' ||
+    message === 'session_read_auth' ||
     message.includes('already in progress') ||
     message.includes('cooldown') ||
     message.includes('api key') ||

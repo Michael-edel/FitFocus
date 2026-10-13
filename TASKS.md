@@ -454,11 +454,15 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   [Контракт](docs/ai-session-guard.md). Запросы без scope остаются прежними.
 - [x] Защитить недельный AI-отчёт и его retry свежим session proof, lifecycle
   guard и durable commit; локальные профильные проверки описаны в
-  [контракте](docs/weekly-ai-report-session.md). CI ещё не подтверждён.
+  [контракте](docs/weekly-ai-report-session.md). GitHub CI коммита `0b7062d`
+  упал на E2E (343 failed из 476) в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143);
+  локальный follow-up прошёл 49/49 связанных тестов Chromium; полный CI нового SHA ожидается.
 - [ ] Завершить оставшиеся AI retry и family callbacks, проверить поздние
   ответы и lifecycle; для всего приложения серверный guard сам по себе
   недостаточен.
 
+Критерии для coach/plan/plateau callbacks и повторов приведены в
+[контракте](docs/ai-callback-sessions.md).
 Готово, когда ответ старого запроса не удаляет новую операцию, не применяет
 старый payload и не продвигает версию независимо изменённого снимка.
 

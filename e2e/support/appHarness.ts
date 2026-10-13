@@ -117,7 +117,11 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
     const json = async (payload: unknown, status = 200) => route.fulfill({
       status,
       contentType: 'application/json',
-      headers: path.startsWith('/api/achievements') ? {
+      headers: path === '/api/ai' && method === 'POST' && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
+      } : path.startsWith('/api/achievements') ? {
         'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
       } : path === '/api/bootstrap' || path === '/api/state' && method === 'GET' ? {
@@ -149,6 +153,8 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         hasAccess: true,
         stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
         bootstrapSync: { protocol: 1, guard: 1 },
+        aiSync: { protocol: 1, guard: 1 },
+        weeklyMenuSync: { protocol: 1, guard: 1 },
         achievementSync: { protocol: 1, guard: 1 },
       });
       return;

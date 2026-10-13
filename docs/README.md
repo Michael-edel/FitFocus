@@ -58,10 +58,15 @@ migration smoke `00cd005`; каждый результат подтвержда�
 SHA. См. [статус проекта](project-status.md). Более ранние проверки ниже
 привязаны к отдельным ревизиям.
 
-Текущий компонент рабочего дерева — защита недельного AI-отчёта свежей сессией
-и durable commit: локально прошли 1095 unit / 197 файлов и 14 browser-сценариев
-на семи проектах без retries; общий и оба strict typecheck прошли. Изменения
-ещё не закоммичены, их CI не запускался. [Контракт и пределы](weekly-ai-report-session.md).
+Текущий компонент — защита недельного AI-отчёта свежей сессией и durable
+commit: локально прошли 1095 unit / 197 файлов и 14 browser-сценариев на семи
+проектах без retries; общий и оба strict typecheck прошли. Коммит `0b7062d`
+отправлен в ветку; CI SHA 0b7062d завершился с ошибкой E2E: 343 failed из
+476; [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143).
+[Контракт и пределы](weekly-ai-report-session.md). Локальный follow-up обновил
+E2E fixtures и убрал шум для ожидаемых auth/session отмен. Связанные
+сценарии прошли 49/49 в desktop Chromium; полный unit-набор — 1095 тестов / 197 файлов. Полный E2E и CI нового SHA
+ожидаются.
 Recovery UI acceptance расширена в [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5):
 три основных E2E-файла прошли 189/189; после добавления multi-edit сценария
 `storage-durability.spec.ts` прошёл 70/70 на семи проектах, совокупно подтверждены
@@ -159,6 +164,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Требования к session/lifecycle guard для coach, личного плана, плато и их повторов; реализация остаётся открытой |
 | [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |

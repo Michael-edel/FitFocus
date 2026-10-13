@@ -12,6 +12,9 @@ describe('frontend error helpers', () => {
 
   it('keeps expected weekly AI soft failures out of noisy logging', () => {
     expect(isSoftWeeklyAiError(new Error('already in progress'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('LOGIN_SESSION_CHANGED'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('SESSION_READ_AUTH'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('SESSION_READ_PROTOCOL'))).toBe(false);
     expect(isSoftWeeklyAiError(new Error('database stack trace'))).toBe(false);
   });
 

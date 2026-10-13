@@ -1,7 +1,9 @@
 # Защита недельного AI-отчёта сессией
 
-Обновлено: 13.10.2026. Реализация сейчас находится в рабочем дереве ветки
-`fix/durable-outbox`; commit и CI для этого компонента ещё не подтверждены.
+Обновлено: 13.10.2026. Реализация недельного отчёта входит в commit 0b7062d
+ветки fix/durable-outbox; его CI завершился ошибкой E2E. Локальный follow-up
+по E2E mocks прошёл 49/49 затронутых сценариев в desktop Chromium; CI нового
+SHA ещё не запускался.
 Общий P0.5 остаётся открытым: этот документ описывает только генерацию
 недельного AI-отчёта и её повтор.
 
@@ -35,7 +37,12 @@ IndexedDB repository: 24 теста в четырёх файлах. Полный
 1095 тестов / 197 файлов. Прошли общий typecheck, `domain-strict`,
 `storage-strict` и admin guards. Новый browser spec прошёл 14/14 на семи
 проектах (`workers=1`, `retries=0`); запуск также собрал production build.
-CI для изменений рабочего дерева ещё не запускался.
+GitHub CI для коммита `0b7062d` завершился ошибкой E2E в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143);
+Unit, typecheck и build прошли, но E2E завершился с 343 failed из 476. По
+логу, fixtures не возвращали AI-capabilities; штатные auth/session отказы
+также попадали в error console. Локальный follow-up исправил fixtures и
+классификацию ожидаемого отказа: 49/49 связанных E2E прошли в desktop
+Chromium; полный прогон и CI нового SHA ожидаются.
 
 Browser-сценарии проверяют успешный guarded save и поздний AI-ответ после
 logout. Во втором случае отчёт и новая outbox-операция не появляются.
@@ -43,4 +50,5 @@ logout. Во втором случае отчёт и новая outbox-опер�
 Не входят в этот компонент: повторы личного плана, плато и coach; семейные
 callbacks; полная проверка всех AI writers, реального OAuth/staging и всего
 lifecycle приложения. Их статус остаётся в [P0.5](../TASKS.md) и
-[общем AI-session контракте](ai-session-guard.md).
+[контрактах клиентских callbacks](ai-callback-sessions.md) и
+[AI API](ai-session-guard.md).
