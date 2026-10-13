@@ -33,6 +33,13 @@ HTTP/D1 rollback-проверка на 23 запросах прошли. Два 
 [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) добавили delayed family invite и AI-menu account-switch E2E; каждый прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный CI для `b66dcb4` прошёл, точный CI для нового AI-сценария `bca2eda` ожидается.
 PR #93 остаётся draft и не слит в `main`.
 
+Локальная приёмка personal-plan retry после смены аккаунта добавлена в
+`e2e/ai-callback-account-switch.spec.ts`: поздний ответ A не меняет профиль,
+значения, outbox или success-effects A и B. Она прошла 3/3 на desktop Chromium,
+Firefox и WebKit; `npm run typecheck` прошёл. Этот сценарий ещё не входит в
+удалённый CI. CI run `38425515018` для опубликованного `c6ebbdc` выполняет E2E;
+предыдущие статические проверки, unit, typecheck и build уже прошли.
+
 ## Предыдущий компонент — P0.5 client AI callbacks
 
 Coach, личный план и объяснение плато используют свежий session proof, scoped

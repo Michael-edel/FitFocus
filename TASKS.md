@@ -1,18 +1,18 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
-в `fix/durable-outbox`. Полный [CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
-завершился success: 1115 unit, 466 browser passed / 9 skipped, guards,
-typechecks, build и rollback-проверка на 23 запросах прошли; audit сообщил
-0 уязвимостей. IndexedDB read/write запросы outbox ставятся в очередь до
-первого `await`; две Firefox race-проверки прошли 30/30 без retries, весь
-weekly-menu spec — 8/8.
+Обновлено: 13.10.2026. Последний опубликованный HEAD — документационный коммит
+[`c6ebbdc`](https://github.com/Michael-edel/FitFocus/commit/c6ebbdc6987f38ca487b12917630e2d2429f5afa)
+в `fix/durable-outbox`; CI run [38425515018](https://github.com/Michael-edel/FitFocus/actions/runs/38425515018)
+дошёл до E2E после успешных guards, unit, typecheck и build. Предыдущий полный
+CI [run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386)
+для `b66dcb4` завершился success.
 
-Один CI E2E был flaky в desktop WebKit PWA update: кнопка обновления не появилась
-в первой попытке, retry прошёл. Локальный целевой повтор прошёл 3/3 с
-`retries=0`; причина пока не установлена. P0.8 остаётся открытым до полной
-lifecycle-приёмки; P0.5 — до browser-приёмки позднего coach/plateau ответа и
-смены аккаунта. Следующие критерии — в разделах P0 ниже.
+Локальный commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
+добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
+и WebKit прошли 3/3, `npm run typecheck` прошёл. Он ещё не опубликован; следующий
+CI должен проверить этот сценарий вместе с остальной веткой. P0.5 и P0.8
+остаются открытыми до остальных callbacks, общей lifecycle-приёмки и staging.
+Подробные критерии — в разделах P0 ниже.
 
 ## Предыдущие результаты
 
@@ -489,6 +489,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   соседней вкладке: приглашение не попадает в старую UI, AI-ответ не создаёт
   `familyMenu`-операцию. `f9c8425` и `bca2eda` прошли по 3/3 на desktop
   Chromium, Firefox и WebKit без retries.
+- [x] Проверить задержанный повтор личного плана A после входа B в соседней
+  вкладке: поздний ответ не меняет профиль, значения, outbox или success-effects
+  обоих аккаунтов. Локально прошло 3/3 на desktop Chromium, Firefox и WebKit;
+  `npm run typecheck` прошёл. Точный CI этого изменения ожидает публикации.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

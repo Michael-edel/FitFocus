@@ -2526,3 +2526,17 @@ family меню не меняется, новая `familyMenu` outbox-опера
 на desktop Chromium, Firefox и WebKit. Полный CI для этого SHA ещё ожидается;
 остальные family/AI callbacks, явная цель invite/member, staging и выпуск
 остаются открытыми.
+
+## P0.5 — повтор личного плана после смены аккаунта, локальная приёмка, 13.10.2026
+
+В `e2e/ai-callback-account-switch.spec.ts` добавлена проверка задержанного
+personal-plan retry. Вкладка A начинает повтор; в соседней same-origin вкладке
+выполняется вход B; после освобождения ответа проверяются active session,
+профиль, значения, outbox и профильные/state записи обоих аккаунтов, а также
+отсутствие achievement и позднего плана в UI.
+
+`npm run typecheck` и целевой сценарий прошли. Команда с desktop Chromium,
+Firefox и WebKit завершилась 3/3 без retries. Изменения ещё локальные и не входят
+в run `38425515018`, который проверяет опубликованный `c6ebbdc`; в нём E2E
+продолжается после успешных unit, typecheck, guards и build. Staging, OAuth,
+BFCache, другие callbacks и общий P0.5 остаются открытыми.

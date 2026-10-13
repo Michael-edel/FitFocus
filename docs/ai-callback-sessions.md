@@ -119,10 +119,15 @@ PR CI исправления `ec29f41` прошёл с одним unrelated flak
 отпускается раньше 10 секунд, до таймаута запроса. Полный [CI точного SHA](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
 завершился success: E2E, статические проверки, typecheck, build и rollback/CAS jobs прошли.
 
-Эти сценарии не закрывают весь [P0.5](../TASKS.md): отдельная browser-приёмка
-повторов плана, семейных callbacks, остальных writers и полного lifecycle всё
-ещё открыта. Результаты и границы: [статус проекта](project-status.md) и
-[журнал](stabilization-progress.md).
+Следующая локальная browser-приёмка удерживает повтор личного плана аккаунта A,
+пока соседняя вкладка входит в B. Тест проверяет, что поздний ответ не меняет
+профиль, значения, outbox, active session или success-effects обоих аккаунтов.
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit; `npm run typecheck`
+прошёл. Полный CI для коммита с этим тестом будет указан после публикации.
+
+Эти сценарии не закрывают весь [P0.5](../TASKS.md): другие AI/family callbacks,
+прочие writers и полный lifecycle всё ещё открыты. Результаты и границы:
+[статус проекта](project-status.md) и [журнал](stabilization-progress.md).
 
 ## Приёмка
 
@@ -141,8 +146,9 @@ PR CI исправления `ec29f41` прошёл с одним unrelated flak
   success-effects. Объяснение плато меняет только актуальный экран.
 - Все запросы, включая fallback-модели, используют один session scope.
   Неуспешная подготовка proof не вызывает unscoped POST.
-- Browser acceptance проверяет поздний ответ на той же вкладке и смену
-  аккаунта; mock API результат не выдаётся за OAuth или staging-приёмку.
+- Browser acceptance проверяет поздний ответ и смену аккаунта для coach,
+  объяснения плато и повтора личного плана; mock API результат не выдаётся за
+  OAuth или staging-приёмку.
 
 Отдельно закрываются семейные callbacks и остальные AI writers по своим
 контрактам. Успех одного действия не закрывает общий P0.5.

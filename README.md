@@ -70,7 +70,7 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний полный CI для состояния ветки — коммит [`b66dcb4`](https://github.com/Michael-edel/FitFocus/commit/b66dcb4910267345e2c38eeb2f58175c5c8bea1f), [run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386) завершился success. Он включает browser acceptance Coach/plateau и delayed family invite. Более новый кодовый коммит [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) проверяет поздний AI-ответ семейного меню после входа другого аккаунта: typecheck и 3/3 desktop Chromium, Firefox и WebKit прошли локально; точный CI этой ревизии ещё ожидается.
+Полный CI run `38425515018` для опубликованного HEAD [`c6ebbdc`](https://github.com/Michael-edel/FitFocus/commit/c6ebbdc6987f38ca487b12917630e2d2429f5afa) прошёл guards, unit, typecheck и build; E2E выполнялся при последней проверке. В нём уже есть account-switch тест семейного AI-меню [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5), который локально прошёл 3/3 на desktop Chromium, Firefox и WebKit. Следующий локальный commit `eae1ce1` добавляет delayed personal-plan retry acceptance с результатом 3/3 в тех же браузерах; новый полный CI проверит опубликованный тестовый и документационный HEAD.
 
 Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий
