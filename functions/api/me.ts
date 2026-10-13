@@ -20,7 +20,7 @@ const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
       profileSync: { protocol: 1, guard: 1, ...(menuProjection ? { weeklyMenuProjection: 1 } : {}) },
       inviteSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
-      familySync: { protocol: 1, guard: 1 }, ...(familyMenuState ? { familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : {}),
+      familySync: { protocol: 1, guard: 1, target: 1 }, ...(familyMenuState ? { familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : {}),
       achievementSync: { protocol: 1, guard: 1 } }, 200);
   } catch {
     return json({ user: null }, 200);

@@ -62,7 +62,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
       ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'familySync'].map(name =>
-        [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}) }])),
+        [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {

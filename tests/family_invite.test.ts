@@ -42,7 +42,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { insertChanges?: number[] } = {}) {
+function makeDb(options: { insertChanges?: number[]; memberExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   let insertAttempt = 0;
   return {
@@ -58,7 +58,9 @@ function makeDb(options: { insertChanges?: number[] } = {}) {
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-1', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('FROM users WHERE id = ? LIMIT 1')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('JOIN family_members')) return { id: 'family-1', owner_user_id: 'user-1', role: 'owner' };
+          if (sql.includes('JOIN family_members')) return options.memberExists === false
+            ? null
+            : { id: String(this.binds[0] || 'family-1'), owner_user_id: 'user-1', role: 'owner' };
           if (sql.includes('FROM subscriptions')) return { plan: 'family' };
           return null;
         },
@@ -81,7 +83,7 @@ function makeDb(options: { insertChanges?: number[] } = {}) {
   };
 }
 
-async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { ttlHours: 24 }, requestId?: string) {
+async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { familyId: 'family-1', ttlHours: 24 }, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyInviteContext = {
     request: new Request('https://fitfocus.test/api/family/invite', {
@@ -104,12 +106,13 @@ describe('/api/family/invite', () => {
     randomCode.mockReturnValueOnce('AAAA1111').mockReturnValueOnce('BBBB2222');
 
     const db = makeDb({ insertChanges: [0, 1] });
-    const response = await postInvite(db, { ttlHours: 24 }, 'family-invite-request-1');
+    const response = await postInvite(db, { familyId: 'family-2', ttlHours: 24 }, 'family-invite-request-1');
 
     expect(response.status).toBe(201);
     expect(response.headers.get('X-Request-ID')).toBe('family-invite-request-1');
     await expect(response.json()).resolves.toMatchObject({ code: 'BBBB2222' });
     expect(db.runs.filter((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))).toHaveLength(2);
+    expect(db.runs.find((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))?.binds[1]).toBe('family-2');
   });
 
   it('falls back invalid ttlHours before writing expires_at', async () => {
@@ -117,7 +120,7 @@ describe('/api/family/invite', () => {
     randomCode.mockReturnValue('AAAA1111');
 
     const db = makeDb();
-    const response = await postInvite(db, { ttlHours: 'abc' });
+    const response = await postInvite(db, { familyId: 'family-1', ttlHours: 'abc' });
 
     expect(response.status).toBe(201);
     const body = await response.json() as InviteResponseBody;
@@ -135,5 +138,24 @@ describe('/api/family/invite', () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ error: 'INVITE_GENERATION_FAILED' });
+  });
+
+  it('rejects a missing target family before membership lookup or invite writes', async () => {
+    randomCode.mockReset();
+    const db = makeDb();
+    const response = await postInvite(db, { ttlHours: 24 });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_TARGET' });
+    expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))).toBe(false);
+  });
+
+  it('rejects a target family the caller does not belong to', async () => {
+    randomCode.mockReset();
+    const db = makeDb({ memberExists: false });
+    const response = await postInvite(db, { familyId: 'family-other', ttlHours: 24 });
+
+    expect(response.status).toBe(403);
+    expect(db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))).toBe(false);
   });
 });

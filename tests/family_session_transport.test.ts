@@ -23,6 +23,16 @@ it.each([undefined, { protocol: 1 }, { protocol: 2, guard: 1 }])('requires famil
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me({ familySync: capability }))); session.fetchImpl = fetchImpl;
   await expect(request()).rejects.toThrow('PROTOCOL'); expect(fetchImpl).toHaveBeenCalledOnce();
 });
+it.each([
+  ['/api/family/invite', 'POST'],
+  ['/api/family/member', 'PATCH'],
+] as const)('requires explicit-family capability before %s mutation', async (url, method) => {
+  const fetchImpl = vi.fn<typeof fetch>(async input => String(input).startsWith('/api/me') ? json(me()) : json({ ok: true }, headers()));
+  session.fetchImpl = fetchImpl;
+  await expect(requestFamilyJson(session, url, { method, body: '{}' })).rejects.toThrow('PROTOCOL');
+  expect(fetchImpl).toHaveBeenCalledOnce();
+  expect(String(fetchImpl.mock.calls[0][0])).toContain('/api/me');
+});
 it.each(['other-account', 'same-account-login'])('never adopts a %s proof', async change => {
   const owner = change === 'other-account' ? 'another-owner' : account;
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me({ user: { sub: owner }, stateSync: { protocol: 2, guard: 1, accountId: owner, sessionId: 'b'.repeat(64) } })));

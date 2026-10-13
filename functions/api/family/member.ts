@@ -1,9 +1,9 @@
 // /api/family/member
-// PATCH: update current user's member profile inside their active family (goal + basic params)
-// Body: { goal?: 'LOSS'|'MAINTAIN', sex?: 'MALE'|'FEMALE', age?: number, height_cm?: number, weight_kg?: number, activity?: number, dietary?: {...} }
+// PATCH: update current user's member profile inside the explicitly selected family
+// Body: { familyId: string, goal?: 'LOSS'|'MAINTAIN', sex?: 'MALE'|'FEMALE', age?: number, height_cm?: number, weight_kg?: number, activity?: number, dietary?: {...} }
 import { requireStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
-import { updateActiveFamilyMemberProfile } from "../_lib/family_member_profile";
+import { updateFamilyMemberProfile } from "../_lib/family_member_profile";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { requestIdFor } from '../_lib/observability';
 import { familyResponse } from '../_lib/family_response';
@@ -26,9 +26,12 @@ const handlePatch: PagesFunction<Env> = async ({ request, env }) => {
       }
       throw err;
     }
-    const result = await updateActiveFamilyMemberProfile({ db, userId: user.sub, body });
+    const familyId = body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>).familyId
+      : undefined;
+    const result = await updateFamilyMemberProfile({ db, userId: user.sub, familyId, body });
     if (result.ok === false) {
-      const status = result.error === 'NOT_FOUND' ? 404 : 400;
+      const status = result.error === 'NOT_FOUND' ? 404 : result.error === 'NOT_IN_FAMILY' ? 403 : 400;
       return familyResponse('family.member.update', requestId, result.error === 'NOT_IN_FAMILY' ? { ok: false, error: result.error } : { error: result.error }, status);
     }
 

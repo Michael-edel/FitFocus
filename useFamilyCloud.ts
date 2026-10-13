@@ -42,8 +42,8 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
   const [cloudFamilyMembers, setCloudFamilyMembers] = useFamilyState(scope, EMPTY_MEMBERS);
   const [cloudFamilyMenu, setCloudFamilyMenu] = useFamilyState<FamilyWeeklyMenu | null>(scope, null);
   const [cloudFamilyLoading, setCloudFamilyLoading] = useFamilyState(scope, false);
-  const [cloudFamilyError, setCloudFamilyError] = useFamilyState<string | null>(scope, null);
-  const [familyInviteCode, setFamilyInviteCode] = useFamilyState(scope, '');
+  const [cloudFamilyError, setCloudFamilyError] = useFamilyState<string | null>(scope, null, cloudFamily?.id ?? '');
+  const [familyInviteCode, setFamilyInviteCode] = useFamilyState(scope, '', cloudFamily?.id ?? '');
   const [familyJoinCode, setFamilyJoinCode] = useFamilyState(scope, '');
   const [familyNameDraft, setFamilyNameDraft] = useFamilyState(scope, 'Моя семья');
   const [familyShopping, setFamilyShopping] = useFamilyState<FamilyShoppingState>(scope, null, cloudFamily?.id);
@@ -130,8 +130,14 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     if (current()) await loadCloudFamily();
   }), [familyNameDraft, loadCloudFamily, runMutation]);
   const makeInviteCode = useCallback(() => runMutation(async (binding, current) => {
-    const code = await createFamilyInvite(binding); if (current()) setFamilyInviteCode(code); return code;
-  }), [runMutation, setFamilyInviteCode]);
+    const familyId = cloudFamily?.id;
+    if (!familyId) throw new Error('Обновите список семей и повторите действие.');
+    const isCurrentTarget = () => current() && familyIdRef.current === familyId;
+    const targetBinding = { ...binding, isCurrentSession: isCurrentTarget };
+    const code = await createFamilyInvite(familyId, targetBinding);
+    if (isCurrentTarget()) setFamilyInviteCode(code);
+    return code;
+  }), [cloudFamily?.id, runMutation, setFamilyInviteCode]);
   const joinFamilyCloud = useCallback(async () => {
     const code = familyJoinCode.trim(); if (!code) return;
     await runMutation(async (binding, current) => {
@@ -140,8 +146,13 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     });
   }, [familyJoinCode, loadCloudFamily, runMutation, setFamilyJoinCode]);
   const updateMyFamilyGoal = useCallback((goal: 'LOSS' | 'MAINTAIN') => runMutation(async (binding, current) => {
-    await updateFamilyGoal(goal, binding); if (current()) await loadCloudFamily();
-  }), [loadCloudFamily, runMutation]);
+    const familyId = cloudFamily?.id;
+    if (!familyId) throw new Error('Обновите список семей и повторите действие.');
+    const isCurrentTarget = () => current() && familyIdRef.current === familyId;
+    const targetBinding = { ...binding, isCurrentSession: isCurrentTarget };
+    await updateFamilyGoal(familyId, goal, targetBinding);
+    if (isCurrentTarget()) await loadCloudFamily();
+  }), [cloudFamily?.id, loadCloudFamily, runMutation]);
   const generateFamilyMenuNow = useCallback(async () => {
     const familyId = cloudFamily?.id; if (!familyId || !familyMenuRepository) return null;
     if (cloudFamily.owner_user_id !== currentUser?.id) throw new Error('Только владелец семьи может менять общее меню.');

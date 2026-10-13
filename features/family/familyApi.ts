@@ -161,8 +161,10 @@ export async function createFamily(name: string, session: FamilySession): Promis
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось создать семью'));
 }
 
-export async function createFamilyInvite(session: FamilySession): Promise<string> {
-  const { response, body: rawData } = await apiFetch('/api/family/invite', requestOptions('POST'), session);
+export async function createFamilyInvite(familyId: string, session: FamilySession): Promise<string> {
+  const targetFamilyId = typeof familyId === 'string' ? familyId.trim() : '';
+  if (!targetFamilyId) throw new Error('Не удалось определить семью для приглашения. Обновите список семей.');
+  const { response, body: rawData } = await apiFetch('/api/family/invite', requestOptions('POST', { familyId: targetFamilyId }), session);
   const data = isRecord(rawData) ? rawData : {};
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось создать приглашение'));
   return typeof data.code === 'string' ? data.code : '';
@@ -173,8 +175,10 @@ export async function joinFamily(code: string, session: FamilySession): Promise<
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось присоединиться'));
 }
 
-export async function updateFamilyGoal(goal: 'LOSS' | 'MAINTAIN', session: FamilySession): Promise<void> {
-  const { response, body: data } = await apiFetch('/api/family/member', requestOptions('PATCH', { goal }), session);
+export async function updateFamilyGoal(familyId: string, goal: 'LOSS' | 'MAINTAIN', session: FamilySession): Promise<void> {
+  const targetFamilyId = typeof familyId === 'string' ? familyId.trim() : '';
+  if (!targetFamilyId) throw new Error('Не удалось определить семью участника. Обновите список семей.');
+  const { response, body: data } = await apiFetch('/api/family/member', requestOptions('PATCH', { familyId: targetFamilyId, goal }), session);
   if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось обновить цель'));
 }
 

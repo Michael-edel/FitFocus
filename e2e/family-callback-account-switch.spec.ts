@@ -5,7 +5,13 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 const accountA = { id: 'family-callback-account-a', sid: 'a'.repeat(64), name: 'Семья A' };
 const accountB = { id: 'family-callback-account-b', sid: 'b'.repeat(64), name: 'Семья B' };
 type Account = typeof accountA;
-type FixtureState = { current: Account; inviteRequests: number; releasedInvites: number };
+type FixtureState = {
+  current: Account;
+  familyId?: string;
+  inviteRequests: number;
+  inviteTargetIds: string[];
+  releasedInvites: number;
+};
 
 function profileFor(account: Account) {
   const profile = buildMockProfile();
@@ -52,7 +58,7 @@ function apiBody(account: Account) {
     aiSync: { protocol: 1, guard: 1 },
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
-    familySync: { protocol: 1, guard: 1 },
+    familySync: { protocol: 1, guard: 1, target: 1 },
     familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
     profile: profileFor(account),
   };
@@ -100,13 +106,19 @@ async function installAccountApi(page: Page, state: FixtureState, holdInvite: bo
       expect(requestedAccount).toBe(scopedAccount.id);
       expect(requestedSession).toBe(scopedAccount.sid);
     }
-    if (path === '/api/family') return json({
-      family: { id: `family-${scopedAccount.id}`, name: scopedAccount.name, owner_user_id: scopedAccount.id },
+    if (path === '/api/family') {
+      const familyId = state.familyId ?? `family-${scopedAccount.id}`;
+      const familyName = state.familyId ? `Семья ${state.familyId}` : scopedAccount.name;
+      return json({
+      family: { id: familyId, name: familyName, owner_user_id: scopedAccount.id },
       members: [{ user_id: scopedAccount.id, name: scopedAccount.name, role: 'owner', goal: 'MAINTAIN' }],
     });
+    }
     if (path === '/api/family/menu') return json({ weekStart: url.searchParams.get('week'), shared: null, portions: null });
     if (path === '/api/family/invite') {
       state.inviteRequests += 1;
+      const body = request.postDataJSON() as { familyId?: unknown } | null;
+      state.inviteTargetIds.push(typeof body?.familyId === 'string' ? body.familyId : '');
       if (holdInvite && scopedAccount.id === accountA.id) {
         await held.promise;
         state.releasedInvites += 1;
@@ -114,7 +126,11 @@ async function installAccountApi(page: Page, state: FixtureState, holdInvite: bo
       }
       return json({ code: 'CURRENT-CODE' });
     }
-    if (path === '/api/shopping/list') return json({ family_id: `family-${scopedAccount.id}`, week_start: url.searchParams.get('week'), items: [] });
+    if (path === '/api/shopping/list') return json({
+      family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
+      week_start: url.searchParams.get('week'),
+      items: [],
+    });
     return route.fallback();
   });
   page.on('pageerror', error => errors.push(error.message));
@@ -159,13 +175,15 @@ async function openAccountB(context: BrowserContext, state: FixtureState, errors
 test('a delayed family callback from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
-  const state: FixtureState = { current: accountA, inviteRequests: 0, releasedInvites: 0 };
+  const state: FixtureState = { current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0 };
   const fixtureA = await installAccountApi(page, state, true, errorsA);
   await openApp(page, '/#family');
   await expect(page).toHaveTitle(/FitFocus/);
-  await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
   await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
   await expect.poll(() => state.inviteRequests).toBe(1);
+  expect(state.inviteTargetIds).toEqual([`family-${accountA.id}`]);
 
   try {
     const accountBPage = await openAccountB(context, state, errorsB);
@@ -181,4 +199,37 @@ test('a delayed family callback from account A is ignored after another tab sign
   } finally {
     fixtureA.release();
   }
+});
+
+test('a delayed family callback stays bound to its captured family when the same login reloads another family', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
+  const errors: string[] = [];
+  const state: FixtureState = {
+    current: accountA,
+    familyId: 'family-a-original',
+    inviteRequests: 0,
+    inviteTargetIds: [],
+    releasedInvites: 0,
+  };
+  const fixture = await installAccountApi(page, state, true, errors);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await expect(page.getByRole('heading', { name: 'Семья family-a-original', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
+  await expect.poll(() => state.inviteRequests).toBe(1);
+  expect(state.inviteTargetIds).toEqual(['family-a-original']);
+
+  state.familyId = 'family-a-next';
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Семья family-a-next', exact: true })).toBeVisible();
+
+  fixture.release();
+  await expect.poll(() => state.releasedInvites).toBe(1);
+  await expect(page.getByText('OBSOLETE-CODE-FROM-A', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Сессия изменилась. Войдите снова и повторите действие.', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });

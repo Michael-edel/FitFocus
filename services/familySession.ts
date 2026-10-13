@@ -33,6 +33,9 @@ export async function requestFamilyJson(session: FamilySession, url: string, ini
   if (!guard) throw new SessionReadError('auth');
   const capability = body?.familySync;
   if (!isRecord(capability) || capability.protocol !== 1 || capability.guard !== 1) throw new SessionReadError('protocol');
+  if ((url === '/api/family/invite' || url === '/api/family/member') && capability.target !== 1) {
+    throw new SessionReadError('protocol');
+  }
   const resource = url.startsWith('/api/family/menu/state') ? 'Family-Menu' : url === '/api/weekly_menu/items' ? 'Weekly-Menu' : 'Family';
   if ((resource === 'Family-Menu' || url.startsWith('/api/family/menu/generate'))
     && (!isRecord(body?.familyMenuSync) || body.familyMenuSync.protocol !== 1

@@ -7,7 +7,9 @@ import {
   loadFamilyContext,
   loadFamilyShopping,
   generateFamilyMenu,
+  createFamilyInvite,
   setFamilyShoppingItem,
+  updateFamilyGoal,
 } from '../features/family/familyApi';
 import type { FamilyWeeklyMenu } from '../types';
 
@@ -28,7 +30,7 @@ const sid = 'a'.repeat(64);
 const headers = { 'Content-Type': 'application/json', 'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1',
   'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sid };
 const me = { user: { sub: 'user-1' }, hasAccess: true, stateSync: { protocol: 2, guard: 1, accountId: 'user-1', sessionId: sid },
-  familySync: { protocol: 1, guard: 1 } };
+  familySync: { protocol: 1, guard: 1, target: 1 } };
 beforeEach(async () => {
   database = new StateDatabase({ factory: new IDBFactory() }); const outbox = new DurableOutbox(database);
   session = { guard: (await outbox.acceptReadSession('user-1', sid, 0))!, controller: new AbortController(), isCurrentSession: () => true, outbox };
@@ -67,6 +69,48 @@ describe('family API client', () => {
         family_id: 'family-1',
       }),
     }));
+  });
+
+  it('sends the explicit family target for invite and member mutations', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/me')) return new Response(JSON.stringify(me), { headers });
+      return new Response(JSON.stringify(url === '/api/family/invite' ? { code: 'INVITE-2' } : { ok: true }), {
+        status: url === '/api/family/invite' ? 201 : 200,
+        headers,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createFamilyInvite('family-2', session)).resolves.toBe('INVITE-2');
+    await updateFamilyGoal('family-2', 'LOSS', session);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/family/invite', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ familyId: 'family-2' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/family/member', expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ familyId: 'family-2', goal: 'LOSS' }),
+    }));
+  });
+
+  it.each(['invite', 'member'])('does not send a %s mutation before the server advertises explicit targets', async kind => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/me')) {
+        return new Response(JSON.stringify({ ...me, familySync: { protocol: 1, guard: 1 } }), { headers });
+      }
+      return new Response(JSON.stringify(kind === 'invite' ? { code: 'unexpected' } : { ok: true }), { headers });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mutation = kind === 'invite'
+      ? createFamilyInvite('family-1', session)
+      : updateFamilyGoal('family-1', 'LOSS', session);
+    await expect(mutation).rejects.toThrow('Сервер пока не поддерживает');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/me');
   });
 
   it('requires the family CAS capability before requesting a generated preview', async () => {

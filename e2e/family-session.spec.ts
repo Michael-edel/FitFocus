@@ -10,9 +10,9 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
   'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
   'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1' };
 
-async function setup(page: Page, mode: 'normal' | 'no-capability' | 'held-context' | 'held-invite' | 'check-refusal' = 'normal') {
+async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-invite' | 'check-refusal' = 'normal') {
   await mockApp(page, { session: 'app' });
-  const errors: string[] = [], counts = { context: 0, invites: 0, checks: 0, released: 0 };
+  const errors: string[] = [], counts = { context: 0, invites: 0, members: 0, checks: 0, released: 0 };
   let active = true, cookieSid = sid, profile = buildMockProfile();
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   page.on('pageerror', error => errors.push(error.message));
@@ -26,7 +26,7 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'held-contex
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: cookieSid }, bootstrapSync: { protocol: 1, guard: 1 },
       profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 }, achievementSync: { protocol: 1, guard: 1 },
-      ...(mode === 'no-capability' ? {} : { familySync: { protocol: 1, guard: 1 } }) } : { user: null });
+      ...(mode === 'no-capability' ? {} : { familySync: { protocol: 1, guard: 1, ...(mode === 'no-target-capability' ? {} : { target: 1 }) } }) } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {
       if (request.method() === 'PUT') { const body = request.postDataJSON(); profile = { ...body, version: body.baseVersion + 1 }; }
@@ -47,9 +47,15 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'held-contex
     }
     if (path === '/api/family/menu') return json({ weekStart: new URL(request.url()).searchParams.get('week'), shared: null, portions: null });
     if (path === '/api/family/invite') {
+      expect(request.postDataJSON()).toMatchObject({ familyId: 'family-e2e' });
       counts.invites += 1;
       if (mode === 'held-invite' && counts.invites === 1) { await held; counts.released += 1; return json({ code: 'OBSOLETE-CODE' }); }
       return json({ code: 'CURRENT-CODE' });
+    }
+    if (path === '/api/family/member') {
+      expect(request.postDataJSON()).toMatchObject({ familyId: 'family-e2e' });
+      counts.members += 1;
+      return json({ ok: true });
     }
     if (path === '/api/shopping/list') return json({ family_id: 'family-e2e', week_start: new URL(request.url()).searchParams.get('week'), items: [{ name: 'Рис', grams: 400, checked: false }] });
     if (path === '/api/shopping/check') {
@@ -78,6 +84,8 @@ test('family reads, invitation and shopping check use the originating session', 
   await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
   await expect(page.getByText('CURRENT-CODE', { exact: true })).toBeVisible(); expect(counts.invites).toBe(1);
+  await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
+  await expect.poll(() => counts.members).toBe(1);
   const checkbox = page.getByRole('checkbox'); await expect(checkbox).toBeVisible(); await checkbox.check();
   await expect.poll(() => counts.checks).toBe(1); await expect(checkbox).toBeChecked();
   await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-scoped.png') });
@@ -87,6 +95,17 @@ test('missing family capability prevents family requests and displays a usable e
   await expect(page.getByText('Сервер пока не поддерживает безопасную работу с семьёй. Повторите позже.', { exact: true })).toBeVisible();
   expect(counts.context).toBe(0); expect(counts.invites).toBe(0);
   await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-protocol-required.png') });
+});
+test('missing explicit-family capability prevents invite and member mutations', async ({ page }) => {
+  const { errors, counts } = await setup(page, 'no-target-capability');
+  await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
+  await expect(page.getByText('Сервер пока не поддерживает безопасную работу с семьёй. Повторите позже.', { exact: true })).toBeVisible();
+  expect(counts.invites).toBe(0);
+  await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
+  await expect(page.getByText('Сервер пока не поддерживает безопасную работу с семьёй. Повторите позже.', { exact: true })).toBeVisible();
+  expect(counts.members).toBe(0);
+  await healthy(page, errors);
 });
 test('a shopping refusal restores the previous checkbox and displays an error', async ({ page }) => {
   const { errors, counts } = await setup(page, 'check-refusal');
