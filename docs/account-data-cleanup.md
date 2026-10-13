@@ -13,8 +13,14 @@
 Дополнение 13.10.2026: подавление повторного legacy-импорта, sender guard и
 фильтрация старого backup реализованы в коммите
 [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e).
-Локально прошли 1082 unit-теста, typecheck/build и migration smoke 7/7; push и
-CI этой ревизии ещё не подтверждены.
+Локально прошли 1082 unit-теста, typecheck/build и migration smoke 7/7.
+Изменение отправлено в `fix/durable-outbox`; точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на SHA `57e0a93`: 1082 unit-теста / 197 файлов, 390 browser
+passed / 9 skipped, audit (0 уязвимостей), guards, typecheck, build и rollback
+(23 запроса). Диагностика browser smoke и rollback-артефакт доступны в
+[workflow artifacts](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787457599)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787357946).
 
 ## Область очистки
 

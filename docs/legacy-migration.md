@@ -14,7 +14,11 @@ account-scoped очистка пяти IDB stores реализована в `b53
 evidence; физическое удаление payload и оставшийся lifecycle P0.8 открыты.
 [Контракт очистки](account-data-cleanup.md).
 Tombstone-итерация закоммичена в [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e);
-локальный 7/7 browser smoke пройден, CI ожидается.
+локальный 7/7 browser smoke пройден. Точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на документирующем SHA `57e0a93`: 1082 unit / 197 файлов,
+390 browser passed / 9 skipped, audit без уязвимостей, typecheck/build и rollback
+прошли.
 
 ## Browser acceptance — 13.10.2026
 

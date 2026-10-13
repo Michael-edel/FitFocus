@@ -76,5 +76,7 @@ legacy-источник и snapshots; физическое удаление payl
 UI конфликтов и lifecycle остаются открытыми критериями P0.8. Локальный
 tombstone блокирует повторный импорт и восстановление старых account-owned
 строк, но общий legacy payload сохраняется. Коммит `c7700eb` прошёл локально
-1082 unit-теста и 7/7 migration browser projects; CI этой итерации ожидается.
+1082 unit-теста и 7/7 migration browser projects; точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на SHA `57e0a93`.
 [Контракт очистки](account-data-cleanup.md).

@@ -4,7 +4,8 @@
 
 Дата: 13.10.2026. Ветка: `fix/durable-outbox`; кодовый коммит
 [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e)
-создан локально; push/CI ещё не подтверждены.
+опубликован; точный [CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+на документирующем SHA `57e0a93` завершился success.
 
 Account cleanup пишет в IndexedDB tombstone с SHA-256 account ID и отзывает
 старый migration send gate. При повторном входе importer проверяет tombstone
@@ -17,8 +18,10 @@ Backup restore пропускает account-owned строки из старог
 Локальная проверка: 1082 unit-теста / 197 файлов; профильные migration/cleanup/
 backup-тесты — 75; общий, `domain-strict` и `storage-strict` typecheck,
 production build и `git diff --check` прошли. Legacy migration smoke прошёл
-7/7 browser/device projects без retries. Browser CI, merge, staging и выпуск
-ещё не подтверждены. Payload в общем legacy source/snapshot остаётся; tombstone
+7/7 browser/device projects без retries. CI подтвердил 1082 unit / 197 файлов,
+390 browser passed / 9 skipped, audit без уязвимостей, guards, три typecheck,
+build и rollback-check (23 HTTP/D1-запроса). Merge, staging и выпуск ещё не
+подтверждены. Payload в общем legacy source/snapshot остаётся; tombstone
 обеспечивает локальное подавление, а не физическое стирание или серверную
 синхронизацию.
 
@@ -2283,3 +2286,22 @@ HTTP/D1 rollback smoke прошёл 23 запроса. [Артефакт отк�
 Локально также прошли новые целевые тесты: 4 файла / 12 тестов, `git diff --check`
 и относительные Markdown-ссылки. Staging, merge в main и выпуск не выполнялись.
 Подробности и ограничения: [контракт account cleanup](account-data-cleanup.md).
+
+## P0.8 — tombstone после удаления аккаунта, CI `57e0a93`, 13.10.2026
+
+Коммиты `c7700eb` (реализация) и `57e0a93` (фиксация локальной проверки)
+отправлены в `fix/durable-outbox`. Точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на SHA `57e0a93`. Прошли 1082 unit-теста / 197 файлов и
+390 browser-тестов; 9 сценариев пропущены, E2E занял 21,1 минуты. Dependency
+audit сообщил 0 уязвимостей; schema parity, privacy/auth/API guards, общий,
+domain-strict и storage-strict typecheck, production build и rollback-check
+также прошли. Последний проверил 23 HTTP/D1-запроса на локальном Pages
+worker/workerd/D1 с двумя синтетическими аккаунтами.
+
+CI сохранил [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787457599)
+и [проверенный rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787357946).
+Staging, merge в `main` и выпуск не выполнялись. Общий legacy source и snapshots
+по-прежнему не стираются физически; tombstone обеспечивает локальное подавление
+повторного импорта и отправки. Остаются полный P0.8 lifecycle и UI разрешения
+конфликтов.

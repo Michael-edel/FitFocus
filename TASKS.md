@@ -1,11 +1,12 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Текущий компонент — браузерная приёмка runtime-интеграции
-P0.8 в ветке `fix/durable-outbox`; [контракт миграции](docs/legacy-migration.md).
+Обновлено: 13.10.2026. Текущий компонент — полная приёмка P0.8 runtime-интеграции
+в ветке `fix/durable-outbox`; [контракт миграции](docs/legacy-migration.md).
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
-Последний подтверждённый [CI опубликованной ветки `076f4ac`](https://github.com/Michael-edel/FitFocus/actions/runs/38261672999):
-1053 unit / 194 файла; browser — 383 passed / 9 skips, success, 20,3 мин.
-В итоговом логе нет flaky, preview proxy errors и ECONNREFUSED. Полный
+Последний подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
+1082 unit / 197 файлов; browser — 390 passed / 9 skips, success, 21,1 мин.
+Dependency audit сообщил 0 уязвимостей; rollback-check выполнил 23 HTTP/D1-запроса.
+P0.8 остаётся открытым до полного lifecycle и общей приёмки. Полный
 [CI run 38318876304](https://github.com/Michael-edel/FitFocus/actions/runs/38318876304)
 на `c724bce` также завершился success. После него настоящий old/new bundle smoke
 прошёл на семи Playwright-проектах и проверен полным [CI `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).

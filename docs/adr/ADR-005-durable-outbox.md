@@ -49,7 +49,11 @@ dispatch. Схема IDB остаётся v2; отдельного profile-store
 Реализация и проверки зафиксированы в [cleanup contract](../account-data-cleanup.md)
 и [legacy migration](../legacy-migration.md) в коммите
 [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e).
-Push и CI этого SHA ожидаются.
+Изменение опубликовано в `fix/durable-outbox`. Документирующий коммит
+[`57e0a93`](https://github.com/Michael-edel/FitFocus/commit/57e0a93f8171393e5d0804e8dc395ff84a25ae94)
+и точный [CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+прошли успешно: 1082 unit-теста / 197 файлов, 390 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и 23 HTTP/D1 rollback-запроса.
 
 ## Причина
 

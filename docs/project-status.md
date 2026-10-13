@@ -22,19 +22,26 @@ Rollback-артефакт [сохранён в CI](https://github.com/Michael-ed
 Staging и выпуск не выполнялись. Полный контракт и остаточный риск: [очистка
 локальных данных](account-data-cleanup.md).
 
-## P0.8 — подавление legacy после удаления: `c7700eb`, CI ожидается
+## P0.8 — подавление legacy после удаления: `c7700eb`, CI пройден
 
 Коммит [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e)
-создан в `fix/durable-outbox`; push и CI этого SHA ещё не подтверждены.
+отправлен в `fix/durable-outbox`. Документация результата зафиксирована в
+[`57e0a93`](https://github.com/Michael-edel/FitFocus/commit/57e0a93f8171393e5d0804e8dc395ff84a25ae94).
 Реализация дополняет cleanup SHA-256 tombstone в `outbox_meta`. Повторная
 миграция с доказанным владельцем помечает старый fingerprint обработанным и не
 создаёт новую операцию; sender блокирует claim/finish старой legacy operation.
 Восстановление старого v3 backup в браузере с tombstone пропускает account-owned
 строки. Общие legacy source/snapshots остаются для
 аудита, поэтому физическое локальное стирание данных этим не подтверждается.
-Локально проходят 1082 unit-теста / 197 файлов, общий/domain-strict/storage-strict
+Локально прошли 1082 unit-теста / 197 файлов, общий/domain-strict/storage-strict
 typecheck, production build и профильные тесты миграции, cleanup и backup (75).
-Legacy migration smoke прошёл 7/7 browser/device projects без retries.
+Legacy migration smoke прошёл 7/7 browser/device projects без retries. Точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на SHA `57e0a93`: 1082 unit-теста / 197 файлов, 390 browser
+passed / 9 skipped за 21,1 минуты, audit (0 уязвимостей), schema/privacy guards,
+три typecheck, build и rollback-проверка (23 HTTP/D1-запроса). Browser diagnostics
+и rollback сохранены в [артефактах workflow](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787457599)
+и [проверенном rollback](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787357946).
 [Контракт и ограничения](account-data-cleanup.md).
 
 Полный CI на коде исправления sender завершился success в
