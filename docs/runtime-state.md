@@ -125,8 +125,11 @@ familyMenu. Основные три E2E-файла прошли 189/189; пос�
 операций. Полный [CI на `4e2ccb7`](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
 прошёл: 1092 unit / 197 файлов, 446 browser passed / 9 skipped, три typecheck,
 build и 23 rollback-запроса; артефакт сохранён. Multi-edit сценарий добавлен
-после этого SHA и ожидает полного CI на следующей ревизии. Эти результаты не
-заменяют staging или приёмку выпуска.
+после этого SHA. Последующий commit [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6)
+включил его; точный [CI run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success (1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit, три typecheck, build и rollback-проверка). Эти результаты не заменяют
+staging или приёмку выпуска.
 
 ## Проверки и дальнейшая работа
 
@@ -160,9 +163,11 @@ auth-сессии и HTTP-исходов описан в [state sender](state-se
 независимые edits, logout и поздние ответы проверяются отдельно от sender.
 [Контракт](ai-session-guard.md), [профиль](profile-persistence.md#сохранение-сгенерированного-результата).
 Вторичные items пока являются прямой scoped HTTP-проекцией без version/CAS
-и durable-порядка. Остальные AI/report/retry/family callbacks, runtime legacy,
-конфликты, экспорт/очистка и выпуск остаются открытыми. Историческое описание
-`cfcc31b` выше сохраняется как снимок своей реализации.
+и durable-порядка. Защита недельного AI-отчёта описана в отдельном
+[контракте](weekly-ai-report-session.md); остальные AI/retry и family
+callbacks, runtime legacy lifecycle, конфликты, экспорт/очистка и выпуск
+остаются открытыми. Историческое описание `cfcc31b` выше сохраняется как
+снимок своей реализации.
 
 ## Последующее подключение runtime legacy
 

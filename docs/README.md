@@ -49,26 +49,30 @@
 
 ## Подтверждённая ревизия
 
-Последний подтверждённый CI PR-head на рабочей ветке —
-[`2aff6c3`](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270):
-1073 unit / 196 файлов; browser — 390 passed / 9 skips за 15,7 мин; audit,
-schema/privacy/auth/API, три typecheck и build прошли. Дополнительно CI проверил
-23 HTTP/D1 rollback-запроса и сохранил rollback artifact. Предыдущий old/new
-migration smoke `00cd005` тоже прошёл CI (390 passed / 9 skips); он подтверждает
-этот smoke, а не последующий backup-код. См. [статус проекта](project-status.md).
-Более ранние результаты и проверки отдельных компонентов ниже привязаны к SHA.
-Текущий локальный компонент восстановления очереди — [`80dc1cf`](https://github.com/Michael-edel/FitFocus/commit/80dc1cfa20249ce099f94f3d406455cc547c0819):
-1092 unit-теста и 42 storage browser-сценария на семи проектах прошли локально;
-GitHub CI на этой ветке пока не подтверждён. Подробности — в [статусе](project-status.md)
-и [контракте runtime](runtime-state.md).
+Последний подтверждённый CI PR-head — [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6):
+[run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли.
+Предыдущая acceptance JSON backup на `2aff6c3` также прошла CI, как и old/new
+migration smoke `00cd005`; каждый результат подтверждает только соответствующий
+SHA. См. [статус проекта](project-status.md). Более ранние проверки ниже
+привязаны к отдельным ревизиям.
+
+Текущий компонент рабочего дерева — защита недельного AI-отчёта свежей сессией
+и durable commit: локально прошли 1095 unit / 197 файлов и 14 browser-сценариев
+на семи проектах без retries; общий и оба strict typecheck прошли. Изменения
+ещё не закоммичены, их CI не запускался. [Контракт и пределы](weekly-ai-report-session.md).
 Recovery UI acceptance расширена в [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5):
 три основных E2E-файла прошли 189/189; после добавления multi-edit сценария
 `storage-durability.spec.ts` прошёл 70/70 на семи проектах, совокупно подтверждены
 196 проверок. [CI run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
 на SHA `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser passed /
 9 skipped, три typecheck, build и 23 rollback-запроса; rollback-артефакт сохранён.
-Этот прогон не включает добавленный после него multi-edit сценарий; его CI нужно
-подтвердить на следующей ревизии. См. [текущий статус](project-status.md).
+Следующий commit [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6)
+включил multi-edit сценарий. Его точный [CI run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли. См.
+[текущий статус](project-status.md).
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).
@@ -155,6 +159,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
+| [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |

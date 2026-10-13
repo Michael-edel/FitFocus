@@ -131,10 +131,10 @@ export class UserStateRepository {
     }));
   }
 
-  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K]): Promise<OutboxOperation> {
+  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard?: OutboxCommitGuard): Promise<OutboxOperation> {
     let raw: string;
     try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
-    return this.writeRaw(stateKey, raw);
+    return this.writeRaw(stateKey, raw, false, guard);
   }
 
   writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {

@@ -5,6 +5,17 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+## Рабочее дерево — недельный AI-отчёт
+
+Клиентская генерация недельного отчёта и её retry теперь используют свежую
+account/session-привязку, проверку lifetime и guarded запись в IndexedDB outbox.
+Поздний ответ после logout не применяется к UI и не создаёт durable-операцию.
+Проверки: 24 профильных unit-теста, полный набор 1095/197 файлов, общий и оба
+strict typecheck, admin guards; новый browser spec — 14/14 на семи проектах,
+без retries, production build прошёл. CI для рабочего дерева ещё не запускался. Это не
+закрывает P0.5: прочие AI retry, семейные callbacks и staging остаются открыты.
+Подробности: [контракт недельного AI-отчёта](weekly-ai-report-session.md).
+
 ## Account-scoped cleanup — опубликованный компонент `b53a55e`
 
 Коммит [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
@@ -76,8 +87,11 @@ browser/PWA-проектах. Совокупно подтверждены 196 п
 на точном SHA `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser
 passed / 9 skipped за 23,4 минуты, audit без уязвимостей, три typecheck, build и
 23 rollback-запроса. [Rollback-артефакт](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311/artifacts/11791744552)
-сохранён. Этот CI не включает новый multi-edit сценарий; его полная CI-проверка
-остаётся для следующей ревизии. Выпуск и merge в `main` не выполнялись.
+сохранён. Последующий commit [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6)
+добавил multi-edit сценарий; его точный [CI run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли.
+Выпуск и merge в `main` не выполнялись.
 
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),

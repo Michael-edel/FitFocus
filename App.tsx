@@ -736,6 +736,8 @@ const App: React.FC = () => {
     weekly,
     targets,
     setWeeklyReports,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   const dailyStats = useMemo(() => calculateDailyNutrition(foodDiary), [foodDiary]);
@@ -1185,6 +1187,8 @@ const logWeight = useCallback(() => {
     setAdaptLoading,
     setAdaptNote,
     weeklyReportGenerationRef: aiReportGenerationRef,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     setWeeklyReports,
   }, opts), [
     adaptationIndex,
@@ -1192,6 +1196,8 @@ const logWeight = useCallback(() => {
     currentUser,
     expectedN,
     handleGetCoachAdvice,
+    isCurrentProfileSession,
+    loginReadGuard,
     persistUser,
     refeedSuggestion,
     targets,

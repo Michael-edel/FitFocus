@@ -1,4 +1,3 @@
-import type { MutableRefObject } from 'react';
 import {
   allowAiRetryNow,
   generatePersonalPlan,
@@ -12,6 +11,9 @@ import { getWeekKey } from '../../dateUtils';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, type WeeklyStoredReport } from '../../weeklyAutoEngine';
 import type { UserProfile } from '../../types';
 import type { WeeklyIntelligenceResult } from '../../weeklyIntelligence';
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
+import { prepareAiSession } from '../../services/aiSession';
+import type { WeeklyReportGenerationMarker, WeeklyReportGenerationRef } from './useWeeklyAiReport';
 import {
   buildWeeklyIntelligenceRequest,
   type MacroTargets,
@@ -32,7 +34,9 @@ export type AiRetryParams = {
   retryCoachAdvice: () => Promise<unknown>;
   setAdaptLoading: (loading: boolean) => void;
   setAdaptNote: (note: string) => void;
-  weeklyReportGenerationRef: MutableRefObject<string | null>;
+  weeklyReportGenerationRef: WeeklyReportGenerationRef;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   setWeeklyReports: (reports: WeeklyStoredReport[]) => void;
   getLastAction?: () => AiAction | null;
   allowRetry?: (feature?: string, opts?: { force?: boolean }) => boolean;
@@ -40,6 +44,7 @@ export type AiRetryParams = {
   buildFallbackPlan?: typeof buildFallbackAiPlan;
   requestPlateauExplanation?: typeof generatePlateauExplanation;
   requestWeeklyInterpretation?: typeof getWeeklyIntelligenceInterpretation;
+  prepareSession?: typeof prepareAiSession;
   recordLastAction?: typeof setLastAiAction;
   getWeekKeyImpl?: typeof getWeekKey;
   ensureWeeklyReport?: typeof ensureWeeklyReportWithAI;
@@ -62,6 +67,8 @@ export async function retryLastAiAction({
   setAdaptLoading,
   setAdaptNote,
   weeklyReportGenerationRef,
+  loginGuard,
+  isCurrentSession,
   setWeeklyReports,
   getLastAction = getLastAiAction,
   allowRetry = allowAiRetryNow,
@@ -69,6 +76,7 @@ export async function retryLastAiAction({
   buildFallbackPlan = buildFallbackAiPlan,
   requestPlateauExplanation = generatePlateauExplanation,
   requestWeeklyInterpretation = getWeeklyIntelligenceInterpretation,
+  prepareSession = prepareAiSession,
   recordLastAction = setLastAiAction,
   getWeekKeyImpl = getWeekKey,
   ensureWeeklyReport = ensureWeeklyReportWithAI,
@@ -83,14 +91,15 @@ export async function retryLastAiAction({
   }
 
   if (!last || !currentUser || last.userId !== currentUser.id) return;
-  if (!allowRetry(last.feature, opts)) return;
 
   if (last.type === 'coach') {
+    if (!allowRetry(last.feature, opts)) return;
     await retryCoachAdvice();
     return;
   }
 
   if (last.type === 'plan') {
+    if (!allowRetry(last.feature, opts)) return;
     try {
       const aiPlan = await requestPersonalPlan(currentUser);
       persistUser({ ...currentUser, aiPlan });
@@ -102,6 +111,7 @@ export async function retryLastAiAction({
   }
 
   if (last.type === 'plateau') {
+    if (!allowRetry(last.feature, opts)) return;
     setAdaptLoading(true);
     try {
       const note = await requestPlateauExplanation({
@@ -124,19 +134,42 @@ export async function retryLastAiAction({
 
   if (last.type !== 'wis' || !weekly) return;
 
+  if (!loginGuard || loginGuard.accountId !== currentUser.id) return;
+  const controller = new AbortController();
+  const current = () => !controller.signal.aborted && isCurrentSession();
+  const hide = () => controller.abort();
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('pagehide', hide, { once: true });
+  let marker: WeeklyReportGenerationMarker | undefined;
   try {
-    weeklyReportGenerationRef.current = null;
+    const session = await prepareSession(currentUser.id, controller, current, { previous: loginGuard });
+    if (!current()) return;
+    const latestAction = getLastAction();
+    if (!latestAction || latestAction.feature !== last.feature || latestAction.type !== last.type
+      || latestAction.userId !== last.userId || !allowRetry(last.feature, opts)) return;
     const weekKey = getWeekKeyImpl(new Date());
+    const generationKey = `${currentUser.id}_${weekKey}_${weekly.wis}_${session.guard.sessionEpoch}_${session.guard.serverSessionId}_${session.guard.authFence}`;
     const generateAI = async () => {
-      weeklyReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
+      if (!current()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
+      marker = { generationKey, signal: controller.signal };
+      weeklyReportGenerationRef.current = marker;
       recordLastAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
       return requestWeeklyInterpretation(
         buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
+        session,
       );
     };
-    await ensureWeeklyReport(currentUser.id, weekly, generateAI);
-    setWeeklyReports(await loadReports(currentUser.id));
+    await ensureWeeklyReport(currentUser.id, weekly, generateAI, {
+      readGuard: { ...session.guard }, canCommit: current,
+    });
+    if (!current()) return;
+    const reports = await loadReports(currentUser.id);
+    if (!current()) return;
+    setWeeklyReports(reports);
   } catch (error) {
-    logError(error);
+    if (marker && weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;
+    if (current()) logError(error);
+  } finally {
+    target?.removeEventListener('pagehide', hide);
   }
 }

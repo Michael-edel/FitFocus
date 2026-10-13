@@ -452,10 +452,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.
   [Контракт](docs/ai-session-guard.md). Запросы без scope остаются прежними.
-- [ ] Подключить свежий proof и capabilities к клиентским AI/menu/report/retry/family
-  сценариям, защитить lifecycle и проверить поздние ответы. Для меню ожидать
-  profile commit и явно обработать вторичный items writer; серверный guard
-  сам по себе не исправляет текущие callbacks.
+- [x] Защитить недельный AI-отчёт и его retry свежим session proof, lifecycle
+  guard и durable commit; локальные профильные проверки описаны в
+  [контракте](docs/weekly-ai-report-session.md). CI ещё не подтверждён.
+- [ ] Завершить оставшиеся AI retry и family callbacks, проверить поздние
+  ответы и lifecycle; для всего приложения серверный guard сам по себе
+  недостаточен.
 
 Готово, когда ответ старого запроса не удаляет новую операцию, не применяет
 старый payload и не продвигает версию независимо изменённого снимка.
@@ -580,8 +582,9 @@ all-client Service Worker fence, атомарные migration items и quarantin
   - [x] Подтвердить полный CI на `4e2ccb7`: 1092 unit / 197 файлов, 446 browser
     passed / 9 skipped, audit без уязвимостей, три typecheck, build и 23 rollback-
     запроса прошли в [run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311).
-  - [ ] Подтвердить CI следующей ревизии с multi-edit сценарием; локально storage
-    spec прошёл 70/70.
+  - [x] Подтвердить CI следующей ревизии с multi-edit сценарием: 1092 unit / 197
+    файлов, 453 browser passed / 9 skipped, audit без уязвимостей, три typecheck,
+    build и rollback-проверка прошли в [run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668).
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

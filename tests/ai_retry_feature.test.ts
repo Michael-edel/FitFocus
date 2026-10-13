@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Goal, type UserProfile } from '../types';
 import { retryLastAiAction } from '../features/ai/aiRetry';
+import type { AiSession } from '../services/aiSession';
+import type { OutboxReadGuard } from '../storage/durableOutbox';
 
 const user = { id: 'user-1', name: 'Анна', goal: Goal.LOSS } as UserProfile;
 const weekly = {
@@ -11,8 +13,13 @@ const weekly = {
   compliance: 84,
   adaptationIndex: 24,
 };
+const loginGuard: OutboxReadGuard = {
+  accountId: user.id, sessionEpoch: 'epoch-1', serverSessionId: 'a'.repeat(64), authFence: 0,
+};
 
 function params(overrides: Partial<Parameters<typeof retryLastAiAction>[0]> = {}) {
+  const controller = new AbortController();
+  const session = { guard: loginGuard, controller, isCurrentSession: () => true, outbox: {} } as AiSession;
   return {
     currentUser: user,
     weekly,
@@ -26,7 +33,10 @@ function params(overrides: Partial<Parameters<typeof retryLastAiAction>[0]> = {}
     retryCoachAdvice: vi.fn().mockResolvedValue(undefined),
     setAdaptLoading: vi.fn(),
     setAdaptNote: vi.fn(),
-    weeklyReportGenerationRef: { current: 'in-flight' },
+    weeklyReportGenerationRef: { current: { generationKey: 'in-flight', signal: new AbortController().signal } },
+    loginGuard,
+    isCurrentSession: () => true,
+    prepareSession: vi.fn().mockResolvedValue(session),
     setWeeklyReports: vi.fn(),
     allowRetry: vi.fn().mockReturnValue(true),
     logError: vi.fn(),
@@ -95,7 +105,11 @@ describe('AI retry feature', () => {
     expect(recordLastAction).toHaveBeenCalledWith({ feature: 'wis_text', type: 'wis', userId: user.id });
     expect(requestWeeklyInterpretation).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Анна', wis: 72, calorieTarget: 1800,
-    }));
+    }), expect.objectContaining({ guard: loginGuard }));
+    expect(input.prepareSession).toHaveBeenCalledWith(user.id, expect.any(AbortController), expect.any(Function), { previous: loginGuard });
+    expect(input.weeklyReportGenerationRef.current).toMatchObject({
+      generationKey: `user-1_2026-41_72_epoch-1_${'a'.repeat(64)}_0`,
+    });
     expect(input.setWeeklyReports).toHaveBeenCalledWith(reports);
   });
 });

@@ -1296,10 +1296,10 @@ export async function generatePlateauExplanation(data: unknown): Promise<string>
 /**
  * Интерпретация еженедельных показателей прогресса
  */
-export async function getWeeklyIntelligenceInterpretation(data: unknown): Promise<string> {
+export async function getWeeklyIntelligenceInterpretation(data: unknown, session: AiSession): Promise<string> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Интерпретируй еженедельные результаты пользователя: ${JSON.stringify(data)}. Напиши краткий мотивирующий анализ на 3-4 предложения.`,
-    'wis_text'
+    'wis_text', undefined, session,
   );
   return response.text || "Анализ недели не сформирован.";
 }

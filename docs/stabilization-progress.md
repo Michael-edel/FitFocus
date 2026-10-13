@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## Рабочее дерево — session guard недельного AI-отчёта, 13.10.2026
+
+Генерация недельного AI-отчёта и её retry используют свежую account/session
+привязку и lifetime guard. Сохранение проходит через проверяемый durable
+commit в IndexedDB outbox; поздний ответ после logout не создаёт отчёт или
+операцию синхронизации. Добавлен browser spec для успешного сохранения и
+запоздавшего ответа.
+
+Профильные unit-тесты прошли: 24 проверки в четырёх файлах; полный unit-набор —
+1095 тестов / 197 файлов. Общий, `domain-strict` и `storage-strict` typecheck
+и admin guards прошли. Новый browser spec прошёл 14/14 на семи проектах,
+`workers=1/retries=0`; production build прошёл. CI этого рабочего дерева пока
+не запускался. Изменения ещё не имеют commit SHA. Остальные AI
+retry, family callbacks, staging и общая приёмка P0.5 остаются открытыми.
+[Контракт](weekly-ai-report-session.md); [список задач](../TASKS.md).
+
 ## P0.8 — browser acceptance recovery UI, `4e2ccb7`, 13.10.2026
 
 Кодовый коммит [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5)
@@ -20,8 +36,11 @@ domain-strict и storage-strict typecheck, admin guards и `git diff --check`
 на `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser passed /
 9 skipped за 23,4 минуты, audit без уязвимостей, три typecheck, build и 23
 rollback-запроса. [Артефакт](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311/artifacts/11791744552)
-сохранён. Multi-edit тест требует нового полного CI; staging, merge и выпуск не
-выполнялись; прочие callbacks и lifecycle P0.8 остаются открытыми.
+сохранён. Последующая ревизия [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6)
+включила multi-edit сценарий. Точный [CI run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли. Staging,
+merge и выпуск не выполнялись; прочие callbacks и lifecycle P0.8 остаются открытыми.
 
 ## P0.8 — подавление legacy-импорта после удаления аккаунта
 
