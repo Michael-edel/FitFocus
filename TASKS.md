@@ -482,8 +482,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   и пять повторов падавшего сценария. Фикс закоммичен в `ec29f41`; точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
   завершился success: 466 browser passed / 9 skipped и один flaky в iPhone PWA
   preview-origin (`route.fetch: socket hang up`, retry прошёл; причина неизвестна).
-- [ ] Добавить browser acceptance позднего ответа coach/plateau и смены аккаунта;
-  затем подтвердить CI на точном SHA.
+- [x] Добавить browser acceptance позднего ответа coach/plateau и смены аккаунта:
+  локально 6/6 в desktop Chromium, Firefox и WebKit на `9bc98ee`.
+- [x] Подтвердить CI для точного SHA `9bc98ee`: [run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498) завершился success.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

@@ -23,9 +23,11 @@ HTTP/D1 rollback-проверка на 23 запросах прошли. Два 
 в первой попытке, retry прошёл. Локальный повтор этого сценария прошёл 3/3 при
 `retries=0`; причина не установлена и пока не воспроизведена. Если сбой повторится,
 следующий шаг — сохранить подробный SW/registration snapshot в момент отсутствия
-уведомления. P0.8 остаётся открытым до полной lifecycle-приёмки; P0.5 — до
-browser-тестов позднего coach/plateau ответа и смены аккаунта. PR #93 остаётся
-draft и не слит в `main`.
+уведомления. P0.8 остаётся открытым до полной lifecycle-приёмки. Для P0.5 тесты
+позднего ответа coach/plateau и смены аккаунта добавлены в `9bc98ee` и локально
+прошли 6/6 на desktop Chromium, Firefox и WebKit. Точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success: E2E, все статические проверки, build и rollback/CAS jobs прошли.
+PR #93 остаётся draft и не слит в `main`.
 
 ## Предыдущий компонент — P0.5 client AI callbacks
 
@@ -34,8 +36,11 @@ Coach, личный план и объяснение плато использу
 используют guarded commits; stale retry и поздний результат не должны менять
 данные. Hydration AI-task тоже не делает unscoped POST. Локальные unit/typecheck
 и browser проверки прошли; точные ранние результаты и ошибки CI сохранены в
-[журнале стабилизации](stabilization-progress.md). Полная приёмка P0.5 открыта;
-см. [контракт](ai-callback-sessions.md) и [план](../TASKS.md).
+[журнале стабилизации](stabilization-progress.md). Два новых сценария позднего
+ответа локально прошли 6/6 на трёх desktop engines; точный CI `9bc98ee` завершился
+success в [run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498).
+Полная приёмка P0.5 открыта из-за оставшихся family callbacks и writers; см.
+[контракт](ai-callback-sessions.md) и [план](../TASKS.md).
 
 Последующий документационный SHA `75159f5` тоже прошёл CI
 ([run 38388730336](https://github.com/Michael-edel/FitFocus/actions/runs/38388730336)),

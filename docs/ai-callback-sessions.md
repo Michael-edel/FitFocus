@@ -112,14 +112,17 @@ registration, onboarding и weekly report прошли 32 сценария; 3 п
 Follow-up E2E mock также прошёл weekly-menu spec 8/8 на desktop Firefox и 5/5
 повторов основного сценария. CI `75e4d35` имел один E2E failure и три flaky;
 PR CI исправления `ec29f41` прошёл с одним unrelated flaky в preview-origin.
-Прямые browser-тесты coach/plateau
-остаются открытыми; результаты и границы: [статус проекта](project-status.md) и
-[журнал](stabilization-progress.md).
+Коммит [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
+добавляет `e2e/ai-callback-account-switch.spec.ts`: задержанный Coach retry и
+объяснение плато проверяются после входа аккаунта B во второй вкладке. Локально
+прошли 6/6 на desktop Chromium, Firefox и WebKit; для сетевого mock ответ
+отпускается раньше 10 секунд, до таймаута запроса. Полный [CI точного SHA](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success: E2E, статические проверки, typecheck, build и rollback/CAS jobs прошли.
 
-Прямые browser-сценарии для задержанного coach/plateau ответа и смены аккаунта
-ещё не добавлены. Поэтому этот компонент не закрывает весь [P0.5](../TASKS.md):
-семейные callbacks, остальные writers, browser acceptance и CI остаются
-открытыми.
+Эти сценарии не закрывают весь [P0.5](../TASKS.md): отдельная browser-приёмка
+повторов плана, семейных callbacks, остальных writers и полного lifecycle всё
+ещё открыта. Результаты и границы: [статус проекта](project-status.md) и
+[журнал](stabilization-progress.md).
 
 ## Приёмка
 

@@ -70,20 +70,21 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
-в `fix/durable-outbox`. Он ставит независимые IndexedDB-чтения outbox в очередь
-до первого `await`, чтобы Firefox не закрывал транзакцию между запросами.
-[Полный CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
-завершился success: 1115 unit-тестов, 466 E2E passed / 9 skipped, typechecks,
-guards, build и rollback-проверка на 23 запросах прошли; dependency audit нашёл
-0 уязвимостей.
+Последний проверенный кодовый коммит — [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
+в `fix/durable-outbox`. Он добавляет browser acceptance позднего coach/plateau
+ответа при входе второго аккаунта в соседней вкладке. Локально прошло 6/6 в
+desktop Chromium, Firefox и WebKit; [полный CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success: E2E, dependency audit, schema/privacy/auth/API checks,
+typechecks, build, canonical readers/CAS после rollback и сохранение артефактов
+прошли.
 
-В E2E-итоге CI отмечен один flaky в desktop WebKit PWA update: уведомление об
+Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий
 прошёл 3/3 без retries, поэтому причина пока не воспроизведена. Сам outbox fix
 проверен двумя затронутыми Firefox-сценариями 30/30 и полным Firefox spec 8/8.
-P0.5 и полный lifecycle P0.8 остаются открытыми. Подробный статус и следующие
-критерии: [статус проекта](docs/project-status.md) и [план](TASKS.md).
+P0.5 и полный lifecycle P0.8 остаются открытыми из-за семейных/прочих callbacks
+и остатка lifecycle-приёмки. Подробный статус и следующие критерии: [статус
+проекта](docs/project-status.md) и [план](TASKS.md).
 
 PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
 и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).

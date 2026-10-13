@@ -2472,3 +2472,25 @@ IndexedDB race, ради которой сделан follow-up, не повто�
 PR #93 остаётся draft в `fix/durable-outbox`; изменения не слиты в `main`.
 Staging и release-приёмка не выполнялись. Следующий шаг по workflow — после
 публикации документационного коммита сверить CI именно для его SHA.
+
+## P0.5 — поздний AI-ответ при смене аккаунта, `9bc98ee`, 13.10.2026
+
+Коммит [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
+добавил `e2e/ai-callback-account-switch.spec.ts`. В двух same-origin вкладках
+удерживается Coach retry или объяснение плато аккаунта A; вторая вкладка
+принимает сессию аккаунта B, после чего тест отпускает старый ответ. Проверяется,
+что он не меняет профиль и карточку Coach ни A, ни B, не добавляет операции этих
+ключей в outbox, не запускает achievement и не появляется в старой UI.
+
+Локальный запуск без retries прошёл 6/6: оба сценария в desktop Chromium,
+Firefox и WebKit. Для WebKit фиксируется, что ответ освобождён раньше 10 секунд,
+до 12-секундного transport timeout; исходные запросы WIS и их сохранение
+завершаются до запуска удерживаемого действия. Также прошли `npm run typecheck`,
+admin guards и `git diff --cached --check`. Полный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+для точного SHA `9bc98ee` завершился success: audit, schema/privacy/auth/API,
+unit, typechecks, build, E2E, browser diagnostics, canonical readers/CAS после
+rollback и сохранение rollback-артефакта прошли.
+
+Приёмка охватывает coach retry и прямое объяснение плато, но не повтор личного
+плана, все callbacks, реальный OAuth, устройство/BFCache, staging или выпуск.
+P0.5 и P0.8 в целом остаются открытыми; PR #93 остаётся draft, `main` не менялся.

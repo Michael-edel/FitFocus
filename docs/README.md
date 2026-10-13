@@ -69,8 +69,10 @@ mock-ответа локально прошёл weekly-menu spec Firefox 8/8, о
 точный [PR CI run 38385161995](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
 завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
 Один flaky тест — iPhone PWA preview-origin, с `route.fetch: socket hang up`; retry
-прошёл, причина неизвестна. Browser acceptance
-coach/plateau остаётся открытой. [Контракт](ai-callback-sessions.md).
+прошёл, причина неизвестна. Coach/plateau account-switch acceptance добавлена
+в [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
+и прошла локально 6/6 на трёх desktop engines; её точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success. [Контракт](ai-callback-sessions.md).
 
 Предыдущий компонент — недельный AI-отчёт, коммит `0b7062d`; его CI завершился
 E2E failure в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143).
@@ -172,7 +174,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
-| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт, реализация coach, плана, плато и повторов; mock follow-up `ec29f41` прошёл CI, прямые callback browser acceptance остаются открытыми |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт, реализация coach, плана, плато и повторов; account-switch E2E и точный CI прошли на `9bc98ee`; остальные callback acceptance открыты |
 | [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
