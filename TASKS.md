@@ -509,6 +509,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   соседней вкладке: ответ A со старым scope не показывает toast ни старой, ни
   новой сессии; active session остаётся B. Commit `b44d46e`; 7/7 browser/PWA-профилей,
   `workers=3`, `retries=0`; `npm run typecheck` прошёл. Точный CI ожидается.
+- [x] Закрепить invite и member mutations за явным `familyId`: `/api/me`
+  объявляет `familySync.target`; старый сервер без capability блокируется до
+  запроса. Сервер проверяет точное членство/владельца, UI отбрасывает поздний
+  invite после смены семьи при том же login. `2bbec11`: 1128 unit / 198 файлов,
+  27 family E2E на трёх desktop-браузерах, target-capability 7/7 проектов,
+  typecheck/guards/schema/privacy/audit/build и 23 rollback/CAS HTTP прошли.
+  Точный CI ожидается; staging и реальные old/new bundle для этого изменения
+  остаются открытыми.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

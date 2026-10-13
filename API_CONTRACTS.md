@@ -238,7 +238,15 @@ Capabilities должны быть развёрнуты и проверены д
 
 ## Семейные запросы: исходная сессия
 
-Компонент `9c44c21` добавляет `familySync: { protocol: 1, guard: 1 }` в `/api/me`.
+Компонент `9c44c21` добавляет `familySync: { protocol: 1, guard: 1 }` в `/api/me`;
+коммит `2bbec11` расширяет capability до `target: 1` для явных целей семейных
+мутаций. Новые клиенты отправляют `POST /api/family/invite` и
+`PATCH /api/family/member` только с непустым `familyId`, полученным из выбранной
+семьи. Без `familySync.target === 1` клиент блокирует эти запросы до отправки.
+Invite требует владельца именно указанной активной семьи; member mutation
+проверяет активное членство именно в указанной семье и повторяет условие
+family/user/active в SQL `UPDATE`. Отсутствующая цель возвращает 400,
+неподходящее членство/владелец — 403.
 `useFamilyCloud` получает исходный login guard из hydration и обновляет proof
 перед каждым HTTP, не принимая другой вход того же аккаунта. Запросы передают
 `X-FitFocus-State-Account` / `X-FitFocus-State-Session`; family handlers и

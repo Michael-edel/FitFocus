@@ -20,14 +20,20 @@
 публичную account/session-привязку ответа. Другая сессия того же аккаунта
 не принимается за исходную.
 
+Для `POST /api/family/invite` и `PATCH /api/family/member` дополнительно
+требуется `familySync.target === 1`. Эти запросы всегда содержат `familyId`
+конкретной выбранной семьи; отсутствие capability или цели блокирует запрос
+до мутации. Сервер разрешает invite только владельцу этой активной семьи,
+а member update применяет профиль только к соответствующей активной записи.
+
 ## Серверный и клиентский охват
 
 | Путь | Методы | Защита |
 |---|---|---|
 | `/api/family` | GET, POST | Scope до чтения/создания семьи |
-| `/api/family/invite` | POST | Scope до создания приглашения |
+| `/api/family/invite` | POST | Scope, `familySync.target` и точный `familyId`; владелец целевой семьи |
 | `/api/family/join` | POST | Scope до расходования кода |
-| `/api/family/member` | PATCH | Scope до изменения участника |
+| `/api/family/member` | PATCH | Scope, `familySync.target` и точный `familyId`; только членство в целевой семье |
 | `/api/family/menu` | GET, POST | Scope до чтения/сохранения меню |
 | `/api/family/menu/generate` | POST | Scope до серверной генерации |
 | `/api/shopping/list` | GET | Scope до чтения покупок |
@@ -108,6 +114,25 @@ OAuth, production D1, staging, merge или deploy.
 
 ## Продолжение в текущей рабочей версии
 
+### Явная семья для invite и member — `2bbec11`
+
+`createFamilyInvite` и `updateFamilyGoal` принимают ID выбранной семьи и
+передают его в body. Сервер проверяет членство/владельца именно для этого ID;
+member `UPDATE` повторно ограничен target family и active membership в SQL.
+`/api/me` публикует `familySync.target: 1`; новый клиент не отправляет эти две
+мутации серверу без capability. Invite code и ошибка привязаны к ID семьи,
+а поздний ответ отбрасывается после переключения семьи, даже если login
+остался тем же.
+
+На `2bbec11` прошли 1128 unit-тестов / 198 файлов, три typecheck, guards,
+schema (23 миграции / 32 таблицы), privacy (29 user-related tables), audit
+(0 уязвимостей) и build. Две family E2E suites прошли 27/27 на desktop
+Chromium/Firefox/WebKit; отсутствие target-capability проверено отдельно
+во всех семи browser/PWA-проектах: 7/7. Локальный release rollback/CAS smoke
+с архивом `98d49101e15ad652e1960381ce00e00e8dac0d44` прошёл 23 HTTP-запроса
+на одной D1. Точный GitHub CI нового SHA ещё проверяется; staging и реальные
+старый/новый bundles для этого изменения не проверены.
+
 [Семейное меню и очередь](family-menu-state.md) реализованы в `405238b`:
 AI и серверный preview сохраняются одним familyMenu intent, CAS принимает
 меню/порции/покупки вместе. Старые прямые `saveFamilyMenu` и
@@ -124,9 +149,8 @@ AI account-switch сценария `bca2eda` ещё ожидается.
 
 - Расширить поздний-response account-switch acceptance на остальные family
   callbacks и состояния; уже покрыты invitation UI и AI family-menu commit.
-- Ввести и проверить явную целевую семью/членство для invite и member mutations;
-  session guard сам по себе не закрепляет членство, а смена семьи в том же login
-  требует отдельного контракта.
+- Проверить invite/member family target `2bbec11` в точном CI и затем staging;
+  локальные проверки не подтверждают deployment или реальные bundle.
 - Проверить настоящие old/new bundles с Service Worker, повреждённые legacy-строки,
   staging и совместимый rollback; локальный smoke с отключённым worker этого
   не подтверждает.

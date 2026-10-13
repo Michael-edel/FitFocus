@@ -36,6 +36,14 @@ family-menu recovery в desktop WebKit обнаружил access-control warning
 [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) добавили delayed family invite и AI-menu account-switch E2E; каждый прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный CI для `b66dcb4` прошёл, точный CI для нового AI-сценария `bca2eda` ожидается.
 PR #93 остаётся draft и не слит в `main`.
 
+Следующая family mutation поправка закоммичена на текущей ветке как
+[`2bbec11`](https://github.com/Michael-edel/FitFocus/commit/2bbec1143bb850cbf73bf0e2820d64be9d89db10): invite/member используют явную
+целевую семью и `familySync.target`, а UI не принимает поздний invite после
+переключения семьи тем же аккаунтом. Локально прошли 1128 unit / 198 файлов,
+27 family E2E, 7 capability E2E-проектов, typecheck/guards/schema/privacy/audit/build
+и 23 HTTP rollback/CAS запроса. Точный CI после push ещё не завершён; staging
+и реальные старые/новые bundles остаются открытыми.
+
 Локальная приёмка personal-plan retry после смены аккаунта добавлена в
 `e2e/ai-callback-account-switch.spec.ts`: поздний ответ A не меняет профиль,
 значения, outbox или success-effects A и B. Она прошла 3/3 на desktop Chromium,

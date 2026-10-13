@@ -2629,3 +2629,25 @@ Browser diagnostics artifact `11838963458` доступен до 27.10.2026; rol
 artifact `11839378221` — до 11.01.2027. Следующий шаг P0.5 — продолжить
 оставшихся family callbacks и writers по той же границе попытки/аккаунта;
 staging и общий lifecycle остаются открытыми.
+
+## P0.5 — явная семья для invite/member, `2bbec11`, 14.10.2026
+
+Новые `createFamilyInvite` и `updateFamilyGoal` передают `familyId` выбранной
+семьи. `/api/me` рекламирует `familySync.target: 1`; клиент без этой capability
+не отправляет invite/member mutations. Сервер сверяет точное активное членство,
+для invite — также владение, а SQL update ограничен той же семьёй и участником.
+Invite code/error принадлежат ID выбранной семьи; запоздавший ответ не меняет
+UI, если семья переключилась в той же login-сессии.
+
+На кодовом SHA `2bbec1143bb850cbf73bf0e2820d64be9d89db10` прошли 1128 unit-тестов
+/ 198 файлов, три typecheck, admin/auth/API guards, schema (23 миграции /
+32 таблицы), privacy (29 user-related tables), `npm audit` (0) и production
+build. Две family E2E suites прошли 27/27 на desktop Chromium, Firefox и WebKit;
+тест отсутствующей capability прошёл 7/7 browser/PWA-проектов. Полный
+`release:check` сравнил кандидата `2bbec11` с retained `98d4910`: 23 HTTP
+запроса на одном локальном workerd/D1, включая сохранение profile/family CAS,
+отказы legacy writers и проверку session/owner guards.
+
+Этот коммит подготовлен к push для запуска CI; точный workflow ещё не завершён.
+Staging, старые/новые bundles именно для family target и общий lifecycle
+P0.5/P0.8 остаются открытыми.
