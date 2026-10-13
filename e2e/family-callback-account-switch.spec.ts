@@ -25,6 +25,11 @@ type FixtureState = {
   memberRequests: number;
   memberTargetIds: string[];
   releasedMembers: number;
+  noFamilyForA?: boolean;
+  joinRequests?: number;
+  releasedJoins?: number;
+  familyJoinAchievements?: string[];
+  familyLoadAccounts?: string[];
 };
 
 function profileFor(account: Account, includePersonalShopping = false) {
@@ -106,12 +111,14 @@ async function installAccountApi(
   holdMemberUpdate = false,
   includePersonalShopping = false,
   holdPersonalShoppingList = false,
+  holdJoin = false,
 ) {
   await mockApp(page, { session: 'app' });
   const heldInvite = deferred();
   const heldShoppingCheckResponse = deferred();
   const heldPersonalShoppingListResponse = deferred();
   const heldMemberResponse = deferred();
+  const heldJoinResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -139,6 +146,7 @@ async function installAccountApi(
     if (path === '/api/achievements/check') {
       const body = request.postDataJSON() as { context?: { source?: unknown } } | null;
       if (body?.context?.source === 'shopping_item_checked') state.shoppingAchievements.push(scopedAccount.id);
+      if (body?.context?.source === 'family_join_or_create') (state.familyJoinAchievements ??= []).push(scopedAccount.id);
       return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     }
     if (path === '/api/achievements') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
@@ -149,6 +157,10 @@ async function installAccountApi(
       expect(requestedSession).toBe(scopedAccount.sid);
     }
     if (path === '/api/family') {
+      if (request.method() === 'GET') {
+        (state.familyLoadAccounts ??= []).push(scopedAccount.id);
+        if (state.noFamilyForA && scopedAccount.id === accountA.id) return json({ family: null, members: [] }, accountA);
+      }
       const familyId = state.familyId ?? `family-${scopedAccount.id}`;
       const familyName = state.familyId ? `Семья ${state.familyId}` : scopedAccount.name;
       return json({
@@ -167,6 +179,15 @@ async function installAccountApi(
         return json({ code: 'OBSOLETE-CODE-FROM-A' }, accountA);
       }
       return json({ code: 'CURRENT-CODE' });
+    }
+    if (path === '/api/family/join') {
+      state.joinRequests = (state.joinRequests ?? 0) + 1;
+      if (holdJoin && scopedAccount.id === accountA.id) {
+        await heldJoinResponse.promise;
+        state.releasedJoins = (state.releasedJoins ?? 0) + 1;
+        return json({ ok: true }, accountA);
+      }
+      return json({ ok: true });
     }
     if (path === '/api/family/member') {
       const body = request.postDataJSON() as { familyId?: unknown } | null;
@@ -242,6 +263,7 @@ async function installAccountApi(
     releaseShoppingCheck: heldShoppingCheckResponse.release,
     releasePersonalShoppingList: heldPersonalShoppingListResponse.release,
     releaseMemberUpdate: heldMemberResponse.release,
+    releaseJoin: heldJoinResponse.release,
   };
 }
 
@@ -362,6 +384,49 @@ test('a delayed family callback stays bound to its captured family when the same
   await expect(page.getByText('Сессия изменилась. Войдите снова и повторите действие.', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('a delayed family-join response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-join account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyJoinAchievements: [], familyLoadAccounts: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const joinCode = page.getByPlaceholder('Код приглашения');
+  await expect(joinCode).toBeVisible();
+  await joinCode.fill('JOIN-CODE-A');
+  const accountAFamilyLoads = state.familyLoadAccounts.filter(id => id === accountA.id).length;
+  await page.getByRole('button', { name: 'Войти в семью', exact: true }).click();
+  await expect.poll(() => state.joinRequests).toBe(1);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    expect(await activeAccount(page)).toBe(accountB.id);
+    fixtureA.releaseJoin();
+    await expect.poll(() => state.releasedJoins).toBe(1);
+    await expect(joinCode).toHaveValue('JOIN-CODE-A');
+    await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+    await page.waitForTimeout(100);
+    expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
+    expect(state.familyJoinAchievements).toEqual([]);
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('family-join-account-b.png') });
+  } finally {
+    fixtureA.releaseJoin();
+  }
 });
 
 test('a delayed family shopping response cannot trigger an achievement after another tab signs in as account B', async ({ page, context }, info) => {
