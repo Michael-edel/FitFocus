@@ -2761,3 +2761,21 @@ Fallback checkbox cache использует отдельный user/week клю
 точного PR HEAD. Старые клиенты без scope сервер по-прежнему обслуживает по
 прежнему протоколу; реальный staging/old-new bundle и вся P0.5 lifecycle-матрица
 не закрыты. P0.8 также остаётся открытым.
+
+## P0.5 — отложенный family join после смены аккаунта, `69c739a`
+
+Добавлен browser-сценарий для незакрытого join callback. Аккаунт A открывает
+экран семьи без активного членства, вводит код и отправляет `/api/family/join`;
+ответ удерживается, пока соседняя вкладка входит в B. Fixture затем возвращает
+успешный ответ со scope A, то есть проверяет клиентскую late-response границу,
+а не только отказ сервера. Проверки подтверждают, что введённый код не
+очищается, A не запускает повторную загрузку семьи и не вызывает
+`family_join_or_create`, активный IDB-сеанс остаётся B.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный
+`family-callback-account-switch.spec.ts` после добавления прошёл 21/21 при
+`workers=1/retries=0`; общий `npm run typecheck` и связанные 25 API unit-тестов
+прошли. Изменение находится в [`69c739a`](https://github.com/Michael-edel/FitFocus/commit/69c739a).
+Это mock-backed browser acceptance: реальная многовкладочная OAuth/staging
+проверка и полный lifecycle P0.5 остаются открытыми. Точный GitHub workflow
+этого HEAD будет проверен после push.

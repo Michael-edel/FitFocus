@@ -183,8 +183,9 @@ AI account-switch сценария `bca2eda` ещё ожидается.
 ## Следующие обязательные этапы
 
 - Расширить поздний-response account-switch acceptance на остальные family
-  callbacks и состояния; локально уже покрыты invitation UI, AI family-menu
-  commit, shopping-check achievement и смена target для member update.
+  callbacks и состояния; локально покрыты invitation UI, family join response,
+  AI family-menu commit, shopping-check achievement и смена target для member
+  update.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.
 - Проверить настоящие old/new bundles с Service Worker, повреждённые legacy-строки,
