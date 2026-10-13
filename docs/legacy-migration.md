@@ -1,6 +1,6 @@
 # Компонент импорта старой очереди
 
-Обновлено: 11.10.2026. Реализация: `storage/legacyMigration.ts`,
+Обновлено: 14.10.2026. Реализация: `storage/legacyMigration.ts`,
 проверки: `tests/legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Это компонент [P0.8](../TASKS.md), реализующий согласованный
@@ -112,6 +112,11 @@ ack не импортирует её повторно. Недействител�
 коллизии, параллельные соединения, abort/quota, сохранённые подтверждения,
 потерю ledger/операции перед финальным audit и восстановление старых снимков.
 Используется fake IndexedDB; это не проверка настоящих browser bundle.
+
+На `c39904ccb322` повторно сверены код `storage/legacyQueue.ts`, этот контракт
+и `tests/legacy_queue.test.ts` / `tests/legacy_migration.test.ts`:
+121 тест прошёл. Это локальная проверка этих двух файлов, не полный CI и не
+приёмка runtime-интеграции P0.8.
 
 Остаются runtime-источники доказанного владения и остановки writers,
 profile, полный auth/hydration, экспорт и очистка новых stores.

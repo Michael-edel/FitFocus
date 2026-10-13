@@ -351,6 +351,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 помощнике (первый CI выявил TS2339). Компонент пока не подключён к runtime;
 ни импорт legacy, ни смена хранилища очереди этим шагом не завершены.
 
+14.10.2026 на `c39904ccb322` повторно прошли 121 тест нормализатора и импорта
+(`legacy_queue.test.ts`, `legacy_migration.test.ts`); код и правила сверены с
+[контрактом](docs/legacy-migration.md). Это не закрывает runtime-барьер,
+совместную работу старых/новых сборок или весь P0.8.
+
 В [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) добавлен общий
 менеджер схемы IDB v2 и транзакционный API DurableOutbox. Существующее
 хранение values использует этот менеджер; UserStateRepository переведён
