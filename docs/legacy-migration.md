@@ -13,6 +13,8 @@ account-scoped очистка пяти IDB stores реализована в `b53
 есть в браузере или backup. Global legacy source и snapshots сохраняются как
 evidence; физическое удаление payload и оставшийся lifecycle P0.8 открыты.
 [Контракт очистки](account-data-cleanup.md).
+Tombstone-итерация закоммичена в [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e);
+локальный 7/7 browser smoke пройден, CI ожидается.
 
 ## Browser acceptance — 13.10.2026
 

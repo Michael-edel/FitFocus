@@ -75,4 +75,6 @@ backup. Коммит `b53a55e` добавил локальную очистку 
 legacy-источник и snapshots; физическое удаление payload из общей evidence,
 UI конфликтов и lifecycle остаются открытыми критериями P0.8. Локальный
 tombstone блокирует повторный импорт и восстановление старых account-owned
-строк, но общий legacy payload сохраняется. [Контракт очистки](account-data-cleanup.md).
+строк, но общий legacy payload сохраняется. Коммит `c7700eb` прошёл локально
+1082 unit-теста и 7/7 migration browser projects; CI этой итерации ожидается.
+[Контракт очистки](account-data-cleanup.md).

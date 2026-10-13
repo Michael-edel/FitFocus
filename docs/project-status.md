@@ -22,9 +22,11 @@ Rollback-артефакт [сохранён в CI](https://github.com/Michael-ed
 Staging и выпуск не выполнялись. Полный контракт и остаточный риск: [очистка
 локальных данных](account-data-cleanup.md).
 
-## Следующая локальная итерация P0.8 — подавление legacy после удаления
+## P0.8 — подавление legacy после удаления: `c7700eb`, CI ожидается
 
-Рабочее дерево дополняет cleanup SHA-256 tombstone в `outbox_meta`. Повторная
+Коммит [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e)
+создан в `fix/durable-outbox`; push и CI этого SHA ещё не подтверждены.
+Реализация дополняет cleanup SHA-256 tombstone в `outbox_meta`. Повторная
 миграция с доказанным владельцем помечает старый fingerprint обработанным и не
 создаёт новую операцию; sender блокирует claim/finish старой legacy operation.
 Восстановление старого v3 backup в браузере с tombstone пропускает account-owned
@@ -32,8 +34,7 @@ Staging и выпуск не выполнялись. Полный контрак
 аудита, поэтому физическое локальное стирание данных этим не подтверждается.
 Локально проходят 1082 unit-теста / 197 файлов, общий/domain-strict/storage-strict
 typecheck, production build и профильные тесты миграции, cleanup и backup (75).
-Legacy migration smoke прошёл 7/7 browser/device projects без retries. Точный
-SHA и CI новой итерации будут добавлены после публикации.
+Legacy migration smoke прошёл 7/7 browser/device projects без retries.
 [Контракт и ограничения](account-data-cleanup.md).
 
 Полный CI на коде исправления sender завершился success в

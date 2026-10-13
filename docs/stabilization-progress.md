@@ -2,8 +2,9 @@
 
 ## P0.8 — подавление legacy-импорта после удаления аккаунта
 
-Дата: 13.10.2026. Ветка: `fix/durable-outbox`; локальная итерация перед
-публикацией. Точный CI SHA будет добавлен после push.
+Дата: 13.10.2026. Ветка: `fix/durable-outbox`; кодовый коммит
+[`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e)
+создан локально; push/CI ещё не подтверждены.
 
 Account cleanup пишет в IndexedDB tombstone с SHA-256 account ID и отзывает
 старый migration send gate. При повторном входе importer проверяет tombstone

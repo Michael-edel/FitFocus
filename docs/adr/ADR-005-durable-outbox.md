@@ -47,8 +47,9 @@ dispatch. Схема IDB остаётся v2; отдельного profile-store
 решение предотвращает локальный повторный импорт/отправку, но не является
 физическим стиранием или серверной синхронизацией.
 Реализация и проверки зафиксированы в [cleanup contract](../account-data-cleanup.md)
-и [legacy migration](../legacy-migration.md); точный SHA/CI добавляется после
-публикации изменения.
+и [legacy migration](../legacy-migration.md) в коммите
+[`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e).
+Push и CI этого SHA ожидаются.
 
 ## Причина
 
