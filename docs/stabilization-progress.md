@@ -2508,6 +2508,21 @@ P0.5 и P0.8 в целом остаются открытыми; PR #93 оста�
 завершилась 3/3 без retries; production preview использовался на
 `http://127.0.0.1:4173`. Первый Chromium прогон выявил только неполные AI
 capabilities в тестовом mock; после исправления fixture чисто прошли все три
-браузера. Это не требовало изменения runtime-кода. Точный CI для `f9c8425`
-ещё не подтверждён; явная цель invite/member, остальные callbacks, staging,
-merge и release остаются открытыми.
+браузера. Это не требовало изменения runtime-кода. Документационный HEAD
+`b66dcb4`, включавший этот сценарий, прошёл полный CI run `38420925386`.
+Явная цель invite/member, остальные callbacks, staging, merge и release
+остаются открытыми.
+
+## P0.5 — задержанный family AI menu callback при смене аккаунта, `bca2eda`, 13.10.2026
+
+Коммит [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5)
+добавил account-switch acceptance в `e2e/family-menu-durable.spec.ts`. Пока AI
+генерация меню A удерживается, в соседней вкладке принимается сессия B; после
+освобождения ответа тест проверяет, что active-session остаётся B, исходное
+family меню не меняется, новая `familyMenu` outbox-операция и achievement
+не создаются.
+
+`npm run typecheck` прошёл. Целевой Playwright сценарий прошёл 3/3 без retries
+на desktop Chromium, Firefox и WebKit. Полный CI для этого SHA ещё ожидается;
+остальные family/AI callbacks, явная цель invite/member, staging и выпуск
+остаются открытыми.

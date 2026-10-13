@@ -99,7 +99,9 @@ server-preview/iPhone PWA не дождался названия семьи за
 4 passed, workers=1, retries=0, 1,8 мин; код и таймауты не изменялись.
 Это не заменяет полный локальный результат. Нагрузка хоста — предположение,
 а не установленная причина. Staging и совместимый выпуск ещё не подтверждены.
-Также открыты явные цели invite/member, остальные AI/report/retry callbacks,
+Также открыты явные цели invite/member; поздний AI menu callback при смене
+аккаунта прошёл локально 3/3 на desktop Chromium, Firefox и WebKit в `bca2eda`
+(полный CI этой ревизии ещё ожидается). Остальные AI/report/retry callbacks,
 old/new migration smoke с legacy intent, UI конфликтов и backup/экспорт/очистка
 всех IDB stores. Runtime legacy owner proof и Service Worker fence уже подключены.
 

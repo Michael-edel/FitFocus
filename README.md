@@ -70,12 +70,7 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний коммит с подтверждённым полным CI — [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc): browser acceptance позднего coach/plateau
-ответа при входе второго аккаунта в соседней вкладке прошла 6/6, а [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
-завершился success. Более новый коммит [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469)
-добавляет такой же account-switch сценарий для задержанного семейного invite:
-typecheck и 3/3 desktop Chromium, Firefox и WebKit прошли локально; точный CI
-этой ревизии ещё ожидается.
+Последний полный CI для состояния ветки — коммит [`b66dcb4`](https://github.com/Michael-edel/FitFocus/commit/b66dcb4910267345e2c38eeb2f58175c5c8bea1f), [run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386) завершился success. Он включает browser acceptance Coach/plateau и delayed family invite. Более новый кодовый коммит [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) проверяет поздний AI-ответ семейного меню после входа другого аккаунта: typecheck и 3/3 desktop Chromium, Firefox и WebKit прошли локально; точный CI этой ревизии ещё ожидается.
 
 Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий

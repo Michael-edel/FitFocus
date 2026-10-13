@@ -7,8 +7,9 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последняя полная CI-проверка кода в `fix/durable-outbox` — коммит
-[`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc);
+Последний полный CI для состояния ветки — документационный коммит
+[`b66dcb4`](https://github.com/Michael-edel/FitFocus/commit/b66dcb4910267345e2c38eeb2f58175c5c8bea1f)
+([run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386));
 P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
 исправил последовательные чтения из одной
 IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
@@ -28,9 +29,8 @@ HTTP/D1 rollback-проверка на 23 запросах прошли. Два 
 уведомления. P0.8 остаётся открытым до полной lifecycle-приёмки. Для P0.5 тесты
 позднего ответа coach/plateau и смены аккаунта добавлены в `9bc98ee` и локально
 прошли 6/6 на desktop Chromium, Firefox и WebKit. Точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
-завершился success. Коммит [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469)
-добавил семейный delayed-invite account-switch E2E; typecheck и 3/3 desktop
-Chromium/Firefox/WebKit прошли локально, его точный CI ещё ожидается.
+завершился success. Коммиты [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469) и
+[`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) добавили delayed family invite и AI-menu account-switch E2E; каждый прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный CI для `b66dcb4` прошёл, точный CI для нового AI-сценария `bca2eda` ожидается.
 PR #93 остаётся draft и не слит в `main`.
 
 ## Предыдущий компонент — P0.5 client AI callbacks

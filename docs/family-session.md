@@ -114,13 +114,16 @@ AI и серверный preview сохраняются одним familyMenu in
 `saveFamilyShoppingItems` больше не являются клиентскими writers этого пути.
 Отдельный browser-сценарий задержанного invite-ответа после входа аккаунта B
 добавлен коммитом [`f9c8425`](https://github.com/Michael-edel/FitFocus/commit/f9c8425272804b0bf9fc5963bcfb015e2926e469) и прошёл 3/3 на desktop Chromium,
-Firefox и WebKit без retries. Typecheck прошёл; точный CI для этого SHA ещё
-не подтверждён.
+Firefox и WebKit без retries. Затем `family-menu-durable.spec.ts` добавил
+проверку позднего AI menu-ответа: смена активной сессии на B не позволяет A
+создать `familyMenu`-операцию и изменить меню; [`bca2eda`](https://github.com/Michael-edel/FitFocus/commit/bca2edaf8c4bee1f465dfc3cb6bfabaa08960ea5) прошёл 3/3 в тех же браузерах.
+Typecheck прошёл. Полный CI `b66dcb4` завершился success; точный CI для нового
+AI account-switch сценария `bca2eda` ещё ожидается.
 
 ## Следующие обязательные этапы
 
 - Расширить поздний-response account-switch acceptance на остальные family
-  callbacks и состояния; текущий новый браузерный сценарий покрывает приглашение.
+  callbacks и состояния; уже покрыты invitation UI и AI family-menu commit.
 - Ввести и проверить явную целевую семью/членство для invite и member mutations;
   session guard сам по себе не закрепляет членство, а смена семьи в том же login
   требует отдельного контракта.
