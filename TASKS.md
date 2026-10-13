@@ -1,16 +1,17 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. На проверенном HEAD документационного коммита
-[`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d)
-в `fix/durable-outbox` PR CI [run 38440675173](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173)
-завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped,
+Обновлено: 14.10.2026. Последний полный CI на опубликованном SHA
+[`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)
+([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538))
+завершился success: 1115 unit / 198 файлов, 484 browser passed / 25 skipped,
 audit без известных уязвимостей, guards, три typecheck, build и rollback/CAS
-проверка на 23 запросах прошли. Три E2E прошли retry, но отмечены flaky:
-settings sender в desktop Chromium, восстановление профиля в desktop Firefox и
-legacy migration в iPhone PWA. Они локально повторились соответственно 5/5,
-5/5 и 3/3; первопричины CI нестабильности не установлены. Предыдущий flaky
-legacy migration из run `38429247879` после исправления fingerprint-проверки
-не повторяется.
+на 23 запросах прошли. Два E2E были flaky и прошли retry: Chromium ожидал
+`pending`, но увидел `sending` в IndexedDB; WebKit поймал access-control warning
+при семейном menu state. Точные сценарии локально прошли по 5/5; причина CI
+нестабильности не установлена. Новый P0.5 achievement account-switch тест
+закоммичен в [`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3)
+и локально прошёл 7/7 browser/PWA-профилей без retries; общий typecheck прошёл.
+Для этого нового SHA полный CI ещё ожидается.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
@@ -504,6 +505,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   вкладке: поздний ответ не меняет профиль, значения, outbox или success-effects
   обоих аккаунтов. Локально прошло 3/3 на desktop Chromium, Firefox и WebKit;
   `npm run typecheck` и точный CI прошли: сначала `c48ce1b` в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879), затем полный HEAD `7c50f08` в [run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387). В последнем run три других E2E были flaky и прошли retry.
+- [x] Проверить поздний achievement unlock из аккаунта A после входа B в
+  соседней вкладке: ответ A со старым scope не показывает toast ни старой, ни
+  новой сессии; active session остаётся B. Commit `b44d46e`; 7/7 browser/PWA-профилей,
+  `workers=3`, `retries=0`; `npm run typecheck` прошёл. Точный CI ожидается.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

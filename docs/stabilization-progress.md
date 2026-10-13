@@ -2599,3 +2599,33 @@ HTTP/D1 запросах прошли. В E2E отмечены 3 flaky, все �
 Browser diagnostics artifact `11836633164` доступен до 27.10.2026; rollback
 artifact `11836213753` — до 11.01.2027. Ветка остаётся draft; P0.5/P0.8,
 staging и полная release acceptance открыты.
+
+## P0.5 — поздний achievement callback при смене аккаунта, `b44d46e`, 14.10.2026
+
+В [`e2e/ai-callback-account-switch.spec.ts`](../e2e/ai-callback-account-switch.spec.ts)
+добавлена проверка для ещё не принятого cross-account producer: тест удерживает
+положительный `app_open` POST достижений аккаунта A, открывает в том же origin
+вкладку с аккаунтом B, дожидается записи B в active-session и только затем
+отпускает ответ A со старым scope. Он проверяет, что обе вкладки не показывают
+устаревший unlock/toast, а durable active-session остаётся B.
+
+Точный сценарий прошёл 7/7 настроенных browser/PWA-проектов с `workers=3` и
+`retries=0`; `npm run typecheck` прошёл. Кодовый commit —
+[`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3).
+Это локальная приёмка; полный CI этого SHA ожидается.
+
+Последний завершённый CI до этого кода — [run `38444933538`](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538)
+на `92a5be2`: success, 1115 unit / 198 файлов, 484 browser passed / 25 skipped,
+audit без уязвимостей, guards, три typecheck, build и 23 rollback/CAS HTTP/D1
+запроса прошли. Два E2E прошли retry, но отмечены flaky:
+
+- desktop Chromium, `storage-durability.spec.ts:19`: первая попытка ожидала
+  `pending`, но IndexedDB уже сообщала `sending`;
+- desktop WebKit, `family-menu-durable.spec.ts:195`: первая попытка записала
+  access-control warning для `/api/family/menu/state`.
+
+Изолированные повторы обоих сценариев прошли 5/5; первопричины не установлены.
+Browser diagnostics artifact `11838963458` доступен до 27.10.2026; rollback
+artifact `11839378221` — до 11.01.2027. Следующий шаг P0.5 — продолжить
+оставшихся family callbacks и writers по той же границе попытки/аккаунта;
+staging и общий lifecycle остаются открытыми.

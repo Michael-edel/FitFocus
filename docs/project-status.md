@@ -1,30 +1,29 @@
 # Текущее состояние FitFocus
 
-Сверено: 13.10.2026. Это краткая точка входа: функции — в
+Сверено: 14.10.2026. Это краткая точка входа: функции — в
 [PRODUCT](../PRODUCT.md), порядок и критерии готовности — в
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последний проверенный CI относится к документационному коммиту
-[`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d)
-([run 38440675173](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173));
+Последний завершённый полный CI относится к SHA
+[`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)
+([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538));
 P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
 исправил последовательные чтения из одной
 IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
 `await`, а parent/head операции выбираются из одного индексного снимка.
 E2E-диагностика сохраняет вложенную причину `Error.cause`.
 
-Полный CI `e96025d` завершился success: 1115 unit-тестов / 198 файлов,
-483 E2E passed / 25 skipped, audit без известных уязвимостей,
+Полный CI `92a5be2` завершился success: 1115 unit-тестов / 198 файлов,
+484 E2E passed / 25 skipped, audit без известных уязвимостей,
 schema/privacy/auth/API guards, три typecheck, build и HTTP/D1 rollback-проверка
-на 23 запросах прошли. Три E2E были flaky и прошли retry: settings sender в
-desktop Chromium оставил `Cloud: pending` после reload, Firefox recovery выдал
-IndexedDB transaction-aborted warning при навигации, а iPhone PWA legacy
-migration не дождался server state write за 10 секунд. Локальные повторы этих
-сценариев прошли 5/5, 5/5 и 3/3; первопричина CI нестабильности не установлена.
-Предыдущий fingerprint flaky migration assertion больше не повторялся.
+на 23 запросах прошли. Два E2E были flaky и прошли retry: settings durability
+в desktop Chromium прочитал статус `sending` вместо ожидаемого `pending`, а
+family-menu recovery в desktop WebKit обнаружил access-control warning.
+Изолированные повторы обоих сценариев прошли 5/5; первопричина CI нестабильности
+не установлена. Это не подтверждает её устранение.
 
 В полном CI один WebKit PWA update тест был flaky: кнопка обновления отсутствовала
 в первой попытке, retry прошёл. Локальный повтор этого сценария прошёл 3/3 при
@@ -43,10 +42,14 @@ PR #93 остаётся draft и не слит в `main`.
 Firefox и WebKit; `npm run typecheck` прошёл. Кодовый commit `eae1ce1` и MD
 обновления опубликованы в `c48ce1b`; точный CI run `38429247879` завершился
 success с одним flaky в отдельном legacy-migration сценарии. Follow-up `d5341a0`
-входит в проверенный HEAD `e96025d`; CI `38435173387` прошёл success с тремя
-flaky, затем `38440675173` тоже завершился success и сообщил другой набор из
-трёх flaky. Их локальные повторы прошли, но причина нестабильности не установлена.
-Предыдущий run
+входит в проверенный HEAD `92a5be2`; CI `38435173387` и `38440675173` прошли
+success с тремя flaky каждый, а `38444933538` завершился success с двумя
+другими flaky. Их локальные повторы прошли, но причина нестабильности не
+установлена. Новый E2E для позднего achievement callback добавлен в
+[`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3): при входе B в соседней вкладке тест отпускает положительный
+ответ A со старым scope и проверяет отсутствие unlock в обеих сессиях. Локально
+прошло 7/7 browser/PWA-профилей с `retries=0`, общий typecheck прошёл; точный CI
+для этого изменения ещё не завершён. Предыдущий run
 `38425515018` для `c6ebbdc` отменён concurrency после push нового HEAD.
 
 ## Предыдущий компонент — P0.5 client AI callbacks

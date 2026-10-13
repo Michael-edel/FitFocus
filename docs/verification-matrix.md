@@ -1,8 +1,16 @@
 # Матрица проверки стабилизации FitFocus
 
-Сверено: 13.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
+Сверено: 14.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
+
+Последний полный CI на `92a5be2` завершился success
+([run `38444933538`](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538)):
+1115 unit / 198 файлов, 484 browser passed / 25 skipped, guards, typecheck,
+build и rollback/CAS на 23 запросах прошли. Два E2E были flaky и прошли retry;
+их точные симптомы и локальные повторы описаны в [журнале](stabilization-progress.md).
+Новая P0.5 achievement account-switch acceptance из `b44d46e` прошла локально
+7/7 browser/PWA-профилей с `retries=0`; полный CI этого SHA ожидается.
 
 ## P0.8 — IndexedDB outbox transaction stability
 

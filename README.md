@@ -24,6 +24,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 | [docs/outbox-implementation.md](docs/outbox-implementation.md) | Durable outbox: реализация и оставшиеся этапы подключения |
 | [docs/legacy-migration.md](docs/legacy-migration.md) | Формат legacy-записи, нормализация, карантин и импорт |
 | [docs/ai-callback-sessions.md](docs/ai-callback-sessions.md) | Контракт защиты запросов и повторов coach, плана и плато |
+| [docs/achievement-session.md](docs/achievement-session.md) | Сессия, очередь, scope HTTP и поздние ответы достижений |
 | [docs/weekly-ai-report-session.md](docs/weekly-ai-report-session.md) | Защита недельного AI-отчёта свежей сессией и durable commit |
 | [docs/stabilization-progress.md](docs/stabilization-progress.md) | Журнал изменений, SHA, тесты и CI |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Локальный запуск, проверки и правила внесения изменений |
@@ -70,7 +71,7 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Проверенный HEAD [`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d) включает тест позднего personal-plan retry и исправление fingerprint-проверки legacy migration. Полный PR CI [`38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173) завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped, guards, typecheck, build и rollback/CAS на 23 запросах прошли. Три E2E прошли retry, но отмечены flaky: settings sender в desktop Chromium, восстановление профиля в desktop Firefox и legacy migration в iPhone PWA. Локальные повторы прошли 5/5, 5/5 и 3/3; первопричины CI нестабильности пока не установлены.
+Последний полный CI на [`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f) — [run `38444933538`](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538) — завершился success: 1115 unit / 198 файлов, 484 browser passed / 25 skipped, guards, typecheck, build и rollback/CAS на 23 запросах прошли. Два E2E были flaky и прошли retry; локально оба прошли по 5/5, причина не установлена. Следующий тест P0.5 — поздний achievement callback после смены аккаунта — добавлен в `b44d46e` и локально прошёл 7/7 browser/PWA-профилей без retries; его полный CI ожидается.
 
 Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий

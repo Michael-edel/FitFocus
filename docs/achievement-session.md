@@ -69,6 +69,15 @@ feature/application effects и capability `/me`; [транспорт](../tests/a
 [E2E](../e2e/achievement-session.spec.ts) проверяет меню → достижение → toast,
 logout при held GET и новый page lifetime при held POST во всех семи проектах.
 
+Дополнительный cross-account сценарий в
+[`e2e/ai-callback-account-switch.spec.ts`](../e2e/ai-callback-account-switch.spec.ts)
+удерживает положительный `app_open` POST аккаунта A, открывает соседнюю вкладку
+с аккаунтом B и затем отпускает ответ A. Проверяется, что active session остаётся
+B и unlock/toast не появляется ни в старой, ни в новой вкладке. Commit
+[`b44d46e`](https://github.com/Michael-edel/FitFocus/commit/b44d46eb78255b4b5da0fcbb58cd442e0b2d2eb3)
+прошёл 7/7 browser/PWA-профилей с `workers=3`, `retries=0`; общий typecheck
+прошёл. Точный CI этого commit ожидается.
+
 Локально: 948 unit / 186 файлов, три typecheck, guards/schema/privacy и audit
 прошли; 0 известных уязвимостей. Полная матрица `57da2cf`: 219 passed /
 3 failed / 9 skips. Все 21 новых achievement E2E прошли; три падения profile/logout сохранены в журнале.
