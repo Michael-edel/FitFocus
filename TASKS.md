@@ -1,22 +1,26 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 13.10.2026. Последний опубликованный HEAD — документационный коммит
-[`c48ce1b`](https://github.com/Michael-edel/FitFocus/commit/c48ce1b543af3a4d1fc57f88c2cb875b4c4fd4dc)
-в `fix/durable-outbox`. Его полный PR CI [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879)
-завершился success: 1115 unit / 198 файлов, 485 browser passed / 25 skipped,
+[`7c50f08`](https://github.com/Michael-edel/FitFocus/commit/7c50f08552a5bbe4d164670efe3e7cdea6ad6337)
+в `fix/durable-outbox`. Полный PR CI [run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387)
+завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped,
 audit без известных уязвимостей, guards, три typecheck, build и rollback/CAS
-проверка на 23 запросах прошли. В E2E был один flaky desktop Firefox в legacy
-migration; retry прошёл. Предыдущий run `38425515018` для `c6ebbdc` отменён
-concurrency при push нового PR HEAD.
+проверка на 23 запросах прошли. E2E отметил 3 flaky, все три прошли retry:
+два weekly-menu сценария в desktop Firefox и settings sender в Android PWA.
+Отдельный flaky legacy migration из run `38429247879` после исправления не
+повторился. Эти три новых flakies локально не воспроизвелись в 18 совместных
+повторах; причина не установлена.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
-и WebKit прошли 3/3, `npm run typecheck` прошёл. Он опубликован в `c48ce1b` и
-прошёл точный CI. Flaky migration assertion теперь сверяет стабильные поля
-fingerprint без изменяемого `retryCount`; локально тест прошёл 5/5 серийно,
-3/3 параллельно и 7/7 в browser/PWA-матрице. CI этого тестового follow-up ещё
-ожидается. P0.5 и P0.8 остаются открытыми до остальных callbacks, общей
-lifecycle-приёмки и staging.
+и WebKit прошли 3/3, `npm run typecheck` прошёл. Точный CI `c48ce1b` прошёл;
+следующий commit `d5341a0` исправил flaky migration assertion: она сравнивает
+стабильные fingerprint-поля без изменяемого `retryCount`. В CI `7c50f08` этот
+тест больше не flaky; локально он прошёл 5/5 серийно, 3/3 параллельно и 7/7 в
+browser/PWA-матрице. Остались 3 других CI flakies в двух weekly-menu Firefox и
+Android PWA settings сценарии; локальная совместная матрица прошла 18/18,
+причина CI сбоев не установлена. P0.5 и P0.8 остаются открытыми до остальных
+callbacks, общей lifecycle-приёмки и staging.
 Подробные критерии — в разделах P0 ниже.
 
 ## Предыдущие результаты
@@ -497,7 +501,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить задержанный повтор личного плана A после входа B в соседней
   вкладке: поздний ответ не меняет профиль, значения, outbox или success-effects
   обоих аккаунтов. Локально прошло 3/3 на desktop Chromium, Firefox и WebKit;
-  `npm run typecheck` и точный CI `c48ce1b` прошли в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879).
+  `npm run typecheck` и точный CI прошли: сначала `c48ce1b` в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879), затем полный HEAD `7c50f08` в [run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387). В последнем run три других E2E были flaky и прошли retry.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

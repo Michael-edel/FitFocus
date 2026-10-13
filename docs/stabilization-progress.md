@@ -2553,3 +2553,24 @@ worker, 3/3 с тремя workers и 7/7 на всей browser/PWA-матриц�
 Исправление пока локальное, точный CI follow-up ещё предстоит. Предыдущий run
 `38425515018` для `c6ebbdc` отменён concurrency при push нового HEAD. Staging,
 OAuth, BFCache, другие callbacks и общий P0.5 остаются открытыми.
+
+## Полный CI migration fingerprint follow-up — `7c50f08`, 13.10.2026
+
+PR CI [run `38435173387`](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387)
+завершился success для точного HEAD `7c50f08`: 1115 unit / 198 файлов,
+483 browser passed / 25 skipped, audit сообщил 0 уязвимостей; guards, три
+typecheck, build и rollback/CAS-проверка на 23 запросах прошли. Исправленный
+`legacy-outbox-migration` Firefox сценарий больше не отмечен flaky.
+
+CI сообщил 3 другие flaky попытки: две проверки weekly-menu в desktop Firefox
+(локальная profile commit и повтор генерации после timeout) и подтверждение
+settings sender в Android PWA после reload. Все три прошли retry. Целевые
+локальные повторы прошли: 5/5 и 3/3 для двух Firefox тестов, 5/5 для Android
+PWA; совместный параллельный прогон двух browser-проектов завершился 18/18.
+Причина CI сбоев не воспроизведена; это не подтверждает, что их источник устранён.
+
+Rollback/CAS job прошёл 23 HTTP-запроса на merge candidate `19a63dd62e065d360e6a4606134fed58f07fb2df`
+→ retained source `98d49101e15ad652e1960381ce00e00e8dac0d44`. Browser diagnostics
+artifact `11834122683` сохранён на 14 дней; tested rollback artifact
+`11833354840` — на 90 дней. Staging, OAuth/BFCache, прочие callbacks и общий
+P0.5/P0.8 остаются открытыми.

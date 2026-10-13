@@ -124,7 +124,7 @@ PR CI исправления `ec29f41` прошёл с одним unrelated flak
 профиль, значения, outbox, active session или success-effects обоих аккаунтов.
 Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit; `npm run typecheck`
 прошёл. Тест опубликован в [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979);
-точный PR CI `c48ce1b` завершился success в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879): 1115 unit, 485 E2E passed / 25 skipped и один flaky с retry в независимом legacy migration сценарии. Его диагностическое исправление и локальные повторы описаны в [журнале](stabilization-progress.md).
+точный PR CI `c48ce1b` завершился success в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879): 1115 unit, 485 E2E passed / 25 skipped и один flaky с retry в независимом legacy migration сценарии. Follow-up `7c50f08` прошёл полный CI ([run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387)); personal-plan test passed. Три другие E2E были flaky и прошли retry; локальные повторы и ограничения записаны в [журнале](stabilization-progress.md).
 
 Эти сценарии не закрывают весь [P0.5](../TASKS.md): другие AI/family callbacks,
 прочие writers и полный lifecycle всё ещё открыты. Результаты и границы:
