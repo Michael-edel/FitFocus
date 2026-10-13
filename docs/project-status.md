@@ -35,17 +35,20 @@ passed, 29 skipped и два flaky-теста, прошедших retry. Rollbac
 текущего HEAD — на странице [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 Cloudflare preview SHA `a99ab7b` успешен; это не production-релиз.
 
-## P0.5 — поздние ответы family callbacks, локальная проверка
+## P0.5 — поздние ответы и личная корзина, локальная проверка
 
-В `e2e/family-callback-account-switch.spec.ts` добавлены проверки отложенного
-shopping-check ответа аккаунта A после входа B и отложенного member-goal ответа
-для прежнего `familyId` после переключения семьи тем же аккаунтом. Первая
-проверяет отсутствие `shopping_item_checked` achievement и изменений checkbox
-аккаунта B; вторая — сохранение нового семейного контекста и отсутствие
-перекрёстного target. Все четыре сценария spec прошли 12/12 на desktop
-Chromium/Firefox/WebKit (`workers=1/retries=0`), общий typecheck прошёл.
-Это локальная проверка, а не результат полного workflow; актуальный статус CI
-смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+Код [`b56544e`](https://github.com/Michael-edel/FitFocus/commit/b56544e)
+передаёт `ShoppingListCard` исходный login guard, защищает GET/PATCH свежим
+account/session proof и отделяет React/localStorage состояние по аккаунту и
+неделе. Два новых account-switch сценария удерживают чтение и отметку покупок
+аккаунта A до входа B; серверный fixture отклоняет старый scope, а список B
+остаётся своим и checkbox не отмечен.
+
+Весь `e2e/family-callback-account-switch.spec.ts` прошёл 18/18 на desktop
+Chromium, Firefox и WebKit; два новых сценария прошли 6/6 без retries.
+`npm run typecheck` и 25 связанных API unit-тестов прошли. Это локальная
+проверка: полный workflow нового HEAD и остальные callbacks/lifecycle ещё
+открыты. Актуальный статус CI смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 
 Предыдущий полный CI на SHA
 [`92a5be2`](https://github.com/Michael-edel/FitFocus/commit/92a5be2115f1cf9cea4685a10bbba4e9bc051d0f)

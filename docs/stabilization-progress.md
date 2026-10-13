@@ -2730,3 +2730,34 @@ production-релиз. Эффект тестовых барьеров под CI 
 при записи результата ещё выполнялся на этом SHA; push-run `38470467012`
 отменён concurrency после запуска PR workflow. Это подтверждает проверку
 нормализатора, но не полный CI, runtime lifecycle, staging или готовность P0.8.
+
+## P0.5 — session guard личной корзины, `b56544e`, 14.10.2026
+
+`ShoppingListCard` раньше читал `/api/shopping/list` и менял отметки через
+`/api/shopping/check` только с cookie. Он не связывал запрос с исходными
+account/session proof, а внутренний React state не был привязан к login scope.
+Теперь `App` передаёт исходный read guard и проверку login attempt через
+`AppWorkspace`/`PlanScreen`; карточка вызывает `requestFamilyJson`, который
+перед GET и PATCH проверяет свежий `/api/me`, добавляет account/session headers,
+проверяет серверный Family scope ответа и снова проверяет активную IDB-сессию.
+GET дополнительно сверяет `week_start`. Каждая попытка отменяется при смене
+scope/размонтировании и `pagehide`; возврат из BFCache начинает новое чтение.
+
+Снимок списка изолирован по account, server session, epoch, auth-fence и неделе.
+Fallback checkbox cache использует отдельный user/week ключ и не записывает
+состояние прежнего аккаунта до чтения нового ключа. Оптимистический PATCH и
+его rollback меняют только снимок исходного scope.
+
+Проверки на commit `b56544e`: полный
+`npx playwright test e2e/family-callback-account-switch.spec.ts --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 --retries=0`
+прошёл 18/18; два новых personal-shopping сценария отдельно прошли 6/6.
+`npx vitest run tests/family_session_guard.test.ts tests/family_api.test.ts tests/shopping_list.test.ts`
+прошёл 25/25; `npm run typecheck` и admin guards прошли. Для rendered-flow
+использован repo Playwright; Browser plugin недоступен в этом сеансе. E2E
+проверяет `/#plan` → загрузка списка → checkbox, поздний ответ после login B,
+401 старого scope и неизменность списка B.
+
+Это локальная клиентская приёмка; после push нужно проверить полный workflow
+точного PR HEAD. Старые клиенты без scope сервер по-прежнему обслуживает по
+прежнему протоколу; реальный staging/old-new bundle и вся P0.5 lifecycle-матрица
+не закрыты. P0.8 также остаётся открытым.

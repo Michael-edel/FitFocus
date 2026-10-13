@@ -527,8 +527,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Добавить late-response acceptance для family shopping check и member-goal
   mutation: после входа аккаунта B ответ shopping action из A не запускает
   `shopping_item_checked`, а ответ цели семьи A не применяется после загрузки
-  другой семьи тем же login. Новый family callback spec прошёл 12/12 на desktop
-  Chromium, Firefox и WebKit с `workers=1/retries=0`; `npm run typecheck` прошёл.
+  другой семьи тем же login. Затем личная `ShoppingListCard` подключена к
+  исходному login guard: GET/PATCH требуют свежий account/session proof,
+  поздние ответы не меняют данные аккаунта B, а server/local React state
+  ограничены аккаунтом и неделей. Код `b56544e`; полный callback spec прошёл
+  18/18, целевые новые сценарии — 6/6 на desktop Chromium/Firefox/WebKit,
+  `workers=1/retries=0`. Также прошли 25 API unit-тестов и `npm run typecheck`.
   Это локальная приёмка; полный CI, другие callbacks и lifecycle остаются открыты.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
