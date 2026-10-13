@@ -1,6 +1,77 @@
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { saved, setup, navigate, healthy } from './support/familyHarness';
+import { buildMockProfile, mockApp, openApp } from './support/appHarness';
+
+const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
+
+async function openSwitchAccount(page: Page) {
+  const profile = { ...buildMockProfile(), id: switchAccount.id, googleSub: switchAccount.id,
+    email: `${switchAccount.id}@example.test`, plan: 'family' };
+  const headers = {
+    'X-FitFocus-State-Account': switchAccount.id,
+    'X-FitFocus-State-Session': switchAccount.sid,
+    'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
+    'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
+    'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
+    'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
+    'X-FitFocus-Weekly-Menu-Protocol': '1', 'X-FitFocus-Weekly-Menu-Guard': '1',
+    'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
+    'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1',
+    'X-FitFocus-Family-Menu-Protocol': '1', 'X-FitFocus-Family-Menu-Guard': '1',
+  };
+  await mockApp(page, { session: 'app' });
+  await page.route('**/api/**', async route => {
+    const request = route.request(), url = new URL(request.url()), path = url.pathname;
+    const json = (body: unknown) => route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(body) });
+    if (path === '/api/env') return json({ requireInvite: false });
+    if (path === '/api/me') return json({ user: { sub: switchAccount.id, roles: ['user'] }, hasAccess: true,
+      stateSync: { protocol: 2, guard: 1, accountId: switchAccount.id, sessionId: switchAccount.sid },
+      bootstrapSync: { protocol: 1, guard: 1 }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 },
+      aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+      achievementSync: { protocol: 1, guard: 1 }, familySync: { protocol: 1, guard: 1 },
+      familyMenuSync: { protocol: 1, guard: 1, cas: 1 }, profile });
+    if (path === '/api/bootstrap') return json({ user: { sub: switchAccount.id }, profile, items: [] });
+    if (path === '/api/state') {
+      if (request.method() === 'GET') return json({ items: [] });
+      const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
+      return json({ ok: true, items: items.map(item => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
+    }
+    if (path === '/api/profile') return json({ profile, version: profile.version });
+    if (path === '/api/achievements' || path === '/api/achievements/check') {
+      return json({ enabled: false, catalog: [], unlocked: [], newlyUnlocked: [] });
+    }
+    if (path === '/api/ai') return json({ text: 'Тестовая интерпретация недели.' });
+    if (path === '/api/family') return json({ family: null, members: [] });
+    if (path === '/api/family/menu') return json({ weekStart: url.searchParams.get('week'), shared: null, portions: null });
+    if (path === '/api/logout') return json({ ok: true });
+    return route.fallback();
+  });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (['error', 'warning'].includes(message.type())) errors.push(message.text()); });
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  return errors;
+}
+
+async function activeAccountId(page: Page) {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    try {
+      const request = db.transaction('outbox_meta', 'readonly').objectStore('outbox_meta').get('active-session');
+      const active = await new Promise<{ accountId?: string } | undefined>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return active?.accountId ?? null;
+    } finally { db.close(); }
+  });
+}
 
 test('server preview becomes one durable family menu and purchases operation', async ({ page }, info) => {
   const { counts, errors } = await setup(page);
@@ -90,6 +161,34 @@ test('AI family response after logout cannot create a menu or achievements', asy
     await expect.poll(() => counts.fulfilled).toBe(1);
     expect(counts.put).toBe(0); expect(counts.oldWriter).toBe(0); expect(counts.achievements).toBe(0);
     expect((await saved(page)).operations).toEqual([]); await healthy(page, errors);
+  } finally { release(); }
+});
+
+test('a delayed family AI response after another account signs in cannot write its menu', async ({ page, context }) => {
+  const { counts, errors, release } = await setup(page, 'held-ai');
+  try {
+    await navigate(page, 'План');
+    const update = page.getByRole('button', { name: 'Обновить', exact: true });
+    await update.scrollIntoViewIfNeeded();
+    await update.click();
+    await expect.poll(() => counts.ai).toBe(1);
+    const before = await saved(page);
+
+    const accountBPage = await context.newPage();
+    const errorsB = await openSwitchAccount(accountBPage);
+    await expect.poll(() => activeAccountId(accountBPage)).toBe(switchAccount.id);
+    expect(await activeAccountId(page)).toBe(switchAccount.id);
+
+    release();
+    await expect.poll(() => counts.fulfilled).toBe(1);
+    await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
+    expect(await saved(page)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
+    expect(counts.put).toBe(0);
+    expect(counts.achievements).toBe(0);
+    await healthy(page, errors);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    expect(errorsB).toEqual([]);
   } finally { release(); }
 });
 
