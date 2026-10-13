@@ -103,14 +103,20 @@ test('server conflict keeps the local settings intent and displays the conflict'
   await page.reload(); const notice = page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт' });
   await notice.scrollIntoViewIfNeeded(); await expect(notice).toBeVisible();
   const contrast = await notice.evaluate((element) => {
-    const style = getComputedStyle(element);
     const luminance = (color: string) => {
       const channels = (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((value) => {
         const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
       });
       return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
     };
-    const fg = luminance(style.color); const bg = luminance(style.backgroundColor);
+    let background: string | undefined;
+    for (let node: HTMLElement | null = element as HTMLElement; node; node = node.parentElement) {
+      const color = getComputedStyle(node).backgroundColor;
+      const channels = color.match(/[\d.]+/g)?.map(Number) ?? [];
+      if (channels.length < 4 || channels[3] > 0) { background = color; break; }
+    }
+    const fg = luminance(getComputedStyle(element).color);
+    const bg = luminance(background ?? 'rgb(255 255 255)');
     return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
   });
   expect(contrast).toBeGreaterThanOrEqual(4.5);
@@ -118,6 +124,30 @@ test('server conflict keeps the local settings intent and displays the conflict'
   expect(saved.operations[0]).toMatchObject({ type: 'put', status: 'conflicted', serverSnapshot: { version: 9 } });
   await expect(page.getByText('Cloud: saved', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]); await page.screenshot({ path: testInfo.outputPath('state-conflict.png') });
+});
+
+test('resolves a checked server conflict by sending the latest local settings version', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error' && !/409/.test(message.text())) errors.push(message.text()); });
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>([[key, { version: 9, value: '{"theme":"dark"}' }]]);
+  const options = { conflict: true, settingsRequests: [] as number[] };
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server, options); await openApp(page, '/#settings');
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const action = page.getByRole('button', { name: 'Оставить последнюю локальную версию' });
+  await expect(action).toBeVisible();
+  options.conflict = false;
+  await action.click();
+
+  await expect.poll(async () => (await storedSettings(page)).operations).toHaveLength(0);
+  expect(await storedSettings(page)).toMatchObject({ confirmedVersion: 10 });
+  expect((await storedSettings(page)).value).toContain('"theme":"light"');
+  expect(options.settingsRequests.at(-1)).toBe(9);
+  expect(server.get(key)?.version).toBe(10);
+  expect(JSON.parse(server.get(key)!.value)).toMatchObject({ theme: 'light' });
+  expect(errors).toEqual([]);
 });
 
 test('two tabs without Web Locks retain an independent edit as a conflict', async ({ page, context }) => {

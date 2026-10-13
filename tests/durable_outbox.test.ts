@@ -1,7 +1,7 @@
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DurableOutbox, type OutboxClaim } from '../storage/durableOutbox';
-import { StateDatabase } from '../storage/stateDatabase';
+import { STATE_STORES, StateDatabase, indexedRequest, stateTransaction } from '../storage/stateDatabase';
 
 let factory: IDBFactory;
 let firstConnection: StateDatabase;
@@ -255,5 +255,123 @@ describe('transactional claims and late responses', () => {
       expect(await first.finish(changed, { kind: 'acknowledged', version: 1 })).toBe(false);
     }
     expect((await second.list(accountId))[0]).toEqual(sending);
+  });
+});
+
+describe('explicit queue recovery', () => {
+  let guard: NonNullable<Awaited<ReturnType<DurableOutbox['acceptReadSession']>>>;
+  beforeEach(async () => {
+    const state = await first.sessionState();
+    guard = (await first.acceptReadSession(accountId, 'a'.repeat(64), state.fence))!;
+  });
+
+  it('rebases the latest dependent local value onto the checked server version atomically', async () => {
+    const initial = await write('first');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    const child = await write('latest', { expectedRevision: 1, parentOpId: initial.opId });
+    await first.finish(sending, {
+      kind: 'conflicted', reason: 'server-version-conflict',
+      serverSnapshot: { value: 'remote', version: 9, exists: true },
+    });
+
+    const before = await first.snapshot(accountId, key);
+    const resolved = await first.resolveConflictGroup({
+      accountId, key, expectedOpIds: [initial.opId, child.opId], choice: 'keep-latest-local', readGuard: guard, nowMs: 20,
+    });
+    const after = await second.snapshot(accountId, key);
+    const operations = await second.list(accountId);
+
+    expect(resolved).toBe(true);
+    expect(before).toMatchObject({ value: 'latest', confirmedVersion: 0 });
+    expect(after).toMatchObject({ value: 'latest', confirmedVersion: 9, revision: 3 });
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({ type: 'put', value: 'latest', baseVersion: 9, status: 'pending', retryCount: 0 });
+    expect([initial.opId, child.opId]).not.toContain(operations[0].opId);
+    expect((await claim(second, { sessionEpoch: guard.sessionEpoch })).opId).toBe(operations[0].opId);
+  });
+
+  it('accepts only the checked server snapshot and clears its local variants in one transaction', async () => {
+    const initial = await write('local');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    await first.finish(sending, {
+      kind: 'conflicted', reason: 'server-version-conflict',
+      serverSnapshot: { value: 'remote', version: 9, exists: true },
+    });
+
+    expect(await first.resolveConflictGroup({
+      accountId, key, expectedOpIds: [initial.opId], choice: 'accept-server', readGuard: guard, nowMs: 30,
+    })).toBe(true);
+    expect(await second.snapshot(accountId, key)).toMatchObject({ value: 'remote', confirmedVersion: 9, revision: 2 });
+    expect(await second.list(accountId)).toEqual([]);
+  });
+
+  it('rolls back server acceptance when its metadata write fails', async () => {
+    const initial = await write('local');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    await first.finish(sending, {
+      kind: 'conflicted', reason: 'server-version-conflict',
+      serverSnapshot: { value: 'remote', version: 9, exists: true },
+    });
+    const put = IDBObjectStore.prototype.put;
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+      if (this.name === STATE_STORES.meta) throw new DOMException('Injected recovery fault', 'QuotaExceededError');
+      return put.apply(this, args);
+    });
+
+    await expect(first.resolveConflictGroup({
+      accountId, key, expectedOpIds: [initial.opId], choice: 'accept-server', readGuard: guard, nowMs: 35,
+    })).rejects.toMatchObject({ kind: 'quota' });
+    expect(await second.list(accountId)).toEqual([expect.objectContaining({ opId: initial.opId, status: 'conflicted' })]);
+    expect(await second.snapshot(accountId, key)).toMatchObject({ value: 'local', confirmedVersion: 0, revision: 1 });
+  });
+
+  it('rejects stale operation snapshots and stale session proofs without mutation', async () => {
+    const initial = await write('local');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    await first.finish(sending, {
+      kind: 'conflicted', reason: 'server-version-conflict',
+      serverSnapshot: { value: 'remote', version: 9, exists: true },
+    });
+    expect(await first.resolveConflictGroup({
+      accountId, key, expectedOpIds: ['stale-operation'], choice: 'keep-latest-local', readGuard: guard, nowMs: 30,
+    })).toBe(false);
+
+    const state = await first.sessionState();
+    await first.acceptReadSession(accountId, 'b'.repeat(64), state.fence);
+    expect(await first.resolveConflictGroup({
+      accountId, key, expectedOpIds: [initial.opId], choice: 'keep-latest-local', readGuard: guard, nowMs: 31,
+    })).toBe(false);
+    expect(await second.list(accountId)).toEqual([expect.objectContaining({ opId: initial.opId, status: 'conflicted' })]);
+    expect(await second.snapshot(accountId, key)).toMatchObject({ value: 'local', confirmedVersion: 0 });
+  });
+
+  it('does not expose manual recovery for records with legacy migration provenance', async () => {
+    const operation = await write('legacy local');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    await first.finish(sending, {
+      kind: 'conflicted', reason: 'server-version-conflict',
+      serverSnapshot: { value: 'remote', version: 9, exists: true },
+    });
+    const database = await firstConnection.open();
+    await stateTransaction(database, [STATE_STORES.outbox], 'readwrite', async (tx) => {
+      const current = await indexedRequest(tx.objectStore(STATE_STORES.outbox).get(operation.opId)) as OutboxClaim;
+      tx.objectStore(STATE_STORES.outbox).put({ ...current, migrationSourceKey: 'legacy-queue' });
+    });
+
+    expect(await first.resolveConflictGroup({
+      accountId, key, expectedOpIds: [operation.opId], choice: 'keep-latest-local', readGuard: guard, nowMs: 40,
+    })).toBe(false);
+    expect(await second.list(accountId)).toEqual([expect.objectContaining({ opId: operation.opId, status: 'conflicted', migrationSourceKey: 'legacy-queue' })]);
+  });
+
+  it('retries only failed operations and preserves their local payload', async () => {
+    const operation = await write('saved locally');
+    const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });
+    await first.finish(sending, { kind: 'failed', reason: 'FORBIDDEN_KEYSPACE' });
+
+    expect(await first.retryFailedGroup({ accountId, key, expectedOpIds: [operation.opId], readGuard: guard, nowMs: 50 })).toBe(true);
+    expect(await second.list(accountId)).toEqual([expect.objectContaining({
+      opId: operation.opId, value: 'saved locally', status: 'pending', retryCount: 0, nextAttemptAtMs: 50,
+    })]);
   });
 });

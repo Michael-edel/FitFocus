@@ -169,6 +169,17 @@ describe('durable HTTP sender', () => {
     if (type === 'delete') expect(operations[0]).not.toHaveProperty('value');
   });
 
+  it.each(['scope', 'key', 'version', 'exists'] as const)('does not expose manual recovery for an unverified %s conflict snapshot', async (fault) => {
+    await write();
+    const { instance } = client(async () => json({ error: 'KV_CONFLICT', key: fault === 'key' ? 'other-key' : key,
+      value: 'remote', exists: fault === 'exists' ? 'yes' : true, version: fault === 'version' ? -1 : 9 }, 409,
+    fault === 'scope' ? {} : scope));
+    await instance.connect(account); await instance.flush();
+    expect((await outbox.list(account))[0]).toMatchObject({ status: 'pending', retryCount: 0 });
+    expect((await outbox.list(account))[0]).not.toHaveProperty('serverSnapshot');
+    expect((await outbox.sessionState()).active?.pause).toBe('protocol');
+  });
+
   it.each(['missing-scope', 'wrong-key', 'wrong-version', 'wrong-exists', 'missing-ok'])('does not invent an ack for %s', async (fault) => {
     await write(); const { instance } = client(async () => json({ ok: fault !== 'missing-ok', items: [{ key: fault === 'wrong-key' ? 'other' : key,
       version: fault === 'wrong-version' ? 0 : 1, exists: fault !== 'wrong-exists' }] }, 200, fault === 'missing-scope' ? {} : scope));

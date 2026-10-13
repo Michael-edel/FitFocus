@@ -174,6 +174,42 @@ export class StateSync {
     return this.drainAndCheck(accountId, generation);
   }
 
+  /** Explicitly rebase the latest local snapshot or accept a checked server snapshot for one key. */
+  async resolveConflictedKey(accountId: string, key: string, expectedOpIds: readonly string[], choice: 'keep-latest-local' | 'accept-server'): Promise<boolean> {
+    if (this.accountId !== accountId) return false;
+    const generation = this.generation;
+    if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard) return false;
+    const guard = { ...this.readGuard };
+    const resolved = await this.outbox.resolveConflictGroup({
+      accountId, key, expectedOpIds: [...expectedOpIds], choice, readGuard: guard, nowMs: this.now(),
+    });
+    if (!resolved) {
+      reportStateQueue(accountId, await this.outbox.list(accountId));
+      return false;
+    }
+    reportStateQueue(accountId, await this.outbox.list(accountId));
+    if (choice === 'keep-latest-local' && generation === this.generation && this.accountId === accountId) await this.flush();
+    return true;
+  }
+
+  /** A user retry resets only failed attempts for this key, then runs the usual bounded sender. */
+  async retryFailedKey(accountId: string, key: string, expectedOpIds: readonly string[]): Promise<boolean> {
+    if (this.accountId !== accountId) return false;
+    const generation = this.generation;
+    if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard) return false;
+    const guard = { ...this.readGuard };
+    const retried = await this.outbox.retryFailedGroup({
+      accountId, key, expectedOpIds: [...expectedOpIds], readGuard: guard, nowMs: this.now(),
+    });
+    if (!retried) {
+      reportStateQueue(accountId, await this.outbox.list(accountId));
+      return false;
+    }
+    reportStateQueue(accountId, await this.outbox.list(accountId));
+    if (generation === this.generation && this.accountId === accountId) await this.flush();
+    return true;
+  }
+
   /** Automatic edits wake the existing session; a debounce must not obtain proof or clear an auth pause. */
   flushPending(accountId: string): Promise<boolean> {
     return this.drainAndCheck(accountId, this.generation);
@@ -429,12 +465,12 @@ export class StateSync {
         && response.headers.get('X-FitFocus-State-Session') === serverSessionId
         && isFamilyMenuIntent(intent) && isFamilyMenuSnapshot(snapshot)
         && snapshot.familyId === intent.familyId && snapshot.weekStart === intent.weekStart;
-      if (response.status === 409) return { kind: 'conflicted', reason: 'server-version-conflict',
-        ...(valid && isFamilyMenuSnapshot(snapshot) ? { serverSnapshot: {
+      if (response.status === 409) return valid && isFamilyMenuSnapshot(snapshot)
+        ? { kind: 'conflicted', reason: 'server-version-conflict', serverSnapshot: {
           version: snapshot.version, exists: snapshot.menu !== null,
           value: snapshot.menu ? JSON.stringify({ familyId: snapshot.familyId, weekStart: snapshot.weekStart, menu: snapshot.menu }) : '',
-        } } : {}),
-      };
+        } }
+        : pause('protocol');
       if (response.ok) return valid && isFamilyMenuSnapshot(snapshot) && snapshot.version > claim.baseVersion
         ? { kind: 'acknowledged', version: snapshot.version } : pause('protocol');
     }
@@ -443,8 +479,9 @@ export class StateSync {
         && isUserProfilePayload(body?.profile) && body.profile.id === claim.accountId
         && typeof body.version === 'number' && Number.isSafeInteger(body.version) && body.version >= 0
         && body.profile.version === body.version;
-      if (response.status === 409) return { kind: 'conflicted', reason: 'server-version-conflict',
-        ...(valid ? { serverSnapshot: { value: JSON.stringify(body!.profile), version: body!.version as number, exists: true } } : {}) };
+      if (response.status === 409) return valid
+        ? { kind: 'conflicted', reason: 'server-version-conflict', serverSnapshot: { value: JSON.stringify(body!.profile), version: body!.version as number, exists: true } }
+        : pause('protocol');
       if (response.ok) return valid && (body!.version as number) > claim.baseVersion
         ? { kind: 'acknowledged', version: body!.version as number } : pause('protocol');
     }
@@ -452,7 +489,7 @@ export class StateSync {
       const snapshot = scope && body?.key === claim.key && typeof body.value === 'string' && typeof body.exists === 'boolean'
         && typeof body.version === 'number' && Number.isSafeInteger(body.version) && body.version >= (body.exists ? 1 : 0)
         ? { value: body.value, version: body.version, exists: body.exists } : undefined;
-      return { kind: 'conflicted', reason: 'server-version-conflict', ...(snapshot ? { serverSnapshot: snapshot } : {}) };
+      return snapshot ? { kind: 'conflicted', reason: 'server-version-conflict', serverSnapshot: snapshot } : pause('protocol');
     }
     if (response.ok) {
       const item = claim.type === 'put' && Array.isArray(body?.items) && body.items.length === 1 ? body.items[0] : claim.type === 'delete' ? body : null;

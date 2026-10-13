@@ -171,6 +171,50 @@ function canSendLegacy(operation: OutboxOperation, gate: LegacyGate | undefined,
     && receipt.acknowledgedVersion === undefined && receipt.acknowledgedAtMs === undefined;
 }
 
+function hasLegacyProvenance(operation: OutboxOperation): boolean {
+  return !!(operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical);
+}
+
+type ConflictServerSnapshot = { value: string; version: number; exists: boolean };
+
+function conflictServerSnapshot(accountId: string, operation: OutboxOperation): ConflictServerSnapshot | undefined {
+  const snapshot = operation.serverSnapshot;
+  if (!snapshot || !finiteInteger(snapshot.version) || typeof snapshot.value !== 'string') return undefined;
+  const exists = typeof snapshot.exists === 'boolean' ? snapshot.exists : operation.resource === 'profile';
+  if (operation.resource === 'profile' && !exists) return undefined;
+  if (operation.resource !== 'profile' && typeof snapshot.exists !== 'boolean') return undefined;
+  if (exists && operation.resource === 'profile') {
+    let profile: unknown;
+    try { profile = JSON.parse(snapshot.value); } catch { return undefined; }
+    if (typeof profile !== 'object' || profile === null || Array.isArray(profile)
+      || (profile as Record<string, unknown>).id !== accountId
+      || (profile as Record<string, unknown>).version !== snapshot.version) return undefined;
+  }
+  if (exists && operation.resource === 'familyMenu') {
+    let intent: unknown;
+    try { intent = JSON.parse(snapshot.value); } catch { return undefined; }
+    if (!isFamilyMenuIntent(intent) || familyMenuStorageKey(accountId, intent) !== operation.key) return undefined;
+  }
+  return { value: snapshot.value, version: snapshot.version, exists };
+}
+
+function validResolvedLocalIntent(accountId: string, key: string, operation: OutboxOperation): boolean {
+  if (operation.type === 'delete') return !('value' in operation) && !operation.resource;
+  if (typeof operation.value !== 'string') return false;
+  if (operation.resource === 'profile') {
+    let profile: unknown;
+    try { profile = JSON.parse(operation.value); } catch { return false; }
+    return typeof profile === 'object' && profile !== null && !Array.isArray(profile)
+      && (profile as Record<string, unknown>).id === accountId;
+  }
+  if (operation.resource === 'familyMenu') {
+    let intent: unknown;
+    try { intent = JSON.parse(operation.value); } catch { return false; }
+    return isFamilyMenuIntent(intent) && familyMenuStorageKey(accountId, intent) === key;
+  }
+  return true;
+}
+
 export class DurableOutbox {
   constructor(private readonly connection: StateDatabase = userStateDatabase) {}
 
@@ -347,6 +391,122 @@ export class DurableOutbox {
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) =>
       writeOutboxInTransaction(tx, input, { opId, nowMs, conflictReason: input.conflictReason }));
+  }
+
+  /** Resolve all variants of one key only after the current account proof and UI snapshot still match. */
+  async resolveConflictGroup(input: {
+    accountId: string; key: string; expectedOpIds: readonly string[];
+    choice: 'keep-latest-local' | 'accept-server'; readGuard: OutboxReadGuard; nowMs: number;
+  }): Promise<boolean> {
+    requireOwnedKey(input.accountId, input.key);
+    if (!finiteInteger(input.nowMs) || input.readGuard.accountId !== input.accountId
+      || !input.readGuard.sessionEpoch || !/^[a-f0-9]{64}$/.test(input.readGuard.serverSessionId)
+      || !finiteInteger(input.readGuard.authFence) || !['keep-latest-local', 'accept-server'].includes(input.choice)
+      || input.expectedOpIds.length === 0 || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
+      || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+      const metaStore = tx.objectStore(STATE_STORES.meta);
+      const outbox = tx.objectStore(STATE_STORES.outbox);
+      const [active, fence, owner, value, meta, operations] = await Promise.all([
+        indexedRequest(metaStore.get('active-session')) as Promise<ActiveOutboxSession | undefined>,
+        indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>,
+        indexedRequest(metaStore.get(outboxKeyOwnerId(input.key))) as Promise<{ accountId: string } | undefined>,
+        indexedRequest(tx.objectStore(STATE_STORES.values).get(input.key)) as Promise<{ value: string; accountId?: string } | undefined>,
+        indexedRequest(metaStore.get(keyStateId(input.accountId, input.key))) as Promise<KeyState | undefined>,
+        indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.key])) as Promise<OutboxOperation[]>,
+      ]);
+      const guard = input.readGuard;
+      if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
+        || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
+      if (owner && owner.accountId !== input.accountId || value?.accountId && value.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      operations.sort((left, right) => left.revision - right.revision || left.createdAtMs - right.createdAtMs || left.opId.localeCompare(right.opId));
+      const expected = new Set(input.expectedOpIds);
+      if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
+        || !operations.some((operation) => operation.status === 'conflicted')
+        || operations.some((operation) => operation.status === 'sending' || hasLegacyProvenance(operation))) return false;
+      const resources = new Set(operations.map((operation) => operation.resource ?? 'state'));
+      if (resources.size !== 1 || !meta || !finiteInteger(meta.lastRevision) || !finiteInteger(meta.valueRevision)
+        || !finiteInteger(meta.confirmedVersion) || !finiteInteger(meta.lastRevision + 1)) return false;
+      const conflicts = operations.filter((operation) => operation.status === 'conflicted');
+      const snapshots = conflicts.map((operation) => conflictServerSnapshot(input.accountId, operation))
+        .filter((snapshot): snapshot is ConflictServerSnapshot => snapshot !== undefined)
+        .sort((left, right) => right.version - left.version);
+      const snapshot = snapshots[0];
+      if (conflicts.some((operation) => operation.reason === 'server-version-conflict') && !snapshot) return false;
+      if (snapshot && snapshot.version < meta.confirmedVersion) return false;
+
+      const values = tx.objectStore(STATE_STORES.values);
+      if (input.choice === 'accept-server') {
+        if (!snapshot) return false;
+        if (snapshot.exists) values.put({ key: input.key, accountId: input.accountId, value: snapshot.value, updatedAt: input.nowMs });
+        else values.delete(input.key);
+        for (const operation of operations) outbox.delete(operation.opId);
+        const resolvedMeta: KeyState = { ...meta, lastRevision: meta.lastRevision + 1,
+          valueRevision: meta.lastRevision + 1, confirmedVersion: snapshot.version };
+        delete resolvedMeta.headOpId;
+        metaStore.put(resolvedMeta);
+        metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
+        return true;
+      }
+
+      const latest = operations[operations.length - 1];
+      if (!latest || !validResolvedLocalIntent(input.accountId, input.key, latest)) return false;
+      const baseVersion = snapshot?.version ?? meta.confirmedVersion;
+      const revision = meta.lastRevision + 1;
+      const operation: OutboxOperation = {
+        ...(latest.type === 'put' ? { type: 'put' as const, key: input.key, value: latest.value } : { type: 'delete' as const, key: input.key }),
+        ...(latest.resource ? { resource: latest.resource } : {}),
+        opId: crypto.randomUUID(), accountId: input.accountId, writerId: `manual-resolution:${crypto.randomUUID()}`,
+        revision, baseVersion, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs,
+        createdAtMs: input.nowMs, updatedAtMs: input.nowMs,
+      };
+      for (const previous of operations) outbox.delete(previous.opId);
+      if (operation.type === 'put') values.put({ key: input.key, accountId: input.accountId, value: operation.value, updatedAt: input.nowMs });
+      else values.delete(input.key);
+      outbox.add(operation);
+      metaStore.put({ ...meta, lastRevision: revision, valueRevision: revision, confirmedVersion: baseVersion, headOpId: operation.opId });
+      metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
+      return true;
+    });
+  }
+
+  /** A user retry starts a new bounded retry window without altering the saved payload. */
+  async retryFailedGroup(input: {
+    accountId: string; key: string; expectedOpIds: readonly string[]; readGuard: OutboxReadGuard; nowMs: number;
+  }): Promise<boolean> {
+    requireOwnedKey(input.accountId, input.key);
+    if (!finiteInteger(input.nowMs) || input.readGuard.accountId !== input.accountId
+      || !input.readGuard.sessionEpoch || !/^[a-f0-9]{64}$/.test(input.readGuard.serverSessionId)
+      || !finiteInteger(input.readGuard.authFence) || input.expectedOpIds.length === 0
+      || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
+      || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+      const meta = tx.objectStore(STATE_STORES.meta);
+      const outbox = tx.objectStore(STATE_STORES.outbox);
+      const [active, fence, operations] = await Promise.all([
+        indexedRequest(meta.get('active-session')) as Promise<ActiveOutboxSession | undefined>,
+        indexedRequest(meta.get('auth-fence')) as Promise<{ revision: number } | undefined>,
+        indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.key])) as Promise<OutboxOperation[]>,
+      ]);
+      const guard = input.readGuard;
+      if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
+        || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
+      const expected = new Set(input.expectedOpIds);
+      if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
+        || !operations.some((operation) => operation.status === 'failed')
+        || operations.some((operation) => operation.status === 'conflicted' || operation.status === 'sending'
+          || hasLegacyProvenance(operation))) return false;
+      for (const operation of operations) {
+        if (operation.status !== 'failed') continue;
+        const retry: OutboxOperation = { ...operation, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs, updatedAtMs: input.nowMs };
+        delete retry.reason;
+        delete retry.attempt;
+        outbox.put(retry);
+      }
+      return true;
+    });
   }
 
   async claim(input: { accountId: string; sessionEpoch: string; owner: string; nowMs: number; leaseMs: number }): Promise<OutboxClaim | null> {
