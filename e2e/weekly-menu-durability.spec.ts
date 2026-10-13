@@ -41,10 +41,16 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   const held = gate(), recoveredProfile = gate(); let active = true, cloudAvailable = mode !== 'profile-offline';
   let profile: ReturnType<typeof buildMockProfile> & { version: number; aiPlan: { weeklyMenu?: WeeklyMenu } } = { ...buildMockProfile(), version: 2 };
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => {
+  page.on('console', async message => {
     if (message.type() !== 'error' && message.type() !== 'warning') return;
     if (mode === 'profile-offline' && counts.profileFailures > 0 && new URL(message.location().url, 'http://127.0.0.1').pathname === '/api/profile'
       && message.text().startsWith('Failed to load resource:') && message.text().includes('503')) return;
+    if (message.text().startsWith('Weekly AI reporting failed')) {
+      const details = await message.args()[1]?.evaluate(value => JSON.stringify(value, (_key, nested) =>
+        nested instanceof Error ? { name: nested.name, message: nested.message, stack: nested.stack } : nested)).catch(() => null);
+      errors.push(`${message.text()} ${details ?? ''}`);
+      return;
+    }
     errors.push(message.text());
   });
   await mockApp(page, { session: 'app' });
@@ -86,6 +92,9 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
         lunch: 'Курица 180 г', dinner: 'Рыба 180 г', snack: 'Йогурт 200 г' })), shoppingListItems: [{ name: 'Овсянка', grams: 1400 }] }) });
       counts.fulfilled += 1; return;
     }
+    if (path === '/api/ai' && request.postDataJSON()?.feature === 'wis_text') {
+      return json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
+    }
     if (path === '/api/weekly_menu/items') {
       counts.items += 1;
       return json({ error: 'PERSONAL_MENU_PROFILE_REQUIRED' }, 409);
@@ -123,7 +132,13 @@ async function healthy(page: Page, errors: string[]) {
 
 test('weekly menu and shopping intent are delivered by one durable scoped profile operation', async ({ page }, info) => {
   const { errors, counts } = await setup(page); await generate(page);
-  await expect.poll(() => counts.profileSuccesses).toBe(1);
+  try {
+    await expect.poll(() => counts.profileSuccesses).toBe(1);
+  } catch (error) {
+    const pageText = (await page.locator('body').innerText()).slice(0, 1_000);
+    const local = await saved(page);
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\ncounts=${JSON.stringify(counts)}\nerrors=${JSON.stringify(errors)}\nlocal=${JSON.stringify(local)}\npage=${pageText}`);
+  }
   await expect.poll(async () => (await saved(page)).generated).toBe(0); expect(counts.items).toBe(0);
   expect((await saved(page)).profile?.aiPlan?.weeklyMenu?.days[0].breakfast).toBe('Проверенная овсянка 200 г');
   expect(counts.ai).toBe(1); await expect(page.getByRole('button', { name: 'Обновить план', exact: true })).toBeEnabled();
