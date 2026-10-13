@@ -91,6 +91,13 @@ PR CI этого SHA завершился с ошибкой E2E: 463 passed / 9 
 закрывал транзакцию. В рабочем дереве запросы поставлены в очередь вместе;
 после правки сценарий прошёл 20/20 повторов, весь Firefox spec — 8/8, unit —
 1115/1115, все три typecheck и build. Новый CI для исправленного SHA ещё ожидается.
+CI этого коммита [`4c3ab5a`](https://github.com/Michael-edel/FitFocus/commit/4c3ab5a2c9b1975f1f05c311f7cea7465e435259)
+([run 38393913597](https://github.com/Michael-edel/FitFocus/actions/runs/38393913597))
+завершился success, но нашёл ещё один flaky в Firefox при logout: та же ошибка
+возникла в `writeOutboxInTransaction`. В рабочем дереве все независимые чтения
+записи ставятся в очередь до ожидания, а E2E выводит вложенную `cause` ошибки.
+После этого оба затронутых сценария прошли 30/30 повторов, Firefox spec — 8/8;
+unit, typecheck и build снова прошли. CI этого follow-up ещё ожидается.
 
 PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
 и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).

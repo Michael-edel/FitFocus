@@ -47,7 +47,8 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
       && message.text().startsWith('Failed to load resource:') && message.text().includes('503')) return;
     if (message.text().startsWith('Weekly AI reporting failed')) {
       const details = await message.args()[1]?.evaluate(value => JSON.stringify(value, (_key, nested) =>
-        nested instanceof Error ? { name: nested.name, message: nested.message, stack: nested.stack } : nested)).catch(() => null);
+        nested instanceof Error ? { name: nested.name, message: nested.message, stack: nested.stack,
+          ...(nested.cause === undefined ? {} : { cause: nested.cause }) } : nested)).catch(() => null);
       errors.push(`${message.text()} ${details ?? ''}`);
       return;
     }

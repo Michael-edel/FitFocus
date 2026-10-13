@@ -92,32 +92,37 @@ export async function writeOutboxInTransaction(
   const metaStore = tx.objectStore(STATE_STORES.meta);
   const outbox = tx.objectStore(STATE_STORES.outbox);
   if (input.canCommit && !input.readGuard) throw new Error('OUTBOX_INVALID_READ_GUARD');
+  let activeRequest: Promise<ActiveOutboxSession | undefined> = Promise.resolve(undefined);
+  let fenceRequest: Promise<{ revision: number } | undefined> = Promise.resolve(undefined);
   if (input.readGuard !== undefined) {
     const guard = input.readGuard;
     if (guard.accountId !== input.accountId || !guard.sessionEpoch || !/^[a-f0-9]{64}$/.test(guard.serverSessionId)
       || !finiteInteger(guard.authFence)) throw new Error('OUTBOX_INVALID_READ_GUARD');
-    const [active, fence] = await Promise.all([
-      indexedRequest(metaStore.get('active-session')) as Promise<ActiveOutboxSession | undefined>,
-      indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>,
-    ]);
-    if (active?.accountId !== guard.accountId || active.serverSessionId !== guard.serverSessionId
-      || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) {
-      throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
-    }
+    activeRequest = indexedRequest(metaStore.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
+    fenceRequest = indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>;
   }
   const ownerId = outboxKeyOwnerId(input.intent.key);
-  const owner = await indexedRequest(metaStore.get(ownerId)) as { accountId: string } | undefined;
-  if (owner && owner.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
-  const existingValue = await indexedRequest(tx.objectStore(STATE_STORES.values).get(input.intent.key)) as { value: string; accountId?: string } | undefined;
-  if (existingValue?.accountId && existingValue.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+  const ownerRequest = indexedRequest(metaStore.get(ownerId)) as Promise<{ accountId: string } | undefined>;
+  const existingValueRequest = indexedRequest(tx.objectStore(STATE_STORES.values).get(input.intent.key)) as Promise<{ value: string; accountId?: string } | undefined>;
   const id = keyStateId(input.accountId, input.intent.key);
-  const meta: KeyState = await indexedRequest(metaStore.get(id)) ?? {
+  const metaRequest = indexedRequest(metaStore.get(id)) as Promise<KeyState | undefined>;
+  const operationsRequest = indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.intent.key])) as Promise<OutboxOperation[]>;
+  const [active, fence, owner, existingValue, savedMeta, keyOperations] = await Promise.all([
+    activeRequest, fenceRequest, ownerRequest, existingValueRequest, metaRequest, operationsRequest,
+  ]);
+  if (input.readGuard && (active?.accountId !== input.readGuard.accountId || active.serverSessionId !== input.readGuard.serverSessionId
+    || active.sessionEpoch !== input.readGuard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== input.readGuard.authFence)) {
+    throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+  }
+  if (owner && owner.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+  if (existingValue?.accountId && existingValue.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+  const meta: KeyState = savedMeta ?? {
     id, accountId: input.accountId, key: input.intent.key, lastRevision: 0,
     valueRevision: 0, confirmedVersion: input.baseVersion,
   };
   if (!finiteInteger(meta.lastRevision + 1)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
-  const parent = input.parentOpId ? await indexedRequest(outbox.get(input.parentOpId)) as OutboxOperation | undefined : undefined;
-  const head = meta.headOpId ? await indexedRequest(outbox.get(meta.headOpId)) as OutboxOperation | undefined : undefined;
+  const parent = input.parentOpId ? keyOperations.find((operation) => operation.opId === input.parentOpId) : undefined;
+  const head = meta.headOpId ? keyOperations.find((operation) => operation.opId === meta.headOpId) : undefined;
   const acknowledgedParent = input.parentOpId && !parent && !head
     && meta.acknowledgedOpId === input.parentOpId && meta.acknowledgedWriterId === input.writerId
     && meta.acknowledgedRevision === input.expectedRevision;

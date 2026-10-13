@@ -2432,3 +2432,20 @@ read-only транзакции ожидались последовательно
 прошёл 1115/1115 (198 файлов), общий, domain-strict и storage-strict typecheck
 и production build прошли. Новый код и документация пока не закоммичены;
 результат CI исправленного SHA ещё не подтверждён.
+
+## Follow-up — Firefox IndexedDB write, 13.10.2026
+
+CI [`4c3ab5a`](https://github.com/Michael-edel/FitFocus/commit/4c3ab5a2c9b1975f1f05c311f7cea7465e435259)
+([run 38393913597](https://github.com/Michael-edel/FitFocus/actions/runs/38393913597))
+завершился success, но оставил один flaky в тесте logout: запись weekly report
+вызвала `STATE_STORAGE_TRANSACTION`. Stack указал на `writeOutboxInTransaction`.
+При `readGuard` транзакция последовательно ожидала session proof, затем owner,
+value и metadata. Каждое из чтений независимо; Firefox мог закрыть транзакцию
+между запросами.
+
+Follow-up ставит active-session, auth-fence, owner, value, metadata и операции
+по ключу в очередь до первого `await`, затем проверяет parent/head по этому
+снимку. E2E-сериализация теперь сохраняет вложенный `cause`. После изменения
+logout и независимая правка профиля прошли 30/30 Firefox повторов, полный
+weekly-menu spec — 8/8; unit 1115/1115, общий/domain-strict/storage-strict
+typecheck и production build прошли. CI follow-up SHA ещё ожидается.

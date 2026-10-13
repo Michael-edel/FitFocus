@@ -44,6 +44,16 @@ Push CI был отменён concurrency после запуска PR-собы�
 unit — 1115/1115, общий и оба strict typecheck, build. Изменение ещё не прошло
 CI; workflow нового SHA остаётся ближайшей проверкой.
 
+CI для исправления [`4c3ab5a`](https://github.com/Michael-edel/FitFocus/commit/4c3ab5a2c9b1975f1f05c311f7cea7465e435259)
+завершился success ([run 38393913597](https://github.com/Michael-edel/FitFocus/actions/runs/38393913597)),
+но один Firefox flaky возник при logout во время записи weekly report. Stack
+указывал на последовательные чтения в `writeOutboxInTransaction`. Follow-up
+в рабочем дереве ставит owner/value/metadata/operations чтения в очередь сразу,
+parent/head выбираются из одного результата index query; E2E сохраняет вложенную
+причину ошибки. После правки два затронутых сценария прошли 30/30 повторов,
+полный Firefox spec — 8/8, unit — 1115/1115, все typecheck и build. Новый CI ещё
+не запускался.
+
 ## Предыдущий компонент — недельный AI-отчёт
 
 Клиентская генерация недельного отчёта и её retry теперь используют свежую

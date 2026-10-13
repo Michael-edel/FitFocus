@@ -15,8 +15,13 @@ flaky на iPhone PWA preview-origin). Последующая проверка d
 value и metadata из одного IndexedDB read-only transaction. В текущем рабочем
 дереве все три запроса ставятся в очередь до ожидания результата. После правки
 целевой Firefox-сценарий прошёл 20/20 повторов, весь weekly-menu spec — 8/8,
-unit — 1115/1115, все typecheck и production build. CI этого изменения ещё
-ожидается; результат локального повтора не заменяет workflow.
+unit — 1115/1115, все typecheck и production build. CI `4c3ab5a` затем нашёл
+ещё один flaky в Firefox logout-сценарии: последовательное чтение в
+`writeOutboxInTransaction`. Follow-up в текущем дереве ставит независимые
+owner/value/metadata/operation reads в очередь до ожидания; E2E сохраняет
+вложенную ошибку `cause`. После этого оба сценария прошли 30/30 повторов,
+weekly-menu spec — 8/8, unit — 1115/1115, typecheck и build прошли. CI нового
+изменения ещё ожидается.
 
 ## Контракт
 

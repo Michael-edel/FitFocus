@@ -24,6 +24,11 @@ iPhone PWA preview-origin (`route.fetch: socket hang up`), retry прошёл;
 прошёл 20/20, Firefox spec 8/8, полный unit 1115/1115, общий и оба strict
 typecheck, production build. CI исправленного SHA ещё не получен; P0.5 и P0.8
 остаются открытыми.
+CI `4c3ab5a` завершился success, однако один Firefox flaky показал такой же
+последовательный read в `writeOutboxInTransaction`. Новый follow-up ставит все
+независимые запросы в очередь до первого ожидания и добавляет `cause` в E2E
+диагностику. После него оба проблемных сценария прошли 30/30 повторов, Firefox
+spec 8/8, unit 1115/1115, все typecheck и build; CI follow-up ожидается.
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
 Последний подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
 1082 unit / 197 файлов; browser — 390 passed / 9 skips, success, 21,1 мин.

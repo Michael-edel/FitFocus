@@ -12,7 +12,12 @@
 в рабочем дереве ставит независимые owner/value/metadata-чтения в очередь до
 первого ожидания. После него целевой Firefox-сценарий прошёл 20/20, весь spec
 8/8; 1115 unit, три typecheck и build также прошли. Workflow нового SHA ещё
-ожидается. Подробности: [статус](project-status.md) и [контракт weekly report](weekly-ai-report-session.md).
+ожидается. CI фикса `4c3ab5a` также завершился success, но с одним flaky в
+Firefox logout-сценарии: stack указал на последовательные чтения в записи
+outbox. После постановки всех независимых read requests в очередь оба проблемных
+сценария прошли 30/30, полный spec — 8/8, unit 1115/1115, все typecheck и build;
+workflow следующего SHA ещё ожидается. Подробности: [статус](project-status.md)
+и [контракт weekly report](weekly-ai-report-session.md).
 
 ## Локальная проверка preview origin
 
