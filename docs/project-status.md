@@ -44,6 +44,22 @@ passed / 9 skipped за 21,1 минуты, audit (0 уязвимостей), sch
 и [проверенном rollback](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337/artifacts/11787357946).
 [Контракт и ограничения](account-data-cleanup.md).
 
+## Рабочее дерево — восстановление очереди, `80dc1cf`
+
+В `fix/durable-outbox` добавлены пользовательские действия для обычных
+outbox-записей: повтор failed-операции, сохранение последнего локального
+намерения и принятие проверенного серверного снимка. Действия проверяют свежую
+сессию и точные operation IDs внутри IDB-транзакции. Legacy-записи сохраняются,
+но ручное изменение для них недоступно. Некорректный 409 переводит sender в
+protocol-паузу и не показывается как разрешаемый серверный конфликт.
+
+Локальная проверка коммита [`80dc1cf`](https://github.com/Michael-edel/FitFocus/commit/80dc1cfa20249ce099f94f3d406455cc547c0819):
+1092 unit-теста / 197 файлов; общий, domain-strict и storage-strict typecheck,
+admin guards и production build прошли. `storage-durability.spec.ts` прошёл
+42/42 на семи browser/PWA-проектах; новый сценарий разрешения конфликта — 7/7.
+GitHub CI этого коммита ещё не подтверждён. Staging, merge в `main` и выпуск
+не выполнялись. [Поведение и ограничения](runtime-state.md#повтор-и-разрешение-конфликтов--рабочее-дерево-13102026).
+
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
 job 115035254691, на опубликованной ревизии `ca8ecb1`. Прошли 1068 unit / 196

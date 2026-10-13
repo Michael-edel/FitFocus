@@ -87,8 +87,9 @@ CI точного SHA `00cd005` завершился success в [run 38324638965
 тестов backup. [Полный CI PR-head `2aff6c3`](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
 завершился success: 1073 unit / 196 файлов, 390 browser passed / 9 skips
 (15,7 мин), audit/typechecks/guards/schema/privacy/build и 23 HTTP/D1 rollback
-проверки прошли. Далее — остальные callbacks P0.2–P0.6, UI конфликтов,
-account-scoped очистка stores и staging/rollback acceptance.
+проверки прошли. Далее — остальные callbacks P0.2–P0.6, полная lifecycle-
+приёмка recovery UI и staging/rollback acceptance. Account-scoped cleanup
+реализован; общее legacy evidence физически не удаляется.
 Интеграция P0.1 и серверной части P0.7 в защищённую main остаётся открытой.
 P0.9 пополняется тестами каждого исправления и завершается проверкой
 всего жизненного цикла и выпуска. [Подробный статус](docs/project-status.md),
@@ -564,6 +565,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
   tombstone с сервером остаются отдельными ограничениями.
   [Контракт](docs/account-data-cleanup.md).
 - [ ] Завершить UI повтора/разрешения конфликтов и общий lifecycle.
+  - [x] Добавить безопасные действия для обычных записей: повтор `failed`,
+    оставить последнюю локальную версию или принять проверенный серверный снимок.
+    Очередь и значения меняются транзакционно; действия требуют свежей сессии,
+    точного набора operation IDs и не доступны legacy-записям.
+  - [ ] Пройти браузерную приёмку всех действий, ресурсов и переходов lifecycle;
+    подтвердить результат на точном CI SHA.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

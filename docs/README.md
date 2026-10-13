@@ -57,6 +57,10 @@ schema/privacy/auth/API, три typecheck и build прошли. Дополни�
 migration smoke `00cd005` тоже прошёл CI (390 passed / 9 skips); он подтверждает
 этот smoke, а не последующий backup-код. См. [статус проекта](project-status.md).
 Более ранние результаты и проверки отдельных компонентов ниже привязаны к SHA.
+Текущий локальный компонент восстановления очереди — [`80dc1cf`](https://github.com/Michael-edel/FitFocus/commit/80dc1cfa20249ce099f94f3d406455cc547c0819):
+1092 unit-теста и 42 storage browser-сценария на семи проектах прошли локально;
+GitHub CI на этой ветке пока не подтверждён. Подробности — в [статусе](project-status.md)
+и [контракте runtime](runtime-state.md).
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).
@@ -156,7 +160,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
 | [Legacy migration](legacy-migration.md) | Реализованный импорт, его предусловия и ограничения |
 | [Реализация P0.8](outbox-implementation.md) | Проверенный фундамент и оставшиеся этапы подключения |
-| [Runtime state](runtime-state.md) | Атомарный repository, managed hydration, UI ошибок и оставшееся подключение |
+| [Runtime state](runtime-state.md) | Атомарный repository, managed hydration, статусы сохранения и восстановление outbox |
 | [State sender](state-sender.md) | Исторический контракт sender шести ключей; расширение до 15 описано в пользовательских записях |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
