@@ -46,9 +46,9 @@ export async function saved(page: Page) {
 
 export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
-  let active = true, available = mode !== 'offline', version = 1, week = '';
+  let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
   let cloud = familyTestMenu(account), profile = buildMockProfile();
-  const errors: string[] = [], counts = { preview: 0, put: 0, accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0 };
+  const errors: string[] = [], counts = { preview: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
@@ -86,9 +86,10 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
       expect(request.headers()['x-fitfocus-state-account']).toBe(account); expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
       if (request.method() === 'PUT') {
         counts.put += 1; const body = request.postDataJSON();
+        counts.bases.push(body.baseVersion);
         expect(body.familyId).toBe(familyId); expect(body.weekStart).toBe(week);
         if (!available) return json({ error: 'INJECTED_OFFLINE' }, 503);
-        if (mode === 'conflict') { version = 8; cloud = { ...familyTestMenu(account, 999, week) }; return json({ error: 'VERSION_CONFLICT', snapshot: { familyId, weekStart: week, version, menu: cloud } }, 409); }
+        if (conflict) { version = 8; cloud = { ...familyTestMenu(account, 999, week) }; return json({ error: 'VERSION_CONFLICT', snapshot: { familyId, weekStart: week, version, menu: cloud } }, 409); }
         expect(body.baseVersion).toBe(version); cloud = body.menu; version += 1; counts.accepted += 1;
       }
       return json({ ok: true, snapshot: { familyId, weekStart: week, version, menu: cloud } });
@@ -118,7 +119,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
-  return { errors, counts, restore: () => { available = true; }, release, close: () => { active = false; } };
+  return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, close: () => { active = false; } };
 }
 export async function navigate(page: Page, name: string) {
   const button = page.getByRole('button', { name, exact: true });

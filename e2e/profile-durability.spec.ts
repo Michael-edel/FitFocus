@@ -25,14 +25,15 @@ async function saved(page: Page) {
   }, key);
 }
 async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGate?: { started: () => void; wait: Promise<void> }) {
-  const conflict = mode === 'conflict';
+  let conflict = mode === 'conflict';
+  let expectedProfileBaseVersion = mode === 'refresh' ? 9 : 2;
   let expired = false;
   let rejectedProofs = 0;
   // A new document can start with a restored server login; focus within the old document cannot.
   page.on('request', request => {
     if (request.isNavigationRequest() && request.resourceType() === 'document' && request.frame() === page.mainFrame()) expired = false;
   });
-  const errors: string[] = []; const mutations: string[] = [];
+  const errors: string[] = []; const mutations: string[] = []; const profileBases: number[] = [];
   const expectedHttpErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
@@ -56,13 +57,14 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
     if (path === '/api/profile' && request.method() === 'PUT') {
       mutations.push(request.method());
       const body = request.postDataJSON() as { baseVersion: number };
+      profileBases.push(body.baseVersion);
       expect(request.headers()['x-fitfocus-state-account']).toBe(account);
       expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
-      expect(body.baseVersion).toBe(mode === 'refresh' ? 9 : 2);
+      expect(body.baseVersion).toBe(expectedProfileBaseVersion);
       if (mode === 'refresh') return json({ profile: { ...body, id: account, version: 10 }, version: 10 });
-      if (mode === 'auth') expired = true;
-      return conflict ? json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409)
-        : json({ error: 'UNAUTH' }, 401);
+      if (mode === 'auth') { expired = true; return json({ error: 'UNAUTH' }, 401); }
+      if (conflict) return json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409);
+      return json({ profile: { ...body, id: account, version: body.baseVersion + 1 }, version: body.baseVersion + 1 });
     }
     if (path === '/api/profile') return json({ profile: mode === 'refresh' ? { ...profile, name: 'Cloud refreshed', version: 9 } : profile });
     if (path === '/api/state' && request.method() === 'GET') return json({ items: [] });
@@ -74,7 +76,8 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
     }
     return route.fallback();
   });
-  return { errors, mutations, expectedHttpErrors };
+  return { errors, mutations, profileBases, expectedHttpErrors,
+    resolveConflict: () => { conflict = false; expectedProfileBaseVersion = 8; } };
 }
 test('profile edits survive reload and a different bootstrap snapshot during an auth pause', async ({ page }, testInfo) => {
   const { errors, mutations } = await setup(page, 'auth');
@@ -116,6 +119,52 @@ test('a profile conflict retains the local name and never retries against the cl
   expect(mutations).toEqual(['PUT']); expect((await saved(page)).operations).toHaveLength(1);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('profile-conflict.png') });
+});
+
+test('profile recovery rebases the local profile onto the verified server version', async ({ page }) => {
+  const { errors, mutations, profileBases, resolveConflict } = await setup(page, 'conflict');
+  await openApp(page, '/#settings');
+  const name = page.getByPlaceholder('Как к вам обращаться');
+  await name.fill('Профиль после разрешения конфликта');
+  await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Профиль' });
+  const keepLocal = group.getByRole('button', { name: 'Оставить последнюю локальную версию' });
+  await expect(keepLocal).toBeVisible();
+  resolveConflict();
+  await keepLocal.click();
+
+  await expect.poll(async () => (await saved(page)).operations).toHaveLength(0);
+  expect(profileBases).toEqual([2, 8]);
+  expect(mutations).toEqual(['PUT', 'PUT']);
+  expect((await saved(page)).value).toContain('Профиль после разрешения конфликта');
+  await expect(name).toHaveValue('Профиль после разрешения конфликта');
+  expect(errors).toEqual([]);
+});
+
+test('profile recovery can accept a checked server snapshot after explicit confirmation', async ({ page }) => {
+  const { errors } = await setup(page, 'conflict');
+  await openApp(page, '/#settings');
+  const name = page.getByPlaceholder('Как к вам обращаться');
+  await name.fill('Локальный профиль, который будет отклонён');
+  await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Профиль' });
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  });
+  const reload = page.waitForNavigation({ waitUntil: 'load' });
+  await group.getByRole('button', { name: 'Принять серверную версию' }).click();
+  expect(await dialogHandled).toContain('Локальные изменения этого раздела будут удалены');
+  await reload;
+
+  await expect.poll(async () => (await saved(page)).operations).toHaveLength(0);
+  expect((await saved(page)).value).toContain('Cloud name');
+  expect(errors).toEqual([]);
 });
 
 test('a held profile Save survives the state notice disappearing before pointer release', async ({ page }, testInfo) => {

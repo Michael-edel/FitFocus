@@ -43,7 +43,7 @@ test('settings edit survives reload in IndexedDB with its outgoing intent', asyn
 });
 
 type ServerStateItem = { version: number; value: string };
-async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: { conflict?: boolean; settingsRequests?: number[] } = {}) {
+async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: { conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[] } = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
     stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
@@ -66,6 +66,10 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     if (options.conflict && items[0].key.endsWith('_settings')) {
       await route.fulfill({ status: 409, contentType: 'application/json', headers: scope,
         body: JSON.stringify({ error: 'KV_CONFLICT', key: items[0].key, value: '{"theme":"dark"}', exists: true, version: 9 }) }); return;
+    }
+    if (options.settingsFailure && items[0].key.endsWith('_settings')) {
+      await route.fulfill({ status: 403, contentType: 'application/json', headers: scope,
+        body: JSON.stringify({ error: 'FORBIDDEN_KEYSPACE' }) }); return;
     }
     // A lost response or competing writer can legitimately resend an old base: the real API returns 409.
     const stale = items.find((item) => item.baseVersion !== (server.get(item.key)?.version ?? 0));
@@ -148,6 +152,91 @@ test('resolves a checked server conflict by sending the latest local settings ve
   expect(server.get(key)?.version).toBe(10);
   expect(JSON.parse(server.get(key)!.value)).toMatchObject({ theme: 'light' });
   expect(errors).toEqual([]);
+});
+
+test('retries a failed settings operation from the recovery panel without changing its payload', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error' && !/\b403\b/.test(message.text())) errors.push(message.text()); });
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>();
+  const options = { settingsFailure: true, settingsRequests: [] as number[] };
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server, options); await openApp(page, '/#settings');
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('failed');
+  const original = (await storedSettings(page)).operations[0];
+  expect(original.value).toContain('"theme":"light"');
+
+  await page.reload();
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Настройки' });
+  await expect(group.getByText(/Сервер запретил запись/)).toBeVisible();
+  const retry = group.getByRole('button', { name: 'Повторить отправку' });
+  await expect(retry).toBeVisible();
+  options.settingsFailure = false;
+  await retry.click();
+
+  await expect.poll(async () => (await storedSettings(page)).operations).toHaveLength(0);
+  expect(await storedSettings(page)).toMatchObject({ confirmedVersion: 1 });
+  expect((await storedSettings(page)).value).toContain('"theme":"light"');
+  expect(options.settingsRequests).toEqual([0, 0]);
+  expect(server.get(key)).toMatchObject({ version: 1 });
+  expect(JSON.parse(server.get(key)!.value)).toMatchObject({ theme: 'light' });
+  expect(errors).toEqual([]);
+});
+
+test('accepting a checked server conflict warns, reloads, and discards only the local variant', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error' && !/\b409\b/.test(message.text())) errors.push(message.text()); });
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>([[key, { version: 9, value: '{"theme":"dark"}' }]]);
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server, { conflict: true }); await openApp(page, '/#settings');
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Настройки' });
+  const accept = group.getByRole('button', { name: 'Принять серверную версию' });
+  await expect(accept).toBeVisible();
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  });
+  const reload = page.waitForNavigation({ waitUntil: 'load' });
+  await accept.click();
+  expect(await dialogHandled).toContain('Локальные изменения этого раздела будут удалены');
+  await reload;
+
+  await expect.poll(async () => (await storedSettings(page)).operations).toHaveLength(0);
+  expect(await storedSettings(page)).toMatchObject({ confirmedVersion: 9 });
+  expect((await storedSettings(page)).value).toContain('"theme":"dark"');
+  await expect(page.getByRole('button', { name: /^Тёмная/ })).toHaveClass(/border-indigo-500\/40/);
+  await expect(page.getByText('Cloud: pending', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('canceling server acceptance keeps the checked conflict and the local settings', async ({ page }) => {
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>([[key, { version: 9, value: '{"theme":"dark"}' }]]);
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server, { conflict: true }); await openApp(page, '/#settings');
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Настройки' });
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.dismiss();
+    return message;
+  });
+  await group.getByRole('button', { name: 'Принять серверную версию' }).click();
+  expect(await dialogHandled).toContain('Локальные изменения этого раздела будут удалены');
+
+  const retained = await storedSettings(page);
+  expect(retained.value).toContain('"theme":"light"');
+  expect(retained.confirmedVersion).toBe(9);
+  expect(retained.operations).toHaveLength(1);
+  expect(retained.operations[0]).toMatchObject({ status: 'conflicted', serverSnapshot: { version: 9 } });
 });
 
 test('two tabs without Web Locks retain an independent edit as a conflict', async ({ page, context }) => {

@@ -23,6 +23,48 @@ test('family conflict survives reload with its original menu and remote snapshot
   await purchases.scrollIntoViewIfNeeded(); await expect(purchases).toBeInViewport(); expect(counts.accepted).toBe(0); expect(counts.oldWriter).toBe(0);
   await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-menu-conflict.png') });
 });
+test('family recovery keeps the last local menu and sends it against the checked family version', async ({ page }) => {
+  const { counts, errors, resolveConflict } = await setup(page, 'conflict');
+  await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Семейное меню' });
+  const keepLocal = group.getByRole('button', { name: 'Оставить последнюю локальную версию' });
+  await expect(keepLocal).toBeVisible();
+  resolveConflict();
+  await keepLocal.click();
+
+  await expect.poll(() => counts.accepted).toBe(1);
+  await expect.poll(async () => (await saved(page)).operations).toHaveLength(0);
+  expect(counts.bases).toEqual([1, 8]);
+  expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+  expect(counts.oldWriter).toBe(0);
+  await healthy(page, errors);
+});
+
+test('family recovery accepts only the checked remote menu after explicit confirmation', async ({ page }) => {
+  const { counts, errors } = await setup(page, 'conflict');
+  await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+  await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Семейное меню' });
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  });
+  const reload = page.waitForNavigation({ waitUntil: 'load' });
+  await group.getByRole('button', { name: 'Принять серверную версию' }).click();
+  expect(await dialogHandled).toContain('Локальные изменения этого раздела будут удалены');
+  await reload;
+
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect.poll(async () => (await saved(page)).operations).toHaveLength(0);
+  expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(999);
+  expect(counts.accepted).toBe(0);
+  expect(counts.oldWriter).toBe(0);
+  await healthy(page, errors);
+});
 test('family local storage failure preserves the previous menu and sends no menu mutation', async ({ page }, info) => {
   const { counts, errors } = await setup(page, 'quota');
   await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
