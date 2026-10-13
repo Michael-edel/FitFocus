@@ -1,17 +1,22 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 13.10.2026. Последний опубликованный HEAD — документационный коммит
-[`c6ebbdc`](https://github.com/Michael-edel/FitFocus/commit/c6ebbdc6987f38ca487b12917630e2d2429f5afa)
-в `fix/durable-outbox`; CI run [38425515018](https://github.com/Michael-edel/FitFocus/actions/runs/38425515018)
-дошёл до E2E после успешных guards, unit, typecheck и build. Предыдущий полный
-CI [run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386)
-для `b66dcb4` завершился success.
+[`c48ce1b`](https://github.com/Michael-edel/FitFocus/commit/c48ce1b543af3a4d1fc57f88c2cb875b4c4fd4dc)
+в `fix/durable-outbox`. Его полный PR CI [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879)
+завершился success: 1115 unit / 198 файлов, 485 browser passed / 25 skipped,
+audit без известных уязвимостей, guards, три typecheck, build и rollback/CAS
+проверка на 23 запросах прошли. В E2E был один flaky desktop Firefox в legacy
+migration; retry прошёл. Предыдущий run `38425515018` для `c6ebbdc` отменён
+concurrency при push нового PR HEAD.
 
-Локальный commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
+Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
-и WebKit прошли 3/3, `npm run typecheck` прошёл. Он ещё не опубликован; следующий
-CI должен проверить этот сценарий вместе с остальной веткой. P0.5 и P0.8
-остаются открытыми до остальных callbacks, общей lifecycle-приёмки и staging.
+и WebKit прошли 3/3, `npm run typecheck` прошёл. Он опубликован в `c48ce1b` и
+прошёл точный CI. Flaky migration assertion теперь сверяет стабильные поля
+fingerprint без изменяемого `retryCount`; локально тест прошёл 5/5 серийно,
+3/3 параллельно и 7/7 в browser/PWA-матрице. CI этого тестового follow-up ещё
+ожидается. P0.5 и P0.8 остаются открытыми до остальных callbacks, общей
+lifecycle-приёмки и staging.
 Подробные критерии — в разделах P0 ниже.
 
 ## Предыдущие результаты
@@ -492,7 +497,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить задержанный повтор личного плана A после входа B в соседней
   вкладке: поздний ответ не меняет профиль, значения, outbox или success-effects
   обоих аккаунтов. Локально прошло 3/3 на desktop Chromium, Firefox и WebKit;
-  `npm run typecheck` прошёл. Точный CI этого изменения ожидает публикации.
+  `npm run typecheck` и точный CI `c48ce1b` прошли в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

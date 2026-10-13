@@ -7,20 +7,24 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последний полный CI для состояния ветки — документационный коммит
-[`b66dcb4`](https://github.com/Michael-edel/FitFocus/commit/b66dcb4910267345e2c38eeb2f58175c5c8bea1f)
-([run 38420925386](https://github.com/Michael-edel/FitFocus/actions/runs/38420925386));
+Последний полный CI — документационный коммит
+[`c48ce1b`](https://github.com/Michael-edel/FitFocus/commit/c48ce1b543af3a4d1fc57f88c2cb875b4c4fd4dc)
+([run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879));
 P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
 исправил последовательные чтения из одной
 IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
 `await`, а parent/head операции выбираются из одного индексного снимка.
 E2E-диагностика сохраняет вложенную причину `Error.cause`.
 
-Полный [CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
-завершился success: 1115 unit-тестов / 198 файлов, 466 E2E passed / 9 skipped,
-audit без уязвимостей, schema/privacy/auth/API guards, три typecheck, build и
-HTTP/D1 rollback-проверка на 23 запросах прошли. Два затронутых Firefox-сценария
-прошли 30/30 повторов без retries, весь `weekly-menu-durability.spec.ts` — 8/8.
+Полный CI `c48ce1b` завершился success: 1115 unit-тестов / 198 файлов,
+485 E2E passed / 25 skipped, audit без известных уязвимостей,
+schema/privacy/auth/API guards, три typecheck, build и HTTP/D1 rollback-проверка
+на 23 запросах прошли. Был один flaky desktop Firefox в old/new legacy migration:
+10-секундное ожидание не сошлось в первой попытке, retry прошёл. Локальная
+диагностика показала, что импорт и quarantine корректны, а проверка сырой строки
+учитывала меняющийся `retryCount`, который не входит в stable fingerprint.
+Тест теперь сравнивает fingerprint-поля; после правки прошло 5/5 серийно,
+3/3 параллельно и 7/7 в browser/PWA-профилях. CI follow-up ещё ожидается.
 
 В полном CI один WebKit PWA update тест был flaky: кнопка обновления отсутствовала
 в первой попытке, retry прошёл. Локальный повтор этого сценария прошёл 3/3 при
@@ -36,9 +40,10 @@ PR #93 остаётся draft и не слит в `main`.
 Локальная приёмка personal-plan retry после смены аккаунта добавлена в
 `e2e/ai-callback-account-switch.spec.ts`: поздний ответ A не меняет профиль,
 значения, outbox или success-effects A и B. Она прошла 3/3 на desktop Chromium,
-Firefox и WebKit; `npm run typecheck` прошёл. Этот сценарий ещё не входит в
-удалённый CI. CI run `38425515018` для опубликованного `c6ebbdc` выполняет E2E;
-предыдущие статические проверки, unit, typecheck и build уже прошли.
+Firefox и WebKit; `npm run typecheck` прошёл. Кодовый commit `eae1ce1` и MD
+обновления опубликованы в `c48ce1b`; точный CI run `38429247879` завершился
+success с одним flaky в отдельном legacy-migration сценарии. Предыдущий run
+`38425515018` для `c6ebbdc` отменён concurrency после push нового HEAD.
 
 ## Предыдущий компонент — P0.5 client AI callbacks
 

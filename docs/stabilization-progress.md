@@ -2536,7 +2536,20 @@ personal-plan retry. Вкладка A начинает повтор; в сосе
 отсутствие achievement и позднего плана в UI.
 
 `npm run typecheck` и целевой сценарий прошли. Команда с desktop Chromium,
-Firefox и WebKit завершилась 3/3 без retries. Изменения ещё локальные и не входят
-в run `38425515018`, который проверяет опубликованный `c6ebbdc`; в нём E2E
-продолжается после успешных unit, typecheck, guards и build. Staging, OAuth,
-BFCache, другие callbacks и общий P0.5 остаются открытыми.
+Firefox и WebKit завершилась 3/3 без retries. Кодовый commit `eae1ce1` и MD
+обновления опубликованы в `c48ce1b`. Точный PR CI [run `38429247879`](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879)
+завершился success: 1115 unit / 198 файлов, 485 E2E passed / 25 skipped,
+guards, три typecheck, build и rollback/CAS на 23 HTTP-запросах прошли.
+В итоговом E2E была одна flaky-попытка в desktop Firefox:
+`legacy-outbox-migration.spec.ts` не дождался состояния импорта за 10 секунд;
+retry прошёл.
+
+Диагностика зафиксировала корректные импортированную операцию и карантин, но
+проверка сравнивала всю legacy source строку, включая меняющийся retryCount.
+Миграционный fingerprint намеренно включает только type/key/value/baseVersion.
+Проверка исправлена в `e2e/legacy-outbox-migration.spec.ts` и сверяет тот же
+набор нормализованных полей. После правки прошли 5/5 Firefox повторов с одним
+worker, 3/3 с тремя workers и 7/7 на всей browser/PWA-матрице; typecheck прошёл.
+Исправление пока локальное, точный CI follow-up ещё предстоит. Предыдущий run
+`38425515018` для `c6ebbdc` отменён concurrency при push нового HEAD. Staging,
+OAuth, BFCache, другие callbacks и общий P0.5 остаются открытыми.
