@@ -1,15 +1,16 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Последний опубликованный HEAD — документационный коммит
-[`7c50f08`](https://github.com/Michael-edel/FitFocus/commit/7c50f08552a5bbe4d164670efe3e7cdea6ad6337)
-в `fix/durable-outbox`. Полный PR CI [run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387)
+Обновлено: 13.10.2026. На проверенном HEAD документационного коммита
+[`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d)
+в `fix/durable-outbox` PR CI [run 38440675173](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173)
 завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped,
 audit без известных уязвимостей, guards, три typecheck, build и rollback/CAS
-проверка на 23 запросах прошли. E2E отметил 3 flaky, все три прошли retry:
-два weekly-menu сценария в desktop Firefox и settings sender в Android PWA.
-Отдельный flaky legacy migration из run `38429247879` после исправления не
-повторился. Эти три новых flakies локально не воспроизвелись в 18 совместных
-повторах; причина не установлена.
+проверка на 23 запросах прошли. Три E2E прошли retry, но отмечены flaky:
+settings sender в desktop Chromium, восстановление профиля в desktop Firefox и
+legacy migration в iPhone PWA. Они локально повторились соответственно 5/5,
+5/5 и 3/3; первопричины CI нестабильности не установлены. Предыдущий flaky
+legacy migration из run `38429247879` после исправления fingerprint-проверки
+не повторяется.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
@@ -17,9 +18,10 @@ audit без известных уязвимостей, guards, три typecheck
 следующий commit `d5341a0` исправил flaky migration assertion: она сравнивает
 стабильные fingerprint-поля без изменяемого `retryCount`. В CI `7c50f08` этот
 тест больше не flaky; локально он прошёл 5/5 серийно, 3/3 параллельно и 7/7 в
-browser/PWA-матрице. Остались 3 других CI flakies в двух weekly-menu Firefox и
-Android PWA settings сценарии; локальная совместная матрица прошла 18/18,
-причина CI сбоев не установлена. P0.5 и P0.8 остаются открытыми до остальных
+browser/PWA-матрице. В CI `38435173387` остались 3 других flaky (weekly-menu
+Firefox и Android PWA); следующий CI `38440675173` сообщил иной набор из 3
+flaky. Их точечные локальные повторы прошли 5/5, 5/5 и 3/3, но первопричины
+пока не установлены. P0.5 и P0.8 остаются открытыми до остальных
 callbacks, общей lifecycle-приёмки и staging.
 Подробные критерии — в разделах P0 ниже.
 

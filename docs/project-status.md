@@ -7,22 +7,24 @@
 
 ## Текущая проверка — P0.8 IndexedDB outbox
 
-Последний полный CI — документационный коммит
-[`7c50f08`](https://github.com/Michael-edel/FitFocus/commit/7c50f08552a5bbe4d164670efe3e7cdea6ad6337)
-([run 38435173387](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387));
+Последний проверенный CI относится к документационному коммиту
+[`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d)
+([run 38440675173](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173));
 P0.8 transaction follow-up в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
 исправил последовательные чтения из одной
 IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
 `await`, а parent/head операции выбираются из одного индексного снимка.
 E2E-диагностика сохраняет вложенную причину `Error.cause`.
 
-Полный CI `7c50f08` завершился success: 1115 unit-тестов / 198 файлов,
+Полный CI `e96025d` завершился success: 1115 unit-тестов / 198 файлов,
 483 E2E passed / 25 skipped, audit без известных уязвимостей,
 schema/privacy/auth/API guards, три typecheck, build и HTTP/D1 rollback-проверка
-на 23 запросах прошли. Три E2E были flaky и прошли retry: два weekly-menu
-сценария в desktop Firefox и settings sender в Android PWA. Исправленный legacy
-migration тест больше не flaky. Эти три случая локально не воспроизвелись;
-совместный целевой прогон прошёл 18/18, первопричина CI нестабильности не установлена.
+на 23 запросах прошли. Три E2E были flaky и прошли retry: settings sender в
+desktop Chromium оставил `Cloud: pending` после reload, Firefox recovery выдал
+IndexedDB transaction-aborted warning при навигации, а iPhone PWA legacy
+migration не дождался server state write за 10 секунд. Локальные повторы этих
+сценариев прошли 5/5, 5/5 и 3/3; первопричина CI нестабильности не установлена.
+Предыдущий fingerprint flaky migration assertion больше не повторялся.
 
 В полном CI один WebKit PWA update тест был flaky: кнопка обновления отсутствовала
 в первой попытке, retry прошёл. Локальный повтор этого сценария прошёл 3/3 при
@@ -41,8 +43,10 @@ PR #93 остаётся draft и не слит в `main`.
 Firefox и WebKit; `npm run typecheck` прошёл. Кодовый commit `eae1ce1` и MD
 обновления опубликованы в `c48ce1b`; точный CI run `38429247879` завершился
 success с одним flaky в отдельном legacy-migration сценарии. Follow-up `d5341a0`
-входит в HEAD `7c50f08`; его точный CI `38435173387` прошёл success с 3 другими
-flaky E2E, которые не воспроизвелись в локальных повторах. Предыдущий run
+входит в проверенный HEAD `e96025d`; CI `38435173387` прошёл success с тремя
+flaky, затем `38440675173` тоже завершился success и сообщил другой набор из
+трёх flaky. Их локальные повторы прошли, но причина нестабильности не установлена.
+Предыдущий run
 `38425515018` для `c6ebbdc` отменён concurrency после push нового HEAD.
 
 ## Предыдущий компонент — P0.5 client AI callbacks

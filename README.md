@@ -70,7 +70,7 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний опубликованный HEAD [`7c50f08`](https://github.com/Michael-edel/FitFocus/commit/7c50f08552a5bbe4d164670efe3e7cdea6ad6337) включает тест позднего personal-plan retry и fix сравнения legacy migration fingerprint. Полный PR CI [`38435173387`](https://github.com/Michael-edel/FitFocus/actions/runs/38435173387) завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped, guards, typecheck, build и rollback/CAS на 23 запросах прошли. Тест migration больше не flaky; 3 других E2E прошли retry (два weekly-menu Firefox и settings sender Android PWA). Локальный совместный прогон этих сценариев прошёл 18/18; причина нестабильности в CI пока не установлена.
+Проверенный HEAD [`e96025d`](https://github.com/Michael-edel/FitFocus/commit/e96025def8f3ae1771e534f2e361aede2863140d) включает тест позднего personal-plan retry и исправление fingerprint-проверки legacy migration. Полный PR CI [`38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173) завершился success: 1115 unit / 198 файлов, 483 browser passed / 25 skipped, guards, typecheck, build и rollback/CAS на 23 запросах прошли. Три E2E прошли retry, но отмечены flaky: settings sender в desktop Chromium, восстановление профиля в desktop Firefox и legacy migration в iPhone PWA. Локальные повторы прошли 5/5, 5/5 и 3/3; первопричины CI нестабильности пока не установлены.
 
 Предыдущий CI на `2539c8c` отмечал один flaky в desktop WebKit PWA update: уведомление об
 обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий

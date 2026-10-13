@@ -2574,3 +2574,28 @@ Rollback/CAS job прошёл 23 HTTP-запроса на merge candidate `19a63
 artifact `11834122683` сохранён на 14 дней; tested rollback artifact
 `11833354840` — на 90 дней. Staging, OAuth/BFCache, прочие callbacks и общий
 P0.5/P0.8 остаются открытыми.
+
+## Полный CI и локальные повторы flaky сценариев — `e96025d`, 13.10.2026
+
+PR CI [run `38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173)
+для документационного HEAD `e96025d` завершился success за 18,7 минуты:
+1115 unit / 198 файлов, 483 E2E passed / 25 skipped; audit сообщил 0
+уязвимостей, guards, три typecheck, build и rollback/CAS-проверка на 23
+HTTP/D1 запросах прошли. В E2E отмечены 3 flaky, все прошли retry:
+
+- desktop Chromium, `storage-durability.spec.ts`: после reload проверка
+  `verified sender confirms settings and preserves them after reload` не
+  дождалась исчезновения `Cloud: pending` за 10 секунд;
+- desktop Firefox, `profile-durability.spec.ts`: в `profile recovery can accept a
+  checked server snapshot after explicit confirmation` попало предупреждение
+  `IndexedDB transaction that was not yet complete has been aborted due to page
+  navigation`;
+- iPhone PWA, `legacy-outbox-migration.spec.ts`: после all-client update/release
+  проверка server `stateWriteKeys` не дождалась `targetKey` за 10 секунд.
+
+Изолированные локальные повторы целевых случаев прошли: Chromium 5/5, Firefox
+5/5, iPhone PWA 3/3. Это не устанавливает причину нестабильности под CI-нагрузкой.
+Предыдущий flaky fingerprint assertion в legacy migration не повторился.
+Browser diagnostics artifact `11836633164` доступен до 27.10.2026; rollback
+artifact `11836213753` — до 11.01.2027. Ветка остаётся draft; P0.5/P0.8,
+staging и полная release acceptance открыты.
