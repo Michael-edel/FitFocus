@@ -5,6 +5,22 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+## Незакоммиченный пакет — account-scoped cleanup
+
+На ветке `fix/durable-outbox`, поверх базового `d987c846`, локальная очистка
+удаляет точные account-owned localStorage-ключи и данные из всех пяти
+долговечных IDB stores одной транзакцией. При удалении активной сессии
+увеличивается auth-fence; чужие и неоднозначные данные сохраняются. Общий
+legacy-источник и snapshots не фильтруются и могут содержать данные аккаунта,
+поэтому UI показывает предупреждение, а полное стирание пока не подтверждено.
+
+На текущем рабочем дереве прошли 1079 unit-тестов / 197 файлов, общий,
+`domain-strict` и `storage-strict` typecheck и production build. Изменения ещё
+не закоммичены. Workflow базового `d987c846` завершился success ([run
+38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660)),
+но этот SHA не включает текущие изменения. CI пакета, staging и выпуск не
+подтверждены. Полный контракт и остаточный риск: [очистка локальных данных](account-data-cleanup.md).
+
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
 job 115035254691, на опубликованной ревизии `ca8ecb1`. Прошли 1068 unit / 196
@@ -430,9 +446,12 @@ callbacks. Весь P0.5 остаётся открытым.
 2. Продолжить приёмку lifecycle остальных callbacks. CI profile debounce
    на `bf01d87` прошёл. Исторические `/api/profile` и другие
    источники не считать автоматически объяснёнными этим изменением.
-3. Завершить UI повтора/разрешения конфликтов и account-scoped очистку всех
-   связанных stores без потери чужих данных или ожидающих операций. Локальный
-   JSON backup v3 уже реализован и прошёл CI: [контракт](backup-restore.md).
+3. Завершить UI повтора/разрешения конфликтов. Account-scoped очистка
+   доказанно принадлежащих строк пяти IDB stores и scoped localStorage
+   реализована в незакоммиченном пакете; определить безопасное подавление или
+   удаление account data из общего legacy source/snapshots и проверить повторный
+   вход того же ID. [Контракт очистки](account-data-cleanup.md). JSON backup v3
+   реализован и прошёл CI: [backup/restore](backup-restore.md).
 4. Пройти полную [матрицу lifecycle](sync-model.md#матрица-приёмки), staging
    и [выпуск](../RELEASE_CHECKLIST.md) через защищённую main.
 

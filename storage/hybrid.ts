@@ -47,9 +47,9 @@ const USER_SCOPED_KEY_PREFIXES = [
 function isLocalUserKey(key: string, userId: string): boolean {
   const dataPrefix = `${STORAGE_KEYS.dataPrefix}${userId}_`;
   if (key.startsWith(dataPrefix)) return true;
-  if (key.startsWith(`ff_last_weekly_ai_attempt_${userId}`)) return true;
-  if (key.startsWith(`ff_weekly_ai_inflight_${userId}`)) return true;
-  if (key.startsWith(`ff_dev_plan_override_scope_${userId}`)) return true;
+  if (key === `ff_last_weekly_ai_attempt_${userId}`) return true;
+  if (key === `ff_weekly_ai_inflight_${userId}`) return true;
+  if (key === `ff_dev_plan_override_scope_${userId}`) return true;
   return USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`);
 }
 
@@ -100,12 +100,41 @@ export function safeRemoveItem(key: string) {
   }
 }
 
-/** Remove only browser-local data owned by one account; never enqueue remote deletes. */
-export function clearLocalUserData(userId: string | null | undefined): number {
+export type LocalUserDataCleanupResult = {
+  complete: boolean;
+  localStorageKeysRemoved: number;
+  localStorageCleared: boolean;
+  indexedDbCleared: boolean;
+  legacyEvidenceRetained: boolean;
+};
+
+const INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS = 5_000;
+
+function legacyQueueMayContainAccount(raw: string | null, accountPrefix: string): boolean {
+  if (raw === null) return false;
+  const records = parseJson(raw);
+  if (!Array.isArray(records)) return true;
+  return records.some((record) => !isRecord(record)
+    || typeof record.key !== 'string'
+    || record.key.startsWith(accountPrefix));
+}
+
+/**
+ * Clears local account-owned data after server deletion. Global legacy migration
+ * evidence is preserved if it cannot be separated safely from other accounts.
+ */
+export async function clearLocalUserData(userId: string | null | undefined): Promise<LocalUserDataCleanupResult> {
   const normalizedUserId = String(userId || '').trim();
-  if (!normalizedUserId) return 0;
+  if (!normalizedUserId) return {
+    complete: false, localStorageKeysRemoved: 0, localStorageCleared: false,
+    indexedDbCleared: false, legacyEvidenceRetained: false,
+  };
 
   const keysToRemove: string[] = [];
+  const removed = new Set<string>();
+  let localStorageCleared = true;
+  let legacyEvidenceRetained = false;
+  const accountPrefix = `${STORAGE_KEYS.dataPrefix}${normalizedUserId}_`;
   try {
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
@@ -114,15 +143,45 @@ export function clearLocalUserData(userId: string | null | undefined): number {
       if (isLocalUserKey(baseKey, normalizedUserId)) keysToRemove.push(key);
     }
 
+    const selectedKeys = new Set(keysToRemove);
     for (const key of keysToRemove) {
       localStorage.removeItem(key);
-      if (!key.endsWith('__ffv')) localStorage.removeItem(versionMetaKey(key));
+      removed.add(key);
+      if (!key.endsWith('__ffv')) {
+        const versionKey = versionMetaKey(key);
+        if (selectedKeys.has(versionKey)) {
+          localStorage.removeItem(versionKey);
+          removed.add(versionKey);
+        }
+      }
     }
   } catch {
-    // Best effort: storage can be unavailable or quota-restricted in private mode.
+    localStorageCleared = false;
   }
-  void clearIndexedUserStateForUser(normalizedUserId);
-  return keysToRemove.length;
+
+  try {
+    legacyEvidenceRetained = legacyQueueMayContainAccount(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY), accountPrefix);
+  } catch {
+    legacyEvidenceRetained = true;
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const durable = await Promise.race([
+    clearIndexedUserStateForUser(normalizedUserId),
+    new Promise<{ cleared: false; legacyEvidenceRetained: true }>((resolve) => {
+      timeoutId = setTimeout(() => resolve({ cleared: false, legacyEvidenceRetained: true }), INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS);
+    }),
+  ]);
+  if (timeoutId !== undefined) clearTimeout(timeoutId);
+  legacyEvidenceRetained ||= durable.legacyEvidenceRetained;
+  const indexedDbCleared = durable.cleared;
+  return {
+    complete: localStorageCleared && indexedDbCleared && !legacyEvidenceRetained,
+    localStorageKeysRemoved: removed.size,
+    localStorageCleared,
+    indexedDbCleared,
+    legacyEvidenceRetained,
+  };
 }
 
 export function allUsersStorageKey(userId?: string | null) {

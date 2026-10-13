@@ -77,8 +77,10 @@ owner и числовой startedAtMs. Установить владельца l
 profile, backup и реальная old/new migration-приёмка ещё не были подключены.
 Profile и runtime migration описаны в более поздних контрактах; JSON backup v3
 для всех долговечных stores реализован в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)
-([подробности](backup-restore.md)). Account-scoped очистка всех stores и
-остальная приёмка остаются открытыми в [TASKS](../TASKS.md).
+([подробности](backup-restore.md)). В незакоммиченном пакете поверх `d987c846`
+добавлена локальная account-scoped очистка из пяти stores; global legacy source
+и snapshots сохраняются, поэтому полное стирание ещё открыто.
+[Контракт очистки](account-data-cleanup.md), оставшиеся критерии — в [TASKS](../TASKS.md).
 
 Эта часть относится к ветке `fix/durable-outbox`, а таблица существующих
 хранилищ выше — к исходному снимку `810adb1`. Новая схема IDB — версия 2:
@@ -190,5 +192,7 @@ Generic `/api/state` не принимает этот ресурс. Export и ow
 Последующее обновление 13.10.2026: локальный JSON backup v3 теперь включает
 все пять долговечных stores IDB-outbox и атомарно восстанавливает их с
 проверкой конфликтов; детали в [контракте backup/restore](backup-restore.md).
-Этот экспорт не заменяет серверный GDPR `/api/export` и не закрывает очистку
-всех локальных stores при удалении аккаунта.
+Этот экспорт не заменяет серверный GDPR `/api/export`. Локальная очистка
+account-owned строк пяти IDB stores и scoped localStorage реализуется в
+текущем незакоммиченном пакете; она сохраняет global legacy source/snapshots и
+не подтверждает полное стирание. [Контракт и ограничения](account-data-cleanup.md).

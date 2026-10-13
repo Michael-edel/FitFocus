@@ -768,9 +768,17 @@ const App: React.FC = () => {
     const deletedUserId = googleMe?.sub ?? currentUser?.id ?? null;
     await deleteAccountSession({
       googleSub: googleMe?.sub,
-      clearLocalData: deletedUserId ? () => {
-        clearLocalUserData(deletedUserId);
+      clearLocalData: deletedUserId ? async () => {
+        const cleanup = await clearLocalUserData(deletedUserId);
         setAllUsers(prev => prev.filter(user => user.id !== deletedUserId));
+        if (!cleanup.complete) {
+          const reasons = [
+            !cleanup.localStorageCleared ? 'часть данных localStorage недоступна для удаления' : '',
+            !cleanup.indexedDbCleared ? 'не удалось полностью очистить IndexedDB' : '',
+            cleanup.legacyEvidenceRetained ? 'legacy-очередь содержит записи аккаунта или неразбираемые данные; она сохранена для безопасной миграции' : '',
+          ].filter(Boolean);
+          alert(`Аккаунт удалён на сервере, но локальная очистка завершена не полностью: ${reasons.join('; ')}.`);
+        }
       } : undefined,
       onLogout: logout,
     });

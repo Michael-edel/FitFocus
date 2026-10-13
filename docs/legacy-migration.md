@@ -6,8 +6,11 @@
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 Это компонент [P0.8](../TASKS.md), реализующий согласованный
 [ADR-005](adr/ADR-005-durable-outbox.md). Runtime подключён; old/new bundle
-smoke с настоящей записью прошёл локально на семи Playwright-проектах.
-Полный CI новой проверки и оставшийся lifecycle P0.8 открыты.
+smoke с настоящей записью прошёл на семи Playwright-проектах. Локальная
+account-scoped очистка пяти IDB stores уже реализована в незакоммиченном
+пакете, но global legacy source и snapshots сохраняются. Поэтому удаление
+данных аккаунта из общей миграционной evidence и оставшийся lifecycle P0.8
+открыты. [Контракт очистки](account-data-cleanup.md).
 
 ## Browser acceptance — 13.10.2026
 
@@ -189,8 +192,15 @@ SHA `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965
 390 browser passed / 9 skipped. JSON backup v3 для долговечных stores реализован
 отдельно ([контракт](backup-restore.md), commit
 [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)).
-Остаются остальные callbacks, полный auth/hydration lifecycle, account-scoped
-очистка новых stores и общая приёмка P0.8.
+Локальная очистка подтверждённо account-owned строк уже реализована в рабочем
+пакете ([контракт](account-data-cleanup.md)); общий исходный ключ и snapshots
+не меняются. Они сохраняются для безопасной миграции и могут содержать
+незавершённые записи удалённого аккаунта. Уже импортированные записи с
+утраченным ledger уходят в `missing-imported-operation`; незавершённые могут
+быть импортированы при повторном входе с тем же подтверждённым accountId.
+Нужно определить безопасную suppression/purge-политику. Кроме неё остаются
+остальные callbacks, полный auth/hydration lifecycle, UI разрешения конфликтов
+и общая приёмка P0.8.
 [15 управляемых state-ключей](owned-state-writers.md) подключены;
 прежний sender текущей сборки удалён. Unit-тесты дополняет проверенный выше
 old/new bundle smoke между двумя реальными сборками на одном origin и в одном

@@ -1,11 +1,13 @@
 import { STORAGE_KEYS } from './keys';
-import { STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
+import { STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateDatabase, type StateStore } from './stateDatabase';
 import { outboxKeyOwnerId } from './durableOutbox';
 import { USER_STATE_KEYS } from './userStateRepository';
+import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
 
 const STORE_NAME = STATE_STORES.values;
 
-type IndexedValue = { key: string; value: string; updatedAt: number };
+type IndexedValue = { key: string; value: string; updatedAt: number; accountId?: string };
+type AccountStateCleanupResult = { cleared: boolean; legacyEvidenceRetained: boolean };
 
 const VOLUME_STATE_SUFFIXES = USER_STATE_KEYS;
 
@@ -157,9 +159,143 @@ async function updateKeys(prefix: string, update: (store: IDBObjectStore, entry:
   }
 }
 
-/** Removes volume data for one local account without touching cloud state. */
-export function clearIndexedUserStateForUser(userId: string): Promise<boolean> {
-  return updateKeys(`${STORAGE_KEYS.dataPrefix}${userId}_`, (store, entry) => store.delete(entry.key));
+function rawRecordsMayBelongToAccount(records: unknown, prefix: string): boolean {
+  if (!Array.isArray(records)) return true;
+  return records.some((record) => {
+    if (typeof record !== 'object' || record === null || Array.isArray(record)) return true;
+    const key = (record as Record<string, unknown>).key;
+    return typeof key !== 'string' || key.startsWith(prefix);
+  });
+}
+
+function rawSourceMayBelongToAccount(rawSource: unknown, prefix: string): boolean {
+  if (rawSource === null) return false;
+  if (typeof rawSource !== 'string') return true;
+  try {
+    return rawRecordsMayBelongToAccount(JSON.parse(rawSource), prefix);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Removes rows explicitly owned by one account from every durable store. The
+ * global legacy source, snapshots, and unresolved evidence are retained when
+ * their ownership cannot be separated without risking another account's data.
+ */
+export async function clearIndexedUserStateForUser(
+  userId: string,
+  connection: StateDatabase = userStateDatabase,
+): Promise<AccountStateCleanupResult> {
+  const accountId = userId.trim();
+  if (!accountId) return { cleared: false, legacyEvidenceRetained: false };
+  const prefix = `${STORAGE_KEYS.dataPrefix}${accountId}_`;
+  const database = await connection.open().catch(() => null);
+  if (!database) return { cleared: false, legacyEvidenceRetained: true };
+
+  try {
+    return await stateTransaction(database, Object.values(STATE_STORES) as StateStore[], 'readwrite', async (tx) => {
+      const valuesStore = tx.objectStore(STATE_STORES.values);
+      const outboxStore = tx.objectStore(STATE_STORES.outbox);
+      const itemsStore = tx.objectStore(STATE_STORES.migrationItems);
+      const unknownStore = tx.objectStore(STATE_STORES.migrationUnknown);
+      const metaStore = tx.objectStore(STATE_STORES.meta);
+      const [values, operations, items, unknown, metadata] = await Promise.all([
+        indexedRequest(valuesStore.getAll()) as Promise<Array<IndexedValue & { accountId?: string }>>,
+        indexedRequest(outboxStore.getAll()) as Promise<Array<{ opId: string; accountId?: string }>>,
+        indexedRequest(itemsStore.getAll()) as Promise<Array<{
+          id: string; sourceKey?: string; fingerprint?: string; accountId?: string; unknownIds?: string[]; rawRecords?: unknown[];
+        }>>,
+        indexedRequest(unknownStore.getAll()) as Promise<Array<{
+          id: string; sourceKey?: string; fingerprint?: string; rawRecord?: unknown; rawRecords?: unknown[];
+          resolved?: { accountId?: string };
+        }>>,
+        indexedRequest(metaStore.getAll()) as Promise<Array<Record<string, unknown> & { id: string; accountId?: string }>>,
+      ]);
+
+      let legacyEvidenceRetained = false;
+      let ownershipConflict = false;
+      const accountItems = items.filter((item) => item.accountId === accountId);
+      const linkedUnknowns = new Map<string, { sourceKey?: string; fingerprint?: string }>();
+      for (const item of accountItems) {
+        for (const id of item.unknownIds ?? []) linkedUnknowns.set(id, {
+          sourceKey: item.sourceKey,
+          fingerprint: item.fingerprint,
+        });
+        itemsStore.delete(item.id);
+      }
+
+      for (const row of values) {
+        if (!row.key.startsWith(prefix)) continue;
+        if (row.accountId && row.accountId !== accountId) {
+          ownershipConflict = true;
+          continue;
+        }
+        valuesStore.delete(row.key);
+      }
+
+      for (const operation of operations) {
+        if (operation.accountId === accountId) outboxStore.delete(operation.opId);
+      }
+
+      for (const row of unknown) {
+        const linkedEvidence = linkedUnknowns.get(row.id);
+        const linkedToOwnedItem = !!linkedEvidence && linkedEvidence.sourceKey === row.sourceKey
+          && linkedEvidence.fingerprint === row.fingerprint;
+        if (row.resolved?.accountId === accountId || linkedToOwnedItem) {
+          if (row.resolved?.accountId && row.resolved.accountId !== accountId) {
+            ownershipConflict = true;
+            legacyEvidenceRetained = true;
+            continue;
+          }
+          unknownStore.delete(row.id);
+          continue;
+        }
+        if (rawRecordsMayBelongToAccount(row.rawRecords?.length ? row.rawRecords : [row.rawRecord], prefix)) {
+          legacyEvidenceRetained = true;
+        }
+      }
+
+      for (const row of items) {
+        if (row.accountId === accountId) continue;
+        if (rawRecordsMayBelongToAccount(row.rawRecords ?? [], prefix)) legacyEvidenceRetained = true;
+      }
+
+      const active = metadata.find((row) => row.id === 'active-session');
+      const fence = metadata.find((row) => row.id === 'auth-fence');
+      if (active?.accountId === accountId) {
+        const revision = fence?.revision === undefined ? 0 : fence.revision;
+        if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0 || revision >= Number.MAX_SAFE_INTEGER) {
+          throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+        }
+        metaStore.put({
+          ...(fence ?? {}),
+          id: 'auth-fence',
+          revision: revision + 1,
+          ...(typeof active.serverSessionId === 'string' && active.serverSessionId.length
+            ? { loggedOutSession: active.serverSessionId }
+            : {}),
+        });
+        metaStore.delete('active-session');
+      }
+
+      for (const row of metadata) {
+        if (row.id === 'auth-fence' || row.id === 'active-session') continue;
+        if (row.accountId === accountId) {
+          metaStore.delete(row.id);
+          continue;
+        }
+        if (row.sourceKey === LEGACY_QUEUE_SOURCE_KEY && row.id.startsWith('legacy-snapshot:v1:')
+          && rawSourceMayBelongToAccount(row.rawSource, prefix)) {
+          legacyEvidenceRetained = true;
+        }
+      }
+
+      return { cleared: !ownershipConflict, legacyEvidenceRetained };
+    });
+  } catch {
+    return { cleared: false, legacyEvidenceRetained: true };
+  }
 }
 
 /** Keeps IndexedDB records aligned when an anonymous local account receives its server identity. */

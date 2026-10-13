@@ -35,7 +35,7 @@ describe('Indexed user state', () => {
     await writeIndexedUserStateRaw(firstKey, '[]');
     await writeIndexedUserStateRaw(secondKey, '[1]');
 
-    expect(await clearIndexedUserStateForUser(firstUserId)).toBe(true);
+    expect(await clearIndexedUserStateForUser(firstUserId)).toEqual({ cleared: true, legacyEvidenceRetained: false });
     expect(await readIndexedUserStateRaw(firstKey)).toBeNull();
     expect(await readIndexedUserStateRaw(secondKey)).toBe('[1]');
   });

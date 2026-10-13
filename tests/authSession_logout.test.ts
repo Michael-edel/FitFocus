@@ -60,6 +60,29 @@ describe('deleteAccountSession', () => {
     expect(clearLocalData.mock.invocationCallOrder[0]).toBeLessThan(onLogout.mock.invocationCallOrder[0]);
   });
 
+  it('waits for durable local cleanup before logging out', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 204 })));
+    let finishCleanup: () => void = () => {};
+    const clearLocalData = vi.fn(() => new Promise<void>((resolve) => { finishCleanup = resolve; }));
+    const onLogout = vi.fn();
+
+    const deletion = deleteAccountSession({
+      googleSub: 'user-1',
+      confirmFn: () => 'DELETE',
+      fetchImpl,
+      clearLocalData,
+      onLogout,
+    });
+
+    await Promise.resolve();
+    expect(clearLocalData).toHaveBeenCalledTimes(1);
+    expect(onLogout).not.toHaveBeenCalled();
+
+    finishCleanup();
+    await deletion;
+    expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
   it('does not clear local data when server deletion fails', async () => {
     const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 500 })));
     const clearLocalData = vi.fn();

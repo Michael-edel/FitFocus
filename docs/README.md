@@ -16,6 +16,7 @@
 | Где искать код функции и её проверки? | [Карта кода](code-map.md) |
 | Как устроены данные и синхронизация? | [Архитектура](current-architecture.md), [данные](data-model.md), [синхронизация](sync-model.md) и документ затронутого компонента |
 | Что входит в JSON backup и как восстанавливается outbox? | [Резервная копия и восстановление](backup-restore.md) |
+| Как удаляются локальные данные аккаунта и что остаётся в legacy-источнике? | [Очистка локальных данных аккаунта](account-data-cleanup.md) |
 | Почему принято архитектурное решение? | [DECISIONS](../DECISIONS.md) и связанный ADR |
 | Как запустить, проверить и выпустить изменение? | [CONTRIBUTING](../CONTRIBUTING.md), затем [чек-лист выпуска](../RELEASE_CHECKLIST.md) |
 | Как перейти на новую схему личных покупок? | [Подготовительный сервер и миграция 0020](profile-cas-rollout.md) |
@@ -183,8 +184,8 @@ value/outbox, managed hydration сохраняет локальное намер
 Фраза о незакрытых profile и runtime legacy-импорте относилась к той ревизии.
 Поздние изменения profile, registration, bootstrap и legacy runtime описаны ниже
 в отдельных контрактах. JSON backup v3 добавлен в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)
-([формат и восстановление](backup-restore.md)); account-scoped очистка и UI
-конфликтов остаются открытыми по [текущему статусу](project-status.md).
+([формат и восстановление](backup-restore.md)); полное account-scoped удаление
+legacy evidence и UI конфликтов остаются открытыми по [текущему статусу](project-status.md).
 
 Следующий этап [подключает редактор профиля](profile-persistence.md) к той же
 IDB-outbox и sender. Удалена прежняя Promise-очередь profileSync; конфликт

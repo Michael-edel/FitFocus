@@ -2160,7 +2160,8 @@ Commit `a048289287b90e752b1db47bdab3f0f502f5a5c9` прошёл
 
 ## Sender IDB stability — 13.10.2026
 
-Commit `649056db8ebbcfc3b9a62b7864c74d0d118dde79` прошёл+[CI 38309057601](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601),
+Commit `649056db8ebbcfc3b9a62b7864c74d0d118dde79` прошёл
+[CI 38309057601](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601),
 job 115010066010: success, 1068 unit / 196 файлов, 382 browser passed / 9 skips,
 14,9 мин. Предыдущая WebKit rollback гонка не повторилась после ответа 409 на
 первый family PUT. Сводка CI отметила один Firefox weekly-menu flaky: первая
@@ -2236,3 +2237,26 @@ schema/privacy, три typecheck и build прошли. Последующая H
 проверка прошла 23 запроса; rollback artifact сохранён в [workflow](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270/artifacts/11781863243).
 Контракт: [backup/restore](backup-restore.md). Очистка stores, conflict UI,
 остальные callbacks и staging остаются открытыми.
+
+## Account-scoped локальная очистка — 13.10.2026
+
+В незакоммиченном рабочем дереве `fix/durable-outbox` поверх `d987c846`
+реализована локальная очистка точных account-owned localStorage keys и строк всех
+пяти долговечных IDB stores. IDB-удаление выполняется одной транзакцией; она
+удаляет outbox и разрешённые migration rows владельца, увеличивает auth-fence
+при очистке его активной сессии и оставляет чужие/конфликтные строки нетронутыми.
+Вызовы удаления ждут очистку и показывают предупреждение при неполном результате.
+
+Общий legacy localStorage source и snapshots остаются без изменений согласно
+ADR-005. Если там найдены записи целевого аккаунта или повреждённые данные,
+результат отмечается как неполный. Это сохраняет миграционную evidence, но
+означает, что полное локальное стирание не подтверждено; безопасное подавление
+legacy-записей после удаления и защита от повторного импорта остаются открытыми.
+
+Локально прошли 1079 unit-тестов / 197 файлов, общий, domain-strict и
+storage-strict typecheck, production build и `git diff --check`. Workflow базового
+`d987c846` завершился success ([run 38330238660](https://github.com/Michael-edel/FitFocus/actions/runs/38330238660));
+он не включает этот пакет. Новые целевые
+тесты прошли 4 файла / 12 тестов. Код и MD на момент этой записи не
+закоммичены; CI exact SHA ещё не запускался. Подробности и ограничения:
+[контракт account cleanup](account-data-cleanup.md).
