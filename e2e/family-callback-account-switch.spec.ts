@@ -28,6 +28,8 @@ type FixtureState = {
   noFamilyForA?: boolean;
   joinRequests?: number;
   releasedJoins?: number;
+  createRequests?: number;
+  releasedCreates?: number;
   familyJoinAchievements?: string[];
   familyLoadAccounts?: string[];
 };
@@ -112,6 +114,7 @@ async function installAccountApi(
   includePersonalShopping = false,
   holdPersonalShoppingList = false,
   holdJoin = false,
+  holdCreate = false,
 ) {
   await mockApp(page, { session: 'app' });
   const heldInvite = deferred();
@@ -119,6 +122,7 @@ async function installAccountApi(
   const heldPersonalShoppingListResponse = deferred();
   const heldMemberResponse = deferred();
   const heldJoinResponse = deferred();
+  const heldCreateResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -157,6 +161,15 @@ async function installAccountApi(
       expect(requestedSession).toBe(scopedAccount.sid);
     }
     if (path === '/api/family') {
+      if (request.method() === 'POST') {
+        state.createRequests = (state.createRequests ?? 0) + 1;
+        if (holdCreate && scopedAccount.id === accountA.id) {
+          await heldCreateResponse.promise;
+          state.releasedCreates = (state.releasedCreates ?? 0) + 1;
+          return json({ ok: true }, accountA);
+        }
+        return json({ ok: true });
+      }
       if (request.method() === 'GET') {
         (state.familyLoadAccounts ??= []).push(scopedAccount.id);
         if (state.noFamilyForA && scopedAccount.id === accountA.id) return json({ family: null, members: [] }, accountA);
@@ -264,6 +277,7 @@ async function installAccountApi(
     releasePersonalShoppingList: heldPersonalShoppingListResponse.release,
     releaseMemberUpdate: heldMemberResponse.release,
     releaseJoin: heldJoinResponse.release,
+    releaseCreate: heldCreateResponse.release,
   };
 }
 
@@ -426,6 +440,49 @@ test('a delayed family-join response from account A cannot publish success after
     await accountBPage.screenshot({ path: info.outputPath('family-join-account-b.png') });
   } finally {
     fixtureA.releaseJoin();
+  }
+});
+
+test('a delayed family-create response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-create account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyJoinAchievements: [], familyLoadAccounts: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const familyName = page.getByPlaceholder('Название семьи');
+  await expect(familyName).toBeVisible();
+  await familyName.fill('Семья A');
+  const accountAFamilyLoads = state.familyLoadAccounts.filter(id => id === accountA.id).length;
+  await page.getByRole('button', { name: 'Создать', exact: true }).click();
+  await expect.poll(() => state.createRequests).toBe(1);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    expect(await activeAccount(page)).toBe(accountB.id);
+    fixtureA.releaseCreate();
+    await expect.poll(() => state.releasedCreates).toBe(1);
+    await expect(familyName).toHaveValue('Семья A');
+    await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+    await page.waitForTimeout(100);
+    expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
+    expect(state.familyJoinAchievements).toEqual([]);
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('family-create-account-b.png') });
+  } finally {
+    fixtureA.releaseCreate();
   }
 });
 
