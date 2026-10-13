@@ -2779,3 +2779,18 @@ Fallback checkbox cache использует отдельный user/week клю
 Это mock-backed browser acceptance: реальная многовкладочная OAuth/staging
 проверка и полный lifecycle P0.5 остаются открытыми. Точный GitHub workflow
 этого HEAD будет проверен после push.
+
+## P0.5 — отложенное создание семьи после смены аккаунта, `1b6444a`
+
+Добавлен соседний browser-сценарий для `POST /api/family`. Аккаунт A создаёт
+семью, ответ удерживается до входа B в соседней вкладке, затем fixture
+возвращает успешный ответ со scope A. Сценарий подтверждает, что старый callback
+не запускает повторную загрузку семьи и `family_join_or_create`, а активный
+IDB-сеанс и состояние аккаунта B остаются неизменными.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit; полный
+`family-callback-account-switch.spec.ts` прошёл 24/24 при `workers=1/retries=0`.
+`npm run typecheck` прошёл. Совместно с `69c739a` join/create и личные корзины
+проверены четырьмя новыми сценариями, 12/12. Mock-backed acceptance не заменяет
+реальный OAuth/staging или общий lifecycle P0.5; полный GitHub CI точного HEAD
+ещё ожидается.

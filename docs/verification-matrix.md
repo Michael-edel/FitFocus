@@ -23,13 +23,14 @@ CI этого follow-up для кодовой ревизии [`a99ab7b`](https:/
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
 Локальная late-response acceptance покрывает personal shopping list GET/PATCH
-и family join. `ShoppingListCard` отправляет исходный session scope, ответ A
-после входа B не попадает в список B; поздний join-ответ A не очищает код,
-не инициирует повторный family GET и не запускает achievement. Family
-shopping-check и member-goal также остаются в наборе. После тестового commit
-[`69c739a`](https://github.com/Michael-edel/FitFocus/commit/69c739a) весь
-`family-callback-account-switch.spec.ts` прошёл 21/21 на desktop Chromium,
-Firefox и WebKit (`workers=1/retries=0`); три новых сценария прошли 9/9.
+и family join/create. `ShoppingListCard` отправляет исходный session scope,
+ответ A после входа B не попадает в список B; поздние успешные join/create
+ответы A не очищают ввод, не инициируют повторный family GET и не запускают
+achievement. Family shopping-check и member-goal также остаются в наборе.
+После тестовых commits [`69c739a`](https://github.com/Michael-edel/FitFocus/commit/69c739a)
+и [`1b6444a`](https://github.com/Michael-edel/FitFocus/commit/1b6444a) весь
+`family-callback-account-switch.spec.ts` прошёл 24/24 на desktop Chromium,
+Firefox и WebKit (`workers=1/retries=0`); четыре новых сценария прошли 12/12.
 Связанные API unit-тесты: 25/25; `npm run typecheck` прошёл. Полный CI нового
 HEAD ещё не подтверждён.
 

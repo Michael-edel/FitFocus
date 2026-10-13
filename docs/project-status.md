@@ -40,13 +40,13 @@ Cloudflare preview SHA `a99ab7b` успешен; это не production-рели
 Код [`b56544e`](https://github.com/Michael-edel/FitFocus/commit/b56544e)
 передаёт `ShoppingListCard` исходный login guard, защищает GET/PATCH свежим
 account/session proof и отделяет React/localStorage состояние по аккаунту и
-неделе. Три новых account-switch сценария проверяют personal-list GET/PATCH и
-family join: устаревшие покупки A отклоняются после входа B, а поздний успешный
-join-ответ A с исходным scope не очищает код и не запускает повторную загрузку
-семьи или achievement.
+неделе. Четыре новых account-switch сценария проверяют personal-list GET/PATCH
+и family join/create: устаревшие покупки A отклоняются после входа B, а поздние
+успешные ответы A с исходным scope не очищают ввод, не запускают повторную
+загрузку семьи или achievement.
 
-Весь `e2e/family-callback-account-switch.spec.ts` прошёл 21/21 на desktop
-Chromium, Firefox и WebKit; три новых сценария прошли 9/9 без retries.
+Весь `e2e/family-callback-account-switch.spec.ts` прошёл 24/24 на desktop
+Chromium, Firefox и WebKit; четыре новых сценария прошли 12/12 без retries.
 `npm run typecheck` и 25 связанных API unit-тестов прошли. Это локальная
 проверка: полный workflow нового HEAD и остальные callbacks/lifecycle ещё
 открыты. Актуальный статус CI смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
