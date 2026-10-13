@@ -11,6 +11,13 @@ type FixtureState = {
   inviteRequests: number;
   inviteTargetIds: string[];
   releasedInvites: number;
+  shoppingCheckRequests: number;
+  shoppingCheckAccounts: string[];
+  releasedShoppingChecks: number;
+  shoppingAchievements: string[];
+  memberRequests: number;
+  memberTargetIds: string[];
+  releasedMembers: number;
 };
 
 function profileFor(account: Account) {
@@ -70,9 +77,18 @@ function deferred() {
   return { promise, release };
 }
 
-async function installAccountApi(page: Page, state: FixtureState, holdInvite: boolean, errors: string[]) {
+async function installAccountApi(
+  page: Page,
+  state: FixtureState,
+  holdInvite: boolean,
+  errors: string[],
+  holdShoppingCheck = false,
+  holdMemberUpdate = false,
+) {
   await mockApp(page, { session: 'app' });
-  const held = deferred();
+  const heldInvite = deferred();
+  const heldShoppingCheckResponse = deferred();
+  const heldMemberResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -97,9 +113,12 @@ async function installAccountApi(page: Page, state: FixtureState, holdInvite: bo
       const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
       return json({ ok: true, items: items.map(item => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
     }
-    if (path === '/api/achievements' || path === '/api/achievements/check') {
-      return json({ enabled: false, catalog: [], unlocked: [], newlyUnlocked: [] });
+    if (path === '/api/achievements/check') {
+      const body = request.postDataJSON() as { context?: { source?: unknown } } | null;
+      if (body?.context?.source === 'shopping_item_checked') state.shoppingAchievements.push(scopedAccount.id);
+      return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     }
+    if (path === '/api/achievements') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai') return json({ text: 'Тестовая интерпретация.' });
     if (path === '/api/logout') return json({ ok: true });
     if (path.startsWith('/api/family') || path.startsWith('/api/shopping')) {
@@ -120,24 +139,51 @@ async function installAccountApi(page: Page, state: FixtureState, holdInvite: bo
       const body = request.postDataJSON() as { familyId?: unknown } | null;
       state.inviteTargetIds.push(typeof body?.familyId === 'string' ? body.familyId : '');
       if (holdInvite && scopedAccount.id === accountA.id) {
-        await held.promise;
+        await heldInvite.promise;
         state.releasedInvites += 1;
         return json({ code: 'OBSOLETE-CODE-FROM-A' }, accountA);
       }
       return json({ code: 'CURRENT-CODE' });
     }
+    if (path === '/api/family/member') {
+      const body = request.postDataJSON() as { familyId?: unknown } | null;
+      state.memberRequests += 1;
+      state.memberTargetIds.push(typeof body?.familyId === 'string' ? body.familyId : '');
+      if (holdMemberUpdate && scopedAccount.id === accountA.id) {
+        await heldMemberResponse.promise;
+        await json({ ok: true }, accountA);
+        state.releasedMembers += 1;
+        return;
+      }
+      return json({ ok: true });
+    }
     if (path === '/api/shopping/list') return json({
       family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
       week_start: url.searchParams.get('week'),
-      items: [],
+      items: [{ name: 'Рис', grams: 400, checked: false }],
     });
+    if (path === '/api/shopping/check') {
+      state.shoppingCheckRequests += 1;
+      state.shoppingCheckAccounts.push(scopedAccount.id);
+      if (holdShoppingCheck && scopedAccount.id === accountA.id) {
+        await heldShoppingCheckResponse.promise;
+        await json({ ok: true }, accountA);
+        state.releasedShoppingChecks += 1;
+        return;
+      }
+      return json({ ok: true });
+    }
     return route.fallback();
   });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
     if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
   });
-  return { release: held.release };
+  return {
+    releaseInvite: heldInvite.release,
+    releaseShoppingCheck: heldShoppingCheckResponse.release,
+    releaseMemberUpdate: heldMemberResponse.release,
+  };
 }
 
 async function activeAccount(page: Page): Promise<string | null> {
@@ -175,7 +221,11 @@ async function openAccountB(context: BrowserContext, state: FixtureState, errors
 test('a delayed family callback from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
-  const state: FixtureState = { current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0 };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
   const fixtureA = await installAccountApi(page, state, true, errorsA);
   await openApp(page, '/#family');
   await expect(page).toHaveTitle(/FitFocus/);
@@ -188,7 +238,7 @@ test('a delayed family callback from account A is ignored after another tab sign
   try {
     const accountBPage = await openAccountB(context, state, errorsB);
     expect(await activeAccount(page)).toBe(accountB.id);
-    fixtureA.release();
+    fixtureA.releaseInvite();
     await expect.poll(() => state.releasedInvites).toBe(1);
     await expect(page.getByText('OBSOLETE-CODE-FROM-A', { exact: true })).toHaveCount(0);
     await expect.poll(() => activeAccount(page)).toBe(accountB.id);
@@ -197,7 +247,7 @@ test('a delayed family callback from account A is ignored after another tab sign
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await accountBPage.screenshot({ path: info.outputPath('family-callback-account-b.png') });
   } finally {
-    fixtureA.release();
+    fixtureA.releaseInvite();
   }
 });
 
@@ -210,6 +260,13 @@ test('a delayed family callback stays bound to its captured family when the same
     inviteRequests: 0,
     inviteTargetIds: [],
     releasedInvites: 0,
+    shoppingCheckRequests: 0,
+    shoppingCheckAccounts: [],
+    releasedShoppingChecks: 0,
+    shoppingAchievements: [],
+    memberRequests: 0,
+    memberTargetIds: [],
+    releasedMembers: 0,
   };
   const fixture = await installAccountApi(page, state, true, errors);
   await openApp(page, '/#family');
@@ -226,10 +283,86 @@ test('a delayed family callback stays bound to its captured family when the same
   await page.getByRole('button', { name: 'Обновить', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Семья family-a-next', exact: true })).toBeVisible();
 
-  fixture.release();
+  fixture.releaseInvite();
   await expect.poll(() => state.releasedInvites).toBe(1);
   await expect(page.getByText('OBSOLETE-CODE-FROM-A', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Сессия изменилась. Войдите снова и повторите действие.', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('a delayed family shopping response cannot trigger an achievement after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family shopping callback acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const accountACheckbox = page.getByRole('checkbox').first();
+  await expect(accountACheckbox).toBeVisible();
+  await accountACheckbox.check();
+  await expect.poll(() => state.shoppingCheckRequests).toBe(1);
+  expect(state.shoppingCheckAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    const accountBCheckbox = accountBPage.getByRole('checkbox').first();
+    await expect(accountBCheckbox).toBeVisible();
+    await expect(accountBCheckbox).not.toBeChecked();
+    expect(await activeAccount(page)).toBe(accountB.id);
+
+    fixtureA.releaseShoppingCheck();
+    await expect.poll(() => state.releasedShoppingChecks).toBe(1);
+    // AchievementClient may coalesce checks for up to 500ms; allow that window before asserting absence.
+    await page.waitForTimeout(700);
+    expect(state.shoppingAchievements).toEqual([]);
+    await expect(accountBCheckbox).not.toBeChecked();
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('family-shopping-account-b.png') });
+  } finally {
+    fixtureA.releaseShoppingCheck();
+  }
+});
+
+test('a delayed family member update stays bound to its captured family after the same login loads another family', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
+  const errors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, familyId: 'family-a-original', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixture = await installAccountApi(page, state, false, errors, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Семья family-a-original', exact: true })).toBeVisible();
+
+  try {
+    await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
+    await expect.poll(() => state.memberRequests).toBe(1);
+    expect(state.memberTargetIds).toEqual(['family-a-original']);
+
+    state.familyId = 'family-a-next';
+    await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Семья family-a-next', exact: true })).toBeVisible();
+    fixture.releaseMemberUpdate();
+    await expect.poll(() => state.releasedMembers).toBe(1);
+    await expect(page.getByRole('heading', { name: 'Семья family-a-next', exact: true })).toBeVisible();
+    await expect(page.getByText('Сессия изменилась. Войдите снова и повторите действие.', { exact: true })).toHaveCount(0);
+    expect(state.memberRequests).toBe(1);
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixture.releaseMemberUpdate();
+  }
 });

@@ -524,6 +524,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   typecheck/guards/schema/privacy/audit/build и 23 rollback/CAS HTTP прошли.
   Полный CI `9bdeb47` завершился success ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)); два unrelated E2E были flaky и прошли retry.
   Staging и реальные old/new bundle для этого изменения остаются открытыми.
+- [x] Добавить late-response acceptance для family shopping check и member-goal
+  mutation: после входа аккаунта B ответ shopping action из A не запускает
+  `shopping_item_checked`, а ответ цели семьи A не применяется после загрузки
+  другой семьи тем же login. Новый family callback spec прошёл 12/12 на desktop
+  Chromium, Firefox и WebKit с `workers=1/retries=0`; `npm run typecheck` прошёл.
+  Это локальная приёмка; полный CI, другие callbacks и lifecycle остаются открыты.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

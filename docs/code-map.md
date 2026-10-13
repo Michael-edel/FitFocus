@@ -1,6 +1,6 @@
 # Карта кода FitFocus
 
-Сверено: 12.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
+Сверено: 14.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
 Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
@@ -16,7 +16,7 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 
 | Область | Основные исходники | Контракт и проверки |
 |---|---|---|
-| Сессии семейных запросов | [useFamilyCloud.ts](../useFamilyCloud.ts), [familySession.ts](../services/familySession.ts), [familyApi.ts](../features/family/familyApi.ts), [actionScope.ts](../features/family/actionScope.ts) | [Контракт и открытые writers](family-session.md), [server guard](../tests/family_session_guard.test.ts), [transport](../tests/family_session_transport.test.ts), [E2E](../e2e/family-session.spec.ts) |
+| Сессии семейных запросов | [useFamilyCloud.ts](../useFamilyCloud.ts), [familySession.ts](../services/familySession.ts), [familyApi.ts](../features/family/familyApi.ts), [actionScope.ts](../features/family/actionScope.ts) | [Контракт и открытые writers](family-session.md), [server guard](../tests/family_session_guard.test.ts), [transport](../tests/family_session_transport.test.ts), [session E2E](../e2e/family-session.spec.ts), [late-callback E2E](../e2e/family-callback-account-switch.spec.ts) |
 | Семейное меню: CAS и доставка | [useFamilyMenu.ts](../useFamilyMenu.ts), [repository](../storage/familyMenuRepository.ts), [server CAS](../functions/api/_lib/family_menu_state.ts), [shared ingredients](../shoppingIngredients.ts) | [Контракт](family-menu-state.md), [ADR-008](adr/ADR-008-family-menu-generation.md), [SQL tests](../tests/family_menu_state.test.ts), [outbox/AI](../tests/family_menu_durable.test.ts), [E2E](../e2e/family-menu-durable.spec.ts) |
 | Сборка интерфейса и сценариев | [App.tsx](../App.tsx), [AppWorkspace.tsx](../AppWorkspace.tsx) | [Продукт](../PRODUCT.md), [архитектура](current-architecture.md); feature hooks находятся в `features/` |
 | Вход и загрузка данных | [authSession.ts](../authSession.ts), [loginSession.ts](../features/auth/loginSession.ts), [sessionRead.ts](../storage/sessionRead.ts) | [Bootstrap/hydration](bootstrap-hydration.md), [read guard tests](../tests/session_read_guard.test.ts), [браузерные сценарии](../e2e/bootstrap-session.spec.ts) |

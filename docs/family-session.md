@@ -145,10 +145,22 @@ Firefox и WebKit без retries. Затем `family-menu-durable.spec.ts` до�
 Typecheck прошёл. Полный CI `b66dcb4` завершился success; точный CI для нового
 AI account-switch сценария `bca2eda` ещё ожидается.
 
+Дополнительная browser acceptance в текущей рабочей версии расширяет late-response
+покрытие на две операции. Удержанный shopping-check ответ аккаунта A отпускается
+только после того, как соседняя вкладка приняла аккаунт B; тест проверяет, что
+ответ не вызывает achievement `shopping_item_checked` и не меняет checkbox B.
+Отдельный сценарий удерживает обновление цели семьи A, загружает другую семью
+в той же login-сессии и проверяет, что запоздавшая операция остаётся привязана
+к исходному `familyId` и не меняет UI новой семьи. `family-callback-account-switch.spec.ts`
+прошёл 12/12 на desktop Chromium, Firefox и WebKit с `workers=1/retries=0`;
+общий typecheck прошёл. Это локальная проверка; актуальный CI отслеживается на
+[странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+
 ## Следующие обязательные этапы
 
 - Расширить поздний-response account-switch acceptance на остальные family
-  callbacks и состояния; уже покрыты invitation UI и AI family-menu commit.
+  callbacks и состояния; локально уже покрыты invitation UI, AI family-menu
+  commit, shopping-check achievement и смена target для member update.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.
 - Проверить настоящие old/new bundles с Service Worker, повреждённые legacy-строки,

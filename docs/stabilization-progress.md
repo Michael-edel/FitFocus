@@ -2702,3 +2702,13 @@ old/new family bundle smoke и общая lifecycle-приёмка остают�
 push. Cloudflare preview завершился успешно; это не подтверждает CI или
 production-релиз. Эффект тестовых барьеров под CI остаётся неподтверждённым;
 актуальные проверки находятся на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+
+## Family late-response acceptance — текущая локальная проверка
+
+В `e2e/family-callback-account-switch.spec.ts` добавлены два сценария P0.5:
+запоздавший `/api/shopping/check` от A после входа B не запускает
+`shopping_item_checked` и не меняет список B; задержанный `/api/family/member`
+с target-семьёй A не применяется к UI другой семьи, загруженной тем же login.
+Полный spec прошёл 12/12 на desktop Chromium, Firefox и WebKit, `workers=1`,
+`retries=0`; общий `npm run typecheck` прошёл. Это локальное свидетельство;
+точный CI и другие семейные callbacks остаются открытыми.

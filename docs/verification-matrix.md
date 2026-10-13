@@ -22,6 +22,12 @@ CI этого follow-up для кодовой ревизии [`a99ab7b`](https:/
 полным CI; актуальный run нужно смотреть в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
+Локальная late-response acceptance family callbacks расширена на shopping check
+после account switch и member-goal после смены семьи тем же login. Весь
+`family-callback-account-switch.spec.ts` прошёл 12/12 на desktop Chromium,
+Firefox и WebKit (`workers=1/retries=0`); `npm run typecheck` прошёл. Полный CI
+этого изменения ещё не подтверждён.
+
 ## P0.8 — IndexedDB outbox transaction stability
 
 Текущий кодовый SHA [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
