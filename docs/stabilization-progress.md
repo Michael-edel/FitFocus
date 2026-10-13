@@ -2209,3 +2209,26 @@ parity и privacy coverage. PWA E2E использовал production build. HTT
 не подтверждает реальный OAuth/D1, staging или полный P0.8 lifecycle. CI на
 предыдущем docs commit `c724bce` завершился success (run 38318876304); новый
 коммит со smoke ожидает workflow.
+
+## P0.8 — JSON backup всех IDB stores, 13.10.2026
+
+В рабочей ветке экспорт переведён на формат v3. Один readonly snapshot включает
+`values`, `outbox`, migration items, неизвестные legacy-записи и durable meta;
+временные `active-session`/`auth-fence` в файл не входят. Исправлен экспорт,
+который раньше сериализовал уже сериализованный текст и создавал файл-строку.
+
+Restore проверяет структуру и владение записей до изменения IDB, сливает точные
+повторы идемпотентно и применяет все пять stores одной транзакцией. Divergent
+primary key отменяет транзакцию целиком и возвращает прежние значения
+localStorage. Импорт v1/v2 сохранён. Migration `sendAllowed` сбрасывается при
+restore: записанный в файле writer proof не считается текущим, пока runtime
+не перепроверит legacy source и все открытые окна.
+
+Проверки текущего дерева: полный unit — 1073 passed / 196 файлов; общий,
+domain-strict и storage-strict typecheck, 7/7 backup unit и production build
+прошли; `git diff --check` чистый. Old/new smoke точного SHA `00cd005`
+[прошёл CI](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965):
+390 browser passed / 9 skipped, 20,1 минуты; CI этот новый backup-код не
+содержит. Для backup-компонента workflow запускается после push.
+Контракт: [backup/restore](backup-restore.md). Очистка stores, conflict UI,
+остальные callbacks и staging остаются открытыми.

@@ -65,6 +65,31 @@ export async function writeIndexedUserStateRaw(key: string, value: string): Prom
   }
 }
 
+/** Restores a legacy backup volume as one transaction; durable-owned keys reject the whole batch. */
+export async function restoreIndexedUserStateBackup(entries: Record<string, string>): Promise<boolean> {
+  const rows = Object.entries(entries);
+  if (rows.length === 0) return true;
+  if (rows.some(([key, value]) => !isIndexedUserStateStorageKey(key) || typeof value !== 'string')) return false;
+  const database = await openDatabase();
+  if (!database) return false;
+  try {
+    return await stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta], 'readwrite', async (tx) => {
+      const meta = tx.objectStore(STATE_STORES.meta);
+      const store = tx.objectStore(STORE_NAME);
+      const [owners, currentValues] = await Promise.all([
+        Promise.all(rows.map(([key]) => indexedRequest(meta.get(outboxKeyOwnerId(key))))),
+        Promise.all(rows.map(([key]) => indexedRequest(store.get(key)))),
+      ]);
+      if (owners.some(Boolean) || currentValues.some((value) => !!value && typeof value === 'object' && 'accountId' in value)) return false;
+      const updatedAt = Date.now();
+      for (const [key, value] of rows) store.put({ key, value, updatedAt } satisfies IndexedValue);
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function removeIndexedUserStateRaw(key: string): Promise<boolean> {
   if (!isIndexedUserStateStorageKey(key)) return false;
   const database = await openDatabase();

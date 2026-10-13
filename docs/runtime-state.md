@@ -129,3 +129,19 @@ bundle на одном origin. Прежний hybrid sender ещё активе�
 build id. Источник сохраняется; неответившая или старая вкладка закрывает gate.
 Actual old/new bundle migration с сохранённым pending intent проверен в
 [browser smoke](legacy-migration.md#browser-acceptance--13102026) на семи проектах.
+
+## Последующее расширение JSON backup — 13.10.2026
+
+Текущий backup v3 читает все пять долговечных stores одним readonly-снимком и
+восстанавливает отсутствующие values, operations, migration ledger, quarantine
+и durable meta одной readwrite-транзакцией. Конфликт существующего primary key
+откатывает всю IDB-часть; точный повтор файла идемпотентен. v1/v2 по-прежнему
+импортируются, но не содержат outbox и migration records.
+
+`active-session`/`auth-fence` не входят в переносимую копию. При восстановлении
+legacy progress переводится в `partial` с закрытым `sendAllowed`; runtime обязан
+заново проверить исходный ключ и текущий all-client Service Worker fence.
+localStorage восстанавливается отдельно с возвратом прежних значений при
+ошибке, поскольку общей транзакции с IndexedDB нет.
+[Контракт, проверки и ограничения](backup-restore.md). Очистка всех stores,
+полный conflict UI и остальные callbacks по-прежнему открыты.

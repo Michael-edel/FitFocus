@@ -35,8 +35,12 @@ export function useBackupAutosave() {
     const tick = async () => {
       const handle = backupHandleRef.current;
       if (!handle) return;
-      const payload = await createBackupPayload();
-      await writeBackupToHandle(handle, JSON.stringify(payload));
+      try {
+        const payload = await createBackupPayload();
+        await writeBackupToHandle(handle, payload);
+      } catch {
+        // A failed snapshot must not replace the last known-good file.
+      }
     };
 
     const id = window.setInterval(tick, 20000);
@@ -44,8 +48,12 @@ export function useBackupAutosave() {
   }, [autosaveEnabled]);
 
   const onExportBackup = useCallback(async () => {
-    const payload = await createBackupPayload();
-    downloadJson('fitfocus-backup.json', JSON.stringify(payload, null, 2));
+    try {
+      const payload = await createBackupPayload();
+      downloadJson('fitfocus-backup.json', payload);
+    } catch {
+      alert('Не удалось создать полную резервную копию. Проверьте доступность хранилища и повторите экспорт.');
+    }
   }, []);
 
   const onImportBackup = useCallback(async (file: File) => {
@@ -53,12 +61,18 @@ export function useBackupAutosave() {
       const parsed = await restoreFromFile(file);
       const result = await applyBackupPayload(parsed);
       if (!result.ok) {
-        alert('Файл не похож на резервную копию FitFocus.');
+        if (result.error === 'BACKUP_DURABLE_STATE_CONFLICT') {
+          alert('В копии есть данные, отличающиеся от уже сохранённых. Ничего не изменено. Экспортируйте текущее состояние или восстановите копию в пустом профиле.');
+        } else if (result.error?.startsWith('BACKUP_INVALID_') || result.error === 'BACKUP_DUPLICATE_DURABLE_STATE') {
+          alert('Резервная копия повреждена или имеет неподдерживаемый формат. Данные не изменены.');
+        } else {
+          alert('Не удалось восстановить резервную копию: проверьте доступность локального хранилища.');
+        }
         return;
       }
       window.location.reload();
     } catch {
-      alert('Не удалось прочитать JSON.');
+      alert('Не удалось прочитать резервную копию. Проверьте JSON-файл и повторите попытку.');
     }
   }, []);
 
@@ -72,8 +86,16 @@ export function useBackupAutosave() {
     if (!handle) return false;
     backupHandleRef.current = handle;
     setAutosaveEnabled(true);
-    const payload = await createBackupPayload();
-    await writeBackupToHandle(handle, JSON.stringify(payload, null, 2));
+    try {
+      const payload = await createBackupPayload();
+      if (!await writeBackupToHandle(handle, payload)) {
+        alert('Не удалось записать резервную копию в выбранный файл.');
+        return false;
+      }
+    } catch {
+      alert('Не удалось создать полную резервную копию. Проверьте доступность хранилища и повторите экспорт.');
+      return false;
+    }
     return true;
   }, []);
 

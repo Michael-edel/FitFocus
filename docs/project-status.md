@@ -24,8 +24,12 @@ Firefox повторён 12/12 с тестовой диагностикой. Д�
 обновления старых вкладок, а read guard перепроверяется после миграции.
 Настоящая pending-запись, созданная действием старого bundle, теперь проходит
 old/new migration smoke на одном origin. Локально прошли все семь Playwright-
-проектов (`workers=1/retries=0`); CI этой новой проверки ещё ожидается.
-Полный CI `c724bce` (run 38318876304) завершился success перед добавлением smoke.
+проектов (`workers=1/retries=0`); полный CI точного smoke SHA `00cd005`
+завершился success в [run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).
+Следующая рабочая часть P0.8 добавляет JSON backup v3 со снимком всех пяти
+долговечных IDB stores и атомарным restore; локально прошли 1073 unit / 196
+файлов, общий/domain-strict/storage-strict typecheck. CI backup-изменения ещё
+не запускался. Полный CI `c724bce` (run 38318876304) также прошёл до smoke.
 
 Первый полный CI runtime-изменений на `d28b3e43dda13c29c99a20a5aa70e3c153f79fa9`
 [завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884).

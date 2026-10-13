@@ -68,8 +68,11 @@ workers=2/retries=0, без proxy-ошибок. Typecheck прошёл; полн
 В unit/integration проверках покрыты владелец, карантин, отсутствие proof и закрытый
 send gate; настоящий PWA update-тест проверяет fence и сохранность очереди/профиля.
 Smoke настоящей legacy-записи между старой и новой сборками прошёл локально 7/7;
-CI нового commit ещё ожидается. Далее — остальные callbacks P0.2–P0.6, UI конфликтов, backup/экспорт/очистка stores,
-совместимый rollback artifact и staging.
+CI точного SHA `00cd005` завершился success в [run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965).
+Следующий шаг реализует формат backup v3 для всех пяти IDB stores и атомарный
+restore; локально прошли 1073 unit / 196 файлов и три typecheck. CI этой правки
+ещё не запускался. Далее — остальные callbacks P0.2–P0.6, UI конфликтов,
+очистка stores, совместимый rollback artifact и staging.
 Интеграция P0.1 и серверной части P0.7 в защищённую main остаётся открытой.
 P0.9 пополняется тестами каждого исправления и завершается проверкой
 всего жизненного цикла и выпуска. [Подробный статус](docs/project-status.md),
@@ -531,8 +534,12 @@ LegacyQueueMigration: порции импорта, карантин, ledger и �
   реальным pending intent: сохраняются владелец, ledger и исходный legacy-ключ;
   неизвестный владелец помещён в карантин; прежний bundle до обновления не
   отправляет запись. [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7.
+- [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
+  восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
+  частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
+  остаются импортируемыми. [Контракт и тесты](docs/backup-restore.md).
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
-- [ ] Завершить UI повтора/разрешения конфликтов, экспорт и очистку всех stores;
+- [ ] Завершить UI повтора/разрешения конфликтов, очистку всех stores и
   проверить полный lifecycle. [Граница текущего runtime](docs/runtime-state.md).
 - [x] Проверить старую и новую сборку на одном origin в одном browser context;
   оба окна обновляются и после all-client fence отправляют только известную
