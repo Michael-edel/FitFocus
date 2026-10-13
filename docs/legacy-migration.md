@@ -8,9 +8,11 @@
 [ADR-005](adr/ADR-005-durable-outbox.md). Runtime подключён; old/new bundle
 smoke с настоящей записью прошёл на семи Playwright-проектах. Локальная
 account-scoped очистка пяти IDB stores реализована в `b53a55e`, CI компонента
-прошёл; global legacy source и snapshots сохраняются. Поэтому удаление
-данных аккаунта из общей миграционной evidence и оставшийся lifecycle P0.8
-открыты. [Контракт очистки](account-data-cleanup.md).
+прошёл. Локальный tombstone подавляет повторный импорт записей удалённого
+аккаунта и мешает старому backup вернуть его durable rows, если tombstone уже
+есть в браузере или backup. Global legacy source и snapshots сохраняются как
+evidence; физическое удаление payload и оставшийся lifecycle P0.8 открыты.
+[Контракт очистки](account-data-cleanup.md).
 
 ## Browser acceptance — 13.10.2026
 
@@ -96,6 +98,26 @@ Fingerprint вычисляется из нормализованных поле�
 LegacyQueueMigration получает источник с единственным методом getItem
 и общий StateDatabase. Читает только `fitfocus.remote-kv-outbox.v1`;
 не изменяет этот ключ, не удаляет его и не создаёт новую localStorage-очередь.
+
+## Подавление после удаления аккаунта
+
+Очистка создаёт в `outbox_meta` запись `legacy-deleted-account:v1:<sha256>` в
+той же транзакции, что удаляет account-owned строки. Запись не хранит ID
+аккаунта в открытом виде. Когда свежая проверка подтверждает владельца точного
+ключа, мигратор проверяет tombstone внутри транзакции: совпавший fingerprint
+помечается обработанным в snapshot без создания outbox operation, migration
+item или новой quarantine-копии raw payload. Такая запись учитывается в
+`processedRecords`, но не в `importedRecords`; legacy source и snapshot остаются
+без изменений.
+
+Удаление отзывает прежний `sendAllowed` и writer proof. При восстановлении v3
+backup account-owned values, outbox, ledger и metadata пропускаются, если
+tombstone присутствует в текущей базе или в backup. Общие source/snapshot при
+этом остаются; механизм обеспечивает локальное подавление, а не физическое
+удаление payload или серверную синхронизацию tombstone. Sender также проверяет
+marker на claim и finish: уже существующая legacy operation не отправляется,
+а поздний ответ не может её подтвердить. На другом устройстве старый backup
+без tombstone не знает о более позднем удалении.
 
 | Параметр migrate | Требование |
 |---|---|

@@ -1,5 +1,5 @@
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId,
-  legacyFingerprint, legacyFingerprintFields, normalizeLegacyRecord,
+  legacyDeletedAccountMetaId, legacyFingerprint, legacyFingerprintFields, normalizeLegacyRecord,
   type LegacyInvalidReason, type NormalizedLegacyQueueRecord } from './legacyQueue';
 import { isCurrentLegacyWriterFenceProof, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { outboxKeyOwnerId, writeOutboxInTransaction, type OutboxOperation } from './durableOutbox';
@@ -34,7 +34,7 @@ type Snapshot = { id: string; sourceKey: string; rawSource: string | null; proce
 type PreparedItem = {
   fingerprint: string; canonical: string; canonicalVariants: string[]; rawRecords: unknown[]; rawCanonicals: string[];
   record?: NormalizedLegacyQueueRecord; accountId?: string; reason?: MigrationUnknownReason;
-  evidenceHash: string; unknownNonce: string; opId: string;
+  deletedAccountMarkerId?: string; evidenceHash: string; unknownNonce: string; opId: string;
 };
 type PreparedSnapshot = { snapshotId: string; rawSource: string | null; items: PreparedItem[]; total: number };
 
@@ -75,6 +75,12 @@ function mergeRaw(
 
 async function prepare(raw: string | null, owners: VerifiedLegacyOwners): Promise<PreparedSnapshot> {
   const ownerSnapshot = new Map([...owners].map(([key, accounts]) => [key, [...accounts]]));
+  const deletedAccountMarkerIds = new Map<string, string>();
+  for (const accountId of new Set([...ownerSnapshot.values()].flat())) {
+    if (typeof accountId === 'string' && accountId.trim()) {
+      deletedAccountMarkerIds.set(accountId, await legacyDeletedAccountMetaId(accountId));
+    }
+  }
   const snapshotId = `legacy-snapshot:v1:${await hash(JSON.stringify([raw]))}`;
   let parsed: unknown;
   let containerReason: MigrationUnknownReason | undefined;
@@ -91,6 +97,7 @@ async function prepare(raw: string | null, owners: VerifiedLegacyOwners): Promis
     const fingerprint = record ? await legacyFingerprint(record) : `legacy-${containerReason ? 'container' : 'raw'}:v1:${await hash(canonical)}`;
     let reason = containerReason ?? (normalized.ok === false ? normalized.reason : undefined);
     let accountId: string | undefined;
+    let deletedAccountMarkerId: string | undefined;
     if (record) {
       const candidates = [...new Set(ownerSnapshot.get(record.key) ?? [])];
       if (candidates.length === 0) reason = 'unknown-owner';
@@ -99,6 +106,7 @@ async function prepare(raw: string | null, owners: VerifiedLegacyOwners): Promis
         accountId = candidates[0];
         if (!accountId || !record.key.startsWith(`fitfocus_data_${accountId}_`)) reason = 'ownership-conflict';
         else if (record.key.endsWith('_all_users') || record.key.endsWith('__ffv')) reason = 'forbidden-key';
+        else deletedAccountMarkerId = deletedAccountMarkerIds.get(accountId);
       }
       const fingerprints = keyFingerprints.get(record.key) ?? new Set<string>();
       fingerprints.add(fingerprint); keyFingerprints.set(record.key, fingerprints);
@@ -110,7 +118,7 @@ async function prepare(raw: string | null, owners: VerifiedLegacyOwners): Promis
       prior.reason = prior.canonicalVariants.length > 1 ? 'fingerprint-collision' : 'ambiguous-duplicate';
     } else {
       groups.set(fingerprint, { fingerprint, canonical, canonicalVariants: [canonical], rawRecords: [rawRecord], rawCanonicals: [canonicalRaw],
-        record, accountId, reason, evidenceHash: '', unknownNonce: crypto.randomUUID(), opId: crypto.randomUUID() });
+        record, accountId, reason, deletedAccountMarkerId, evidenceHash: '', unknownNonce: crypto.randomUUID(), opId: crypto.randomUUID() });
     }
   }
   for (const item of groups.values()) {
@@ -278,6 +286,11 @@ export class LegacyQueueMigration {
   }
 
   private async importItem(tx: IDBTransaction, item: PreparedItem, verifyOnly = false): Promise<void> {
+    if (item.deletedAccountMarkerId) {
+      const marker = await indexedRequest(tx.objectStore(STATE_STORES.meta).get(item.deletedAccountMarkerId)) as
+        { kind?: unknown; version?: unknown } | undefined;
+      if (marker?.kind === 'legacy-deleted-account' && marker.version === 1) return;
+    }
     const store = tx.objectStore(STATE_STORES.migrationItems);
     const id = legacyMigrationItemId(item.fingerprint);
     const prior = await indexedRequest(store.get(id)) as MigrationItem | undefined;

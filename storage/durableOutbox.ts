@@ -1,9 +1,13 @@
 import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
-import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields } from './legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
+  legacyDeletedAccountMetaId } from './legacyQueue';
 import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
 
 export type OutboxIntent = { type: 'put'; key: string; value: string } | { type: 'delete'; key: string };
-export type OutboxAttempt = { attemptId: string; owner: string; sessionEpoch: string; startedAtMs: number };
+export type OutboxAttempt = {
+  attemptId: string; owner: string; sessionEpoch: string; startedAtMs: number;
+  deletedAccountMarkerId?: string;
+};
 export type OutboxOperation = OutboxIntent & {
   /** Missing on pre-profile operations: those are state writes. */
   resource?: 'profile' | 'familyMenu';
@@ -349,6 +353,7 @@ export class DurableOutbox {
     requireText(input.accountId); requireText(input.sessionEpoch); requireText(input.owner);
     if (!finiteInteger(input.nowMs) || !finiteInteger(input.leaseMs) || input.leaseMs === 0) throw new Error('OUTBOX_INVALID_LEASE');
     const attemptId = crypto.randomUUID();
+    const deletionMarkerId = await legacyDeletedAccountMetaId(input.accountId);
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
       const sessionRequest = indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as Promise<ActiveSession | undefined>;
@@ -359,11 +364,20 @@ export class DurableOutbox {
       // Revisions define per-key order even if the wall clock moves backwards.
       operations.sort((a, b) => a.revision - b.revision || a.createdAtMs - b.createdAtMs || a.opId.localeCompare(b.opId));
       const seenKeys = new Set<string>();
+      let deletionChecked = false;
+      let accountDeleted = false;
       for (const operation of operations) {
         if (seenKeys.has(operation.key)) continue;
         seenKeys.add(operation.key);
         if (operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical) {
-          const gateRequest = indexedRequest(tx.objectStore(STATE_STORES.meta).get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>;
+          const metaStore = tx.objectStore(STATE_STORES.meta);
+          if (!deletionChecked) {
+            const marker = await indexedRequest(metaStore.get(deletionMarkerId)) as { kind?: unknown; version?: unknown } | undefined;
+            accountDeleted = marker?.kind === 'legacy-deleted-account' && marker.version === 1;
+            deletionChecked = true;
+          }
+          if (accountDeleted) continue;
+          const gateRequest = indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>;
           const receiptRequest = indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(operation.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>;
           const [gate, receipt] = await Promise.all([gateRequest, receiptRequest]);
           if (!canSendLegacy(operation, gate, receipt)) continue;
@@ -374,7 +388,12 @@ export class DurableOutbox {
         const claim: OutboxClaim = {
           ...operation, status: 'sending', updatedAtMs: input.nowMs,
           retryCount: operation.retryCount + (operation.status === 'sending' ? 1 : 0),
-          attempt: { attemptId, owner: input.owner, sessionEpoch: input.sessionEpoch, startedAtMs: input.nowMs },
+          attempt: {
+            attemptId, owner: input.owner, sessionEpoch: input.sessionEpoch, startedAtMs: input.nowMs,
+            ...(operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical
+              ? { deletedAccountMarkerId: deletionMarkerId }
+              : {}),
+          },
         };
         store.put(claim);
         return claim;
@@ -388,6 +407,10 @@ export class DurableOutbox {
     if (!finiteInteger(nowMs)) throw new Error('OUTBOX_INVALID_TIME');
     if (outcome.kind === 'acknowledged' && (!finiteInteger(outcome.version) || outcome.version <= claim.baseVersion)) throw new Error('OUTBOX_INVALID_ACK_VERSION');
     if (outcome.kind === 'retry' && (!finiteInteger(outcome.nextAttemptAtMs) || outcome.nextAttemptAtMs < nowMs)) throw new Error('OUTBOX_INVALID_RETRY_TIME');
+    const isLegacyClaim = !!(claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical);
+    const deletionMarkerId = isLegacyClaim
+      ? claim.attempt.deletedAccountMarkerId ?? await legacyDeletedAccountMetaId(claim.accountId)
+      : undefined;
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
       const store = tx.objectStore(STATE_STORES.outbox);
@@ -403,14 +426,18 @@ export class DurableOutbox {
       const migrationReceiptRequest = claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical
         ? indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(claim.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>
         : Promise.resolve(undefined);
+      const deletionMarkerRequest = deletionMarkerId
+        ? indexedRequest(metaStore.get(deletionMarkerId)) as Promise<{ kind?: unknown; version?: unknown } | undefined>
+        : Promise.resolve(undefined);
       const keyStateRequest = outcome.kind === 'acknowledged'
         ? indexedRequest(metaStore.get(keyStateId(claim.accountId, claim.key))) as Promise<KeyState | undefined>
         : Promise.resolve(undefined);
       const siblingsRequest = outcome.kind === 'acknowledged'
         ? indexedRequest(store.index('accountKey').getAll([claim.accountId, claim.key])) as Promise<OutboxOperation[]>
         : Promise.resolve([] as OutboxOperation[]);
-      const [current, session, fence, gate, receipt, ackMeta, ackSiblings] = await Promise.all([
-        currentRequest, sessionRequest, fenceRequest, migrationGateRequest, migrationReceiptRequest, keyStateRequest, siblingsRequest,
+      const [current, session, fence, gate, receipt, deletionMarker, ackMeta, ackSiblings] = await Promise.all([
+        currentRequest, sessionRequest, fenceRequest, migrationGateRequest, migrationReceiptRequest,
+        deletionMarkerRequest, keyStateRequest, siblingsRequest,
       ]);
       if (!current || current.status !== 'sending' || current.accountId !== claim.accountId || current.revision !== claim.revision
         || current.key !== claim.key || current.baseVersion !== claim.baseVersion || current.writerId !== claim.writerId
@@ -421,8 +448,10 @@ export class DurableOutbox {
         || current.attempt?.attemptId !== claim.attempt.attemptId
         || current.attempt.owner !== claim.attempt.owner || current.attempt.startedAtMs !== claim.attempt.startedAtMs
         || current.attempt.sessionEpoch !== claim.attempt.sessionEpoch
+        || current.attempt.deletedAccountMarkerId !== claim.attempt.deletedAccountMarkerId
         || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch || session.pause) return false;
       if (current.migrationSourceKey || current.migrationFingerprint || current.migrationCanonical) {
+        if (deletionMarker?.kind === 'legacy-deleted-account' && deletionMarker.version === 1) return false;
         if (!canSendLegacy(current, gate, receipt)) return false;
       }
       const updated: OutboxOperation = { ...current, updatedAtMs: nowMs };

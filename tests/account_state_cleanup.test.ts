@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DurableOutbox, outboxKeyOwnerId } from '../storage/durableOutbox';
 import { clearIndexedUserStateForUser } from '../storage/indexedUserState';
-import { LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY } from '../storage/legacyQueue';
+import { LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from '../storage/legacyQueue';
 import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction } from '../storage/stateDatabase';
 
 const deletedAccount = 'cleanup-target';
@@ -90,6 +90,7 @@ describe('account-scoped IndexedDB cleanup', () => {
     ]));
     expect(snapshot.unknown).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'target-unknown' })]));
     expect(snapshot.meta).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: await legacyDeletedAccountMetaId(deletedAccount), kind: 'legacy-deleted-account', version: 1 }),
       expect.objectContaining({ id: outboxKeyOwnerId(otherKey), accountId: otherAccount }),
       expect.objectContaining({ id: `key:${JSON.stringify([otherAccount, otherKey])}` }),
       expect.objectContaining({ id: LEGACY_MIGRATION_META_ID, sendAllowed: false }),
@@ -97,6 +98,7 @@ describe('account-scoped IndexedDB cleanup', () => {
       expect.objectContaining({ id: 'auth-fence', revision: 5, loggedOutSession: 'target-session' }),
     ]));
     expect(snapshot.meta).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: expect.stringContaining(deletedAccount) }),
       expect.objectContaining({ id: outboxKeyOwnerId(deletedKey) }),
       expect.objectContaining({ id: `key:${JSON.stringify([deletedAccount, deletedKey])}` }),
       expect.objectContaining({ id: 'active-session', accountId: deletedAccount }),

@@ -2,8 +2,9 @@ import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
 import { LegacyQueueMigration, type MigrationItem } from '../storage/legacyMigration';
-import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyFingerprint, legacyMigrationItemId, normalizeLegacyRecord } from '../storage/legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyDeletedAccountMetaId, legacyFingerprint, legacyMigrationItemId, normalizeLegacyRecord } from '../storage/legacyQueue';
 import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction, type StateStore } from '../storage/stateDatabase';
+import { clearIndexedUserStateForUser } from '../storage/indexedUserState';
 
 const accountId = 'migration-account';
 const key = `fitfocus_data_${accountId}_diary`;
@@ -50,6 +51,48 @@ describe('atomic resumable legacy migration', () => {
     expect((await outbox.snapshot(accountId, key)).value).toBe(put.value);
     expect(rawSource).toBe(before);
     expect((await claim())?.opId).toBe(operation.opId);
+  });
+
+  it('does not reimport a legacy operation after account deletion and reauthentication', async () => {
+    const originalSource = rawSource;
+    await migration.migrate(options());
+    expect(await outbox.list(accountId)).toHaveLength(1);
+
+    expect(await clearIndexedUserStateForUser(accountId, connection)).toEqual({
+      cleared: true,
+      legacyEvidenceRetained: true,
+    });
+    expect(await outbox.list(accountId)).toEqual([]);
+    expect(await rows(STATE_STORES.migrationItems)).toEqual([]);
+
+    // A fresh authenticated owner proof must still respect the local deletion marker.
+    const resumed = new LegacyQueueMigration(source, otherConnection);
+    expect(await resumed.migrate(options())).toMatchObject({
+      status: 'completed',
+      totalRecords: 1,
+      processedRecords: 1,
+      importedRecords: 0,
+      unresolvedRecords: 0,
+      sendAllowed: true,
+    });
+    expect(await outbox.list(accountId)).toEqual([]);
+    expect(await rows(STATE_STORES.migrationItems)).toEqual([]);
+    expect(rawSource).toBe(originalSource);
+  });
+
+  it('blocks sending a restored legacy operation once its account tombstone exists', async () => {
+    await migration.migrate(options());
+    const sending = await claim();
+    if (!sending) throw new Error('Expected a legacy claim before deletion');
+    const markerId = await legacyDeletedAccountMetaId(accountId);
+    expect(sending.attempt.deletedAccountMarkerId).toBe(markerId);
+    await stateTransaction(await connection.open(), [STATE_STORES.meta], 'readwrite', (tx) => {
+      tx.objectStore(STATE_STORES.meta).put({ id: markerId, kind: 'legacy-deleted-account', version: 1, deletedAtMs: Date.now() });
+    });
+
+    await expect(outbox.finish(sending, { kind: 'acknowledged', version: 1 })).resolves.toBe(false);
+    await expect(claim()).resolves.toBeNull();
+    expect(await outbox.list(accountId)).toHaveLength(1);
   });
 
   it('imports a delete with no value property and preserves its retry metadata', async () => {

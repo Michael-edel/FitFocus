@@ -2,7 +2,7 @@ import { STORAGE_KEYS } from './keys';
 import { STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateDatabase, type StateStore } from './stateDatabase';
 import { outboxKeyOwnerId } from './durableOutbox';
 import { USER_STATE_KEYS } from './userStateRepository';
-import { LEGACY_QUEUE_SOURCE_KEY } from './legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from './legacyQueue';
 
 const STORE_NAME = STATE_STORES.values;
 
@@ -189,6 +189,12 @@ export async function clearIndexedUserStateForUser(
 ): Promise<AccountStateCleanupResult> {
   const accountId = userId.trim();
   if (!accountId) return { cleared: false, legacyEvidenceRetained: false };
+  let deletionMarkerId: string;
+  try {
+    deletionMarkerId = await legacyDeletedAccountMetaId(accountId);
+  } catch {
+    return { cleared: false, legacyEvidenceRetained: true };
+  }
   const prefix = `${STORAGE_KEYS.dataPrefix}${accountId}_`;
   const database = await connection.open().catch(() => null);
   if (!database) return { cleared: false, legacyEvidenceRetained: true };
@@ -289,6 +295,32 @@ export async function clearIndexedUserStateForUser(
           && rawSourceMayBelongToAccount(row.rawSource, prefix)) {
           legacyEvidenceRetained = true;
         }
+      }
+
+      const migrationProgress = metadata.find((row) => row.id === 'legacy-migration:v1');
+      if (migrationProgress) {
+        metaStore.put({
+          ...migrationProgress,
+          status: 'partial',
+          sourceMatches: false,
+          writersStopped: false,
+          snapshotAuditComplete: false,
+          sendAllowed: false,
+        });
+      }
+
+      // Keep this marker outside account-owned metadata so later legacy imports
+      // cannot recreate an operation after the same account authenticates again.
+      const existingDeletionMarker = metadata.find((row) => row.id === deletionMarkerId);
+      if (!(existingDeletionMarker?.kind === 'legacy-deleted-account' && existingDeletionMarker.version === 1
+        && typeof existingDeletionMarker.deletedAtMs === 'number' && Number.isSafeInteger(existingDeletionMarker.deletedAtMs)
+        && existingDeletionMarker.deletedAtMs >= 0)) {
+        metaStore.put({
+          id: deletionMarkerId,
+          kind: 'legacy-deleted-account',
+          version: 1,
+          deletedAtMs: Date.now(),
+        });
       }
 
       return { cleared: !ownershipConflict, legacyEvidenceRetained };

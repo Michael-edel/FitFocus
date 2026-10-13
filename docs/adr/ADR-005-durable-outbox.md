@@ -8,8 +8,9 @@
 [runtime migration](../legacy-migration.md) и [backup v3](../backup-restore.md).
 Реальный old/new smoke прошёл полный CI; backup-компонент опубликован в
 [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
-Остаются UI конфликтов, account-scoped очистка, остальные callbacks и полный
-lifecycle выпуска.
+Account-scoped очистка и локальное подавление legacy-повтора добавлены в ветке;
+остаются физическое удаление общего legacy payload, UI конфликтов, остальные
+callbacks и полный lifecycle выпуска.
 
 Дополнение 11.10.2026: [15 управляемых state-ключей](../owned-state-writers.md)
 подключены, прежний sender текущей сборки удалён. Profile state-upload
@@ -36,6 +37,18 @@ dispatch. Схема IDB остаётся v2; отдельного profile-store
 той же версии не меняет revision; новая серверная версия по-прежнему
 защищает независимого редактора. Остальные callbacks, runtime legacy и
 приёмка выпуска остаются открытыми. Это уточнение реализации принятого ADR.
+
+Дополнение 13.10.2026: после удаления аккаунта cleanup атомарно записывает
+`outbox_meta` tombstone, чей ключ содержит SHA-256 account ID. Legacy importer
+проверяет его в транзакции импорта и отмечает старый fingerprint обработанным,
+не копируя payload обратно в outbox/ledger/quarantine. Sender проверяет marker
+при claim/finish. Backup restore учитывает tombstone из текущей базы и v3 файла
+и пропускает account-owned строки. Общие source/snapshot остаются неизменными:
+решение предотвращает локальный повторный импорт/отправку, но не является
+физическим стиранием или серверной синхронизацией.
+Реализация и проверки зафиксированы в [cleanup contract](../account-data-cleanup.md)
+и [legacy migration](../legacy-migration.md); точный SHA/CI добавляется после
+публикации изменения.
 
 ## Причина
 

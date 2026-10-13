@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — подавление legacy-импорта после удаления аккаунта
+
+Дата: 13.10.2026. Ветка: `fix/durable-outbox`; локальная итерация перед
+публикацией. Точный CI SHA будет добавлен после push.
+
+Account cleanup пишет в IndexedDB tombstone с SHA-256 account ID и отзывает
+старый migration send gate. При повторном входе importer проверяет tombstone
+в той же транзакции, где иначе создал бы операцию, и фиксирует fingerprint в
+snapshot как обработанный без новой outbox/ledger/quarantine-копии payload.
+Sender повторно проверяет tombstone при claim и finish.
+Backup restore пропускает account-owned строки из старого файла, если tombstone
+есть в текущей базе или в backup. Исходный legacy source и snapshots не меняются.
+
+Локальная проверка: 1082 unit-теста / 197 файлов; профильные migration/cleanup/
+backup-тесты — 75; общий, `domain-strict` и `storage-strict` typecheck,
+production build и `git diff --check` прошли. Legacy migration smoke прошёл
+7/7 browser/device projects без retries. Browser CI, merge, staging и выпуск
+ещё не подтверждены. Payload в общем legacy source/snapshot остаётся; tombstone
+обеспечивает локальное подавление, а не физическое стирание или серверную
+синхронизацию.
+
 ## P0.1 — зависимости и ограниченная отправка push
 
 Дата: 09.10.2026. База изменения: GitHub main `c939ae6`.

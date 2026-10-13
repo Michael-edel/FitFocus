@@ -22,6 +22,20 @@ Rollback-артефакт [сохранён в CI](https://github.com/Michael-ed
 Staging и выпуск не выполнялись. Полный контракт и остаточный риск: [очистка
 локальных данных](account-data-cleanup.md).
 
+## Следующая локальная итерация P0.8 — подавление legacy после удаления
+
+Рабочее дерево дополняет cleanup SHA-256 tombstone в `outbox_meta`. Повторная
+миграция с доказанным владельцем помечает старый fingerprint обработанным и не
+создаёт новую операцию; sender блокирует claim/finish старой legacy operation.
+Восстановление старого v3 backup в браузере с tombstone пропускает account-owned
+строки. Общие legacy source/snapshots остаются для
+аудита, поэтому физическое локальное стирание данных этим не подтверждается.
+Локально проходят 1082 unit-теста / 197 файлов, общий/domain-strict/storage-strict
+typecheck, production build и профильные тесты миграции, cleanup и backup (75).
+Legacy migration smoke прошёл 7/7 browser/device projects без retries. Точный
+SHA и CI новой итерации будут добавлены после публикации.
+[Контракт и ограничения](account-data-cleanup.md).
+
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
 job 115035254691, на опубликованной ревизии `ca8ecb1`. Прошли 1068 unit / 196
@@ -447,12 +461,12 @@ callbacks. Весь P0.5 остаётся открытым.
 2. Продолжить приёмку lifecycle остальных callbacks. CI profile debounce
    на `bf01d87` прошёл. Исторические `/api/profile` и другие
    источники не считать автоматически объяснёнными этим изменением.
-3. Завершить UI повтора/разрешения конфликтов. Account-scoped очистка
-   доказанно принадлежащих строк пяти IDB stores и scoped localStorage
-   опубликована в `b53a55e` и прошла CI; определить безопасное подавление или
-   удаление account data из общего legacy source/snapshots и проверить повторный
-   вход того же ID. [Контракт очистки](account-data-cleanup.md). JSON backup v3
-   реализован и прошёл CI: [backup/restore](backup-restore.md).
+3. Завершить UI повтора/разрешения конфликтов. Локальный tombstone и проверка
+   повторного входа закрывают повторный импорт и восстановление account-owned
+   rows из старого backup при наличии tombstone. Физическое удаление payload из
+   общего legacy source/snapshots остаётся открытым ограничением. [Контракт
+   очистки](account-data-cleanup.md). JSON backup v3 реализован и прошёл CI:
+   [backup/restore](backup-restore.md).
 4. Пройти полную [матрицу lifecycle](sync-model.md#матрица-приёмки), staging
    и [выпуск](../RELEASE_CHECKLIST.md) через защищённую main.
 

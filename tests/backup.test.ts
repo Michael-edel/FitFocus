@@ -1,12 +1,12 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyBackupPayload, createBackupPayload, downloadJson } from '../backup';
-import { readIndexedUserStateRaw, writeIndexedUserStateRaw } from '../storage/indexedUserState';
+import { clearIndexedUserStateForUser, readIndexedUserStateRaw, writeIndexedUserStateRaw } from '../storage/indexedUserState';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { STATE_STORES, stateTransaction, indexedRequest, userStateDatabase } from '../storage/stateDatabase';
 import { LegacyQueueMigration } from '../storage/legacyMigration';
-import { LEGACY_QUEUE_SOURCE_KEY } from '../storage/legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from '../storage/legacyQueue';
 
 function createLocalStorage(): Storage {
   const values = new Map<string, string>();
@@ -165,6 +165,46 @@ describe('browser backup', () => {
     const resumedSession = await new DurableOutbox().sessionState();
     expect(await new DurableOutbox().claim({ accountId, sessionEpoch: resumedSession.active!.sessionEpoch,
       owner: 'backup-test-sender', nowMs: Date.now(), leaseMs: 5_000 })).not.toBeNull();
+  });
+
+  it('does not restore deleted-account rows from a backup made before deletion', async () => {
+    const accountId = 'deleted-backup-owner';
+    const key = `fitfocus_data_${accountId}_diary`;
+    const rawLegacy = JSON.stringify([{ type: 'put', key, value: 'private legacy value' }]);
+    localStorage.setItem(LEGACY_QUEUE_SOURCE_KEY, rawLegacy);
+    const migration = new LegacyQueueMigration({ getItem: (requested) => requested === LEGACY_QUEUE_SOURCE_KEY ? rawLegacy : null });
+    await migration.migrate({
+      verifiedOwners: new Map([[key, [accountId]]]),
+      verifyWritersStopped: async () => ({
+        buildId: 'backup-delete-test', checkedAtMs: Date.now(), challengeId: crypto.randomUUID(), clientIds: ['backup-client'],
+      }),
+    });
+    const staleBackup = JSON.parse(JSON.stringify(await createBackupPayload())) as Awaited<ReturnType<typeof createBackupPayload>>;
+    expect(staleBackup.durableState?.stores[STATE_STORES.outbox]).toHaveLength(1);
+
+    expect(await clearIndexedUserStateForUser(accountId)).toEqual({ cleared: true, legacyEvidenceRetained: true });
+    await expect(applyBackupPayload(staleBackup)).resolves.toEqual({ ok: true });
+
+    expect(await new DurableOutbox().list(accountId)).toEqual([]);
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+    const restoredMeta = await stateTransaction(await userStateDatabase.open(), [STATE_STORES.meta], 'readonly',
+      (tx) => indexedRequest(tx.objectStore(STATE_STORES.meta).getAll()));
+    expect(restoredMeta).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'legacy-deleted-account', version: 1 }),
+      expect.objectContaining({ id: expect.stringMatching(/^legacy-snapshot:v1:/), rawSource: rawLegacy }),
+    ]));
+
+    const deletionBackup = await createBackupPayload();
+    const deletionMarkerId = await legacyDeletedAccountMetaId(accountId);
+    expect(deletionBackup.durableState?.stores[STATE_STORES.meta]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: deletionMarkerId, kind: 'legacy-deleted-account', version: 1 }),
+    ]));
+    userStateDatabase.close();
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    await expect(applyBackupPayload(deletionBackup)).resolves.toEqual({ ok: true });
+    const portableMarker = await stateTransaction(await userStateDatabase.open(), [STATE_STORES.meta], 'readonly',
+      (tx) => indexedRequest(tx.objectStore(STATE_STORES.meta).get(deletionMarkerId)));
+    expect(portableMarker).toMatchObject({ kind: 'legacy-deleted-account', version: 1 });
   });
 
   it('aborts every IndexedDB store and rolls localStorage back when one durable key conflicts', async () => {

@@ -41,6 +41,13 @@ build id Service Worker и всех открытых окон; только по
 разрешается отправка legacy-операции. `active-session` и `auth-fence` остаются
 текущими для браузера и из файла не импортируются.
 
+Экспорт включает локальные account deletion tombstones в `outbox_meta`, а
+валидатор проверяет их формат. Если tombstone для аккаунта есть в текущей базе
+или backup, старые account-owned values, операции, ledger и owner metadata
+этого аккаунта пропускаются при восстановлении. Sender блокирует claim/finish
+уже существующей legacy operation при наличии tombstone. Это не удаляет payload
+из общего legacy source/snapshot.
+
 localStorage не поддерживает транзакцию вместе с IndexedDB. Импорт сохраняет
 его предыдущие значения и восстанавливает их, если запись localStorage или
 IDB-восстановление завершились ошибкой. Атомарная граница новых очереди,
@@ -51,8 +58,9 @@ ledger, карантина, значений и meta — единая IndexedDB-
 
 `tests/backup.test.ts` покрывает экспорт/восстановление пяти stores, pending и
 unknown legacy-записи, недействительность старого writer proof, повторный
-импорт, rollback всех IDB stores при конфликте, возврат localStorage к
-прежнему значению, старый формат и пригодный для чтения скачиваемый JSON.
+импорт, фильтрацию backup после удаления аккаунта, rollback всех IDB stores
+при конфликте, возврат localStorage к прежнему значению, старый формат и
+пригодный для чтения скачиваемый JSON.
 
 Реализация опубликована в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
 Локально прошли 7/7 backup-тестов, все 1073 unit / 196 файлов, три typecheck и
@@ -64,6 +72,7 @@ production build. [Полный CI PR-head](https://github.com/Michael-edel/FitF
 сессию, не меняет серверный `/api/export` и не является удалённым staging
 backup. Коммит `b53a55e` добавил локальную очистку точных account-owned строк
 пяти IDB stores и scoped localStorage; его CI прошёл. Она сохраняет общий
-legacy-источник и snapshots; безопасное подавление данных удалённого аккаунта
-в этой общей evidence, UI конфликтов и lifecycle остаются открытыми критериями
-P0.8. [Контракт очистки](account-data-cleanup.md).
+legacy-источник и snapshots; физическое удаление payload из общей evidence,
+UI конфликтов и lifecycle остаются открытыми критериями P0.8. Локальный
+tombstone блокирует повторный импорт и восстановление старых account-owned
+строк, но общий legacy payload сохраняется. [Контракт очистки](account-data-cleanup.md).

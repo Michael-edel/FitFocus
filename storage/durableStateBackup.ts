@@ -1,5 +1,6 @@
 import { StateStorageError, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateStore } from './stateDatabase';
-import { LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY, legacyMigrationItemId } from './legacyQueue';
+import { LEGACY_DELETED_ACCOUNT_META_PREFIX, LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY,
+  legacyDeletedAccountMetaId, legacyMigrationItemId } from './legacyQueue';
 
 const STORE_NAMES = Object.values(STATE_STORES) as StateStore[];
 const DURABLE_META_EXCLUDED = new Set(['active-session', 'auth-fence']);
@@ -81,6 +82,9 @@ function validateOperation(row: unknown): row is Record<string, unknown> {
   if (row.attempt !== undefined) {
     if (!isRecord(row.attempt) || !text(row.attempt.attemptId) || !text(row.attempt.owner)
       || !text(row.attempt.sessionEpoch) || !integer(row.attempt.startedAtMs)) return false;
+    if (row.attempt.deletedAccountMarkerId !== undefined
+      && (typeof row.attempt.deletedAccountMarkerId !== 'string'
+        || !new RegExp(`^${LEGACY_DELETED_ACCOUNT_META_PREFIX}[a-f0-9]{64}$`).test(row.attempt.deletedAccountMarkerId))) return false;
   }
   if (row.serverSnapshot !== undefined) {
     const snapshot = row.serverSnapshot;
@@ -142,6 +146,10 @@ function validateMeta(row: unknown): row is Record<string, unknown> {
       && typeof row.snapshotAuditComplete === 'boolean' && typeof row.sourceMatches === 'boolean'
       && typeof row.writersStopped === 'boolean' && typeof row.sendAllowed === 'boolean';
   }
+  if (row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX)) {
+    return new RegExp(`^${LEGACY_DELETED_ACCOUNT_META_PREFIX}[a-f0-9]{64}$`).test(row.id)
+      && row.kind === 'legacy-deleted-account' && row.version === 1 && integer(row.deletedAtMs);
+  }
   if (row.id.startsWith('legacy-snapshot:v1:')) {
     return /^legacy-snapshot:v1:[a-f0-9]{64}$/.test(row.id) && row.sourceKey === LEGACY_QUEUE_SOURCE_KEY
       && (row.rawSource === null || typeof row.rawSource === 'string') && strings(row.processed);
@@ -184,9 +192,44 @@ function rowKey(store: StateStore, row: Record<string, unknown>): string {
 /** Merge a backup in one transaction. Exact repeats are idempotent; divergent keys abort every store. */
 export async function restoreDurableStateBackup(value: unknown): Promise<void> {
   validateSnapshot(value);
+  const stores = value.stores;
+  const candidateAccounts = new Set<string>();
+  const addAccount = (accountId: unknown) => { if (text(accountId)) candidateAccounts.add(accountId); };
+  for (const row of stores[STATE_STORES.values] as Record<string, unknown>[]) addAccount(row.accountId);
+  for (const row of stores[STATE_STORES.outbox] as Record<string, unknown>[]) addAccount(row.accountId);
+  for (const row of stores[STATE_STORES.migrationItems] as Record<string, unknown>[]) addAccount(row.accountId);
+  for (const row of stores[STATE_STORES.migrationUnknown] as Record<string, unknown>[]) {
+    if (isRecord(row.resolved)) addAccount(row.resolved.accountId);
+  }
+  for (const row of stores[STATE_STORES.meta] as Record<string, unknown>[]) addAccount(row.accountId);
+  const candidateMarkerIds = new Map<string, string>();
+  for (const accountId of candidateAccounts) {
+    candidateMarkerIds.set(accountId, await legacyDeletedAccountMetaId(accountId));
+  }
+  const backupMarkers = new Set((stores[STATE_STORES.meta] as Record<string, unknown>[])
+    .filter((row) => typeof row.id === 'string' && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX))
+    .map((row) => String(row.id)));
+  const ownedAccountsByKey = new Map<string, string>();
+  for (const row of stores[STATE_STORES.outbox] as Record<string, unknown>[]) {
+    if (text(row.accountId) && text(row.key)) ownedAccountsByKey.set(row.key, row.accountId);
+  }
+  for (const row of stores[STATE_STORES.meta] as Record<string, unknown>[]) {
+    if (text(row.accountId) && text(row.key) && (String(row.id).startsWith('owner:') || String(row.id).startsWith('key:'))) {
+      ownedAccountsByKey.set(row.key, row.accountId);
+    }
+  }
   const database = await userStateDatabase.open();
   try {
     await stateTransaction(database, STORE_NAMES, 'readwrite', async (tx) => {
+      const metaStore = tx.objectStore(STATE_STORES.meta);
+      const existingMeta = await indexedRequest(metaStore.getAll()) as Array<Record<string, unknown>>;
+      const existingMarkers = new Set(existingMeta
+        .filter((row) => typeof row.id === 'string' && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX)
+          && row.kind === 'legacy-deleted-account' && row.version === 1)
+        .map((row) => String(row.id)));
+      const deletedAccounts = new Set([...candidateMarkerIds]
+        .filter(([, markerId]) => backupMarkers.has(markerId) || existingMarkers.has(markerId))
+        .map(([accountId]) => accountId));
       for (const storeName of STORE_NAMES) {
         const store = tx.objectStore(storeName);
         const rows = value.stores[storeName] as Record<string, unknown>[];
@@ -197,9 +240,19 @@ export async function restoreDurableStateBackup(value: unknown): Promise<void> {
             ? { ...savedRow, status: 'partial', snapshotAuditComplete: false, sourceMatches: false,
               writersStopped: false, sendAllowed: false }
             : savedRow;
+          const owner = storeName === STATE_STORES.values && !text(row.accountId) && text(row.key)
+            ? ownedAccountsByKey.get(row.key)
+            : undefined;
+          const resolvedOwner = storeName === STATE_STORES.migrationUnknown && isRecord(row.resolved)
+            ? row.resolved.accountId
+            : undefined;
+          if (deletedAccounts.has(String(row.accountId ?? owner ?? resolvedOwner ?? ''))) continue;
           const key = rowKey(storeName, row);
           const existing = await indexedRequest(store.get(key)) as unknown;
           if (existing !== undefined) {
+            if (storeName === STATE_STORES.meta && typeof row.id === 'string'
+              && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX) && isRecord(existing)
+              && existing.kind === 'legacy-deleted-account' && existing.version === 1) continue;
             if (canonical(existing) !== canonical(row)) throw new Error('BACKUP_DURABLE_STATE_CONFLICT');
             continue;
           }

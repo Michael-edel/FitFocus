@@ -83,4 +83,14 @@ export async function legacyFingerprint(record: NormalizedLegacyQueueRecord): Pr
 
 export const LEGACY_QUEUE_SOURCE_KEY = 'fitfocus.remote-kv-outbox.v1';
 export const LEGACY_MIGRATION_META_ID = 'legacy-migration:v1';
+export const LEGACY_DELETED_ACCOUNT_META_PREFIX = 'legacy-deleted-account:v1:';
 export const legacyMigrationItemId = (fingerprint: string) => `legacy-item:${fingerprint}`;
+
+/** A local tombstone key that does not store the deleted account ID in plaintext. */
+export async function legacyDeletedAccountMetaId(accountId: string): Promise<string> {
+  const normalized = accountId.trim();
+  if (!normalized) throw new Error('LEGACY_INVALID_ACCOUNT_ID');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${LEGACY_DELETED_ACCOUNT_META_PREFIX}${hash}`;
+}
