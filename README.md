@@ -70,34 +70,20 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Текущий компонент P0.5 для coach, личного плана и объяснения плато опубликован
-в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e).
-PR CI этого SHA завершился с ошибкой E2E: 463 passed / 9 skipped, один failed
-и три flaky. Все проверки до E2E прошли. Ошибка возникла в Firefox weekly-menu
-сценарии: его API fixture не отвечал на фоновый AI-запрос отчёта `wis_text`.
-После добавления явного ответа локально прошли этот spec 8/8 и пять повторов
-затронутого сценария. В [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070)
-обновлена E2E-фикстура; [полный PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
-завершился success: 1115 unit, 466 browser passed / 9 skipped. Один retry
-отмечен flaky в iPhone PWA preview-origin: `route.fetch` получил `socket hang up`,
-повтор прошёл, причина не установлена. Browser-приёмка
-специализированных coach/plateau гонок также остаётся открытой.
+Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+в `fix/durable-outbox`. Он ставит независимые IndexedDB-чтения outbox в очередь
+до первого `await`, чтобы Firefox не закрывал транзакцию между запросами.
+[Полный CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
+завершился success: 1115 unit-тестов, 466 E2E passed / 9 skipped, typechecks,
+guards, build и rollback-проверка на 23 запросах прошли; dependency audit нашёл
+0 уязвимостей.
 
-Документационный SHA [`75159f5`](https://github.com/Michael-edel/FitFocus/commit/75159f5b4ead4a627ff6598fb875552b1baf1f8d)
-([run 38388730336](https://github.com/Michael-edel/FitFocus/actions/runs/38388730336))
-завершился success, но отметил один flaky в Firefox-сценарии независимой правки
-профиля. Локально ошибка воспроизвелась 2 раза из 20: read-only IndexedDB
-`snapshot()` последовательно ожидал три независимых чтения, и Firefox иногда
-закрывал транзакцию. В рабочем дереве запросы поставлены в очередь вместе;
-после правки сценарий прошёл 20/20 повторов, весь Firefox spec — 8/8, unit —
-1115/1115, все три typecheck и build. Новый CI для исправленного SHA ещё ожидается.
-CI этого коммита [`4c3ab5a`](https://github.com/Michael-edel/FitFocus/commit/4c3ab5a2c9b1975f1f05c311f7cea7465e435259)
-([run 38393913597](https://github.com/Michael-edel/FitFocus/actions/runs/38393913597))
-завершился success, но нашёл ещё один flaky в Firefox при logout: та же ошибка
-возникла в `writeOutboxInTransaction`. В рабочем дереве все независимые чтения
-записи ставятся в очередь до ожидания, а E2E выводит вложенную `cause` ошибки.
-После этого оба затронутых сценария прошли 30/30 повторов, Firefox spec — 8/8;
-unit, typecheck и build снова прошли. CI этого follow-up ещё ожидается.
+В E2E-итоге CI отмечен один flaky в desktop WebKit PWA update: уведомление об
+обновлении не появилось в первой попытке, retry прошёл. Локально этот сценарий
+прошёл 3/3 без retries, поэтому причина пока не воспроизведена. Сам outbox fix
+проверен двумя затронутыми Firefox-сценариями 30/30 и полным Firefox spec 8/8.
+P0.5 и полный lifecycle P0.8 остаются открытыми. Подробный статус и следующие
+критерии: [статус проекта](docs/project-status.md) и [план](TASKS.md).
 
 PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
 и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).

@@ -2448,4 +2448,27 @@ Follow-up ставит active-session, auth-fence, owner, value, metadata и о�
 снимку. E2E-сериализация теперь сохраняет вложенный `cause`. После изменения
 logout и независимая правка профиля прошли 30/30 Firefox повторов, полный
 weekly-menu spec — 8/8; unit 1115/1115, общий/domain-strict/storage-strict
-typecheck и production build прошли. CI follow-up SHA ещё ожидается.
+typecheck и production build прошли. На момент этой записи CI follow-up SHA
+ещё ожидался; итог приведён в следующем разделе.
+
+## Полный CI для outbox transaction follow-up — 13.10.2026
+
+Кодовый commit [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+прошёл [полный CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703),
+job `115300046192`: workflow success. Dependency audit сообщил 0 уязвимостей;
+schema parity, privacy/auth/API guards, 1115 unit-тестов в 198 файлах, общий,
+domain-strict и storage-strict typecheck и production build прошли. E2E summary:
+466 passed / 9 skipped; rollback HTTP/D1 проверил 23 запроса и сохранил артефакт.
+Cloudflare preview и GitGuardian также завершились success.
+
+В первой попытке полного E2E один тест был flaky в desktop WebKit:
+`real service worker waits for an explicit update and preserves durable family
+intent` не нашёл кнопку «Обновить приложение»; retry прошёл. Целевой локальный
+прогон этого теста в WebKit с `workers=1`, `retries=0`, `repeat-each=3` прошёл
+3/3. Причина CI-сбоя не установлена и локально не воспроизведена. Firefox
+IndexedDB race, ради которой сделан follow-up, не повторилась: два затронутых
+сценария прошли 30/30, полный weekly-menu spec — 8/8.
+
+PR #93 остаётся draft в `fix/durable-outbox`; изменения не слиты в `main`.
+Staging и release-приёмка не выполнялись. Следующий шаг по workflow — после
+публикации документационного коммита сверить CI именно для его SHA.

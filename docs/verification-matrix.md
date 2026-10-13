@@ -4,19 +4,17 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-## P0.5 — Firefox IndexedDB snapshot
+## P0.8 — IndexedDB outbox transaction stability
 
-Документационный SHA `75159f5` прошёл CI (`38388730336`), но в полном browser
-наборе один раз упал Firefox-сценарий параллельной правки профиля с
-`STATE_STORAGE_TRANSACTION`. Локально сбой воспроизвёлся 2/20 раз. Исправление
-в рабочем дереве ставит независимые owner/value/metadata-чтения в очередь до
-первого ожидания. После него целевой Firefox-сценарий прошёл 20/20, весь spec
-8/8; 1115 unit, три typecheck и build также прошли. Workflow нового SHA ещё
-ожидается. CI фикса `4c3ab5a` также завершился success, но с одним flaky в
-Firefox logout-сценарии: stack указал на последовательные чтения в записи
-outbox. После постановки всех независимых read requests в очередь оба проблемных
-сценария прошли 30/30, полный spec — 8/8, unit 1115/1115, все typecheck и build;
-workflow следующего SHA ещё ожидается. Подробности: [статус](project-status.md)
+Текущий кодовый SHA [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+прошёл полный [CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703):
+1115 unit, 466 E2E passed / 9 skipped, guards, три typecheck, build и rollback
+на 23 HTTP/D1 запросах. Один E2E retry был flaky в desktop WebKit PWA update
+(уведомление отсутствовало в первой попытке); локальный повтор прошёл 3/3 без
+retries, точная причина не установлена. Исправленная IndexedDB write race прошла
+30/30 повторов двух затронутых Firefox-сценариев; весь weekly-menu spec — 8/8.
+P0.8 всё ещё открыт до подтверждения полного lifecycle, legacy migration и
+приёмки выпуска. Подробности: [статус](project-status.md), [журнал](stabilization-progress.md)
 и [контракт weekly report](weekly-ai-report-session.md).
 
 ## Локальная проверка preview origin
@@ -31,7 +29,7 @@ passed / 9 skips и 23 HTTP/D1 запроса. Реальный staging, D1/APP_
 
 ## Проверенная граница
 
-Последний подтверждённый [CI `47da77c`](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353):
+Исторический baseline [CI `47da77c`](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353):
 1053 unit / 194 файла, 383 browser passed / 9 skips, workflow success, 20,6 мин.
 В итоговых логах нет flaky, preview proxy errors и ECONNREFUSED; HTTP/D1 прошёл
 23 запроса. CI содержит WebKit held-PUT rollback test.

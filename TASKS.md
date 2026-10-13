@@ -1,36 +1,23 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Текущий компонент — P0.5 client AI callbacks,
-закоммичен в `fix/durable-outbox` как [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e); [контракт](docs/ai-callback-sessions.md).
-Локально прошли 1115 unit-тестов / 198 файлов, общий и два strict typecheck,
-browser — 32 passed / 3 skipped на семи профилях. Push-run отменён concurrency
-после старта PR-события. Точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
-завершился с E2E-ошибкой: 463 passed / 9 skipped, один failed и три flaky;
-audit, guards, unit, typecheck и build прошли. E2E fixture получил явный ответ
-для фонового `wis_text`; после локальной поправки weekly-menu spec прошёл 8/8
-на Firefox, затронутый сценарий — 5/5 повторов. Фикс опубликован в
-[`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
-точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
-завершился success: 1115 unit, 466 browser passed / 9 skipped. Один flaky —
-iPhone PWA preview-origin (`route.fetch: socket hang up`), retry прошёл;
-причина не установлена.
-Полная приёмка P0.8 runtime-интеграции также остаётся открытой;
-[контракт миграции](docs/legacy-migration.md).
+Обновлено: 13.10.2026. Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+в `fix/durable-outbox`. Полный [CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
+завершился success: 1115 unit, 466 browser passed / 9 skipped, guards,
+typechecks, build и rollback-проверка на 23 запросах прошли; audit сообщил
+0 уязвимостей. IndexedDB read/write запросы outbox ставятся в очередь до
+первого `await`; две Firefox race-проверки прошли 30/30 без retries, весь
+weekly-menu spec — 8/8.
 
-Дополнительная проверка CI SHA `75159f5` (`38388730336`) выявила flaky в Firefox
-при независимой правке профиля: `snapshot()` IndexedDB последовательно ожидал
-независимые чтения. Локально дефект воспроизвёлся 2/20 раз. В текущем рабочем
-дереве чтения поставлены в очередь до ожидания; после исправления целевой тест
-прошёл 20/20, Firefox spec 8/8, полный unit 1115/1115, общий и оба strict
-typecheck, production build. CI исправленного SHA ещё не получен; P0.5 и P0.8
-остаются открытыми.
-CI `4c3ab5a` завершился success, однако один Firefox flaky показал такой же
-последовательный read в `writeOutboxInTransaction`. Новый follow-up ставит все
-независимые запросы в очередь до первого ожидания и добавляет `cause` в E2E
-диагностику. После него оба проблемных сценария прошли 30/30 повторов, Firefox
-spec 8/8, unit 1115/1115, все typecheck и build; CI follow-up ожидается.
+Один CI E2E был flaky в desktop WebKit PWA update: кнопка обновления не появилась
+в первой попытке, retry прошёл. Локальный целевой повтор прошёл 3/3 с
+`retries=0`; причина пока не установлена. P0.8 остаётся открытым до полной
+lifecycle-приёмки; P0.5 — до browser-приёмки позднего coach/plateau ответа и
+смены аккаунта. Следующие критерии — в разделах P0 ниже.
+
+## Предыдущие результаты
+
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
-Последний подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
+Ранее подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
 1082 unit / 197 файлов; browser — 390 passed / 9 skips, success, 21,1 мин.
 Dependency audit сообщил 0 уязвимостей; rollback-check выполнил 23 HTTP/D1-запроса.
 P0.8 остаётся открытым до полного lifecycle и общей приёмки. Полный

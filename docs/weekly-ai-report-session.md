@@ -1,11 +1,11 @@
 # Защита недельного AI-отчёта сессией
 
-Обновлено: 13.10.2026. Реализация недельного отчёта входит в commit `0b7062d`.
-После ошибки его E2E CI fixture исправлен в `ec29f41`; полный CI этого SHA
-завершился success в run `38385161995` (466 browser passed / 9 skipped, один
-flaky на iPhone PWA preview-origin). Последующая проверка docs SHA `75159f5`
-выявила отдельную Firefox race в IndexedDB; её диагностика и текущий локальный
-результат приведены ниже.
+Обновлено: 13.10.2026. Реализация недельного отчёта входит в commit `0b7062d`;
+его E2E fixture исправлен в `ec29f41`. Последний общий кодовый SHA [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+прошёл [полный CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703):
+1115 unit, 466 browser passed / 9 skipped; две затронутые Firefox race-проверки
+прошли 30/30 без retries. В CI остался один flaky desktop WebKit PWA update;
+локальный повтор прошёл 3/3, причина не установлена.
 Общий P0.5 остаётся открытым: этот документ описывает только генерацию
 недельного AI-отчёта и её повтор.
 
@@ -17,11 +17,12 @@ value и metadata из одного IndexedDB read-only transaction. В теку
 целевой Firefox-сценарий прошёл 20/20 повторов, весь weekly-menu spec — 8/8,
 unit — 1115/1115, все typecheck и production build. CI `4c3ab5a` затем нашёл
 ещё один flaky в Firefox logout-сценарии: последовательное чтение в
-`writeOutboxInTransaction`. Follow-up в текущем дереве ставит независимые
+`writeOutboxInTransaction`. Коммит `2539c8c` ставит независимые
 owner/value/metadata/operation reads в очередь до ожидания; E2E сохраняет
 вложенную ошибку `cause`. После этого оба сценария прошли 30/30 повторов,
-weekly-menu spec — 8/8, unit — 1115/1115, typecheck и build прошли. CI нового
-изменения ещё ожидается.
+weekly-menu spec — 8/8, unit — 1115/1115, typecheck и build прошли. Полный CI
+`2539c8c` завершился success в run `38398403703`; один посторонний к этому
+контракту flaky зафиксирован в desktop WebKit PWA update и описан в [статусе](project-status.md).
 
 ## Контракт
 

@@ -5,54 +5,59 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Текущий компонент — P0.5 client AI callbacks
+## Текущая проверка — P0.8 IndexedDB outbox
 
-Текущий компонент опубликован в коммите [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
-ветки `fix/durable-outbox`. Coach, личный план и объяснение плато используют свежий session
-proof, scoped `/api/ai` transport и attempt/lifecycle guards. Coach card, usage
-и generated plan используют guarded commits; stale retry и поздний результат
-не должны менять данные. Hydration AI-task тоже не делает unscoped POST.
+Последний проверенный кодовый коммит — [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+ветки `fix/durable-outbox`. Исправлены последовательные чтения из одной
+IndexedDB-транзакции: независимые запросы ставятся в очередь до первого
+`await`, а parent/head операции выбираются из одного индексного снимка.
+E2E-диагностика сохраняет вложенную причину `Error.cause`.
 
-Проверки локального дерева: полный unit — 1115 тестов / 198 файлов; общий,
-domain-strict и storage-strict typecheck прошли. Три browser spec — onboarding,
-registration durability и weekly AI report — завершились с 32 passed и 3 skipped;
-пропуски заданы проектной конфигурацией, запуск выполнен на 7 browser/PWA-профилях,
-`workers=1/retries=0`. Повтор после исправления mock-заголовков и классификации
-ожидаемого session-cancel прошёл чисто.
+Полный [CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
+завершился success: 1115 unit-тестов / 198 файлов, 466 E2E passed / 9 skipped,
+audit без уязвимостей, schema/privacy/auth/API guards, три typecheck, build и
+HTTP/D1 rollback-проверка на 23 запросах прошли. Два затронутых Firefox-сценария
+прошли 30/30 повторов без retries, весь `weekly-menu-durability.spec.ts` — 8/8.
 
-Push CI был отменён concurrency после запуска PR-события; точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
-завершился с E2E-ошибкой: 463 passed / 9 skipped, один failed и три flaky.
-Остальные CI-проверки прошли. Единственный failed — weekly-menu Firefox,
-где fixture не отвечал на фоновый `wis_text` отчёта. После добавления ответа
-локально прошли весь weekly-menu spec Firefox 8/8 и пять повторов основного
-сценария. Фикс mock опубликован в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
-точный [PR CI](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
-завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
-Один flaky — iPhone PWA preview-origin (`route.fetch: socket hang up`), retry
-прошёл; причина не установлена. Прямые browser tests
-для позднего coach/plateau ответа и смены аккаунта пока отсутствуют, поэтому
-весь P0.5 остаётся открытым; см. [контракт](ai-callback-sessions.md) и
-[план](../TASKS.md). PR #93 не слит в `main`.
+В полном CI один WebKit PWA update тест был flaky: кнопка обновления отсутствовала
+в первой попытке, retry прошёл. Локальный повтор этого сценария прошёл 3/3 при
+`retries=0`; причина не установлена и пока не воспроизведена. Если сбой повторится,
+следующий шаг — сохранить подробный SW/registration snapshot в момент отсутствия
+уведомления. P0.8 остаётся открытым до полной lifecycle-приёмки; P0.5 — до
+browser-тестов позднего coach/plateau ответа и смены аккаунта. PR #93 остаётся
+draft и не слит в `main`.
+
+## Предыдущий компонент — P0.5 client AI callbacks
+
+Coach, личный план и объяснение плато используют свежий session proof, scoped
+`/api/ai` transport и attempt/lifecycle guards. Coach card, usage и generated plan
+используют guarded commits; stale retry и поздний результат не должны менять
+данные. Hydration AI-task тоже не делает unscoped POST. Локальные unit/typecheck
+и browser проверки прошли; точные ранние результаты и ошибки CI сохранены в
+[журнале стабилизации](stabilization-progress.md). Полная приёмка P0.5 открыта;
+см. [контракт](ai-callback-sessions.md) и [план](../TASKS.md).
 
 Последующий документационный SHA `75159f5` тоже прошёл CI
 ([run 38388730336](https://github.com/Michael-edel/FitFocus/actions/runs/38388730336)),
 но с одним flaky в Firefox: фоновое чтение недельного отчёта завершилось
 `STATE_STORAGE_TRANSACTION` во время независимой правки профиля. Повтор локально
 воспроизвёл сбой 2/20 раз; причина — три независимых чтения в `snapshot()`,
-ожидавшиеся по очереди. В текущем рабочем дереве чтения поставлены одновременно.
+ожидавшиеся по очереди. Последующий фикс ставит независимые чтения одновременно.
 После исправления целевой Firefox-сценарий прошёл 20/20, полный spec — 8/8,
-unit — 1115/1115, общий и оба strict typecheck, build. Изменение ещё не прошло
-CI; workflow нового SHA остаётся ближайшей проверкой.
+unit — 1115/1115, общий и оба strict typecheck, build. Следующий CI на `4c3ab5a`
+выявил ещё одну последовательную операцию чтения в write-транзакции; её отдельное
+исправление и итоговая CI-проверка приведены ниже.
 
 CI для исправления [`4c3ab5a`](https://github.com/Michael-edel/FitFocus/commit/4c3ab5a2c9b1975f1f05c311f7cea7465e435259)
 завершился success ([run 38393913597](https://github.com/Michael-edel/FitFocus/actions/runs/38393913597)),
 но один Firefox flaky возник при logout во время записи weekly report. Stack
 указывал на последовательные чтения в `writeOutboxInTransaction`. Follow-up
-в рабочем дереве ставит owner/value/metadata/operations чтения в очередь сразу,
-parent/head выбираются из одного результата index query; E2E сохраняет вложенную
-причину ошибки. После правки два затронутых сценария прошли 30/30 повторов,
-полный Firefox spec — 8/8, unit — 1115/1115, все typecheck и build. Новый CI ещё
-не запускался.
+последующий фикс в [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
+ставит owner/value/metadata/operations чтения в очередь сразу, parent/head
+выбираются из одного результата index query; E2E сохраняет вложенную причину
+ошибки. После правки два затронутых сценария прошли 30/30 повторов, полный
+Firefox spec — 8/8, unit — 1115/1115, все typecheck и build. [Полный CI](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703)
+для `2539c8c` завершился success; его WebKit flaky описан выше.
 
 ## Предыдущий компонент — недельный AI-отчёт
 
