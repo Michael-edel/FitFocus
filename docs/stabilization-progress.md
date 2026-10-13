@@ -2698,7 +2698,7 @@ old/new family bundle smoke и общая lifecycle-приёмка остают�
 Документационный HEAD [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
 содержит локальные результаты синхронизации двух E2E-сценариев из `7753d87`.
 Полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
-запущен для точного SHA и на момент последней проверки ещё выполнялся.
-Cloudflare preview завершился успешно; это не подтверждает завершение CI или
-production-релиз. До результата workflow эффект тестовых барьеров под CI
-остаётся неподтверждённым.
+был запущен для этого SHA, затем отменён после следующего документационного
+push. Cloudflare preview завершился успешно; это не подтверждает CI или
+production-релиз. Эффект тестовых барьеров под CI остаётся неподтверждённым;
+актуальные проверки находятся на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).

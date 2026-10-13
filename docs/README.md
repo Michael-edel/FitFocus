@@ -4,9 +4,9 @@
 
 Начните с [текущего состояния проекта](project-status.md): проверенный SHA,
 готовые компоненты, оставшаяся работа и ближайшие шаги.
-Для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
-запущен [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712);
-локальный follow-up уже описан в статусе и журнале, полный workflow ещё выполняется.
+Локальный follow-up уже описан в статусе и журнале. Актуальный статус workflow
+смотрите в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks),
+поскольку новые push могут отменять предыдущий CI run.
 Ниже — полная карта документов и область архитектурного снимка.
 
 ## Как пользоваться MD-файлами

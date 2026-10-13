@@ -16,8 +16,10 @@ browser/PWA-проектов с `retries=0`.
 После CI локально проверен E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54):
 оба flaky-сценария повторены 10/10 каждый; полные затронутые specs прошли 10/10
 на Android PWA Chrome и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Полный
-CI этого follow-up выполняется для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98):
-[run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712).
+CI этого follow-up для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
+([run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712))
+отменён после последующего документационного push. Follow-up не подтверждён
+полным CI; актуальный run нужно смотреть в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
 ## P0.8 — IndexedDB outbox transaction stability
