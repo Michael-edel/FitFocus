@@ -430,3 +430,66 @@ test('held plateau explanation cannot appear after another tab signs in as accou
     fixtureA.release();
   }
 });
+
+test('a held achievement unlock from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  const held = deferred();
+  const counts = { heldChecks: 0, releasedChecks: 0 };
+
+  await page.route('**/api/achievements', async route => route.fulfill({
+    contentType: 'application/json',
+    headers: scopedHeaders(accountA),
+    body: JSON.stringify({ enabled: true, catalog: [], unlocked: [] }),
+  }));
+  await page.route('**/api/achievements/check', async route => {
+    const request = route.request();
+    const body = request.postDataJSON() as { context?: { source?: string } };
+    if (request.headers()['x-fitfocus-state-account'] === accountA.id && body.context?.source === 'app_open') {
+      expect(request.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+      counts.heldChecks += 1;
+      await held.promise;
+      await route.fulfill({
+        contentType: 'application/json',
+        headers: scopedHeaders(accountA),
+        body: JSON.stringify({ enabled: true, newlyUnlocked: [{
+          key: 'obsolete-account-a', title: 'Позднее достижение A', description: 'Устаревший ответ',
+          tier: 'bronze', category: 'profile', unlocked_at: 123,
+        }] }),
+      });
+      counts.releasedChecks += 1;
+      return;
+    }
+    await route.fallback();
+  });
+
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => counts.heldChecks).toBe(1);
+  expect((await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  try {
+    const switched = await openAccountB(context, state);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    held.release();
+    await expect.poll(() => counts.releasedChecks).toBe(1);
+    const final = await readDurableSnapshot(page);
+    expect(final.activeSession?.accountId).toBe(accountB.id);
+    await expect(page.getByText('Позднее достижение A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Позднее достижение A', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Новое достижение', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Новое достижение', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('achievement-late-response-account-switch.png') });
+  } finally {
+    held.release();
+  }
+});
