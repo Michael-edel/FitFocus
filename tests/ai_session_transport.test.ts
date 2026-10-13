@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { StateDatabase } from '../storage/stateDatabase';
 import { prepareAiSession, postScopedAiJson } from '../services/aiSession';
-import { generateWeeklyMenu } from '../geminiService';
+import { generatePersonalPlan, generatePlateauExplanation, generateWeeklyMenu, getCoachAdvice } from '../geminiService';
 import { Goal, type UserProfile } from '../types';
 
 const account = 'ai-owner', sid = 'a'.repeat(64);
@@ -31,6 +31,54 @@ it('requires an atomic projection capability for a personal menu action', async 
   fetchImpl.mockResolvedValue(json(me({ profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } })));
   await expect(prepareAiSession(account, new AbortController(), () => true,
     { outbox, fetchImpl, requireMenuProjection: true })).resolves.toMatchObject({ guard: { accountId: account } });
+});
+
+it('allows registration to bootstrap one session only when explicitly requested', async () => {
+  const initialDb = new StateDatabase({ factory: new IDBFactory(), name: 'fitfocus-ai-initial-session' });
+  const initialOutbox = new DurableOutbox(initialDb);
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me()));
+  try {
+    await expect(prepareAiSession(account, new AbortController(), () => true, { outbox: initialOutbox, fetchImpl }))
+      .rejects.toThrow('LOGIN_SESSION_CHANGED');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const session = await prepareAiSession(account, new AbortController(), () => true,
+      { outbox: initialOutbox, fetchImpl, allowInitialSession: true });
+    expect(session.guard).toMatchObject({ accountId: account, serverSessionId: sid });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  } finally {
+    initialDb.close();
+  }
+});
+
+it('does not allow an initial session to adopt a different account', async () => {
+  const initialDb = new StateDatabase({ factory: new IDBFactory(), name: 'fitfocus-ai-initial-other-account' });
+  const initialOutbox = new DurableOutbox(initialDb);
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ ...me(), user: { sub: 'different-account' },
+    stateSync: { protocol: 2, guard: 1, accountId: 'different-account', sessionId: 'b'.repeat(64) } }));
+  try {
+    await expect(prepareAiSession(account, new AbortController(), () => true,
+      { outbox: initialOutbox, fetchImpl, allowInitialSession: true })).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(await initialOutbox.sessionState()).toMatchObject({ active: undefined, fence: 0 });
+  } finally {
+    initialDb.close();
+  }
+});
+
+it('does not adopt a login that races with initial registration proof', async () => {
+  const initialDb = new StateDatabase({ factory: new IDBFactory(), name: 'fitfocus-ai-initial-session-race' });
+  const initialOutbox = new DurableOutbox(initialDb);
+  const fetchImpl = vi.fn<typeof fetch>(async () => {
+    await initialOutbox.acceptReadSession('racing-login', 'b'.repeat(64), (await initialOutbox.sessionState()).fence);
+    return json(me());
+  });
+  try {
+    await expect(prepareAiSession(account, new AbortController(), () => true,
+      { outbox: initialOutbox, fetchImpl, allowInitialSession: true })).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    expect(await initialOutbox.sessionState()).toMatchObject({ active: { accountId: 'racing-login' }, fence: 1 });
+  } finally {
+    initialDb.close();
+  }
 });
 
 it.each(['aiSync', 'weeklyMenuSync'])('fails closed without %s capability', async name => {
@@ -69,6 +117,50 @@ it('sends the captured proof and returns a scoped response', async () => {
   expect(new Headers(init.headers).get('X-FitFocus-State-Account')).toBe(account);
   expect(new Headers(init.headers).get('X-FitFocus-State-Session')).toBe(sid);
   expect(init.credentials).toBe('include'); expect(init.redirect).toBe('error'); expect(init.cache).toBe('no-store');
+});
+
+it('generates coach advice only through the captured account/session scope', async () => {
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me())
+    : json({ text: JSON.stringify({ title: 'Сегодня', advice: 'Добавьте белок.', bullets: ['Творог'] }) }, headers()));
+  const advice = await getCoachAdvice({ user: { id: account }, today: {} }, await prepare(fetchImpl));
+
+  expect(advice).toEqual({ title: 'Сегодня', advice: 'Добавьте белок.', bullets: ['Творог'] });
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  const [url, init] = fetchImpl.mock.calls[1];
+  expect(url).toBe('/api/ai');
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Account')).toBe(account);
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sid);
+  expect(JSON.parse(String(init?.body)).feature).toBe('coach_advice');
+});
+it('generates the personal plan only through the captured account/session scope', async () => {
+  const plan = { title: 'План', strategySummary: 'Регулярное питание.', weeklyFocus: 'Стабильный ритм.',
+    dailyKpi: { calories: 1800, protein: 120, fat: 60, carbs: 190 }, rules: ['Белок в каждом приёме.'],
+    firstTasks: ['Запланировать питание.'], mealTemplate: { breakfast: 'Каша.', lunch: 'Курица.', dinner: 'Рыба.', snack: 'Йогурт.' } };
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me())
+    : json({ text: JSON.stringify(plan) }, headers()));
+  const user = { id: account, name: 'Test', gender: 'MALE', age: 30, weight: 70, height: 175, activityLevel: 1.55,
+    goal: Goal.LOSS } as UserProfile;
+
+  expect((await generatePersonalPlan(user, await prepare(fetchImpl))).title).toBe('План');
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  const [url, init] = fetchImpl.mock.calls[1];
+  expect(url).toBe('/api/ai');
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Account')).toBe(account);
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sid);
+  expect(JSON.parse(String(init?.body)).feature).toBe('personal_plan');
+});
+it('generates the plateau explanation only through the captured account/session scope', async () => {
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me())
+    : json({ text: 'Проверьте точность порций и сон.' }, headers()));
+
+  expect(await generatePlateauExplanation({ weightDelta: 0, compliance: 0.82, newCalories: 1800 }, await prepare(fetchImpl)))
+    .toBe('Проверьте точность порций и сон.');
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  const [url, init] = fetchImpl.mock.calls[1];
+  expect(url).toBe('/api/ai');
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Account')).toBe(account);
+  expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sid);
+  expect(JSON.parse(String(init?.body)).feature).toBe('plateau');
 });
 it.each(['protocol', 'guard', 'account', 'session'])('rejects a response with the wrong %s', async change => {
   const scope = headers(); const name = { protocol: 'X-FitFocus-AI-Protocol', guard: 'X-FitFocus-AI-Guard',

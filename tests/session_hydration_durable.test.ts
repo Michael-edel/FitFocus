@@ -9,7 +9,7 @@ import { userProfile } from './_helpers/userProfile';
 import { sessionMe, sessionHeaders, testSessionId } from './_helpers/sessionRead';
 import { restoreProfile } from '../storage/profileState';
 
-vi.mock('../coach', () => ({ createTask: async (user: unknown) => user }));
+vi.mock('../coach', () => ({ createTask: async (user: unknown) => user, requiresAiPlateauTask: () => false }));
 const user = userProfile('hydration-account');
 const key = `fitfocus_data_${user.id}_diary`;
 const meal = (id: string) => [{ id, name: 'Суп', calories: 100, protein: 2, fat: 3, carbs: 4, timestamp: '2026-10-09T08:00:00Z' }];

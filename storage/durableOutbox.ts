@@ -233,13 +233,15 @@ export class DurableOutbox {
     return (await this.acceptSessionState(accountId, serverSessionId, expectedFence))?.session ?? null;
   }
 
-  async acceptReadSession(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard): Promise<OutboxReadGuard | null> {
-    const accepted = await this.acceptSessionState(accountId, serverSessionId, expectedFence, previous);
+  async acceptReadSession(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard,
+    requireNoActiveSession = false): Promise<OutboxReadGuard | null> {
+    const accepted = await this.acceptSessionState(accountId, serverSessionId, expectedFence, previous, requireNoActiveSession);
     return accepted ? { accountId, serverSessionId, sessionEpoch: accepted.session.sessionEpoch, authFence: accepted.authFence } : null;
   }
 
   /** Accept proof and capture its fence in the same transaction; later reads cannot adopt a newer fence. */
-  private async acceptSessionState(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard): Promise<{ session: ActiveOutboxSession; authFence: number } | null> {
+  private async acceptSessionState(accountId: string, serverSessionId: string, expectedFence: number, previous?: OutboxReadGuard,
+    requireNoActiveSession = false): Promise<{ session: ActiveOutboxSession; authFence: number } | null> {
     requireText(accountId); requireText(serverSessionId);
     if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
     const db = await this.connection.open();
@@ -249,6 +251,7 @@ export class DurableOutbox {
       const currentRequest = indexedRequest(store.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
       const [fence, current] = await Promise.all([fenceRequest, currentRequest]);
       if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
+      if (requireNoActiveSession && current) return null;
       // Refreshing an existing read action cannot clear a pause or replace its attempt while /me was in flight.
       if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
         || previous.authFence !== expectedFence || current?.accountId !== previous.accountId

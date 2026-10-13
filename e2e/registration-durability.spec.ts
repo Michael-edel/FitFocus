@@ -4,6 +4,7 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 const account = 'google-e2e-sub'; const sid = 'a'.repeat(64); const key = `fitfocus_data_${account}_profile`;
 const scope = { 'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
   'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
+  'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
   'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
   'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid };
 async function saved(page: Page) {

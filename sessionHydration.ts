@@ -1,4 +1,4 @@
-import { createTask } from './coach';
+import { createTask, requiresAiPlateauTask } from './coach';
 import { type FoodItem, type FavoriteRecipe, type UserHabit, type UserProfile } from './types';
 import type { WeeklyStoredReport } from './weeklyAutoEngine';
 import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
@@ -9,6 +9,8 @@ import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
 import { restoreProfile } from './storage/profileState';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { verifyReadSession, readScopedJson, assertReadSession, SessionReadError } from './storage/sessionRead';
+import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
+import { isRecoverableAiGenerationError } from './geminiService';
 
 export type HydratedSession = {
   repository?: UserStateRepository;
@@ -196,7 +198,33 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
   const foodHistory = await readKV<FoodItem[]>('history', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem));
   const foodFavorites = await readKV<FavoriteRecipe[]>('favorites', [], (value): value is FavoriteRecipe[] => Array.isArray(value) && value.every(isFavoriteRecipe));
   const coachCard = await readKV('last_coach_card', null, isCoachCard);
-  const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+  let taskAiSession: AiSession | undefined;
+  let taskController: AbortController | undefined;
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  const hide = () => taskController?.abort();
+  if (readGuard && requiresAiPlateauTask(userWithResetUsage, storedDiary, storedHabits)) {
+    const controller = taskController = new AbortController();
+    target?.addEventListener('pagehide', hide, { once: true });
+    try {
+      taskAiSession = await prepareAiSession(user.id, controller,
+        () => deps.isCurrentSession?.() !== false && !controller.signal.aborted,
+        { previous: readGuard, fetchImpl: fetchFn });
+    } catch (error) {
+      if (error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth' || error.kind === 'access')) throw error;
+      // AI is optional during hydration; without capabilities or transport, use the local task text.
+    }
+  }
+  let userWithTask: UserProfile;
+  try {
+    userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits, taskAiSession);
+  } catch (error) {
+    if (!taskAiSession || !isRecoverableAiGenerationError(error)) throw error;
+    await assertAiSession(taskAiSession);
+    assertCurrent();
+    userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
+  } finally {
+    if (taskController) target?.removeEventListener('pagehide', hide);
+  }
   if (readGuard) await assertReadSession(readGuard, readOptions);
   assertCurrent();
 

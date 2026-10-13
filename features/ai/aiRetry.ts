@@ -1,9 +1,9 @@
 import {
   allowAiRetryNow,
   generatePersonalPlan,
-  generatePlateauExplanation,
   getLastAiAction,
   getWeeklyIntelligenceInterpretation,
+  isRecoverableAiGenerationError,
   setLastAiAction,
 } from '../../geminiService';
 import { buildFallbackAiPlan } from '../../aiPlanFallback';
@@ -11,8 +11,10 @@ import { getWeekKey } from '../../dateUtils';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, type WeeklyStoredReport } from '../../weeklyAutoEngine';
 import type { UserProfile } from '../../types';
 import type { WeeklyIntelligenceResult } from '../../weeklyIntelligence';
-import type { OutboxReadGuard } from '../../storage/durableOutbox';
-import { prepareAiSession } from '../../services/aiSession';
+import type { OutboxCommitGuard, OutboxOperation, OutboxReadGuard } from '../../storage/durableOutbox';
+import { assertAiSession, prepareAiSession } from '../../services/aiSession';
+import { isSoftWeeklyAiError } from '../../services/frontendErrors';
+import type { PlateauExplanationInput } from './usePlateauExplanation';
 import type { WeeklyReportGenerationMarker, WeeklyReportGenerationRef } from './useWeeklyAiReport';
 import {
   buildWeeklyIntelligenceRequest,
@@ -30,11 +32,12 @@ export type AiRetryParams = {
   expectedN: number;
   adaptationIndex: number;
   refeedSuggestion: unknown;
-  persistUser: (user: UserProfile) => void;
-  retryCoachAdvice: () => Promise<unknown>;
-  setAdaptLoading: (loading: boolean) => void;
-  setAdaptNote: (note: string) => void;
+  persistUser: (action: UserProfile | ((previous: UserProfile) => UserProfile), guard?: OutboxCommitGuard) => Promise<OutboxOperation | null>;
+  retryCoachAdvice: (expectedAction: AiAction, opts?: { force?: boolean }) => Promise<unknown>;
+  retryPlateauExplanation: (input: PlateauExplanationInput, expectedAction: AiAction, opts?: { force?: boolean }) => Promise<unknown>;
   weeklyReportGenerationRef: WeeklyReportGenerationRef;
+  controller: AbortController;
+  profileEditRevisionRef: { current: number };
   loginGuard: OutboxReadGuard | null;
   isCurrentSession: () => boolean;
   setWeeklyReports: (reports: WeeklyStoredReport[]) => void;
@@ -42,7 +45,6 @@ export type AiRetryParams = {
   allowRetry?: (feature?: string, opts?: { force?: boolean }) => boolean;
   requestPersonalPlan?: typeof generatePersonalPlan;
   buildFallbackPlan?: typeof buildFallbackAiPlan;
-  requestPlateauExplanation?: typeof generatePlateauExplanation;
   requestWeeklyInterpretation?: typeof getWeeklyIntelligenceInterpretation;
   prepareSession?: typeof prepareAiSession;
   recordLastAction?: typeof setLastAiAction;
@@ -64,17 +66,17 @@ export async function retryLastAiAction({
   refeedSuggestion,
   persistUser,
   retryCoachAdvice,
-  setAdaptLoading,
-  setAdaptNote,
+  retryPlateauExplanation,
   weeklyReportGenerationRef,
   loginGuard,
+  controller,
+  profileEditRevisionRef,
   isCurrentSession,
   setWeeklyReports,
   getLastAction = getLastAiAction,
   allowRetry = allowAiRetryNow,
   requestPersonalPlan = generatePersonalPlan,
   buildFallbackPlan = buildFallbackAiPlan,
-  requestPlateauExplanation = generatePlateauExplanation,
   requestWeeklyInterpretation = getWeeklyIntelligenceInterpretation,
   prepareSession = prepareAiSession,
   recordLastAction = setLastAiAction,
@@ -83,6 +85,7 @@ export async function retryLastAiAction({
   loadReports = loadWeeklyReports,
   logError = console.error,
 }: AiRetryParams, opts?: { force?: boolean }): Promise<void> {
+  const current = () => !controller.signal.aborted && isCurrentSession();
   let last: AiAction | null;
   try {
     last = getLastAction();
@@ -90,86 +93,112 @@ export async function retryLastAiAction({
     return;
   }
 
-  if (!last || !currentUser || last.userId !== currentUser.id) return;
+  if (!last || !currentUser || last.userId !== currentUser.id || !current()) return;
+  const stillLast = () => current() && sameAiAction(getLastAction(), last);
 
   if (last.type === 'coach') {
-    if (!allowRetry(last.feature, opts)) return;
-    await retryCoachAdvice();
+    if (!loginGuard || loginGuard.accountId !== currentUser.id || !allowRetry(last.feature, opts) || !stillLast()) return;
+    await retryCoachAdvice(last, opts);
     return;
   }
 
   if (last.type === 'plan') {
-    if (!allowRetry(last.feature, opts)) return;
+    if (!loginGuard || loginGuard.accountId !== currentUser.id || !allowRetry(last.feature, opts)) return;
+    const sourceProfileRevision = profileEditRevisionRef.current;
     try {
-      const aiPlan = await requestPersonalPlan(currentUser);
-      persistUser({ ...currentUser, aiPlan });
+      const session = await prepareSession(currentUser.id, controller, current, { previous: loginGuard });
+      if (!stillLast() || sourceProfileRevision !== profileEditRevisionRef.current || !allowRetry(last.feature, opts)) return;
+      const retryAction = { ...last, actionId: crypto.randomUUID() };
+      recordLastAction(retryAction);
+      const isCurrentAttempt = () => current() && sameAiAction(getLastAction(), retryAction)
+        && sourceProfileRevision === profileEditRevisionRef.current;
+      if (!isCurrentAttempt()) return;
+      let aiPlan;
+      try {
+        aiPlan = await requestPersonalPlan(currentUser, session);
+      } catch (error) {
+        if (!isCurrentAttempt()) return;
+        try {
+          await assertAiSession(session);
+        } catch {
+          return;
+        }
+        if (!isCurrentAttempt()) return;
+        if (!isRecoverableAiGenerationError(error)) {
+          if (!isSoftWeeklyAiError(error)) logError(error);
+          return;
+        }
+        logError(error);
+        aiPlan = buildFallbackPlan(currentUser);
+      }
+      if (!isCurrentAttempt()) return;
+      const operation = await persistUser(previous => ({ ...previous, aiPlan }), {
+        readGuard: { ...session.guard }, canCommit: isCurrentAttempt,
+      });
+      if (operation?.status !== 'pending' && isCurrentAttempt()) logError(new Error('AI_RETRY_PLAN_COMMIT_FAILED'));
     } catch (error) {
-      logError(error);
-      persistUser({ ...currentUser, aiPlan: buildFallbackPlan(currentUser) });
+      if (current() && !isSoftWeeklyAiError(error)) logError(error);
     }
     return;
   }
 
   if (last.type === 'plateau') {
-    if (!allowRetry(last.feature, opts)) return;
-    setAdaptLoading(true);
-    try {
-      const note = await requestPlateauExplanation({
-        name: currentUser.name,
-        goal: currentUser.goal,
-        compliancePct,
-        weightDeltaN,
-        expectedN,
-        adaptationIndex,
-        suggestion: refeedSuggestion,
-      });
-      setAdaptNote(note);
-    } catch (error) {
-      logError(error);
-    } finally {
-      setAdaptLoading(false);
-    }
+    if (!loginGuard || loginGuard.accountId !== currentUser.id || !allowRetry(last.feature, opts) || !stillLast()) return;
+    await retryPlateauExplanation({
+      name: currentUser.name,
+      goal: currentUser.goal,
+      compliancePct,
+      weightDeltaN,
+      expectedN,
+      adaptationIndex,
+      suggestion: refeedSuggestion,
+    }, last, opts);
     return;
   }
 
   if (last.type !== 'wis' || !weekly) return;
 
   if (!loginGuard || loginGuard.accountId !== currentUser.id) return;
-  const controller = new AbortController();
-  const current = () => !controller.signal.aborted && isCurrentSession();
-  const hide = () => controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', hide, { once: true });
   let marker: WeeklyReportGenerationMarker | undefined;
+  let retryAction: AiAction | undefined;
   try {
     const session = await prepareSession(currentUser.id, controller, current, { previous: loginGuard });
     if (!current()) return;
     const latestAction = getLastAction();
-    if (!latestAction || latestAction.feature !== last.feature || latestAction.type !== last.type
-      || latestAction.userId !== last.userId || !allowRetry(last.feature, opts)) return;
+    if (!sameAiAction(latestAction, last) || !allowRetry(last.feature, opts)) return;
+    const isCurrentRetry = () => current() && sameAiAction(getLastAction(), retryAction ?? last);
     const weekKey = getWeekKeyImpl(new Date());
     const generationKey = `${currentUser.id}_${weekKey}_${weekly.wis}_${session.guard.sessionEpoch}_${session.guard.serverSessionId}_${session.guard.authFence}`;
     const generateAI = async () => {
-      if (!current()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
+      if (!isCurrentRetry()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
       marker = { generationKey, signal: controller.signal };
       weeklyReportGenerationRef.current = marker;
-      recordLastAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
-      return requestWeeklyInterpretation(
+      retryAction = { feature: 'wis_text', type: 'wis', userId: currentUser.id, actionId: crypto.randomUUID() };
+      recordLastAction(retryAction);
+      if (!isCurrentRetry()) throw new Error('WEEKLY_REPORT_ACTION_CHANGED');
+      const text = await requestWeeklyInterpretation(
         buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
         session,
       );
+      if (!isCurrentRetry()) throw new Error('WEEKLY_REPORT_ACTION_CHANGED');
+      return text;
     };
     await ensureWeeklyReport(currentUser.id, weekly, generateAI, {
-      readGuard: { ...session.guard }, canCommit: current,
+      readGuard: { ...session.guard },
+      canCommit: isCurrentRetry,
     });
-    if (!current()) return;
+    if (!isCurrentRetry()) return;
     const reports = await loadReports(currentUser.id);
     if (!current()) return;
     setWeeklyReports(reports);
   } catch (error) {
     if (marker && weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;
-    if (current()) logError(error);
-  } finally {
-    target?.removeEventListener('pagehide', hide);
+    if (current() && !isSoftWeeklyAiError(error)) logError(error);
   }
+}
+
+function sameAiAction(left: AiAction | null, right: AiAction | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.feature === right.feature && left.type === right.type && left.userId === right.userId
+    && left.actionId === right.actionId;
 }

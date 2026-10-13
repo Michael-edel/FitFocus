@@ -7,6 +7,9 @@ import { UserStateRepository } from './storage/userStateRepository';
 import { createProfileIntent } from './storage/profileState';
 import { Goal, type UserProfile } from './types';
 import { isRecord } from './safeJson';
+import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
 
 type RegDataLike = {
   name: string;
@@ -48,10 +51,12 @@ type RegisterFlowDeps = {
   inviteCode: string;
   googleMe: { email?: string; name?: string; sub?: string; picture?: string } | null;
   setPlanError: (message: string | null) => void;
-  setLastAiAction: (value: { feature: string; type: 'plan'; userId: string }) => void;
+  setLastAiAction: (value: { feature: string; type: 'plan'; userId: string; actionId?: string }) => void;
   setDevPlanOverride: (plan: UserProfile['plan'] | '', userId?: string | null) => void;
-  generatePersonalPlan: (user: UserProfile) => Promise<UserProfile['aiPlan']>;
-  loginAsUser: (user: UserProfile) => Promise<void>;
+  generatePersonalPlan: (user: UserProfile, session: AiSession) => Promise<UserProfile['aiPlan']>;
+  prepareSession?: typeof prepareAiSession;
+  controller?: AbortController;
+  loginAsUser: (user: UserProfile, readGuard?: OutboxReadGuard) => Promise<void>;
   isCurrentSession: () => boolean;
   setActiveTab: (value: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => void;
   setPlanIntroOpen: (value: boolean) => void;
@@ -200,26 +205,56 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
   }
   if (!isCurrent()) return;
   deps.setDevPlanOverride(deps.regData.plan, newUser.id);
-  deps.setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id });
+  const controller = deps.controller ?? new AbortController();
+  const aiIsCurrent = () => isCurrent() && !controller.signal.aborted;
+  const hide = () => controller.abort();
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('pagehide', hide, { once: true });
+  let aiSession: AiSession | undefined;
   let aiPlan: UserProfile['aiPlan'];
-  try { aiPlan = await deps.generatePersonalPlan(newUser); }
-  catch { if (isCurrent()) deps.setPlanError('Не удалось создать AI-план. Используем сохранённый базовый план.'); }
-  if (!isCurrent()) return;
-  if (aiPlan) {
+  try {
     try {
-      const generated = { ...newUser, aiPlan };
-      const operation = await repository.writeJson('profile', generated);
-      if (!isCurrent()) return;
-      if (operation.status === 'conflicted') deps.setPlanError('AI-план сохранён как конфликт. Используем прежний локальный профиль.');
-      else newUser = generated;
-    } catch {
-      if (!isCurrent()) return;
-      deps.setPlanError('AI-план не удалось сохранить. Базовый профиль сохранён на устройстве.');
+      aiSession = await (deps.prepareSession ?? prepareAiSession)(newUser.id, controller, aiIsCurrent, { allowInitialSession: true });
+      if (!aiIsCurrent()) return;
+      deps.setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id, actionId: crypto.randomUUID() });
+      aiPlan = await deps.generatePersonalPlan(newUser, aiSession);
+    } catch (error) {
+      if (!aiIsCurrent()) return;
+      if (aiSession) {
+        try {
+          await assertAiSession(aiSession);
+        } catch {
+          if (aiIsCurrent()) deps.setPlanError('Сессия изменилась или больше не подтверждена. Повторите вход перед генерацией плана.');
+          return;
+        }
+        if (!aiIsCurrent()) return;
+      } else if (error instanceof SessionReadError) {
+        deps.setPlanError('Не удалось подтвердить AI-сессию. Повторите вход перед генерацией плана.');
+        return;
+      }
+      deps.setPlanError('Не удалось создать AI-план. Используется ранее сохранённый базовый план.');
     }
+    if (!aiIsCurrent()) return;
+    if (aiPlan && aiSession) {
+      try {
+        const generated = { ...newUser, aiPlan };
+        const operation = await repository.writeJson('profile', generated, {
+          readGuard: { ...aiSession.guard }, canCommit: aiIsCurrent,
+        });
+        if (!aiIsCurrent()) return;
+        if (operation.status !== 'pending') deps.setPlanError('AI-план не сохранён. Базовый профиль остался на устройстве.');
+        else newUser = generated;
+      } catch {
+        if (!aiIsCurrent()) return;
+        deps.setPlanError('AI-план не удалось сохранить. Базовый профиль сохранён на устройстве.');
+      }
+    }
+  } finally {
+    target?.removeEventListener('pagehide', hide);
   }
   if (!isCurrent()) return;
   try {
-    await deps.loginAsUser(newUser);
+    await deps.loginAsUser(newUser, aiSession?.guard);
   } catch {
     if (isCurrent()) deps.setPlanError('Профиль сохранён на устройстве. Повторите вход для его восстановления.');
     return;

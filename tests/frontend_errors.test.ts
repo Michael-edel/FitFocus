@@ -14,6 +14,9 @@ describe('frontend error helpers', () => {
     expect(isSoftWeeklyAiError(new Error('already in progress'))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('LOGIN_SESSION_CHANGED'))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('SESSION_READ_AUTH'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('SESSION_READ_SESSION'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('WEEKLY_REPORT_SESSION_CHANGED'))).toBe(true);
+    expect(isSoftWeeklyAiError(new Error('WEEKLY_REPORT_ACTION_CHANGED'))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('SESSION_READ_PROTOCOL'))).toBe(false);
     expect(isSoftWeeklyAiError(new Error('database stack trace'))).toBe(false);
   });

@@ -2370,3 +2370,31 @@ typecheck, admin guards, production build и `git diff --check`. Полный
 outbox добавлена проверка rollback при отказе IDB во время принятия серверного
 снимка. GitHub CI для этого SHA ещё не подтверждён; полный P0.8 lifecycle,
 приёмка других ресурсов и действий, staging и выпуск остаются открытыми.
+
+## P0.5 — scoped coach, plan и plateau callbacks, 13.10.2026
+
+В рабочем дереве `fix/durable-outbox` поверх базового `d3f5c8a` действия coach,
+личного плана и объяснения плато подключены к свежему `AiSession` и собственному
+attempt/lifecycle guard. Повтор получает ожидаемый action и проверяет его после
+proof; weekly retry также сверяет новый actionId перед и после запроса и в
+durable commit. Для coach карточка и usage коммитятся с guard до UI/achievement;
+план сохраняется функциональной profile-операцией. При смене session/fence
+сетевой сбой не запускает локальный fallback. Регистрация получает initial proof
+только при пустой active-session и атомарно отказывает гонке с другим входом.
+Daily plateau task в hydration использует тот же scoped transport и pagehide
+abort до завершения.
+
+Локальная проверка прошла: 1115 unit-тестов / 198 файлов; общий, domain-strict и
+storage-strict typecheck; browser onboarding, registration durability и weekly
+AI report — 32 passed / 3 skipped на 7 профилях, `workers=1/retries=0`.
+Сборка приложения прошла в webServer каждого E2E запуска. Первый E2E запуск
+выявил, что registration mock не возвращал AI protocol/guard headers; фикстура
+исправлена. Повтор выявил шум от ожидаемого `WEEKLY_REPORT_SESSION_CHANGED` при
+отмене страницы; отмена добавлена в классификатор soft error, после чего полный
+targeted прогон завершился чисто.
+
+Прямые браузерные тесты задержанного coach/plateau ответа и смены аккаунта ещё
+не добавлены. Изменения не закоммичены; CI этого состояния, staging, merge в
+`main` и выпуск не проверены. Детальный контракт и границы —
+[client AI callbacks](ai-callback-sessions.md); остаются пункты P0.5 в
+[TASKS](../TASKS.md).

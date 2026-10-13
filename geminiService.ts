@@ -6,6 +6,7 @@ import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 import { fetchWithResilience } from './services/httpClient';
 import { postScopedAiJson, type AiSession } from './services/aiSession';
+import { SessionReadError } from './storage/sessionRead';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -28,6 +29,21 @@ type AiProxyConfig = JsonRecord;
 type AiProxyResponse = JsonRecord & {
   text: string;
 };
+export class AiProxyError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'AiProxyError';
+  }
+}
+
+export function isRecoverableAiGenerationError(error: unknown): boolean {
+  if (error instanceof SessionReadError) return false;
+  if (error instanceof AiProxyError) return error.status === 408 || error.status === 429 || error.status >= 500;
+  if (error instanceof TypeError) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message === 'state_request_aborted' || message.includes('network') || message.includes('fetch failed')
+    || message.includes('timed out') || message.includes('timeout');
+}
 type FoodPhotoIngredientResult = {
   name: string;
   percent: number;
@@ -66,6 +82,7 @@ export type CoachAdviceResult = {
   advice: string;
   bullets: string[];
 };
+export type AiActionRecord = { feature: string; type: string; userId: string; actionId?: string };
 type RuntimeGlobal = typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
   __ENV?: Record<string, string | undefined>;
@@ -429,7 +446,7 @@ async function callAiProxy(
       } catch {}
     }
     const msg = stringValue(error.message) || stringValue(data.message) || `AI proxy error: ${res.status}`;
-    throw new Error(msg);
+    throw new AiProxyError(msg, res.status);
   }
 
   // Нормализуем ответ: UI ожидает поле `text`,
@@ -638,7 +655,7 @@ export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) =>
 /**
  * Установить последнее действие AI для возможности повтора
  */
-export const setLastAiAction = (action: { feature: string; type: string; userId: string } | null) => {
+export const setLastAiAction = (action: AiActionRecord | null) => {
   try {
     if (!action) localStorage.removeItem(LS_LAST_ACTION_KEY());
     else localStorage.setItem(LS_LAST_ACTION_KEY(), JSON.stringify(action));
@@ -648,13 +665,18 @@ export const setLastAiAction = (action: { feature: string; type: string; userId:
 /**
  * Получить последнее действие AI
  */
-export const getLastAiAction = (): { feature: string; type: string; userId: string } | null => {
+export const getLastAiAction = (): AiActionRecord | null => {
   try {
     const raw = localStorage.getItem(LS_LAST_ACTION_KEY());
     if (!raw) return null;
     const parsed = safeJsonObject(raw);
     return typeof parsed.feature === 'string' && typeof parsed.type === 'string' && typeof parsed.userId === 'string'
-      ? { feature: parsed.feature, type: parsed.type, userId: parsed.userId }
+      ? {
+        feature: parsed.feature,
+        type: parsed.type,
+        userId: parsed.userId,
+        ...(typeof parsed.actionId === 'string' ? { actionId: parsed.actionId } : {}),
+      }
       : null;
   } catch { return null; }
 };
@@ -1103,7 +1125,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
 /**
  * Получение персонального совета от AI коуча
  */
-export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> {
+export async function getCoachAdvice(data: unknown, session: AiSession): Promise<CoachAdviceResult> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Сахар крови трактуй так: низкий = не давать агрессивный дефицит и долгие голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка/клетчатки и равномерное распределение углеводов; не меняй калорийную цель, меняй состав и ритм питания. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
@@ -1118,7 +1140,8 @@ export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> 
         },
         required: ["title", "advice", "bullets"]
       }
-    }
+    },
+    session,
   );
   return normalizeCoachAdvice(safeJsonObject(response.text));
 }
@@ -1126,7 +1149,7 @@ export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> 
 /**
  * Генерация персонального плана (используется Gemini Pro)
  */
-export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
+export async function generatePersonalPlan(user: UserProfile, session: AiSession): Promise<AIPlan> {
   const schema = {
     type: "OBJECT",
     properties: {
@@ -1265,7 +1288,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   const r1 = await callAiProxy(AI_DEFAULT_MODEL, basePrompt, 'personal_plan', {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   let plan = applyFallbackKpi(normalizePlan(safeJsonObject(r1.text)));
 
@@ -1274,7 +1297,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     const r2 = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt(plan), 'personal_plan', {
       responseMimeType: "application/json",
       responseSchema: schema
-    });
+    }, session);
     const repaired = safeJsonObject(r2.text);
     plan = applyFallbackKpi(normalizePlan(Object.keys(repaired).length ? repaired : plan));
   }
@@ -1285,10 +1308,10 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 /**
  * Объяснение причин плато и рекомендации
  */
-export async function generatePlateauExplanation(data: unknown): Promise<string> {
+export async function generatePlateauExplanation(data: unknown, session: AiSession): Promise<string> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
-    'plateau'
+    'plateau', undefined, session,
   );
   return response.text || "Не удалось получить объяснение от AI.";
 }

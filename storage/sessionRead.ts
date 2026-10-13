@@ -14,6 +14,8 @@ export type SessionReadOptions = {
   timeoutMs?: number;
   retryDelayMs?: number;
   signal?: AbortSignal;
+  expectedAuthFence?: number;
+  requireNoActiveSession?: boolean;
 };
 const current = (options: SessionReadOptions) => {
   if (options.signal?.aborted || options.isCurrentSession?.() === false) throw new SessionReadError('session');
@@ -69,6 +71,8 @@ export async function verifyReadSession(options: SessionReadOptions & {
   const outbox = options.outbox ?? new DurableOutbox();
   if (options.previous) await assertReadSession(options.previous, { ...options, outbox });
   const before = await outbox.sessionState(); current(options);
+  if (options.expectedAuthFence !== undefined && before.fence !== options.expectedAuthFence
+    || options.requireNoActiveSession && before.active) throw new SessionReadError('session');
   const { response, body } = await readJson(`/api/me?t=${Date.now()}`, {}, options);
   current(options);
   if (response.status === 408 || response.status === 429 || response.status >= 500) throw new Error('SESSION_READ_UNAVAILABLE');
@@ -83,7 +87,8 @@ export async function verifyReadSession(options: SessionReadOptions & {
     || options.previous && (proof.accountId !== options.previous.accountId || proof.sessionId !== options.previous.serverSessionId)) {
     throw new SessionReadError('session');
   }
-  const accepted = await outbox.acceptReadSession(proof.accountId, proof.sessionId, before.fence, options.previous);
+  const accepted = await outbox.acceptReadSession(proof.accountId, proof.sessionId, before.fence, options.previous,
+    options.requireNoActiveSession);
   current(options);
   if (!accepted) throw new SessionReadError('session');
   await assertReadSession(accepted, { ...options, outbox });

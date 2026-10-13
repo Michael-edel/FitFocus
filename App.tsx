@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { 
   Activity, 
@@ -47,7 +47,7 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
+import { analyzeFoodPhoto, generatePersonalPlan, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { fetchWithResilience } from './services/httpClient';
 import { type FastLogItem } from './storage/foodDiary';
@@ -104,6 +104,8 @@ import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
+import { usePlateauExplanation } from './features/ai/usePlateauExplanation';
+import { AiActionScope } from './features/ai/actionScope';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
@@ -276,6 +278,8 @@ const App: React.FC = () => {
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
   const registrationAttemptRef = useRef(0);
+  const registrationControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { registrationControllerRef.current?.abort(); }, []);
   const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
   const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
@@ -750,6 +754,8 @@ const App: React.FC = () => {
   const logout = useMemo(() => createLogoutSession({
     onClearLocalSession: () => {
       authBootstrapAttemptRef.current += 1;
+      registrationAttemptRef.current += 1;
+      registrationControllerRef.current?.abort();
       loginAttemptRef.current += 1; setUserStateRepository(null);
       setUserProfileRepository(null);
       setLoginReadGuard(null);
@@ -1164,40 +1170,80 @@ const logWeight = useCallback(() => {
     handleGetCoachAdvice,
   } = useCoachAdvice({
     currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
     targets,
     dailyStats,
     canUseCoachAdvice: () => checkLimit('aiCoachAdvicePerDay'),
     openPaywall: paywall.openPaywall,
-    incrementUsage: () => incrementUsage('aiCoachCount'),
+    incrementUsage: guard => persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiCoachCount'),
+    }), guard),
     repository: userStateRepository,
     checkAchievements: () => checkAchievements('ai_coach_success'),
   });
 
-  const handleAiRetry = useCallback((opts?: { force?: boolean }) => retryLastAiAction({
-    currentUser,
-    weekly,
-    targets,
-    compliancePct,
-    weightDeltaN,
-    expectedN,
-    adaptationIndex,
-    refeedSuggestion,
-    persistUser,
-    retryCoachAdvice: handleGetCoachAdvice,
-    setAdaptLoading,
-    setAdaptNote,
-    weeklyReportGenerationRef: aiReportGenerationRef,
+  const handlePlateauExplanation = usePlateauExplanation({
+    currentUserId: currentUser?.id ?? null,
     loginGuard: loginReadGuard,
     isCurrentSession: isCurrentProfileSession,
-    setWeeklyReports,
-  }, opts), [
+    profileEditRevisionRef,
+    setLoading: setAdaptLoading,
+    setNote: setAdaptNote,
+  });
+
+  const aiRetryScope = useMemo(() => new AiActionScope(isCurrentProfileSession), [currentUser?.id, isCurrentProfileSession]);
+  useLayoutEffect(() => {
+    aiRetryScope.activate();
+    const hide = () => { aiRetryScope.invalidate(); setAdaptLoading(false); };
+    const show = (event: PageTransitionEvent) => { if (event.persisted) aiRetryScope.activate(); };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', hide);
+      window.addEventListener('pageshow', show);
+    }
+    return () => {
+      aiRetryScope.invalidate();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', hide);
+        window.removeEventListener('pageshow', show);
+      }
+    };
+  }, [aiRetryScope, setAdaptLoading]);
+
+  const handleAiRetry = useCallback((opts?: { force?: boolean }) => {
+    const attempt = aiRetryScope.begin();
+    if (!attempt) return Promise.resolve();
+    return retryLastAiAction({
+      currentUser,
+      weekly,
+      targets,
+      compliancePct,
+      weightDeltaN,
+      expectedN,
+      adaptationIndex,
+      refeedSuggestion,
+      persistUser,
+      retryCoachAdvice: (action, retryOptions) => handleGetCoachAdvice(action, retryOptions),
+      retryPlateauExplanation: (input, action, retryOptions) => handlePlateauExplanation(input, action, retryOptions),
+      weeklyReportGenerationRef: aiReportGenerationRef,
+      controller: attempt.controller,
+      profileEditRevisionRef,
+      loginGuard: loginReadGuard,
+      isCurrentSession: attempt.isCurrent,
+      setWeeklyReports,
+    }, opts).finally(attempt.finish);
+  }, [
     adaptationIndex,
+    aiRetryScope,
     compliancePct,
     currentUser,
     expectedN,
     handleGetCoachAdvice,
-    isCurrentProfileSession,
+    handlePlateauExplanation,
     loginReadGuard,
+    profileEditRevisionRef,
     persistUser,
     refeedSuggestion,
     targets,
@@ -1207,28 +1253,37 @@ const logWeight = useCallback(() => {
 
   const handleRegister = useCallback(async () => {
     const attempt = ++registrationAttemptRef.current;
+    registrationControllerRef.current?.abort();
+    const controller = new AbortController();
+    registrationControllerRef.current = controller;
     const bootstrap = authBootstrapAttemptRef.current;
     const accountId = googleMe?.sub;
     const isCurrent = () => attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
       && accountId === authIdentityRef.current;
-    await runRegistrationFlow({
-      regData,
-      regNameValid,
-      allUsersCount: normalizedAllUsers.length,
-      requireInvite,
-      inviteCode,
-      googleMe,
-      setPlanError,
-      setLastAiAction,
-      setDevPlanOverride,
-      generatePersonalPlan,
-      loginAsUser: user => loginAsUser(user, googleMe, isCurrent),
-      isCurrentSession: isCurrent,
-      setActiveTab,
-      setPlanIntroOpen,
-      fetchImpl: fetch,
-    });
-  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
+    try {
+      await runRegistrationFlow({
+        regData,
+        regNameValid,
+        allUsersCount: normalizedAllUsers.length,
+        requireInvite,
+        inviteCode,
+        googleMe,
+        setPlanError,
+        setLastAiAction,
+        setDevPlanOverride,
+        generatePersonalPlan,
+        loginAsUser: (user, readGuard) => loginAsUser(user, googleMe, isCurrent, readGuard),
+        controller,
+        isCurrentSession: isCurrent,
+        setActiveTab,
+        setPlanIntroOpen,
+        fetchImpl: fetch,
+      });
+    } finally {
+      if (registrationControllerRef.current === controller) registrationControllerRef.current = null;
+    }
+  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe,
+    setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
 
   const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
     totalMs: ACTIVATION_TOTAL_MS,
@@ -1354,9 +1409,7 @@ const logWeight = useCallback(() => {
       scheduleRefeedTomorrow,
       expectedN,
       adaptLoading,
-      setAdaptLoading,
-      setLastAiAction,
-      generatePlateauExplanation,
+      generatePlateauExplanation: handlePlateauExplanation,
       adaptNote,
       setAdaptNote,
       adaptExpanded,

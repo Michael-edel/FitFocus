@@ -29,6 +29,9 @@ export function isSoftWeeklyAiError(error: unknown): boolean {
   return (
     message === 'login_session_changed' ||
     message === 'session_read_auth' ||
+    message === 'session_read_session' ||
+    message === 'weekly_report_session_changed' ||
+    message === 'weekly_report_action_changed' ||
     message.includes('already in progress') ||
     message.includes('cooldown') ||
     message.includes('api key') ||

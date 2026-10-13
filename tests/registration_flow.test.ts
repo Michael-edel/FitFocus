@@ -7,15 +7,24 @@ import { userProfile } from './_helpers/userProfile';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { userStateDatabase } from '../storage/stateDatabase';
+import { type AiSession, prepareAiSession } from '../services/aiSession';
 
 const account = 'registration-owner';
 function deps() {
+  const sid = 'a'.repeat(64);
   return { regData: { name: 'Test User', gender: Gender.FEMALE, weight: 72, height: 170, age: 32,
     activityLevel: ActivityLevel.MODERATELY_ACTIVE, goal: Goal.LOSS, targetWeight: 65, plan: 'free' as const },
     regNameValid: true, allUsersCount: 0, requireInvite: false, inviteCode: '',
     googleMe: { sub: account, email: 'test@example.test' }, isCurrentSession: () => true,
     setPlanError: vi.fn(), setLastAiAction: vi.fn(), setDevPlanOverride: vi.fn(),
-    generatePersonalPlan: vi.fn<(user: UserProfile) => Promise<UserProfile['aiPlan']>>(async () => undefined), loginAsUser: vi.fn(async () => {}),
+    generatePersonalPlan: vi.fn<(user: UserProfile, session: AiSession) => Promise<UserProfile['aiPlan']>>(async () => undefined), loginAsUser: vi.fn(async () => {}),
+    prepareSession: async (_id: string, controller: AbortController, isCurrent: () => boolean, options: Parameters<typeof prepareAiSession>[3] = {}) => {
+      expect(options.allowInitialSession).toBe(true);
+      const outbox = new DurableOutbox();
+      const guard = await outbox.acceptReadSession(account, sid, 0);
+      if (!guard) throw new Error('test session setup failed');
+      return { guard, controller, isCurrentSession: isCurrent, outbox } as AiSession;
+    },
     setAllUsers: vi.fn(), setCurrentUser: vi.fn(), setAuthState: vi.fn(),
     setActiveTab: vi.fn(), setPlanIntroOpen: vi.fn(),
     fetchImpl: vi.fn<typeof fetch>(async () => { throw new Error('offline'); }) };
@@ -34,14 +43,16 @@ afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllG
 describe('durable registration', () => {
   it('commits the canonical account profile before generating AI and enters the app without a direct profile request', async () => {
     const d = deps();
-    d.generatePersonalPlan.mockImplementation(async () => {
+    d.generatePersonalPlan.mockImplementation(async (_user, session) => {
+      expect(session.guard.accountId).toBe(account);
       const snapshot = await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`);
       expect(JSON.parse(snapshot.value!)).toMatchObject({ id: account, version: 0, googleSub: account });
       expect(await new DurableOutbox().list(account)).toHaveLength(1);
       return undefined;
     });
     await runRegistrationFlow(d);
-    expect(d.fetchImpl).not.toHaveBeenCalled(); expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: account, aiPlan: expect.any(Object) }));
+    expect(d.fetchImpl).not.toHaveBeenCalled(); expect(d.loginAsUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: account, aiPlan: expect.any(Object) }), expect.objectContaining({ accountId: account }));
     expect(d.setActiveTab).toHaveBeenCalledWith('plan'); expect(localStorage.length).toBe(0);
     expect(await new DurableOutbox().list(account)).toMatchObject([{ resource: 'profile', baseVersion: 0, status: 'pending' }]);
   });
@@ -62,7 +73,21 @@ describe('durable registration', () => {
   it('retains the initial fallback profile when AI fails', async () => {
     const d = deps(); d.generatePersonalPlan.mockRejectedValue(new Error('offline'));
     await runRegistrationFlow(d);
-    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: account, aiPlan: expect.any(Object) }));
+    expect(d.loginAsUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: account, aiPlan: expect.any(Object) }), expect.objectContaining({ accountId: account }));
+    expect(await new DurableOutbox().list(account)).toHaveLength(1);
+  });
+  it('does not continue registration with a fallback after the AI session is invalidated', async () => {
+    const d = deps();
+    d.generatePersonalPlan.mockImplementation(async () => {
+      await new DurableOutbox().invalidateSessions();
+      throw new TypeError('Network unavailable');
+    });
+
+    await runRegistrationFlow(d);
+
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(d.setPlanError).toHaveBeenCalledWith(expect.stringMatching(/сессия изменилась|не подтверждена/i));
     expect(await new DurableOutbox().list(account)).toHaveLength(1);
   });
   it('does not overwrite a profile already owned by another editor', async () => {
@@ -77,7 +102,8 @@ describe('durable registration', () => {
   it('uses the authenticated email name as a display fallback while keeping the authenticated account id', async () => {
     const d = deps(); d.regData.name = ''; d.regNameValid = false;
     await runRegistrationFlow(d);
-    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ id: account, name: 'test' }));
+    expect(d.loginAsUser).toHaveBeenCalledWith(
+      expect.objectContaining({ id: account, name: 'test' }), expect.objectContaining({ accountId: account }));
   });
   it('keeps the generated plan as a causal child of the initial durable profile', async () => {
     const d = deps(); const plan = { ...buildFallbackAiPlan(userProfile(account)), title: 'Generated plan' };
@@ -86,7 +112,7 @@ describe('durable registration', () => {
     expect(operations).toHaveLength(2);
     const initial = operations.find(op => !op.parentOpId)!;
     expect(operations.find(op => op.parentOpId)).toMatchObject({ parentOpId: initial.opId, status: 'pending', baseVersion: 0 });
-    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ aiPlan: plan }));
+    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ aiPlan: plan }), expect.objectContaining({ accountId: account }));
   });
   it.each(['account', 'capability'])('does not redeem an invite with an unverified %s', async invalid => {
     const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC';
@@ -108,7 +134,8 @@ describe('durable registration', () => {
     const snapshot = await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`);
     expect(JSON.parse(snapshot.value!).aiPlan.title).not.toBe('Generated plan');
     expect(await new DurableOutbox().list(account)).toHaveLength(1);
-    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ aiPlan: JSON.parse(snapshot.value!).aiPlan }));
+    expect(d.loginAsUser).toHaveBeenCalledWith(
+      expect.objectContaining({ aiPlan: JSON.parse(snapshot.value!).aiPlan }), expect.objectContaining({ accountId: account }));
   });
   it('binds invite redemption to a fresh session and requires its guarded acknowledgement', async () => {
     const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC'; const sid = 'a'.repeat(64);

@@ -76,8 +76,6 @@ type DashboardScreenProps = {
   scheduleRefeedTomorrow: () => void;
   expectedN: number;
   adaptLoading: boolean;
-  setAdaptLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  setLastAiAction: (value: { feature: string; type: 'plateau'; userId: string }) => void;
   generatePlateauExplanation: (input: {
     name: string;
     goal: Goal;
@@ -86,9 +84,8 @@ type DashboardScreenProps = {
     expectedN: number;
     adaptationIndex: number;
     suggestion: RefeedSuggestion;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
   adaptNote: string;
-  setAdaptNote: React.Dispatch<React.SetStateAction<string>>;
   adaptExpanded: boolean;
   setAdaptExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   adaptRead: boolean;
@@ -149,11 +146,8 @@ export default function DashboardScreen({
   scheduleRefeedTomorrow,
   expectedN,
   adaptLoading,
-  setAdaptLoading,
-  setLastAiAction,
   generatePlateauExplanation,
   adaptNote,
-  setAdaptNote,
   adaptExpanded,
   setAdaptExpanded,
   adaptRead,
@@ -419,11 +413,9 @@ export default function DashboardScreen({
               <button
                 type="button"
                 disabled={adaptLoading}
-                onClick={async () => {
+                onClick={() => {
                   if (!currentUser) return;
-                  setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id });
-                  setAdaptLoading(true);
-                  const txt = await generatePlateauExplanation({
+                  void generatePlateauExplanation({
                     name: currentUser.name,
                     goal: currentUser.goal,
                     compliancePct,
@@ -432,8 +424,6 @@ export default function DashboardScreen({
                     adaptationIndex,
                     suggestion: refeedSuggestion,
                   });
-                  setAdaptNote(txt);
-                  setAdaptLoading(false);
                 }}
                 className={clsx('px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95', adaptLoading ? 'opacity-60 border-slate-800 bg-slate-900' : 'border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300')}
               >

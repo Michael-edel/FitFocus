@@ -1,7 +1,10 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 13.10.2026. Текущий компонент — полная приёмка P0.8 runtime-интеграции
-в ветке `fix/durable-outbox`; [контракт миграции](docs/legacy-migration.md).
+Обновлено: 13.10.2026. Текущий локальный компонент — P0.5 client AI callbacks
+в рабочем дереве `fix/durable-outbox`, основанном на `d3f5c8a`; [контракт](docs/ai-callback-sessions.md).
+Код ещё не закоммичен. Unit и три targeted browser spec прошли; CI нового SHA
+отсутствует. Полная приёмка P0.8 runtime-интеграции также остаётся открытой;
+[контракт миграции](docs/legacy-migration.md).
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
 Последний подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
 1082 unit / 197 файлов; browser — 390 passed / 9 skips, success, 21,1 мин.
@@ -457,9 +460,16 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   [контракте](docs/weekly-ai-report-session.md). GitHub CI коммита `0b7062d`
   упал на E2E (343 failed из 476) в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143);
   локальный follow-up прошёл 49/49 связанных тестов Chromium; полный CI нового SHA ожидается.
-- [ ] Завершить оставшиеся AI retry и family callbacks, проверить поздние
-  ответы и lifecycle; для всего приложения серверный guard сам по себе
-  недостаточен.
+- [x] Локально перевести coach, личный план и объяснение плато с повторами на
+  общий `AiSession`/lifecycle guard; профиль и usage сохранять только через
+  guarded commit. Unit-suite: 1115 passed / 198 файлов, typecheck и два strict
+  typecheck прошли. Browser-приёмка регистрации, onboarding и weekly report
+  прошла: 32 passed / 3 skipped на 7 browser/PWA-профилях; CI нового состояния
+  ещё не запущен.
+- [ ] Добавить browser acceptance позднего ответа coach/plateau и смены аккаунта;
+  затем подтвердить CI на точном SHA.
+- [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
+  серверный guard сам по себе недостаточен.
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в
 [контракте](docs/ai-callback-sessions.md).

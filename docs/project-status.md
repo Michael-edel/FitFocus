@@ -5,7 +5,27 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Рабочее дерево — недельный AI-отчёт
+## Рабочее дерево — P0.5 client AI callbacks
+
+Текущая работа в `fix/durable-outbox` основана на `d3f5c8a` и пока не
+закоммичена. Coach, личный план и объяснение плато используют свежий session
+proof, scoped `/api/ai` transport и attempt/lifecycle guards. Coach card, usage
+и generated plan используют guarded commits; stale retry и поздний результат
+не должны менять данные. Hydration AI-task тоже не делает unscoped POST.
+
+Проверки локального дерева: полный unit — 1115 тестов / 198 файлов; общий,
+domain-strict и storage-strict typecheck прошли. Три browser spec — onboarding,
+registration durability и weekly AI report — завершились с 32 passed и 3 skipped;
+пропуски заданы проектной конфигурацией, запуск выполнен на 7 browser/PWA-профилях,
+`workers=1/retries=0`. Повтор после исправления mock-заголовков и классификации
+ожидаемого session-cancel прошёл чисто.
+
+GitHub CI для текущего рабочего дерева ещё не запускался. Прямые browser tests
+для позднего coach/plateau ответа и смены аккаунта пока отсутствуют, поэтому
+весь P0.5 остаётся открытым; см. [контракт](ai-callback-sessions.md) и
+[план](../TASKS.md). PR #93 не слит в `main`.
+
+## Предыдущий компонент — недельный AI-отчёт
 
 Клиентская генерация недельного отчёта и её retry теперь используют свежую
 account/session-привязку, проверку lifetime и guarded запись в IndexedDB outbox.
