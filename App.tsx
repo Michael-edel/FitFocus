@@ -1482,6 +1482,8 @@ const logWeight = useCallback(() => {
       currentUserGoal: currentUser?.goal || Goal.MAINTAIN,
       DEFAULT_DEFICIT,
       DEFAULT_SURPLUS,
+      loginGuard: loginReadGuard,
+      isCurrentSession: isCurrentProfileSession,
       ShoppingListCardComponent: ShoppingListCard,
     },
     nutrition: {

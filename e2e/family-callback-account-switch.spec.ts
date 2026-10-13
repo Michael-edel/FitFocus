@@ -14,13 +14,20 @@ type FixtureState = {
   shoppingCheckRequests: number;
   shoppingCheckAccounts: string[];
   releasedShoppingChecks: number;
+  personalShoppingListRequests: number;
+  personalShoppingListAccounts: string[];
+  releasedPersonalShoppingLists: number;
+  rejectedPersonalShoppingLists: number;
+  personalShoppingCheckRequests: number;
+  personalShoppingCheckAccounts: string[];
+  rejectedPersonalShoppingChecks: number;
   shoppingAchievements: string[];
   memberRequests: number;
   memberTargetIds: string[];
   releasedMembers: number;
 };
 
-function profileFor(account: Account) {
+function profileFor(account: Account, includePersonalShopping = false) {
   const profile = buildMockProfile();
   return {
     ...profile,
@@ -29,6 +36,19 @@ function profileFor(account: Account) {
     name: account.name,
     email: `${account.id}@example.test`,
     plan: 'family',
+    ...(includePersonalShopping ? {
+      aiPlan: {
+        ...profile.aiPlan,
+        weeklyMenu: {
+          weekStart: '2026-10-12',
+          days: Array.from({ length: 7 }, (_, index) => ({
+            day: `День ${index + 1}`, breakfast: 'Овсянка', lunch: 'Курица', dinner: 'Рыба', snack: 'Йогурт',
+          })),
+          shoppingList: [`Меню ${account.id}`],
+          shoppingListItems: [{ name: `Меню ${account.id}`, grams: 700 }],
+        },
+      },
+    } : {}),
   };
 }
 
@@ -55,7 +75,7 @@ function scopedHeaders(account: Account) {
   };
 }
 
-function apiBody(account: Account) {
+function apiBody(account: Account, includePersonalShopping = false) {
   return {
     user: { sub: account.id, roles: ['user'] },
     hasAccess: true,
@@ -67,7 +87,7 @@ function apiBody(account: Account) {
     achievementSync: { protocol: 1, guard: 1 },
     familySync: { protocol: 1, guard: 1, target: 1 },
     familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
-    profile: profileFor(account),
+    profile: profileFor(account, includePersonalShopping),
   };
 }
 
@@ -84,10 +104,13 @@ async function installAccountApi(
   errors: string[],
   holdShoppingCheck = false,
   holdMemberUpdate = false,
+  includePersonalShopping = false,
+  holdPersonalShoppingList = false,
 ) {
   await mockApp(page, { session: 'app' });
   const heldInvite = deferred();
   const heldShoppingCheckResponse = deferred();
+  const heldPersonalShoppingListResponse = deferred();
   const heldMemberResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
@@ -105,8 +128,8 @@ async function installAccountApi(
     });
 
     if (path === '/api/env') return json({ requireInvite: false }, state.current);
-    if (path === '/api/me') return json(apiBody(state.current), state.current);
-    if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current), items: [] }, state.current);
+    if (path === '/api/me') return json(apiBody(state.current, includePersonalShopping), state.current);
+    if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current, includePersonalShopping), items: [] }, state.current);
     if (path === '/api/profile') return json({ profile: profileFor(scopedAccount), version: 1 });
     if (path === '/api/state') {
       if (request.method() === 'GET') return json({ items: [] });
@@ -157,19 +180,52 @@ async function installAccountApi(
       }
       return json({ ok: true });
     }
-    if (path === '/api/shopping/list') return json({
-      family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
-      week_start: url.searchParams.get('week'),
-      items: [{ name: 'Рис', grams: 400, checked: false }],
-    });
+    if (path === '/api/shopping/list') {
+      const weekStart = url.searchParams.get('week');
+      if (!url.searchParams.has('family_id')) {
+        state.personalShoppingListRequests += 1;
+        state.personalShoppingListAccounts.push(scopedAccount.id);
+        if (holdPersonalShoppingList && scopedAccount.id === accountA.id) {
+          await heldPersonalShoppingListResponse.promise;
+          state.releasedPersonalShoppingLists += 1;
+        }
+        if (requestedAccount !== state.current.id || requestedSession !== state.current.sid) {
+          state.rejectedPersonalShoppingLists += 1;
+          return json({ error: 'STATE_SESSION_CHANGED' }, state.current, 401);
+        }
+        return json({
+          week_start: weekStart,
+          items: [{ name: `Список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400, checked: false }],
+        });
+      }
+      return json({
+        family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
+        week_start: weekStart,
+        items: [{ name: 'Рис', grams: 400, checked: false }],
+      });
+    }
     if (path === '/api/shopping/check') {
       state.shoppingCheckRequests += 1;
       state.shoppingCheckAccounts.push(scopedAccount.id);
+      const body = request.postDataJSON() as { family_id?: unknown } | null;
+      const personal = !body?.family_id;
+      if (personal) {
+        state.personalShoppingCheckRequests += 1;
+        state.personalShoppingCheckAccounts.push(scopedAccount.id);
+      }
       if (holdShoppingCheck && scopedAccount.id === accountA.id) {
         await heldShoppingCheckResponse.promise;
-        await json({ ok: true }, accountA);
         state.releasedShoppingChecks += 1;
+        if (personal && (requestedAccount !== state.current.id || requestedSession !== state.current.sid)) {
+          state.rejectedPersonalShoppingChecks += 1;
+          return json({ error: 'STATE_SESSION_CHANGED' }, state.current, 401);
+        }
+        await json({ ok: true }, accountA);
         return;
+      }
+      if (personal && (requestedAccount !== state.current.id || requestedSession !== state.current.sid)) {
+        state.rejectedPersonalShoppingChecks += 1;
+        return json({ error: 'STATE_SESSION_CHANGED' }, state.current, 401);
       }
       return json({ ok: true });
     }
@@ -177,11 +233,14 @@ async function installAccountApi(
   });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
+    if (message.type() === 'error' && /\/api\/shopping\/(list|check)/.test(message.location().url)
+      && /\b401\b/.test(message.text())) return;
     if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
   });
   return {
     releaseInvite: heldInvite.release,
     releaseShoppingCheck: heldShoppingCheckResponse.release,
+    releasePersonalShoppingList: heldPersonalShoppingListResponse.release,
     releaseMemberUpdate: heldMemberResponse.release,
   };
 }
@@ -207,13 +266,17 @@ async function activeAccount(page: Page): Promise<string | null> {
   });
 }
 
-async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[]) {
+async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[], includePersonalShopping = false) {
   state.current = accountB;
   const page = await context.newPage();
-  await installAccountApi(page, state, false, errors);
-  await openApp(page, '/#family');
+  await installAccountApi(page, state, false, errors, false, false, includePersonalShopping);
+  await openApp(page, includePersonalShopping ? '/#plan' : '/#family');
   await expect(page).toHaveTitle(/FitFocus/);
-  await expect(page.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+  if (includePersonalShopping) {
+    await expect(page.locator('#shopping-list')).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+  }
   await expect.poll(() => activeAccount(page)).toBe(accountB.id);
   return page;
 }
@@ -223,7 +286,10 @@ test('a delayed family callback from account A is ignored after another tab sign
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
-    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
     memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
   };
   const fixtureA = await installAccountApi(page, state, true, errorsA);
@@ -263,6 +329,13 @@ test('a delayed family callback stays bound to its captured family when the same
     shoppingCheckRequests: 0,
     shoppingCheckAccounts: [],
     releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0,
+    personalShoppingListAccounts: [],
+    releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0,
+    personalShoppingCheckRequests: 0,
+    personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0,
     shoppingAchievements: [],
     memberRequests: 0,
     memberTargetIds: [],
@@ -296,7 +369,10 @@ test('a delayed family shopping response cannot trigger an achievement after ano
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
-    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
     memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
   };
   const fixtureA = await installAccountApi(page, state, false, errorsA, true);
@@ -333,12 +409,103 @@ test('a delayed family shopping response cannot trigger an achievement after ano
   }
 });
 
+test('a delayed personal shopping-list read cannot cross the account boundary', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, true, true);
+  await openApp(page, '/#plan');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await expect(page.locator('#shopping-list')).toBeVisible();
+  await expect.poll(() => state.personalShoppingListRequests).toBe(1);
+  expect(state.personalShoppingListAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB, true);
+    await expect.poll(() => state.personalShoppingListRequests).toBe(2);
+    const accountBItem = accountBPage.getByText('Список B', { exact: true });
+    await expect(accountBItem).toBeVisible();
+    expect(state.personalShoppingListAccounts).toEqual([accountA.id, accountB.id]);
+
+    fixtureA.releasePersonalShoppingList();
+    await expect.poll(() => state.releasedPersonalShoppingLists).toBe(1);
+    await expect.poll(() => state.rejectedPersonalShoppingLists).toBe(1);
+    await expect(accountBItem).toBeVisible();
+    await expect(accountBPage.getByText('Список A', { exact: true })).toHaveCount(0);
+    await accountBItem.scrollIntoViewIfNeeded();
+    await expect(accountBItem).toBeInViewport();
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('personal-shopping-list-account-b.png') });
+  } finally {
+    fixtureA.releasePersonalShoppingList();
+  }
+});
+
+test('a delayed personal shopping check from account A is rejected after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, true, false, true);
+  await openApp(page, '/#plan');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const accountACheckbox = page.getByLabel('Список A');
+  await expect(accountACheckbox).toBeVisible();
+  await accountACheckbox.check();
+  await expect.poll(() => state.personalShoppingCheckRequests).toBe(1);
+  expect(state.personalShoppingCheckAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB, true);
+    const accountBCheckbox = accountBPage.getByLabel('Список B');
+    await expect(accountBCheckbox).toBeVisible();
+    await expect(accountBCheckbox).not.toBeChecked();
+    expect(await activeAccount(page)).toBe(accountB.id);
+
+    fixtureA.releaseShoppingCheck();
+    await expect.poll(() => state.releasedShoppingChecks).toBe(1);
+    await expect.poll(() => state.rejectedPersonalShoppingChecks).toBe(1);
+    await expect(accountBCheckbox).not.toBeChecked();
+    await accountBCheckbox.scrollIntoViewIfNeeded();
+    await expect(accountBCheckbox).toBeInViewport();
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(state.shoppingAchievements).toEqual([]);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('personal-shopping-check-account-b.png') });
+  } finally {
+    fixtureA.releaseShoppingCheck();
+  }
+});
+
 test('a delayed family member update stays bound to its captured family after the same login loads another family', async ({ page }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-a-original', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
-    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0, shoppingAchievements: [],
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
     memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
   };
   const fixture = await installAccountApi(page, state, false, errors, false, true);

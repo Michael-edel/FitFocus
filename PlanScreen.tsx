@@ -15,6 +15,7 @@ import {
   type ShoppingListItem,
   type UserProfile,
 } from './types';
+import type { OutboxReadGuard } from './storage/durableOutbox';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -22,6 +23,8 @@ type ShoppingListCardComponent = React.ComponentType<{
   title?: string;
   fallbackList?: string[];
   userId?: string | null;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
 }>;
 type CloudFamilyRef = { id?: string | null } | null;
 type FamilyShoppingItem = ShoppingListItem & { checked?: boolean };
@@ -61,6 +64,8 @@ type PlanScreenProps = {
   currentUserGoal: Goal | string;
   DEFAULT_DEFICIT: number;
   DEFAULT_SURPLUS: number;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   ShoppingListCardComponent?: ShoppingListCardComponent;
 };
 
@@ -98,6 +103,8 @@ export default function PlanScreen({
   currentUserGoal,
   DEFAULT_DEFICIT,
   DEFAULT_SURPLUS,
+  loginGuard,
+  isCurrentSession,
   ShoppingListCardComponent,
 }: PlanScreenProps) {
   const getWeekStartISO = React.useCallback((date: Date) => {
@@ -531,6 +538,8 @@ export default function PlanScreen({
                     : weeklyMenu.shoppingList
                 }
                 userId={currentUser?.id ?? null}
+                loginGuard={loginGuard}
+                isCurrentSession={isCurrentSession}
               />
             </div>
           </div>

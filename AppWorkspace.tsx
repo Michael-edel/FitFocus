@@ -1,6 +1,7 @@
 import React from 'react';
 import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
+import type { OutboxReadGuard } from './storage/durableOutbox';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
@@ -59,6 +60,8 @@ type AppWorkspaceData = {
   dashboard: Record<string, PassThroughProp>;
   plan: Record<string, PassThroughProp> & {
     currentUserGoal?: Goal;
+    loginGuard: OutboxReadGuard | null;
+    isCurrentSession: () => boolean;
   };
   nutrition: Record<string, PassThroughProp>;
   progress: Record<string, PassThroughProp> & {
@@ -80,7 +83,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
 
   const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, generatePlateauExplanation, adaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
 
-  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS, ShoppingListCardComponent } = plan;
+  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS, loginGuard, isCurrentSession, ShoppingListCardComponent } = plan;
 
   const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent, onDiaryDayChange } = nutrition;
 
@@ -183,6 +186,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             currentUserGoal={currentUserGoal}
             DEFAULT_DEFICIT={DEFAULT_DEFICIT}
             DEFAULT_SURPLUS={DEFAULT_SURPLUS}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
             ShoppingListCardComponent={ShoppingListCardComponent}
           />
         </React.Suspense>
