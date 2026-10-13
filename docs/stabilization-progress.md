@@ -1,5 +1,28 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — browser acceptance recovery UI, `4e2ccb7`, 13.10.2026
+
+Кодовый коммит [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5)
+добавляет E2E-проверки действий восстановления для state/settings, profile и
+familyMenu. Покрыты failed → retry → ack, keep-latest-local на подтверждённой
+серверной версии, accept-server после явного предупреждения и отмена принятия
+с сохранением конфликта. Family/profile fixtures теперь позволяют продолжить
+после конфликта и проверяют правильную version-base и сохранённый локальный или
+серверный payload.
+
+Локально основные три изменённых E2E-файла прошли 189/189 на семи browser/PWA
+проектах без retries. Затем добавлен multi-edit сценарий; обновлённый
+`storage-durability.spec.ts` прошёл 70/70. Совокупно по трём файлам подтверждены
+196 проверок. `npm run test:unit` дал 1092 теста / 197 файлов; общий,
+domain-strict и storage-strict typecheck, admin guards и `git diff --check`
+прошли. Новый multi-edit тест не включён в SHA `4e2ccb7`. Полный
+[CI run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
+на `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser passed /
+9 skipped за 23,4 минуты, audit без уязвимостей, три typecheck, build и 23
+rollback-запроса. [Артефакт](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311/artifacts/11791744552)
+сохранён. Multi-edit тест требует нового полного CI; staging, merge и выпуск не
+выполнялись; прочие callbacks и lifecycle P0.8 остаются открытыми.
+
 ## P0.8 — подавление legacy-импорта после удаления аккаунта
 
 Дата: 13.10.2026. Ветка: `fix/durable-outbox`; кодовый коммит

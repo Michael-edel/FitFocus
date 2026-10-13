@@ -60,6 +60,25 @@ admin guards и production build прошли. `storage-durability.spec.ts` пр
 GitHub CI этого коммита ещё не подтверждён. Staging, merge в `main` и выпуск
 не выполнялись. [Поведение и ограничения](runtime-state.md#повтор-и-разрешение-конфликтов--рабочее-дерево-13102026).
 
+## Recovery UI — browser acceptance на `4e2ccb7`
+
+В [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5)
+добавлена browser acceptance recovery actions для трёх ресурсов: state/settings,
+profile и familyMenu. Проверены failed → retry → ack, conflict → keep latest local
+на проверенной серверной версии, conflict → accept server после подтверждения и
+отмена подтверждения с сохранением локального конфликта. В familyMenu проверены
+обе ветки с version 8 и исходным локальным/удалённым меню.
+
+Локально: исходный прогон трёх изменённых spec-файлов — 189/189; после добавления
+multi-edit сценария `storage-durability.spec.ts` прошёл 70/70 на семи
+browser/PWA-проектах. Совокупно подтверждены 196 проверок без retries. [CI run
+38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
+на точном SHA `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser
+passed / 9 skipped за 23,4 минуты, audit без уязвимостей, три typecheck, build и
+23 rollback-запроса. [Rollback-артефакт](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311/artifacts/11791744552)
+сохранён. Этот CI не включает новый multi-edit сценарий; его полная CI-проверка
+остаётся для следующей ревизии. Выпуск и merge в `main` не выполнялись.
+
 Полный CI на коде исправления sender завершился success в
 [run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963),
 job 115035254691, на опубликованной ревизии `ca8ecb1`. Прошли 1068 unit / 196

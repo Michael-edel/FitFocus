@@ -569,8 +569,19 @@ all-client Service Worker fence, атомарные migration items и quarantin
     оставить последнюю локальную версию или принять проверенный серверный снимок.
     Очередь и значения меняются транзакционно; действия требуют свежей сессии,
     точного набора operation IDs и не доступны legacy-записям.
-  - [ ] Пройти браузерную приёмку всех действий, ресурсов и переходов lifecycle;
-    подтвердить результат на точном CI SHA.
+  - [x] Пройти браузерную приёмку recovery-действий для state/settings, profile и
+    familyMenu: retry failed, keep-latest-local, accept-server и отмена принятия.
+    Полный прогон трёх spec-файлов прошёл локально: исходные 189 сценариев и
+    добавленная проверка нескольких правок (всего 196 проверок по результатам
+    прогонов); последний `storage-durability.spec.ts` прошёл 70/70 на семи
+    browser/PWA-проектах. Общий/domain-strict/storage-strict typecheck прошёл.
+    Проверка нескольких правок относится к следующей ревизии и не входит в CI
+    SHA `4e2ccb7`.
+  - [x] Подтвердить полный CI на `4e2ccb7`: 1092 unit / 197 файлов, 446 browser
+    passed / 9 skipped, audit без уязвимостей, три typecheck, build и 23 rollback-
+    запроса прошли в [run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311).
+  - [ ] Подтвердить CI следующей ревизии с multi-edit сценарием; локально storage
+    spec прошёл 70/70.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

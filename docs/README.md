@@ -61,6 +61,14 @@ migration smoke `00cd005` тоже прошёл CI (390 passed / 9 skips); он 
 1092 unit-теста и 42 storage browser-сценария на семи проектах прошли локально;
 GitHub CI на этой ветке пока не подтверждён. Подробности — в [статусе](project-status.md)
 и [контракте runtime](runtime-state.md).
+Recovery UI acceptance расширена в [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5):
+три основных E2E-файла прошли 189/189; после добавления multi-edit сценария
+`storage-durability.spec.ts` прошёл 70/70 на семи проектах, совокупно подтверждены
+196 проверок. [CI run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
+на SHA `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser passed /
+9 skipped, три typecheck, build и 23 rollback-запроса; rollback-артефакт сохранён.
+Этот прогон не включает добавленный после него multi-edit сценарий; его CI нужно
+подтвердить на следующей ревизии. См. [текущий статус](project-status.md).
 Семейное меню в `405238b`
 опубликовано и прошло CI; оставшаяся приёмка описана в
 [текущей работе](project-status.md#текущая-работа--семейное-меню).

@@ -117,6 +117,17 @@ scope и снимка, sender ставится на `protocol`-паузу; та�
 локальной матрицы и точная ревизия фиксируются в
 [журнале](stabilization-progress.md).
 
+Дополнение к `4e2ccb7`: recovery-панель проверена на state/settings, profile и
+familyMenu. Основные три E2E-файла прошли 189/189; после добавления multi-edit
+сценария storage spec прошёл 70/70 на семи проектах, совокупно подтверждены 196
+проверок. Пройдены retry failed, обе стратегии конфликта, подтверждение принятия
+сервера, отмена и предупреждение перед сворачиванием нескольких локальных
+операций. Полный [CI на `4e2ccb7`](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
+прошёл: 1092 unit / 197 файлов, 446 browser passed / 9 skipped, три typecheck,
+build и 23 rollback-запроса; артефакт сохранён. Multi-edit сценарий добавлен
+после этого SHA и ожидает полного CI на следующей ревизии. Эти результаты не
+заменяют staging или приёмку выпуска.
+
 ## Проверки и дальнейшая работа
 
 - [Repository](../tests/user_state_repository_indexed.test.ts): commit/reload,

@@ -43,7 +43,10 @@ test('settings edit survives reload in IndexedDB with its outgoing intent', asyn
 });
 
 type ServerStateItem = { version: number; value: string };
-async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: { conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[] } = {}) {
+async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: {
+  conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[];
+  settingsConflictGate?: { started: () => void; wait: Promise<void> };
+} = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
     stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
@@ -64,6 +67,8 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     const items = request.postDataJSON().items as { key: string; value: string; baseVersion: number }[];
     for (const item of items) if (item.key.endsWith('_settings')) options.settingsRequests?.push(item.baseVersion);
     if (options.conflict && items[0].key.endsWith('_settings')) {
+      options.settingsConflictGate?.started();
+      if (options.settingsConflictGate) await options.settingsConflictGate.wait;
       await route.fulfill({ status: 409, contentType: 'application/json', headers: scope,
         body: JSON.stringify({ error: 'KV_CONFLICT', key: items[0].key, value: '{"theme":"dark"}', exists: true, version: 9 }) }); return;
     }
@@ -151,6 +156,49 @@ test('resolves a checked server conflict by sending the latest local settings ve
   expect(options.settingsRequests.at(-1)).toBe(9);
   expect(server.get(key)?.version).toBe(10);
   expect(JSON.parse(server.get(key)!.value)).toMatchObject({ theme: 'light' });
+  expect(errors).toEqual([]);
+});
+
+test('multi-edit recovery warns before replacing earlier operations and sends only the latest settings', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error' && !/\b409\b/.test(message.text())) errors.push(message.text()); });
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>();
+  let releaseConflict!: () => void; let markConflictStarted!: () => void;
+  const conflictWait = new Promise<void>((resolve) => { releaseConflict = resolve; });
+  const conflictStarted = new Promise<void>((resolve) => { markConflictStarted = resolve; });
+  const options = { conflict: true, settingsRequests: [] as number[], settingsConflictGate: { started: markConflictStarted, wait: conflictWait } };
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await conflictStarted;
+  await page.getByRole('button', { name: /^Violet AI/ }).click();
+  const queued = await storedSettings(page);
+  expect(queued.operations).toHaveLength(2);
+  expect(queued.operations.map((operation) => operation.status).sort()).toEqual(['pending', 'sending']);
+  const latestValue = queued.value!;
+
+  releaseConflict();
+  await expect.poll(async () => (await storedSettings(page)).operations.some((operation) => operation.status === 'conflicted')).toBe(true);
+  expect((await storedSettings(page)).operations).toHaveLength(2);
+  server.set(key, { version: 9, value: '{"theme":"dark"}' });
+  await page.locator('[data-state-notice-region] details summary').click();
+  const group = page.getByRole('region', { name: 'Настройки' });
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  });
+  options.conflict = false;
+  await group.getByRole('button', { name: 'Оставить последнюю локальную версию' }).click();
+  expect(await dialogHandled).toContain('Она заменит остальные 1 несинхронизированные операции этого раздела');
+
+  await expect.poll(async () => (await storedSettings(page)).operations).toHaveLength(0);
+  expect((await storedSettings(page)).value).toBe(latestValue);
+  expect((await storedSettings(page)).confirmedVersion).toBe(10);
+  expect(options.settingsRequests).toEqual([0, 9]);
+  expect(JSON.parse(server.get(key)!.value)).toEqual(JSON.parse(latestValue));
   expect(errors).toEqual([]);
 });
 
