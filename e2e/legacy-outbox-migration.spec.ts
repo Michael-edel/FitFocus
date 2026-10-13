@@ -72,6 +72,22 @@ function itemForKey(items: MigrationItem[], key: string): MigrationItem | undefi
   });
 }
 
+function legacySourceFingerprintFields(source: string | null): string[] {
+  const parsed: unknown = JSON.parse(source ?? '[]');
+  if (!Array.isArray(parsed)) throw new Error('LEGACY_SOURCE_NOT_AN_ARRAY');
+  // retryCount is mutable delivery metadata and is intentionally excluded from the stable fingerprint.
+  return parsed.map((record: unknown) => {
+    if (typeof record !== 'object' || record === null) return JSON.stringify(['invalid', record]);
+    const value = record as Record<string, unknown>;
+    return JSON.stringify([
+      value.type,
+      value.key,
+      value.value ?? null,
+      value.baseVersion ?? 0,
+    ]);
+  }).sort();
+}
+
 function quarantinedRecordExists(records: MigrationUnknown[], key: string): boolean {
   return records.some(({ rawRecord, reason }) => reason === 'unknown-owner' && rawRecord !== null
     && typeof rawRecord === 'object' && (rawRecord as { key?: unknown }).key === key);
@@ -132,7 +148,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       const quarantined = itemForKey(state.migrationItems, orphanKey);
       const operation = state.operations.find((entry) => entry.opId === imported?.opId);
       return {
-        source: state.source,
+        sourceFingerprintFields: legacySourceFingerprintFields(state.source),
         targetState: imported?.state,
         targetOwner: imported?.accountId,
         targetOperationKey: operation?.key,
@@ -146,7 +162,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         writersStopped: state.progress?.writersStopped,
       };
     }).toEqual({
-      source: oldSource,
+      sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
       targetState: 'imported',
       targetOwner: account,
       targetOperationKey: targetKey,
@@ -185,7 +201,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       const imported = itemForKey(state.migrationItems, targetKey);
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
       return {
-        source: state.source,
+        sourceFingerprintFields: legacySourceFingerprintFields(state.source),
         targetState: imported?.state,
         targetOwner: imported?.accountId,
         acknowledgedVersion: imported?.acknowledgedVersion,
@@ -197,7 +213,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         writersStopped: state.progress?.writersStopped,
       };
     }).toEqual({
-      source: oldSource,
+      sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
       targetState: 'imported',
       targetOwner: account,
       acknowledgedVersion: 1,
