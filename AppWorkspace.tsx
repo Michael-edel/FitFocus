@@ -390,6 +390,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
             onServerLogout={logout}
             onDeleteAccount={deleteAccount}
             user={currentUser}

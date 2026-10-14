@@ -300,3 +300,20 @@ cookie-сессией до прикладной работы с тикетами
 Запросы без state-заголовков остаются совместимыми, но не защищены этой
 привязкой. Контракт React lifetime и локальных проверок — в
 [документе сессии поддержки](docs/support-session.md).
+
+## Выдача мобильного bearer-токена
+
+`POST /api/mobile/token` в актуальном Settings-клиенте сначала получает свежий
+`/api/me` proof исходной login-сессии, затем передаёт парные
+`X-FitFocus-State-Account` и `X-FitFocus-State-Session`. Сервер использует
+`requireStateUser` до выпуска токена; устаревшая или неполная пара отвергается
+как 401. Успешный scoped-ответ содержит `X-FitFocus-Mobile-Token-Protocol: 1`,
+`X-FitFocus-Mobile-Token-Guard: 1` и echo обоих публичных scope headers, а все
+ответы `POST` используют `Cache-Control: no-store`.
+
+Клиент отправляет этот POST один раз без автоматических повторов. После ответа
+он сверяет серверные markers и ещё раз проверяет durable read guard до
+возвращения секрета в Settings; UI скрывает токен и bridge setup link при смене
+guard и проверяет его перед копированием. Старые unscoped-вызовы остаются
+совместимыми, но не имеют account/session binding. Проверки и ограничения:
+[wearable sync](docs/wearable-sync.md).

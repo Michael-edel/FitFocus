@@ -17,7 +17,7 @@ export async function requireStateUser(request: Request, env: Parameters<typeof 
 }
 
 /** A capability marker plus public scope lets a new client verify the guarded response. */
-export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support'): Response {
+export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token'): Response {
   response.headers.set(`X-FitFocus-${resource}-Protocol`, '1');
   response.headers.set(`X-FitFocus-${resource}-Guard`, '1');
   for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {

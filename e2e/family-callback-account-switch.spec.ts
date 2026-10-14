@@ -38,6 +38,8 @@ type FixtureState = {
   releasedFamilyShoppingLists?: number;
   supportListAccounts?: string[];
   releasedSupportLists?: number;
+  mobileTokenAccounts?: string[];
+  releasedMobileTokens?: number;
 };
 
 function profileFor(account: Account, includePersonalShopping = false) {
@@ -87,6 +89,8 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Family-Menu-Guard': '1',
     'X-FitFocus-Support-Protocol': '1',
     'X-FitFocus-Support-Guard': '1',
+    'X-FitFocus-Mobile-Token-Protocol': '1',
+    'X-FitFocus-Mobile-Token-Guard': '1',
   };
 }
 
@@ -126,8 +130,19 @@ async function installAccountApi(
   holdFamilyContext = false,
   holdFamilyShoppingList = false,
   holdSupportList = false,
+  holdMobileToken = false,
 ) {
   await mockApp(page, { session: 'app' });
+  if (holdMobileToken) {
+    await page.addInitScript(() => {
+      const target = window as typeof window & { __fitfocusClipboardWrites?: string[] };
+      target.__fitfocusClipboardWrites = [];
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (value: string) => { target.__fitfocusClipboardWrites?.push(value); } },
+      });
+    });
+  }
   const heldInvite = deferred();
   const heldShoppingCheckResponse = deferred();
   const heldPersonalShoppingListResponse = deferred();
@@ -137,6 +152,7 @@ async function installAccountApi(
   const heldFamilyContextResponse = deferred();
   const heldFamilyShoppingListResponse = deferred();
   const heldSupportListResponse = deferred();
+  const heldMobileTokenResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -170,6 +186,15 @@ async function installAccountApi(
     if (path === '/api/achievements') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai') return json({ text: 'Тестовая интерпретация.' });
     if (path === '/api/logout') return json({ ok: true });
+    if (path === '/api/mobile/token' && request.method() === 'POST') {
+      (state.mobileTokenAccounts ??= []).push(scopedAccount.id);
+      if (holdMobileToken && scopedAccount.id === accountA.id) {
+        await heldMobileTokenResponse.promise;
+        state.releasedMobileTokens = (state.releasedMobileTokens ?? 0) + 1;
+        return json({ token: 'account-a-mobile-token-secret', expiresAt: Date.now() + 60_000 }, accountA);
+      }
+      return json({ token: `mobile-token-${scopedAccount.id}`, expiresAt: Date.now() + 60_000 });
+    }
     if (path === '/api/support/feedback/my') {
       expect(requestedAccount).toBe(scopedAccount.id);
       expect(requestedSession).toBe(scopedAccount.sid);
@@ -340,6 +365,7 @@ async function installAccountApi(
     releaseFamilyContext: heldFamilyContextResponse.release,
     releaseFamilyShoppingList: heldFamilyShoppingListResponse.release,
     releaseSupportList: heldSupportListResponse.release,
+    releaseMobileToken: heldMobileTokenResponse.release,
   };
 }
 
@@ -365,7 +391,7 @@ async function activeAccount(page: Page): Promise<string | null> {
 }
 
 async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[], includePersonalShopping = false,
-  targetTab: 'family' | 'plan' | 'support' = includePersonalShopping ? 'plan' : 'family') {
+  targetTab: 'family' | 'plan' | 'support' | 'settings' = includePersonalShopping ? 'plan' : 'family') {
   state.current = accountB;
   const page = await context.newPage();
   await installAccountApi(page, state, false, errors, false, false, includePersonalShopping);
@@ -374,6 +400,8 @@ async function openAccountB(context: BrowserContext, state: FixtureState, errors
   if (targetTab === 'support') {
     await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Обращение B', exact: true })).toBeVisible();
+  } else if (targetTab === 'settings') {
+    await expect(page.getByRole('button', { name: 'Сгенерировать token' })).toBeVisible();
   } else if (includePersonalShopping) {
     await expect(page.locator('#shopping-list')).toBeVisible();
   } else {
@@ -800,6 +828,50 @@ test('a delayed support ticket list from account A cannot appear in account B', 
     await accountBPage.screenshot({ path: info.outputPath('support-account-switch-b.png') });
   } finally {
     fixtureA.releaseSupportList();
+  }
+});
+
+test('a delayed mobile token from account A is neither shown nor copied after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab mobile-token account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    mobileTokenAccounts: [], releasedMobileTokens: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const generateButton = page.getByRole('button', { name: 'Сгенерировать token' });
+  await expect(generateButton).toBeVisible();
+  await generateButton.click();
+  await expect.poll(() => state.mobileTokenAccounts?.length).toBe(1);
+  expect(state.mobileTokenAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB, false, 'settings');
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    fixtureA.releaseMobileToken();
+    await expect.poll(() => state.releasedMobileTokens).toBe(1);
+
+    await expect(page.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(accountBPage.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Mobile token', { exact: true })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() =>
+      (window as typeof window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([]);
+    expect(await activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('mobile-token-account-b.png') });
+  } finally {
+    fixtureA.releaseMobileToken();
   }
 });
 

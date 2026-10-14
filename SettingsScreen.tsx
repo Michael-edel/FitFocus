@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
 import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send, Camera, Upload } from 'lucide-react';
@@ -12,6 +12,8 @@ import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 import { requestMobileToken } from './features/settings/mobileTokenApi';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSession } from './services/mobileTokenSession';
 import { disconnectHuaweiHealth, requestHuaweiHealthStatus, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
 
 const MIN_HEIGHT_CM = 120;
@@ -51,6 +53,8 @@ const SETTINGS_UI_STORAGE_KEY = 'fitfocus.settings.ui.v1';
 
 type Props = {
   serverSession?: boolean;
+  loginGuard?: OutboxReadGuard | null;
+  isCurrentSession?: () => boolean;
   onServerLogout?: () => Promise<void> | void;
   onDeleteAccount?: () => Promise<void> | void;
 
@@ -359,6 +363,8 @@ export default function SettingsScreen({
   onConnectAutosave,
   autosaveEnabled,
   serverSession,
+  loginGuard,
+  isCurrentSession,
   onServerLogout,
   onDeleteAccount,
   syncState,
@@ -368,6 +374,9 @@ export default function SettingsScreen({
   onReloadFromCloud,
   onResetUiState,
 }: Props) {
+  const mobileTokenScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
   const gainSur = user?.gainSurplus ?? DEFAULT_SURPLUS;
@@ -412,11 +421,18 @@ export default function SettingsScreen({
   const [huaweiNotice, setHuaweiNotice] = useState<string | null>(null);
   const [uiResetAt, setUiResetAt] = useState<number | null>(null);
   const [mobileTokenBusy, setMobileTokenBusy] = useState(false);
-  const [mobileTokenValue, setMobileTokenValue] = useState('');
-  const [mobileTokenExpiresAt, setMobileTokenExpiresAt] = useState<number | null>(null);
+  const [mobileTokenCredential, setMobileTokenCredential] = useState<{
+    scopeKey: string;
+    token: string;
+    expiresAt: number | null;
+    session: MobileTokenSession;
+  } | null>(null);
   const [mobileTokenError, setMobileTokenError] = useState<string | null>(null);
   const [mobileTokenCopiedAt, setMobileTokenCopiedAt] = useState<number | null>(null);
   const [bridgeSetupCopiedAt, setBridgeSetupCopiedAt] = useState<number | null>(null);
+  const [validatedMobileTokenScope, setValidatedMobileTokenScope] = useState<string | null>(null);
+  const mobileTokenControllerRef = useRef<AbortController | null>(null);
+  const mobileTokenAttemptRef = useRef(0);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -510,17 +526,77 @@ export default function SettingsScreen({
     ? wearableProviderLabel[user.wearableProvider]
     : 'Не подключено';
   const bridgeBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fitfocus.pages.dev';
+  const activeMobileToken = serverSession && isCurrentSession?.() === true
+    && mobileTokenCredential?.scopeKey === mobileTokenScopeKey
+    && validatedMobileTokenScope === mobileTokenCredential?.scopeKey
+    ? mobileTokenCredential
+    : null;
   const bridgeSetupLink = useMemo(() => {
-    if (!mobileTokenValue || !bridgeBaseUrl) return '';
+    if (!activeMobileToken || !bridgeBaseUrl) return '';
     const params = new URLSearchParams({
       baseURL: bridgeBaseUrl,
-      token: mobileTokenValue,
+      token: activeMobileToken.token,
     });
-    if (mobileTokenExpiresAt) {
-      params.set('expiresAt', String(mobileTokenExpiresAt));
+    if (activeMobileToken.expiresAt) {
+      params.set('expiresAt', String(activeMobileToken.expiresAt));
     }
     return `fitfocusbridge://setup?${params.toString()}`;
-  }, [bridgeBaseUrl, mobileTokenExpiresAt, mobileTokenValue]);
+  }, [activeMobileToken, bridgeBaseUrl]);
+
+  useEffect(() => {
+    mobileTokenAttemptRef.current += 1;
+    mobileTokenControllerRef.current?.abort();
+    mobileTokenControllerRef.current = null;
+    setMobileTokenBusy(false);
+    setMobileTokenCredential(null);
+    setMobileTokenError(null);
+    setMobileTokenCopiedAt(null);
+    setBridgeSetupCopiedAt(null);
+    setValidatedMobileTokenScope(null);
+    return () => {
+      mobileTokenAttemptRef.current += 1;
+      mobileTokenControllerRef.current?.abort();
+      mobileTokenControllerRef.current = null;
+    };
+  }, [mobileTokenScopeKey]);
+
+  useEffect(() => {
+    if (!mobileTokenCredential) {
+      setValidatedMobileTokenScope(null);
+      return;
+    }
+    let disposed = false;
+    const validate = async () => {
+      try {
+        if (mobileTokenCredential.scopeKey !== mobileTokenScopeKey || !serverSession || !isCurrentSession?.()) {
+          throw new Error('MOBILE_TOKEN_SESSION_CHANGED');
+        }
+        await assertMobileTokenSession(mobileTokenCredential.session);
+        if (!disposed) setValidatedMobileTokenScope(mobileTokenCredential.scopeKey);
+      } catch {
+        if (disposed) return;
+        setValidatedMobileTokenScope(null);
+        setMobileTokenCredential(current => current === mobileTokenCredential ? null : current);
+        setMobileTokenCopiedAt(null);
+        setBridgeSetupCopiedAt(null);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') void validate();
+    };
+    void validate();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') void validate();
+    }, 1_000);
+    window.addEventListener('focus', onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onVisibilityChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isCurrentSession, mobileTokenCredential, mobileTokenScopeKey, serverSession]);
 
   const loadHuaweiStatus = React.useCallback(async () => {
     if (!serverSession) {
@@ -653,45 +729,68 @@ export default function SettingsScreen({
   };
 
   const generateMobileToken = async () => {
-    if (!serverSession) return;
+    const isSessionCurrent = isCurrentSession;
+    if (!serverSession || !loginGuard || !isSessionCurrent || !isSessionCurrent()) return;
+    const scopeKey = mobileTokenScopeKey;
+    if (!scopeKey) return;
+    mobileTokenControllerRef.current?.abort();
+    const controller = new AbortController();
+    mobileTokenControllerRef.current = controller;
+    const attempt = ++mobileTokenAttemptRef.current;
     setMobileTokenBusy(true);
+    setMobileTokenCredential(null);
     setMobileTokenError(null);
     setMobileTokenCopiedAt(null);
     setBridgeSetupCopiedAt(null);
     try {
-      const { token, expiresAt } = await requestMobileToken();
-      setMobileTokenValue(token);
-      setMobileTokenExpiresAt(expiresAt);
+      const session = await prepareMobileTokenSession(loginGuard, controller, isSessionCurrent);
+      const { token, expiresAt } = await requestMobileToken(session);
+      await assertMobileTokenSession(session);
+      if (attempt !== mobileTokenAttemptRef.current || !isSessionCurrent()) return;
+      setMobileTokenCredential({ scopeKey, token, expiresAt, session });
       try {
+        await assertMobileTokenSession(session);
+        if (attempt !== mobileTokenAttemptRef.current || !isSessionCurrent()) return;
         await navigator.clipboard.writeText(token);
-        setMobileTokenCopiedAt(Date.now());
+        await assertMobileTokenSession(session);
+        if (attempt === mobileTokenAttemptRef.current && isSessionCurrent()) setMobileTokenCopiedAt(Date.now());
       } catch {
         // clipboard is optional
       }
     } catch (error) {
-      setMobileTokenError(error instanceof Error ? error.message : 'Не удалось создать мобильный токен');
+      if (attempt === mobileTokenAttemptRef.current && isSessionCurrent()) {
+        setMobileTokenError(error instanceof Error ? error.message : 'Не удалось создать мобильный токен');
+      }
     } finally {
-      setMobileTokenBusy(false);
+      if (attempt === mobileTokenAttemptRef.current) {
+        setMobileTokenBusy(false);
+      }
     }
   };
 
   const copyMobileToken = async () => {
-    if (!mobileTokenValue) return;
+    if (!activeMobileToken) return;
     try {
-      await navigator.clipboard.writeText(mobileTokenValue);
-      setMobileTokenCopiedAt(Date.now());
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey !== mobileTokenScopeKey || !isCurrentSession?.()) return;
+      await navigator.clipboard.writeText(activeMobileToken.token);
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenCopiedAt(Date.now());
     } catch {
-      setMobileTokenError('Не удалось скопировать токен');
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenError('Не удалось скопировать токен');
     }
   };
 
   const copyBridgeSetup = async () => {
-    if (!bridgeSetupLink) return;
+    if (!bridgeSetupLink || !activeMobileToken) return;
     try {
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey !== mobileTokenScopeKey || !isCurrentSession?.()) return;
       await navigator.clipboard.writeText(bridgeSetupLink);
-      setBridgeSetupCopiedAt(Date.now());
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setBridgeSetupCopiedAt(Date.now());
     } catch {
-      setMobileTokenError('Не удалось скопировать ссылку для bridge');
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenError('Не удалось скопировать ссылку для bridge');
     }
   };
 
@@ -1954,7 +2053,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void generateMobileToken()}
-                      disabled={!serverSession || mobileTokenBusy}
+                      disabled={!serverSession || !loginGuard || !isCurrentSession?.() || mobileTokenBusy}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
                     >
                       <KeyRound className="w-4 h-4" />
@@ -1968,13 +2067,13 @@ export default function SettingsScreen({
                     </div>
                   )}
 
-                  {mobileTokenValue && (
+                  {activeMobileToken && (
                     <div className="mt-3 rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Mobile token</div>
-                          <div className="mt-2 text-sm text-slate-100 break-all font-mono">{mobileTokenValue}</div>
-                          <div className="mt-2 text-xs text-slate-500">Срок: {formatMobileTokenExpiry(mobileTokenExpiresAt)}</div>
+                          <div className="mt-2 text-sm text-slate-100 break-all font-mono">{activeMobileToken.token}</div>
+                          <div className="mt-2 text-xs text-slate-500">Срок: {formatMobileTokenExpiry(activeMobileToken.expiresAt)}</div>
                         </div>
                         <div className="flex flex-col gap-2">
                           <button
@@ -1983,10 +2082,10 @@ export default function SettingsScreen({
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-[0.85rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
                           >
                             <Copy className="w-4 h-4" />
-                            {mobileTokenCopiedAt ? 'Скопировано' : 'Копировать'}
+                            {mobileTokenCopiedAt && activeMobileToken ? 'Скопировано' : 'Копировать'}
                           </button>
                           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
-                            {mobileTokenCopiedAt ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
+                            {mobileTokenCopiedAt && activeMobileToken ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
                           </div>
                         </div>
                       </div>

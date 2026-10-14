@@ -4,6 +4,22 @@ Endpoint: `POST /api/wearable/sync`
 
 Purpose: accept a snapshot from an iPhone bridge, typically a small native app or helper that reads Apple HealthKit and forwards the data to FitFocus.
 
+## Issuing a mobile bearer token
+
+The user creates the bridge token from Settings with `POST /api/mobile/token`.
+The current web client first refreshes the captured login proof through `/api/me`,
+then sends `X-FitFocus-State-Account` and `X-FitFocus-State-Session` with the
+POST. The server compares the pair to the cookie session before issuing a token.
+Scoped responses include `X-FitFocus-Mobile-Token-Protocol: 1`,
+`X-FitFocus-Mobile-Token-Guard: 1` and the echoed public scope; the response is
+marked `Cache-Control: no-store`. The token-issuing POST is not retried.
+
+Settings keeps the token only for the captured account/session guard, checks the
+guard again before showing or copying it, and hides the token and setup link when
+the login changes. Requests without scope remain compatible with older web
+clients, but do not receive account/session binding; the current UI always sends
+scope and requires the matching guarded response.
+
 ## Required transport
 
 - Authenticated session cookie from FitFocus, or `Authorization: Bearer <token>` from `POST /api/mobile/token`

@@ -141,6 +141,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Упаковка, проверка или хранение release/rollback artifact | docs/release-artifacts.md, scripts/release-artifact.mjs и затронутый gate RELEASE_CHECKLIST.md |
 | API, login proof или lifetime семейных запросов | docs/family-session.md, API_CONTRACTS.md, TASKS и краткий статус; отдельно учитывать ещё прежний AI-путь и CAS |
 | Личный экран обращений поддержки, тикеты и ответы пользователя | docs/support-session.md, API_CONTRACTS.md, TASKS и краткий статус |
+| Выдача мобильного bearer-токена и его account/session scope | docs/wearable-sync.md, API_CONTRACTS.md, TASKS и журнал конкретной проверки |
 
 Каждый статус должен различать «согласовано», «реализовано в ветке»,
 «проверено», «слито» и «выпущено». Старые результаты сохраняйте с их SHA,

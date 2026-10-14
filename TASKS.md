@@ -490,6 +490,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
+- [ ] Завершить проверку выдачи мобильного bearer-токена из Settings: fresh
+  account/session proof, server scope до mint, guarded no-store response,
+  очистка токена/setup link при смене логина и delayed account-switch E2E.
+  Реализация находится в текущем изменении; пункт закроется после проверки точного
+  CI HEAD. [Контракт](docs/wearable-sync.md).
 - [x] Перевести AI Совет на общий `AiSession`: все 14 запросов используют один
   account/session proof, вопрос, ответ и очистка истории используют guarded
   durable commit; поздний ответ после входа другого аккаунта проверяется
