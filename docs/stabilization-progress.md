@@ -2809,3 +2809,16 @@ Typecheck прошёл. Вместе с тестами `69c739a` и `1b6444a` п
 сценариев прошли 15/15. Mock-backed проверка не заменяет реальный OAuth/staging;
 полный lifecycle P0.5 остаётся открытым. Точный GitHub workflow текущего HEAD
 будет проверен после push.
+
+## P0.5 — отложенный family shopping GET, `8f012e4`
+
+Добавлена проверка семейного `/api/shopping/list?family_id=...`: начальные GET
+аккаунта A удерживаются до входа B в соседней вкладке, затем возвращают список
+A со scope A. Старые ответы не появляются в family UI; повторные ответы для A
+не запускаются, а список B после обновления содержит только данные B.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный
+`family-callback-account-switch.spec.ts` прошёл 30/30 при `workers=1/retries=0`;
+typecheck прошёл. В сумме personal/family shopping и family callbacks теперь
+имеют шесть новых acceptance-сценариев, 18/18. Реальные OAuth/staging и полный
+lifecycle P0.5 всё ещё открыты; точный workflow этого HEAD проверяется после push.

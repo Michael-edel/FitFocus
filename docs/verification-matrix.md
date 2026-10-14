@@ -23,15 +23,16 @@ CI этого follow-up для кодовой ревизии [`a99ab7b`](https:/
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
 Локальная late-response acceptance покрывает personal shopping list GET/PATCH,
-family join/create и family-context GET. `ShoppingListCard` отправляет исходный
-session scope; ответ A после входа B не попадает в список B, не очищает ввод,
-не появляется в family UI аккаунта B, не инициирует повторный family GET и не
-запускает achievement. Family shopping-check и member-goal также остаются в
-наборе. После тестовых commits [`69c739a`](https://github.com/Michael-edel/FitFocus/commit/69c739a),
-[`1b6444a`](https://github.com/Michael-edel/FitFocus/commit/1b6444a) и
-[`bb1866c`](https://github.com/Michael-edel/FitFocus/commit/bb1866c) весь
-`family-callback-account-switch.spec.ts` прошёл 27/27 на desktop Chromium,
-Firefox и WebKit (`workers=1/retries=0`); пять новых сценариев прошли 15/15.
+family join/create, family-context GET и family shopping GET. `ShoppingListCard`
+отправляет исходный session scope; ответы A после входа B не попадают в списки
+B, не очищают ввод, не появляются в family UI аккаунта B, не инициируют
+повторный family GET и не запускают achievement. Family shopping-check и
+member-goal также остаются в наборе. После тестовых commits [`69c739a`](https://github.com/Michael-edel/FitFocus/commit/69c739a),
+[`1b6444a`](https://github.com/Michael-edel/FitFocus/commit/1b6444a),
+[`bb1866c`](https://github.com/Michael-edel/FitFocus/commit/bb1866c) и
+[`8f012e4`](https://github.com/Michael-edel/FitFocus/commit/8f012e4) весь
+`family-callback-account-switch.spec.ts` прошёл 30/30 на desktop Chromium,
+Firefox и WebKit (`workers=1/retries=0`); шесть новых сценариев прошли 18/18.
 Связанные API unit-тесты: 25/25; `npm run typecheck` прошёл. Полный CI нового
 HEAD ещё не подтверждён.
 
