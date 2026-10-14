@@ -114,3 +114,57 @@ test('failed council deletion keeps the visible history and reports a storage er
   await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('two same-origin tabs without Web Locks retain concurrent writes to different keys', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
+  });
+
+  const errorsA = await setup(page);
+  await openApp(page, '/#plan');
+  await expect(page.getByRole('button', { name: 'Записать первый завтрак', exact: true })).toBeVisible();
+
+  const second = await context.newPage();
+  const errorsB = await setup(second);
+  try {
+    await openApp(second, '/#settings');
+    const light = second.getByRole('button', { name: /^Светлая/ });
+    await expect(light).toBeVisible();
+
+    const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
+    await Promise.all([task.click(), light.click()]);
+
+    await expect.poll(async () => {
+      const [plan, settings] = await Promise.all([
+        state(page, 'plan_task_done'),
+        state(second, 'settings'),
+      ]);
+      return [plan.operations.length, settings.operations.length];
+    }).toEqual([1, 1]);
+
+    const [planFromA, settingsFromA, planFromB, settingsFromB] = await Promise.all([
+      state(page, 'plan_task_done'), state(page, 'settings'),
+      state(second, 'plan_task_done'), state(second, 'settings'),
+    ]);
+    expect(planFromA.value).toContain('"0:Записать первый завтрак":true');
+    expect(planFromB.value).toBe(planFromA.value);
+    expect(planFromB.operations).toEqual(planFromA.operations);
+    expect(planFromA.operations[0]).toMatchObject({ type: 'put', accountId: account });
+    expect(['pending', 'sending']).toContain(planFromA.operations[0].status);
+    expect(settingsFromA.value).toContain('"theme":"light"');
+    expect(settingsFromB.value).toBe(settingsFromA.value);
+    expect(settingsFromB.operations).toEqual(settingsFromA.operations);
+    expect(settingsFromA.operations[0]).toMatchObject({ type: 'put', accountId: account });
+    expect(['pending', 'sending']).toContain(settingsFromA.operations[0].status);
+    expect(await page.evaluate(() => navigator.locks)).toBeUndefined();
+    expect(await second.evaluate(() => navigator.locks)).toBeUndefined();
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(second.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
+    await second.close();
+  }
+});
