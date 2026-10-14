@@ -33,6 +33,9 @@ type FixtureState = {
   familyJoinAchievements?: string[];
   familyLoadAccounts?: string[];
   releasedFamilyContexts?: number;
+  familyShoppingListRequests?: number;
+  familyShoppingListAccounts?: string[];
+  releasedFamilyShoppingLists?: number;
 };
 
 function profileFor(account: Account, includePersonalShopping = false) {
@@ -117,6 +120,7 @@ async function installAccountApi(
   holdJoin = false,
   holdCreate = false,
   holdFamilyContext = false,
+  holdFamilyShoppingList = false,
 ) {
   await mockApp(page, { session: 'app' });
   const heldInvite = deferred();
@@ -126,6 +130,7 @@ async function installAccountApi(
   const heldJoinResponse = deferred();
   const heldCreateResponse = deferred();
   const heldFamilyContextResponse = deferred();
+  const heldFamilyShoppingListResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -241,10 +246,18 @@ async function installAccountApi(
           items: [{ name: `Список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400, checked: false }],
         });
       }
+      state.familyShoppingListRequests = (state.familyShoppingListRequests ?? 0) + 1;
+      (state.familyShoppingListAccounts ??= []).push(scopedAccount.id);
+      if (holdFamilyShoppingList && scopedAccount.id === accountA.id) {
+        await heldFamilyShoppingListResponse.promise;
+        state.releasedFamilyShoppingLists = (state.releasedFamilyShoppingLists ?? 0) + 1;
+        return json({ family_id: `family-${accountA.id}`, week_start: weekStart,
+          items: [{ name: 'Семейный список A', grams: 400, checked: false }] }, accountA);
+      }
       return json({
         family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
         week_start: weekStart,
-        items: [{ name: 'Рис', grams: 400, checked: false }],
+        items: [{ name: `Семейный список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400, checked: false }],
       });
     }
     if (path === '/api/shopping/check') {
@@ -288,6 +301,7 @@ async function installAccountApi(
     releaseJoin: heldJoinResponse.release,
     releaseCreate: heldCreateResponse.release,
     releaseFamilyContext: heldFamilyContextResponse.release,
+    releaseFamilyShoppingList: heldFamilyShoppingListResponse.release,
   };
 }
 
@@ -529,6 +543,46 @@ test('a delayed family-context read from account A cannot appear after account B
     await accountBPage.screenshot({ path: info.outputPath('family-context-account-b.png') });
   } finally {
     fixtureA.releaseFamilyContext();
+  }
+});
+
+test('a delayed family shopping-list read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-shopping account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyJoinAchievements: [], familyLoadAccounts: [], familyShoppingListAccounts: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
+  await expect.poll(() => state.familyShoppingListAccounts.filter(id => id === accountA.id).length).toBeGreaterThan(0);
+  const accountAFamilyShoppingRequests = state.familyShoppingListAccounts.filter(id => id === accountA.id).length;
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    expect(await activeAccount(page)).toBe(accountB.id);
+    fixtureA.releaseFamilyShoppingList();
+    await expect.poll(() => state.releasedFamilyShoppingLists).toBeGreaterThanOrEqual(accountAFamilyShoppingRequests);
+    await page.waitForTimeout(100);
+    await expect(page.getByText('Семейный список A', { exact: false })).toHaveCount(0);
+    const refreshB = accountBPage.getByRole('button', { name: 'Обновить список', exact: true });
+    await refreshB.click();
+    await expect(accountBPage.getByText('Семейный список B', { exact: false })).toBeVisible();
+    expect(state.familyShoppingListAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyShoppingRequests);
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('family-shopping-account-b.png') });
+  } finally {
+    fixtureA.releaseFamilyShoppingList();
   }
 });
 
