@@ -36,6 +36,8 @@ type FixtureState = {
   familyShoppingListRequests?: number;
   familyShoppingListAccounts?: string[];
   releasedFamilyShoppingLists?: number;
+  supportListAccounts?: string[];
+  releasedSupportLists?: number;
 };
 
 function profileFor(account: Account, includePersonalShopping = false) {
@@ -83,6 +85,8 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Family-Guard': '1',
     'X-FitFocus-Family-Menu-Protocol': '1',
     'X-FitFocus-Family-Menu-Guard': '1',
+    'X-FitFocus-Support-Protocol': '1',
+    'X-FitFocus-Support-Guard': '1',
   };
 }
 
@@ -121,6 +125,7 @@ async function installAccountApi(
   holdCreate = false,
   holdFamilyContext = false,
   holdFamilyShoppingList = false,
+  holdSupportList = false,
 ) {
   await mockApp(page, { session: 'app' });
   const heldInvite = deferred();
@@ -131,6 +136,7 @@ async function installAccountApi(
   const heldCreateResponse = deferred();
   const heldFamilyContextResponse = deferred();
   const heldFamilyShoppingListResponse = deferred();
+  const heldSupportListResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -164,6 +170,37 @@ async function installAccountApi(
     if (path === '/api/achievements') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai') return json({ text: 'Тестовая интерпретация.' });
     if (path === '/api/logout') return json({ ok: true });
+    if (path === '/api/support/feedback/my') {
+      expect(requestedAccount).toBe(scopedAccount.id);
+      expect(requestedSession).toBe(scopedAccount.sid);
+      const ticket = {
+        id: `ticket-${scopedAccount.id}`,
+        created_at: 1,
+        updated_at: 1,
+        category: 'Ошибка',
+        section: 'Обзор',
+        subject: `Обращение ${scopedAccount.id === accountA.id ? 'A' : 'B'}`,
+        message: `Секретное обращение ${scopedAccount.id}`,
+        status: 'new',
+        priority: 'normal',
+        attachment_count: 0,
+        messages: [],
+      };
+      if (request.method() === 'GET' && !url.searchParams.has('id')) {
+        (state.supportListAccounts ??= []).push(scopedAccount.id);
+        if (holdSupportList && scopedAccount.id === accountA.id) {
+          await heldSupportListResponse.promise;
+          state.releasedSupportLists = (state.releasedSupportLists ?? 0) + 1;
+          return json({ tickets: [ticket] }, accountA);
+        }
+        return json({ tickets: [ticket] });
+      }
+      if (request.method() === 'GET') return json({ ticket });
+      return json({ ticket, ok: true });
+    }
+    if (path === '/api/support/feedback' && request.method() === 'POST') {
+      return json({ ok: true, id: `ticket-${scopedAccount.id}` });
+    }
     if (path.startsWith('/api/family') || path.startsWith('/api/shopping')) {
       expect(requestedAccount).toBe(scopedAccount.id);
       expect(requestedSession).toBe(scopedAccount.sid);
@@ -302,6 +339,7 @@ async function installAccountApi(
     releaseCreate: heldCreateResponse.release,
     releaseFamilyContext: heldFamilyContextResponse.release,
     releaseFamilyShoppingList: heldFamilyShoppingListResponse.release,
+    releaseSupportList: heldSupportListResponse.release,
   };
 }
 
@@ -326,13 +364,17 @@ async function activeAccount(page: Page): Promise<string | null> {
   });
 }
 
-async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[], includePersonalShopping = false) {
+async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[], includePersonalShopping = false,
+  targetTab: 'family' | 'plan' | 'support' = includePersonalShopping ? 'plan' : 'family') {
   state.current = accountB;
   const page = await context.newPage();
   await installAccountApi(page, state, false, errors, false, false, includePersonalShopping);
-  await openApp(page, includePersonalShopping ? '/#plan' : '/#family');
+  await openApp(page, `/#${targetTab}`);
   await expect(page).toHaveTitle(/FitFocus/);
-  if (includePersonalShopping) {
+  if (targetTab === 'support') {
+    await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Обращение B', exact: true })).toBeVisible();
+  } else if (includePersonalShopping) {
     await expect(page.locator('#shopping-list')).toBeVisible();
   } else {
     await expect(page.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
@@ -716,6 +758,48 @@ test('a delayed personal shopping check from account A is rejected after account
     await accountBPage.screenshot({ path: info.outputPath('personal-shopping-check-account-b.png') });
   } finally {
     fixtureA.releaseShoppingCheck();
+  }
+});
+
+test('a delayed support ticket list from account A cannot appear in account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab support account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    supportListAccounts: [], releasedSupportLists: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#support');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await expect.poll(() => state.supportListAccounts?.length).toBe(1);
+  expect(state.supportListAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB, false, 'support');
+    expect(state.supportListAccounts).toEqual([accountA.id, accountB.id]);
+    const accountBTicket = accountBPage.getByRole('heading', { name: 'Обращение B', exact: true });
+    await expect(accountBTicket).toBeVisible();
+
+    fixtureA.releaseSupportList();
+    await expect.poll(() => state.releasedSupportLists).toBe(1);
+    await expect(accountBTicket).toBeVisible();
+    await expect(accountBPage.getByRole('heading', { name: 'Обращение A', exact: true })).toHaveCount(0);
+    await accountBTicket.scrollIntoViewIfNeeded();
+    await expect(accountBTicket).toBeInViewport();
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('support-account-switch-b.png') });
+  } finally {
+    fixtureA.releaseSupportList();
   }
 });
 

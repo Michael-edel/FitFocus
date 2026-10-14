@@ -1,6 +1,6 @@
 # Работа с FitFocus
 
-Обновлено: 12.10.2026. Начальная навигация: [карта документации](docs/README.md).
+Обновлено: 14.10.2026. Начальная навигация: [карта документации](docs/README.md).
 Это инструкция для разработки; результаты выполненных проверок хранятся
 отдельно в [журнале стабилизации](docs/stabilization-progress.md).
 
@@ -140,6 +140,7 @@ PR укажите проблему, итоговое поведение, баз�
 | Origin preview и настройки staging | docs/staging-origin.md, RELEASE_CHECKLIST.md и docs/current-architecture.md |
 | Упаковка, проверка или хранение release/rollback artifact | docs/release-artifacts.md, scripts/release-artifact.mjs и затронутый gate RELEASE_CHECKLIST.md |
 | API, login proof или lifetime семейных запросов | docs/family-session.md, API_CONTRACTS.md, TASKS и краткий статус; отдельно учитывать ещё прежний AI-путь и CAS |
+| Личный экран обращений поддержки, тикеты и ответы пользователя | docs/support-session.md, API_CONTRACTS.md, TASKS и краткий статус |
 
 Каждый статус должен различать «согласовано», «реализовано в ветке»,
 «проверено», «слито» и «выпущено». Старые результаты сохраняйте с их SHA,

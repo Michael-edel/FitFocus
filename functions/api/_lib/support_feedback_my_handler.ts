@@ -1,4 +1,5 @@
-import { json, requireUser } from "./auth";
+import { json } from "./auth";
+import { requireStateUser } from "./state_session";
 import { requireDB } from "./db";
 import {
   readFormDataRequest,
@@ -23,7 +24,7 @@ type MySupportFeedbackContext = Parameters<PagesFunction<MySupportFeedbackEnv>>[
 export async function handleMySupportGet({ request, env }: MySupportFeedbackContext) {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
@@ -44,7 +45,7 @@ export async function handleMySupportGet({ request, env }: MySupportFeedbackCont
 export async function handleMySupportPost({ request, env }: MySupportFeedbackContext) {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }

@@ -1,6 +1,6 @@
 # Контракты API, критичные для синхронизации
 
-Обновлено: 12.10.2026. State описывает серверный компонент P0.7
+Обновлено: 14.10.2026. State описывает серверный компонент P0.7
 в `fix/state-generations` после миграции 0019; profile включает guard/capability
 интеграционной ветки `fix/durable-outbox`.
 Серверная ветка объединена с клиентской коммитом `93f90c0`;
@@ -282,3 +282,21 @@ RETURNING version. 409 содержит проверенный snapshot без �
 Старые menu/items POST и генерация без preview после 0021 возвращают 409.
 Generic state отклоняет family-menu key с 403. Empty canonical не читает
 legacy; повреждённый canonical возвращает ошибку и требует восстановления.
+
+## Обращения пользователя в поддержку: session guard
+
+Новые клиенты читают свои тикеты через `GET /api/support/feedback/my` и
+`GET /api/support/feedback/my?id=…`, создают обращение через
+`POST /api/support/feedback`, отвечают через `POST /api/support/feedback/my`.
+Запросы передают парные `X-FitFocus-State-Account` /
+`X-FitFocus-State-Session`; `requireStateUser` сравнивает их с фактической
+cookie-сессией до прикладной работы с тикетами и вложениями. Неполная или
+устаревшая пара возвращает 401.
+
+Ответы пользовательских endpoints кроме 401 содержат
+`X-FitFocus-Support-Protocol: 1`, `X-FitFocus-Support-Guard: 1` и переданный
+публичный state scope. Новые клиенты проверяют все четыре значения до
+применения результата к UI. Мутации не повторяются автоматически.
+Запросы без state-заголовков остаются совместимыми, но не защищены этой
+привязкой. Контракт React lifetime и локальных проверок — в
+[документе сессии поддержки](docs/support-session.md).

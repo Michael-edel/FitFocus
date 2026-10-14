@@ -6,6 +6,7 @@ import {
   type SupportFeedbackEnv,
 } from "../_lib/support_feedback_handler";
 import { logApiEvent, requestIdFor, withRequestId } from "../_lib/observability";
+import { withSessionGuard } from "../_lib/state_session";
 
 type Env = SupportFeedbackEnv;
 
@@ -16,6 +17,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   } catch {
     response = json({ error: "SERVER_ERROR", public_message: "Не удалось отправить обращение. Попробуйте ещё раз позже." }, 500);
   }
+  if (response.status !== 401) response = withSessionGuard(response, context.request, "Support");
   const requestId = requestIdFor(context.request);
   logApiEvent("support.create.response", { requestId, status: response.status });
   return withRequestId(response, requestId);

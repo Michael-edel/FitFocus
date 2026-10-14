@@ -359,7 +359,14 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       )}
       {activeTab === 'support' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка поддержки...</div>}>
-          <SupportScreen currentUser={currentUser} />
+          <SupportScreen
+            key={loginGuard
+              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
+              : `no-session:${currentUser?.id || 'anonymous'}`}
+            currentUser={currentUser}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+          />
         </React.Suspense>
       )}
       {activeTab === 'guide' && (

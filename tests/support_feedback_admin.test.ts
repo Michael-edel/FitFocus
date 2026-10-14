@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPatch, onRequestPost } from '../functions/api/support/feedback';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type SupportFeedbackGetContext = Parameters<typeof onRequestGet>[0];
 type SupportFeedbackPatchContext = Parameters<typeof onRequestPatch>[0];
 type SupportFeedbackPostContext = Parameters<typeof onRequestPost>[0];
@@ -308,6 +309,39 @@ describe('admin support ticket updates', () => {
     const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
     expect(messageInsert?.binds[4]).toBe('');
     expect(messageInsert?.binds[5]).toBe(1);
+  });
+
+  it('advertises the verified account/session for a scoped ticket creation', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка'); form.set('section', 'Обзор'); form.set('subject', 'Scoped support request');
+    form.set('message', 'Проверка guarded support POST.');
+    const sid = await stateSessionId({ sub: 'user-1', sid: 'sid-admin' });
+    const response = await postTicketForm(db, form, {
+      'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sid,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-FitFocus-Support-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe(sid);
+    expect(db.batches).toHaveLength(1);
+  });
+
+  it('rejects a ticket creation with a stale account/session proof before any write', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка'); form.set('section', 'Обзор'); form.set('subject', 'Should not be created');
+    form.set('message', 'Stale state proof.');
+    const response = await postTicketForm(db, form, {
+      'X-FitFocus-State-Account': 'another-user', 'X-FitFocus-State-Session': 'f'.repeat(64),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBeNull();
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some(run => run.sql.includes('INSERT INTO support_feedback'))).toBe(false);
   });
 
   it('adds automatic device and browser diagnostics to user bug reports', async () => {

@@ -567,6 +567,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Firefox timeout в первом полном запуске не повторился: этот сценарий прошёл
   5/5, затем полный spec — 25 passed / 2 skipped. Связанные unit — 11/11,
   typecheck прошёл. Точный CI нового теста ожидается после push.
+- [x] Привязать список, детали, создание тикета и ответ пользователя к исходной
+  login-сессии. Сервер требует совпадающие account/session до прикладных
+  чтений/записей тикетов и вложений;
+  клиент проверяет response markers, IDB auth-fence и не применяет поздний
+  результат в другой сессии. Unit и account-switch E2E — локальная приёмка;
+  точный CI этого изменения проверяется после push. [Контракт](docs/support-session.md).
 - [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
   guarded diary/history commit, profile usage и успешный UI только для текущей
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли
