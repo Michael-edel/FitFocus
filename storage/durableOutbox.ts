@@ -78,6 +78,7 @@ export function writeOutboxInTransaction(
   context: {
     opId: string; nowMs: number; conflictReason?: string;
     legacy?: { sourceKey: string; fingerprint: string; canonical: string; retryCount: number };
+    onOperationCreated?: (operation: OutboxOperation) => void;
   },
 ): Promise<OutboxOperation> {
   requireOwnedKey(input.accountId, input.intent.key);
@@ -170,6 +171,7 @@ export function writeOutboxInTransaction(
     outbox.add(operation);
     metaStore.put({ id: ownerId, key: input.intent.key, accountId: input.accountId });
     metaStore.put(next);
+    context.onOperationCreated?.(operation);
     return operation;
   });
 }
