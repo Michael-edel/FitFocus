@@ -4,6 +4,29 @@
 [ADR-005](adr/ADR-005-durable-outbox.md), а не новый архитектурный план.
 Общий порядок P0/P1 остаётся в [TASKS](../TASKS.md).
 
+## Legacy migration: readwrite callbacks в активной транзакции — 37dc4b0
+
+В `legacyMigration.ts` readwrite-транзакции больше не зависят от `await`
+между IndexedDB-запросами. Нужные reads ставятся в очередь заранее; проверка
+и последующие действия выполняются синхронно из success-событий запросов.
+Порция импорта связывает outbox operation, migration ledger и progress одной
+транзакцией. Создание операции уведомляет мигратор синхронным callback внутри
+активной транзакции, поэтому ledger не записывается после её завершения.
+Snapshot initialization, повторная обработка прежних snapshots и финальный
+audit используют тот же порядок. Read-only `progress()` и `unknown()` остаются
+обычными promise-чтениями.
+
+На кодовом SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+прошли 94 целевых storage unit tests, все 1133 unit tests / 198 файлов,
+общий, domain-strict и storage-strict typecheck и production build. Целевой
+`legacy-outbox-migration.spec.ts` прошёл 6/6 запусков при `workers=1,retries=0`
+на desktop Firefox и Android Chrome. Первый совместный прогон migration и
+weekly-menu specs дал один Firefox timeout; изолированный прогон и три повтора
+на каждом из двух проектов прошли. Это подтверждает повторяемость целевого
+сценария, но не заменяет CI точного нового HEAD. Полная миграционная и P0.8
+приёмка остаётся открытой; отдельно требуется проверить `durableStateBackup`
+restore callbacks и полный lifecycle.
+
 ## Firefox: завершение finish в активной транзакции
 
 Локальный follow-up [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)

@@ -54,6 +54,17 @@ Workflow [38566637885](https://github.com/Michael-edel/FitFocus/actions/runs/385
 он не включает новый код. Проверка точного нового branch HEAD остаётся следующим
 критерием. Полный P0.8 lifecycle не завершён.
 
+Последующий кодовый commit [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+переводит readwrite callbacks импорта legacy-очереди на активные IndexedDB
+request events. На этой ревизии прошли 94 целевых storage unit tests,
+весь набор 1133 unit / 198 файлов, общий/domain-strict/storage-strict typecheck
+и production build. Migration E2E прошёл 6/6 последовательных запусков на
+desktop Firefox и Android Chrome. Первый совместный прогон двух E2E specs дал
+один Firefox timeout; последующий изолированный прогон и повторы миграции были
+успешны. Предыдущий completed PR CI [38570274020](https://github.com/Michael-edel/FitFocus/actions/runs/38570274020)
+проверил только `a221227`; новый точный HEAD ещё требует CI. Открыты durable
+backup restore callbacks, полный lifecycle, staging и выпуск.
+
 ## P0.5 — поздний ответ retry объяснения плато
 
 Новый сценарий удерживает ответ retry для аккаунта A, пока соседняя вкладка

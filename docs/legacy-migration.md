@@ -41,6 +41,25 @@ API fixture отвечает 503 на новые пакетные записи �
 iPhone Safari и iPhone PWA: 7/7, `workers=1/retries=0`. Используется HTTP API
 fixture; реальный OAuth/D1/staging и полный lifecycle этим smoke не подтверждены.
 
+## IDB-транзакции импорта — 37dc4b0
+
+В текущем импортере readwrite-транзакции не ждут завершения promise между
+запросами. Чтения снимка и прогресса ставятся заранее; обработка продолжается
+в success-событиях IndexedDB-запросов. Для каждой записи outbox operation,
+ledger и progress фиксируются согласованно в одной транзакции. Если запись
+импортируется как неизвестная, карантин и прогресс также остаются в её
+транзакционной границе. Batch chaining, сохранение snapshots и финальный audit
+используют те же активные request events.
+
+Код зафиксирован в [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0).
+На этой ревизии прошли 94 целевых теста migration/outbox/account cleanup,
+весь unit-набор (1133 теста / 198 файлов), общий и два strict typecheck,
+production build. `legacy-outbox-migration.spec.ts` прошёл 6/6 последовательных
+запусков на desktop Firefox и Android Chrome без retries. До этого один раз
+упал timeout в совместном прогоне migration и weekly-menu specs; изолированный
+повтор и серия повторов migration прошли. Полный CI для нового branch HEAD,
+durable backup restore callbacks и общая lifecycle-приёмка остаются открытыми.
+
 ## Формат legacy-записи
 
 Контракт согласованного нормализатора уже реализован в

@@ -1,17 +1,13 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 14.10.2026. Последний завершённый PR CI для PR #93 проверил
-ветку `fix/durable-outbox` на run
-[38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769);
-PR head — [`6c6feca`](https://github.com/Michael-edel/FitFocus/commit/6c6fecace6cc421e745d04127e1b544bde187618).
-Workflow завершился success: audit, schema/privacy/auth/API guards, unit,
-typechecks, build, E2E и rollback/CAS прошли; rollback-артефакт сохранён как
-`11887748120`. Все P0 остаются открытыми до остальных writers/callbacks,
-staging и полной приёмки lifecycle/release.
-В текущей ревизии добавлена account-switch проверка отложенного retry
-объяснения плато; целевой тест и полный callback spec прошли локально
-(25 passed / 2 skipped, без retries), связанные unit — 11/11, typecheck прошёл.
-Точный CI этой ревизии проверяется после push. Подробности — в
+Обновлено: 14.10.2026. Последний завершённый PR CI до текущего локального
+follow-up проверил `a221227` в run
+[38570274020](https://github.com/Michael-edel/FitFocus/actions/runs/38570274020)
+и завершился success. Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+переводит legacy migration readwrite callbacks на активные IDB request events;
+локальные unit/typecheck/build проверки прошли. CI для нового HEAD ещё нужно
+проверить после push. Все P0 остаются открытыми до остальных writers/callbacks,
+staging и полной приёмки lifecycle/release. Подробности — в
 [журнале](docs/stabilization-progress.md) и
 [матрице](docs/verification-matrix.md).
 
@@ -655,9 +651,16 @@ all-client Service Worker fence, атомарные migration items и quarantin
   account cleanup и user-state backup restore на записи в success-событии последнего IDB
   request (`f3a9abf`). Добавлена обработка пустого набора запросов; 1133 unit,
   три typecheck, build и 57 связанных Firefox/Android E2E прошли локально.
-- [ ] Подтвердить полный CI для опубликованной ветки `fix/durable-outbox` на
-  точном HEAD после code/docs push. Workflow `38566637885` для SHA `933213d`
-  ещё выполнялся на E2E-этапе и новый код не содержит.
+- [x] Перевести readwrite callbacks legacy migration на предварительно
+  поставленные IDB-запросы и синхронные продолжения из request events
+  (`37dc4b0`). Snapshot/progress и импорт с ledger остаются транзакционно
+  согласованными; 94 целевых unit, 1133 общих unit, три typecheck и build
+  прошли. Целевой migration smoke прошёл 6/6 повторов в Firefox и Android
+  Chrome; первый совместный прогон двух E2E specs имел один timeout — подробности
+  и границы проверки в [журнале](docs/stabilization-progress.md).
+- [ ] Подтвердить полный CI точного нового HEAD `fix/durable-outbox` после
+  code/docs push. Предыдущий completed PR run `38570274020` относится к
+  `a221227` и не включает `37dc4b0`.
 - [x] Реализовать компонент импорта по [ADR-005](docs/adr/ADR-005-durable-outbox.md):
   операция/карантин, ledger и прогресс порции атомарны; повтор, коллизии,
   подтверждение и необработанные прежние снимки учтены в тестах.

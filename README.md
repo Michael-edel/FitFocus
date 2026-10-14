@@ -71,12 +71,14 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Кодовая ревизия [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)
-устранила подтверждённую Firefox-причину сбоев IndexedDB finish. Локально прошли
-1132 unit-теста, 20/20 повторов двух flaky-сценариев, полный weekly-menu spec
-24/24 на трёх desktop engines, оба typecheck. Полный CI для follow-up ещё ожидается;
-остальные критерии P0.8 остаются открытыми. См. [статус](docs/project-status.md)
-и [журнал](docs/stabilization-progress.md).
+Последний локально проверенный follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+удерживает readwrite callbacks legacy migration внутри активных IndexedDB
+транзакций. На нём прошли 1133 unit-теста / 198 файлов, общий и оба strict
+typecheck, production build; migration E2E прошёл 6/6 повторов на Firefox и
+Android Chrome. Один timeout в более раннем совместном E2E-прогоне зафиксирован
+в журнале. CI для нового кода проверяется после push, а остальная P0.8-приёмка
+остаётся открытой. См. [статус](docs/project-status.md) и
+[журнал](docs/stabilization-progress.md).
 
 Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
 добавила проверку задержанного ответа личной генерации недельного меню при

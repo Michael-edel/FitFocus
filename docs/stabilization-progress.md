@@ -3028,3 +3028,29 @@ typecheck, production build. Шесть связанных browser spec на des
 не проверял этот код. После push требуется CI на новом HEAD. Legacy importer и
 durable backup callbacks, полный lifecycle, staging и выпуск этой работой
 не закрываются.
+
+## P0.8 — активные транзакции legacy migration, `37dc4b0`, 14.10.2026
+
+В `storage/legacyMigration.ts` readwrite flows переведены с async-continuation
+между IDB-запросами на заранее поставленные requests и синхронные callbacks
+в success events. Проверки progress/snapshot, batch chaining, запись migration
+ledger вместе с созданной outbox operation и финальный audit теперь используют
+активные транзакционные события. В `storage/durableOutbox.ts` добавлен
+синхронный `onOperationCreated` hook для ledger-записи внутри этой транзакции.
+
+Проверено на code SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0),
+ветка `fix/durable-outbox`; документация обновляется отдельным коммитом.
+Команда `npx vitest run tests/legacy_migration.test.ts tests/durable_outbox.test.ts tests/account_state_cleanup.test.ts`
+прошла 94/94. `npm run test:unit` — 1133/1133 в 198 файлах. Успешно прошли
+`npm run typecheck`, `npm run typecheck:domain-strict`,
+`npm run typecheck:storage-strict`, `npm run build` и `git diff --check`.
+
+Первый совместный запуск migration и weekly-menu specs на desktop Firefox и
+Android Chrome дал 17 passed / 1 failed: Firefox migration smoke превысил
+ожидание. Изолированный Firefox migration spec прошёл 1/1; затем
+`npx playwright test --project=desktop-firefox --project=android-chrome --workers=1 --retries=0 --repeat-each=3 e2e/legacy-outbox-migration.spec.ts`
+прошёл 6/6. Это не скрывает исходный timeout; полный workflow точного нового
+branch HEAD ещё не запускался. Предыдущий завершённый PR run 38570274020
+относится к `a221227`. Следующий шаг — push обновлённой документации и проверка
+CI на точном HEAD; `durableStateBackup` restore callbacks, полный lifecycle,
+staging и выпуск остаются открытыми.
