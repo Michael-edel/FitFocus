@@ -1,4 +1,4 @@
-import { StateDatabase, STATE_STORES, StateStorageError, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
+import { StateDatabase, STATE_STORES, StateStorageError, afterIndexedRequests, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
   legacyDeletedAccountMetaId } from './legacyQueue';
 import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
@@ -59,46 +59,6 @@ function requireOwnedKey(accountId: string, key: string): void {
   if (!key.startsWith(`fitfocus_data_${accountId}_`) || key.endsWith('_all_users') || key.endsWith('__ffv')) {
     throw new Error('OUTBOX_KEY_OWNERSHIP');
   }
-}
-
-/** Run dependent work in the final IDB request event while the transaction is active. */
-function afterIndexedRequests<T>(
-  transaction: IDBTransaction,
-  requests: readonly IDBRequest<unknown>[],
-  work: (results: readonly unknown[]) => T,
-): Promise<Awaited<T>> {
-  return new Promise<Awaited<T>>((resolve, reject) => {
-    const results: unknown[] = new Array(requests.length);
-    let remaining = requests.length;
-    let settled = false;
-    const abortAndReject = (error: unknown) => {
-      if (settled) return;
-      settled = true;
-      try { transaction.abort(); } catch { /* The transaction may already be aborting. */ }
-      reject(error);
-    };
-    requests.forEach((request, index) => {
-      request.addEventListener('success', () => {
-        if (settled) return;
-        results[index] = request.result;
-        remaining -= 1;
-        if (remaining !== 0) return;
-        try {
-          const result = work(results);
-          Promise.resolve(result).then((value) => {
-            if (settled) return;
-            settled = true;
-            resolve(value as Awaited<T>);
-          }, abortAndReject);
-        } catch (error) {
-          abortAndReject(error);
-        }
-      }, { once: true });
-      request.addEventListener('error', () => {
-        abortAndReject(request.error ?? new StateStorageError('transaction'));
-      }, { once: true });
-    });
-  });
 }
 
 export type OutboxWrite = {
@@ -305,37 +265,50 @@ export class DurableOutbox {
     requireText(accountId); requireText(serverSessionId);
     if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
     const db = await this.connection.open();
-    return stateTransaction(db, [STATE_STORES.meta], 'readwrite', async (tx) => {
+    return stateTransaction(db, [STATE_STORES.meta], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
-      const fenceRequest = indexedRequest(store.get('auth-fence')) as Promise<{ revision: number; loggedOutSession?: string } | undefined>;
-      const currentRequest = indexedRequest(store.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
-      const [fence, current] = await Promise.all([fenceRequest, currentRequest]);
-      if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
-      if (requireNoActiveSession && current) return null;
-      // Refreshing an existing read action cannot clear a pause or replace its attempt while /me was in flight.
-      if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
-        || previous.authFence !== expectedFence || current?.accountId !== previous.accountId
-        || current.serverSessionId !== previous.serverSessionId || current.sessionEpoch !== previous.sessionEpoch || current.pause)) return null;
-      if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return { session: current, authFence: expectedFence };
-      const revision = (fence?.revision ?? 0) + 1;
-      if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
-      const active: ActiveOutboxSession = { id: 'active-session', accountId, serverSessionId, sessionEpoch: crypto.randomUUID() };
-      store.put({ id: 'auth-fence', revision });
-      store.put(active);
-      return { session: active, authFence: revision };
+      const fenceRequest = store.get('auth-fence');
+      const currentRequest = store.get('active-session');
+      return afterIndexedRequests(tx, [
+        fenceRequest as unknown as IDBRequest<unknown>,
+        currentRequest as unknown as IDBRequest<unknown>,
+      ], ([fenceValue, currentValue]) => {
+        const fence = fenceValue as { revision: number; loggedOutSession?: string } | undefined;
+        const current = currentValue as ActiveOutboxSession | undefined;
+        if ((fence?.revision ?? 0) !== expectedFence || fence?.loggedOutSession === serverSessionId) return null;
+        if (requireNoActiveSession && current) return null;
+        // Refreshing an existing read action cannot clear a pause or replace its attempt while /me was in flight.
+        if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
+          || previous.authFence !== expectedFence || current?.accountId !== previous.accountId
+          || current.serverSessionId !== previous.serverSessionId || current.sessionEpoch !== previous.sessionEpoch || current.pause)) return null;
+        if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return { session: current, authFence: expectedFence };
+        const revision = (fence?.revision ?? 0) + 1;
+        if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+        const active: ActiveOutboxSession = { id: 'active-session', accountId, serverSessionId, sessionEpoch: crypto.randomUUID() };
+        store.put({ id: 'auth-fence', revision });
+        store.put(active);
+        return { session: active, authFence: revision };
+      });
     });
   }
 
   async invalidateSessions(): Promise<void> {
     const db = await this.connection.open();
-    await stateTransaction(db, [STATE_STORES.meta], 'readwrite', async (tx) => {
+    await stateTransaction(db, [STATE_STORES.meta], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
-      const fence = await indexedRequest(store.get('auth-fence')) as { revision: number; loggedOutSession?: string } | undefined;
-      const active = await indexedRequest(store.get('active-session')) as ActiveOutboxSession | undefined;
-      const revision = (fence?.revision ?? 0) + 1;
-      if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
-      store.put({ id: 'auth-fence', revision, loggedOutSession: active?.serverSessionId ?? fence?.loggedOutSession });
-      store.delete('active-session');
+      const fenceRequest = store.get('auth-fence');
+      const activeRequest = store.get('active-session');
+      return afterIndexedRequests(tx, [
+        fenceRequest as unknown as IDBRequest<unknown>,
+        activeRequest as unknown as IDBRequest<unknown>,
+      ], ([fenceValue, activeValue]) => {
+        const fence = fenceValue as { revision: number; loggedOutSession?: string } | undefined;
+        const active = activeValue as ActiveOutboxSession | undefined;
+        const revision = (fence?.revision ?? 0) + 1;
+        if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+        store.put({ id: 'auth-fence', revision, loggedOutSession: active?.serverSessionId ?? fence?.loggedOutSession });
+        store.delete('active-session');
+      });
     });
   }
 
@@ -350,10 +323,13 @@ export class DurableOutbox {
   async clearSession(accountId: string, expectedEpoch: string): Promise<void> {
     requireText(accountId); requireText(expectedEpoch);
     const database = await this.connection.open();
-    await stateTransaction(database, [STATE_STORES.meta], 'readwrite', async (tx) => {
+    await stateTransaction(database, [STATE_STORES.meta], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
-      const session = await indexedRequest(store.get('active-session')) as ActiveSession | undefined;
-      if (session?.accountId === accountId && session.sessionEpoch === expectedEpoch) store.delete('active-session');
+      const request = store.get('active-session') as IDBRequest<ActiveSession | undefined>;
+      return afterIndexedRequests(tx, [request as unknown as IDBRequest<unknown>], ([value]) => {
+        const session = value as ActiveSession | undefined;
+        if (session?.accountId === accountId && session.sessionEpoch === expectedEpoch) store.delete('active-session');
+      });
     });
   }
 
@@ -406,39 +382,57 @@ export class DurableOutbox {
       || typeof observation.value !== 'string' || typeof observation.exists !== 'boolean'
       || (observation.exists && observation.version === 0)) throw new Error('OUTBOX_INVALID_OBSERVATION');
     const database = await this.connection.open();
-    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) => {
       const metaStore = tx.objectStore(STATE_STORES.meta);
+      const reads: IDBRequest<unknown>[] = [];
+      const indices: Record<string, number> = Object.create(null) as Record<string, number>;
+      const queueRead = <T>(name: string, request: IDBRequest<T>): void => {
+        indices[name] = reads.length;
+        reads.push(request as unknown as IDBRequest<unknown>);
+      };
       if (expectedSessionEpoch) {
-        const active = await indexedRequest(metaStore.get('active-session')) as ActiveOutboxSession | undefined;
-        if (active?.accountId !== accountId || active.sessionEpoch !== expectedSessionEpoch || active.pause) return false;
-        if (expectedAuthFence !== undefined) {
-          const fence = await indexedRequest(metaStore.get('auth-fence')) as { revision: number } | undefined;
-          if ((fence?.revision ?? 0) !== expectedAuthFence) return false;
-        }
+        queueRead('active', metaStore.get('active-session'));
+        if (expectedAuthFence !== undefined) queueRead('fence', metaStore.get('auth-fence'));
       }
-      const owner = await indexedRequest(metaStore.get(outboxKeyOwnerId(key))) as { accountId: string } | undefined;
-      if (owner && owner.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      queueRead('owner', metaStore.get(outboxKeyOwnerId(key)));
       const id = keyStateId(accountId, key);
-      const meta = await indexedRequest(metaStore.get(id)) as KeyState | undefined;
-      const operations = await indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountKey').getAll([accountId, key])) as OutboxOperation[];
-      if (operations.length || (meta?.valueRevision ?? 0) !== expectedRevision
-        || observation.version < (meta?.confirmedVersion ?? 0)) return false;
-      const values = tx.objectStore(STATE_STORES.values);
-      const existing = await indexedRequest(values.get(key)) as { value: string; accountId?: string } | undefined;
-      if (existing?.accountId && existing.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
-      // Unowned legacy content needs its migration/provenance decision before replacement.
-      if (existing && !existing.accountId && (!observation.exists || existing.value !== observation.value)) return false;
-      // Re-reading the same owned generation must not make another tab's editor stale.
-      // Initial absence still creates metadata so a leftover legacy value cannot revive.
-      if (meta && owner?.accountId === accountId && observation.version === meta.confirmedVersion
-        && (observation.exists ? existing?.accountId === accountId && existing.value === observation.value : !existing)) return true;
-      const revision = (meta?.lastRevision ?? 0) + 1;
-      if (!finiteInteger(revision)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
-      if (observation.exists) values.put({ key, accountId, value: observation.value, updatedAt: Date.now() });
-      else values.delete(key);
-      metaStore.put({ id, accountId, key, lastRevision: revision, valueRevision: revision, confirmedVersion: observation.version } satisfies KeyState);
-      metaStore.put({ id: outboxKeyOwnerId(key), accountId, key });
-      return true;
+      queueRead('meta', metaStore.get(id));
+      queueRead('operations', tx.objectStore(STATE_STORES.outbox).index('accountKey').getAll([accountId, key]));
+      queueRead('existing', tx.objectStore(STATE_STORES.values).get(key));
+
+      return afterIndexedRequests(tx, reads, (results) => {
+        const read = <T>(name: string): T => results[indices[name]] as T;
+        if (expectedSessionEpoch) {
+          const active = read<ActiveOutboxSession | undefined>('active');
+          if (active?.accountId !== accountId || active.sessionEpoch !== expectedSessionEpoch || active.pause) return false;
+          if (expectedAuthFence !== undefined) {
+            const fence = read<{ revision: number } | undefined>('fence');
+            if ((fence?.revision ?? 0) !== expectedAuthFence) return false;
+          }
+        }
+        const owner = read<{ accountId: string } | undefined>('owner');
+        if (owner && owner.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+        const meta = read<KeyState | undefined>('meta');
+        const operations = read<OutboxOperation[]>('operations');
+        if (operations.length || (meta?.valueRevision ?? 0) !== expectedRevision
+          || observation.version < (meta?.confirmedVersion ?? 0)) return false;
+        const values = tx.objectStore(STATE_STORES.values);
+        const existing = read<{ value: string; accountId?: string } | undefined>('existing');
+        if (existing?.accountId && existing.accountId !== accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+        // Unowned legacy content needs its migration/provenance decision before replacement.
+        if (existing && !existing.accountId && (!observation.exists || existing.value !== observation.value)) return false;
+        // Re-reading the same owned generation must not make another tab's editor stale.
+        // Initial absence still creates metadata so a leftover legacy value cannot revive.
+        if (meta && owner?.accountId === accountId && observation.version === meta.confirmedVersion
+          && (observation.exists ? existing?.accountId === accountId && existing.value === observation.value : !existing)) return true;
+        const revision = (meta?.lastRevision ?? 0) + 1;
+        if (!finiteInteger(revision)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
+        if (observation.exists) values.put({ key, accountId, value: observation.value, updatedAt: Date.now() });
+        else values.delete(key);
+        metaStore.put({ id, accountId, key, lastRevision: revision, valueRevision: revision, confirmedVersion: observation.version } satisfies KeyState);
+        metaStore.put({ id: outboxKeyOwnerId(key), accountId, key });
+        return true;
+      });
     });
   }
 
@@ -469,69 +463,82 @@ export class DurableOutbox {
       || input.expectedOpIds.length === 0 || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
       || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
     const database = await this.connection.open();
-    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) => {
       const metaStore = tx.objectStore(STATE_STORES.meta);
       const outbox = tx.objectStore(STATE_STORES.outbox);
-      const [active, fence, owner, value, meta, operations] = await Promise.all([
-        indexedRequest(metaStore.get('active-session')) as Promise<ActiveOutboxSession | undefined>,
-        indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>,
-        indexedRequest(metaStore.get(outboxKeyOwnerId(input.key))) as Promise<{ accountId: string } | undefined>,
-        indexedRequest(tx.objectStore(STATE_STORES.values).get(input.key)) as Promise<{ value: string; accountId?: string } | undefined>,
-        indexedRequest(metaStore.get(keyStateId(input.accountId, input.key))) as Promise<KeyState | undefined>,
-        indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.key])) as Promise<OutboxOperation[]>,
-      ]);
-      const guard = input.readGuard;
-      if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
-        || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
-      if (owner && owner.accountId !== input.accountId || value?.accountId && value.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
-      operations.sort((left, right) => left.revision - right.revision || left.createdAtMs - right.createdAtMs || left.opId.localeCompare(right.opId));
-      const expected = new Set(input.expectedOpIds);
-      if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
-        || !operations.some((operation) => operation.status === 'conflicted')
-        || operations.some((operation) => operation.status === 'sending' || hasLegacyProvenance(operation))) return false;
-      const resources = new Set(operations.map((operation) => operation.resource ?? 'state'));
-      if (resources.size !== 1 || !meta || !finiteInteger(meta.lastRevision) || !finiteInteger(meta.valueRevision)
-        || !finiteInteger(meta.confirmedVersion) || !finiteInteger(meta.lastRevision + 1)) return false;
-      const conflicts = operations.filter((operation) => operation.status === 'conflicted');
-      const snapshots = conflicts.map((operation) => conflictServerSnapshot(input.accountId, operation))
-        .filter((snapshot): snapshot is ConflictServerSnapshot => snapshot !== undefined)
-        .sort((left, right) => right.version - left.version);
-      const snapshot = snapshots[0];
-      if (conflicts.some((operation) => operation.reason === 'server-version-conflict') && !snapshot) return false;
-      if (snapshot && snapshot.version < meta.confirmedVersion) return false;
+      const activeRequest = metaStore.get('active-session');
+      const fenceRequest = metaStore.get('auth-fence');
+      const ownerRequest = metaStore.get(outboxKeyOwnerId(input.key));
+      const valueRequest = tx.objectStore(STATE_STORES.values).get(input.key);
+      const metaRequest = metaStore.get(keyStateId(input.accountId, input.key));
+      const operationsRequest = outbox.index('accountKey').getAll([input.accountId, input.key]);
+      return afterIndexedRequests(tx, [
+        activeRequest as unknown as IDBRequest<unknown>,
+        fenceRequest as unknown as IDBRequest<unknown>,
+        ownerRequest as unknown as IDBRequest<unknown>,
+        valueRequest as unknown as IDBRequest<unknown>,
+        metaRequest as unknown as IDBRequest<unknown>,
+        operationsRequest as unknown as IDBRequest<unknown>,
+      ], ([activeValue, fenceValue, ownerValue, valueValue, metaValue, operationsValue]) => {
+        const active = activeValue as ActiveOutboxSession | undefined;
+        const fence = fenceValue as { revision: number } | undefined;
+        const owner = ownerValue as { accountId: string } | undefined;
+        const value = valueValue as { value: string; accountId?: string } | undefined;
+        const meta = metaValue as KeyState | undefined;
+        const operations = operationsValue as OutboxOperation[];
+        const guard = input.readGuard;
+        if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
+          || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
+        if (owner && owner.accountId !== input.accountId || value?.accountId && value.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+        operations.sort((left, right) => left.revision - right.revision || left.createdAtMs - right.createdAtMs || left.opId.localeCompare(right.opId));
+        const expected = new Set(input.expectedOpIds);
+        if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
+          || !operations.some((operation) => operation.status === 'conflicted')
+          || operations.some((operation) => operation.status === 'sending' || hasLegacyProvenance(operation))) return false;
+        const resources = new Set(operations.map((operation) => operation.resource ?? 'state'));
+        if (resources.size !== 1 || !meta || !finiteInteger(meta.lastRevision) || !finiteInteger(meta.valueRevision)
+          || !finiteInteger(meta.confirmedVersion) || !finiteInteger(meta.lastRevision + 1)) return false;
+        const conflicts = operations.filter((operation) => operation.status === 'conflicted');
+        const snapshots = conflicts.map((operation) => conflictServerSnapshot(input.accountId, operation))
+          .filter((snapshot): snapshot is ConflictServerSnapshot => snapshot !== undefined)
+          .sort((left, right) => right.version - left.version);
+        const snapshot = snapshots[0];
+        if (conflicts.some((operation) => operation.reason === 'server-version-conflict') && !snapshot) return false;
+        if (snapshot && snapshot.version < meta.confirmedVersion) return false;
 
-      const values = tx.objectStore(STATE_STORES.values);
-      if (input.choice === 'accept-server') {
-        if (!snapshot) return false;
-        if (snapshot.exists) values.put({ key: input.key, accountId: input.accountId, value: snapshot.value, updatedAt: input.nowMs });
+        const values = tx.objectStore(STATE_STORES.values);
+        if (input.choice === 'accept-server') {
+          if (!snapshot) return false;
+          if (snapshot.exists) values.put({ key: input.key, accountId: input.accountId, value: snapshot.value, updatedAt: input.nowMs });
+          else values.delete(input.key);
+          for (const operation of operations) outbox.delete(operation.opId);
+          const resolvedMeta: KeyState = { ...meta, lastRevision: meta.lastRevision + 1,
+            valueRevision: meta.lastRevision + 1, confirmedVersion: snapshot.version };
+          delete resolvedMeta.headOpId;
+          metaStore.put(resolvedMeta);
+          metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
+          return true;
+        }
+
+        const latest = operations[operations.length - 1];
+        if (!latest || !validResolvedLocalIntent(input.accountId, input.key, latest)) return false;
+        const baseVersion = snapshot?.version ?? meta.confirmedVersion;
+        const revision = meta.lastRevision + 1;
+        const operation: OutboxOperation = {
+          ...(latest.type === 'put' ? { type: 'put' as const, key: input.key, value: latest.value } : { type: 'delete' as const, key: input.key }),
+          ...(latest.resource ? { resource: latest.resource } : {}),
+          opId: crypto.randomUUID(), accountId: input.accountId, writerId: `manual-resolution:${crypto.randomUUID()}`,
+          revision, baseVersion, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs,
+          createdAtMs: input.nowMs, updatedAtMs: input.nowMs,
+        };
+        for (const previous of operations) outbox.delete(previous.opId);
+        if (operation.type === 'put') values.put({ key: input.key, accountId: input.accountId, value: operation.value, updatedAt: input.nowMs });
         else values.delete(input.key);
-        for (const operation of operations) outbox.delete(operation.opId);
-        const resolvedMeta: KeyState = { ...meta, lastRevision: meta.lastRevision + 1,
-          valueRevision: meta.lastRevision + 1, confirmedVersion: snapshot.version };
-        delete resolvedMeta.headOpId;
-        metaStore.put(resolvedMeta);
+        outbox.add(operation);
+        metaStore.put({ ...meta, lastRevision: revision, valueRevision: revision, confirmedVersion: baseVersion, headOpId: operation.opId });
         metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
         return true;
-      }
-
-      const latest = operations[operations.length - 1];
-      if (!latest || !validResolvedLocalIntent(input.accountId, input.key, latest)) return false;
-      const baseVersion = snapshot?.version ?? meta.confirmedVersion;
-      const revision = meta.lastRevision + 1;
-      const operation: OutboxOperation = {
-        ...(latest.type === 'put' ? { type: 'put' as const, key: input.key, value: latest.value } : { type: 'delete' as const, key: input.key }),
-        ...(latest.resource ? { resource: latest.resource } : {}),
-        opId: crypto.randomUUID(), accountId: input.accountId, writerId: `manual-resolution:${crypto.randomUUID()}`,
-        revision, baseVersion, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs,
-        createdAtMs: input.nowMs, updatedAtMs: input.nowMs,
-      };
-      for (const previous of operations) outbox.delete(previous.opId);
-      if (operation.type === 'put') values.put({ key: input.key, accountId: input.accountId, value: operation.value, updatedAt: input.nowMs });
-      else values.delete(input.key);
-      outbox.add(operation);
-      metaStore.put({ ...meta, lastRevision: revision, valueRevision: revision, confirmedVersion: baseVersion, headOpId: operation.opId });
-      metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
-      return true;
+      });
     });
   }
 
@@ -546,30 +553,37 @@ export class DurableOutbox {
       || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
       || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
     const database = await this.connection.open();
-    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', async (tx) => {
+    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) => {
       const meta = tx.objectStore(STATE_STORES.meta);
       const outbox = tx.objectStore(STATE_STORES.outbox);
-      const [active, fence, operations] = await Promise.all([
-        indexedRequest(meta.get('active-session')) as Promise<ActiveOutboxSession | undefined>,
-        indexedRequest(meta.get('auth-fence')) as Promise<{ revision: number } | undefined>,
-        indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.key])) as Promise<OutboxOperation[]>,
-      ]);
-      const guard = input.readGuard;
-      if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
-        || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
-      const expected = new Set(input.expectedOpIds);
-      if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
-        || !operations.some((operation) => operation.status === 'failed')
-        || operations.some((operation) => operation.status === 'conflicted' || operation.status === 'sending'
-          || hasLegacyProvenance(operation))) return false;
-      for (const operation of operations) {
-        if (operation.status !== 'failed') continue;
-        const retry: OutboxOperation = { ...operation, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs, updatedAtMs: input.nowMs };
-        delete retry.reason;
-        delete retry.attempt;
-        outbox.put(retry);
-      }
-      return true;
+      const activeRequest = meta.get('active-session');
+      const fenceRequest = meta.get('auth-fence');
+      const operationsRequest = outbox.index('accountKey').getAll([input.accountId, input.key]);
+      return afterIndexedRequests(tx, [
+        activeRequest as unknown as IDBRequest<unknown>,
+        fenceRequest as unknown as IDBRequest<unknown>,
+        operationsRequest as unknown as IDBRequest<unknown>,
+      ], ([activeValue, fenceValue, operationsValue]) => {
+        const active = activeValue as ActiveOutboxSession | undefined;
+        const fence = fenceValue as { revision: number } | undefined;
+        const operations = operationsValue as OutboxOperation[];
+        const guard = input.readGuard;
+        if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
+          || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
+        const expected = new Set(input.expectedOpIds);
+        if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
+          || !operations.some((operation) => operation.status === 'failed')
+          || operations.some((operation) => operation.status === 'conflicted' || operation.status === 'sending'
+            || hasLegacyProvenance(operation))) return false;
+        for (const operation of operations) {
+          if (operation.status !== 'failed') continue;
+          const retry: OutboxOperation = { ...operation, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs, updatedAtMs: input.nowMs };
+          delete retry.reason;
+          delete retry.attempt;
+          outbox.put(retry);
+        }
+        return true;
+      });
     });
   }
 

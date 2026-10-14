@@ -133,6 +133,58 @@ export function indexedRequest<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** Run dependent reads and writes from an IDB success event while its transaction is active. */
+export function afterIndexedRequests<T>(
+  transaction: IDBTransaction,
+  requests: readonly IDBRequest<unknown>[],
+  work: (results: readonly unknown[]) => T,
+): Promise<Awaited<T>> {
+  return new Promise<Awaited<T>>((resolve, reject) => {
+    const results: unknown[] = new Array(requests.length);
+    let remaining = requests.length;
+    let settled = false;
+    const abortAndReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      try { transaction.abort(); } catch { /* The transaction may already be aborting. */ }
+      reject(error);
+    };
+    if (requests.length === 0) {
+      try {
+        Promise.resolve(work([])).then((value) => {
+          if (settled) return;
+          settled = true;
+          resolve(value as Awaited<T>);
+        }, abortAndReject);
+      } catch (error) {
+        abortAndReject(error);
+      }
+      return;
+    }
+    requests.forEach((request, index) => {
+      request.addEventListener('success', () => {
+        if (settled) return;
+        results[index] = request.result;
+        remaining -= 1;
+        if (remaining !== 0) return;
+        try {
+          const result = work(results);
+          Promise.resolve(result).then((value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value as Awaited<T>);
+          }, abortAndReject);
+        } catch (error) {
+          abortAndReject(error);
+        }
+      }, { once: true });
+      request.addEventListener('error', () => {
+        abortAndReject(request.error ?? new StateStorageError('transaction'));
+      }, { once: true });
+    });
+  });
+}
+
 /** Await only IDB requests inside work; hashes, timers and HTTP belong outside. */
 export async function stateTransaction<T>(
   database: IDBDatabase,

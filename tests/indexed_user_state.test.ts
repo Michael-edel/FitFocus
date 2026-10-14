@@ -5,6 +5,7 @@ import {
   isIndexedUserStateStorageKey,
   readIndexedUserStateRaw,
   renameIndexedUserStatePrefix,
+  restoreIndexedUserStateBackup,
   writeIndexedUserStateRaw,
 } from '../storage/indexedUserState';
 
@@ -19,6 +20,10 @@ afterEach(async () => {
 });
 
 describe('Indexed user state', () => {
+  it('accepts an empty backup restore without waiting for nonexistent IDB requests', async () => {
+    await expect(restoreIndexedUserStateBackup({})).resolves.toBe(true);
+  });
+
   it('stores volume state outside localStorage and can move it to a resolved account id', async () => {
     expect(isIndexedUserStateStorageKey(firstKey)).toBe(true);
     expect(isIndexedUserStateStorageKey(`fitfocus_data_${firstUserId}_settings`)).toBe(true);
