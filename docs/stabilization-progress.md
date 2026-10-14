@@ -2956,3 +2956,55 @@ conflict и migration receipt остаются в одной транзакци�
 24/24 на desktop Chromium, Firefox и WebKit. Полный CI нового коммита ожидается
 после push; локальные результаты не заменяют его. P0.8 и выпуск остаются
 открытыми до завершения остальных lifecycle-критериев.
+
+## Outbox write и Android migration follow-up — 8d7aee0, 14.10.2026
+
+Полный [CI run 38556748824](https://github.com/Michael-edel/FitFocus/actions/runs/38556748824)
+на точном `8dc7f71` завершился success: 1132 unit / 198 файлов, 537 browser
+passed / 83 skipped, guards/schema/privacy/build и rollback checks прошли.
+Итог отметил три flaky: два desktop Firefox с `STATE_STORAGE_TRANSACTION`
+и Android Chrome migration с timeout ожидания отправки.
+
+Firefox stack указал на `DurableOutbox.write` → `writeOutboxInTransaction`:
+запросы были поставлены до `Promise.all`, а в продолжении после их завершения
+вызывался `tx.objectStore()` и ставились зависимые writes. Исправление
+[`8d7aee0`](https://github.com/Michael-edel/FitFocus/commit/8d7aee0) выполняет
+проверки и записи синхронно в success-событии последнего read request; при
+ошибке вычисления readwrite-транзакция отменяется до выхода из события.
+
+Android diagnostic показал, что миграция импортировала и разрешила отправку,
+но test fixture восстанавливала backend через 750 ms после обновления. Медленный
+Service Worker мог открыть gate раньше восстановления, получить retry и оставить
+операцию `sending` в момент 10-секундной проверки. Теперь backend готов до
+обновления; до него тест проверяет отсутствие state-write попыток, а затем ждёт
+`writersStopped && sendAllowed` вместо таймера.
+
+После поправок прошли 1132 unit / 198 файлов, общий, domain-strict и
+storage-strict typecheck. Targeted runs без retry: Firefox timeout 5/5,
+weekly-menu account switch 3/3, Android migration 5/5. Полный прогон этих трёх
+файлов на desktop Firefox и Android Chrome: 27 passed / 9 skipped. CI точного
+`8d7aee0` отдельно не запускался; его код включён в `35fceb4`, для которого
+push CI приведён ниже. P0.8 и выпуск остаются открытыми.
+
+## Outbox claim follow-up — 35fceb4, 14.10.2026
+
+При аудите после `8d7aee0` найден аналогичный Firefox lifecycle-риск в
+`DurableOutbox.claim`: после `Promise.all` метод проверял legacy gate/receipt и
+записывал `sending`. Теперь начальные session/outbox reads ставятся в очередь
+вместе; для каждого нужного legacy-кандидата запрос receipt ставится из
+success-события предыдущего чтения, а claim — в success-событии последнего
+нужного read request. Поздняя или устаревшая сессия по-прежнему не получает
+lease. Legacy receipt читается только для рассматриваемого head intent, а не
+для всей очереди на каждом claim.
+
+На точном кодовом SHA
+[`35fceb4`](https://github.com/Michael-edel/FitFocus/commit/35fceb467f7928be3f7df57f0f6b3d669f8265dc)
+прошли 1132 unit-теста / 198 файлов, `npm run typecheck`,
+`npm run typecheck:storage-strict` и production build. Без retries прошли 18
+E2E из `weekly-menu-durability.spec.ts` и `legacy-outbox-migration.spec.ts` на
+desktop Firefox и Android Chrome. Push CI
+[run 38566246646](https://github.com/Michael-edel/FitFocus/actions/runs/38566246646)
+для SHA `35fceb4` отменён concurrency после запуска PR
+[run 38566257477](https://github.com/Michael-edel/FitFocus/actions/runs/38566257477),
+который ещё выполняется. После push документации нужно проверить CI нового
+branch HEAD. Полная P0.8 и выпуск остаются открытыми.

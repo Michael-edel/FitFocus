@@ -32,6 +32,11 @@
 в Map больше не используются этим repository. Delete удаляет value и сохраняет
 delete-intent; новое значение и delete не отменяют существование друг друга.
 
+`DurableOutbox.write` и `claim` выполняют зависимые записи в success-событиях
+последних нужных IDB-чтений, пока readwrite-транзакция активна. Это сохраняет
+атомарность value/outbox и claim/lease в Firefox; детали и проверки — в
+[карте P0.8](outbox-implementation.md).
+
 Методы writeJson/remove возвращают Promise результата commit. Quota/abort или
 недоступная IDB дают отказ; запасная localStorage-outbox не создаётся.
 Прежний localStorage value удаляется только после принятой транзакционной правки.

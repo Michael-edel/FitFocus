@@ -19,6 +19,51 @@ spec 24/24 на Chromium, Firefox и WebKit; также прошёл весь un
 Полный CI для follow-up ожидается после push. Остальные критерии P0.8 остаются
 открытыми.
 
+## Firefox: зависимые записи `write` в активной транзакции — 8d7aee0
+
+CI `8dc7f71` обнаружил ещё один редкий Firefox `InvalidStateError` в
+`DurableOutbox.write`: после `Promise.all` IDB-чтений `writeOutboxInTransaction`
+обращался к `tx.objectStore()` и ставил value/operation/meta записи уже после
+того, как транзакция переходила в commit. Теперь все чтения ставятся в очередь
+сразу; проверка владельца, readGuard и ревизий, затем зависимые записи
+выполняются синхронно в success-событии последнего запроса. Исключение
+синхронно прерывает транзакцию. Value и outbox остаются атомарными.
+
+Android Chrome flake того же CI был гонкой в тестовом порядке: API включалось
+после таймера, когда медленная активация Service Worker уже могла открыть
+send-gate. Fixture теперь делает API доступным до обновления, а тест ждёт
+`writersStopped && sendAllowed` вместо фиксированной паузы; до открытия gate
+проверяется отсутствие даже попыток записи.
+
+На `8d7aee0` прошли 1132 unit-теста / 198 файлов, общий, domain-strict и
+storage-strict typecheck; timeout Firefox — 5/5, weekly-menu account switch —
+3/3, Android migration — 5/5. Полный набор этих трёх E2E-файлов на desktop
+Firefox и Android Chrome: 27 passed / 9 skipped. Исправление включено в
+опубликованный branch HEAD `35fceb4`; его полный CI указан в следующем разделе.
+Остальные критерии P0.8 остаются открытыми.
+
+## Firefox: зависимый claim в активной транзакции — 35fceb4
+
+После исправления `write` аудит sender обнаружил тот же риск в `claim`:
+метод ждал `Promise.all` для session/outbox reads, затем мог читать migration
+gate/receipt и записывать `sending` в уже завершающуюся транзакцию. Теперь
+session и список операций читаются вместе; поиск первого отправляемого intent
+продолжается в success-событиях запросов. Для legacy intent gate и receipt
+читаются по одному кандидату, а claim записывается в том же активном событии.
+Это сохраняет claim/lease и не делает полный проход по migration items на каждую
+попытку sender.
+
+На точном кодовом SHA [`35fceb4`](https://github.com/Michael-edel/FitFocus/commit/35fceb467f7928be3f7df57f0f6b3d669f8265dc)
+прошли 1132 unit-теста / 198 файлов, общий и storage-strict typecheck,
+production build. Targeted E2E `weekly-menu-durability` и
+`legacy-outbox-migration` на desktop Firefox и Android Chrome: 18 passed / 0
+skipped, retries выключены. Push CI
+[run 38566246646](https://github.com/Michael-edel/FitFocus/actions/runs/38566246646)
+для этого SHA отменён concurrency после запуска PR CI
+[run 38566257477](https://github.com/Michael-edel/FitFocus/actions/runs/38566257477);
+тот run ещё выполняется. После публикации документации нужно проверить CI на
+новом branch HEAD. Полная P0.8-приёмка остаётся открытой.
+
 ## Проверенная граница
 
 Ревизия [`51a789c5c0d8b724a54071ecf10232ecc58a42df`](https://github.com/Michael-edel/FitFocus/commit/51a789c5c0d8b724a54071ecf10232ecc58a42df),

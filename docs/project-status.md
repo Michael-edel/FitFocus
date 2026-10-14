@@ -24,6 +24,27 @@ outbox и базы состояния, общий typecheck и storage-strict ty
 оставшиеся writers, миграция, восстановление конфликтов и полный lifecycle
 перечислены в [TASKS](../TASKS.md).
 
+Последующий CI [run 38556748824](https://github.com/Michael-edel/FitFocus/actions/runs/38556748824)
+на `8dc7f71` завершился success (1132 unit, 537 browser passed / 83 skipped),
+но пометил три flaky. Два Firefox-сценария выявили тот же lifecycle-риск в
+`DurableOutbox.write`: чтения завершались, а зависимые записи ставились после
+`Promise.all`. Android migration diagnostic показал, что backend recovery
+соревновался с открытием Service Worker send-gate после фиксированной паузы.
+В коде `8d7aee0` записи `write` выполняются в success-событии последнего чтения;
+тест миграции включает API до открытия gate и ждёт фактический барьер.
+Локально прошли 1132 unit, три typecheck, целевой Firefox timeout 5/5,
+account-switch 3/3, Android migration 5/5 и 27 связанных E2E без retry.
+Последующий аудит выявил такой же риск в `claim`. На кодовом SHA `35fceb4`
+поиск claim теперь планирует записи в success-событии IDB-чтений, включая
+legacy gate/receipt. Для него прошли 1132 unit, общий и storage-strict typecheck,
+production build и 18 целевых Firefox/Android E2E без retries. CI для
+опубликованного SHA [`35fceb4`](https://github.com/Michael-edel/FitFocus/commit/35fceb467f7928be3f7df57f0f6b3d669f8265dc)
+отменён для push-события из-за concurrency
+([run 38566246646](https://github.com/Michael-edel/FitFocus/actions/runs/38566246646));
+PR run [38566257477](https://github.com/Michael-edel/FitFocus/actions/runs/38566257477)
+на том же SHA выполняется. После push документации нужно проверить CI нового
+branch HEAD; полная P0.8-приёмка остаётся открытой.
+
 ## P0.5 — поздний ответ retry объяснения плато
 
 Новый сценарий удерживает ответ retry для аккаунта A, пока соседняя вкладка

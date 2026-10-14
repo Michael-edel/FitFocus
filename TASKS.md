@@ -642,7 +642,18 @@ all-client Service Worker fence, атомарные migration items и quarantin
 - [x] Выполнять зависимые записи finish внутри success-события последнего
   IndexedDB read request; проверить Firefox-повторы и браузерную матрицу.
   Локальные результаты связаны с кодом [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd);
-  CI этого изменения ещё ожидается.
+  CI `8dc7f71` прошёл, но обнаружил ещё один flaky в outbox.write; см. следующий пункт.
+- [x] Выполнять зависимые value/operation/meta записи `writeOutboxInTransaction`
+  в success-событии последнего IDB-чтения и синхронно отменять транзакцию при
+  ошибке (`8d7aee0`). Timeout Firefox прошёл 5/5, account-switch 3/3,
+  Android migration 5/5; связанные E2E: 27 passed / 9 skipped.
+- [x] Выполнять claim-запись в активном success-событии IDB-чтения; gate и
+  migration receipt проверять для нужной legacy-операции без сканирования всей
+  очереди на каждом claim (`35fceb4`). 1132 unit, typecheck, storage-strict,
+  production build прошли; Firefox и Android Chrome: 18/18 целевых E2E.
+- [ ] Подтвердить полный CI для опубликованной ветки `fix/durable-outbox` на
+  точном HEAD после документационного коммита; прежний CI `8dc7f71` прошёл,
+  но содержал flake в `write` и Android migration.
 - [x] Реализовать компонент импорта по [ADR-005](docs/adr/ADR-005-durable-outbox.md):
   операция/карантин, ledger и прогресс порции атомарны; повтор, коллизии,
   подтверждение и необработанные прежние снимки учтены в тестах.
