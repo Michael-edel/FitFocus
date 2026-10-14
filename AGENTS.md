@@ -43,7 +43,9 @@
   сохраняет canonical profile до AI, затем причинный update; owned IDB-профиль
   восстанавливается без подбора по email или переноса prefix. HTTP bootstrap,
   state-hydration и profile seed используют scope/readGuard и транзакционный
-  auth-fence (`dac2de2`); остальные callbacks и runtime legacy ещё открыты.
+  auth-fence (`dac2de2`). Runtime legacy import подключён к свежему `/api/me`
+  proof и all-client Service Worker fence; остаются остальные callbacks и
+  полный lifecycle/acceptance. Сверяйся с TASKS и статусом текущей ветки.
   Контракт и приёмка компонента:
   [загрузка сессии](docs/bootstrap-hydration.md). Проверенная граница:
   [регистрация](docs/registration-persistence.md),

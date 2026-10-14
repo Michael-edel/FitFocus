@@ -490,11 +490,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
-- [ ] Завершить проверку выдачи мобильного bearer-токена из Settings: fresh
+- [x] Проверить выдачу мобильного bearer-токена из Settings: fresh
   account/session proof, server scope до mint, guarded no-store response,
   очистка токена/setup link при смене логина и delayed account-switch E2E.
-  Реализация находится в текущем изменении; пункт закроется после проверки точного
-  CI HEAD. [Контракт](docs/wearable-sync.md).
+  Все проверки включены в точный PR CI HEAD `08618e3`, run
+  [38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894),
+  завершившийся success. [Контракт](docs/wearable-sync.md).
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
   account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.
@@ -732,7 +733,8 @@ all-client Service Worker fence, атомарные migration items и quarantin
   реальным pending intent: сохраняются владелец, ledger и исходный legacy-ключ;
   неизвестный владелец помещён в карантин; старое окно не отправляет запись до
   обновления, а новая очередь отправляет её после all-client fence.
-  [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7.
+  [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7; обновлённая
+  migration E2E-проверка прошла в точном CI HEAD `08618e3`, run `38628487894`.
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2

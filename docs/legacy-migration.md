@@ -1,6 +1,6 @@
 # Компонент импорта старой очереди
 
-Обновлено: 14.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
+Обновлено: 15.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
 `storage/stateSync.ts`, проверки: `tests/legacy_migration.test.ts` и
 `tests/state_sync_legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
@@ -122,15 +122,16 @@ Fingerprint вычисляется из нормализованных поле�
 объекта не участвуют. Отсутствующий baseVersion эквивалентен явному 0.
 Совпавший hash дополнительно сверяется по каноническим полям при импорте.
 
-Сверка кода и тестов на `48cf797` подтвердила все правила выше. Повторная
-проверка branch HEAD `659aebd` 14.10.2026 подтвердила контракт на актуальной
-ветке: файлы нормализатора и его тестов не менялись после `ce546c1`, а
-`npx vitest run tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
-прошёл 124/124. Полный PR workflow [run 38608666208](https://github.com/Michael-edel/FitFocus/actions/runs/38608666208)
-проверяет точный HEAD `659aebd` и пока выполняется. Локальная проверка
-подтверждает нормализатор и импортные unit-тесты, но не завершённый CI, полный
-lifecycle, staging или готовность P0.8. Оставшаяся работа указана в
-[статусе проекта](project-status.md).
+Сверка кода и тестов на `48cf797` подтвердила все правила выше. Полный PR CI
+на опубликованном source HEAD [`08618e3`](https://github.com/Michael-edel/FitFocus/commit/08618e305414b8ab2962198a39dea0e8a258350b),
+включая обновлённый old/new migration browser smoke, завершился success в
+[run 38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894):
+1153 unit-теста / 199 файлов, 577 browser passed / 95 skipped, audit, guards,
+три typecheck, production build, 23 rollback/CAS-запроса и сохранение
+rollback-артефакта прошли. Отдельная локальная проверка 124/124 относится к
+HEAD `659aebd` и остаётся историческим свидетельством. Новый двухвкладочный
+тест конкурентных записей ожидает отдельный CI; полный lifecycle, staging и
+готовность P0.8 остаются открытыми. См. [текущий статус проекта](project-status.md).
 
 ## Входные данные и граница доверия
 

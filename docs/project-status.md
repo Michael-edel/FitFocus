@@ -3,20 +3,20 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-Последний кодовый HEAD ветки fix/durable-outbox — [ce7b60d](https://github.com/Michael-edel/FitFocus/commit/ce7b60d9e6cd40201778fb399fbf1421c04630c5).
-Он содержит session-bound local commit для вопроса и очистки истории AI Совета;
-обычные repository-записи AI остаются под строгим guard. CI
-[38621324053](https://github.com/Michael-edel/FitFocus/actions/runs/38621324053)
-на SHA 010cf26 прошёл 1153 unit-теста, но typecheck сообщил об отсутствующих
-импортах guard-типов в UserStateRepository; исправление вошло в ce7b60d.
-Полный PR CI [38621962929](https://github.com/Michael-edel/FitFocus/actions/runs/38621962929)
-прошёл на merge-ref `d805b1f`, включающем исходный SHA `7458ea0`:
-1153 unit-теста / 199 файлов, 576 browser passed / 95 skipped, audit без
-уязвимостей, schema/privacy/auth/API guards, общий и два strict typecheck,
-build и 23 rollback/CAS-запроса. Один тест legacy migration на desktop Chromium
-оказался flaky: первая попытка не дождалась согласованного состояния, повтор
-прошёл; CI завершился success. Предыдущий провал на SHA 6305695 и его восемь
-E2E-ошибок сохранены в [журнале стабилизации](stabilization-progress.md).
+Последний проверенный опубликованный source HEAD ветки fix/durable-outbox —
+[`08618e3`](https://github.com/Michael-edel/FitFocus/commit/08618e305414b8ab2962198a39dea0e8a258350b).
+Точный PR CI [`38628487894`](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)
+завершился success на merge-ref `d10ec68`: 1153 unit-теста / 199 файлов,
+577 browser passed / 95 skipped, audit без уязвимостей, schema/privacy/auth/API
+guards, три typecheck, production build, 23 rollback/CAS-запроса и сохранённый
+rollback-артефакт. Предыдущий flaky migration timeout на `7458ea0` исправлен
+тестовой синхронизацией; подробности и прежние неуспешные прогоны сохранены в
+[журнале стабилизации](stabilization-progress.md).
+
+Follow-up добавляет двухвкладочный сценарий конкурентных записей в разные ключи
+без Web Locks. Его exact CI ожидает push и не входит в run `38628487894`. PR #93
+остаётся draft к `fix/state-generations`; интеграция в `main`, staging и выпуск
+не выполнены.
 
 Вопрос и очистка истории сохраняются при паузе отправителя только при
 совпадении account, server session и epoch. Сгенерированный ответ AI требует
