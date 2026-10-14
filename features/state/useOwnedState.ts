@@ -12,6 +12,6 @@ export function useOwnedState<T>(accountId: string | null | undefined, key: User
   const setValue: Dispatch<SetStateAction<T>> = useCallback((action) => { void editor.set(action).catch(() => {}); }, [editor]);
   const persist = useCallback((value: T) => editor.set(value), [editor]);
   const persistGenerated = useCallback((value: T | ((previous: T) => T), guard: OutboxCommitGuard) => editor.commitGenerated(value, guard), [editor]);
-  const remove = useCallback(() => editor.remove(), [editor]);
+  const remove = useCallback((guard?: OutboxCommitGuard) => editor.remove(guard), [editor]);
   return { value: snapshot.value, setValue, persist, persistGenerated, remove, ready: snapshot.phase === 'ready' };
 }

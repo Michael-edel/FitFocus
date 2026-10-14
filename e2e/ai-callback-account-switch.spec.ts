@@ -11,9 +11,10 @@ const profileKey = (accountId: string) => `fitfocus_data_${accountId}_profile`;
 const coachKey = (accountId: string) => `fitfocus_data_${accountId}_last_coach_card`;
 const diaryKey = (accountId: string) => `fitfocus_data_${accountId}_diary`;
 const historyKey = (accountId: string) => `fitfocus_data_${accountId}_history`;
+const councilKey = (accountId: string) => `fitfocus_data_${accountId}_council_history`;
 
 type Account = typeof accountA;
-type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced';
+type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced' | 'council_chairman';
 type FixtureState = { current: Account; profile: ReturnType<typeof profileFor> };
 
 function profileFor(accountId: string, plateau = false) {
@@ -83,6 +84,7 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     releasedResponses: 0,
     achievementChecks: 0,
     completedAiFeatures: [] as string[],
+    aiRequests: [] as Array<{ feature: string; account?: string; session?: string }>,
     stateWrites: [] as string[],
     profileWrites: [] as string[],
   };
@@ -131,6 +133,7 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/logout') return json({ ok: true }, responseAccount);
     if (path === '/api/ai' && method === 'POST') {
       const feature = request.postDataJSON()?.feature;
+      if (typeof feature === 'string') counts.aiRequests.push({ feature, account: requestedAccount, session: requestedSession });
       if (feature === heldFeature) {
         expect(requestedAccount).toBe(accountA.id);
         expect(requestedSession).toBe(accountA.sid);
@@ -139,6 +142,8 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
         await held.promise;
         const text = feature === 'coach_advice'
           ? JSON.stringify({ title: 'Поздний ответ A', advice: 'Совет профиля A', bullets: ['Старые данные'] })
+          : feature === 'council_chairman'
+            ? 'Поздний ответ AI Совета из аккаунта A'
           : feature === 'personal_plan'
             ? JSON.stringify({ ...profileFor(accountA.id).aiPlan, title: 'Поздний план A' })
             : feature === 'weekly_menu'
@@ -243,11 +248,11 @@ function rawValue(snapshot: DurableSnapshot, key: string) {
 
 function operationsFor(snapshot: DurableSnapshot, account: Account) {
   return snapshot.operations.filter(operation => operation.accountId === account.id
-    && [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id)].includes(operation.key));
+    && [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id), councilKey(account.id)].includes(operation.key));
 }
 
 function valuesFor(snapshot: DurableSnapshot, account: Account) {
-  return snapshot.values.filter(value => [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id)].includes(value.key));
+  return snapshot.values.filter(value => [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id), councilKey(account.id)].includes(value.key));
 }
 
 async function waitForAccountOutboxIdle(page: Page, account: Account) {
@@ -341,6 +346,55 @@ test('held coach retry cannot write for account A after another tab signs in as 
     expect(switched.errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await page.screenshot({ path: info.outputPath('coach-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('AI Council uses account A proof and discards its held answer after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab AI Council account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()} @ ${JSON.stringify(message.location())}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'council_chairman');
+  await openApp(page, '/#council');
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  const question = 'Как улучшить режим питания?';
+  await page.getByPlaceholder('Ваш вопрос экспертам...').fill(question);
+  await page.locator('form').getByRole('button').click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeSwitch = await readDurableSnapshot(page);
+  const councilA = rawValue(beforeSwitch, councilKey(accountA.id));
+  expect(councilA).toContain(question);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+
+  try {
+    const switched = await openAccountB(context, state);
+    const beforeB = await readDurableSnapshot(switched.page);
+    const councilBBefore = rawValue(beforeB, councilKey(accountB.id));
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(page);
+    expect(rawValue(final, councilKey(accountA.id))).toBe(councilA);
+    expect(operationsFor(final, accountA)).toEqual(operationsFor(beforeSwitch, accountA));
+    expect(rawValue(final, councilKey(accountB.id))).toBe(councilBBefore);
+    expect(operationsFor(final, accountB)).toEqual(operationsFor(beforeB, accountB));
+    expect(fixtureA.counts.aiRequests.filter(call => call.feature.startsWith('council_')))
+      .toEqual([{ feature: 'council_chairman', account: accountA.id, session: accountA.sid }]);
+    await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('ai-council-late-response-account-switch.png') });
   } finally {
     fixtureA.release();
   }

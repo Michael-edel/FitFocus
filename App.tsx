@@ -535,13 +535,18 @@ const App: React.FC = () => {
     setCouncilInput,
     councilLoading,
     councilStage,
+    councilError,
     councilMessages,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,
     councilScrollRef,
     handleCouncilSubmit,
     clearCouncilHistory,
-  } = useCouncilChat({ currentUser, foodDiary, habits });
+  } = useCouncilChat({
+    currentUser, foodDiary, habits,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+  });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
   const {
@@ -1552,6 +1557,7 @@ const logWeight = useCallback(() => {
       setCouncilInput,
       councilLoading,
       councilStage,
+      councilError,
       councilMessages,
       expandedCouncilThoughtIds,
       setExpandedCouncilThoughtIds,

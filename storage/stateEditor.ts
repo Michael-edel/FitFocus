@@ -57,10 +57,10 @@ export class StateEditor<T> {
     if (operation.status === 'pending') { this.editRevision += 1; this.publish({ value, phase: 'ready' }); }
     return operation;
   }
-  async remove() {
+  async remove(guard?: OutboxCommitGuard) {
     const editRevision = ++this.editRevision;
     if (this.repository && this.snapshot.phase !== 'ready') this.unobservedEdit = true;
-    const operation = this.repository ? await this.repository.remove(this.key, this.unobservedEdit) : null;
+    const operation = this.repository ? await this.repository.remove(this.key, this.unobservedEdit, guard) : null;
     if (editRevision === this.editRevision && (!operation || operation.status === 'pending')) {
       this.publish({ ...this.snapshot, value: this.initial });
     }

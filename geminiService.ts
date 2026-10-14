@@ -489,10 +489,12 @@ export async function callAiCouncil(
   query: string,
   user: UserProfile,
   diary: FoodItem[],
-  habits: UserHabit[]
+  habits: UserHabit[],
+  session: AiSession,
 ): Promise<CouncilResponse> {
+  if (session.guard.accountId !== user.id) throw new SessionReadError('session');
   const callModel = async (prompt: string, role: AIAgentRole) => {
-    const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, `council_${role}`);
+    const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, `council_${role}`, undefined, session);
     return res.text || '';
   };
 

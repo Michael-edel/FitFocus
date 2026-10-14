@@ -69,7 +69,7 @@ type AppWorkspaceData = {
     syncState?: PassThroughProp;
   };
   family: Record<string, PassThroughProp>;
-  council: Record<string, PassThroughProp>;
+  council: Record<string, PassThroughProp> & { councilError?: string | null };
   content: Record<string, PassThroughProp> & {
     settings: AppSettings;
     setSettings: (next: AppSettings) => void;
@@ -90,7 +90,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
   const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
-  const { councilInput, setCouncilInput, councilLoading, councilStage, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
+  const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
 
   return (
@@ -326,6 +326,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             setCouncilInput={setCouncilInput}
             councilLoading={councilLoading}
             councilStage={councilStage}
+            councilError={councilError}
             councilMessages={councilMessages}
             expandedCouncilThoughtIds={expandedCouncilThoughtIds}
             setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}

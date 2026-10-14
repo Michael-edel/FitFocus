@@ -160,7 +160,7 @@ export class UserStateRepository {
     } catch { return fallback; }
   }
 
-  remove(stateKey: UserStateKey, retainAsConflict = false): Promise<OutboxOperation> {
-    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict);
+  remove(stateKey: UserStateKey, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict, guard);
   }
 }

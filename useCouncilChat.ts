@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { callAiCouncil } from './geminiService';
 import { FoodEntry, UserHabit, UserProfile } from './types';
 import type { CouncilChatMsg } from './storage/stateTypes';
 export type { CouncilChatMsg } from './storage/stateTypes';
 import { useOwnedState } from './features/state/useOwnedState';
+import { AiActionScope } from './features/ai/actionScope';
+import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { assertReadSession } from './storage/sessionRead';
 import type { StateCodec } from './storage/stateEditor';
 import { errorMessage, isRecord, parseJson } from './safeJson';
 
@@ -26,22 +30,46 @@ type UseCouncilChatArgs = {
   currentUser: UserProfile | null;
   foodDiary: FoodEntry[];
   habits: UserHabit[];
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
 };
 
-export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilChatArgs) {
+export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isCurrentSession }: UseCouncilChatArgs) {
   const [councilInput, setCouncilInput] = useState('');
   const [councilLoading, setCouncilLoading] = useState(false);
   const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
+  const [councilError, setCouncilError] = useState<string | null>(null);
   const history = useOwnedState(currentUser?.id, 'council_history', [], councilCodec);
   const councilMessages = history.value;
-  const setCouncilMessages = history.setValue;
   const requestGeneration = useRef(0);
+  const scope = useMemo(() => new AiActionScope(() => Boolean(loginGuard
+    && loginGuard.accountId === currentUser?.id && isCurrentSession())),
+  [currentUser?.id, isCurrentSession, loginGuard]);
   const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
   const councilScrollRef = useRef<HTMLDivElement | null>(null);
 
+  useLayoutEffect(() => {
+    scope.activate();
+    const hide = () => {
+      scope.invalidate(); requestGeneration.current += 1;
+      setCouncilLoading(false); setCouncilStage('idle');
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      scope.activate(); setCouncilLoading(false); setCouncilStage('idle');
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      scope.invalidate();
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, [scope]);
+
   useEffect(() => {
     requestGeneration.current += 1;
-    setCouncilInput(''); setCouncilLoading(false);
+    setCouncilInput(''); setCouncilLoading(false); setCouncilError(null);
     setExpandedCouncilThoughtIds({}); setCouncilStage('idle');
     return () => { requestGeneration.current += 1; };
   }, [currentUser?.id]);
@@ -52,19 +80,40 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
   }, [councilMessages.length, councilLoading]);
 
   const clearCouncilHistory = useCallback(() => {
+    if (!currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
+    const attempt = scope.begin();
+    if (!attempt) return;
     const generation = ++requestGeneration.current;
-    setCouncilLoading(false); setCouncilStage('idle');
-    void history.remove().then((operation) => {
-      if (generation === requestGeneration.current && (!operation || operation.status === 'pending')) setExpandedCouncilThoughtIds({});
-    }).catch(() => {});
-  }, [history.remove]);
+    const isCurrent = () => generation === requestGeneration.current && attempt.isCurrent();
+    const showErrorIfSessionCurrent = async (message: string) => {
+      try { await assertReadSession(loginGuard, { signal: attempt.controller.signal, isCurrentSession: isCurrent }); }
+      catch { return; }
+      if (isCurrent()) setCouncilError(message);
+    };
+    setCouncilLoading(false); setCouncilStage('idle'); setCouncilError(null);
+    void history.remove({ readGuard: { ...loginGuard }, canCommit: isCurrent }).then((operation) => {
+      if (!isCurrent()) return;
+      if (operation?.status === 'pending') setExpandedCouncilThoughtIds({});
+      else void showErrorIfSessionCurrent('Не удалось очистить историю совета. Проверьте состояние хранилища.');
+    }).catch((error: unknown) => {
+      void showErrorIfSessionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
+    }).finally(() => attempt.finish());
+  }, [currentUser, history.remove, loginGuard, scope]);
 
   const handleCouncilSubmit = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
     const q = councilInput.trim();
     if (!q) return;
+    if (!history.ready) {
+      setCouncilError('История ещё загружается. Повторите отправку вопроса.');
+      return;
+    }
+    const attempt = scope.begin();
+    if (!attempt) return;
     const generation = ++requestGeneration.current;
-    const isCurrent = () => generation === requestGeneration.current;
+    const isCurrent = () => generation === requestGeneration.current && attempt.isCurrent();
+    const originalGuard = Object.freeze({ ...loginGuard });
+    let session: AiSession | null = null;
 
     const userMsg = {
       id: `u_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
@@ -72,9 +121,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
       text: q,
       createdAt: new Date().toISOString(),
     };
-    setCouncilInput('');
-
-    setCouncilMessages((prev) => [...prev, userMsg]);
+    setCouncilError(null);
     setCouncilLoading(true);
     setCouncilStage('router');
 
@@ -84,7 +131,18 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
     timers.push(setTimeout(() => { if (isCurrent()) setCouncilStage((s) => (s === 'review' ? 'chairman' : s)); }, 1400));
 
     try {
-      const r = await callAiCouncil(q, currentUser, foodDiary, habits);
+      const userOperation = await history.persistGenerated(previous => [...previous, userMsg], {
+        readGuard: { ...originalGuard }, canCommit: isCurrent,
+      });
+      if (!isCurrent()) return;
+      if (!userOperation || userOperation.status !== 'pending') throw new Error('Не удалось сохранить вопрос совета. Проверьте состояние хранилища.');
+      setCouncilInput('');
+
+      session = await prepareAiSession(currentUser.id, attempt.controller, isCurrent, { previous: originalGuard });
+      if (!isCurrent()) return;
+      const r = await callAiCouncil(q, currentUser, foodDiary, habits, session);
+      if (!isCurrent()) return;
+      await assertAiSession(session);
       if (!isCurrent()) return;
       const assistantMsg: CouncilChatMsg = {
         id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
@@ -93,28 +151,54 @@ export function useCouncilChat({ currentUser, foodDiary, habits }: UseCouncilCha
         createdAt: new Date().toISOString(),
         response: r,
       };
-      setCouncilMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: unknown) {
-      const msg = errorMessage(err, 'Ошибка совета.');
+      const operation = await history.persistGenerated(previous => [...previous, assistantMsg], {
+        readGuard: { ...session.guard }, canCommit: isCurrent,
+      });
       if (!isCurrent()) return;
+      if (!operation || operation.status !== 'pending') throw new Error('Ответ совета не сохранён. Проверьте конфликт или ошибку хранилища.');
+    } catch (err: unknown) {
+      if (!isCurrent()) return;
+      const readGuard = session?.guard ?? originalGuard;
+      try {
+        if (session) await assertAiSession(session);
+        else await assertReadSession(originalGuard, { signal: attempt.controller.signal, isCurrentSession: isCurrent });
+        if (!isCurrent()) return;
+      } catch {
+        if (generation === requestGeneration.current) { setCouncilLoading(false); setCouncilStage('idle'); }
+        attempt.controller.abort();
+        return;
+      }
+      const msg = errorMessage(err, 'Ошибка совета.');
       const assistantMsg: CouncilChatMsg = {
         id: `a_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}`,
-        role: 'assistant',
-        text: `⚠️ ${msg}`,
-        createdAt: new Date().toISOString(),
+        role: 'assistant', text: `⚠️ ${msg}`, createdAt: new Date().toISOString(),
       };
-      setCouncilMessages((prev) => [...prev, assistantMsg]);
+      try {
+        const operation = await history.persistGenerated(previous => [...previous, assistantMsg], {
+          readGuard: { ...readGuard }, canCommit: isCurrent,
+        });
+        if (isCurrent() && (!operation || operation.status !== 'pending')) setCouncilError(msg);
+      } catch {
+        if (!isCurrent()) return;
+        try {
+          if (session) await assertAiSession(session);
+          else await assertReadSession(originalGuard, { signal: attempt.controller.signal, isCurrentSession: isCurrent });
+          if (isCurrent()) setCouncilError(msg);
+        } catch { return; }
+      }
     } finally {
       timers.forEach((t) => clearTimeout(t));
+      attempt.finish();
       if (isCurrent()) { setCouncilLoading(false); setCouncilStage('idle'); }
     }
-  }, [councilInput, currentUser, foodDiary, habits, setCouncilMessages]);
+  }, [councilInput, currentUser, foodDiary, habits, history, isCurrentSession, loginGuard, scope]);
 
   return {
     councilInput,
     setCouncilInput,
     councilLoading,
     councilStage,
+    councilError,
     councilMessages,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,

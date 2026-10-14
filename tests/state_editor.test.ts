@@ -62,6 +62,22 @@ it('rolls back a failed delete and leaves the visible history intact', async () 
   expect(await outbox.list('owner')).toHaveLength(1);
 });
 
+it('rejects a guarded delete after another account becomes active', async () => {
+  const login = await outbox.acceptReadSession('owner', 'a'.repeat(64), 0);
+  expect(login).not.toBeNull();
+  const state = editor(); await state.load(); await state.set('keep');
+  const guard = { readGuard: login!, canCommit: () => true };
+  const { fence } = await outbox.sessionState();
+  await outbox.acceptReadSession('other-account', 'b'.repeat(64), fence);
+
+  await expect(state.remove(guard)).rejects.toMatchObject({
+    kind: 'transaction', cause: { message: 'OUTBOX_WRITE_SESSION_CHANGED' },
+  });
+  expect(state.getSnapshot().value).toBe('keep');
+  expect((await outbox.snapshot('owner', 'fitfocus_data_owner_refeed')).value).toBe('keep');
+  expect((await outbox.list('owner')).map(operation => operation.type)).toEqual(['put']);
+});
+
 it('does not clear a newer working edit when an earlier delete completes late', async () => {
   const repository = repo();
   const state = new StateEditor(repository, 'refeed', '', codec);

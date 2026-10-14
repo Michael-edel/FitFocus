@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { StateDatabase } from '../storage/stateDatabase';
 import { prepareAiSession, postScopedAiJson } from '../services/aiSession';
-import { generatePersonalPlan, generatePlateauExplanation, generateWeeklyMenu, getCoachAdvice } from '../geminiService';
+import { callAiCouncil, generatePersonalPlan, generatePlateauExplanation, generateWeeklyMenu, getCoachAdvice } from '../geminiService';
 import { Goal, type UserProfile } from '../types';
 
 const account = 'ai-owner', sid = 'a'.repeat(64);
@@ -161,6 +161,30 @@ it('generates the plateau explanation only through the captured account/session 
   expect(new Headers(init?.headers).get('X-FitFocus-State-Account')).toBe(account);
   expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sid);
   expect(JSON.parse(String(init?.body)).feature).toBe('plateau');
+});
+it('sends every AI Council expert request through the captured account/session scope', async () => {
+  const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+    if (String(url).startsWith('/api/me')) return json(me());
+    const payload = JSON.parse(String(init?.body)) as { feature: string };
+    const text = payload.feature === 'council_chairman'
+      ? 'Сводный ответ. Agreement Score: 90/100'
+      : 'stance: approve\nscore: 90\nreason: проверено';
+    return json({ text }, headers());
+  });
+  const user = { id: account, name: 'Test', gender: 'MALE', age: 30, height: 175, weight: 70,
+    activityLevel: 1.55, goal: Goal.MAINTAIN } as UserProfile;
+
+  const result = await callAiCouncil('Как улучшить режим питания?', user, [], [], await prepare(fetchImpl));
+  const aiCalls = fetchImpl.mock.calls.filter(([url]) => String(url) === '/api/ai');
+
+  expect(result.finalAnswer).toContain('Сводный ответ.');
+  expect(aiCalls).toHaveLength(14);
+  for (const [, init] of aiCalls) {
+    const requestHeaders = new Headers(init?.headers);
+    expect(requestHeaders.get('X-FitFocus-State-Account')).toBe(account);
+    expect(requestHeaders.get('X-FitFocus-State-Session')).toBe(sid);
+    expect((JSON.parse(String(init?.body)) as { feature: string }).feature).toMatch(/^council_/);
+  }
 });
 it.each(['protocol', 'guard', 'account', 'session'])('rejects a response with the wrong %s', async change => {
   const scope = headers(); const name = { protocol: 'X-FitFocus-AI-Protocol', guard: 'X-FitFocus-AI-Guard',
