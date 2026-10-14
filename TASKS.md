@@ -1,13 +1,14 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 14.10.2026. Последний завершённый PR CI до текущего локального
-follow-up проверил `a221227` в run
-[38570274020](https://github.com/Michael-edel/FitFocus/actions/runs/38570274020)
-и завершился success. Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
-переводит legacy migration readwrite callbacks на активные IDB request events;
-локальные unit/typecheck/build проверки прошли. CI для нового HEAD ещё нужно
-проверить после push. Все P0 остаются открытыми до остальных writers/callbacks,
-staging и полной приёмки lifecycle/release. Подробности — в
+Обновлено: 14.10.2026. Точный PR CI run
+[38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585)
+проверил HEAD [`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+и завершился success: 1133 unit / 198 файлов, 540 browser passed / 83 skipped,
+audit без уязвимостей, guards, три typecheck, build и rollback/CAS прошли.
+Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
+переводит legacy migration readwrite callbacks на активные IDB request events.
+Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
+приёмки lifecycle/release. Подробности — в
 [журнале](docs/stabilization-progress.md) и
 [матрице](docs/verification-matrix.md).
 
@@ -658,9 +659,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
   прошли. Целевой migration smoke прошёл 6/6 повторов в Firefox и Android
   Chrome; первый совместный прогон двух E2E specs имел один timeout — подробности
   и границы проверки в [журнале](docs/stabilization-progress.md).
-- [ ] Подтвердить полный CI точного нового HEAD `fix/durable-outbox` после
-  code/docs push. Предыдущий completed PR run `38570274020` относится к
-  `a221227` и не включает `37dc4b0`.
+- [x] Подтвердить полный CI точного HEAD `152d7d7` после code/docs push:
+  1133 unit / 198 файлов, 540 browser passed / 83 skipped, audit без
+  уязвимостей, guards, три typecheck, build и 23 rollback/CAS-запроса прошли в
+  [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585).
 - [x] Реализовать компонент импорта по [ADR-005](docs/adr/ADR-005-durable-outbox.md):
   операция/карантин, ledger и прогресс порции атомарны; повтор, коллизии,
   подтверждение и необработанные прежние снимки учтены в тестах.

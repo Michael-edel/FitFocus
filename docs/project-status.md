@@ -54,16 +54,21 @@ Workflow [38566637885](https://github.com/Michael-edel/FitFocus/actions/runs/385
 он не включает новый код. Проверка точного нового branch HEAD остаётся следующим
 критерием. Полный P0.8 lifecycle не завершён.
 
-Последующий кодовый commit [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+Последующий кодовый commit [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 переводит readwrite callbacks импорта legacy-очереди на активные IndexedDB
 request events. На этой ревизии прошли 94 целевых storage unit tests,
 весь набор 1133 unit / 198 файлов, общий/domain-strict/storage-strict typecheck
 и production build. Migration E2E прошёл 6/6 последовательных запусков на
 desktop Firefox и Android Chrome. Первый совместный прогон двух E2E specs дал
 один Firefox timeout; последующий изолированный прогон и повторы миграции были
-успешны. Предыдущий completed PR CI [38570274020](https://github.com/Michael-edel/FitFocus/actions/runs/38570274020)
-проверил только `a221227`; новый точный HEAD ещё требует CI. Открыты durable
-backup restore callbacks, полный lifecycle, staging и выпуск.
+успешны. Точный CI документирующего HEAD [`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
+540 browser passed / 83 skipped, 1133 unit / 198 файлов, audit без уязвимостей,
+guards, три typecheck, build и 23 rollback/CAS-запроса прошли. Артефакты
+[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11903083122)
+и [rollback](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11902803403)
+сохранены. Открыты durable backup restore callbacks, полный lifecycle, staging
+и выпуск.
 
 ## P0.5 — поздний ответ retry объяснения плато
 

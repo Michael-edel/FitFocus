@@ -3038,7 +3038,7 @@ ledger вместе с созданной outbox operation и финальный
 активные транзакционные события. В `storage/durableOutbox.ts` добавлен
 синхронный `onOperationCreated` hook для ledger-записи внутри этой транзакции.
 
-Проверено на code SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0),
+Проверено на code SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b),
 ветка `fix/durable-outbox`; документация обновляется отдельным коммитом.
 Команда `npx vitest run tests/legacy_migration.test.ts tests/durable_outbox.test.ts tests/account_state_cleanup.test.ts`
 прошла 94/94. `npm run test:unit` — 1133/1133 в 198 файлах. Успешно прошли
@@ -3049,8 +3049,12 @@ ledger вместе с созданной outbox operation и финальный
 Android Chrome дал 17 passed / 1 failed: Firefox migration smoke превысил
 ожидание. Изолированный Firefox migration spec прошёл 1/1; затем
 `npx playwright test --project=desktop-firefox --project=android-chrome --workers=1 --retries=0 --repeat-each=3 e2e/legacy-outbox-migration.spec.ts`
-прошёл 6/6. Это не скрывает исходный timeout; полный workflow точного нового
-branch HEAD ещё не запускался. Предыдущий завершённый PR run 38570274020
-относится к `a221227`. Следующий шаг — push обновлённой документации и проверка
-CI на точном HEAD; `durableStateBackup` restore callbacks, полный lifecycle,
-staging и выпуск остаются открытыми.
+прошёл 6/6. Это не скрывает исходный timeout. Точный CI документирующего HEAD
+[`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
+1133 unit / 198 файлов, 540 browser passed / 83 skipped, audit сообщил 0
+уязвимостей, guards, три typecheck, build и rollback/CAS (23 запроса) прошли.
+Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11903083122)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11902803403).
+`durableStateBackup` restore callbacks, полный lifecycle, staging и выпуск
+остаются открытыми.

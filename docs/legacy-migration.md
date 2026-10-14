@@ -51,14 +51,18 @@ ledger и progress фиксируются согласованно в одной
 транзакционной границе. Batch chaining, сохранение snapshots и финальный audit
 используют те же активные request events.
 
-Код зафиксирован в [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0).
+Код зафиксирован в [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b).
 На этой ревизии прошли 94 целевых теста migration/outbox/account cleanup,
 весь unit-набор (1133 теста / 198 файлов), общий и два strict typecheck,
 production build. `legacy-outbox-migration.spec.ts` прошёл 6/6 последовательных
 запусков на desktop Firefox и Android Chrome без retries. До этого один раз
 упал timeout в совместном прогоне migration и weekly-menu specs; изолированный
-повтор и серия повторов migration прошли. Полный CI для нового branch HEAD,
-durable backup restore callbacks и общая lifecycle-приёмка остаются открытыми.
+повтор и серия повторов migration прошли. Точный CI документирующего HEAD
+[`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
+540 browser passed / 83 skipped; unit, guards, typechecks, build и rollback/CAS
+также прошли. Durable backup restore callbacks и общая lifecycle-приёмка
+остаются открытыми.
 
 ## Формат legacy-записи
 

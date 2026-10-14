@@ -71,13 +71,15 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний локально проверенный follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+Последний локально проверенный follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 удерживает readwrite callbacks legacy migration внутри активных IndexedDB
 транзакций. На нём прошли 1133 unit-теста / 198 файлов, общий и оба strict
 typecheck, production build; migration E2E прошёл 6/6 повторов на Firefox и
 Android Chrome. Один timeout в более раннем совместном E2E-прогоне зафиксирован
-в журнале. CI для нового кода проверяется после push, а остальная P0.8-приёмка
-остаётся открытой. См. [статус](docs/project-status.md) и
+в журнале. Полный CI документирующего HEAD [`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
+540 browser passed / 83 skipped и 23 rollback/CAS-запроса прошли. Остальная
+P0.8-приёмка остаётся открытой. См. [статус](docs/project-status.md) и
 [журнал](docs/stabilization-progress.md).
 
 Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)

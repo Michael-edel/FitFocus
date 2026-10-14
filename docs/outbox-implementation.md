@@ -16,16 +16,20 @@ Snapshot initialization, повторная обработка прежних sn
 audit используют тот же порядок. Read-only `progress()` и `unknown()` остаются
 обычными promise-чтениями.
 
-На кодовом SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0)
+На кодовом SHA [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 прошли 94 целевых storage unit tests, все 1133 unit tests / 198 файлов,
 общий, domain-strict и storage-strict typecheck и production build. Целевой
 `legacy-outbox-migration.spec.ts` прошёл 6/6 запусков при `workers=1,retries=0`
 на desktop Firefox и Android Chrome. Первый совместный прогон migration и
 weekly-menu specs дал один Firefox timeout; изолированный прогон и три повтора
 на каждом из двух проектов прошли. Это подтверждает повторяемость целевого
-сценария, но не заменяет CI точного нового HEAD. Полная миграционная и P0.8
-приёмка остаётся открытой; отдельно требуется проверить `durableStateBackup`
-restore callbacks и полный lifecycle.
+сценария, но не отменяет исходный timeout. Полный CI документирующего HEAD
+[`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
+завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
+540 browser passed / 83 skipped, 1133 unit, audit, guards, typechecks, build и
+23 rollback/CAS-запроса прошли. Полная миграционная и P0.8 приёмка остаётся
+открытой; отдельно требуется проверить `durableStateBackup` restore callbacks
+и полный lifecycle.
 
 ## Firefox: завершение finish в активной транзакции
 
