@@ -276,7 +276,15 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       )}
       {activeTab === 'recipes' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
-          <RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />
+          <RecipesScreen
+            userId={currentUser?.id}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+            recipes={favoriteRecipes}
+            onAdd={addFavoriteRecipe}
+            onRemove={removeFavoriteRecipe}
+            onClear={clearFavoriteRecipes}
+          />
         </React.Suspense>
       )}
       {activeTab === 'workouts' && (

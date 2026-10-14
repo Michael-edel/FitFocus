@@ -1025,7 +1025,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
 /**
  * Анализ фото еды с использованием Gemini Flash
  */
-export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysisResult> {
+export async function analyzeFoodPhoto(base64: string, session: AiSession): Promise<FoodPhotoAnalysisResult> {
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       {
@@ -1063,12 +1063,12 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
       },
       required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
     }
-  });
+  }, session);
   return normalizeFoodPhotoAnalysis(safeJsonObject(response.text));
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
-    export async function analyzeFoodPhotoEnhanced(base64: string): Promise<EnhancedFoodPhotoAnalysisResult> {
+    export async function analyzeFoodPhotoEnhanced(base64: string, session: AiSession): Promise<EnhancedFoodPhotoAnalysisResult> {
       const schema = {
         type: "OBJECT",
         properties: {
@@ -1117,7 +1117,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
       }, "foodphoto_enhanced", {
         responseMimeType: "application/json",
         responseSchema: schema,
-      });
+      }, session);
 
       return normalizeEnhancedFoodPhotoAnalysis(safeJsonObject(response.text));
     }

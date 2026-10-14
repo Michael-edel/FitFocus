@@ -9,9 +9,11 @@ const MAX_HELD_AI_RESPONSE_MS = 11_900;
 const aiActionKey = (accountId: string) => `fitfocus_data_${accountId}_ai_last_action_v1`;
 const profileKey = (accountId: string) => `fitfocus_data_${accountId}_profile`;
 const coachKey = (accountId: string) => `fitfocus_data_${accountId}_last_coach_card`;
+const diaryKey = (accountId: string) => `fitfocus_data_${accountId}_diary`;
+const historyKey = (accountId: string) => `fitfocus_data_${accountId}_history`;
 
 type Account = typeof accountA;
-type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu';
+type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced';
 type FixtureState = { current: Account; profile: ReturnType<typeof profileFor> };
 
 function profileFor(accountId: string, plateau = false) {
@@ -151,12 +153,34 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
                 shoppingList: ['Поздний продукт A'],
                 shoppingListItems: [{ name: 'Поздний продукт A', grams: 700 }],
               })
-              : 'Позднее объяснение плато из профиля A';
+              : feature === 'foodphoto'
+                ? JSON.stringify({
+                  name: 'Поздняя еда A', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
+                  ingredients: [{ name: 'Старые данные A', percent: 100 }], notes: ['Поздний анализ аккаунта A'],
+                })
+                : feature === 'foodphoto_enhanced'
+                  ? JSON.stringify({
+                    name: 'Поздний рецепт A', calories: 412, protein: 24, fat: 18, carbs: 39,
+                    ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
+                    notes: ['Поздний анализ рецепта'], portionGrams: 200, modelConfidence: 0.95,
+                  })
+                  : 'Позднее объяснение плато из профиля A';
         await json({ text }, accountA);
         counts.releasedResponses += 1;
         return;
       }
-      await json({ text: 'Тестовая интерпретация недели.' }, responseAccount);
+      const text = feature === 'foodphoto'
+        ? JSON.stringify({
+          name: 'Тестовый омлет', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
+          ingredients: [{ name: 'Яйца', percent: 70 }], notes: ['Оценка по фото'],
+        })
+        : feature === 'foodphoto_enhanced'
+          ? JSON.stringify({
+            name: 'Тестовый рецепт', calories: 320, protein: 23, fat: 21, carbs: 4,
+            ingredients: [{ name: 'Яйца', amount: '100 г' }], notes: [], portionGrams: 200, modelConfidence: 0.95,
+          })
+          : 'Тестовая интерпретация недели.';
+      await json({ text }, responseAccount);
       if (typeof feature === 'string') counts.completedAiFeatures.push(feature);
       return;
     }
@@ -219,11 +243,11 @@ function rawValue(snapshot: DurableSnapshot, key: string) {
 
 function operationsFor(snapshot: DurableSnapshot, account: Account) {
   return snapshot.operations.filter(operation => operation.accountId === account.id
-    && (operation.key === profileKey(account.id) || operation.key === coachKey(account.id)));
+    && [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id)].includes(operation.key));
 }
 
 function valuesFor(snapshot: DurableSnapshot, account: Account) {
-  return snapshot.values.filter(value => value.key === profileKey(account.id) || value.key === coachKey(account.id));
+  return snapshot.values.filter(value => [profileKey(account.id), coachKey(account.id), diaryKey(account.id), historyKey(account.id)].includes(value.key));
 }
 
 async function waitForAccountOutboxIdle(page: Page, account: Account) {
@@ -504,6 +528,173 @@ test('held personal weekly-menu response cannot write for account A after anothe
   } finally {
     fixtureA.release();
   }
+});
+
+test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'foodphoto');
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  const upload = page.locator('input[type="file"][multiple]').first();
+  await expect(upload).toHaveCount(1);
+  await upload.setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  await waitForAccountOutboxIdle(page, accountA);
+  const settledBeforeSwitch = await readDurableSnapshot(page);
+  const profileABefore = rawValue(settledBeforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(settledBeforeSwitch, accountA);
+  const operationsABefore = operationsFor(settledBeforeSwitch, accountA);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+
+  try {
+    const switched = await openAccountB(context, state);
+    const snapshotB = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(snapshotB, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(snapshotB, accountB);
+    const operationsBBefore = operationsFor(snapshotB, accountB);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(page);
+    expect(rawValue(final, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(final, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(final, accountA)).toEqual(operationsABefore);
+    expect(rawValue(final, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(final, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    const diaryKeys = [diaryKey(accountA.id), historyKey(accountA.id)];
+    expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
+      .toEqual(stateWritesBefore.filter(key => diaryKeys.includes(key)));
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Поздняя еда A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Поздняя еда A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('food-photo-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'foodphoto_enhanced');
+  await openApp(page, '/#recipes');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const fileInput = page.locator('input[type="file"]').nth(1);
+  await expect(fileInput).toHaveCount(1);
+  await fileInput.setInputFiles({
+    name: 'recipe.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="blue"/></svg>'),
+  });
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  await waitForAccountOutboxIdle(page, accountA);
+  const profileABefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(beforeSwitch, accountA);
+  const operationsABefore = operationsFor(beforeSwitch, accountA);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+
+  try {
+    const switched = await openAccountB(context, state);
+    const snapshotB = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(snapshotB, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(snapshotB, accountB);
+    const operationsBBefore = operationsFor(snapshotB, accountB);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(page);
+    expect(rawValue(final, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(final, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(final, accountA)).toEqual(operationsABefore);
+    expect(rawValue(final, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(final, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    const diaryKeys = [diaryKey(accountA.id), historyKey(accountA.id)];
+    expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
+      .toEqual(stateWritesBefore.filter(key => diaryKeys.includes(key)));
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Поздний рецепт A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Поздний рецепт A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('recipe-photo-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const upload = page.locator('input[type="file"][multiple]').first();
+  await expect(upload).toHaveCount(1);
+  await upload.setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+
+  await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
+  await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
+  await waitForAccountOutboxIdle(page, accountA);
+  const snapshot = await readDurableSnapshot(page);
+  const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
+  const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ name: string; calories: number }>;
+  const history = JSON.parse(rawValue(snapshot, historyKey(accountA.id)) ?? '[]') as Array<{ name: string; calories: number }>;
+
+  expect(snapshot.activeSession?.accountId).toBe(accountA.id);
+  expect(profile?.usage.aiFoodPhotoCount).toBe(1);
+  expect(diary).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
+  expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
+  expect(operationsFor(snapshot, accountA)).toEqual([]);
+  expect(fixture.counts.profileWrites).toEqual([accountA.id]);
+  expect(fixture.counts.achievementChecks).toBeGreaterThan(0);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('food-photo-analysis-success.png') });
 });
 
 test('a held achievement unlock from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {

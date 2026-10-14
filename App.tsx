@@ -140,7 +140,7 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
-import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -639,6 +639,7 @@ const App: React.FC = () => {
   const {
     persistFoodDiary,
     addFoodToDiary,
+    addFoodToDiaryGuarded,
     updateFoodEntry,
     deleteFoodPhoto,
     deleteFoodEntry,
@@ -646,6 +647,7 @@ const App: React.FC = () => {
     userId: currentUser?.id,
     repository: userStateRepository,
     foodDiary,
+    foodHistory,
     setFoodDiary,
     inferMealType,
     setFoodHistory,
@@ -1002,15 +1004,25 @@ const App: React.FC = () => {
     return getRemainingFoodPhotoScans(allowance, currentUser.usage?.aiFoodPhotoCount);
   }, [currentUser, paywall.plan]);
 
+  const incrementPhotoUsage = useCallback((guard: OutboxCommitGuard) => {
+    if (!currentUser) return Promise.resolve(null);
+    return persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiFoodPhotoCount'),
+    }), guard);
+  }, [currentUser, persistUser]);
+
   const processPhotoFiles = useFoodPhotoAnalysis({
     userId: currentUser?.id,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     remainingScans: remainingPhotoScans,
     openPaywall: paywall.openPaywall,
     setScanning: setIsScanning,
     compressPhoto: compressFoodPhoto,
     analyzePhoto: analyzeFoodPhoto,
-    addFoodToDiary,
-    incrementUsage: () => incrementUsage('aiFoodPhotoCount'),
+    addFoodToDiary: addFoodToDiaryGuarded,
+    incrementUsage: incrementPhotoUsage,
     showInsight: setInsightModal,
   });
 

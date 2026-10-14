@@ -1,12 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useState } from 'react';
 import type { FavoriteRecipe } from './types';
 import clsx from 'clsx';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import type { EnhancedFoodPhotoAnalysisResult } from './geminiService';
 import { Heart, Search, Trash2, Clock3, Users, Camera, Upload, Loader2, X, CheckCircle2 } from 'lucide-react';
 import type { Recipe } from './types';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
+import { assertAiSession, prepareAiSession } from './services/aiSession';
+import { AiActionScope } from './features/ai/actionScope';
 
 type Props = {
+  userId: string | undefined;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   recipes: FavoriteRecipe[];
   onAdd: (recipe: FavoriteRecipe) => void;
   onRemove: (id: string) => void;
@@ -301,7 +308,7 @@ export const buildDraftRecipeFromAi = (
   };
 };
 
-export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Props) {
+export default function RecipesScreen({ userId, loginGuard, isCurrentSession, recipes, onAdd, onRemove, onClear }: Props) {
   const [q, setQ] = useState('');
 
 const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -309,6 +316,26 @@ const [draft, setDraft] = useState<DraftRecipe | null>(null);
 const [editor, setEditor] = useState<RecipeEditorState | null>(null);
 const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const photoAnalysisScope = useMemo(() => new AiActionScope(isCurrentSession), [userId, isCurrentSession]);
+  useLayoutEffect(() => {
+    photoAnalysisScope.activate();
+    setIsAnalyzing(false);
+    setDraft(null);
+    const hide = () => photoAnalysisScope.invalidate();
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      photoAnalysisScope.activate();
+      setIsAnalyzing(false);
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      photoAnalysisScope.invalidate();
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, [photoAnalysisScope]);
 const editorPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
 const fileToBase64 = (file: File) =>
@@ -388,21 +415,40 @@ const fileToCompressedDataUrl = async (file: File) => {
 };
 
 const handlePick = async (file?: File) => {
-  if (!file) return;
+  if (!file || !userId || !loginGuard) return;
+  const attempt = photoAnalysisScope.begin();
+  if (!attempt) return;
+  let session: Awaited<ReturnType<typeof prepareAiSession>> | undefined;
   setIsAnalyzing(true);
   try {
+    session = await prepareAiSession(userId, attempt.controller, attempt.isCurrent, { previous: loginGuard });
+    if (!attempt.isCurrent()) return;
     const [b64, photo] = await Promise.all([
       fileToBase64(file),
       fileToCompressedDataUrl(file),
     ]);
-    const ai = await analyzeFoodPhotoEnhanced(b64);
+    if (!attempt.isCurrent()) return;
+    await assertAiSession(session);
+    if (!attempt.isCurrent()) return;
+    const ai = await analyzeFoodPhotoEnhanced(b64, session);
+    if (!attempt.isCurrent()) return;
+    await assertAiSession(session);
+    if (!attempt.isCurrent()) return;
     setDraft(buildDraftRecipeFromAi(ai, photo));
   } catch (e: unknown) {
-    alert(e instanceof Error && e.message ? e.message : 'Не удалось распознать рецепт по фото');
+    if (attempt.isCurrent() && !(e instanceof SessionReadError && e.kind === 'session')) {
+      if (session) {
+        try { await assertAiSession(session); } catch { return; }
+      }
+      if (attempt.isCurrent()) alert(e instanceof Error && e.message ? e.message : 'Не удалось распознать рецепт по фото');
+    }
   } finally {
-    setIsAnalyzing(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (attempt.isCurrent()) {
+      setIsAnalyzing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+    attempt.finish();
   }
 };
 
