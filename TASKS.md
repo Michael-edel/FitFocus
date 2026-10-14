@@ -750,6 +750,11 @@ all-client Service Worker fence, атомарные migration items и quarantin
   обновления, а новая очередь отправляет её после all-client fence.
   [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7; обновлённая
   migration E2E-проверка прошла в точном CI HEAD `08618e3`, run `38628487894`.
+  Позднее изменение того же legacy value из открытой старой вкладки повторно
+  проверяет source audit и сохраняет второе намерение как конфликт; локально
+  3/3 desktop engines без retries (`workers=1`). Повторная операция моделирует
+  storage-пару старого `safeSetItem`; полный UI lifecycle второго действия и
+  точный CI этого расширения остаются отдельной проверкой.
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2

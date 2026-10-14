@@ -10,6 +10,7 @@ const targetKey = `fitfocus_data_${account}_plan_task_done`;
 const orphanKey = 'fitfocus_data_another-account_orphan';
 const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
+const nextTaskEntry = '1:Проверить настройки push';
 // Keep in sync with the production sender lease in storage/stateSync.ts.
 const SENDER_LEASE_MS = 30_000;
 
@@ -73,6 +74,15 @@ async function migrationState(page: Page) {
 function itemForKey(items: MigrationItem[], key: string): MigrationItem | undefined {
   return items.find((item) => {
     try { return (JSON.parse(item.canonical) as unknown[])[1] === key; } catch { return false; }
+  });
+}
+
+function itemForRecord(items: MigrationItem[], key: string, value: string): MigrationItem | undefined {
+  return items.find((item) => {
+    try {
+      const fields = JSON.parse(item.canonical) as unknown[];
+      return fields[1] === key && fields[2] === value;
+    } catch { return false; }
   });
 }
 
@@ -184,6 +194,55 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     expect(server.counts.currentStatePutAttempts).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
 
+    // A still-open old bundle can replace its legacy snapshot after the new
+    // bundle imported it. The new sender must re-audit that source and keep the
+    // changed same-key intent as a conflict while the old writer is present.
+    const previousOldRecord = generatedRecord!;
+    const updatedOldValue = JSON.stringify({ [taskEntry]: true, [nextTaskEntry]: true });
+    const updatedOldSource = await oldPage.evaluate(({ sourceKey, key, value }) => {
+      const records = JSON.parse(localStorage.getItem(sourceKey) ?? '[]') as LegacyRecord[];
+      const index = records.findIndex((record) => record.key === key);
+      if (index < 0 || records[index].type !== 'put') throw new Error('LEGACY_SOURCE_RECORD_MISSING');
+      records[index] = { ...records[index], value };
+      // Model the old safeSetItem pair: its user value and Map-backed queue are
+      // both localStorage writes on the still-open old bundle's origin.
+      localStorage.setItem(key, value);
+      const raw = JSON.stringify(records);
+      localStorage.setItem(sourceKey, raw);
+      return raw;
+    }, { sourceKey: legacySourceKey, key: targetKey, value: updatedOldValue });
+    expect(updatedOldSource).toBeTruthy();
+    await expect.poll(async () => {
+      const state = await migrationState(currentPage);
+      const original = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
+      const updated = itemForRecord(state.migrationItems, targetKey, updatedOldValue);
+      const updatedOperation = state.operations.find((entry) => entry.opId === updated?.opId);
+      return {
+        source: state.source,
+        sourceMatches: state.progress?.sourceMatches,
+        sendAllowed: state.progress?.sendAllowed,
+        writersStopped: state.progress?.writersStopped,
+        originalImported: original?.state,
+        updatedImported: updated?.state,
+        updatedOperationStatus: updatedOperation?.status,
+        updatedOperationReason: updatedOperation?.reason,
+        updatedOperationValue: updatedOperation?.value,
+      };
+    }).toEqual({
+      source: updatedOldSource,
+      sourceMatches: true,
+      sendAllowed: false,
+      writersStopped: false,
+      originalImported: 'imported',
+      updatedImported: 'imported',
+      updatedOperationStatus: 'conflicted',
+      updatedOperationReason: 'independent-snapshot',
+      updatedOperationValue: updatedOldValue,
+    });
+    legacyWritesBeforeUpdate = server.counts.legacyStatePutAttempts;
+    expect(server.counts.currentStatePutAttempts).toBe(0);
+    expect(server.stateWriteKeys).not.toContain(targetKey);
+
     // Keep current writes unavailable while both documents navigate. The first
     // new-build request must not be accepted just before that page is unloaded:
     // the server could commit it while navigation drops the acknowledgement.
@@ -206,7 +265,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       return progress?.writersStopped === true && progress.sendAllowed === true;
     }).toBe(true);
     const beforeRecovery = await migrationState(currentPage);
-    const importedBeforeRecovery = itemForKey(beforeRecovery.migrationItems, targetKey);
+    const importedBeforeRecovery = itemForRecord(beforeRecovery.migrationItems, targetKey, previousOldRecord.value!);
     const targetBeforeRecovery = beforeRecovery.operations.find(operation => operation.opId === importedBeforeRecovery?.opId);
     const eligibleAtMs = targetBeforeRecovery?.status === 'sending' && targetBeforeRecovery.attempt
       ? targetBeforeRecovery.attempt.startedAtMs + SENDER_LEASE_MS
@@ -216,7 +275,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     // expires. Otherwise the explicit 503 response returns it to pending.
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
-      const imported = itemForKey(state.migrationItems, targetKey);
+      const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
       const operation = state.operations.find(entry => entry.opId === imported?.opId);
       return operation?.status === 'pending' && operation.reason === 'http-503';
     }, { timeout: recoveryTimeoutMs }).toBe(true);
@@ -225,14 +284,20 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     await expect.poll(() => server.stateWriteKeys.includes(targetKey)).toBe(true);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
-      const imported = itemForKey(state.migrationItems, targetKey);
+      const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
+      const changed = itemForRecord(state.migrationItems, targetKey, updatedOldValue);
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
+      const changedOperation = state.operations.find((entry) => entry.opId === changed?.opId);
       return {
         sourceFingerprintFields: legacySourceFingerprintFields(state.source),
         targetState: imported?.state,
         targetOwner: imported?.accountId,
         acknowledgedVersion: imported?.acknowledgedVersion,
         operationPresent,
+        changedState: changed?.state,
+        changedOperationStatus: changedOperation?.status,
+        changedOperationReason: changedOperation?.reason,
+        changedOperationValue: changedOperation?.value,
         foreignState: itemForKey(state.migrationItems, orphanKey)?.state,
         foreignReason: itemForKey(state.migrationItems, orphanKey)?.reason,
         foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
@@ -240,11 +305,15 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         writersStopped: state.progress?.writersStopped,
       };
     }).toEqual({
-      sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
+      sourceFingerprintFields: legacySourceFingerprintFields(updatedOldSource),
       targetState: 'imported',
       targetOwner: account,
       acknowledgedVersion: 1,
       operationPresent: false,
+      changedState: 'imported',
+      changedOperationStatus: 'conflicted',
+      changedOperationReason: 'independent-snapshot',
+      changedOperationValue: updatedOldValue,
       foreignState: 'unknown',
       foreignReason: 'unknown-owner',
       foreignRawRetained: true,

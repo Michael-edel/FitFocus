@@ -255,6 +255,14 @@ SHA `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965
 390 browser passed / 9 skipped. JSON backup v3 для долговечных stores реализован
 отдельно ([контракт](backup-restore.md), commit
 [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)).
+Дополнительная проверка 15.10.2026 оставляет прежнюю вкладку открытой после
+первого импорта и меняет legacy source/value через storage-операции старого
+bundle. Источник повторно импортируется; новая same-key запись получает
+`independent-snapshot`, исходная отправляется только после обновления всех
+клиентов, а новая остаётся в конфликте. Первый legacy intent создаётся старым
+UI; повторное изменение моделирует storage-пару `safeSetItem`, поэтому само по
+себе не является проверкой второго UI-клика. Прогон прошёл 3/3 в desktop
+Chromium, Firefox и WebKit при `workers=1`, без retries; точный CI ожидает push.
 Локальная очистка подтверждённо account-owned строк реализована в коммите
 [`b53a55e`](https://github.com/Michael-edel/FitFocus/commit/b53a55eaf272ca8ad6ba8653760f502b0e993b6b)
 ([контракт](account-data-cleanup.md)); общий исходный ключ и snapshots
