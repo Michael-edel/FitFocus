@@ -3,7 +3,7 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-Последний проверенный опубликованный source HEAD ветки fix/durable-outbox —
+Последний полный проверенный source HEAD ветки fix/durable-outbox —
 [`a8f3219`](https://github.com/Michael-edel/FitFocus/commit/a8f321905c2577a8b04fd5c2be5a6f9b0b2556d4).
 Точный PR CI [`38634080772`](https://github.com/Michael-edel/FitFocus/actions/runs/38634080772)
 завершился success на merge-ref `9033633`: 1153 unit-теста / 199 файлов,
@@ -12,6 +12,12 @@
 падения сравнения имени профиля тест прошёл retry; причина не установлена.
 Dependency audit дал 0 уязвимостей; schema/privacy/auth/API guards, три typecheck,
 production build, 23 rollback/CAS-запроса и сохранение rollback-артефакта прошли.
+Документационный HEAD `da4dc85` опубликован после этой полной проверки; его
+docs-only CI `38638704278` выполняется и не проверяет новый E2E-сценарий.
+Новый acceptance для pending outbox операции аккаунта A после входа B и возврата
+A с новой server session локально прошёл 3/3 в desktop Chromium, Firefox и WebKit
+без retries;
+точный CI для этого изменения ожидает push.
 Предыдущая проверка `08618e3` успешно покрыла migration smoke и bearer token;
 её результаты приведены в [журнале стабилизации](stabilization-progress.md).
 

@@ -1,5 +1,18 @@
 # Стабилизация: проверяемые изменения
 
+## P0.6 — возобновление outbox после смены аккаунта, 15.10.2026
+
+В `e2e/ai-callback-account-switch.spec.ts` добавлен desktop acceptance:
+запись плана аккаунта A получает 503 и остаётся pending с `retryCount=1`;
+после входа B проверяется, что операция сохраняет исходные `accountId` и
+`opId`, и что просроченный retry не уходит при активном B. Возврат A с новым
+server session возобновляет ту же операцию; в журнале запросов проверяется,
+что отправка адресована A и содержит новый session id. Runtime-код не менялся.
+
+Точечный локальный Playwright прогон завершился 3/3 без retries в desktop
+Chromium, Firefox и WebKit (`workers=1,retries=0`). Точный CI для текущего изменения ожидает push;
+это закрывает один acceptance P0.6, но не logout/login, reload и весь lifecycle.
+
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 
 В PR CI `38621962929` один desktop Chromium прогон

@@ -15,7 +15,13 @@ const councilKey = (accountId: string) => `fitfocus_data_${accountId}_council_hi
 
 type Account = typeof accountA;
 type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced' | 'council_chairman';
-type FixtureState = { current: Account; profile: ReturnType<typeof profileFor> };
+type StateWriteAttempt = { account?: string; session?: string; keys: string[] };
+type FixtureState = {
+  current: Account;
+  profile: ReturnType<typeof profileFor>;
+  stateWriteLog?: StateWriteAttempt[];
+  holdStateWriteFailures?: { key: string; active: boolean };
+};
 
 function profileFor(accountId: string, plateau = false) {
   const profile = buildMockProfile();
@@ -113,7 +119,14 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/state' && method === 'GET') return json({ items: [] }, responseAccount);
     if (path === '/api/state' && method === 'PUT') {
       const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
-      counts.stateWrites.push(...items.map(item => item.key));
+      const keys = items.map(item => item.key);
+      counts.stateWrites.push(...keys);
+      state.stateWriteLog?.push({ account: requestedAccount, session: requestedSession, keys });
+      if (state.holdStateWriteFailures?.active && keys.includes(state.holdStateWriteFailures.key)) {
+        return route.fulfill({ status: 503, contentType: 'application/json',
+          headers: { ...scopedHeaders(responseAccount), 'Retry-After': '1' },
+          body: JSON.stringify({ error: 'SERVICE_UNAVAILABLE' }) });
+      }
       return json({ ok: true, items: items.map(item => ({
         key: item.key, version: item.baseVersion + 1, exists: true,
       })) }, responseAccount);
@@ -195,7 +208,10 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
 }
 
 type StoredValue = { key: string; value: string };
-type StoredOperation = { opId: string; accountId: string; key: string; status: string; resource?: string; value?: string };
+type StoredOperation = {
+  opId: string; accountId: string; key: string; status: string; resource?: string; value?: string;
+  retryCount: number; nextAttemptAtMs: number; reason?: string;
+};
 type DurableSnapshot = {
   values: StoredValue[];
   operations: StoredOperation[];
@@ -230,7 +246,8 @@ async function readDurableSnapshot(page: Page): Promise<DurableSnapshot> {
         values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
         operations: operations.map((item: StoredOperation) => ({
           opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
-          resource: item.resource, value: item.value,
+          resource: item.resource, value: item.value, retryCount: item.retryCount,
+          nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
         })),
         activeSession: session ? {
           accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
@@ -878,4 +895,77 @@ test('a held achievement unlock from account A is ignored after another tab sign
   } finally {
     held.release();
   }
+});
+test('pending account A outbox stays scoped while B signs in and resumes with a fresh A session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox account-switch acceptance uses desktop tabs.');
+  const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
+  const stateWrites: StateWriteAttempt[] = [];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateWriteLog: stateWrites,
+    holdStateWriteFailures: { key: planKeyA, active: true },
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && !/503/.test(message.text())) errorsA.push(message.text());
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#plan');
+  const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
+  await expect(task).toBeVisible();
+  await task.click();
+
+  await expect.poll(() => stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(1);
+  await expect.poll(async () => (await readDurableSnapshot(page)).operations
+    .find(operation => operation.key === planKeyA)?.status).toBe('pending');
+  const beforeSwitch = await readDurableSnapshot(page);
+  const pendingA = beforeSwitch.operations.find(operation => operation.key === planKeyA)!;
+  expect(pendingA).toMatchObject({
+    accountId: accountA.id, status: 'pending', retryCount: 1, reason: 'http-503',
+  });
+  expect(stateWrites.find(write => write.keys.includes(planKeyA)))
+    .toMatchObject({ account: accountA.id, session: accountA.sid, keys: [planKeyA] });
+  const switched = await openAccountB(context, state);
+  await expect.poll(async () => (await readDurableSnapshot(switched.page)).activeSession?.serverSessionId).toBe(accountB.sid);
+  const pendingDuringB = (await readDurableSnapshot(switched.page)).operations.find(operation => operation.key === planKeyA);
+  expect(pendingDuringB).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
+  const aAttemptsWhileBActive = stateWrites.filter(write => write.keys.includes(planKeyA)).length;
+  await switched.page.waitForTimeout(Math.max(0, pendingDuringB!.nextAttemptAtMs - Date.now()) + 1_100);
+  expect(stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(aAttemptsWhileBActive);
+
+  await openApp(switched.page, '/#settings');
+  const light = switched.page.getByRole('button', { name: /^Светлая/ });
+  await expect(light).toBeVisible();
+  await light.click();
+  const settingsKeyB = 'fitfocus_data_' + accountB.id + '_settings';
+  await expect.poll(() => stateWrites.some(write => write.account === accountB.id && write.keys.includes(settingsKeyB))).toBe(true);
+
+  const freshAccountA = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.holdStateWriteFailures!.active = false;
+  state.current = freshAccountA;
+  state.profile = profileFor(accountA.id);
+  const returningPage = await context.newPage();
+  const errorsReturning: string[] = [];
+  returningPage.on('pageerror', error => errorsReturning.push(error.message));
+  returningPage.on('console', message => {
+    if (message.type() === 'error' && !/503/.test(message.text())) errorsReturning.push(message.text());
+  });
+  await installAccountApi(returningPage, state);
+  await openApp(returningPage, '/#plan');
+  await expect.poll(async () => (await readDurableSnapshot(returningPage)).operations
+    .filter(operation => operation.key === planKeyA)).toEqual([]);
+  const resumedWrites = stateWrites.filter(write => write.keys.includes(planKeyA));
+  expect(resumedWrites.length).toBeGreaterThanOrEqual(2);
+  expect(resumedWrites.slice(0, -1).every(write => write.account === accountA.id && write.session === accountA.sid)).toBe(true);
+  expect(resumedWrites.at(-1)).toMatchObject({ account: accountA.id, session: freshAccountA.sid, keys: [planKeyA] });
+  expect(stateWrites.filter(write => write.account === accountB.id && write.keys.includes(planKeyA))).toEqual([]);
+  await expect(returningPage.getByText('1/3 выполнено', { exact: true })).toBeVisible();
+  expect(errorsA).toEqual([]);
+  expect(errorsReturning).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(returningPage.locator('vite-error-overlay')).toHaveCount(0);
+  await returningPage.screenshot({ path: info.outputPath('state-outbox-account-a-resumed.png') });
 });
