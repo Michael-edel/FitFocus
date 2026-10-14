@@ -77,8 +77,12 @@ conflicted operation, quarantine и owner metadata восстанавливаю�
 backup; второй сценарий подтверждает полный rollback IDB и localStorage при
 конфликте. Целевые Firefox и Android Chrome прошли 4/4 без retries. Также
 прошли 1133 unit-теста / 198 файлов, общий, domain-strict и storage-strict
-typecheck и production build. Новый CI для кода `38d169c` после push ещё
-не подтверждён; полный P0.8 lifecycle остаётся открытым.
+typecheck и production build. Следующий полный PR CI
+[38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
+проверил документирующий HEAD `23c8be6`, включавший этот код, и завершился
+success. E2E-шаг занял 30 мин 43 сек, полный job — около 33 мин. Новый callback
+тест смены аккаунта добавлен позже в `2c09825` и этим запуском не проверялся.
+Полный P0.8 lifecycle остаётся открытым.
 
 Реализация опубликована в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
 Локально прошли 7/7 backup-тестов, все 1073 unit / 196 файлов, три typecheck и

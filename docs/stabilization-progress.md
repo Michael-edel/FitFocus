@@ -3079,3 +3079,22 @@ outbox operation, quarantine и owner metadata, а также для полно�
 — 4/4. Новый точный CI запускается после push; успех предыдущего run
 38577353585 на SHA `152d7d7` не переносится на этот код. Полный P0.8 lifecycle,
 staging и выпуск этим компонентом не закрыты.
+
+## P0.5 — задержанный server preview семейного меню, `2c09825`, 14.10.2026
+
+В `e2e/family-menu-durable.spec.ts` добавлен account-switch сценарий для
+`/api/family/menu/generate`: ответ удерживается, пока другая вкладка принимает
+аккаунт B, затем освобождается. Проверка подтверждает, что поздний preview не
+создаёт familyMenu outbox operation и не меняет сохранённое меню аккаунта B.
+В production-коде дефект не воспроизвёлся; это закрывает один пропуск browser
+acceptance по family callbacks, но не весь P0.5.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit. Полный
+`family-menu-durable.spec.ts` прошёл 36/36 на тех же движках при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Точный CI предыдущего HEAD `23c8be6` завершился success в
+[run 38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014):
+все шаги, включая E2E и rollback/CAS, прошли. E2E заняли 30 мин 43 сек, полный
+job — около 33 мин. Новый тест в этот run не входил; его CI ожидается после
+push `2c09825`. Остальные family callbacks, общий lifecycle, staging и выпуск
+остаются открытыми.

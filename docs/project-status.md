@@ -5,6 +5,15 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+Проверка CI последнего документирующего HEAD `23c8be6` завершилась успехом:
+browser E2E, unit, audit, guards, typechecks, build и rollback/CAS прошли.
+Браузерный шаг занял около 31 минуты при семи Playwright-проектах; workflow
+завершился примерно за 33 минуты. В кодовом follow-up
+[`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
+добавлена account-switch проверка позднего family-menu preview; целевая suite
+прошла 36/36 на Chromium, Firefox и WebKit без retries, точный CI этого SHA
+ещё ожидается после push. Общие P0, staging и выпуск остаются открытыми.
+
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 
 Код [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)

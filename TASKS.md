@@ -1,12 +1,17 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 14.10.2026. Точный PR CI run
-[38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585)
-проверил HEAD [`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
-и завершился success: 1133 unit / 198 файлов, 540 browser passed / 83 skipped,
-audit без уязвимостей, guards, три typecheck, build и rollback/CAS прошли.
+[38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
+проверил HEAD [`23c8be6`](https://github.com/Michael-edel/FitFocus/commit/23c8be615a1afcc16c811e8943c4ae6dfbed7675)
+и завершился success: unit, audit, guards, три typecheck, build, browser E2E и
+rollback/CAS прошли. E2E заняли 30 мин 43 сек, полный job — около 33 мин; это
+был долгий, но завершившийся workflow, а не незапустившаяся проверка.
 Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 переводит legacy migration readwrite callbacks на активные IDB request events.
+В коммите [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
+добавлена browser acceptance запоздавшего family-menu preview при смене аккаунта:
+36/36 семейных menu-сценариев прошли на Chromium, Firefox и WebKit без retries;
+этот код ещё ожидает точный CI после push.
 Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
 приёмки lifecycle/release. Подробности — в
 [журнале](docs/stabilization-progress.md) и
@@ -571,6 +576,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Подробности: [журнал](docs/stabilization-progress.md).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
+  Отдельно добавлена account-switch проверка позднего ответа
+  `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
+  menu outbox operation и не меняет сохранённое меню. Остальные callbacks и
+  staging остаются открытыми.
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в
 [контракте](docs/ai-callback-sessions.md).

@@ -185,7 +185,12 @@ AI account-switch сценария `bca2eda` ещё ожидается.
 - Расширить поздний-response account-switch acceptance на остальные family
   callbacks и состояния; локально покрыты invitation UI, family-context GET,
   family shopping GET, family join/create responses, AI family-menu commit,
-  shopping-check achievement и смена target для member update.
+  shopping-check achievement, смена target для member update и отложенный
+  ответ `/api/family/menu/generate`. Новая suite `family-menu-durable.spec.ts`
+  прошла 36/36 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+  этот сценарий появился в кодовом коммите
+  [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295).
+  Покрытие остальных callbacks всё ещё неполное.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.
 - Проверить настоящие old/new bundles с Service Worker, повреждённые legacy-строки,
