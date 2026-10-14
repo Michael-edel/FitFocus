@@ -1,5 +1,31 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — локальные действия AI Совета при паузе отправки, 15.10.2026
+
+CI на предыдущем SHA 6305695, [run 38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717),
+завершился с 567 passed, 95 skipped, 8 failed и 2 flaky. Семь одинаковых
+E2E-падений возникли в owned-state.spec.ts: очистка истории AI Совета не
+создавала delete operation во время auth/protocol pause, потому что строгий
+sender guard отклонял локальную пользовательскую запись. Это нарушало
+контракт: пауза блокирует отправку, а не сохранение намерения. Отдельный
+iPhone PWA failure в family-menu проверках остаётся самостоятельным вопросом.
+
+Коммит [32bc410](https://github.com/Michael-edel/FitFocus/commit/32bc4101bc3e31bd272d610e1730a9ffa23b7ae9)
+добавляет local commit guard, который внутри IDB-транзакции требует прежние
+account, server session и epoch, но допускает локальную запись при sender
+pause. Вопрос пользователя и очистка истории используют этот guard; ответ AI
+сохраняет строгий guard. В tests/state_editor.test.ts добавлены проверки
+записи во время protocol pause и отказа после смены аккаунта. Контракт:
+[AI Совет](ai-council-session.md).
+
+Полный CI [run 38619175535](https://github.com/Michael-edel/FitFocus/actions/runs/38619175535)
+на SHA 32bc410 остановился на unit-тесте: фикстура использовала nowMs=10,
+а outbox operation была создана с реальным Date.now(); 1152 теста прошли.
+Коммит [0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141)
+переводит claim и retry timestamps теста на общий clock. git diff --check
+и локальная проверка ссылок пройдены; тесты локально не запускались.
+Полный CI исправленного branch HEAD ожидает выполнения. P0.5/P0.8 остаются
+открытыми.
 ## P0.5 — AI Совет использует account-scoped session, 14.10.2026
 
 Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)

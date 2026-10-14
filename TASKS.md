@@ -495,10 +495,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   очистка токена/setup link при смене логина и delayed account-switch E2E.
   Реализация находится в текущем изменении; пункт закроется после проверки точного
   CI HEAD. [Контракт](docs/wearable-sync.md).
-- [x] Перевести AI Совет на общий `AiSession`: все 14 запросов используют один
-  account/session proof, вопрос, ответ и очистка истории используют guarded
-  durable commit; поздний ответ после входа другого аккаунта проверяется
+- [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
+  account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.
+- [ ] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
+  pause через session-bound local commit guard; ответы AI остаются под строгим
+  read guard. Workflow 38619175535 выявил ошибку времени новой тестовой фикстуры;
+  тест исправлен в 0abb185; точный CI нового HEAD ожидает выполнения.
   [Контракт](docs/ai-council-session.md); общий P0.5 остаётся открытым.
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.
