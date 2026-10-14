@@ -89,7 +89,8 @@ async function postMobileToken(
 
 describe('/api/mobile/token', () => {
   it('issues a mobile-audience bearer token from a valid web session', async () => {
-    const response = await postMobileToken(makeDb());
+    const fake = makeDb();
+    const response = await postMobileToken(fake);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Request-ID')).toBe('mobile-token-test-01');
