@@ -1,22 +1,19 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 14.10.2026. Последний полный CI на SHA
-[`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
-([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051))
-завершился success: unit прошли во всех 198 файлах; Playwright — 501 passed /
-29 skipped и два flaky-теста, прошедших retry; rollback/CAS job прошёл. Два
-flaky-сценария повторены локально по 10 раз с `retries=0`, но причины под CI
-не установлены. Подробности записаны в [журнале](docs/stabilization-progress.md).
-Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
-приёмки lifecycle/release.
-Локальный E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54)
-добавил барьеры для двух flaky-сценариев: целевые повторы прошли 10/10 каждый,
-затронутые specs — 10/10 и 8/8; точный CI этого follow-up ещё не подтверждён.
-Кодовая ревизия [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
-содержит эти результаты. Её [CI run 38466153712](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
-отменён после отправки следующего документационного коммита, поэтому follow-up
-подтверждён локально, но не полным workflow. Проверки текущего HEAD отображаются
-на странице [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+Обновлено: 14.10.2026. Последний завершённый PR CI для PR #93 проверил
+ветку `fix/durable-outbox` на run
+[38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769);
+PR head — [`6c6feca`](https://github.com/Michael-edel/FitFocus/commit/6c6fecace6cc421e745d04127e1b544bde187618).
+Workflow завершился success: audit, schema/privacy/auth/API guards, unit,
+typechecks, build, E2E и rollback/CAS прошли; rollback-артефакт сохранён как
+`11887748120`. Все P0 остаются открытыми до остальных writers/callbacks,
+staging и полной приёмки lifecycle/release.
+В текущей ревизии добавлена account-switch проверка отложенного retry
+объяснения плато; целевой тест и полный callback spec прошли локально
+(25 passed / 2 skipped, без retries), связанные unit — 11/11, typecheck прошёл.
+Точный CI этой ревизии проверяется после push. Подробности — в
+[журнале](docs/stabilization-progress.md) и
+[матрице](docs/verification-matrix.md).
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
@@ -240,10 +237,14 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   и полная матрица 229 passed / 9 skips. CI `42ee434` подтверждён.
   Счётчики остаются best effort; staging/BFCache ещё открыты.
   [Контракт и границы](docs/achievement-session.md).
-- [ ] Версионировать вторичную items-проекцию и определить durable-порядок
-  конкурирующих writers; scoped HTTP не заменяет CAS или постоянную очередь.
-- [ ] Пройти реальные BFCache/OAuth/staging-сценарии и остальные AI/report/retry/family
-  writers. Unit-проверка двух IDB connections не заменяет old/new bundles.
+- [x] Личный список покупок переведён на profile CAS и SQL-проекцию без
+  отдельного личного items POST; семейное меню, порции и покупки используют
+  одну `familyMenu` outbox-операцию с CAS по семье и неделе.
+  [Личный контракт](docs/personal-menu-projection.md),
+  [семейный контракт](docs/family-menu-state.md).
+- [ ] Проверить эти пути на staging и завершить реальные BFCache/OAuth-сценарии;
+  остальные AI/report/retry/family writers и их общий lifecycle остаются открыты.
+  Unit-проверка двух IDB connections не заменяет old/new bundles.
 
 Ни весь P0.5, ни выпуск этим компонентом не закрыты.
 
@@ -317,11 +318,13 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 - [x] Подтвердить [CI опубликованного `3baac01`](https://github.com/Michael-edel/FitFocus/actions/runs/38200234936).
 - [x] Подтвердить последующий [CI `0eae743`](https://github.com/Michael-edel/FitFocus/actions/runs/38201311011):
   1009 unit / 189 файлов, 278 browser passed / 9 skips; без flaky в итоговом summary.
-- [ ] Перевести AI-сценарий `useFamilyMenu`, family/week CAS и постоянную
-  доставку через существующую IDB-outbox; пройти реальные bundles/staging.
+- [x] Подключить `useFamilyMenu` к durable `familyMenu` intent, family/week
+  CAS и единой серверной записи меню/порций/покупок. Реализация `405238b`
+  прошла CI; контракт и проверки — [здесь](docs/family-menu-state.md).
+- [ ] Проверить реальные old/new bundles, PWA/Service Worker, staging и
+  совместимый откат; это остаётся release gate.
 
-Следующая семейная часть опубликована как `405238b` и ещё проходит общую приёмку.
-[Точная граница текущей работы](docs/project-status.md#текущая-работа--семейное-меню).
+[Точная граница семейного компонента](docs/project-status.md#текущая-работа--семейное-меню).
 - [x] Подключить AI и server-preview к единственному familyMenu intent с исходным
   login guard, captured revision/baseVersion и guarded локальным commit.
 - [x] Принимать family/week CAS одной SQL-записью, читать покупки из того же
@@ -544,6 +547,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   полный `ai-callback-account-switch.spec.ts` — 15/15 без retries, typecheck
   прошёл. Полный CI для этого SHA прошёл: [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
   Другие AI/family callbacks и общий lifecycle остаются открыты.
+- [x] Проверить поздний ответ retry объяснения плато A после входа B во
+  второй вкладке: профиль, values, outbox, active session и success-effects
+  обоих аккаунтов не меняются. Целевой тест прошёл на Chromium, Firefox и
+  WebKit; полный callback spec после поправки синхронизации прошёл 25/25
+  выполненных проверок (2 штатных skip), `workers=1,retries=0`. Один Coach
+  Firefox timeout в первом полном запуске не повторился: этот сценарий прошёл
+  5/5, затем полный spec — 25 passed / 2 skipped. Связанные unit — 11/11,
+  typecheck прошёл. Точный CI нового теста ожидается после push.
 - [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
   guarded diary/history commit, profile usage и успешный UI только для текущей
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли
@@ -557,7 +568,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   неактивна. Код исправлен в [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd);
   unit 1132/1132, storage 37/37, два сценария повторены 20/20, полный
   weekly-menu spec прошёл 24/24 на Chromium, Firefox и WebKit. Typecheck и
-  storage-strict typecheck прошли; полный CI новой ревизии ожидается после push.
+  storage-strict typecheck прошли. Полный PR CI опубликованного HEAD `6c6feca`
+  завершился success в [run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769);
+  новый plateau-retry сценарий добавлен после этого SHA и ожидает точного CI.
   Подробности: [журнал](docs/stabilization-progress.md).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.

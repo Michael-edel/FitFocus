@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний retry объяснения плато после смены аккаунта, 14.10.2026
+
+Добавлен account-switch acceptance для ответа retry аккаунта A после входа B
+в соседней вкладке. Проверяются profile, локальные values, outbox, active
+session, achievement effects и UI обоих аккаунтов. Целевой тест прошёл 3/3 на
+desktop Chromium, Firefox и WebKit; связанные unit-тесты — 11/11, typecheck
+прошёл.
+
+Первый полный `ai-callback-account-switch.spec.ts` завершился 24 passed /
+1 failed / 2 skipped при `workers=1,retries=0`. Сбой был в ранее существовавшем
+Coach retry desktop Firefox: после ответа A исходная вкладка не увидела account B
+за 10 секунд. Targeted повтор прошёл; затем в Coach и новом plateau сценариях
+добавлен барьер, который подтверждает активную сессию B в исходной вкладке до
+освобождения ответа. Coach прошёл 5/5 повторов, а повторный полный spec завершился
+25 passed / 2 skipped без retries. Новый тест ещё ждёт точного CI после push;
+staging и весь P0.5 остаются открытыми.
+
 ## Предыдущий компонент — session guard недельного AI-отчёта, 13.10.2026
 
 Генерация недельного AI-отчёта и её retry используют свежую account/session

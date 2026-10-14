@@ -199,7 +199,9 @@ POST `/api/ai` и `/api/weekly_menu/items` проверяют парные
 capabilities, передавал scope, ждал guarded profile commit и только затем
 отправлял items. Таймаут запроса сохраняет возможность показать ошибку и
 повторить действие; logout/pagehide отменяют прежнюю попытку.
-Остальные callbacks, CAS и durable-порядок вторичной проекции остаются открытыми. [Полный контракт и приёмка](docs/ai-session-guard.md).
+Личные покупки связаны с profile CAS, семейное меню — с family/week CAS и
+durable outbox; остальные callbacks и staging-приёмка остаются открытыми.
+[Полный контракт и приёмка](docs/ai-session-guard.md).
 Capabilities должны быть развёрнуты и проверены до выпуска нового клиента.
 
 Компонент `4736ff5` связывает личные покупки с profile CAS и убирает
@@ -208,8 +210,10 @@ Capabilities должны быть развёрнуты и проверены д
 её строки. Пустой/повреждённый канонический снимок не включает legacy fallback.
 Личный POST `/api/weekly_menu/items` с корректным `week_start` возвращает
 409 `{ "error": "PERSONAL_MENU_PROFILE_REQUIRED", "requestId": "…" }` без записи
-покупок. Семейный POST с `family_id` сохраняет прежний путь и требует отдельной
-приёмки CAS/lifecycle. [Контракт, проверки и порядок выпуска](docs/personal-menu-projection.md).
+покупок. Семейный POST после миграции 0021 блокируется; семейный список следует
+каноническому family/week поколению через `/api/family/menu/state`, CAS и
+durable `familyMenu` outbox. [Личный контракт и проверки](docs/personal-menu-projection.md),
+[семейный контракт](docs/family-menu-state.md).
 Реализация в ветке не подтверждает deploy; подготовительный сервер с RETURNING
 должен предшествовать миграции 0020.
 

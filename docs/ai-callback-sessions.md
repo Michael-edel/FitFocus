@@ -160,6 +160,18 @@ Chromium, Firefox и WebKit; полный изменённый callback spec —
 `npm run typecheck` прошёл. Тест опубликован в [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979);
 точный PR CI `c48ce1b` завершился success в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879): 1115 unit, 485 E2E passed / 25 skipped и один flaky с retry в независимом legacy migration сценарии. Fingerprint-проверка migration была исправлена, а тест прошёл в последующих CI. Последний завершённый полный CI на `92a5be2` ([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538)) также включал personal-plan acceptance; два unrelated E2E прошли retry, но отмечены flaky. Новая achievement account-switch acceptance добавлена в `b44d46e` и прошла локально 7/7 browser/PWA-профилей; точный CI ожидается. Локальные результаты и ограничения записаны в [журнале](stabilization-progress.md).
 
+## P0.5 — retry объяснения плато при смене аккаунта
+
+Новый browser сценарий удерживает ответ retry аккаунта A до входа B в соседней
+вкладке, затем сверяет profile, values, outbox обоих аккаунтов, active session,
+achievement effects и UI. Целевой тест прошёл 3/3 на desktop Chromium, Firefox
+и WebKit; связанные AI retry/plateau unit-тесты — 11/11, typecheck — success.
+Первый полный callback spec имел единичный timeout существующего Coach retry в
+Firefox. Добавлена проверка активной сессии B в исходной вкладке до освобождения
+ответа; Coach прошёл 5/5 повторов, полный spec — 25 passed / 2 skipped без
+retries. Новый тест добавлен после PR CI run 38550243769 и пока не имеет
+CI-подтверждения. Staging, реальный OAuth/BFCache и весь P0.5 не проверялись.
+
 Эти сценарии не закрывают весь [P0.5](../TASKS.md): другие AI/family callbacks,
 прочие writers и полный lifecycle всё ещё открыты. Результаты и границы:
 [статус проекта](project-status.md) и [журнал](stabilization-progress.md).

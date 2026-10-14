@@ -17,10 +17,24 @@ success-событии последнего чтения, сохраняя ат�
 Локально прошли все 1132 unit-теста в 198 файлах, 37 целевых тестов durable
 outbox и базы состояния, общий typecheck и storage-strict typecheck. Два
 проблемных Firefox-сценария прошли 20/20 повторов, полный weekly-menu spec —
-24/24 на Chromium, Firefox и WebKit. CI новой ревизии ожидается после push.
+24/24 на Chromium, Firefox и WebKit. PR CI опубликованного HEAD `6c6feca`
+завершился success в
+[run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769).
 Это закрывает найденную транзакционную причину flaky, но не весь P0.8:
 оставшиеся writers, миграция, восстановление конфликтов и полный lifecycle
 перечислены в [TASKS](../TASKS.md).
+
+## P0.5 — поздний ответ retry объяснения плато
+
+Новый сценарий удерживает ответ retry для аккаунта A, пока соседняя вкладка
+входит в аккаунт B. После ответа проверяются profile, локальные values, outbox,
+active session, achievement effects и отсутствие старого объяснения в UI.
+Целевой тест прошёл на desktop Chromium, Firefox и WebKit; связанные unit
+тесты прошли 11/11, `npm run typecheck` прошёл. Первый полный прогон выявил
+один timeout в существующем Coach retry для Firefox. После добавления барьера
+активной сессии до освобождения ответов Coach прошёл 5/5 повторов, затем полный
+callback spec завершился 25 passed / 2 skipped без retries.
+Новый тест не входил в CI run 38550243769; staging и весь P0.5 остаются открытыми.
 
 ## P0.5 — session guard фотоанализа
 
@@ -706,9 +720,10 @@ sender через `requestJson` во время reload. На этом снимк
 CI документирующего `59a3630` прошёл: 860 unit, 152 browser passed / 9 skips,
 без flaky. Он предшествует коду меню. Новый workflow проверяется на точном
 опубликованном HEAD отдельно; [контракт компонента](ai-session-guard.md).
-После этой ревизии achievement HTTP защищён отдельным `57da2cf`; остаются version/CAS и
-durable-порядок вторичной items-проекции, остальные AI/report/retry/family
-callbacks. Весь P0.5 остаётся открытым.
+После этой ревизии achievement HTTP защищён отдельным `57da2cf`. Позднее
+личные покупки переведены на profile CAS, а семейное меню — на family/week CAS
+и durable `familyMenu` outbox. Остальные AI/report/retry/family callbacks,
+staging и общий lifecycle остаются открытыми; весь P0.5 не закрыт.
 
 ## Что остаётся
 

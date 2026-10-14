@@ -18,8 +18,10 @@
   quota/409, восстановление той же операции после reload, отсутствие личного
   items POST, timeout/retry и реальный lifecycle страницы. Mock событий
   pagehide/pageshow не заменяет BFCache на целевом браузере.
-- [ ] Для вторичных items определены версия/CAS и durable-порядок всех writers;
-  session guard не считается защитой от перестановки уже принятых запросов.
+- [ ] На staging подтверждены личные покупки через profile CAS/SQL-проекцию
+  и семейное меню/покупки через family/week CAS и durable `familyMenu` outbox.
+  Это задаёт порядок этих ресурсов; для остальных writers требуется отдельная
+  проверка их версий, очереди и побочных эффектов.
 - [ ] Для [достижений](docs/achievement-session.md) сервер публикует независимую
   `achievementSync: { protocol: 1, guard: 1 }` до выпуска нового клиента.
   Проверены scoped GET/POST, смена cookie, новый вход того же аккаунта и
@@ -32,9 +34,10 @@
   `familySync: { protocol: 1, guard: 1 }` выпущены до нового клиента.
   На staging проверены чужая cookie, новый login того же аккаунта, поздний ответ,
   отказ checkbox с восстановлением и повтор после реального BFCache.
-- [ ] Семейный AI-путь `useFamilyMenu`, явная family/week-привязка мутации,
-  CAS и постоянный порядок всех menu/items writers проверены отдельно.
-  Session guard и отмена fetch не объявлены атомарностью или гарантированной доставкой.
+- [ ] На staging проверены семейный AI-путь `useFamilyMenu`, явная
+  family/week-привязка, CAS-запись через `familyMenu` outbox, reload/конфликт
+  и отказ старых writers после migration barrier. Session guard и отмена fetch
+  не объявлены атомарностью или гарантированной доставкой.
 
 Для изменения исполняемого кода запускать проверки из `package.json`
 и действующего `.github/workflows/ci.yml`:

@@ -1,9 +1,12 @@
 # Личное меню и список покупок
 
-Сверено: 12.10.2026. Код компонента —
+Сверено: 14.10.2026. Код компонента —
 [`4736ff5`](https://github.com/Michael-edel/FitFocus/commit/4736ff51b06f0062a6cb45a98169f4a4d0c39895), ветка `fix/durable-outbox`.
 Серверная валидация дополнена на [`830caf4`](https://github.com/Michael-edel/FitFocus/commit/830caf43895fe00bd9eddf2b58cf254afbe847c8).
-Локальные проверки прошли; CI нового опубликованного HEAD проверяется отдельно.
+Локальные проверки компонента описаны ниже. Последний PR CI ветки
+`fix/durable-outbox` проверил HEAD `6c6feca` и завершился success
+([run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769));
+staging и выпуск не подтверждены.
 Общий план — [TASKS](../TASKS.md), решение — [ADR-007](adr/ADR-007-personal-menu-projection.md),
 подтверждённая область — [матрица P0](verification-matrix.md).
 
@@ -44,8 +47,11 @@ guard не связывал покупки с принятой версией pr
 Миграция сохраняет прежние строки и не угадывает недостающую неделю меню.
 
 Личный items POST возвращает `409 PERSONAL_MENU_PROFILE_REQUIRED` без записи
-покупок. Семейный путь с `familyId` остаётся отдельным; его CAS, очередь и
-lifecycle ещё открыты. Проекции включены в export/delete аккаунта и privacy coverage.
+покупок. Семейный список хранится как часть единого поколения меню
+`(family_id, week_start)` через `familyMenu` outbox и server CAS; отдельного
+items POST для нового протокола нет. Семейный контракт и его оставшиеся
+lifecycle/staging проверки описаны в [family-menu-state.md](family-menu-state.md).
+Проекции включены в export/delete аккаунта и privacy coverage.
 
 ## Совместимость клиента
 

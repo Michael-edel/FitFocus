@@ -4,6 +4,15 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+Последний завершённый PR CI для PR #93 проверил PR head
+[`6c6feca`](https://github.com/Michael-edel/FitFocus/commit/6c6feca) и завершился
+success в [run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769):
+audit, guards, unit, typechecks, build, E2E и rollback/CAS прошли. Новый локальный
+plateau-retry сценарий прошёл на трёх desktop-браузерах, связанные unit —
+11/11, typecheck — success. После барьера переключения активной сессии Coach
+Firefox прошёл 5/5 повторов; повторный полный callback spec — 25 passed / 2
+skipped без retries. Новый тест ещё ожидает отдельного CI.
+
 Последний полный CI до Firefox-finish исправления прошёл на HEAD
 [a9e3096](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c)
 в [run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):

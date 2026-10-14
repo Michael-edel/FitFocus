@@ -136,14 +136,19 @@ Browser plugin not available: использован repository Playwright с mo
 ошибки браузера, viewport и реальные клики. Разрешена только внесённая 503
 resource-ошибка отдельного items-сценария; фильтра CORS/pageerror нет.
 История red/fixed проверок — [в журнале](stabilization-progress.md).
-CI итогового опубликованного HEAD проверяется отдельно. Mock API и локальные
-результаты не подтверждают настоящий OAuth, реальные устройства или staging.
+На снимке `f4b4eee` итоговый CI проверялся отдельно. Поздний PR CI для
+ветки `fix/durable-outbox`, HEAD `6c6feca`, завершился success
+([run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769)).
+Mock API и локальные результаты не подтверждают настоящий OAuth, реальные
+устройства или staging.
 
-Вторичные items всё ещё отправляются прямым guarded HTTP. На сервере это
-замена без CAS/версии и durable outbox: уже принятые конкурентные запросы
-могут завершиться в другом порядке. Нужно определить версионирование,
-постоянное намерение и порядок всех writers до закрытия этого риска.
-Другие AI и retry writers, family callbacks и старые сборки остаются открытыми.
+Личный список покупок больше не отправляется отдельным items-запросом:
+profile CAS атомарно обновляет SQL-проекцию, а клиент использует одну durable
+profile-операцию. Семейное меню, порции и покупки сохраняются как единое
+family/week-поколение через `familyMenu` outbox и серверный CAS. Эти контракты
+закрывают порядок указанных menu/items writes; они не задают глобальный порядок
+между несвязанными writers. Остальные AI/retry writers, family callbacks,
+staging и старые сборки остаются открытыми.
 
 Исходники и проверки: [AI transport](../services/aiSession.ts),
 [scope](../features/ai/actionScope.ts), [menu use case](../features/ai/useWeeklyMenuGeneration.ts),
@@ -153,7 +158,12 @@ CI итогового опубликованного HEAD проверяется
 [scope tests](../tests/ai_action_scope.test.ts),
 [browser tests](../e2e/weekly-menu-durability.spec.ts).
 
-## Что нужно подключить на клиенте
+## Исторический этап клиентской интеграции на f4b4eee
+
+Следующие пункты описывают последовательность первоначального guarded-menu
+компонента. После него личный items POST был заменён profile CAS-проекцией;
+текущее поведение и проверки записаны в
+[контракте личных покупок](personal-menu-projection.md).
 
 - [x] Проверять переданную привязку в обоих серверных handlers и объявлять capabilities.
 - [x] Для персонального меню получать свежий proof исходного аккаунта, проверять capability
@@ -165,7 +175,11 @@ CI итогового опубликованного HEAD проверяется
   сохранять независимые изменения профиля и учитывать конфликт/отказ хранения.
 - [x] Убрать скрытый items writer из стадии вычисления меню; явно определить
   порядок сохранения и поведение при отказе вторичной записи.
-- [ ] Добавить version/CAS и durable-порядок вторичной items-проекции.
+- [x] Убрать отдельный личный items writer: принятый profile CAS обновляет
+  покупки одной SQL-проекцией; семейное меню и покупки используют свою
+  `familyMenu` outbox-операцию и family/week CAS.
+  [Личный контракт](personal-menu-projection.md),
+  [семейный контракт](family-menu-state.md).
 - [x] Для недельного AI-отчёта и его retry получать свежий proof, связывать
   попытку с исходной сессией и защищать durable commit; локальные проверки
   описаны в [отдельном контракте](weekly-ai-report-session.md).
@@ -180,8 +194,9 @@ CI итогового опубликованного HEAD проверяется
 `checkAchievements`. На снимке `f4b4eee` проверка menu use case до вызова
 не защищала последующий HTTP при смене cookie. Компонент `57da2cf` добавляет
 [собственные server/client guard, очередь и lifetime](achievement-session.md).
-Durable-порядок/CAS items и остальные producers остаются открытыми;
-полная безопасность всех побочных эффектов меню пока не подтверждена.
+Profile CAS для личных покупок и family/week CAS для семейного меню реализованы.
+Остальные producers и побочные эффекты меню требуют отдельной проверки; staging
+и полная lifecycle-приёмка не подтверждены.
 
 На предыдущем снимке `f4b4eee` полная приёмка оставалась открытой:
 200 passed / 1 failed / 9 skips. Старый profile reload на desktop WebKit воспроизвёл native сообщение

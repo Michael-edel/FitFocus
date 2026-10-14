@@ -169,7 +169,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Матрица проверок P0](verification-matrix.md) | Подтверждённые части, связанные тесты и открытые критерии |
 | [Личное меню и покупки](personal-menu-projection.md) | Одна profile-операция, SQL-проекция, проверки и приёмка выпуска |
 | [Переход на схему покупок 0020](profile-cas-rollout.md) | Подготовительная версия CAS, последовательность выпуска и опасный откат reader |
-| [Сессии семьи](family-session.md) | Guarded family API, исходный login proof, lifetime и открытые CAS/AI-writers |
+| [Сессии семьи](family-session.md) | Guarded family API, исходный login proof, lifetime и оставшиеся AI/callback lifecycle-проверки |
 | [ADR-007](adr/ADR-007-personal-menu-projection.md) | Причина выбора проекции, альтернативы и порядок совместимого выпуска |
 | [Карта кода](code-map.md) | Функции, основные модули, проверки и границы текущей реализации |
 | [Пользовательские записи](owned-state-writers.md) | 15 управляемых ключей, редакторы, удаление старого sender и границы profile/legacy |

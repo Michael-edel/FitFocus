@@ -162,12 +162,14 @@ auth-сессии и HTTP-исходов описан в [state sender](state-se
 транзакционным readGuard и lifetime predicate. Меню публикуется после commit;
 независимые edits, logout и поздние ответы проверяются отдельно от sender.
 [Контракт](ai-session-guard.md), [профиль](profile-persistence.md#сохранение-сгенерированного-результата).
-Вторичные items пока являются прямой scoped HTTP-проекцией без version/CAS
-и durable-порядка. Защита недельного AI-отчёта описана в отдельном
-[контракте](weekly-ai-report-session.md); остальные AI/retry и family
-callbacks, runtime legacy lifecycle, конфликты, экспорт/очистка и выпуск
-остаются открытыми. Историческое описание `cfcc31b` выше сохраняется как
-снимок своей реализации.
+Личные покупки теперь входят в одну durable profile-операцию и обновляют
+SQL-проекцию только при принятом profile CAS
+([контракт](personal-menu-projection.md)). Семейное меню и списки покупок
+используют отдельную `familyMenu` outbox-операцию с CAS по семье и неделе
+([контракт](family-menu-state.md)). Эти пути имеют собственные гарантии версии
+и порядка; другие AI/retry/family callbacks, runtime legacy lifecycle,
+конфликты, экспорт/очистка и выпуск всё ещё требуют приёмки.
+Историческое описание `cfcc31b` выше сохраняется как снимок своей реализации.
 
 ## Последующее подключение runtime legacy
 
