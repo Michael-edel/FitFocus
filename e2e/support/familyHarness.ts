@@ -44,12 +44,13 @@ export async function saved(page: Page) {
   }, account);
 }
 
-export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
+export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
   let cloud = familyTestMenu(account), profile = buildMockProfile();
-  const errors: string[] = [], counts = { preview: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0 };
+  const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
+  let releasePreview!: () => void; const heldPreview = new Promise<void>(resolve => { releasePreview = resolve; });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
     if (!['error', 'warning'].includes(message.type())) return;
@@ -96,6 +97,8 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     }
     if (path === '/api/family/menu/generate') {
       counts.preview += 1; expect(request.postDataJSON()).toEqual({ preview: true, familyId });
+      if (mode === 'held-preview') await heldPreview;
+      counts.previewFulfilled += 1;
       return json({ preview: true, shared: { familyId, weekStart: week, menu: familyTestMenu(account, 700, week) } });
     }
     if (path === '/api/ai' && String(request.postDataJSON()?.feature).startsWith('family_menu')) {
@@ -119,7 +122,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
-  return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, close: () => { active = false; } };
+  return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview, close: () => { active = false; } };
 }
 export async function navigate(page: Page, name: string) {
   const button = page.getByRole('button', { name, exact: true });

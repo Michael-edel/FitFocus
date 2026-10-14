@@ -192,6 +192,32 @@ test('a delayed family AI response after another account signs in cannot write i
   } finally { release(); }
 });
 
+test('a delayed family server preview after another account signs in cannot write its menu', async ({ page, context }) => {
+  const { counts, errors, releasePreview } = await setup(page, 'held-preview');
+  try {
+    await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+    await expect.poll(() => counts.preview).toBe(1);
+    const before = await saved(page);
+
+    const accountBPage = await context.newPage();
+    const errorsB = await openSwitchAccount(accountBPage);
+    await expect.poll(() => activeAccountId(accountBPage)).toBe(switchAccount.id);
+    await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
+
+    releasePreview();
+    await expect.poll(() => counts.previewFulfilled).toBe(1);
+    await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
+    expect(await saved(page)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
+    expect(counts.put).toBe(0);
+    expect(counts.accepted).toBe(0);
+    expect(counts.oldWriter).toBe(0);
+    await healthy(page, errors);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    expect(errorsB).toEqual([]);
+  } finally { releasePreview(); }
+});
+
 test('family pending operation survives reload and delivers after recovery with the same opId', async ({ page }, info) => {
   const { counts, errors, restore } = await setup(page, 'offline');
   await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
