@@ -10,9 +10,12 @@ const targetKey = `fitfocus_data_${account}_plan_task_done`;
 const orphanKey = 'fitfocus_data_another-account_orphan';
 const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
+// Keep in sync with the production sender lease in storage/stateSync.ts.
+const SENDER_LEASE_MS = 30_000;
 
 type LegacyRecord = { type: string; key: string; value?: string; baseVersion?: number; retryCount?: number };
-type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; baseVersion: number; status: string };
+type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; baseVersion: number;
+  status: string; reason?: string; nextAttemptAtMs: number; attempt?: { startedAtMs: number } };
 type MigrationItem = { id: string; canonical: string; state: string; reason?: string; accountId?: string; opId?: string; acknowledgedVersion?: number };
 type MigrationUnknown = { rawRecord: unknown; reason: string };
 
@@ -61,6 +64,7 @@ async function migrationState(page: Page) {
         progress: metadata.find((entry) => entry.id === 'legacy-migration:v1') ?? null,
         migrationItems,
         migrationUnknown,
+        nowMs: Date.now(),
       };
     } finally { db.close(); }
   }, { sourceKey: legacySourceKey, valueKey: targetKey });
@@ -180,10 +184,9 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     expect(server.counts.currentStatePutAttempts).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
 
-    // Restore the endpoint before the update can open the migration send gate.
-    // Otherwise a slow mobile service-worker reload can race recovery against
-    // the first send and leave the operation waiting through its retry delay.
-    server.recoverCurrentState();
+    // Keep current writes unavailable while both documents navigate. The first
+    // new-build request must not be accepted just before that page is unloaded:
+    // the server could commit it while navigation drops the acknowledgement.
     const update = currentPage.getByRole('button', { name: 'Обновить приложение', exact: true });
     await expect(update).toBeVisible();
     const currentNavigation = currentPage.waitForEvent('framenavigated', frame => frame === currentPage.mainFrame());
@@ -202,6 +205,23 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       const progress = (await migrationState(currentPage)).progress;
       return progress?.writersStopped === true && progress.sendAllowed === true;
     }).toBe(true);
+    const beforeRecovery = await migrationState(currentPage);
+    const importedBeforeRecovery = itemForKey(beforeRecovery.migrationItems, targetKey);
+    const targetBeforeRecovery = beforeRecovery.operations.find(operation => operation.opId === importedBeforeRecovery?.opId);
+    const eligibleAtMs = targetBeforeRecovery?.status === 'sending' && targetBeforeRecovery.attempt
+      ? targetBeforeRecovery.attempt.startedAtMs + SENDER_LEASE_MS
+      : targetBeforeRecovery?.nextAttemptAtMs ?? beforeRecovery.nowMs;
+    const recoveryTimeoutMs = Math.max(10_000, eligibleAtMs - beforeRecovery.nowMs + 10_000);
+    // A request aborted by navigation remains sending until its durable lease
+    // expires. Otherwise the explicit 503 response returns it to pending.
+    await expect.poll(async () => {
+      const state = await migrationState(currentPage);
+      const imported = itemForKey(state.migrationItems, targetKey);
+      const operation = state.operations.find(entry => entry.opId === imported?.opId);
+      return operation?.status === 'pending' && operation.reason === 'http-503';
+    }, { timeout: recoveryTimeoutMs }).toBe(true);
+    expect(server.stateWriteKeys).not.toContain(targetKey);
+    server.recoverCurrentState();
     await expect.poll(() => server.stateWriteKeys.includes(targetKey)).toBe(true);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
