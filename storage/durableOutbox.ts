@@ -66,8 +66,8 @@ function afterIndexedRequests<T>(
   transaction: IDBTransaction,
   requests: readonly IDBRequest<unknown>[],
   work: (results: readonly unknown[]) => T,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+): Promise<Awaited<T>> {
+  return new Promise<Awaited<T>>((resolve, reject) => {
     const results: unknown[] = new Array(requests.length);
     let remaining = requests.length;
     let settled = false;
@@ -85,8 +85,11 @@ function afterIndexedRequests<T>(
         if (remaining !== 0) return;
         try {
           const result = work(results);
-          settled = true;
-          resolve(result);
+          Promise.resolve(result).then((value) => {
+            if (settled) return;
+            settled = true;
+            resolve(value as Awaited<T>);
+          }, abortAndReject);
         } catch (error) {
           abortAndReject(error);
         }
@@ -576,50 +579,91 @@ export class DurableOutbox {
     const attemptId = crypto.randomUUID();
     const deletionMarkerId = await legacyDeletedAccountMetaId(input.accountId);
     const database = await this.connection.open();
-    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
-      const sessionRequest = indexedRequest(tx.objectStore(STATE_STORES.meta).get('active-session')) as Promise<ActiveSession | undefined>;
+    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', (tx) => {
+      const metaStore = tx.objectStore(STATE_STORES.meta);
       const store = tx.objectStore(STATE_STORES.outbox);
-      const operationsRequest = indexedRequest(store.index('accountId').getAll(input.accountId)) as Promise<OutboxOperation[]>;
-      const [session, operations] = await Promise.all([sessionRequest, operationsRequest]);
-      if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch || session.pause) return null;
-      // Revisions define per-key order even if the wall clock moves backwards.
-      operations.sort((a, b) => a.revision - b.revision || a.createdAtMs - b.createdAtMs || a.opId.localeCompare(b.opId));
-      const seenKeys = new Set<string>();
-      let deletionChecked = false;
-      let accountDeleted = false;
-      for (const operation of operations) {
-        if (seenKeys.has(operation.key)) continue;
-        seenKeys.add(operation.key);
-        if (operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical) {
-          const metaStore = tx.objectStore(STATE_STORES.meta);
-          if (!deletionChecked) {
-            const marker = await indexedRequest(metaStore.get(deletionMarkerId)) as { kind?: unknown; version?: unknown } | undefined;
-            accountDeleted = marker?.kind === 'legacy-deleted-account' && marker.version === 1;
-            deletionChecked = true;
-          }
-          if (accountDeleted) continue;
-          const gateRequest = indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>;
-          const receiptRequest = indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(operation.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>;
-          const [gate, receipt] = await Promise.all([gateRequest, receiptRequest]);
-          if (!canSendLegacy(operation, gate, receipt)) continue;
+      const sessionRequest = metaStore.get('active-session') as IDBRequest<ActiveSession | undefined>;
+      const operationsRequest = store.index('accountId').getAll(input.accountId) as IDBRequest<OutboxOperation[]>;
+      return afterIndexedRequests(tx, [
+        sessionRequest as unknown as IDBRequest<unknown>,
+        operationsRequest as unknown as IDBRequest<unknown>,
+      ], ([sessionValue, operationsValue]) => {
+        const session = sessionValue as ActiveSession | undefined;
+        const operations = operationsValue as OutboxOperation[];
+        if (session?.accountId !== input.accountId || session.sessionEpoch !== input.sessionEpoch || session.pause) return null;
+        // Revisions define per-key order even if the wall clock moves backwards.
+        operations.sort((a, b) => a.revision - b.revision || a.createdAtMs - b.createdAtMs || a.opId.localeCompare(b.opId));
+        const heads: OutboxOperation[] = [];
+        const seenKeys = new Set<string>();
+        for (const operation of operations) {
+          if (seenKeys.has(operation.key)) continue;
+          seenKeys.add(operation.key);
+          heads.push(operation);
         }
-        if (operation.status === 'sending') {
-          if (!operation.attempt || (operation.attempt.sessionEpoch === input.sessionEpoch && input.nowMs - operation.attempt.startedAtMs < input.leaseMs)) continue;
-        } else if (operation.status !== 'pending' || operation.nextAttemptAtMs > input.nowMs) continue;
-        const claim: OutboxClaim = {
-          ...operation, status: 'sending', updatedAtMs: input.nowMs,
-          retryCount: operation.retryCount + (operation.status === 'sending' ? 1 : 0),
-          attempt: {
-            attemptId, owner: input.owner, sessionEpoch: input.sessionEpoch, startedAtMs: input.nowMs,
-            ...(operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical
-              ? { deletedAccountMarkerId: deletionMarkerId }
-              : {}),
-          },
+
+        const claimOperation = (operation: OutboxOperation): OutboxClaim | null => {
+          if (operation.status === 'sending') {
+            if (!operation.attempt || (operation.attempt.sessionEpoch === input.sessionEpoch && input.nowMs - operation.attempt.startedAtMs < input.leaseMs)) return null;
+          } else if (operation.status !== 'pending' || operation.nextAttemptAtMs > input.nowMs) return null;
+          const legacy = !!(operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical);
+          const claim: OutboxClaim = {
+            ...operation, status: 'sending', updatedAtMs: input.nowMs,
+            retryCount: operation.retryCount + (operation.status === 'sending' ? 1 : 0),
+            attempt: {
+              attemptId, owner: input.owner, sessionEpoch: input.sessionEpoch, startedAtMs: input.nowMs,
+              ...(legacy ? { deletedAccountMarkerId: deletionMarkerId } : {}),
+            },
+          };
+          store.put(claim);
+          return claim;
         };
-        store.put(claim);
-        return claim;
-      }
-      return null;
+
+        const findClaim = (
+          startAt: number,
+          legacyState?: { accountDeleted: boolean; gate: LegacyGate | undefined },
+        ): OutboxClaim | null | Promise<OutboxClaim | null> => {
+          for (let index = startAt; index < heads.length; index += 1) {
+            const operation = heads[index];
+            const legacy = !!(operation.migrationSourceKey || operation.migrationFingerprint || operation.migrationCanonical);
+            if (!legacy) {
+              const claim = claimOperation(operation);
+              if (claim) return claim;
+              continue;
+            }
+            if (legacyState?.accountDeleted || (legacyState && (legacyState.gate?.sendAllowed !== true
+              || legacyState.gate.sourceKey !== LEGACY_QUEUE_SOURCE_KEY))) continue;
+
+            const receiptRequest = tx.objectStore(STATE_STORES.migrationItems)
+              .get(legacyMigrationItemId(operation.migrationFingerprint ?? ''));
+            const requests: IDBRequest<unknown>[] = legacyState
+              ? [receiptRequest]
+              : [
+                metaStore.get(deletionMarkerId),
+                metaStore.get(LEGACY_MIGRATION_META_ID),
+                receiptRequest,
+              ];
+            return afterIndexedRequests(tx, requests, (results) => {
+              const state = legacyState ?? {
+                accountDeleted: ((results[0] as { kind?: unknown; version?: unknown } | undefined)?.kind === 'legacy-deleted-account'
+                  && (results[0] as { kind?: unknown; version?: unknown } | undefined)?.version === 1),
+                gate: results[1] as LegacyGate | undefined,
+              };
+              const receipt = results[legacyState ? 0 : 2] as LegacyReceipt | undefined;
+              if (!state.accountDeleted && canSendLegacy(operation, state.gate, receipt)) {
+                const claim = claimOperation(operation);
+                if (claim) return claim;
+              }
+              return findClaim(index + 1, state);
+            });
+          }
+          return null;
+        };
+
+        // Queue dependent reads and the claim write from request success events.
+        // Legacy receipt reads are sequential to avoid work proportional to the
+        // entire imported queue on every sender claim.
+        return findClaim(0);
+      });
     });
   }
 
