@@ -3,12 +3,13 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-Последний кодовый HEAD ветки fix/durable-outbox — [0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141).
-Коммит 32bc410 добавляет session-bound local commit для вопроса и очистки
-истории AI Совета; 0abb185 исправляет часы тестовой фикстуры. Предыдущий PR CI
-[38619175535](https://github.com/Michael-edel/FitFocus/actions/runs/38619175535)
-на SHA 32bc410 завершился unit failure: 1152 passed, 1 failed из 1153; E2E не
-запускались. Исправленный HEAD ожидает полного CI после push. Более ранний CI
+Последний кодовый HEAD ветки fix/durable-outbox — [92ecaa3](https://github.com/Michael-edel/FitFocus/commit/92ecaa3cd1f97b643daf62ca44fd5d6b76a7670f).
+Он оставляет обычные repository-записи AI под строгим commit guard, а local
+guard доступен только через явно названные методы. Предыдущий PR CI
+[38620253135](https://github.com/Michael-edel/FitFocus/actions/runs/38620253135)
+на SHA f1f553d прошёл 1153 unit-теста, но остановился на typecheck из-за
+расширенного типа guard у writeJson; E2E не запускались. Исправление вошло
+в 92ecaa3 и ожидает полного CI после push. Более ранний CI
 [38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717)
 на SHA 6305695 завершился E2E failure: 567 passed, 95 skipped, 8 failed,
 2 flaky. Семь падений касались очистки истории AI Совета при sender pause;
@@ -30,12 +31,11 @@ P0.5/P0.8, полный lifecycle, staging и выпуск остаются от
 iPhone PWA падение family-menu остаётся открытым.
 
 Коммит 32bc410 добавил session-bound local commit для вопроса и очистки истории,
-с проверкой account/server session/epoch внутри IDB-транзакции. Ответы AI
-сохраняют строгий read guard. Тестовая временная база исправлена в
-[0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141).
-Полный CI нового branch HEAD ещё не завершён. Контракт:
-[AI Совет](ai-council-session.md). Общий P0.5, P0.8 и выпуск остаются открытыми.
-
+с проверкой account/server session/epoch внутри IDB-транзакции. Тестовая
+временная база исправлена в 0abb185. Коммит 92ecaa3 отделил явно local методы
+от repository API для AI-результатов, сохранив строгие типы. Точный PR CI
+нового HEAD ещё не завершён. Контракт: [AI Совет](ai-council-session.md).
+Общий P0.5, P0.8 и выпуск остаются открытыми.
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 
 Код [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)

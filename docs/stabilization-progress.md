@@ -2,7 +2,7 @@
 
 ## P0.5 — локальные действия AI Совета при паузе отправки, 15.10.2026
 
-CI на предыдущем SHA 6305695, [run 38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717),
+CI на SHA 6305695, [run 38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717),
 завершился с 567 passed, 95 skipped, 8 failed и 2 flaky. Семь одинаковых
 E2E-падений возникли в owned-state.spec.ts: очистка истории AI Совета не
 создавала delete operation во время auth/protocol pause, потому что строгий
@@ -14,18 +14,18 @@ iPhone PWA failure в family-menu проверках остаётся самос
 добавляет local commit guard, который внутри IDB-транзакции требует прежние
 account, server session и epoch, но допускает локальную запись при sender
 pause. Вопрос пользователя и очистка истории используют этот guard; ответ AI
-сохраняет строгий guard. В tests/state_editor.test.ts добавлены проверки
-записи во время protocol pause и отказа после смены аккаунта. Контракт:
-[AI Совет](ai-council-session.md).
+сохраняет строгий guard. Тестовая временная база исправлена в
+[0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141).
 
-Полный CI [run 38619175535](https://github.com/Michael-edel/FitFocus/actions/runs/38619175535)
-на SHA 32bc410 остановился на unit-тесте: фикстура использовала nowMs=10,
-а outbox operation была создана с реальным Date.now(); 1152 теста прошли.
-Коммит [0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141)
-переводит claim и retry timestamps теста на общий clock. git diff --check
-и локальная проверка ссылок пройдены; тесты локально не запускались.
-Полный CI исправленного branch HEAD ожидает выполнения. P0.5/P0.8 остаются
-открытыми.
+Полный CI [run 38620253135](https://github.com/Michael-edel/FitFocus/actions/runs/38620253135)
+на SHA f1f553d прошёл 1153 unit-теста, но typecheck выявил, что широкий
+OutboxWriteGuard из UserStateRepository также разрешал local guard для
+AI-generated repository writes. Коммит
+[92ecaa3](https://github.com/Michael-edel/FitFocus/commit/92ecaa3cd1f97b643daf62ca44fd5d6b76a7670f)
+разделил строгие writeJson/writeRaw/remove и явные writeLocalRaw/removeLocal,
+которые вызываются только для локальных действий StateEditor. git diff --check
+и локальная проверка Markdown-ссылок прошли; локальные тесты не запускались.
+Полный CI исправленного HEAD ожидает выполнения. P0.5/P0.8 остаются открытыми.
 ## P0.5 — AI Совет использует account-scoped session, 14.10.2026
 
 Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)
