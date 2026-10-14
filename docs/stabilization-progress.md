@@ -10,8 +10,13 @@ server session возобновляет ту же операцию; в журн�
 что отправка адресована A и содержит новый session id. Runtime-код не менялся.
 
 Точечный локальный Playwright прогон завершился 3/3 без retries в desktop
-Chromium, Firefox и WebKit (`workers=1,retries=0`). Точный CI для текущего изменения ожидает push;
-это закрывает один acceptance P0.6, но не logout/login, reload и весь lifecycle.
+Chromium, Firefox и WebKit (`workers=1,retries=0`). Точный PR CI source HEAD
+`943d4c0`, merge-ref `75362ae`, [run 38641088114](https://github.com/Michael-edel/FitFocus/actions/runs/38641088114),
+завершился success: 1153 unit-теста / 199 файлов, 587 browser passed / 99 skipped
+за 30,3 минуты, audit с 0 уязвимостей, все guards, три typecheck, production
+build, 23 rollback/CAS-запроса и rollback-артефакт. Предшествующий docs-only
+run `38638704278` отменился при новом push из-за branch concurrency. Это закрывает
+один acceptance P0.6, но не logout/login, reload и весь lifecycle.
 
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 

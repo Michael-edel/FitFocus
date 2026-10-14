@@ -640,7 +640,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Дополнительно добавлен сценарий 503 → вход B → возврат A с новой server
   session: pending операция сохраняет account A и тот же opId, не отправляется
   при активном B и возобновляется под свежей сессией A. Локальный прогон прошёл
-  3/3 в desktop Chromium, Firefox и WebKit без retries; точный CI ожидает push.
+  3/3 в desktop Chromium, Firefox и WebKit без retries; точный PR CI source HEAD
+  `943d4c0` / merge-ref `75362ae` завершился success (run 38641088114).
   Это не закрывает общий P0.6.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи
