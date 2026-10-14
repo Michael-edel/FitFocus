@@ -28,8 +28,24 @@ weekly-menu specs дал один Firefox timeout; изолированный п
 завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585):
 540 browser passed / 83 skipped, 1133 unit, audit, guards, typechecks, build и
 23 rollback/CAS-запроса прошли. Полная миграционная и P0.8 приёмка остаётся
-открытой; отдельно требуется проверить `durableStateBackup` restore callbacks
-и полный lifecycle.
+открытой; `durableStateBackup` restore callbacks проверены в отдельном follow-up
+ниже, полный lifecycle остаётся незавершённым.
+
+## Durable backup restore в активной транзакции — 38d169c
+
+`restoreDurableStateBackup` больше не ждёт IDB request по одному между чтением
+и записью. Он сначала читает tombstone metadata, ставит чтения существующих
+primary keys для всех оставшихся rows, затем синхронно сверяет содержимое и
+планирует `add` запросы в success-событии последнего чтения. Конфликт вызывает
+abort до commit; вся операция по пяти stores остаётся атомарной. Пустая копия
+также проходит через явную обработку пустого набора requests.
+
+На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
+прошли 1133 unit / 198 файлов, общий, domain-strict и storage-strict typecheck,
+production build и 4/4 browser E2E через Settings на desktop Firefox и Android
+Chrome: успешный импорт 64 values + outbox/quarantine/meta и rollback при
+конфликте. Полный CI на новом HEAD ещё не подтверждён. Общий lifecycle P0.8,
+staging и выпуск остаются открытыми.
 
 ## Firefox: завершение finish в активной транзакции
 

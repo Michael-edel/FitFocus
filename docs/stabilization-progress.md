@@ -3056,5 +3056,26 @@ Android Chrome дал 17 passed / 1 failed: Firefox migration smoke превыс
 уязвимостей, guards, три typecheck, build и rollback/CAS (23 запроса) прошли.
 Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11903083122)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11902803403).
-`durableStateBackup` restore callbacks, полный lifecycle, staging и выпуск
-остаются открытыми.
+На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
+durable backup restore callback переведён на активные IDB request events; полный
+lifecycle, staging и выпуск остаются открытыми.
+
+## P0.8 — durable backup restore в активной транзакции, `38d169c`, 14.10.2026
+
+`storage/durableStateBackup.ts::restoreDurableStateBackup` переведён с
+последовательных `await` IndexedDB requests на три связанные стадии в активной
+транзакции: чтение tombstone metadata, предварительное чтение всех candidate
+primary keys, затем проверка и планирование всех отсутствующих `add` операций
+из success-события последнего чтения. Различающийся existing row отменяет всю
+транзакцию до commit; tombstone-фильтр, migration-gate reset и идемпотентный
+повтор сохранены. Добавлен E2E через Settings для успешного импорта 64 значений,
+outbox operation, quarantine и owner metadata, а также для полного rollback при
+конфликте.
+
+На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c),
+ветка `fix/durable-outbox`, прошли `npm run test:unit` — 1133/1133 в 198 файлах,
+общий, domain-strict и storage-strict typecheck, production build и
+`npx playwright test e2e/durable-backup-restore.spec.ts --project=desktop-firefox --project=android-chrome --workers=1 --retries=0`
+— 4/4. Новый точный CI запускается после push; успех предыдущего run
+38577353585 на SHA `152d7d7` не переносится на этот код. Полный P0.8 lifecycle,
+staging и выпуск этим компонентом не закрыты.

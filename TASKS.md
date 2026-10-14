@@ -696,6 +696,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
   остаются импортируемыми. [Контракт и тесты](docs/backup-restore.md).
+- [x] В durable restore заранее ставить проверки существующих primary keys,
+  затем выполнять сравнение и добавление внутри success-события IDB-запросов;
+  конфликт отменяет единую транзакцию всех пяти stores. Браузерный импорт и
+  rollback прошли 4/4 на Firefox и Android Chrome в `38d169c`.
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
 - [x] Реализовать локальную очистку точных account-owned ключей и записей в
   пяти IDB stores одной транзакцией; инвалидировать сессию удаляемого аккаунта,

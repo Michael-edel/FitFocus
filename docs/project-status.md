@@ -67,8 +67,11 @@ desktop Firefox и Android Chrome. Первый совместный прого�
 guards, три typecheck, build и 23 rollback/CAS-запроса прошли. Артефакты
 [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11903083122)
 и [rollback](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585/artifacts/11902803403)
-сохранены. Открыты durable backup restore callbacks, полный lifecycle, staging
-и выпуск.
+сохранены. На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
+закрыта транзакционная проверка durable backup restore: 1133 unit / 198 файлов,
+общий и два strict typecheck, build и 4/4 targeted Firefox/Android browser E2E
+прошли локально. Новый полный CI после push ещё не подтверждён; полный P0.8
+lifecycle, staging и выпуск остаются открытыми.
 
 ## P0.5 — поздний ответ retry объяснения плато
 

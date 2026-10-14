@@ -41,6 +41,14 @@ build id Service Worker и всех открытых окон; только по
 разрешается отправка legacy-операции. `active-session` и `auth-fence` остаются
 текущими для браузера и из файла не импортируются.
 
+Restore держит зависимые операции внутри активной IndexedDB-транзакции:
+сначала читается текущая meta для tombstone-фильтра, затем все candidate primary
+keys читаются заранее. В success-событии последнего чтения сравниваются
+канонические записи; только после полной проверки ставятся все отсутствующие
+`add` запросы. Различающаяся существующая строка отменяет общую транзакцию до
+commit, включая изменения в других stores. Пустой набор candidate-строк тоже
+обрабатывается без ожидания несуществующего request event.
+
 Экспорт включает локальные account deletion tombstones в `outbox_meta`, а
 валидатор проверяет их формат. Если tombstone для аккаунта есть в текущей базе
 или backup, старые account-owned values, операции, ledger и owner metadata
@@ -61,6 +69,16 @@ unknown legacy-записи, недействительность старого
 импорт, фильтрацию backup после удаления аккаунта, rollback всех IDB stores
 при конфликте, возврат localStorage к прежнему значению, старый формат и
 пригодный для чтения скачиваемый JSON.
+
+На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
+добавлен [браузерный сценарий](../e2e/durable-backup-restore.spec.ts) импорта
+через экран Settings. 64 value rows,
+conflicted operation, quarantine и owner metadata восстанавливаются из v3
+backup; второй сценарий подтверждает полный rollback IDB и localStorage при
+конфликте. Целевые Firefox и Android Chrome прошли 4/4 без retries. Также
+прошли 1133 unit-теста / 198 файлов, общий, domain-strict и storage-strict
+typecheck и production build. Новый CI для кода `38d169c` после push ещё
+не подтверждён; полный P0.8 lifecycle остаётся открытым.
 
 Реализация опубликована в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
 Локально прошли 7/7 backup-тестов, все 1073 unit / 196 файлов, три typecheck и
