@@ -175,9 +175,15 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       sendAllowed: false,
       writersStopped: false,
     });
+    // Keep the backend unavailable until the release barrier has been checked;
+    // the old/current clients must not even attempt a current-state write yet.
     expect(server.counts.currentStatePutAttempts).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
 
+    // Restore the endpoint before the update can open the migration send gate.
+    // Otherwise a slow mobile service-worker reload can race recovery against
+    // the first send and leave the operation waiting through its retry delay.
+    server.recoverCurrentState();
     const update = currentPage.getByRole('button', { name: 'Обновить приложение', exact: true });
     await expect(update).toBeVisible();
     const currentNavigation = currentPage.waitForEvent('framenavigated', frame => frame === currentPage.mainFrame());
@@ -192,9 +198,10 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     const buildIds = await Promise.all([oldPage, currentPage].map(page => page.evaluate(() => localStorage.getItem('fitfocus.build.id'))));
     expect(buildIds[0]).toBeTruthy();
     expect(buildIds[0]).toBe(buildIds[1]);
-    // Let the all-client update and any brief reload settle before the API accepts the migrated write.
-    await Promise.all([currentPage, oldPage].map(page => page.waitForTimeout(750)));
-    server.recoverCurrentState();
+    await expect.poll(async () => {
+      const progress = (await migrationState(currentPage)).progress;
+      return progress?.writersStopped === true && progress.sendAllowed === true;
+    }).toBe(true);
     await expect.poll(() => server.stateWriteKeys.includes(targetKey)).toBe(true);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);

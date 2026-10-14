@@ -61,6 +61,43 @@ function requireOwnedKey(accountId: string, key: string): void {
   }
 }
 
+/** Run dependent work in the final IDB request event while the transaction is active. */
+function afterIndexedRequests<T>(
+  transaction: IDBTransaction,
+  requests: readonly IDBRequest<unknown>[],
+  work: (results: readonly unknown[]) => T,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const results: unknown[] = new Array(requests.length);
+    let remaining = requests.length;
+    let settled = false;
+    const abortAndReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      try { transaction.abort(); } catch { /* The transaction may already be aborting. */ }
+      reject(error);
+    };
+    requests.forEach((request, index) => {
+      request.addEventListener('success', () => {
+        if (settled) return;
+        results[index] = request.result;
+        remaining -= 1;
+        if (remaining !== 0) return;
+        try {
+          const result = work(results);
+          settled = true;
+          resolve(result);
+        } catch (error) {
+          abortAndReject(error);
+        }
+      }, { once: true });
+      request.addEventListener('error', () => {
+        abortAndReject(request.error ?? new StateStorageError('transaction'));
+      }, { once: true });
+    });
+  });
+}
+
 export type OutboxWrite = {
   accountId: string; writerId: string; intent: OutboxIntent; expectedRevision: number;
   resource?: 'profile' | 'familyMenu';
@@ -72,7 +109,7 @@ export type OutboxWrite = {
 };
 
 /** Internal transaction primitive, shared by ordinary writes and atomic migration. */
-export async function writeOutboxInTransaction(
+export function writeOutboxInTransaction(
   tx: IDBTransaction,
   input: Omit<OutboxWrite, 'expectedRevision'> & { expectedRevision?: number },
   context: {
@@ -92,71 +129,86 @@ export async function writeOutboxInTransaction(
   const metaStore = tx.objectStore(STATE_STORES.meta);
   const outbox = tx.objectStore(STATE_STORES.outbox);
   if (input.canCommit && !input.readGuard) throw new Error('OUTBOX_INVALID_READ_GUARD');
-  let activeRequest: Promise<ActiveOutboxSession | undefined> = Promise.resolve(undefined);
-  let fenceRequest: Promise<{ revision: number } | undefined> = Promise.resolve(undefined);
+  const requests: IDBRequest<unknown>[] = [];
+  const requestIndices: Record<string, number> = Object.create(null) as Record<string, number>;
+  const queueRead = <T>(name: string, request: IDBRequest<T>): void => {
+    requestIndices[name] = requests.length;
+    requests.push(request as IDBRequest<unknown>);
+  };
   if (input.readGuard !== undefined) {
     const guard = input.readGuard;
     if (guard.accountId !== input.accountId || !guard.sessionEpoch || !/^[a-f0-9]{64}$/.test(guard.serverSessionId)
       || !finiteInteger(guard.authFence)) throw new Error('OUTBOX_INVALID_READ_GUARD');
-    activeRequest = indexedRequest(metaStore.get('active-session')) as Promise<ActiveOutboxSession | undefined>;
-    fenceRequest = indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>;
+    queueRead('active', metaStore.get('active-session'));
+    queueRead('fence', metaStore.get('auth-fence'));
   }
   const ownerId = outboxKeyOwnerId(input.intent.key);
-  const ownerRequest = indexedRequest(metaStore.get(ownerId)) as Promise<{ accountId: string } | undefined>;
-  const existingValueRequest = indexedRequest(tx.objectStore(STATE_STORES.values).get(input.intent.key)) as Promise<{ value: string; accountId?: string } | undefined>;
+  queueRead('owner', metaStore.get(ownerId));
+  queueRead('existingValue', tx.objectStore(STATE_STORES.values).get(input.intent.key));
   const id = keyStateId(input.accountId, input.intent.key);
-  const metaRequest = indexedRequest(metaStore.get(id)) as Promise<KeyState | undefined>;
-  const operationsRequest = indexedRequest(outbox.index('accountKey').getAll([input.accountId, input.intent.key])) as Promise<OutboxOperation[]>;
-  const [active, fence, owner, existingValue, savedMeta, keyOperations] = await Promise.all([
-    activeRequest, fenceRequest, ownerRequest, existingValueRequest, metaRequest, operationsRequest,
-  ]);
-  if (input.readGuard && (active?.accountId !== input.readGuard.accountId || active.serverSessionId !== input.readGuard.serverSessionId
-    || active.sessionEpoch !== input.readGuard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== input.readGuard.authFence)) {
-    throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
-  }
-  if (owner && owner.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
-  if (existingValue?.accountId && existingValue.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
-  const meta: KeyState = savedMeta ?? {
-    id, accountId: input.accountId, key: input.intent.key, lastRevision: 0,
-    valueRevision: 0, confirmedVersion: input.baseVersion,
-  };
-  if (!finiteInteger(meta.lastRevision + 1)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
-  const parent = input.parentOpId ? keyOperations.find((operation) => operation.opId === input.parentOpId) : undefined;
-  const head = meta.headOpId ? keyOperations.find((operation) => operation.opId === meta.headOpId) : undefined;
-  const acknowledgedParent = input.parentOpId && !parent && !head
-    && meta.acknowledgedOpId === input.parentOpId && meta.acknowledgedWriterId === input.writerId
-    && meta.acknowledgedRevision === input.expectedRevision;
-  let reason = context.conflictReason;
-  if (!reason && (input.expectedRevision ?? (context.legacy ? meta.valueRevision : -1)) !== meta.valueRevision) reason = 'local-revision-conflict';
-  else if (!reason && input.parentOpId && !acknowledgedParent && (!parent || parent.opId !== head?.opId || parent.accountId !== input.accountId
-    || parent.key !== input.intent.key || parent.resource !== input.resource || parent.writerId !== input.writerId || !['pending', 'sending'].includes(parent.status))) reason = 'invalid-parent';
-  else if (!reason && head && !parent) reason = 'independent-snapshot';
-  else if (!reason && !input.parentOpId && input.baseVersion !== meta.confirmedVersion) reason = 'base-version-conflict';
-  if (!reason && context.legacy && existingValue
-    && (input.intent.type === 'delete' || existingValue.value !== input.intent.value)) reason = 'legacy-local-value-conflict';
+  queueRead('meta', metaStore.get(id));
+  queueRead('operations', outbox.index('accountKey').getAll([input.accountId, input.intent.key]));
+  // Queue dependent writes in the final read's success event. Firefox may
+  // deactivate a readwrite transaction before a Promise.all continuation runs.
+  return afterIndexedRequests(tx, requests, (results) => {
+    const read = <T>(name: string, fallback: T): T => {
+      const index = requestIndices[name];
+      return index === undefined ? fallback : results[index] as T;
+    };
+    const active = read<ActiveOutboxSession | undefined>('active', undefined);
+    const fence = read<{ revision: number } | undefined>('fence', undefined);
+    const owner = read<{ accountId: string } | undefined>('owner', undefined);
+    const existingValue = read<{ value: string; accountId?: string } | undefined>('existingValue', undefined);
+    const savedMeta = read<KeyState | undefined>('meta', undefined);
+    const keyOperations = read<OutboxOperation[]>('operations', []);
+    if (input.readGuard && (active?.accountId !== input.readGuard.accountId || active.serverSessionId !== input.readGuard.serverSessionId
+      || active.sessionEpoch !== input.readGuard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== input.readGuard.authFence)) {
+      throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+    }
+    if (owner && owner.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+    if (existingValue?.accountId && existingValue.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+    const meta: KeyState = savedMeta ?? {
+      id, accountId: input.accountId, key: input.intent.key, lastRevision: 0,
+      valueRevision: 0, confirmedVersion: input.baseVersion,
+    };
+    if (!finiteInteger(meta.lastRevision + 1)) throw new Error('OUTBOX_REVISION_EXHAUSTED');
+    const parent = input.parentOpId ? keyOperations.find((operation) => operation.opId === input.parentOpId) : undefined;
+    const head = meta.headOpId ? keyOperations.find((operation) => operation.opId === meta.headOpId) : undefined;
+    const acknowledgedParent = input.parentOpId && !parent && !head
+      && meta.acknowledgedOpId === input.parentOpId && meta.acknowledgedWriterId === input.writerId
+      && meta.acknowledgedRevision === input.expectedRevision;
+    let reason = context.conflictReason;
+    if (!reason && (input.expectedRevision ?? (context.legacy ? meta.valueRevision : -1)) !== meta.valueRevision) reason = 'local-revision-conflict';
+    else if (!reason && input.parentOpId && !acknowledgedParent && (!parent || parent.opId !== head?.opId || parent.accountId !== input.accountId
+      || parent.key !== input.intent.key || parent.resource !== input.resource || parent.writerId !== input.writerId || !['pending', 'sending'].includes(parent.status))) reason = 'invalid-parent';
+    else if (!reason && head && !parent) reason = 'independent-snapshot';
+    else if (!reason && !input.parentOpId && input.baseVersion !== meta.confirmedVersion) reason = 'base-version-conflict';
+    if (!reason && context.legacy && existingValue
+      && (input.intent.type === 'delete' || existingValue.value !== input.intent.value)) reason = 'legacy-local-value-conflict';
 
-  if (input.canCommit?.() === false) throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
-  const operation: OutboxOperation = {
-    ...input.intent, opId: context.opId, accountId: input.accountId, writerId: input.writerId,
-    ...(input.resource ? { resource: input.resource } : {}),
-    revision: meta.lastRevision + 1, baseVersion: !reason && input.parentOpId ? parent?.baseVersion ?? meta.confirmedVersion : input.baseVersion,
-    status: reason ? 'conflicted' : 'pending', retryCount: context.legacy?.retryCount ?? 0, nextAttemptAtMs: context.nowMs,
-    createdAtMs: context.nowMs, updatedAtMs: context.nowMs,
-    ...(input.parentOpId ? { parentOpId: input.parentOpId } : {}), ...(reason ? { reason } : {}),
-    ...(context.legacy ? { migrationSourceKey: context.legacy.sourceKey, migrationFingerprint: context.legacy.fingerprint, migrationCanonical: context.legacy.canonical } : {}),
-  };
-  const next = { ...meta, lastRevision: operation.revision };
-  if (!reason) {
-    next.valueRevision = operation.revision;
-    next.headOpId = operation.opId;
-    const values = tx.objectStore(STATE_STORES.values);
-    if (operation.type === 'put') values.put({ key: operation.key, value: operation.value, accountId: operation.accountId, updatedAt: context.nowMs });
-    else values.delete(operation.key);
-  }
-  outbox.add(operation);
-  metaStore.put({ id: ownerId, key: input.intent.key, accountId: input.accountId });
-  metaStore.put(next);
-  return operation;
+    if (input.canCommit?.() === false) throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+    const operation: OutboxOperation = {
+      ...input.intent, opId: context.opId, accountId: input.accountId, writerId: input.writerId,
+      ...(input.resource ? { resource: input.resource } : {}),
+      revision: meta.lastRevision + 1, baseVersion: !reason && input.parentOpId ? parent?.baseVersion ?? meta.confirmedVersion : input.baseVersion,
+      status: reason ? 'conflicted' : 'pending', retryCount: context.legacy?.retryCount ?? 0, nextAttemptAtMs: context.nowMs,
+      createdAtMs: context.nowMs, updatedAtMs: context.nowMs,
+      ...(input.parentOpId ? { parentOpId: input.parentOpId } : {}), ...(reason ? { reason } : {}),
+      ...(context.legacy ? { migrationSourceKey: context.legacy.sourceKey, migrationFingerprint: context.legacy.fingerprint, migrationCanonical: context.legacy.canonical } : {}),
+    };
+    const next = { ...meta, lastRevision: operation.revision };
+    if (!reason) {
+      next.valueRevision = operation.revision;
+      next.headOpId = operation.opId;
+      const values = tx.objectStore(STATE_STORES.values);
+      if (operation.type === 'put') values.put({ key: operation.key, value: operation.value, accountId: operation.accountId, updatedAt: context.nowMs });
+      else values.delete(operation.key);
+    }
+    outbox.add(operation);
+    metaStore.put({ id: ownerId, key: input.intent.key, accountId: input.accountId });
+    metaStore.put(next);
+    return operation;
+  });
 }
 
 type LegacyGate = { sourceKey: string; sendAllowed: boolean };
