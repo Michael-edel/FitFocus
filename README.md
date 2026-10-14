@@ -71,6 +71,12 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
+Последняя кодовая ревизия [`010805f`](https://github.com/Michael-edel/FitFocus/commit/010805f447d49ff62f18f5e3a17b08d66f5edd63)
+прошёл локальную browser acceptance для семейных и личных callbacks (30/30),
+шесть новых account-switch сценариев (18/18) и целевые legacy-тесты (124/124).
+При последней проверке точный [CI run `38528630120`](https://github.com/Michael-edel/FitFocus/actions/runs/38528630120)
+выполнял E2E; полный статус и открытые проверки — в [сводке проекта](docs/project-status.md).
+
 Последний завершённый полный CI на [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11) — [run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051) — завершился success: unit прошли во всех 198 файлах, 501 browser passed / 29 skipped, два E2E прошли retry как flaky; rollback/CAS-проверка прошла.
 
 Локальный follow-up для двух flaky-сценариев прошёл: целевые повторы — 10/10, полные затронутые specs — 10/10 на Android PWA Chrome и 8/8 на iPhone PWA, `npm run typecheck` — успешно. Полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712) для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98) отменён после отправки следующего документационного коммита; актуальное состояние проверок текущего HEAD смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks). Cloudflare preview успешен, но это не production-релиз. Подробности и оставшиеся критерии — в [статусе проекта](docs/project-status.md), [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

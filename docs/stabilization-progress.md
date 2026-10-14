@@ -2822,3 +2822,19 @@ A со scope A. Старые ответы не появляются в family UI
 typecheck прошёл. В сумме personal/family shopping и family callbacks теперь
 имеют шесть новых acceptance-сценариев, 18/18. Реальные OAuth/staging и полный
 lifecycle P0.5 всё ещё открыты; точный workflow этого HEAD проверяется после push.
+
+## Проверки текущего HEAD — `010805f`, 14.10.2026
+
+Текущий PR HEAD `010805f447d49ff62f18f5e3a17b08d66f5edd63` включает эти
+документированные browser acceptance. `family-callback-account-switch.spec.ts`
+прошёл 30/30 на desktop Chromium, Firefox и WebKit; шесть новых сценариев
+прошли 18/18. Локальные тесты legacy-нормализации и импорта
+`npx vitest run tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
+прошли 124/124.
+
+PR workflow [38528630120](https://github.com/Michael-edel/FitFocus/actions/runs/38528630120)
+на момент записи выполняется. Audit, schema/privacy/auth/API checks, unit,
+общий и два strict typecheck, а также production build завершились успешно;
+E2E выполняется, canonical readers/CAS after rollback и сохранение rollback-
+артефакта ещё не завершены. Полный CI для этого SHA пока не подтверждён.
+Staging, production-релиз и закрытие P0.5/P0.8 этим результатом не подтверждаются.

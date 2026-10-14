@@ -5,14 +5,26 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Текущая проверка — P0.8 IndexedDB outbox
+## Последняя кодовая ревизия — P0.5 callbacks и P0.8 outbox
 
-Целевая локальная сверка на кодовой ревизии [`48cf797`](https://github.com/Michael-edel/FitFocus/commit/48cf797b2b08cd4b62bdf59c265c4d85a4db863f)
-прошла: 124/124 теста нормализации/миграции legacy-очереди и
-`npm run typecheck`. PR workflow [38470475102](https://github.com/Michael-edel/FitFocus/actions/runs/38470475102)
-выполнялся при записи результата; push-run отменён конкурирующим PR-run.
-Предыдущий завершённый полный CI ниже относится к `9bdeb47`; текущие проверки
-смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+Ветка `fix/durable-outbox`, точный HEAD
+[`010805f`](https://github.com/Michael-edel/FitFocus/commit/010805f447d49ff62f18f5e3a17b08d66f5edd63).
+Browser acceptance `family-callback-account-switch.spec.ts` прошла 30/30 на
+desktop Chromium, Firefox и WebKit; шесть новых сценариев смены аккаунта —
+18/18. На этом HEAD целевые тесты нормализации и миграции прошли 124/124;
+общий typecheck также прошёл.
+
+При последней проверке PR workflow [38528630120](https://github.com/Michael-edel/FitFocus/actions/runs/38528630120)
+ещё выполнялся: audit, schema/privacy/auth/API checks, unit, три typecheck и
+build завершились успешно; E2E выполнялись, проверка canonical readers/CAS после
+server rollback и сохранение rollback-артефакта ожидали. Полный CI для этой
+кодовой ревизии ещё не подтверждён. Последний завершённый полный CI ниже относится к
+`9bdeb47`; актуальное состояние смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+
+Сверка формата legacy-нормализатора отдельно зафиксирована на
+[`48cf797`](https://github.com/Michael-edel/FitFocus/commit/48cf797b2b08cd4b62bdf59c265c4d85a4db863f)
+в [контракте миграции](legacy-migration.md); её результаты не подменяют проверки
+текущего HEAD.
 
 Последний завершённый полный CI проверил текущий SHA
 [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
