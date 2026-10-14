@@ -632,8 +632,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   уже использует auth-derived owner и all-client Service Worker fence.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
-- [ ] Проверить конкурентные записи одного ключа и old/new writers; завершить
-  profile и остальные API callbacks.
+- [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:
+  пока первая запись отправляется, независимая правка сохраняется конфликтом;
+  [E2E](e2e/storage-durability.spec.ts) прошёл 3/3 desktop-браузера.
+- [ ] Проверить границу old/new writers; завершить гарантии для profile и
+  остальных API callbacks.
   Добавлен браузерный сценарий двух вкладок без Web Locks: параллельно
   сохраняются отметка плана и настройки в разные ключи. Проверка прошла в CI
   HEAD `a8f3219` (run 38634080772); остальные критерии P0.6 и writers остаются открытыми.
@@ -647,7 +650,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   запись только после входа под свежей server session. Совместный локальный
   прогон всех трёх account-сценариев прошёл 9/9 в desktop Chromium, Firefox и
   WebKit без retries (`workers=1,retries=0`). CI этого изменения ожидает push.
-  Это не закрывает общий P0.6: остаются same-key/old-new гонки и writers.
+  Это не закрывает общий P0.6: остаются old/new writers и остальные callbacks.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи
 всей очереди одной вкладкой.

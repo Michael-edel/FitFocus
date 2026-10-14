@@ -67,6 +67,7 @@ type ServerStateItem = { version: number; value: string };
 async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: {
   conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[];
   settingsConflictGate?: { started: () => void; wait: Promise<void> };
+  settingsSuccessGate?: { started: () => void; wait: Promise<void> };
 } = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
@@ -96,6 +97,10 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     if (options.settingsFailure && items[0].key.endsWith('_settings')) {
       await route.fulfill({ status: 403, contentType: 'application/json', headers: scope,
         body: JSON.stringify({ error: 'FORBIDDEN_KEYSPACE' }) }); return;
+    }
+    if (options.settingsSuccessGate && items.some((item) => item.key.endsWith('_settings'))) {
+      options.settingsSuccessGate.started();
+      await options.settingsSuccessGate.wait;
     }
     // A lost response or competing writer can legitimately resend an old base: the real API returns 409.
     const stale = items.find((item) => item.baseVersion !== (server.get(item.key)?.version ?? 0));
@@ -332,6 +337,71 @@ test('two tabs without Web Locks retain an independent edit as a conflict', asyn
   // This observer closes before the shared fixture; unload it while its mocks remain active.
   await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
   await second.close();
+});
+
+test('two tabs without Web Locks retain a same-key edit made while its first write is in flight', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  const server = new Map<string, ServerStateItem>();
+  const settingsRequests: number[] = [];
+  const errors: string[] = [];
+  let releaseFirstWrite!: () => void;
+  let markFirstWriteStarted!: () => void;
+  const firstWriteStarted = new Promise<void>((resolve) => { markFirstWriteStarted = resolve; });
+  const firstWriteResponse = new Promise<void>((resolve) => { releaseFirstWrite = resolve; });
+  const options = { settingsRequests, settingsSuccessGate: { started: markFirstWriteStarted, wait: firstWriteResponse } };
+  const watch = (tab: Page) => {
+    tab.on('pageerror', (error) => errors.push(error.message));
+    tab.on('console', (message) => { if (message.type() === 'error' && !/409/.test(message.text())) errors.push(message.text()); });
+  };
+  watch(page);
+  await context.addInitScript(() => { Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true }); });
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+
+  const second = await context.newPage();
+  watch(second);
+  await mockApp(second, { session: 'app' });
+  await verifiedServer(second, server, options);
+  await openApp(second, '/#settings');
+  await expect(second.getByRole('button', { name: /^Тёмная/ })).toHaveClass(/border-indigo-500\/40/);
+
+  try {
+    await page.getByRole('button', { name: /^Светлая/ }).click();
+    await firstWriteStarted;
+    await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"light"');
+
+    await second.getByRole('button', { name: /^Violet AI/ }).click();
+    await expect.poll(async () => (await storedSettings(second)).operations.some((operation) => operation.status === 'conflicted')).toBe(true);
+    const conflicted = await storedSettings(second);
+    expect(conflicted.value).toContain('"theme":"light"');
+    expect(conflicted.operations).toHaveLength(2);
+    const localConflict = conflicted.operations.find((operation) => operation.status === 'conflicted');
+    const inFlight = conflicted.operations.find((operation) => operation.status === 'sending');
+    expect(localConflict).toMatchObject({ status: 'conflicted', reason: 'local-revision-conflict', accountId: 'google-e2e-sub' });
+    expect(localConflict?.value).toContain('"theme":"violet"');
+    expect(inFlight?.value).toContain('"theme":"light"');
+    expect(server.get('fitfocus_data_google-e2e-sub_settings')).toBeUndefined();
+    expect(settingsRequests).toEqual([0]);
+
+    releaseFirstWrite();
+    await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(1);
+    const afterAcknowledgement = await storedSettings(second);
+    expect(afterAcknowledgement.value).toContain('"theme":"light"');
+    expect(afterAcknowledgement.confirmedVersion).toBe(1);
+    expect(afterAcknowledgement.operations).toHaveLength(1);
+    expect(afterAcknowledgement.operations[0]).toMatchObject({ status: 'conflicted', reason: 'local-revision-conflict' });
+    expect(afterAcknowledgement.operations[0].value).toContain('"theme":"violet"');
+    expect(server.get('fitfocus_data_google-e2e-sub_settings')).toMatchObject({ version: 1 });
+    expect(settingsRequests).toEqual([0]);
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(second.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFirstWrite();
+    await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
+    await second.close();
+  }
 });
 
 test('quota fault rolls back settings and displays a visible storage error', async ({ page }, testInfo) => {

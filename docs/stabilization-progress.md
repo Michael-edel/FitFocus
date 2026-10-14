@@ -30,6 +30,14 @@ Chromium, Firefox и WebKit без retries (`workers=1,retries=0`). CI ново�
 изменения ожидает push. Эти проверки подтверждают три сценария, но не закрывают
 same-key/old-new гонки и полный lifecycle P0.6.
 
+Дополнен [same-key browser acceptance](../e2e/storage-durability.spec.ts): первая
+вкладка отправляет settings PUT, ответ удерживается; до его завершения вторая
+вкладка записывает независимый полный снимок. Проверено, что первая операция
+остаётся `sending`, вторая хранится как `local-revision-conflict`, успешный ack
+не удаляет конфликт, а сервер принимает только первый PUT. Прогон прошёл 3/3
+в desktop Chromium, Firefox и WebKit без retries. Проверен рабочий diff поверх
+`ce6ade0`; точный CI нового коммита будет запущен после push.
+
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 
 В PR CI `38621962929` один desktop Chromium прогон
