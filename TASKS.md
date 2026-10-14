@@ -544,6 +544,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   полный `ai-callback-account-switch.spec.ts` — 15/15 без retries, typecheck
   прошёл. Полный CI для этого SHA прошёл: [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
   Другие AI/family callbacks и общий lifecycle остаются открыты.
+- [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
+  guarded diary/history commit, profile usage и успешный UI только для текущей
+  попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли
+  на Chromium/Firefox/WebKit, а success-path дневника/истории/usage — на Chromium.
+  Полный account-switch spec прошёл 22 сценария / 2 project skips без retries;
+  полный GitHub CI этой ревизии будет проверен после push.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

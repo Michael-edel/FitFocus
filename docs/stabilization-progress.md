@@ -2860,3 +2860,29 @@ typecheck, domain/storage strict checks, build, E2E и canonical readers/CAS aft
 server rollback прошли. Browser diagnostics сохранены в артефакте `11879048388`,
 rollback — в `11879443791`. OAuth/staging и весь P0.5 этим browser acceptance не
 закрыты.
+
+## P0.5 — session guard фотоанализа дневника и рецепта, `d93ff53`, 14.10.2026
+
+`useFoodPhotoAnalysis` теперь получает исходный login guard и использует
+`AiActionScope`, свежий `AiSession` и guarded commit для diary/history и
+профильного счётчика использования. Смена аккаунта, закрытие страницы или новая
+попытка инвалидируют старый callback; он не показывает insight, не запускает
+achievement и не записывает данные. `useFoodDiary` перечитывает актуальные
+значения из repository и передаёт один guard обоим ключам. Recipe photo flow
+передаёт session в `analyzeFoodPhotoEnhanced`, повторно проверяет её после
+сжатия и HTTP, очищает старый draft при смене сессии и не применяет поздний ответ.
+
+На кодовом commit [`d93ff53`](https://github.com/Michael-edel/FitFocus/commit/d93ff53)
+прошли `npx vitest run tests/food_photo_feature.test.ts tests/food_diary_feature.test.ts`
+(11/11) и `npm run typecheck` с admin guards. Browser-команда
+`npx playwright test e2e/ai-callback-account-switch.spec.ts --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 --retries=0`
+завершилась 22 passed / 2 expected skips. Поздние foodphoto и recipe callbacks
+прошли на всех трёх движках; успешный фотоанализ с diary/history/usage commit
+прошёл на Chromium. `git diff --check` прошёл.
+
+Первый полный browser-прогон провалил только слишком широкое ожидание stateWrites:
+WebKit записал независимый `weekly_reports` во время теста recipe photo. Snapshot
+профиля, дневника, истории и outbox аккаунтов не изменился. Ожидание сужено до
+`diary`/`history`; полный повтор прошёл без failed или flaky. Это локальная
+приёмка: полный CI на отправленном HEAD ещё проверяется. Реальные OAuth/BFCache,
+staging, другие callbacks и весь P0.5 остаются открытыми.

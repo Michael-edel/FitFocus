@@ -22,6 +22,12 @@ CI этого follow-up для кодовой ревизии [`a99ab7b`](https:/
 полным CI; актуальный run нужно смотреть в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
+Локальный компонент [`d93ff53`](https://github.com/Michael-edel/FitFocus/commit/d93ff53)
+добавил scoped photo-analysis callbacks для дневника и рецептов. Связанные unit
+прошли 11/11, typecheck прошёл, полный account-switch spec прошёл 22 сценария / 2
+project skips на desktop Chromium/Firefox/WebKit (`workers=1,retries=0`); полный
+GitHub CI этой ревизии будет проверен после push.
+
 Локальная late-response acceptance покрывает personal shopping list GET/PATCH,
 family join/create, family-context GET и family shopping GET. `ShoppingListCard`
 отправляет исходный session scope; ответы A после входа B не попадают в списки

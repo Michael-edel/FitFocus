@@ -5,6 +5,24 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+## P0.5 — session guard фотоанализа
+
+Код [`d93ff53`](https://github.com/Michael-edel/FitFocus/commit/d93ff53)
+привязывает анализ еды и фото-рецепта к исходной AI-сессии и lifecycle-попытке.
+Поздний результат не попадает в другой профиль, дневник/историю, usage,
+achievement или черновик рецепта. Успешный путь проверяет сохранение дневника,
+истории и usage в аккаунте.
+
+На локальном HEAD `d93ff53` прошли связанные unit-тесты 11/11,
+`npm run typecheck` и `git diff --check`. Полный
+`ai-callback-account-switch.spec.ts` прошёл 22 сценария, 2 пропущены проектной
+конфигурацией, при `workers=1,retries=0`: задержанные ответы фото/рецепта прошли
+в Chromium, Firefox и WebKit, успешная запись фото проверена в Chromium. Первый
+прогон выявил слишком широкое ожидание из-за независимой записи `weekly_reports`;
+проверка теперь ограничена diary/history и полный повтор прошёл без ошибок.
+Полный GitHub CI этой ревизии будет проверен после push; staging, OAuth и весь
+P0.5 остаются открытыми.
+
 ## P0.5 — personal weekly-menu account switch
 
 Кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
