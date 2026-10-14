@@ -39,6 +39,12 @@ export type StateSyncPause = 'auth' | 'access' | 'protocol' | 'legacy';
 export type ActiveOutboxSession = { id: 'active-session'; accountId: string; sessionEpoch: string; serverSessionId?: string; pause?: StateSyncPause };
 export type OutboxReadGuard = { accountId: string; serverSessionId: string; sessionEpoch: string; authFence: number };
 export type OutboxCommitGuard = { readGuard: OutboxReadGuard; canCommit: () => boolean };
+/** Session-bound local edits remain writable during sender pauses, but not after a login switch. */
+export type OutboxLocalCommitGuard = {
+  localCommitGuard: Pick<OutboxReadGuard, 'accountId' | 'serverSessionId' | 'sessionEpoch'>;
+  canCommit: () => boolean;
+};
+export type OutboxWriteGuard = OutboxCommitGuard | OutboxLocalCommitGuard;
 type ActiveSession = ActiveOutboxSession;
 export type OutboxClaim = OutboxOperation & { status: 'sending'; attempt: OutboxAttempt };
 export type OutboxOutcome =
@@ -68,6 +74,8 @@ export type OutboxWrite = {
   conflictReason?: 'editor-not-loaded';
   /** Generated results require the captured proof; ordinary offline edits omit it. */
   readGuard?: OutboxReadGuard;
+  /** User-authored local edits are session-bound but remain allowed during sender pauses. */
+  localCommitGuard?: OutboxLocalCommitGuard['localCommitGuard'];
   canCommit?: () => boolean;
 };
 
@@ -92,18 +100,26 @@ export function writeOutboxInTransaction(
   }
   const metaStore = tx.objectStore(STATE_STORES.meta);
   const outbox = tx.objectStore(STATE_STORES.outbox);
-  if (input.canCommit && !input.readGuard) throw new Error('OUTBOX_INVALID_READ_GUARD');
+  if (input.readGuard && input.localCommitGuard || input.canCommit && !input.readGuard && !input.localCommitGuard) {
+    throw new Error('OUTBOX_INVALID_READ_GUARD');
+  }
+  if (input.localCommitGuard && input.canCommit === undefined) throw new Error('OUTBOX_INVALID_READ_GUARD');
   const requests: IDBRequest<unknown>[] = [];
   const requestIndices: Record<string, number> = Object.create(null) as Record<string, number>;
   const queueRead = <T>(name: string, request: IDBRequest<T>): void => {
     requestIndices[name] = requests.length;
     requests.push(request as IDBRequest<unknown>);
   };
+  if (input.readGuard !== undefined || input.localCommitGuard !== undefined) {
+    const guard = input.readGuard ?? input.localCommitGuard!;
+    if (guard.accountId !== input.accountId || !guard.sessionEpoch || !/^[a-f0-9]{64}$/.test(guard.serverSessionId)) {
+      throw new Error('OUTBOX_INVALID_READ_GUARD');
+    }
+    queueRead('active', metaStore.get('active-session'));
+  }
   if (input.readGuard !== undefined) {
     const guard = input.readGuard;
-    if (guard.accountId !== input.accountId || !guard.sessionEpoch || !/^[a-f0-9]{64}$/.test(guard.serverSessionId)
-      || !finiteInteger(guard.authFence)) throw new Error('OUTBOX_INVALID_READ_GUARD');
-    queueRead('active', metaStore.get('active-session'));
+    if (!finiteInteger(guard.authFence)) throw new Error('OUTBOX_INVALID_READ_GUARD');
     queueRead('fence', metaStore.get('auth-fence'));
   }
   const ownerId = outboxKeyOwnerId(input.intent.key);
@@ -127,6 +143,11 @@ export function writeOutboxInTransaction(
     const keyOperations = read<OutboxOperation[]>('operations', []);
     if (input.readGuard && (active?.accountId !== input.readGuard.accountId || active.serverSessionId !== input.readGuard.serverSessionId
       || active.sessionEpoch !== input.readGuard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== input.readGuard.authFence)) {
+      throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+    }
+    if (input.localCommitGuard && (active?.accountId !== input.localCommitGuard.accountId
+      || active.serverSessionId !== input.localCommitGuard.serverSessionId
+      || active.sessionEpoch !== input.localCommitGuard.sessionEpoch)) {
       throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
     }
     if (owner && owner.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
@@ -441,7 +462,8 @@ export class DurableOutbox {
   /** A conflicting full snapshot is retained as an operation, without overwriting values. */
   async write(input: OutboxWrite): Promise<OutboxOperation> {
     // A caller cannot replace the captured proof or payload while opening IDB.
-    input = { ...input, intent: { ...input.intent }, ...(input.readGuard ? { readGuard: { ...input.readGuard } } : {}) };
+    input = { ...input, intent: { ...input.intent }, ...(input.readGuard ? { readGuard: { ...input.readGuard } } : {}),
+      ...(input.localCommitGuard ? { localCommitGuard: { ...input.localCommitGuard } } : {}) };
     requireOwnedKey(input.accountId, input.intent.key); requireText(input.writerId);
     if (!finiteInteger(input.expectedRevision) || !finiteInteger(input.baseVersion)) throw new Error('OUTBOX_INVALID_VERSION');
     if (!['put', 'delete'].includes(input.intent.type)

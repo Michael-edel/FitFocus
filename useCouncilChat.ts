@@ -6,7 +6,7 @@ export type { CouncilChatMsg } from './storage/stateTypes';
 import { useOwnedState } from './features/state/useOwnedState';
 import { AiActionScope } from './features/ai/actionScope';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
-import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxLocalCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import type { StateCodec } from './storage/stateEditor';
 import { errorMessage, isRecord, parseJson } from './safeJson';
@@ -25,6 +25,17 @@ const councilCodec: StateCodec<CouncilChatMsg[]> = {
   decode: (raw) => { const parsed = raw ? parseJson(raw) : []; return Array.isArray(parsed) ? parsed.filter(isCouncilChatMessage) : []; },
   encode: (value) => JSON.stringify(value.slice(-50)),
 };
+
+function localCommitGuard(readGuard: OutboxReadGuard, canCommit: () => boolean): OutboxLocalCommitGuard {
+  return {
+    localCommitGuard: {
+      accountId: readGuard.accountId,
+      serverSessionId: readGuard.serverSessionId,
+      sessionEpoch: readGuard.sessionEpoch,
+    },
+    canCommit,
+  };
+}
 
 type UseCouncilChatArgs = {
   currentUser: UserProfile | null;
@@ -85,18 +96,16 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
     if (!attempt) return;
     const generation = ++requestGeneration.current;
     const isCurrent = () => generation === requestGeneration.current && attempt.isCurrent();
-    const showErrorIfSessionCurrent = async (message: string) => {
-      try { await assertReadSession(loginGuard, { signal: attempt.controller.signal, isCurrentSession: isCurrent }); }
-      catch { return; }
+    const showErrorIfActionCurrent = (message: string) => {
       if (isCurrent()) setCouncilError(message);
     };
     setCouncilLoading(false); setCouncilStage('idle'); setCouncilError(null);
-    void history.remove({ readGuard: { ...loginGuard }, canCommit: isCurrent }).then((operation) => {
+    void history.remove(localCommitGuard(loginGuard, isCurrent)).then((operation) => {
       if (!isCurrent()) return;
       if (operation?.status === 'pending') setExpandedCouncilThoughtIds({});
-      else void showErrorIfSessionCurrent('Не удалось очистить историю совета. Проверьте состояние хранилища.');
+      else showErrorIfActionCurrent('Не удалось очистить историю совета. Проверьте состояние хранилища.');
     }).catch((error: unknown) => {
-      void showErrorIfSessionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
+      showErrorIfActionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
     }).finally(() => attempt.finish());
   }, [currentUser, history.remove, loginGuard, scope]);
 
@@ -130,12 +139,12 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
     timers.push(setTimeout(() => { if (isCurrent()) setCouncilStage((s) => (s === 'experts' ? 'review' : s)); }, 900));
     timers.push(setTimeout(() => { if (isCurrent()) setCouncilStage((s) => (s === 'review' ? 'chairman' : s)); }, 1400));
 
+    let userMessageSaved = false;
     try {
-      const userOperation = await history.persistGenerated(previous => [...previous, userMsg], {
-        readGuard: { ...originalGuard }, canCommit: isCurrent,
-      });
+      const userOperation = await history.persistGenerated(previous => [...previous, userMsg], localCommitGuard(originalGuard, isCurrent));
       if (!isCurrent()) return;
       if (!userOperation || userOperation.status !== 'pending') throw new Error('Не удалось сохранить вопрос совета. Проверьте состояние хранилища.');
+      userMessageSaved = true;
       setCouncilInput('');
 
       session = await prepareAiSession(currentUser.id, attempt.controller, isCurrent, { previous: originalGuard });
@@ -164,7 +173,13 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
         else await assertReadSession(originalGuard, { signal: attempt.controller.signal, isCurrentSession: isCurrent });
         if (!isCurrent()) return;
       } catch {
-        if (generation === requestGeneration.current) { setCouncilLoading(false); setCouncilStage('idle'); }
+        if (isCurrent()) {
+          setCouncilLoading(false);
+          setCouncilStage('idle');
+          setCouncilError(userMessageSaved
+            ? 'Вопрос сохранён на устройстве, но отправка ожидает повторной проверки сессии.'
+            : 'Не удалось проверить сессию. Повторите попытку.');
+        }
         attempt.controller.abort();
         return;
       }

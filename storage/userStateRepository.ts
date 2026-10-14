@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard, type OutboxCommitGuard } from './durableOutbox';
+import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard, type OutboxWriteGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
@@ -104,8 +104,12 @@ export class UserStateRepository {
     return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch, expectedAuthFence)));
   }
 
-  private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
-    const capturedGuard = guard ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit } : undefined;
+  private mutate(stateKey: UserStateKey, intent: OutboxIntent, retainAsConflict = false, guard?: OutboxWriteGuard): Promise<OutboxOperation> {
+    const capturedGuard = guard
+      ? 'readGuard' in guard
+        ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit }
+        : { localCommitGuard: { ...guard.localCommitGuard }, canCommit: guard.canCommit }
+      : undefined;
     const key = this.key(stateKey);
     return this.track(key, this.serialize(key, async () => {
       // An editor that has not loaded existing data cannot silently claim its revision.
@@ -131,13 +135,13 @@ export class UserStateRepository {
     }));
   }
 
-  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard?: OutboxWriteGuard): Promise<OutboxOperation> {
     let raw: string;
     try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
     return this.writeRaw(stateKey, raw, false, guard);
   }
 
-  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxWriteGuard): Promise<OutboxOperation> {
     return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict, guard);
   }
 
@@ -160,7 +164,7 @@ export class UserStateRepository {
     } catch { return fallback; }
   }
 
-  remove(stateKey: UserStateKey, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+  remove(stateKey: UserStateKey, retainAsConflict = false, guard?: OutboxWriteGuard): Promise<OutboxOperation> {
     return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict, guard);
   }
 }

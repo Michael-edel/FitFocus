@@ -67,15 +67,41 @@ it('rejects a guarded delete after another account becomes active', async () => 
   expect(login).not.toBeNull();
   const state = editor(); await state.load(); await state.set('keep');
   const guard = { readGuard: login!, canCommit: () => true };
+  const localGuard = { localCommitGuard: { accountId: login!.accountId,
+    serverSessionId: login!.serverSessionId, sessionEpoch: login!.sessionEpoch }, canCommit: () => true };
   const { fence } = await outbox.sessionState();
   await outbox.acceptReadSession('other-account', 'b'.repeat(64), fence);
 
   await expect(state.remove(guard)).rejects.toMatchObject({
     kind: 'transaction', cause: { message: 'OUTBOX_WRITE_SESSION_CHANGED' },
   });
+  await expect(state.remove(localGuard)).rejects.toMatchObject({
+    kind: 'transaction', cause: { message: 'OUTBOX_WRITE_SESSION_CHANGED' },
+  });
   expect(state.getSnapshot().value).toBe('keep');
   expect((await outbox.snapshot('owner', 'fitfocus_data_owner_refeed')).value).toBe('keep');
   expect((await outbox.list('owner')).map(operation => operation.type)).toEqual(['put']);
+});
+
+it('keeps session-bound local edits writable during sender pauses', async () => {
+  const login = await outbox.acceptReadSession('owner', 'a'.repeat(64), 0);
+  expect(login).not.toBeNull();
+  const state = editor(); await state.load(); await state.set('history');
+  const sending = await outbox.claim({ accountId: 'owner', owner: 'tab-a', sessionEpoch: login!.sessionEpoch,
+    nowMs: 10, leaseMs: 1_000 });
+  expect(sending).not.toBeNull();
+  await outbox.finish(sending!, { kind: 'retry', reason: 'PROTOCOL', nextAttemptAtMs: 20, pause: 'protocol' }, 20);
+
+  const deletion = await state.remove({
+    localCommitGuard: { accountId: login!.accountId, serverSessionId: login!.serverSessionId, sessionEpoch: login!.sessionEpoch },
+    canCommit: () => true,
+  });
+
+  expect(deletion).toMatchObject({ type: 'delete', status: 'pending' });
+  expect((await outbox.snapshot('owner', 'fitfocus_data_owner_refeed')).value).toBeNull();
+  expect((await outbox.sessionState()).active?.pause).toBe('protocol');
+  expect(await outbox.claim({ accountId: 'owner', owner: 'tab-a', sessionEpoch: login!.sessionEpoch,
+    nowMs: 30, leaseMs: 1_000 })).toBeNull();
 });
 
 it('does not clear a newer working edit when an earlier delete completes late', async () => {

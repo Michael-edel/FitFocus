@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore, type Dispatch, type SetStateAction } from 'react';
 import { StateEditor, type StateCodec } from '../../storage/stateEditor';
 import { UserStateRepository, type UserStateKey } from '../../storage/userStateRepository';
-import type { OutboxCommitGuard } from '../../storage/durableOutbox';
+import type { OutboxWriteGuard } from '../../storage/durableOutbox';
 
 /** Captured callbacks keep their original account/editor, including after a profile switch. */
 export function useOwnedState<T>(accountId: string | null | undefined, key: UserStateKey, initial: T, codec: StateCodec<T>) {
@@ -11,7 +11,7 @@ export function useOwnedState<T>(accountId: string | null | undefined, key: User
   useEffect(() => { void editor.load(); }, [editor]);
   const setValue: Dispatch<SetStateAction<T>> = useCallback((action) => { void editor.set(action).catch(() => {}); }, [editor]);
   const persist = useCallback((value: T) => editor.set(value), [editor]);
-  const persistGenerated = useCallback((value: T | ((previous: T) => T), guard: OutboxCommitGuard) => editor.commitGenerated(value, guard), [editor]);
-  const remove = useCallback((guard?: OutboxCommitGuard) => editor.remove(guard), [editor]);
+  const persistGenerated = useCallback((value: T | ((previous: T) => T), guard: OutboxWriteGuard) => editor.commitGenerated(value, guard), [editor]);
+  const remove = useCallback((guard?: OutboxWriteGuard) => editor.remove(guard), [editor]);
   return { value: snapshot.value, setValue, persist, persistGenerated, remove, ready: snapshot.phase === 'ready' };
 }
