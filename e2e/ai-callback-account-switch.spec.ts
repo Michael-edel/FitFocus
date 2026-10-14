@@ -316,6 +316,7 @@ test('held coach retry cannot write for account A after another tab signs in as 
   try {
     const switched = await openAccountB(context, state);
     const accountBBefore = await readDurableSnapshot(switched.page);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
     const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
     const coachBBefore = rawValue(accountBBefore, coachKey(accountB.id));
     const valuesBBefore = valuesFor(accountBBefore, accountB);
@@ -407,6 +408,71 @@ test('held personal-plan retry cannot update either profile after another tab si
   }
 });
 
+test('held plateau retry cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(message.text());
+  });
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await waitForAccountOutboxIdle(page, accountA);
+  await page.evaluate(({ key, accountId }) => {
+    localStorage.setItem(key, JSON.stringify({
+      feature: 'plateau', type: 'plateau', userId: accountId, actionId: 'seeded-plateau-retry',
+    }));
+  }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  const retry = page.getByRole('button', { name: 'Retry: Plateau', exact: true });
+  await expect(retry).toBeVisible({ timeout: 5_000 });
+  await retry.click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toBeVisible();
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  const profileABefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(beforeSwitch, accountA);
+  const operationsABefore = operationsFor(beforeSwitch, accountA);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    const switched = await openAccountB(context, state);
+    const accountBBefore = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(accountBBefore, accountB);
+    const operationsBBefore = operationsFor(accountBBefore, accountB);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    const profileWritesBeforeResponse = [...fixtureA.counts.profileWrites];
+    const stateWritesBeforeResponse = [...fixtureA.counts.stateWrites];
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(page);
+    expect(rawValue(final, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(final, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(final, accountA)).toEqual(operationsABefore);
+    expect(rawValue(final, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(final, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeResponse);
+    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeResponse);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Нажмите «Объяснить», чтобы AI интерпретировал вашу динамику веса и комплаенс режима.')).toBeVisible();
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('plateau-retry-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
 test('held plateau explanation cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
   const profileA = profileFor(accountA.id, true);
