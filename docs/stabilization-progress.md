@@ -17,15 +17,18 @@ pause. Вопрос пользователя и очистка истории и
 сохраняет строгий guard. Тестовая временная база исправлена в
 [0abb185](https://github.com/Michael-edel/FitFocus/commit/0abb185ed3ea227158c1eb2e732bfafd79abc141).
 
-Полный CI [run 38620253135](https://github.com/Michael-edel/FitFocus/actions/runs/38620253135)
+CI [38620253135](https://github.com/Michael-edel/FitFocus/actions/runs/38620253135)
 на SHA f1f553d прошёл 1153 unit-теста, но typecheck выявил, что широкий
-OutboxWriteGuard из UserStateRepository также разрешал local guard для
-AI-generated repository writes. Коммит
+OutboxWriteGuard расширил API repository-записей. Коммит
 [92ecaa3](https://github.com/Michael-edel/FitFocus/commit/92ecaa3cd1f97b643daf62ca44fd5d6b76a7670f)
-разделил строгие writeJson/writeRaw/remove и явные writeLocalRaw/removeLocal,
-которые вызываются только для локальных действий StateEditor. git diff --check
-и локальная проверка Markdown-ссылок прошли; локальные тесты не запускались.
-Полный CI исправленного HEAD ожидает выполнения. P0.5/P0.8 остаются открытыми.
+разделил строгие writeJson/writeRaw/remove и явные writeLocalRaw/removeLocal.
+Следующий CI [38621324053](https://github.com/Michael-edel/FitFocus/actions/runs/38621324053)
+на SHA 010cf26 тоже прошёл unit, затем выявил пропущенные импорты этих типов;
+они добавлены в [ce7b60d](https://github.com/Michael-edel/FitFocus/commit/ce7b60d9e6cd40201778fb399fbf1421c04630c5).
+
+git diff --check и локальная проверка Markdown-ссылок прошли; локальные тесты
+не запускались. Полный CI нового HEAD ожидает выполнения. P0.5/P0.8 остаются
+открытыми.
 ## P0.5 — AI Совет использует account-scoped session, 14.10.2026
 
 Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)

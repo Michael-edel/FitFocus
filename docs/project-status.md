@@ -3,13 +3,13 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-Последний кодовый HEAD ветки fix/durable-outbox — [92ecaa3](https://github.com/Michael-edel/FitFocus/commit/92ecaa3cd1f97b643daf62ca44fd5d6b76a7670f).
-Он оставляет обычные repository-записи AI под строгим commit guard, а local
-guard доступен только через явно названные методы. Предыдущий PR CI
-[38620253135](https://github.com/Michael-edel/FitFocus/actions/runs/38620253135)
-на SHA f1f553d прошёл 1153 unit-теста, но остановился на typecheck из-за
-расширенного типа guard у writeJson; E2E не запускались. Исправление вошло
-в 92ecaa3 и ожидает полного CI после push. Более ранний CI
+Последний кодовый HEAD ветки fix/durable-outbox — [ce7b60d](https://github.com/Michael-edel/FitFocus/commit/ce7b60d9e6cd40201778fb399fbf1421c04630c5).
+Он содержит session-bound local commit для вопроса и очистки истории AI Совета;
+обычные repository-записи AI остаются под строгим guard. CI
+[38621324053](https://github.com/Michael-edel/FitFocus/actions/runs/38621324053)
+на SHA 010cf26 прошёл 1153 unit-теста, но typecheck сообщил об отсутствующих
+импортах guard-типов в UserStateRepository; исправление вошло в ce7b60d.
+Полный CI этого HEAD ожидает выполнения после push. Более ранний CI
 [38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717)
 на SHA 6305695 завершился E2E failure: 567 passed, 95 skipped, 8 failed,
 2 flaky. Семь падений касались очистки истории AI Совета при sender pause;
@@ -25,17 +25,16 @@ P0.5/P0.8, полный lifecycle, staging и выпуск остаются от
 ## P0.5 — AI Совет
 
 Коммит 500d83e связал 14 запросов совета, историю и поздние ответы с login-сессией.
-Предыдущий полный CI на SHA 6305695, run 38613219717, выявил семь E2E-сбоев
-локальной очистки истории во время sender pause: строгий guard запрещал запись,
-хотя пауза должна останавливать отправку, а не локальное сохранение. Отдельное
-iPhone PWA падение family-menu остаётся открытым.
+Предыдущий CI на SHA 6305695, run 38613219717, выявил семь E2E-сбоев локальной
+очистки истории во время sender pause: строгий guard запрещал запись, хотя пауза
+должна останавливать отправку, а не локальное сохранение. Отдельное iPhone PWA
+падение family-menu остаётся открытым.
 
-Коммит 32bc410 добавил session-bound local commit для вопроса и очистки истории,
-с проверкой account/server session/epoch внутри IDB-транзакции. Тестовая
-временная база исправлена в 0abb185. Коммит 92ecaa3 отделил явно local методы
-от repository API для AI-результатов, сохранив строгие типы. Точный PR CI
-нового HEAD ещё не завершён. Контракт: [AI Совет](ai-council-session.md).
-Общий P0.5, P0.8 и выпуск остаются открытыми.
+Коммит 32bc410 добавил session-bound local commit для вопроса и очистки истории.
+В 92ecaa3 обычные AI repository-записи отделены от local-only методов, а
+ce7b60d добавил пропущенные типовые импорты. CI нового HEAD ещё не завершён.
+Контракт: [AI Совет](ai-council-session.md). Общий P0.5, P0.8 и выпуск остаются
+открытыми.
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 
 Код [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)

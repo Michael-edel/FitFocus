@@ -500,9 +500,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   browser acceptance.
 - [ ] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
-  read guard. 38619175535 выявил ошибку времени фикстуры, исправленную в 0abb185;
-  38620253135 прошёл unit, но выявил typecheck-сужение guard. Исправлено в 92ecaa3;
-  точный CI нового HEAD ожидает выполнения.
+  read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135
+  прошёл unit и нашёл типизацию repository API, исправлено в 92ecaa3; 38621324053
+  прошёл unit и нашёл отсутствующие imports, исправлено в ce7b60d. Точный CI HEAD ожидает.
   [Контракт](docs/ai-council-session.md); общий P0.5 остаётся открытым.
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.
