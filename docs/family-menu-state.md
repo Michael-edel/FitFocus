@@ -108,6 +108,14 @@ server-preview/iPhone PWA не дождался названия семьи за
 old/new migration smoke с legacy intent, UI конфликтов и backup/экспорт/очистка
 всех IDB stores. Runtime legacy owner proof и Service Worker fence уже подключены.
 
+Поздние family-menu callbacks дополнительно проверяются на account switch:
+удержанный `/api/family/menu/generate` preview не создаёт операцию после входа
+аккаунта B, а удержанный `GET /api/family/menu/state` не гидратирует ответ A.
+Оба сценария прошли на Chromium, Firefox и WebKit; полная
+`family-menu-durable.spec.ts` прошла 39/39 без retries в `13e336d`.
+Точный CI этого follow-up ожидает push; остальные writers и общая lifecycle-
+приёмка остаются открытыми.
+
 ## Настоящие bundles на одном origin
 
 Локальный Chromium smoke: 2/2, последовательно pending и conflicted.

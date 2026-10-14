@@ -8,10 +8,12 @@ rollback/CAS прошли. E2E заняли 30 мин 43 сек, полный jo
 был долгий, но завершившийся workflow, а не незапустившаяся проверка.
 Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 переводит legacy migration readwrite callbacks на активные IDB request events.
-В коммите [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
-добавлена browser acceptance запоздавшего family-menu preview при смене аккаунта:
-36/36 семейных menu-сценариев прошли на Chromium, Firefox и WebKit без retries;
-этот код ещё ожидает точный CI после push.
+В [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
+добавлена проверка позднего family-menu preview, а follow-up
+[`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa)
+проверяет отложенное чтение durable menu-state после смены аккаунта. Вся suite
+прошла 39/39 на Chromium, Firefox и WebKit без retries; точный CI follow-up
+ожидает push.
 Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
 приёмки lifecycle/release. Подробности — в
 [журнале](docs/stabilization-progress.md) и
@@ -462,6 +464,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
+  Дополнительно delayed durable family-menu state GET прошёл account-switch
+  проверку без гидратации старых данных; остальные cloud callbacks и cache
+  остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
@@ -578,8 +583,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   серверный guard сам по себе недостаточен.
   Отдельно добавлена account-switch проверка позднего ответа
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
-  menu outbox operation и не меняет сохранённое меню. Остальные callbacks и
-  staging остаются открытыми.
+  menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует
+  старое меню после смены аккаунта. Оба сценария прошли на трёх desktop engines;
+  остальные callbacks и staging остаются открытыми.
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в
 [контракте](docs/ai-callback-sessions.md).

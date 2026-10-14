@@ -186,10 +186,12 @@ AI account-switch сценария `bca2eda` ещё ожидается.
   callbacks и состояния; локально покрыты invitation UI, family-context GET,
   family shopping GET, family join/create responses, AI family-menu commit,
   shopping-check achievement, смена target для member update и отложенный
-  ответ `/api/family/menu/generate`. Новая suite `family-menu-durable.spec.ts`
-  прошла 36/36 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
-  этот сценарий появился в кодовом коммите
-  [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295).
+  ответ `/api/family/menu/generate` и отложенный GET `/api/family/menu/state`.
+  Последний проверяет, что смена аккаунта останавливает durable hydration до
+  чтения устаревшего ответа. Suite `family-menu-durable.spec.ts` прошла 39/39
+  на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`); два новых
+  сценария находятся в коммитах [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
+  и [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa).
   Покрытие остальных callbacks всё ещё неполное.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.

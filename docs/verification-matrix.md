@@ -4,6 +4,13 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+Локальный follow-up `13e336d` расширил family account-switch acceptance двумя
+путями: отложенный `/api/family/menu/generate` и отложенный durable
+`GET /api/family/menu/state`. Полная `family-menu-durable.spec.ts` прошла 39/39
+на Chromium, Firefox и WebKit (`workers=1,retries=0`); typecheck прошёл.
+Текущий PR CI для предыдущего SHA `1207f5c` не включает state-read сценарий;
+точный workflow follow-up ожидается после push.
+
 Последний завершённый PR CI для PR #93 проверил PR head
 [`6c6feca`](https://github.com/Michael-edel/FitFocus/commit/6c6feca) и завершился
 success в [run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769):

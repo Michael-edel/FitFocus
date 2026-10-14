@@ -3095,6 +3095,25 @@ acceptance по family callbacks, но не весь P0.5.
 Точный CI предыдущего HEAD `23c8be6` завершился success в
 [run 38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014):
 все шаги, включая E2E и rollback/CAS, прошли. E2E заняли 30 мин 43 сек, полный
-job — около 33 мин. Новый тест в этот run не входил; его CI ожидается после
-push `2c09825`. Остальные family callbacks, общий lifecycle, staging и выпуск
-остаются открытыми.
+job — около 33 мин. Новый тест не входил в тот run. Следующий PR CI
+[38592830599](https://github.com/Michael-edel/FitFocus/actions/runs/38592830599)
+проверяет SHA `1207f5c`, включающий `2c09825`; на момент добавления follow-up
+он выполнялся на E2E. Остальные family callbacks, общий lifecycle, staging и
+выпуск остаются открытыми.
+
+## P0.4/P0.5 — задержанный durable family-menu read, `13e336d`, 14.10.2026
+
+В `e2e/family-menu-durable.spec.ts` добавлен сценарий, удерживающий
+`GET /api/family/menu/state` во время reload вкладки A. После того как соседняя
+вкладка приняла аккаунт B, ответ A освобождается; проверка подтверждает, что
+старый снимок не гидратирует меню и не меняет сохранённые durable rows. Это
+проверяет guard на чтении вместе с последующим repository refresh; production
+дефект не воспроизвёлся.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit. После него
+полный `family-menu-durable.spec.ts` прошёл 39/39 (`workers=1,retries=0`),
+`npm run typecheck` и `git diff --check` прошли. PR CI
+[38592830599](https://github.com/Michael-edel/FitFocus/actions/runs/38592830599)
+проверяет предыдущий SHA `1207f5c` и не содержит этот follow-up; точный CI
+`13e336d` ожидает push. Другие cloud callbacks, AI writers, staging и полный
+lifecycle остаются открытыми.

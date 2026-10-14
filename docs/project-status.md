@@ -10,9 +10,12 @@ browser E2E, unit, audit, guards, typechecks, build и rollback/CAS прошли
 Браузерный шаг занял около 31 минуты при семи Playwright-проектах; workflow
 завершился примерно за 33 минуты. В кодовом follow-up
 [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
-добавлена account-switch проверка позднего family-menu preview; целевая suite
-прошла 36/36 на Chromium, Firefox и WebKit без retries, точный CI этого SHA
-ещё ожидается после push. Общие P0, staging и выпуск остаются открытыми.
+добавлена account-switch проверка позднего family-menu preview. Следующий
+follow-up [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa)
+удерживает GET `/api/family/menu/state` до входа другого аккаунта и проверяет,
+что ответ не гидратирует устаревшее меню. Вся целевая suite прошла 39/39 на
+Chromium, Firefox и WebKit без retries; точный CI follow-up ожидает push.
+Общие P0, staging и выпуск остаются открытыми.
 
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 
