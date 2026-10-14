@@ -538,6 +538,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   acceptance-проверок — 18/18 на desktop Chromium/Firefox/WebKit,
   `workers=1/retries=0`. Также прошли 25 API unit-тестов и `npm run typecheck`.
   Это локальная приёмка; полный CI, другие callbacks и lifecycle остаются открыты.
+- [x] Проверить поздний ответ личной генерации недельного меню A после входа B:
+  профиль, outbox и success-effects обоих аккаунтов остаются без изменений.
+  `562e20d`: новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit;
+  полный `ai-callback-account-switch.spec.ts` — 15/15 без retries, typecheck
+  прошёл. Полный CI для этого SHA прошёл: [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
+  Другие AI/family callbacks и общий lifecycle остаются открыты.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

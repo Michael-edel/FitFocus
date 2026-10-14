@@ -1,6 +1,6 @@
 # Защита клиентских AI callbacks
 
-Обновлено: 13.10.2026. Реализация контракта опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
+Обновлено: 14.10.2026. Реализация контракта опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
 ветки `fix/durable-outbox`. Push-run отменён concurrency после старта PR-события.
 Точный [PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
 завершился ошибкой E2E: 463 passed / 9 skipped, один failed и три flaky; audit,
@@ -18,8 +18,8 @@ mock-ответа локально прошли все 8 сценариев week
 ## Область
 
 Контракт охватывает запрос совета coach, повтор совета, повтор генерации
-личного плана, объяснение плато на Dashboard и его повтор. Первичная генерация
-плана при регистрации сохраняет отдельный порядок из
+личного плана, генерацию личного недельного меню, объяснение плато на Dashboard
+и его повтор. Первичная генерация плана при регистрации сохраняет отдельный порядок из
 [контракта регистрации](registration-persistence.md), но её запрос к /api/ai
 также должен соблюдать session-scoped transport. Недельный отчёт описан в
 [отдельном контракте](weekly-ai-report-session.md), серверные заголовки и
@@ -80,8 +80,8 @@ React недостаточно.
 ## Текущее состояние реализации
 
 В коммите `75e4d35` клиентские пути coach, личного плана и плато переведены на
-свежий `AiSession` и lifecycle scope. `getCoachAdvice`, `generatePersonalPlan`
-и `generatePlateauExplanation` передают одну сессию каждому `/api/ai` запросу,
+свежий `AiSession` и lifecycle scope. `getCoachAdvice`, `generatePersonalPlan`,
+`generateWeeklyMenu` и `generatePlateauExplanation` передают одну сессию каждому `/api/ai` запросу,
 в том числе повторным запросам внутри генератора. Ошибка proof или response
 scope не запускает unscoped запрос.
 
@@ -95,6 +95,10 @@ scope не запускает unscoped запрос.
   тот же session/lifecycle контракт и не применяет fallback после смены IDB
   сессии или отказа commit. Восстанавливаемая ошибка допускает существующий
   локальный план только после повторной проверки исходной сессии.
+- **Личное недельное меню:** генератор использует свежий `AiSession`, проверяет
+  активную попытку и версию профиля до/после AI, затем сохраняет меню одной
+  guarded profile-операцией. Смена аккаунта не должна применить поздний ответ
+  к профилю A или B и не должна запускать достижение.
 - **Плато:** Dashboard и повтор используют общий hook; профиль, исходный action,
   pagehide, logout и новая попытка блокируют поздний ответ. Текст объяснения
   обновляет только UI.
@@ -119,11 +123,19 @@ PR CI исправления `ec29f41` прошёл с одним unrelated flak
 отпускается раньше 10 секунд, до таймаута запроса. Полный [CI точного SHA](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
 завершился success: E2E, статические проверки, typecheck, build и rollback/CAS jobs прошли.
 
-Следующая локальная browser-приёмка удерживает повтор личного плана аккаунта A,
-пока соседняя вкладка входит в B. Тест проверяет, что поздний ответ не меняет
-профиль, значения, outbox, active session или success-effects обоих аккаунтов.
-Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit; `npm run typecheck`
-прошёл. Тест опубликован в [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979);
+Account-switch acceptance личной генерации недельного меню добавлена в
+[`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935).
+Поздний AI-ответ аккаунта A после входа B не создаёт profile/outbox write для
+обоих аккаунтов и не вызывает achievement. Новый сценарий прошёл 3/3 на desktop
+Chromium, Firefox и WebKit; полный изменённый callback spec — 15/15 при
+`workers=1,retries=0`; `npm run typecheck` прошёл. Полный CI для этого SHA
+завершился success в [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
+
+Ранее добавленная локальная browser-приёмка удерживает повтор личного плана
+аккаунта A, пока соседняя вкладка входит в B. Тест проверяет, что поздний ответ
+не меняет профиль, значения, outbox, active session или success-effects обоих
+аккаунтов. Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit;
+`npm run typecheck` прошёл. Тест опубликован в [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979);
 точный PR CI `c48ce1b` завершился success в [run 38429247879](https://github.com/Michael-edel/FitFocus/actions/runs/38429247879): 1115 unit, 485 E2E passed / 25 skipped и один flaky с retry в независимом legacy migration сценарии. Fingerprint-проверка migration была исправлена, а тест прошёл в последующих CI. Последний завершённый полный CI на `92a5be2` ([run 38444933538](https://github.com/Michael-edel/FitFocus/actions/runs/38444933538)) также включал personal-plan acceptance; два unrelated E2E прошли retry, но отмечены flaky. Новая achievement account-switch acceptance добавлена в `b44d46e` и прошла локально 7/7 browser/PWA-профилей; точный CI ожидается. Локальные результаты и ограничения записаны в [журнале](stabilization-progress.md).
 
 Эти сценарии не закрывают весь [P0.5](../TASKS.md): другие AI/family callbacks,
@@ -135,7 +147,7 @@ PR CI исправления `ec29f41` прошёл с одним unrelated flak
 - Unit-тесты подтверждают отказ при другом аккаунте, повторном входе,
   отсутствующей capability, неверном response scope/protocol и неактуальном
   login guard.
-- Задержанный ответ coach/plan/plateau после logout, account switch, pagehide
+- Задержанный ответ coach/plan/weekly-menu/plateau после logout, account switch, pagehide
   или unmount не меняет UI, profile, outbox, usage или achievements.
 - Новая попытка после возврата страницы может завершиться; завершение старой
   попытки не сбрасывает её loading и не очищает её маркеры.

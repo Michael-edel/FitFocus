@@ -5,26 +5,29 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-## Последняя кодовая ревизия — P0.5 callbacks и P0.8 outbox
+## P0.5 — personal weekly-menu account switch
 
-Ветка `fix/durable-outbox`, точный HEAD
-[`010805f`](https://github.com/Michael-edel/FitFocus/commit/010805f447d49ff62f18f5e3a17b08d66f5edd63).
-Browser acceptance `family-callback-account-switch.spec.ts` прошла 30/30 на
-desktop Chromium, Firefox и WebKit; шесть новых сценариев смены аккаунта —
-18/18. На этом HEAD целевые тесты нормализации и миграции прошли 124/124;
-общий typecheck также прошёл.
+Кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
+добавляет browser acceptance позднего ответа личной генерации недельного меню.
+Когда аккаунт A генерирует меню, а в соседней вкладке входит B, отпущенный ответ
+A не меняет профиль/outbox A или B и не запускает achievement. Новый сценарий
+прошёл 3/3 на desktop Chromium, Firefox и WebKit; весь изменённый
+`ai-callback-account-switch.spec.ts` прошёл 15/15 при `workers=1,retries=0`.
+`npm run typecheck`, admin guards и `git diff --check` прошли. Порог ожидания
+отложенного ответа в тестах согласован с 12-секундным timeout session transport;
+повтор coach WebKit после правки прошёл.
 
-При последней проверке PR workflow [38528630120](https://github.com/Michael-edel/FitFocus/actions/runs/38528630120)
-ещё выполнялся: audit, schema/privacy/auth/API checks, unit, три typecheck и
-build завершились успешно; E2E выполнялись, проверка canonical readers/CAS после
-server rollback и сохранение rollback-артефакта ожидали. Полный CI для этой
-кодовой ревизии ещё не подтверждён. Последний завершённый полный CI ниже относится к
-`9bdeb47`; актуальное состояние смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+Полный [CI run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)
+для этой ревизии завершился success: audit, schema/privacy/auth/API checks,
+unit, typechecks, build, E2E и canonical readers/CAS after server rollback прошли.
+Rollback-артефакт сохранён как `11879443791`. Другие AI/family callbacks,
+общий lifecycle, staging и выпуск остаются открытыми.
 
-Сверка формата legacy-нормализатора отдельно зафиксирована на
+Последний завершённый полный CI ниже относится к `9bdeb47`; сверка формата
+legacy-нормализатора отдельно зафиксирована на
 [`48cf797`](https://github.com/Michael-edel/FitFocus/commit/48cf797b2b08cd4b62bdf59c265c4d85a4db863f)
-в [контракте миграции](legacy-migration.md); её результаты не подменяют проверки
-текущего HEAD.
+в [контракте миграции](legacy-migration.md). Эти результаты относятся к своим
+ревизиям и не заменяют проверки текущей кодовой ветки.
 
 Последний завершённый полный CI проверил текущий SHA
 [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)

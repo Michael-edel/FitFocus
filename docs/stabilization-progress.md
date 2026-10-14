@@ -2838,3 +2838,25 @@ PR workflow [38528630120](https://github.com/Michael-edel/FitFocus/actions/runs/
 E2E выполняется, canonical readers/CAS after rollback и сохранение rollback-
 артефакта ещё не завершены. Полный CI для этого SHA пока не подтверждён.
 Staging, production-релиз и закрытие P0.5/P0.8 этим результатом не подтверждаются.
+
+## P0.5 — account-switch acceptance личного недельного меню, `562e20d`
+
+Добавлен browser-сценарий для личной генерации недельного меню. Ответ AI
+аккаунта A удерживается, пока соседняя вкладка входит в аккаунт B; после
+освобождения тест проверяет, что профили и outbox обоих аккаунтов не меняются,
+profile/state writes и achievement не запускаются, позднее меню не отображается.
+Также существующие ожидания Coach/Plan/Plateau приведены к порогу 11,9 с,
+оставляя запас до 12-секундного session transport timeout. Первый полный прогон
+нашёл одну ошибку только из-за прежнего 10-секундного порога в WebKit Coach;
+после поправки этот сценарий прошёл отдельно.
+
+На `562e20d210695328bcd17309f9836a2e10c68935` новый weekly-menu сценарий прошёл
+3/3 на desktop Chromium, Firefox и WebKit; полный изменённый
+`ai-callback-account-switch.spec.ts` прошёл 15/15 при `workers=1,retries=0`.
+`npm run typecheck`, admin guards и `git diff --check` прошли. Полный CI
+[38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)
+для этого SHA завершился success: audit, schema/privacy/auth/API checks, unit,
+typecheck, domain/storage strict checks, build, E2E и canonical readers/CAS after
+server rollback прошли. Browser diagnostics сохранены в артефакте `11879048388`,
+rollback — в `11879443791`. OAuth/staging и весь P0.5 этим browser acceptance не
+закрыты.

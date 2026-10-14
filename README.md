@@ -23,7 +23,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 | [docs/data-model.md](docs/data-model.md) и [docs/sync-model.md](docs/sync-model.md) | Хранилища, версии и синхронизация |
 | [docs/outbox-implementation.md](docs/outbox-implementation.md) | Durable outbox: реализация и оставшиеся этапы подключения |
 | [docs/legacy-migration.md](docs/legacy-migration.md) | Формат legacy-записи, нормализация, карантин и импорт |
-| [docs/ai-callback-sessions.md](docs/ai-callback-sessions.md) | Контракт защиты запросов и повторов coach, плана и плато |
+| [docs/ai-callback-sessions.md](docs/ai-callback-sessions.md) | Контракт защиты запросов и повторов coach, личного плана, недельного меню и плато |
 | [docs/achievement-session.md](docs/achievement-session.md) | Сессия, очередь, scope HTTP и поздние ответы достижений |
 | [docs/weekly-ai-report-session.md](docs/weekly-ai-report-session.md) | Защита недельного AI-отчёта свежей сессией и durable commit |
 | [docs/stabilization-progress.md](docs/stabilization-progress.md) | Журнал изменений, SHA, тесты и CI |
@@ -71,11 +71,12 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последняя кодовая ревизия [`010805f`](https://github.com/Michael-edel/FitFocus/commit/010805f447d49ff62f18f5e3a17b08d66f5edd63)
-прошёл локальную browser acceptance для семейных и личных callbacks (30/30),
-шесть новых account-switch сценариев (18/18) и целевые legacy-тесты (124/124).
-При последней проверке точный [CI run `38528630120`](https://github.com/Michael-edel/FitFocus/actions/runs/38528630120)
-выполнял E2E; полный статус и открытые проверки — в [сводке проекта](docs/project-status.md).
+Последняя кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
+добавила проверку задержанного ответа личной генерации недельного меню при
+смене аккаунта. Изменённый callback spec прошёл 15/15 на desktop Chromium,
+Firefox и WebKit; новый сценарий — 3/3, typecheck прошёл. Полный [CI run
+38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)
+завершился success, включая E2E и rollback/CAS.
 
 Последний завершённый полный CI на [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11) — [run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051) — завершился success: unit прошли во всех 198 файлах, 501 browser passed / 29 skipped, два E2E прошли retry как flaky; rollback/CAS-проверка прошла.
 
