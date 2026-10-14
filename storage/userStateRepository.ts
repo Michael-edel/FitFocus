@@ -135,13 +135,17 @@ export class UserStateRepository {
     }));
   }
 
-  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard?: OutboxWriteGuard): Promise<OutboxOperation> {
+  writeJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard?: OutboxCommitGuard): Promise<OutboxOperation> {
     let raw: string;
     try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
     return this.writeRaw(stateKey, raw, false, guard);
   }
 
-  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxWriteGuard): Promise<OutboxOperation> {
+  writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict, guard);
+  }
+
+  writeLocalRaw(stateKey: UserStateKey, value: string, retainAsConflict: boolean, guard: OutboxLocalCommitGuard): Promise<OutboxOperation> {
     return this.mutate(stateKey, { type: 'put', key: this.key(stateKey), value }, retainAsConflict, guard);
   }
 
@@ -164,7 +168,11 @@ export class UserStateRepository {
     } catch { return fallback; }
   }
 
-  remove(stateKey: UserStateKey, retainAsConflict = false, guard?: OutboxWriteGuard): Promise<OutboxOperation> {
+  remove(stateKey: UserStateKey, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {
+    return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict, guard);
+  }
+
+  removeLocal(stateKey: UserStateKey, retainAsConflict: boolean, guard: OutboxLocalCommitGuard): Promise<OutboxOperation> {
     return this.mutate(stateKey, { type: 'delete', key: this.key(stateKey) }, retainAsConflict, guard);
   }
 }

@@ -57,7 +57,10 @@ export class StateEditor<T> {
     const writeGuard: OutboxWriteGuard = 'readGuard' in captured
       ? { readGuard: captured.readGuard, canCommit }
       : { localCommitGuard: captured.localCommitGuard, canCommit };
-    const operation = await this.repository.writeRaw(this.key, this.codec.encode(value), this.unobservedEdit, writeGuard);
+    const encoded = this.codec.encode(value);
+    const operation = 'readGuard' in writeGuard
+      ? await this.repository.writeRaw(this.key, encoded, this.unobservedEdit, writeGuard)
+      : await this.repository.writeLocalRaw(this.key, encoded, this.unobservedEdit, writeGuard);
     if (!canCommit()) return null;
     if (operation.status === 'pending') { this.editRevision += 1; this.publish({ value, phase: 'ready' }); }
     return operation;
@@ -65,7 +68,11 @@ export class StateEditor<T> {
   async remove(guard?: OutboxWriteGuard) {
     const editRevision = ++this.editRevision;
     if (this.repository && this.snapshot.phase !== 'ready') this.unobservedEdit = true;
-    const operation = this.repository ? await this.repository.remove(this.key, this.unobservedEdit, guard) : null;
+    const operation = !this.repository ? null
+      : !guard ? await this.repository.remove(this.key, this.unobservedEdit)
+        : 'readGuard' in guard
+          ? await this.repository.remove(this.key, this.unobservedEdit, guard)
+          : await this.repository.removeLocal(this.key, this.unobservedEdit, guard);
     if (editRevision === this.editRevision && (!operation || operation.status === 'pending')) {
       this.publish({ ...this.snapshot, value: this.initial });
     }
