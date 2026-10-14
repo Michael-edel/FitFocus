@@ -5,17 +5,16 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-Проверка CI последнего документирующего HEAD `23c8be6` завершилась успехом:
-browser E2E, unit, audit, guards, typechecks, build и rollback/CAS прошли.
-Браузерный шаг занял около 31 минуты при семи Playwright-проектах; workflow
-завершился примерно за 33 минуты. В кодовом follow-up
-[`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
-добавлена account-switch проверка позднего family-menu preview. Следующий
-follow-up [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa)
-удерживает GET `/api/family/menu/state` до входа другого аккаунта и проверяет,
-что ответ не гидратирует устаревшее меню. Вся целевая suite прошла 39/39 на
-Chromium, Firefox и WebKit без retries; точный CI follow-up ожидает push.
-Общие P0, staging и выпуск остаются открытыми.
+На момент сверки удалённая ветка `fix/durable-outbox` указывает на
+[`ce546c1`](https://github.com/Michael-edel/FitFocus/commit/ce546c1b30d17918ae03e43d3e13a095848f0b15),
+PR #93 направлен в `fix/state-generations`; в `main` изменения не влиты.
+Точный PR CI [run 38601101801](https://github.com/Michael-edel/FitFocus/actions/runs/38601101801)
+для этого SHA ещё выполняется: audit, schema parity, privacy, auth scope, API
+invariants, unit, три typecheck и build прошли; E2E выполняется, rollback/CAS
+ещё не начались. Кодовый коммит [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)
+локально прошёл 1135/1135 unit, три typecheck и account-switch acceptance
+28 passed / 2 skipped без retries. Последующие коммиты `ce546c1` содержат
+документацию этого контракта. Общие P0, staging и выпуск остаются открытыми.
 
 ## P0.5 — AI Совет
 
@@ -24,7 +23,7 @@ Chromium, Firefox и WebKit без retries; точный CI follow-up ожида
 login-сессии и durable commit guard. Unit-набор прошёл 1135/1135; три typecheck
 прошли; account-switch spec завершился 28 passed / 2 skipped на Chromium,
 Firefox и WebKit без retries. Проверенный контракт: [AI Совет](ai-council-session.md).
-Точный GitHub CI запускается после push; весь P0.5 и выпуск остаются открытыми.
+Точный PR CI для `ce546c1` выполняется в [run 38601101801](https://github.com/Michael-edel/FitFocus/actions/runs/38601101801); весь P0.5 и выпуск остаются открытыми.
 
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 

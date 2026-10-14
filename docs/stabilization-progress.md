@@ -2773,6 +2773,12 @@ production-релиз. Эффект тестовых барьеров под CI 
 отменён concurrency после запуска PR workflow. Это подтверждает проверку
 нормализатора, но не полный CI, runtime lifecycle, staging или готовность P0.8.
 
+Повторная проверка на рабочей ревизии `ce546c1` 14.10.2026 подтвердила тот же
+контракт: `npm run test:unit -- tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
+прошёл 124/124. Точный PR workflow для этого SHA —
+[run 38601101801](https://github.com/Michael-edel/FitFocus/actions/runs/38601101801) —
+на момент сверки всё ещё выполняется на E2E; его полный результат не подтверждён.
+
 ## P0.5 — session guard личной корзины, `b56544e`, 14.10.2026
 
 `ShoppingListCard` раньше читал `/api/shopping/list` и менял отметки через
