@@ -64,6 +64,22 @@ skipped, retries выключены. Push CI
 тот run ещё выполняется. После публикации документации нужно проверить CI на
 новом branch HEAD. Полная P0.8-приёмка остаётся открытой.
 
+## Остальные зависимые записи в активной транзакции — f3a9abf
+
+Follow-up [`f3a9abf`](https://github.com/Michael-edel/FitFocus/commit/f3a9abf796f9b3bedd969efc5f032bd8d4d370cf)
+выносит `afterIndexedRequests` в `stateDatabase.ts` и применяет его к
+гидратации, принятию/инвалидации/очистке сессии, разрешению конфликтов и retry.
+Операции account cleanup и indexed user-state backup restore также ставят зависимые записи
+из success-события последнего чтения. Помощник корректно обрабатывает пустой
+набор запросов; восстановление пустого backup покрыто unit-тестом.
+
+На этой ревизии прошли 1133 unit-теста / 198 файлов, общий, domain-strict и
+storage-strict typecheck, production build. Шесть связанных E2E-файлов на
+desktop Firefox и Android Chrome дали 57 passed / 9 skipped. CI прежнего docs
+SHA `933213d` выполнялся на E2E-этапе и не подтверждает `f3a9abf`; новый CI
+нужно проверить по точному HEAD после push. Callback-и legacy migration и
+durable backup остаются частью полной транзакционной приёмки; P0.8 не закрыт.
+
 ## Проверенная граница
 
 Ревизия [`51a789c5c0d8b724a54071ecf10232ecc58a42df`](https://github.com/Michael-edel/FitFocus/commit/51a789c5c0d8b724a54071ecf10232ecc58a42df),

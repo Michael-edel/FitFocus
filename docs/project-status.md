@@ -45,6 +45,15 @@ PR run [38566257477](https://github.com/Michael-edel/FitFocus/actions/runs/38566
 на том же SHA выполняется. После push документации нужно проверить CI нового
 branch HEAD; полная P0.8-приёмка остаётся открытой.
 
+В коде [`f3a9abf`](https://github.com/Michael-edel/FitFocus/commit/f3a9abf796f9b3bedd969efc5f032bd8d4d370cf)
+тот же приём распространён на остальные критичные outbox/session readwrite
+пути и account cleanup/user-state backup restore. Unit — 1133/1133, три typecheck и build
+прошли; шесть связанных Firefox/Android E2E дали 57 passed / 9 skipped.
+Workflow [38566637885](https://github.com/Michael-edel/FitFocus/actions/runs/38566637885)
+для прежнего docs SHA `933213d` во время локальной проверки оставался на E2E;
+он не включает новый код. Проверка точного нового branch HEAD остаётся следующим
+критерием. Полный P0.8 lifecycle не завершён.
+
 ## P0.5 — поздний ответ retry объяснения плато
 
 Новый сценарий удерживает ответ retry для аккаунта A, пока соседняя вкладка

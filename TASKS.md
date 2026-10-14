@@ -651,9 +651,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
   migration receipt проверять для нужной legacy-операции без сканирования всей
   очереди на каждом claim (`35fceb4`). 1132 unit, typecheck, storage-strict,
   production build прошли; Firefox и Android Chrome: 18/18 целевых E2E.
+- [x] Перевести гидратацию, session accept/invalidate/clear, resolve/retry,
+  account cleanup и user-state backup restore на записи в success-событии последнего IDB
+  request (`f3a9abf`). Добавлена обработка пустого набора запросов; 1133 unit,
+  три typecheck, build и 57 связанных Firefox/Android E2E прошли локально.
 - [ ] Подтвердить полный CI для опубликованной ветки `fix/durable-outbox` на
-  точном HEAD после документационного коммита; прежний CI `8dc7f71` прошёл,
-  но содержал flake в `write` и Android migration.
+  точном HEAD после code/docs push. Workflow `38566637885` для SHA `933213d`
+  ещё выполнялся на E2E-этапе и новый код не содержит.
 - [x] Реализовать компонент импорта по [ADR-005](docs/adr/ADR-005-durable-outbox.md):
   операция/карантин, ledger и прогресс порции атомарны; повтор, коллизии,
   подтверждение и необработанные прежние снимки учтены в тестах.

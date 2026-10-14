@@ -3008,3 +3008,23 @@ desktop Firefox и Android Chrome. Push CI
 [run 38566257477](https://github.com/Michael-edel/FitFocus/actions/runs/38566257477),
 который ещё выполняется. После push документации нужно проверить CI нового
 branch HEAD. Полная P0.8 и выпуск остаются открытыми.
+
+## P0.8 — остальные активные IDB-транзакции, `f3a9abf`, 14.10.2026
+
+`afterIndexedRequests` перенесён в `storage/stateDatabase.ts` и применён к
+оставшимся outbox/session readwrite-путям, включая hydrate, принятие и
+инвалидацию сессии, conflict recovery, retry, indexed user-state backup restore и account
+cleanup. Зависимые проверки и записи выполняются в активной IDB-транзакции.
+Пустой backup не создаёт request success event, поэтому helper отдельно
+обрабатывает пустой набор; соответствующая unit-проверка добавлена.
+
+На точном кодовом SHA
+[`f3a9abf`](https://github.com/Michael-edel/FitFocus/commit/f3a9abf796f9b3bedd969efc5f032bd8d4d370cf)
+прошли 1133 unit-теста / 198 файлов, общий, domain-strict и storage-strict
+typecheck, production build. Шесть связанных browser spec на desktop Firefox
+и Android Chrome: 57 passed / 9 skipped. Workflow
+[38566637885](https://github.com/Michael-edel/FitFocus/actions/runs/38566637885)
+на прежнем docs SHA `933213d` оставался на E2E во время локальной проверки и
+не проверял этот код. После push требуется CI на новом HEAD. Legacy importer и
+durable backup callbacks, полный lifecycle, staging и выпуск этой работой
+не закрываются.

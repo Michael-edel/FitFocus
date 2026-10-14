@@ -265,6 +265,15 @@ Legacy-ключ сохраняется до подтверждённого им�
 предварительным совместимым релизом. Старый writer не должен дописать
 legacy после финального marker. Два разных preview-origin этого не проверяют.
 
+Дополнение 14.10.2026, `f3a9abf`: общий `afterIndexedRequests` также
+используется в hydrate/session, recovery actions, indexed user-state backup restore и account
+cleanup. Зависимые записи выполняются в success-событии последнего IDB request;
+пустой набор чтений завершается без ожидания отсутствующего события.
+Unit/typecheck/build и локальные Firefox/Android E2E прошли; CI нового HEAD
+нужно проверить после push. Этот helper не заменяет отдельную проверку всех
+readwrite callback-ов legacy importer и durable backup; полный P0.8 lifecycle
+остаётся открытым.
+
 ## Отказ и приёмка
 
 Если IDB недоступна/переполнена или транзакция прервалась, показать явное
