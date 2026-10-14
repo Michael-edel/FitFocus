@@ -490,6 +490,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
+- [x] Перевести AI Совет на общий `AiSession`: все 14 запросов используют один
+  account/session proof, вопрос, ответ и очистка истории используют guarded
+  durable commit; поздний ответ после входа другого аккаунта проверяется
+  browser acceptance.
+  [Контракт](docs/ai-council-session.md); общий P0.5 остаётся открытым.
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.
   [Контракт](docs/ai-session-guard.md). Запросы без scope остаются прежними.

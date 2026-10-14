@@ -22,7 +22,8 @@ mock-ответа локально прошли все 8 сценариев week
 и его повтор, анализ фото для дневника и распознавание рецепта по фото.
 Первичная генерация плана при регистрации сохраняет отдельный порядок из
 [контракта регистрации](registration-persistence.md), но её запрос к /api/ai
-также должен соблюдать session-scoped transport. Недельный отчёт описан в
+также должен соблюдать session-scoped transport. AI Совет и guarded history
+описаны в [отдельном контракте](ai-council-session.md). Недельный отчёт описан в
 [отдельном контракте](weekly-ai-report-session.md), серверные заголовки и
 capabilities — в [контракте AI API](ai-session-guard.md). Семейные callbacks
 остаются в [контракте семейной сессии](family-session.md).

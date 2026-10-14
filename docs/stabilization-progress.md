@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — AI Совет использует account-scoped session, 14.10.2026
+
+Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)
+в `fix/durable-outbox` связывает AI Совет с исходной login-сессией. В
+`useCouncilChat` вопрос и ответ теперь проходят guarded durable commit в
+`council_history`. `callAiCouncil` получает `AiSession`, проверяет соответствие
+аккаунта профилю и передаёт тот же proof на каждый из 14 запросов `/api/ai`.
+Поздний ответ после входа в аккаунт B не может изменить историю A или B; ошибки
+сохранения видны в интерфейсе. Очистка истории также проверяет read guard внутри
+outbox-транзакции. Проверки описаны в
+[контракте AI Совета](ai-council-session.md).
+
+`npx vitest run tests/ai_session_transport.test.ts tests/state_editor.test.ts`
+прошёл 40/40; полный unit-набор — 1135 тестов / 198 файлов. Общий,
+domain-strict и storage-strict typecheck прошли. Новый account-switch сценарий
+прошёл на desktop Chromium, Firefox и WebKit; полный
+`ai-callback-account-switch.spec.ts` завершился 28 passed / 2 skipped при
+`workers=1,retries=0`. Первый запуск теста не дождался инициализации сессии и
+lazy-экрана; после явного барьера активной сессии аккаунта A сценарий прошёл во
+всех трёх браузерах. Точный CI этого follow-up запускается после push. P0.5,
+P0.8, staging и выпуск остаются открытыми.
+
 ## P0.5 — поздний retry объяснения плато после смены аккаунта, 14.10.2026
 
 Добавлен account-switch acceptance для ответа retry аккаунта A после входа B

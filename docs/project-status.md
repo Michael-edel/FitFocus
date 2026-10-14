@@ -17,6 +17,15 @@ follow-up [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3
 Chromium, Firefox и WebKit без retries; точный CI follow-up ожидает push.
 Общие P0, staging и выпуск остаются открытыми.
 
+## P0.5 — AI Совет
+
+Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)
+привязал все 14 AI-запросов совета, его историю и её очистку к активной
+login-сессии и durable commit guard. Unit-набор прошёл 1135/1135; три typecheck
+прошли; account-switch spec завершился 28 passed / 2 skipped на Chromium,
+Firefox и WebKit без retries. Проверенный контракт: [AI Совет](ai-council-session.md).
+Точный GitHub CI запускается после push; весь P0.5 и выпуск остаются открытыми.
+
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
 
 Код [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)
