@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { DurableOutbox, type OutboxIntent, type OutboxOperation, type OutboxReadGuard, type OutboxWriteGuard } from './durableOutbox';
+import { DurableOutbox, type OutboxCommitGuard, type OutboxIntent, type OutboxLocalCommitGuard, type OutboxOperation, type OutboxReadGuard, type OutboxWriteGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
