@@ -2794,3 +2794,18 @@ IDB-сеанс и состояние аккаунта B остаются неи�
 проверены четырьмя новыми сценариями, 12/12. Mock-backed acceptance не заменяет
 реальный OAuth/staging или общий lifecycle P0.5; полный GitHub CI точного HEAD
 ещё ожидается.
+
+## P0.5 — отложенное чтение семейного контекста, `bb1866c`
+
+Добавлена проверка initial `GET /api/family` аккаунта A, удержанного до входа B
+в соседней вкладке. После освобождения fixture возвращает валидный ответ со
+scope A; UI не показывает семью A после переключения, не запускает второй
+family read, а active IDB-сеанс остаётся B. Это проверяет клиентскую обработку
+позднего ответа, дополняя существующий logout и mutation acceptance.
+
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit; полный
+`family-callback-account-switch.spec.ts` прошёл 27/27 при `workers=1/retries=0`.
+Typecheck прошёл. Вместе с тестами `69c739a` и `1b6444a` пять новых acceptance
+сценариев прошли 15/15. Mock-backed проверка не заменяет реальный OAuth/staging;
+полный lifecycle P0.5 остаётся открытым. Точный GitHub workflow текущего HEAD
+будет проверен после push.

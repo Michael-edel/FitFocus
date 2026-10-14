@@ -530,11 +530,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   другой семьи тем же login. Затем личная `ShoppingListCard` подключена к
   исходному login guard: GET/PATCH требуют свежий account/session proof,
   поздние ответы не меняют данные аккаунта B, а server/local React state
-  ограничены аккаунтом и неделей. Затем проверены отложенные ответы family
-  join/create: после входа B ответы A не очищают код, не запускают повторную
-  загрузку семьи и не вызывают `family_join_or_create`. Тестовые commits
-  `69c739a` и `1b6444a`; полный callback spec прошёл 24/24, четыре новые
-  acceptance-проверки — 12/12 на desktop Chromium/Firefox/WebKit,
+  ограничены аккаунтом и неделей. Затем проверены отложенные family join/create
+  и family-context GET: после входа B ответы A не очищают ввод, не появляются в
+  UI B, не запускают повторную загрузку семьи и не вызывают
+  `family_join_or_create`. Тестовые commits `69c739a`, `1b6444a` и `bb1866c`;
+  полный callback spec прошёл 27/27, пять новых acceptance-проверок — 15/15 на
+  desktop Chromium/Firefox/WebKit,
   `workers=1/retries=0`. Также прошли 25 API unit-тестов и `npm run typecheck`.
   Это локальная приёмка; полный CI, другие callbacks и lifecycle остаются открыты.
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
