@@ -1,4 +1,4 @@
-import { StateStorageError, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateStore } from './stateDatabase';
+import { afterIndexedRequests, StateStorageError, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateStore } from './stateDatabase';
 import { LEGACY_DELETED_ACCOUNT_META_PREFIX, LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY,
   legacyDeletedAccountMetaId, legacyMigrationItemId } from './legacyQueue';
 
@@ -220,45 +220,57 @@ export async function restoreDurableStateBackup(value: unknown): Promise<void> {
   }
   const database = await userStateDatabase.open();
   try {
-    await stateTransaction(database, STORE_NAMES, 'readwrite', async (tx) => {
+    await stateTransaction(database, STORE_NAMES, 'readwrite', (tx) => {
       const metaStore = tx.objectStore(STATE_STORES.meta);
-      const existingMeta = await indexedRequest(metaStore.getAll()) as Array<Record<string, unknown>>;
-      const existingMarkers = new Set(existingMeta
-        .filter((row) => typeof row.id === 'string' && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX)
-          && row.kind === 'legacy-deleted-account' && row.version === 1)
-        .map((row) => String(row.id)));
-      const deletedAccounts = new Set([...candidateMarkerIds]
-        .filter(([, markerId]) => backupMarkers.has(markerId) || existingMarkers.has(markerId))
-        .map(([accountId]) => accountId));
-      for (const storeName of STORE_NAMES) {
-        const store = tx.objectStore(storeName);
-        const rows = value.stores[storeName] as Record<string, unknown>[];
-        for (const savedRow of rows) {
-          // A stored all-client proof is ephemeral. Re-audit the imported source
-          // against the current Service Worker and every open window before send.
-          const row = storeName === STATE_STORES.meta && savedRow.id === LEGACY_MIGRATION_META_ID
-            ? { ...savedRow, status: 'partial', snapshotAuditComplete: false, sourceMatches: false,
-              writersStopped: false, sendAllowed: false }
-            : savedRow;
-          const owner = storeName === STATE_STORES.values && !text(row.accountId) && text(row.key)
-            ? ownedAccountsByKey.get(row.key)
-            : undefined;
-          const resolvedOwner = storeName === STATE_STORES.migrationUnknown && isRecord(row.resolved)
-            ? row.resolved.accountId
-            : undefined;
-          if (deletedAccounts.has(String(row.accountId ?? owner ?? resolvedOwner ?? ''))) continue;
-          const key = rowKey(storeName, row);
-          const existing = await indexedRequest(store.get(key)) as unknown;
-          if (existing !== undefined) {
-            if (storeName === STATE_STORES.meta && typeof row.id === 'string'
-              && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX) && isRecord(existing)
-              && existing.kind === 'legacy-deleted-account' && existing.version === 1) continue;
-            if (canonical(existing) !== canonical(row)) throw new Error('BACKUP_DURABLE_STATE_CONFLICT');
-            continue;
+      return afterIndexedRequests(tx, [metaStore.getAll() as IDBRequest<unknown>], ([metadata]) => {
+        const existingMeta = metadata as Array<Record<string, unknown>>;
+        const existingMarkers = new Set(existingMeta
+          .filter((row) => typeof row.id === 'string' && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX)
+            && row.kind === 'legacy-deleted-account' && row.version === 1)
+          .map((row) => String(row.id)));
+        const deletedAccounts = new Set([...candidateMarkerIds]
+          .filter(([, markerId]) => backupMarkers.has(markerId) || existingMarkers.has(markerId))
+          .map(([accountId]) => accountId));
+        const candidates: Array<{ storeName: StateStore; store: IDBObjectStore; row: Record<string, unknown>; key: IDBValidKey }> = [];
+
+        for (const storeName of STORE_NAMES) {
+          const store = tx.objectStore(storeName);
+          const rows = value.stores[storeName] as Record<string, unknown>[];
+          for (const savedRow of rows) {
+            // A stored all-client proof is ephemeral. Re-audit the imported source
+            // against the current Service Worker and every open window before send.
+            const row = storeName === STATE_STORES.meta && savedRow.id === LEGACY_MIGRATION_META_ID
+              ? { ...savedRow, status: 'partial', snapshotAuditComplete: false, sourceMatches: false,
+                writersStopped: false, sendAllowed: false }
+              : savedRow;
+            const owner = storeName === STATE_STORES.values && !text(row.accountId) && text(row.key)
+              ? ownedAccountsByKey.get(row.key)
+              : undefined;
+            const resolvedOwner = storeName === STATE_STORES.migrationUnknown && isRecord(row.resolved)
+              ? row.resolved.accountId
+              : undefined;
+            if (deletedAccounts.has(String(row.accountId ?? owner ?? resolvedOwner ?? ''))) continue;
+            candidates.push({ storeName, store, row, key: rowKey(storeName, row) });
           }
-          await indexedRequest(store.add(row));
         }
-      }
+
+        const reads = candidates.map(({ store, key }) => store.get(key) as IDBRequest<unknown>);
+        return afterIndexedRequests(tx, reads, (existingRows) => {
+          const additions: IDBRequest<unknown>[] = [];
+          candidates.forEach(({ storeName, store, row }, index) => {
+            const existing = existingRows[index];
+            if (existing !== undefined) {
+              if (storeName === STATE_STORES.meta && typeof row.id === 'string'
+                && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX) && isRecord(existing)
+                && existing.kind === 'legacy-deleted-account' && existing.version === 1) return;
+              if (canonical(existing) !== canonical(row)) throw new Error('BACKUP_DURABLE_STATE_CONFLICT');
+              return;
+            }
+            additions.push(store.add(row) as IDBRequest<unknown>);
+          });
+          return afterIndexedRequests(tx, additions, () => undefined);
+        });
+      });
     });
   } catch (error) {
     if (error instanceof StateStorageError && error.cause instanceof Error
