@@ -5,20 +5,23 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-На момент этой сверки опубликованная ветка `fix/durable-outbox` указывала на
-[`4f172a6`](https://github.com/Michael-edel/FitFocus/commit/4f172a65d4a8009eacdb98ee3bada7394111af08).
+Последний проверенный кодовый HEAD ветки `fix/durable-outbox` —
+[`659aebd`](https://github.com/Michael-edel/FitFocus/commit/659aebd9ac9e1b856caa3d660a53503311af0c69);
+текущее изменение обновляет только документацию.
 PR #93 направлен в `fix/state-generations`; в `main` изменения не влиты.
-Поверх неё локально создан кодовый commit
-[`20a6d79`](https://github.com/Michael-edel/FitFocus/commit/20a6d799a6be02ff36e8be18b1210e1c10eb53a7)
-для account/session guard пользовательских обращений поддержки. Полная проверка
-локального изменения прошла: 1148 unit, 33 account-switch E2E на Chromium,
-Firefox и WebKit без retries, три typecheck, production build, API/auth/schema/
-privacy checks. Подробности — в [журнале](stabilization-progress.md).
+Последний кодовый компонент — commit
+[`20a6d79`](https://github.com/Michael-edel/FitFocus/commit/20a6d799a6be02ff36e8be18b1210e1c10eb53a7):
+account/session guard пользовательских обращений поддержки. Для него прошли
+1148 unit, 33 account-switch E2E на Chromium, Firefox и WebKit без retries,
+три typecheck, production build, API/auth/schema/privacy checks. Legacy
+нормализатор отдельно проверен на этом branch HEAD: 124/124 целевых unit-теста.
+Подробности — в [журнале](stabilization-progress.md).
 
-При последней сверке [run 38604103098](https://github.com/Michael-edel/FitFocus/actions/runs/38604103098)
-ещё выполнялся на предыдущем SHA `4f172a6`; его успешные шаги не подтверждают
-изменение `20a6d79`. Точный GitHub CI нового branch HEAD проверяется после push.
-Полные P0, staging, merge в `main` и выпуск остаются открытыми.
+Полный PR workflow
+[run 38608666208](https://github.com/Michael-edel/FitFocus/actions/runs/38608666208)
+проверяет точный HEAD `659aebd` и ещё выполняется. Пока он не завершён,
+полный CI этой ревизии не подтверждён. Полные P0, staging, merge в `main` и
+выпуск остаются открытыми.
 
 ## P0.5 — AI Совет
 

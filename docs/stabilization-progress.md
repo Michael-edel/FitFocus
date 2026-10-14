@@ -3172,3 +3172,20 @@ schema parity (23 migrations/32 tables), privacy coverage (29 tables),
 ещё выполнялся на родительском SHA `4f172a6` и не включает этот код. Точный CI
 проверяется после push. Остальные P0.5 callbacks, полный lifecycle, staging,
 merge и выпуск не закрыты.
+
+## P0.8 — документирование финального контракта legacy-нормализатора, 14.10.2026
+
+В [`legacy-migration.md`](legacy-migration.md) зафиксированы итоговые требования:
+непустой `key`, строковый `value` только для `put`, запрет самого поля `value`
+для `delete`, значения `0` для отсутствующих `baseVersion`/`retryCount`, проверки
+присутствующих счётчиков и полный список семи причин карантина. Fingerprint
+описан для нормализованного tuple без индекса и `retryCount`.
+
+На branch HEAD [`659aebd`](https://github.com/Michael-edel/FitFocus/commit/659aebd9ac9e1b856caa3d660a53503311af0c69)
+файлы `storage/legacyQueue.ts`, `tests/legacy_queue.test.ts` и
+`tests/legacy_migration.test.ts` не менялись после `ce546c1`. Повторная команда
+`npx vitest run tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
+прошла 124/124. Полный PR workflow
+[38608666208](https://github.com/Michael-edel/FitFocus/actions/runs/38608666208)
+проверяет тот же HEAD и пока выполняется. Это подтверждает локальные тесты
+нормализатора/импорта, но не полный CI, P0.8 lifecycle, staging или выпуск.
