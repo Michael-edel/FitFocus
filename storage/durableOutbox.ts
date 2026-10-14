@@ -1,4 +1,4 @@
-import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
+import { StateDatabase, STATE_STORES, StateStorageError, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
   legacyDeletedAccountMetaId } from './legacyQueue';
 import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
@@ -581,83 +581,126 @@ export class DurableOutbox {
       ? claim.attempt.deletedAccountMarkerId ?? await legacyDeletedAccountMetaId(claim.accountId)
       : undefined;
     const database = await this.connection.open();
-    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', async (tx) => {
+    return stateTransaction(database, [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.outbox);
       const metaStore = tx.objectStore(STATE_STORES.meta);
-      const currentRequest = indexedRequest(store.get(claim.opId)) as Promise<OutboxOperation | undefined>;
-      const sessionRequest = indexedRequest(metaStore.get('active-session')) as Promise<ActiveSession | undefined>;
-      const fenceRequest = outcome.kind === 'retry' && outcome.pause
-        ? indexedRequest(metaStore.get('auth-fence')) as Promise<{ revision: number } | undefined>
-        : Promise.resolve(undefined);
-      const migrationGateRequest = claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical
-        ? indexedRequest(metaStore.get(LEGACY_MIGRATION_META_ID)) as Promise<LegacyGate | undefined>
-        : Promise.resolve(undefined);
-      const migrationReceiptRequest = claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical
-        ? indexedRequest(tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(claim.migrationFingerprint ?? ''))) as Promise<LegacyReceipt | undefined>
-        : Promise.resolve(undefined);
-      const deletionMarkerRequest = deletionMarkerId
-        ? indexedRequest(metaStore.get(deletionMarkerId)) as Promise<{ kind?: unknown; version?: unknown } | undefined>
-        : Promise.resolve(undefined);
-      const keyStateRequest = outcome.kind === 'acknowledged'
-        ? indexedRequest(metaStore.get(keyStateId(claim.accountId, claim.key))) as Promise<KeyState | undefined>
-        : Promise.resolve(undefined);
-      const siblingsRequest = outcome.kind === 'acknowledged'
-        ? indexedRequest(store.index('accountKey').getAll([claim.accountId, claim.key])) as Promise<OutboxOperation[]>
-        : Promise.resolve([] as OutboxOperation[]);
-      const [current, session, fence, gate, receipt, deletionMarker, ackMeta, ackSiblings] = await Promise.all([
-        currentRequest, sessionRequest, fenceRequest, migrationGateRequest, migrationReceiptRequest,
-        deletionMarkerRequest, keyStateRequest, siblingsRequest,
-      ]);
-      if (!current || current.status !== 'sending' || current.accountId !== claim.accountId || current.revision !== claim.revision
-        || current.key !== claim.key || current.baseVersion !== claim.baseVersion || current.writerId !== claim.writerId
-        || current.type !== claim.type || (current.type === 'put' && (claim.type !== 'put' || current.value !== claim.value))
-        || current.resource !== claim.resource
-        || current.migrationSourceKey !== claim.migrationSourceKey || current.migrationFingerprint !== claim.migrationFingerprint
-        || current.migrationCanonical !== claim.migrationCanonical
-        || current.attempt?.attemptId !== claim.attempt.attemptId
-        || current.attempt.owner !== claim.attempt.owner || current.attempt.startedAtMs !== claim.attempt.startedAtMs
-        || current.attempt.sessionEpoch !== claim.attempt.sessionEpoch
-        || current.attempt.deletedAccountMarkerId !== claim.attempt.deletedAccountMarkerId
-        || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch || session.pause) return false;
-      if (current.migrationSourceKey || current.migrationFingerprint || current.migrationCanonical) {
-        if (deletionMarker?.kind === 'legacy-deleted-account' && deletionMarker.version === 1) return false;
-        if (!canSendLegacy(current, gate, receipt)) return false;
+      const requests: IDBRequest<unknown>[] = [];
+      const requestIndices: Record<string, number> = Object.create(null) as Record<string, number>;
+      const queueRead = <T>(name: string, request: IDBRequest<T>): void => {
+        requestIndices[name] = requests.length;
+        requests.push(request as unknown as IDBRequest<unknown>);
+      };
+      queueRead('current', store.get(claim.opId));
+      queueRead('session', metaStore.get('active-session'));
+      if (outcome.kind === 'retry' && outcome.pause) queueRead('fence', metaStore.get('auth-fence'));
+      const isLegacyClaim = !!(claim.migrationSourceKey || claim.migrationFingerprint || claim.migrationCanonical);
+      if (isLegacyClaim) {
+        queueRead('gate', metaStore.get(LEGACY_MIGRATION_META_ID));
+        queueRead('receipt', tx.objectStore(STATE_STORES.migrationItems).get(legacyMigrationItemId(claim.migrationFingerprint ?? '')));
       }
-      const updated: OutboxOperation = { ...current, updatedAtMs: nowMs };
-      delete updated.attempt;
+      if (deletionMarkerId) queueRead('deletionMarker', metaStore.get(deletionMarkerId));
       if (outcome.kind === 'acknowledged') {
-        const meta = ackMeta;
-        if (!meta) throw new Error('OUTBOX_MISSING_KEY_STATE');
-        for (const child of ackSiblings) {
-          if (child.parentOpId === current.opId && child.resource === current.resource && child.writerId === current.writerId && child.status === 'pending') {
-            store.put({ ...child, baseVersion: outcome.version, updatedAtMs: nowMs });
-          }
-        }
-        meta.confirmedVersion = outcome.version;
-        meta.acknowledgedOpId = current.opId;
-        meta.acknowledgedWriterId = current.writerId;
-        meta.acknowledgedRevision = current.revision;
-        if (meta.headOpId === current.opId && meta.valueRevision === current.revision) delete meta.headOpId;
-        metaStore.put(meta);
-        if (receipt) tx.objectStore(STATE_STORES.migrationItems).put({ ...receipt, acknowledgedVersion: outcome.version, acknowledgedAtMs: nowMs });
-        store.delete(current.opId);
-      } else {
-        updated.reason = outcome.reason;
-        updated.status = outcome.kind === 'retry' ? 'pending' : outcome.kind;
-        if (outcome.kind === 'retry') {
-          if (!outcome.pause) updated.retryCount += 1;
-          updated.nextAttemptAtMs = outcome.nextAttemptAtMs;
-          if (outcome.pause) {
-            const revision = (fence?.revision ?? 0) + 1;
-            if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
-            metaStore.put({ id: 'auth-fence', revision });
-            metaStore.put({ ...session, pause: outcome.pause });
-          }
-        }
-        if (outcome.kind === 'conflicted' && outcome.serverSnapshot) updated.serverSnapshot = outcome.serverSnapshot;
-        store.put(updated);
+        queueRead('ackMeta', metaStore.get(keyStateId(claim.accountId, claim.key)));
+        queueRead('ackSiblings', store.index('accountKey').getAll([claim.accountId, claim.key]));
       }
-      return true;
+
+      // Perform dependent writes inside the last request's success event. Some
+      // Firefox builds can deactivate a transaction before an async Promise.all
+      // continuation resumes, even when all reads were queued up front.
+      return new Promise<boolean>((resolve, reject) => {
+        const results: unknown[] = new Array(requests.length);
+        let remaining = requests.length;
+        let settled = false;
+        requests.forEach((request, index) => {
+          request.addEventListener('success', () => {
+            if (settled) return;
+            results[index] = request.result;
+            remaining -= 1;
+            if (remaining !== 0) return;
+            settled = true;
+            const read = <T>(name: string, fallback: T): T => {
+              const resultIndex = requestIndices[name];
+              return resultIndex === undefined ? fallback : results[resultIndex] as T;
+            };
+            try {
+              const current = read<OutboxOperation | undefined>('current', undefined);
+              const session = read<ActiveSession | undefined>('session', undefined);
+              const fence = read<{ revision: number } | undefined>('fence', undefined);
+              const gate = read<LegacyGate | undefined>('gate', undefined);
+              const receipt = read<LegacyReceipt | undefined>('receipt', undefined);
+              const deletionMarker = read<{ kind?: unknown; version?: unknown } | undefined>('deletionMarker', undefined);
+              const ackMeta = read<KeyState | undefined>('ackMeta', undefined);
+              const ackSiblings = read<OutboxOperation[]>('ackSiblings', []);
+              if (!current || current.status !== 'sending' || current.accountId !== claim.accountId || current.revision !== claim.revision
+                || current.key !== claim.key || current.baseVersion !== claim.baseVersion || current.writerId !== claim.writerId
+                || current.type !== claim.type || (current.type === 'put' && (claim.type !== 'put' || current.value !== claim.value))
+                || current.resource !== claim.resource
+                || current.migrationSourceKey !== claim.migrationSourceKey || current.migrationFingerprint !== claim.migrationFingerprint
+                || current.migrationCanonical !== claim.migrationCanonical
+                || current.attempt?.attemptId !== claim.attempt.attemptId
+                || current.attempt.owner !== claim.attempt.owner || current.attempt.startedAtMs !== claim.attempt.startedAtMs
+                || current.attempt.sessionEpoch !== claim.attempt.sessionEpoch
+                || current.attempt.deletedAccountMarkerId !== claim.attempt.deletedAccountMarkerId
+                || session?.accountId !== claim.accountId || session.sessionEpoch !== claim.attempt.sessionEpoch || session.pause) {
+                resolve(false);
+                return;
+              }
+              if (current.migrationSourceKey || current.migrationFingerprint || current.migrationCanonical) {
+                if (deletionMarker?.kind === 'legacy-deleted-account' && deletionMarker.version === 1) {
+                  resolve(false);
+                  return;
+                }
+                if (!canSendLegacy(current, gate, receipt)) {
+                  resolve(false);
+                  return;
+                }
+              }
+              const updated: OutboxOperation = { ...current, updatedAtMs: nowMs };
+              delete updated.attempt;
+              if (outcome.kind === 'acknowledged') {
+                const meta = ackMeta;
+                if (!meta) throw new Error('OUTBOX_MISSING_KEY_STATE');
+                for (const child of ackSiblings) {
+                  if (child.parentOpId === current.opId && child.resource === current.resource && child.writerId === current.writerId && child.status === 'pending') {
+                    store.put({ ...child, baseVersion: outcome.version, updatedAtMs: nowMs });
+                  }
+                }
+                meta.confirmedVersion = outcome.version;
+                meta.acknowledgedOpId = current.opId;
+                meta.acknowledgedWriterId = current.writerId;
+                meta.acknowledgedRevision = current.revision;
+                if (meta.headOpId === current.opId && meta.valueRevision === current.revision) delete meta.headOpId;
+                metaStore.put(meta);
+                if (receipt) tx.objectStore(STATE_STORES.migrationItems).put({ ...receipt, acknowledgedVersion: outcome.version, acknowledgedAtMs: nowMs });
+                store.delete(current.opId);
+              } else {
+                updated.reason = outcome.reason;
+                updated.status = outcome.kind === 'retry' ? 'pending' : outcome.kind;
+                if (outcome.kind === 'retry') {
+                  if (!outcome.pause) updated.retryCount += 1;
+                  updated.nextAttemptAtMs = outcome.nextAttemptAtMs;
+                  if (outcome.pause) {
+                    const revision = (fence?.revision ?? 0) + 1;
+                    if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
+                    metaStore.put({ id: 'auth-fence', revision });
+                    metaStore.put({ ...session, pause: outcome.pause });
+                  }
+                }
+                if (outcome.kind === 'conflicted' && outcome.serverSnapshot) updated.serverSnapshot = outcome.serverSnapshot;
+                store.put(updated);
+              }
+              resolve(true);
+            } catch (error) {
+              reject(error);
+            }
+          }, { once: true });
+          request.addEventListener('error', () => {
+            if (settled) return;
+            settled = true;
+            reject(request.error ?? new StateStorageError('transaction'));
+          }, { once: true });
+        });
+      });
     });
   }
 }
