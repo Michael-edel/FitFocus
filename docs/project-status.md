@@ -4,18 +4,18 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
 Последний проверенный опубликованный source HEAD ветки fix/durable-outbox —
-[`08618e3`](https://github.com/Michael-edel/FitFocus/commit/08618e305414b8ab2962198a39dea0e8a258350b).
-Точный PR CI [`38628487894`](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)
-завершился success на merge-ref `d10ec68`: 1153 unit-теста / 199 файлов,
-577 browser passed / 95 skipped, audit без уязвимостей, schema/privacy/auth/API
-guards, три typecheck, production build, 23 rollback/CAS-запроса и сохранённый
-rollback-артефакт. Предыдущий flaky migration timeout на `7458ea0` исправлен
-тестовой синхронизацией; подробности и прежние неуспешные прогоны сохранены в
-[журнале стабилизации](stabilization-progress.md).
+[`a8f3219`](https://github.com/Michael-edel/FitFocus/commit/a8f321905c2577a8b04fd5c2be5a6f9b0b2556d4).
+Точный PR CI [`38634080772`](https://github.com/Michael-edel/FitFocus/actions/runs/38634080772)
+завершился success на merge-ref `9033633`: 1153 unit-теста / 199 файлов,
+583 browser passed / 95 skipped и один flaky retry. Новая двухвкладочная проверка
+прошла. Flaky относится к iPhone Safari в `pwa-rollback.spec.ts`: после одного
+падения сравнения имени профиля тест прошёл retry; причина не установлена.
+Dependency audit дал 0 уязвимостей; schema/privacy/auth/API guards, три typecheck,
+production build, 23 rollback/CAS-запроса и сохранение rollback-артефакта прошли.
+Предыдущая проверка `08618e3` успешно покрыла migration smoke и bearer token;
+её результаты приведены в [журнале стабилизации](stabilization-progress.md).
 
-Follow-up добавляет двухвкладочный сценарий конкурентных записей в разные ключи
-без Web Locks. Его exact CI ожидает push и не входит в run `38628487894`. PR #93
-остаётся draft к `fix/state-generations`; интеграция в `main`, staging и выпуск
+PR #93 остаётся draft к `fix/state-generations`; интеграция в `main`, staging и выпуск
 не выполнены.
 
 Вопрос и очистка истории сохраняются при паузе отправителя только при
