@@ -18,6 +18,14 @@ build, 23 rollback/CAS-запроса и rollback-артефакт. Предше
 run `38638704278` отменился при новом push из-за branch concurrency. Это закрывает
 один acceptance P0.6, но не logout/login, reload и весь lifecycle.
 
+В `ai-callback-account-switch.spec.ts` добавлен отдельный reload acceptance:
+операция плана A принудительно остаётся pending на 503; после reload сервер
+возвращает тот же account с новым session id. Тест проверяет сохранение `opId`,
+попытку отправки под новой session и подтверждение операции.
+Chromium, Firefox и WebKit прошли 3/3 без retries (`workers=1,retries=0`);
+точный CI нового изменения ожидает push. Это не закрывает logout/login и полный
+lifecycle.
+
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 
 В PR CI `38621962929` один desktop Chromium прогон

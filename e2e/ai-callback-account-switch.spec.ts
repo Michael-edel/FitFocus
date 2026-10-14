@@ -969,3 +969,56 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
   await expect(returningPage.locator('vite-error-overlay')).toHaveCount(0);
   await returningPage.screenshot({ path: info.outputPath('state-outbox-account-a-resumed.png') });
 });
+
+test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox reload acceptance runs in desktop browser profiles.');
+  const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
+  const stateWrites: StateWriteAttempt[] = [];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateWriteLog: stateWrites,
+    holdStateWriteFailures: { key: planKeyA, active: true },
+  };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && !/503/.test(message.text())) errors.push(message.text());
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#plan');
+  const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
+  await expect(task).toBeVisible();
+  await task.click();
+
+  await expect.poll(() => stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(1);
+  await expect.poll(async () => (await readDurableSnapshot(page)).operations
+    .find(operation => operation.key === planKeyA)?.status).toBe('pending');
+  const beforeReload = await readDurableSnapshot(page);
+  const pendingA = beforeReload.operations.find(operation => operation.key === planKeyA)!;
+  expect(pendingA).toMatchObject({
+    accountId: accountA.id, status: 'pending', retryCount: 1, reason: 'http-503',
+  });
+  expect(stateWrites.find(write => write.keys.includes(planKeyA)))
+    .toMatchObject({ account: accountA.id, session: accountA.sid, keys: [planKeyA] });
+
+  const freshAccountA = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = freshAccountA;
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Записать первый завтрак', exact: true })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(freshAccountA.sid);
+  await expect.poll(() => stateWrites.some(write => write.keys.includes(planKeyA) && write.session === freshAccountA.sid)).toBe(true);
+
+  const resumed = (await readDurableSnapshot(page)).operations.find(operation => operation.key === planKeyA);
+  expect(resumed).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
+  state.holdStateWriteFailures!.active = false;
+  await expect.poll(async () => (await readDurableSnapshot(page)).operations
+    .filter(operation => operation.key === planKeyA)).toEqual([]);
+
+  const resumedWrites = stateWrites.filter(write => write.keys.includes(planKeyA));
+  expect(resumedWrites.some(write => write.account === accountA.id && write.session === freshAccountA.sid)).toBe(true);
+  await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('state-outbox-account-a-reloaded.png') });
+});
