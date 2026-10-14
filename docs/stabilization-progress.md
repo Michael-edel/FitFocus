@@ -1,5 +1,38 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — session guard Huawei Health, `455cb01`, 15.10.2026
+
+В `SettingsScreen` и `huaweiHealthApi` действия Huawei теперь принадлежат
+исходным account/session proof и попытке страницы. Клиент требует capability
+`huaweiSync` и scope/guard headers, ограничивает ответы по времени и размеру,
+отменяет работу при смене входа или уходе со страницы и пишет профиль только
+через guarded outbox commit. Серверный OAuth start принимает scoped POST; signed
+state содержит публичный digest session id. Callback проверяет исходную сессию
+до обмена кода и повторно перед записью credentials/profile. Sync повторно
+проверяет вход после внешнего вызова Huawei и до CAS-записи профиля.
+[Контракт](huawei-health-session.md).
+
+На кодовом SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
+прошли `npm run test:unit` (1167/1167 в 200 файлах), общий и два strict
+typecheck, production build, API/auth/schema/privacy/admin guards. Четыре
+профильных transport/server/API файла дали 26/26 тестов. Выбранные пятисценарные
+account-switch проверки завершились 15/15 в desktop Chromium, Firefox и WebKit
+без retries (`workers=1,retries=0`), включая задержанный Huawei sync A после
+входа B. Полный account-switch spec при первом запуске поймал отдельные
+тайминговые нестабильности соседних сценариев; исправлены ожидания тестов,
+целевая выборка после этого прошла без retries. Не утверждается, что полный
+spec повторно проходил локально; после правок полный PR E2E job на `455cb01`
+завершился success.
+
+Полный PR CI точного source SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
+завершился success: E2E, unit, audit, schema/privacy/auth/API guards, три
+typecheck, production build, canonical readers/CAS after rollback и сохранение
+browser/rollback artifacts прошли. Cloudflare Pages preview успешно опубликован;
+GitGuardian не обнаружил секретов. Локальная account-switch выборка дополняет,
+но не заменяет полный E2E job. Настоящий Huawei OAuth, реальные устройства/BFCache,
+staging и production не проверены; общий P0.5, staging и выпуск остаются
+открытыми.
+
 ## P0.6 — возобновление outbox после смены аккаунта, reload и logout/login, 15.10.2026
 
 В `e2e/ai-callback-account-switch.spec.ts` добавлен desktop acceptance:
@@ -26,8 +59,8 @@ run `38638704278` отменился при новом push из-за branch con
 операция остаётся в IndexedDB, а повторный вход аккаунта A с новой server
 session возобновляет ту же операцию и подтверждает её.
 Совместный прогон account-switch, reload и logout/login прошёл 9/9 в desktop
-Chromium, Firefox и WebKit без retries (`workers=1,retries=0`). CI нового
-изменения ожидает push. Эти проверки подтверждают три сценария, но не закрывают
+Chromium, Firefox и WebKit без retries (`workers=1,retries=0`). Все три сценария
+вошли в полный CI `455cb01`, завершившийся success. Эти проверки подтверждают три сценария, но не закрывают
 same-key/old-new гонки и полный lifecycle P0.6.
 
 Дополнен [same-key browser acceptance](../e2e/storage-durability.spec.ts): первая
@@ -35,8 +68,8 @@ same-key/old-new гонки и полный lifecycle P0.6.
 вкладка записывает независимый полный снимок. Проверено, что первая операция
 остаётся `sending`, вторая хранится как `local-revision-conflict`, успешный ack
 не удаляет конфликт, а сервер принимает только первый PUT. Прогон прошёл 3/3
-в desktop Chromium, Firefox и WebKit без retries. Проверен рабочий diff поверх
-`ce6ade0`; точный CI нового коммита будет запущен после push.
+в desktop Chromium, Firefox и WebKit без retries. Проверенный diff поверх
+`ce6ade0` вошёл в полный CI `455cb01`, завершившийся success.
 
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 
@@ -74,8 +107,8 @@ build, 23 rollback/CAS-запроса и сохранение rollback-арте�
 изменённая остаётся конфликтом, foreign-owner остаётся в карантине. Точечный
 локальный прогон завершился 3/3 без retries в desktop Chromium, Firefox и WebKit
 (`workers=1`). Это browser acceptance source audit на одном origin; он не
-проверяет второй пользовательский клик старого клиента. Точный CI этого
-изменения будет записан после push и завершения workflow.
+проверяет второй пользовательский клик старого клиента. Сценарий вошёл в полный
+CI `455cb01`, завершившийся success.
 
 ## P0.6 — параллельная запись разных ключей из двух вкладок, 15.10.2026
 

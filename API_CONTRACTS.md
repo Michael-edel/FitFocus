@@ -317,3 +317,22 @@ cookie-сессией до прикладной работы с тикетами
 guard и проверяет его перед копированием. Старые unscoped-вызовы остаются
 совместимыми, но не имеют account/session binding. Проверки и ограничения:
 [wearable sync](docs/wearable-sync.md).
+
+## Huawei Health: session guard
+
+Текущий Settings-клиент получает Huawei capability из `/api/me`, затем передаёт
+парные `X-FitFocus-State-Account` / `X-FitFocus-State-Session` в status, OAuth
+start, sync и disconnect. `requireStateUser` сверяет scope с cookie-сессией до
+прикладных эффектов; scoped-ответы содержат
+`X-FitFocus-Huawei-Protocol: 1`, `X-FitFocus-Huawei-Guard: 1` и точное эхо scope.
+POST start возвращает authorization URL только для совпавшей сессии. Старый GET
+redirect остаётся совместимым.
+
+Signed OAuth state дополнительно содержит публичный digest исходного session id.
+Callback сверяет user/session до обмена authorization code и повторно проверяет
+вход перед записью credentials и profile. Huawei sync повторяет серверную
+проверку после внешнего запроса к provider перед CAS-профильной записью.
+Клиент отбрасывает поздний ответ после смены IndexedDB session и пишет профиль
+через guarded outbox commit. Legacy-вызовы без scope сохраняют прежний путь, но
+не защищены session binding. Подробности и границы проверок:
+[Huawei session contract](docs/huawei-health-session.md).

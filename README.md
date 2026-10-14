@@ -6,7 +6,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 интеграции с поддерживаемыми сервисами. Полный перечень функций и их статус —
 в [PRODUCT.md](PRODUCT.md).
 
-Обновлено: 14.10.2026. Текущий этап — стабилизация хранения пользовательских
+Обновлено: 15.10.2026. Текущий этап — стабилизация хранения пользовательских
 данных, синхронизации между вкладками и восстановления после ошибок. Проверенный
 статус, точные ревизии и ограничения собраны в [docs/project-status.md](docs/project-status.md).
 
@@ -26,6 +26,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 | [docs/ai-callback-sessions.md](docs/ai-callback-sessions.md) | Контракт защиты запросов и повторов coach, личного плана, недельного меню и плато |
 | [docs/achievement-session.md](docs/achievement-session.md) | Сессия, очередь, scope HTTP и поздние ответы достижений |
 | [docs/support-session.md](docs/support-session.md) | Session guard списка, деталей, создания обращений и ответов пользователя |
+| [docs/huawei-health-session.md](docs/huawei-health-session.md) | Account/session guard Huawei OAuth, sync и профильных изменений |
 | [docs/weekly-ai-report-session.md](docs/weekly-ai-report-session.md) | Защита недельного AI-отчёта свежей сессией и durable commit |
 | [docs/stabilization-progress.md](docs/stabilization-progress.md) | Журнал изменений, SHA, тесты и CI |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Локальный запуск, проверки и правила внесения изменений |
@@ -72,17 +73,15 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последний локально проверенный кодовый follow-up
-[`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c) удерживает
-durable backup restore callbacks внутри активной IndexedDB-транзакции. На нём
-прошли 1133 unit-теста / 198 файлов, общий и оба strict typecheck, production
-build и 4/4 целевых browser E2E на desktop Firefox и Android Chrome. Предыдущий
-полный CI документирующего HEAD [`152d7d7`](https://github.com/Michael-edel/FitFocus/commit/152d7d729d84d9d86d1c3968911d075df23045d7)
-завершился success в [run 38577353585](https://github.com/Michael-edel/FitFocus/actions/runs/38577353585);
-он не включает `38d169c`, поэтому CI нового HEAD ожидается после push.
-Ранее выявленный Firefox timeout в совместном E2E-прогоне сохранён в журнале.
-P0.8 lifecycle, staging и выпуск в main остаются открытыми. См. [статус](docs/project-status.md)
-и [журнал](docs/stabilization-progress.md).
+Кодовый SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
+привязывает Huawei OAuth, sync и guarded profile commit к account/session.
+Локально прошли 1167 unit-тестов, три typecheck, production build, API/auth/schema/privacy
+checks и 15/15 выбранных account-switch E2E в desktop Chromium, Firefox и WebKit
+без retries. Точный PR CI [`38656586334`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
+завершился success: E2E, unit, guards, typecheck, build и rollback/CAS прошли.
+Cloudflare preview для SHA также опубликован. Настоящий Huawei OAuth, staging
+и выпуск в main остаются открытыми. См. [сессионный контракт Huawei](docs/huawei-health-session.md),
+[статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
 
 Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
 добавила проверку задержанного ответа личной генерации недельного меню при

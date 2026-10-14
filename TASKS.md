@@ -1,19 +1,19 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 14.10.2026. Точный PR CI run
-[38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
-проверил HEAD [`23c8be6`](https://github.com/Michael-edel/FitFocus/commit/23c8be615a1afcc16c811e8943c4ae6dfbed7675)
-и завершился success: unit, audit, guards, три typecheck, build, browser E2E и
-rollback/CAS прошли. E2E заняли 30 мин 43 сек, полный job — около 33 мин; это
-был долгий, но завершившийся workflow, а не незапустившаяся проверка.
+Обновлено: 15.10.2026. Последний полный PR CI проверил source HEAD
+[`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
+и завершился success в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
+unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
+Предыдущий run [38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
+на `23c8be6` также завершился штатно примерно за 33 минуты.
 Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
 переводит legacy migration readwrite callbacks на активные IDB request events.
 В [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
 добавлена проверка позднего family-menu preview, а follow-up
 [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa)
 проверяет отложенное чтение durable menu-state после смены аккаунта. Вся suite
-прошла 39/39 на Chromium, Firefox и WebKit без retries; точный CI follow-up
-ожидает push.
+прошла 39/39 на Chromium, Firefox и WebKit без retries; follow-up включён в
+полный CI `455cb01` и завершился success.
 Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
 приёмки lifecycle/release. Подробности — в
 [журнале](docs/stabilization-progress.md) и
@@ -496,6 +496,16 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Все проверки включены в точный PR CI HEAD `08618e3`, run
   [38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894),
   завершившийся success. [Контракт](docs/wearable-sync.md).
+- [x] Связать Huawei Health status, OAuth start/callback, sync и disconnect
+  с исходными account/session proof; профиль фиксировать только через guarded
+  outbox commit. `455cb01`: 26 профильных unit/API-тестов и 15/15 выбранных
+  account-switch E2E на desktop Chromium/Firefox/WebKit без retries; typecheck,
+  guards, schema/privacy и build прошли. [Контракт](docs/huawei-health-session.md).
+- [x] Подтвердить полный PR CI на точном SHA `455cb01`: run
+  [38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
+  завершился success; E2E, unit, guards, typecheck, build и rollback/CAS прошли.
+- [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
+  компонент не закрывает остальные writers и общий lifecycle P0.5.
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
   account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.
@@ -580,7 +590,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   выполненных проверок (2 штатных skip), `workers=1,retries=0`. Один Coach
   Firefox timeout в первом полном запуске не повторился: этот сценарий прошёл
   5/5, затем полный spec — 25 passed / 2 skipped. Связанные unit — 11/11,
-  typecheck прошёл. Точный CI нового теста ожидается после push.
+  typecheck прошёл. Тест входит в полный CI `455cb01`, завершившийся success.
 - [x] Привязать список, детали, создание тикета и ответ пользователя к исходной
   login-сессии. Сервер требует совпадающие account/session до прикладных
   чтений/записей тикетов и вложений;
@@ -649,7 +659,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   opId переживает reload, а при logout sender ставится на паузу и возобновляет
   запись только после входа под свежей server session. Совместный локальный
   прогон всех трёх account-сценариев прошёл 9/9 в desktop Chromium, Firefox и
-  WebKit без retries (`workers=1,retries=0`). CI этого изменения ожидает push.
+  WebKit без retries (`workers=1,retries=0`); полный CI `455cb01` завершился
+  success.
   Это не закрывает общий P0.6: остаются old/new writers и остальные callbacks.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи

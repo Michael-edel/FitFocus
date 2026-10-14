@@ -3,7 +3,30 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-Последний полный проверенный source HEAD ветки fix/durable-outbox —
+## Текущий кандидат — Huawei Health session guard
+
+Кодовый SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
+в `fix/durable-outbox` привязал Huawei status, OAuth start/callback, sync и
+disconnect к account/session, а возвращённый профиль — к guarded outbox commit.
+Локально прошли 1167 unit-тестов, три typecheck, production build и проверки
+API/auth/schema/privacy. Выбранные account-switch сценарии, включая поздний
+Huawei sync после входа B, прошли 15/15 в desktop Chromium, Firefox и WebKit
+без retries (`workers=1`). Первый полный локальный запуск account-switch spec
+поймал отдельные timing flakes в соседних сценариях;
+после уточнения ожиданий выбранная выборка прошла повторно. Полный PR E2E job
+на `455cb01` завершился success.
+
+Полный PR CI на точном SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
+завершился success: E2E, unit, audit, schema/privacy/auth/API guards, три
+typecheck, build, canonical readers/CAS after rollback и сохранение артефактов
+прошли. GitGuardian не обнаружил секретов. Cloudflare Pages preview опубликован
+по адресу [fix-durable-outbox.fitfocus.pages.dev](https://fix-durable-outbox.fitfocus.pages.dev);
+это не production-релиз. Последний полный проверенный source HEAD теперь
+`455cb01`. Huawei OAuth с настоящим
+провайдером, устройство, staging и production не проверялись; общий P0.5,
+staging и выпуск остаются открытыми. [Контракт](huawei-health-session.md).
+
+Предыдущая полная проверка ветки до Huawei session guard была на source HEAD
 [`943d4c0`](https://github.com/Michael-edel/FitFocus/commit/943d4c0f658d05150b78a5a41925ea7f8ae03aa8).
 Точный PR CI [`38641088114`](https://github.com/Michael-edel/FitFocus/actions/runs/38641088114)
 завершился success на merge-ref `75362ae`: 1153 unit-теста / 199 файлов,
@@ -18,14 +41,14 @@ A с новой server session прошёл локально 3/3 в desktop Chro
 возобновлением под новой server session и logout/login acceptance также прошли
 совместно 9/9 в desktop Chromium, Firefox и WebKit без retries. При logout
 отправка приостанавливается; после нового входа под свежей server session
-возобновляется та же операция с прежним `opId`. CI этих локальных проверок
-ожидает push.
+возобновляется та же операция с прежним `opId`. Эти E2E вошли в полный CI
+`455cb01`, завершившийся success.
 Дополнительный same-key acceptance на рабочем дереве поверх `ce6ade0` проверил
 две вкладки без Web Locks: пока первый PUT задержан, вторая независимая правка
 того же полного JSON-снимка сохраняется как конфликт; после ack первой записи
 конфликт остаётся доступным, а сервер получил только первую запись. Локально
-прошёл 3/3 в desktop Chromium, Firefox и WebKit без retries; точный CI этого
-изменения будет запущен после push.
+прошёл 3/3 в desktop Chromium, Firefox и WebKit без retries; сценарий вошёл в
+полный CI `455cb01`, завершившийся success.
 Old/new migration acceptance на рабочем дереве поверх `9f8f548` проверяет,
 что открытый старый bundle меняет legacy-снимок после его первого импорта:
 новый bundle повторно читает источник, сохраняет новую same-key запись как
@@ -34,7 +57,8 @@ Old/new migration acceptance на рабочем дереве поверх `9f8f
 доступным конфликтом, а чужая запись остаётся в карантине. Локально 3/3 без
 retries в desktop Chromium, Firefox и WebKit (`workers=1`); второй старый write
 смоделирован парой localStorage-записей `safeSetItem`, а первый создан через UI.
-Точный CI ожидает push.
+Этот old/new migration сценарий вошёл в полный CI `455cb01`, завершившийся
+success.
 Предыдущая проверка `08618e3` успешно покрыла migration smoke и bearer token;
 её результаты приведены в [журнале стабилизации](stabilization-progress.md).
 

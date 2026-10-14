@@ -77,11 +77,15 @@ If the profile version changed on the server, the endpoint returns `409` with `P
 ## Huawei Health OAuth sync
 
 Huawei Health uses server-side OAuth and does not expose tokens to the PWA.
+The Settings flow is bound to its captured account/session proof. Current client,
+server guard, OAuth-state binding, and account-switch acceptance are documented
+in [Huawei session contract](huawei-health-session.md).
 
 Routes:
 
 - `GET /api/wearable/huawei/status` - returns whether Huawei Health is configured and connected.
-- `GET /api/wearable/huawei/start` - redirects the current logged-in user to Huawei OAuth.
+- `POST /api/wearable/huawei/start` - checks the account/session scope and returns an authorization URL for the current Settings attempt.
+- `GET /api/wearable/huawei/start` - preserves the legacy redirect flow; OAuth state is also bound to the initiating session.
 - `GET /api/wearable/huawei/callback` - exchanges Huawei OAuth `code` for tokens and stores encrypted tokens in D1.
 - `POST /api/wearable/huawei/sync` - refreshes the token if needed, reads today's Huawei Health snapshot, and writes supported metrics into the user profile.
 - `POST /api/wearable/huawei/disconnect` - removes the Huawei connection and disables Huawei as current wearable source.
