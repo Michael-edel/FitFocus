@@ -5,16 +5,20 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
-На момент сверки удалённая ветка `fix/durable-outbox` указывает на
-[`ce546c1`](https://github.com/Michael-edel/FitFocus/commit/ce546c1b30d17918ae03e43d3e13a095848f0b15),
+На момент этой сверки опубликованная ветка `fix/durable-outbox` указывала на
+[`4f172a6`](https://github.com/Michael-edel/FitFocus/commit/4f172a65d4a8009eacdb98ee3bada7394111af08).
 PR #93 направлен в `fix/state-generations`; в `main` изменения не влиты.
-Точный PR CI [run 38601101801](https://github.com/Michael-edel/FitFocus/actions/runs/38601101801)
-для этого SHA ещё выполняется: audit, schema parity, privacy, auth scope, API
-invariants, unit, три typecheck и build прошли; E2E выполняется, rollback/CAS
-ещё не начались. Кодовый коммит [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)
-локально прошёл 1135/1135 unit, три typecheck и account-switch acceptance
-28 passed / 2 skipped без retries. Последующие коммиты `ce546c1` содержат
-документацию этого контракта. Общие P0, staging и выпуск остаются открытыми.
+Поверх неё локально создан кодовый commit
+[`20a6d79`](https://github.com/Michael-edel/FitFocus/commit/20a6d799a6be02ff36e8be18b1210e1c10eb53a7)
+для account/session guard пользовательских обращений поддержки. Полная проверка
+локального изменения прошла: 1148 unit, 33 account-switch E2E на Chromium,
+Firefox и WebKit без retries, три typecheck, production build, API/auth/schema/
+privacy checks. Подробности — в [журнале](stabilization-progress.md).
+
+При последней сверке [run 38604103098](https://github.com/Michael-edel/FitFocus/actions/runs/38604103098)
+ещё выполнялся на предыдущем SHA `4f172a6`; его успешные шаги не подтверждают
+изменение `20a6d79`. Точный GitHub CI нового branch HEAD проверяется после push.
+Полные P0, staging, merge в `main` и выпуск остаются открытыми.
 
 ## P0.5 — AI Совет
 

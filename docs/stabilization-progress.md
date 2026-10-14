@@ -3145,3 +3145,30 @@ job — около 33 мин. Новый тест не входил в тот ru
 проверяет предыдущий SHA `1207f5c` и не содержит этот follow-up; точный CI
 `13e336d` ожидает push. Другие cloud callbacks, AI writers, staging и полный
 lifecycle остаются открытыми.
+
+## P0.5 — session guard пользовательской поддержки, `20a6d79`, 14.10.2026
+
+В `SupportScreen` список, детали, создание тикета и ответ пользователя теперь
+привязаны к login proof и IDB auth-fence. Серверные support handlers принимают
+парные state account/session headers и проверяют их перед прикладными
+операциями с тикетами/вложениями. Ответы помечаются Support protocol/guard и
+эхом публичного scope; клиент требует совпадение и не применяет поздний
+результат к другой сессии. Старые клиенты без scope сохраняют прежнюю
+совместимость, но не получают эту защиту. Профильный контракт:
+[support-session.md](support-session.md).
+
+На кодовом SHA [`20a6d79`](https://github.com/Michael-edel/FitFocus/commit/20a6d799a6be02ff36e8be18b1210e1c10eb53a7)
+полный unit suite прошёл 1148/1148 в 199 файлах; три support transport/server
+файла — 29/29. Полный `family-callback-account-switch.spec.ts` прошёл 33/33 на
+desktop Chromium, Firefox и WebKit при `workers=1,retries=0`; в том числе новый
+задержанный support-list сценарий прошёл на каждом движке. Общий,
+domain-strict и storage-strict typecheck, build, API invariants, auth scope,
+schema parity (23 migrations/32 tables), privacy coverage (29 tables),
+`git diff --check` и 424 локальные Markdown-ссылки прошли.
+
+Скриншоты трёх desktop-движков сохранены вне репозитория; Chromium-снимок
+визуально подтверждает видимый тикет B без тикета A. Browser plugin недоступен;
+для проверки использован Playwright. [Предыдущий PR run 38604103098](https://github.com/Michael-edel/FitFocus/actions/runs/38604103098)
+ещё выполнялся на родительском SHA `4f172a6` и не включает этот код. Точный CI
+проверяется после push. Остальные P0.5 callbacks, полный lifecycle, staging,
+merge и выпуск не закрыты.
