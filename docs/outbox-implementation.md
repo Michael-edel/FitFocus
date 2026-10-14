@@ -1,8 +1,23 @@
 # Реализация P0.8: постоянная очередь
 
-Обновлено: 12.10.2026. Это карта реализации согласованного
+Обновлено: 14.10.2026. Это карта реализации согласованного
 [ADR-005](adr/ADR-005-durable-outbox.md), а не новый архитектурный план.
 Общий порядок P0/P1 остаётся в [TASKS](../TASKS.md).
+
+## Firefox: завершение finish в активной транзакции
+
+Локальный follow-up [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)
+исправляет редкий Firefox TransactionInactiveError в DurableOutbox.finish.
+Все зависимые reads ставятся в очередь сразу после открытия транзакции. Проверка
+claim/session/migration guard и связанные ack/retry/conflict writes выполняются
+синхронно в success-событии последнего read request, пока транзакция активна.
+Это сохраняет атомарность finish и не меняет правила claim или позднего ответа.
+
+Проверки на этой ревизии: 37 целевых storage unit tests, общий и storage-strict
+typecheck, два исходных Firefox E2E по 10 повторов каждый и полный weekly-menu
+spec 24/24 на Chromium, Firefox и WebKit; также прошёл весь unit-набор 1132/1132.
+Полный CI для follow-up ожидается после push. Остальные критерии P0.8 остаются
+открытыми.
 
 ## Проверенная граница
 

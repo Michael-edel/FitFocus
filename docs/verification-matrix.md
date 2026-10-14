@@ -4,13 +4,14 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Текущий опубликованный HEAD [`a9e3096`](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c)
-прошёл полный CI в [run `38540109329`](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
-1132 unit-теста, 535 E2E passed / 79 skipped, проверки audit/schema/privacy/auth/API,
+Последний полный CI до Firefox-finish исправления прошёл на HEAD
+[a9e3096](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c)
+в [run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
+1132 unit-теста, 535 E2E passed / 79 skipped, audit, schema/privacy/auth/API,
 три typecheck, build и rollback/CAS. Два desktop Firefox теста были flaky на
-первой попытке и прошли retry. В локальном повторе один раз пойман
-`StateStorageError:STATE_STORAGE_TRANSACTION`; причина остаётся открытой,
-подробности — в [журнале](stabilization-progress.md).
+первой попытке и прошли retry. Первичная диагностика зафиксировала
+StateStorageError:STATE_STORAGE_TRANSACTION; последующая трассировка установила
+причину, а локальный follow-up описан ниже.
 
 Предыдущий полный CI проверил SHA [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
 и завершился success ([run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)):

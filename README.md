@@ -71,14 +71,26 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Последняя кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
+Кодовая ревизия [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)
+устранила подтверждённую Firefox-причину сбоев IndexedDB finish. Локально прошли
+1132 unit-теста, 20/20 повторов двух flaky-сценариев, полный weekly-menu spec
+24/24 на трёх desktop engines, оба typecheck. Полный CI для follow-up ещё ожидается;
+остальные критерии P0.8 остаются открытыми. См. [статус](docs/project-status.md)
+и [журнал](docs/stabilization-progress.md).
+
+Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
 добавила проверку задержанного ответа личной генерации недельного меню при
 смене аккаунта. Изменённый callback spec прошёл 15/15 на desktop Chromium,
 Firefox и WebKit; новый сценарий — 3/3, typecheck прошёл. Полный [CI run
 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)
 завершился success, включая E2E и rollback/CAS.
 
-Последний завершённый полный CI на [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11) — [run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051) — завершился success: unit прошли во всех 198 файлах, 501 browser passed / 29 skipped, два E2E прошли retry как flaky; rollback/CAS-проверка прошла.
+Последний завершённый полный CI до Firefox-finish исправления проверил HEAD
+[a9e3096](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c),
+[run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
+1132 unit, 535 browser passed / 79 skipped, audit, typechecks, build и rollback/CAS
+прошли. Два Firefox weekly-menu теста прошли автоматический retry; причина и
+локальный follow-up записаны в статусе проекта.
 
 Локальный follow-up для двух flaky-сценариев прошёл: целевые повторы — 10/10, полные затронутые specs — 10/10 на Android PWA Chrome и 8/8 на iPhone PWA, `npm run typecheck` — успешно. Полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712) для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98) отменён после отправки следующего документационного коммита; актуальное состояние проверок текущего HEAD смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks). Cloudflare preview успешен, но это не production-релиз. Подробности и оставшиеся критерии — в [статусе проекта](docs/project-status.md), [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).
 

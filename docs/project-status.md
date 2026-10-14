@@ -5,6 +5,23 @@
 [TASKS](../TASKS.md), результаты отдельных проверок — в
 [журнале стабилизации](stabilization-progress.md).
 
+## P0.8 — устойчивое завершение IndexedDB-транзакции
+
+Код [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd)
+исправляет Firefox-сбой в DurableOutbox.finish. Трассировка показала
+TransactionInactiveError: после ожидания Promise.all транзакция могла стать
+неактивной до зависимых записей подтверждения. Теперь все чтения ставятся в
+очередь заранее, а проверка guard и связанные записи выполняются синхронно в
+success-событии последнего чтения, сохраняя атомарность finish.
+
+Локально прошли все 1132 unit-теста в 198 файлах, 37 целевых тестов durable
+outbox и базы состояния, общий typecheck и storage-strict typecheck. Два
+проблемных Firefox-сценария прошли 20/20 повторов, полный weekly-menu spec —
+24/24 на Chromium, Firefox и WebKit. CI новой ревизии ожидается после push.
+Это закрывает найденную транзакционную причину flaky, но не весь P0.8:
+оставшиеся writers, миграция, восстановление конфликтов и полный lifecycle
+перечислены в [TASKS](../TASKS.md).
+
 ## P0.5 — session guard фотоанализа
 
 Код [`d93ff53`](https://github.com/Michael-edel/FitFocus/commit/d93ff53)
@@ -29,10 +46,14 @@ achievement или черновик рецепта. Успешный путь п
 `weekly-menu-durability.spec.ts` были flaky на первой попытке и прошли retry.
 Локальные повторы подтвердили intermittent ошибку: в одной диагностической
 серии sender остановился на `StateStorageError:STATE_STORAGE_TRANSACTION` до
-HTTP, хотя профиль и pending operation остались в IndexedDB. Последующий
-десятикратный повтор timeout-сценария прошёл 10/10; первопричина транзакционного
-сбоя не установлена и остаётся открытой задачей. Staging, OAuth и весь P0.5
-остаются открытыми.
+HTTP, хотя профиль и pending operation остались в IndexedDB. Позднее трассировка
+установила точную причину: TransactionInactiveError в DurableOutbox.finish,
+когда зависимые IDB-записи выполнялись после асинхронного продолжения уже
+неактивной транзакции. Исправление опубликовано в
+[cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd) и локально
+прошло целевые Firefox-повторы 20/20 и полный weekly-menu spec 24/24 на трёх
+движках. Подробности — в разделе P0.8 выше. Причинная связь с изменением
+фотоанализа не подтверждена. Staging, OAuth и весь P0.5 остаются открытыми.
 
 ## P0.5 — personal weekly-menu account switch
 

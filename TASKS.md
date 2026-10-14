@@ -551,11 +551,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Полный account-switch spec прошёл 22 сценария / 2 project skips без retries;
   полный CI HEAD `a9e3096` завершился success в [run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329)
   (1132 unit, 535 E2E passed / 79 skipped, два Firefox flaky прошли retry).
-- [ ] Разобрать Firefox-flaky в двух сценариях `weekly-menu-durability.spec.ts`:
-  локально один сбой проявился как `StateStorageError:STATE_STORAGE_TRANSACTION`,
-  sender остановился до HTTP при сохранённой pending operation. Последний
-  10-кратный повтор timeout-сценария прошёл 10/10, но причина пока не найдена;
-  см. [журнал](docs/stabilization-progress.md).
+- [x] Разобрать и исправить Firefox-flaky в двух сценариях weekly-menu durability.
+  Трассировка установила TransactionInactiveError в DurableOutbox.finish: запись
+  выполнялась после async-продолжения, когда IndexedDB-транзакция уже была
+  неактивна. Код исправлен в [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd);
+  unit 1132/1132, storage 37/37, два сценария повторены 20/20, полный
+  weekly-menu spec прошёл 24/24 на Chromium, Firefox и WebKit. Typecheck и
+  storage-strict typecheck прошли; полный CI новой ревизии ожидается после push.
+  Подробности: [журнал](docs/stabilization-progress.md).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 
@@ -623,6 +626,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
   migration_items, migration_unknown и outbox_meta.
 - [x] Реализовать и проверить транзакционные примитивы записи value/операции,
   claim/lease и guarded finish, явное владение ключом и сессией.
+- [x] Выполнять зависимые записи finish внутри success-события последнего
+  IndexedDB read request; проверить Firefox-повторы и браузерную матрицу.
+  Локальные результаты связаны с кодом [cae28bd](https://github.com/Michael-edel/FitFocus/commit/cae28bd);
+  CI этого изменения ещё ожидается.
 - [x] Реализовать компонент импорта по [ADR-005](docs/adr/ADR-005-durable-outbox.md):
   операция/карантин, ledger и прогресс порции атомарны; повтор, коллизии,
   подтверждение и необработанные прежние снимки учтены в тестах.
