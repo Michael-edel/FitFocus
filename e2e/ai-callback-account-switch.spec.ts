@@ -4,12 +4,14 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const accountA = { id: 'ai-callback-account-a', sid: 'a'.repeat(64) };
 const accountB = { id: 'ai-callback-account-b', sid: 'b'.repeat(64) };
+// Keep held AI responses inside the 12-second session transport deadline.
+const MAX_HELD_AI_RESPONSE_MS = 11_900;
 const aiActionKey = (accountId: string) => `fitfocus_data_${accountId}_ai_last_action_v1`;
 const profileKey = (accountId: string) => `fitfocus_data_${accountId}_profile`;
 const coachKey = (accountId: string) => `fitfocus_data_${accountId}_last_coach_card`;
 
 type Account = typeof accountA;
-type Feature = 'coach_advice' | 'plateau' | 'personal_plan';
+type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu';
 type FixtureState = { current: Account; profile: ReturnType<typeof profileFor> };
 
 function profileFor(accountId: string, plateau = false) {
@@ -137,7 +139,19 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
           ? JSON.stringify({ title: 'Поздний ответ A', advice: 'Совет профиля A', bullets: ['Старые данные'] })
           : feature === 'personal_plan'
             ? JSON.stringify({ ...profileFor(accountA.id).aiPlan, title: 'Поздний план A' })
-            : 'Позднее объяснение плато из профиля A';
+            : feature === 'weekly_menu'
+              ? JSON.stringify({
+                days: Array.from({ length: 7 }, (_, index) => ({
+                  day: `День ${index + 1}`,
+                  breakfast: 'Позднее меню A',
+                  lunch: 'Поздний обед A',
+                  dinner: 'Поздний ужин A',
+                  snack: 'Поздний перекус A',
+                })),
+                shoppingList: ['Поздний продукт A'],
+                shoppingListItems: [{ name: 'Поздний продукт A', grams: 700 }],
+              })
+              : 'Позднее объяснение плато из профиля A';
         await json({ text }, accountA);
         counts.releasedResponses += 1;
         return;
@@ -282,7 +296,7 @@ test('held coach retry cannot write for account A after another tab signs in as 
     const coachBBefore = rawValue(accountBBefore, coachKey(accountB.id));
     const valuesBBefore = valuesFor(accountBBefore, accountB);
     const operationsBBefore = operationsFor(accountBBefore, accountB);
-    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(10_000);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
@@ -344,7 +358,7 @@ test('held personal-plan retry cannot update either profile after another tab si
     const operationsBBefore = operationsFor(accountBBefore, accountB);
     const profileWritesBeforeResponse = [...fixtureA.counts.profileWrites];
     const stateWritesBeforeResponse = [...fixtureA.counts.stateWrites];
-    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(10_000);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
@@ -405,7 +419,7 @@ test('held plateau explanation cannot appear after another tab signs in as accou
     const coachBBefore = rawValue(accountBBefore, coachKey(accountB.id));
     const valuesBBefore = valuesFor(accountBBefore, accountB);
     const operationsBBefore = operationsFor(accountBBefore, accountB);
-    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(10_000);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
@@ -426,6 +440,67 @@ test('held plateau explanation cannot appear after another tab signs in as accou
     expect(switched.errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await page.screenshot({ path: info.outputPath('plateau-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('held personal weekly-menu response cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'weekly_menu');
+  await openApp(page, '/#plan');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const generate = page.getByRole('button', { name: 'Обновить план', exact: true });
+  await expect(generate).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept());
+  await generate.click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  await waitForAccountOutboxIdle(page, accountA);
+  const settledBeforeSwitch = await readDurableSnapshot(page);
+  const profileABefore = rawValue(settledBeforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(settledBeforeSwitch, accountA);
+  const operationsABefore = operationsFor(settledBeforeSwitch, accountA);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+
+  try {
+    const switched = await openAccountB(context, state);
+    const accountBBefore = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(accountBBefore, accountB);
+    const operationsBBefore = operationsFor(accountBBefore, accountB);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(page);
+    expect(rawValue(final, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(final, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(final, accountA)).toEqual(operationsABefore);
+    expect(rawValue(final, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(final, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('weekly-menu-late-response-account-switch.png') });
   } finally {
     fixtureA.release();
   }
