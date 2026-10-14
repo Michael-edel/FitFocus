@@ -26,9 +26,14 @@ OutboxWriteGuard расширил API repository-записей. Коммит
 на SHA 010cf26 тоже прошёл unit, затем выявил пропущенные импорты этих типов;
 они добавлены в [ce7b60d](https://github.com/Michael-edel/FitFocus/commit/ce7b60d9e6cd40201778fb399fbf1421c04630c5).
 
-git diff --check и локальная проверка Markdown-ссылок прошли; локальные тесты
-не запускались. Полный CI нового HEAD ожидает выполнения. P0.5/P0.8 остаются
-открытыми.
+На точном PR CI для branch HEAD `7458ea0` (merge-ref `d805b1f`) завершились
+success audit с 0 уязвимостей, schema/privacy/auth/API guards, 1153 unit-теста /
+199 файлов, общий и два strict typecheck, production build, E2E и 23 rollback/CAS
+запроса: [run 38621962929](https://github.com/Michael-edel/FitFocus/actions/runs/38621962929).
+Playwright summary: 576 passed / 95 skipped и один flaky на первом запуске
+`legacy-outbox-migration.spec.ts` в desktop Chromium; retry прошёл. Локальные
+тесты не запускались по принятому порядку проверки. Это подтверждает local
+commit при sender pause в CI; общий P0.5/P0.8 остаются открытыми.
 ## P0.5 — AI Совет использует account-scoped session, 14.10.2026
 
 Кодовый follow-up [`500d83e`](https://github.com/Michael-edel/FitFocus/commit/500d83e3dd8856608ec7d9ab4330c05d661b4dd1)

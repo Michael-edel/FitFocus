@@ -498,11 +498,15 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
   account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.
-- [ ] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
+- [x] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
   read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135
   прошёл unit и нашёл типизацию repository API, исправлено в 92ecaa3; 38621324053
-  прошёл unit и нашёл отсутствующие imports, исправлено в ce7b60d. Точный CI HEAD ожидает.
+  прошёл unit и нашёл отсутствующие imports, исправлено в ce7b60d. Точный PR CI
+  прошёл на merge-ref `d805b1f` с исходным SHA `7458ea0`: 1153 unit / 199 файлов,
+  576 browser passed / 95 skipped, один flaky migration test прошёл после retry,
+  audit, guards, три typecheck, build и 23 rollback/CAS-запроса прошли
+  ([run 38621962929](https://github.com/Michael-edel/FitFocus/actions/runs/38621962929)).
   [Контракт](docs/ai-council-session.md); общий P0.5 остаётся открытым.
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.

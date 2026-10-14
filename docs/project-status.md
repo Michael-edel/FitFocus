@@ -9,18 +9,23 @@
 [38621324053](https://github.com/Michael-edel/FitFocus/actions/runs/38621324053)
 на SHA 010cf26 прошёл 1153 unit-теста, но typecheck сообщил об отсутствующих
 импортах guard-типов в UserStateRepository; исправление вошло в ce7b60d.
-Полный CI этого HEAD ожидает выполнения после push. Более ранний CI
-[38613219717](https://github.com/Michael-edel/FitFocus/actions/runs/38613219717)
-на SHA 6305695 завершился E2E failure: 567 passed, 95 skipped, 8 failed,
-2 flaky. Семь падений касались очистки истории AI Совета при sender pause;
-отдельное падение iPhone PWA семейного меню остаётся открытым.
+Полный PR CI [38621962929](https://github.com/Michael-edel/FitFocus/actions/runs/38621962929)
+прошёл на merge-ref `d805b1f`, включающем исходный SHA `7458ea0`:
+1153 unit-теста / 199 файлов, 576 browser passed / 95 skipped, audit без
+уязвимостей, schema/privacy/auth/API guards, общий и два strict typecheck,
+build и 23 rollback/CAS-запроса. Один тест legacy migration на desktop Chromium
+оказался flaky: первая попытка не дождалась согласованного состояния, повтор
+прошёл; CI завершился success. Предыдущий провал на SHA 6305695 и его восемь
+E2E-ошибок сохранены в [журнале стабилизации](stabilization-progress.md).
 
 Вопрос и очистка истории сохраняются при паузе отправителя только при
 совпадении account, server session и epoch. Сгенерированный ответ AI требует
 строгий read guard. [Контракт](ai-council-session.md).
 
 PR #93 направлен в fix/state-generations; в main изменения не влиты.
-P0.5/P0.8, полный lifecycle, staging и выпуск остаются открытыми.
+Проверка local commit при sender pause закрыта CI; общий P0.5/P0.8,
+полный lifecycle, staging и выпуск остаются открытыми. Зелёный общий workflow
+не заменяет целевую приёмку установленного iPhone PWA.
 
 ## P0.5 — AI Совет
 
@@ -32,7 +37,9 @@ P0.5/P0.8, полный lifecycle, staging и выпуск остаются от
 
 Коммит 32bc410 добавил session-bound local commit для вопроса и очистки истории.
 В 92ecaa3 обычные AI repository-записи отделены от local-only методов, а
-ce7b60d добавил пропущенные типовые импорты. CI нового HEAD ещё не завершён.
+ce7b60d добавил пропущенные типовые импорты. Точный PR CI прошёл: 1153 unit,
+576 browser passed / 95 skipped; один flaky migration test прошёл после retry
+([run 38621962929](https://github.com/Michael-edel/FitFocus/actions/runs/38621962929)).
 Контракт: [AI Совет](ai-council-session.md). Общий P0.5, P0.8 и выпуск остаются
 открытыми.
 ## P0.8 — устойчивое завершение IndexedDB-транзакции
