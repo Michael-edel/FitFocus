@@ -15,8 +15,11 @@ A с новой server session прошёл локально 3/3 в desktop Chro
 без retries и включён в этот CI. Предыдущий docs-only run `38638704278` отменён
 после нового push из-за branch concurrency.
 Отдельный reload acceptance для pending операции с сохранением `opId` и
-возобновлением под новой server session также прошёл локально 3/3; CI нового
-изменения ожидает push.
+возобновлением под новой server session и logout/login acceptance также прошли
+совместно 9/9 в desktop Chromium, Firefox и WebKit без retries. При logout
+отправка приостанавливается; после нового входа под свежей server session
+возобновляется та же операция с прежним `opId`. CI этих локальных проверок
+ожидает push.
 Предыдущая проверка `08618e3` успешно покрыла migration smoke и bearer token;
 её результаты приведены в [журнале стабилизации](stabilization-progress.md).
 

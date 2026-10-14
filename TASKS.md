@@ -632,8 +632,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   уже использует auth-derived owner и all-client Service Worker fence.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
-- [ ] Проверить конкурентные записи разных и одинаковых ключей, logout/login
-  и смену аккаунта; завершить profile и остальные API callbacks.
+- [ ] Проверить конкурентные записи одного ключа и old/new writers; завершить
+  profile и остальные API callbacks.
   Добавлен браузерный сценарий двух вкладок без Web Locks: параллельно
   сохраняются отметка плана и настройки в разные ключи. Проверка прошла в CI
   HEAD `a8f3219` (run 38634080772); остальные критерии P0.6 и writers остаются открытыми.
@@ -642,10 +642,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при активном B и возобновляется под свежей сессией A. Локальный прогон прошёл
   3/3 в desktop Chromium, Firefox и WebKit без retries; точный PR CI source HEAD
   `943d4c0` / merge-ref `75362ae` завершился success (run 38641088114).
-  Также добавлен reload acceptance: pending запись с тем же opId переживает
-  перезагрузку, возобновляется с новой server session и подтверждается. Локально
-  прошёл 3/3 desktop-браузера без retries; CI нового изменения ожидает push.
-  Это не закрывает общий P0.6.
+  Также добавлены acceptance для reload и logout/login: pending запись с тем же
+  opId переживает reload, а при logout sender ставится на паузу и возобновляет
+  запись только после входа под свежей server session. Совместный локальный
+  прогон всех трёх account-сценариев прошёл 9/9 в desktop Chromium, Firefox и
+  WebKit без retries (`workers=1,retries=0`). CI этого изменения ожидает push.
+  Это не закрывает общий P0.6: остаются same-key/old-new гонки и writers.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи
 всей очереди одной вкладкой.

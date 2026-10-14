@@ -1,6 +1,6 @@
 # Стабилизация: проверяемые изменения
 
-## P0.6 — возобновление outbox после смены аккаунта, 15.10.2026
+## P0.6 — возобновление outbox после смены аккаунта, reload и logout/login, 15.10.2026
 
 В `e2e/ai-callback-account-switch.spec.ts` добавлен desktop acceptance:
 запись плана аккаунта A получает 503 и остаётся pending с `retryCount=1`;
@@ -22,9 +22,13 @@ run `38638704278` отменился при новом push из-за branch con
 операция плана A принудительно остаётся pending на 503; после reload сервер
 возвращает тот же account с новым session id. Тест проверяет сохранение `opId`,
 попытку отправки под новой session и подтверждение операции.
-Chromium, Firefox и WebKit прошли 3/3 без retries (`workers=1,retries=0`);
-точный CI нового изменения ожидает push. Это не закрывает logout/login и полный
-lifecycle.
+Также добавлен logout/login acceptance: после 503 выход останавливает отправку,
+операция остаётся в IndexedDB, а повторный вход аккаунта A с новой server
+session возобновляет ту же операцию и подтверждает её.
+Совместный прогон account-switch, reload и logout/login прошёл 9/9 в desktop
+Chromium, Firefox и WebKit без retries (`workers=1,retries=0`). CI нового
+изменения ожидает push. Эти проверки подтверждают три сценария, но не закрывают
+same-key/old-new гонки и полный lifecycle P0.6.
 
 ## P0.8 — миграционный smoke при обновлении PWA, 15.10.2026
 
