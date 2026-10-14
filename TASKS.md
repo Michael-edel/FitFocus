@@ -549,7 +549,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли
   на Chromium/Firefox/WebKit, а success-path дневника/истории/usage — на Chromium.
   Полный account-switch spec прошёл 22 сценария / 2 project skips без retries;
-  полный GitHub CI этой ревизии будет проверен после push.
+  полный CI HEAD `a9e3096` завершился success в [run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329)
+  (1132 unit, 535 E2E passed / 79 skipped, два Firefox flaky прошли retry).
+- [ ] Разобрать Firefox-flaky в двух сценариях `weekly-menu-durability.spec.ts`:
+  локально один сбой проявился как `StateStorageError:STATE_STORAGE_TRANSACTION`,
+  sender остановился до HTTP при сохранённой pending operation. Последний
+  10-кратный повтор timeout-сценария прошёл 10/10, но причина пока не найдена;
+  см. [журнал](docs/stabilization-progress.md).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
 

@@ -177,7 +177,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
-| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт coach/плана/плато, дневникового фото и фото-рецепта; локальная account-switch и success acceptance `d93ff53`, GitHub CI этой ревизии будет проверен после push |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт coach/плана/плато, дневникового фото и фото-рецепта; CI `a9e3096` прошёл, два Firefox weekly-menu flaky требуют разбора |
 | [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |

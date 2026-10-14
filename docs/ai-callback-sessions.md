@@ -144,6 +144,13 @@ Chromium, Firefox и WebKit; полный изменённый callback spec —
 `workers=1,retries=0`; `npm run typecheck` прошёл. Полный CI для этого SHA
 завершился success в [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
 
+Фотоанализ из `d93ff53` вошёл в опубликованный HEAD `a9e3096`; полный CI
+[38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329)
+завершился success. Два flaky Firefox-теста в `weekly-menu-durability.spec.ts`
+относятся к отправке profile operation и отдельно отслеживаются в
+[статусе проекта](project-status.md) и [журнале](stabilization-progress.md);
+они не меняют подтверждённую локальную account-switch приёмку фото.
+
 Ранее добавленная локальная browser-приёмка удерживает повтор личного плана
 аккаунта A, пока соседняя вкладка входит в B. Тест проверяет, что поздний ответ
 не меняет профиль, значения, outbox, active session или success-effects обоих

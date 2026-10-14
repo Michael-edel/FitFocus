@@ -2884,5 +2884,33 @@ achievement и не записывает данные. `useFoodDiary` переч
 WebKit записал независимый `weekly_reports` во время теста recipe photo. Snapshot
 профиля, дневника, истории и outbox аккаунтов не изменился. Ожидание сужено до
 `diary`/`history`; полный повтор прошёл без failed или flaky. Это локальная
-приёмка: полный CI на отправленном HEAD ещё проверяется. Реальные OAuth/BFCache,
+приёмка; полный CI опубликованного HEAD описан в следующей записи. Реальные OAuth/BFCache,
 staging, другие callbacks и весь P0.5 остаются открытыми.
+
+## Проверки текущего HEAD — `a9e3096`, 14.10.2026
+
+PR workflow [38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329)
+на точном HEAD `a9e309696be85414a6ca96697beec3d91c19718c` завершился success.
+Unit: 1132 теста в 198 файлах; Playwright: 535 passed / 79 skipped. Audit,
+schema/privacy/auth/API guards, три typecheck и production build прошли;
+rollback и canonical readers/CAS после rollback прошли на 23 запросах.
+Rollback-артефакт `11883487207` сохранён. Push-trigger run `38540101601`
+отменён concurrency после запуска PR workflow; это ожидаемая отмена предыдущего
+запуска, а не отказ проверки.
+
+Два desktop Firefox теста в `e2e/weekly-menu-durability.spec.ts` были flaky на
+первой попытке и прошли автоматический retry:
+
+- `weekly menu and shopping intent are delivered by one durable scoped profile operation`;
+- `weekly menu clears loading after a timeout and lets the user generate again`.
+
+Первый локальный повтор обоих сценариев (`--repeat-each=5`, один worker, без
+retries) дал 8/10; каждый сценарий один раз не достиг HTTP-успеха. В следующей
+диагностической серии таймаутный сценарий снова воспроизвёл сбой: локальный
+профиль и одна `pending` outbox operation были записаны, `profileAttempts=0`,
+sender сообщил `StateStorageError:STATE_STORAGE_TRANSACTION` и остановился до
+HTTP. Последующий повтор timeout-сценария 10/10 прошёл. Временное логирование
+удалено; точный внутренний `IDBTransaction.error` и первопричина остаются
+неустановленными. Нужен отдельный диагностический/кодовый follow-up до признания
+этой Firefox-границы стабильной. Причинная связь с изменением фотоанализа не
+подтверждена.

@@ -4,29 +4,43 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Последний полный CI проверил SHA [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
+Текущий опубликованный HEAD [`a9e3096`](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c)
+прошёл полный CI в [run `38540109329`](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
+1132 unit-теста, 535 E2E passed / 79 skipped, проверки audit/schema/privacy/auth/API,
+три typecheck, build и rollback/CAS. Два desktop Firefox теста были flaky на
+первой попытке и прошли retry. В локальном повторе один раз пойман
+`StateStorageError:STATE_STORAGE_TRANSACTION`; причина остаётся открытой,
+подробности — в [журнале](stabilization-progress.md).
+
+Предыдущий полный CI проверил SHA [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
 и завершился success ([run `38459458051`](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)):
 unit прошли во всех 198 файлах; Playwright сообщил 501 passed / 29 skipped и
 два flaky-теста, прошедших retry; rollback/CAS job прошёл. Локальные повторы этих
-двух сценариев прошли 10/10 каждый, но первопричины не установлены; см.
-[журнал](stabilization-progress.md). P0.5 achievement account-switch acceptance
-из `b44d46e` включена в этот HEAD; профильный локальный прогон прошёл 7/7
-browser/PWA-проектов с `retries=0`.
+двух сценариев прошли 10/10 каждый, но первопричины не установлены. P0.5 achievement
+account-switch acceptance из `b44d46e` включена в этот HEAD; профильный локальный
+прогон прошёл 7/7 browser/PWA-проектов с `retries=0`.
 
-После CI локально проверен E2E follow-up [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54):
+В историческом follow-up после CI проверен E2E-коммит [`7753d87`](https://github.com/Michael-edel/FitFocus/commit/7753d87fe99a07b7fa555dac5ab2a5c487d44d54):
 оба flaky-сценария повторены 10/10 каждый; полные затронутые specs прошли 10/10
 на Android PWA Chrome и 8/8 на iPhone PWA; `npm run typecheck` прошёл. Полный
 CI этого follow-up для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
 ([run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712))
 отменён после последующего документационного push. Follow-up не подтверждён
-полным CI; актуальный run нужно смотреть в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+полным CI. Текущий CI-снимок указан выше; эта историческая проверка не подтверждает HEAD `a9e3096`.
 Cloudflare preview успешен, но не подтверждает полный CI или production-выпуск.
 
 Локальный компонент [`d93ff53`](https://github.com/Michael-edel/FitFocus/commit/d93ff53)
 добавил scoped photo-analysis callbacks для дневника и рецептов. Связанные unit
 прошли 11/11, typecheck прошёл, полный account-switch spec прошёл 22 сценария / 2
-project skips на desktop Chromium/Firefox/WebKit (`workers=1,retries=0`); полный
-GitHub CI этой ревизии будет проверен после push.
+project skips на desktop Chromium/Firefox/WebKit (`workers=1,retries=0`). Полный
+CI опубликованного HEAD `a9e3096` завершился success в [run `38540109329`](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
+1132 unit, 535 E2E passed / 79 skipped, три typecheck, build, audit и rollback/CAS.
+Два Firefox-сценария weekly-menu были flaky и прошли retry; локально один раз
+зафиксирован `StateStorageError:STATE_STORAGE_TRANSACTION`, после которого
+sender не сделал HTTP-запрос, а pending profile operation сохранилась. Поздний
+10-кратный повтор timeout-сценария прошёл 10/10, но первопричина не установлена;
+см. [журнал](stabilization-progress.md). Это ограничение не закрывает весь P0.5,
+staging или OAuth.
 
 Локальная late-response acceptance покрывает personal shopping list GET/PATCH,
 family join/create, family-context GET и family shopping GET. `ShoppingListCard`

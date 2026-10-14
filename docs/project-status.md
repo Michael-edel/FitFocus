@@ -20,8 +20,19 @@ achievement или черновик рецепта. Успешный путь п
 в Chromium, Firefox и WebKit, успешная запись фото проверена в Chromium. Первый
 прогон выявил слишком широкое ожидание из-за независимой записи `weekly_reports`;
 проверка теперь ограничена diary/history и полный повтор прошёл без ошибок.
-Полный GitHub CI этой ревизии будет проверен после push; staging, OAuth и весь
-P0.5 остаются открытыми.
+
+Полный [CI run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329)
+для опубликованного HEAD `a9e3096` завершился success: 1132 unit-теста в 198
+файлах, 535 E2E passed / 79 skipped, audit без уязвимостей, проверки схемы,
+приватности, auth/API, три typecheck, build, rollback и canonical readers/CAS
+прошли; rollback-артефакт `11883487207` сохранён. В Firefox E2E два теста
+`weekly-menu-durability.spec.ts` были flaky на первой попытке и прошли retry.
+Локальные повторы подтвердили intermittent ошибку: в одной диагностической
+серии sender остановился на `StateStorageError:STATE_STORAGE_TRANSACTION` до
+HTTP, хотя профиль и pending operation остались в IndexedDB. Последующий
+десятикратный повтор timeout-сценария прошёл 10/10; первопричина транзакционного
+сбоя не установлена и остаётся открытой задачей. Staging, OAuth и весь P0.5
+остаются открытыми.
 
 ## P0.5 — personal weekly-menu account switch
 
@@ -41,13 +52,13 @@ unit, typechecks, build, E2E и canonical readers/CAS after server rollback пр
 Rollback-артефакт сохранён как `11879443791`. Другие AI/family callbacks,
 общий lifecycle, staging и выпуск остаются открытыми.
 
-Последний завершённый полный CI ниже относится к `9bdeb47`; сверка формата
+Предыдущий полный CI ниже относится к `9bdeb47`; сверка формата
 legacy-нормализатора отдельно зафиксирована на
 [`48cf797`](https://github.com/Michael-edel/FitFocus/commit/48cf797b2b08cd4b62bdf59c265c4d85a4db863f)
 в [контракте миграции](legacy-migration.md). Эти результаты относятся к своим
 ревизиям и не заменяют проверки текущей кодовой ветки.
 
-Последний завершённый полный CI проверил текущий SHA
+Предыдущий завершённый полный CI проверил SHA
 [`9bdeb47`](https://github.com/Michael-edel/FitFocus/commit/9bdeb47dfd21c5e5d5366bb5fe47f8e5862cda11)
 ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051))
 и завершился success. Unit прошли во всех 198 файлах; Playwright сообщил 501
@@ -64,8 +75,9 @@ passed, 29 skipped и два flaky-теста, прошедших retry. Rollbac
 [38466153712](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712)
 для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98)
 отменён после отправки следующего документационного коммита. Устранение flaky
-подтверждено локальными повторами, но не полным CI; актуальное состояние проверок
-текущего HEAD — на странице [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
+подтверждено локальными повторами, но не полным CI этого follow-up. Последняя
+проверка опубликованного HEAD `a9e3096` приведена выше; новые коммиты проверяйте
+по [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 Cloudflare preview SHA `a99ab7b` успешен; это не production-релиз.
 
 ## P0.5 — поздние ответы и личная корзина, локальная проверка
