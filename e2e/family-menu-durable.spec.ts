@@ -218,6 +218,39 @@ test('a delayed family server preview after another account signs in cannot writ
   } finally { releasePreview(); }
 });
 
+test('a delayed durable menu-state read after another account signs in cannot hydrate its menu', async ({ page, context }) => {
+  const { errors } = await setup(page);
+  const before = await saved(page);
+  let releaseRead!: () => void;
+  let readStarted = false;
+  const held = new Promise<void>(resolve => { releaseRead = resolve; });
+  await page.route('**/api/family/menu/state*', async route => {
+    if (route.request().method() === 'GET') {
+      readStarted = true;
+      await held;
+    }
+    await route.fallback();
+  });
+
+  try {
+    const reload = page.reload();
+    await expect.poll(() => readStarted).toBe(true);
+    const accountBPage = await context.newPage();
+    const errorsB = await openSwitchAccount(accountBPage);
+    await expect.poll(() => activeAccountId(accountBPage)).toBe(switchAccount.id);
+    await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
+
+    releaseRead();
+    await reload;
+    await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
+    expect(await saved(page)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
+    await healthy(page, errors);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    expect(errorsB).toEqual([]);
+  } finally { releaseRead(); }
+});
+
 test('family pending operation survives reload and delivers after recovery with the same opId', async ({ page }, info) => {
   const { counts, errors, restore } = await setup(page, 'offline');
   await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
