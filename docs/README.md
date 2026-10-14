@@ -1,6 +1,6 @@
 # Документация FitFocus
 
-Обновлено: 14.10.2026.
+Обновлено: 15.10.2026.
 
 Начните с [текущего состояния проекта](project-status.md): проверенный SHA,
 готовые компоненты, оставшаяся работа и ближайшие шаги.
@@ -180,7 +180,7 @@ Mock-фикстура опубликована в `085fcc1`; её приёмка
 | [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
 | [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
 | [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
-| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт coach/плана/плато и фото; CI a9e3096 прошёл, Firefox-flaky в outbox исправлен в cae28bd, полный CI follow-up ожидается |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт coach/плана/плато и фото; новый PR CI 38621962929 прошёл (1153 unit, 576 browser passed / 95 skipped); один flaky migration test прошёл после retry, полный lifecycle P0.5 открыт |
 | [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
 | [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
