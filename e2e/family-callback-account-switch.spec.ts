@@ -104,6 +104,7 @@ function apiBody(account: Account, includePersonalShopping = false) {
     aiSync: { protocol: 1, guard: 1 },
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
+    huaweiSync: { protocol: 1, guard: 1 },
     familySync: { protocol: 1, guard: 1, target: 1 },
     familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
     profile: profileFor(account, includePersonalShopping),

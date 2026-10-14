@@ -62,7 +62,7 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
       profileSync: { protocol: 1, guard: 1, ...(mode === 'old-profile-server' ? {} : { weeklyMenuProjection: 1 }) },
       bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
-      achievementSync: { protocol: 1, guard: 1 } } : { user: null });
+      achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/logout') { active = false; return json({ ok: true }); }
     if (path === '/api/profile') {

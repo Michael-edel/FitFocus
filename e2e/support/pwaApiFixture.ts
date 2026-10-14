@@ -4,7 +4,7 @@ import { familyTestMenu } from '../../tests/_helpers/familyMenu';
 
 const account = 'google-e2e-sub', sid = 'a'.repeat(64), familyId = 'family-durable-e2e';
 const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid,
-  ...Object.fromEntries(['State', 'Profile', 'Bootstrap', 'AI', 'Weekly-Menu', 'Achievements', 'Family', 'Family-Menu'].flatMap(resource =>
+  ...Object.fromEntries(['State', 'Profile', 'Bootstrap', 'AI', 'Weekly-Menu', 'Achievements', 'Huawei', 'Family', 'Family-Menu'].flatMap(resource =>
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
@@ -50,7 +50,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
-      ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'familySync'].map(name =>
+      ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'huaweiSync', 'familySync'].map(name =>
         [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 } });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });

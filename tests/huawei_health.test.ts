@@ -2,13 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onRequestGet as getHuaweiStatus } from '../functions/api/wearable/huawei/status';
 import { onRequestPost as postHuaweiSync } from '../functions/api/wearable/huawei/sync';
 import { onRequestGet as startHuaweiOAuth } from '../functions/api/wearable/huawei/start';
+import { onRequestPost as startHuaweiOAuthScoped } from '../functions/api/wearable/huawei/start';
 import { onRequestGet as callbackHuaweiOAuth } from '../functions/api/wearable/huawei/callback';
 import { onRequestPost as disconnectHuawei } from '../functions/api/wearable/huawei/disconnect';
 import { encryptHuaweiTokenSet } from '../functions/api/_lib/huawei_health';
+import { stateSessionId } from '../functions/api/_lib/state_session';
+import { base64UrlEncode, signState } from '../functions/api/auth/_oauth';
 
 type HuaweiStatusContext = Parameters<typeof getHuaweiStatus>[0];
 type HuaweiSyncContext = Parameters<typeof postHuaweiSync>[0];
 type HuaweiStartContext = Parameters<typeof startHuaweiOAuth>[0];
+type HuaweiStartScopedContext = Parameters<typeof startHuaweiOAuthScoped>[0];
 type HuaweiCallbackContext = Parameters<typeof callbackHuaweiOAuth>[0];
 type HuaweiDisconnectContext = Parameters<typeof disconnectHuawei>[0];
 
@@ -99,14 +103,19 @@ function env(db: ReturnType<typeof makeDb>) {
   };
 }
 
+async function scopedHeaders(overrides: Record<string, string> = {}) {
+  const session = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
+  return { 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': session, ...overrides };
+}
+
 async function contextRequest(url: string, init: RequestInit = {}) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com', name: 'User' });
+  const headers = new Headers(init.headers);
+  const extraCookie = headers.get('Cookie');
+  headers.set('Cookie', [`ff_session=${token}`, extraCookie].filter(Boolean).join('; '));
   return new Request(url, {
     ...init,
-    headers: {
-      Cookie: `ff_session=${token}`,
-      ...(init.headers || {}),
-    },
+    headers,
   });
 }
 
@@ -178,6 +187,7 @@ describe('Huawei Health integration', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Request-ID')).toBe('huawei-status-test-01');
+    expect(response.headers.get('X-FitFocus-Huawei-Protocol')).toBe('1');
     const bodyText = await response.text();
     expect(bodyText).toContain('"connected":true');
     expect(bodyText).not.toContain('access-token');
@@ -244,6 +254,72 @@ describe('Huawei Health integration', () => {
     });
     expect(db.runs.some((run) => run.sql.includes('UPDATE user_profiles SET profile_json'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('UPDATE wearable_connections SET last_sync_at'))).toBe(true);
+  });
+
+  it('rejects stale scoped sessions before Huawei reads or profile writes and echoes the request guard', async () => {
+    const db = makeDb({});
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await postHuaweiSync({
+      request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
+        method: 'POST',
+        headers: await scopedHeaders({ 'X-FitFocus-State-Account': 'user-2', 'X-Request-ID': 'huawei-stale-test-01' }),
+        body: JSON.stringify({ timezone: 'UTC', date: '2026-06-28' }),
+      }),
+      env: env(db) as unknown as HuaweiSyncContext['env'],
+      params: {}, data: {}, waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Huawei-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Huawei-Guard')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-2');
+    expect(response.headers.get('X-Request-ID')).toBe('huawei-stale-test-01');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.runs.some(run => run.sql.includes('CREATE TABLE IF NOT EXISTS wearable_connections'))).toBe(false);
+    expect(db.runs.some(run => run.sql.includes('UPDATE user_profiles SET profile_json'))).toBe(false);
+  });
+
+  it('issues a scoped OAuth start URL and binds its signed state to the initiating session', async () => {
+    const db = makeDb();
+    const request = await contextRequest('https://fitfocus.test/api/wearable/huawei/start', {
+      method: 'POST', headers: { ...await scopedHeaders(), 'Content-Type': 'application/json', 'X-Request-ID': 'huawei-post-start-01' },
+      body: JSON.stringify({ redirect: 'https://fitfocus.test/#settings' }),
+    });
+    const response = await startHuaweiOAuthScoped({
+      request, env: env(db) as unknown as HuaweiStartScopedContext['env'], params: {}, data: {},
+      waitUntil: () => undefined, next: () => Promise.resolve(new Response(null, { status: 404 })),
+    } as unknown as HuaweiStartScopedContext);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-FitFocus-Huawei-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe((await scopedHeaders())['X-FitFocus-State-Session']);
+    expect(response.headers.get('X-Request-ID')).toBe('huawei-post-start-01');
+    const body = await response.json() as { authorizeUrl: string };
+    const authorizeUrl = new URL(body.authorizeUrl);
+    const encodedState = authorizeUrl.searchParams.get('state')!;
+    const stateBytes = encodedState.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+    const rawState = new TextDecoder().decode(Uint8Array.from(atob(stateBytes + '='.repeat((4 - stateBytes.length % 4) % 4)), c => c.charCodeAt(0)));
+    const state = JSON.parse(rawState) as { u: string; s: string; r: string; n: string; t: number };
+    expect(state).toMatchObject({ u: 'user-1', s: await stateSessionId({ sub: 'user-1', sid: 'sid-1' }), r: 'https://fitfocus.test/#settings' });
+    expect(response.headers.get('Set-Cookie')).toContain('ff_huawei_oauth_nonce=');
+  });
+
+  it('rejects an OAuth callback from a different login session before exchanging credentials', async () => {
+    const db = makeDb();
+    const rawState = JSON.stringify({ u: 'user-1', s: 'wrong-session-digest', r: 'https://fitfocus.test/', n: 'nonce-1', t: Date.now() });
+    const state = `${base64UrlEncode(new TextEncoder().encode(rawState))}.${await signState(rawState, SECRET)}`;
+    const response = await callbackHuaweiOAuth({
+      request: await contextRequest(`https://fitfocus.test/api/wearable/huawei/callback?code=code-1&state=${encodeURIComponent(state)}`, {
+        headers: { Cookie: 'ff_huawei_oauth_nonce=nonce-1' },
+      }),
+      env: env(db) as unknown as HuaweiCallbackContext['env'], params: {}, data: {},
+      waitUntil: () => undefined, next: () => Promise.resolve(new Response(null, { status: 404 })),
+    } as unknown as HuaweiCallbackContext);
+    expect(response.status).toBe(400);
+    expect(db.runs.some(run => run.sql.includes('CREATE TABLE IF NOT EXISTS wearable_connections'))).toBe(false);
+    expect(db.runs.some(run => run.sql.includes('UPDATE user_profiles SET profile_json'))).toBe(false);
   });
 
   it('rejects oversized Huawei sync bodies before calling Huawei or writing', async () => {

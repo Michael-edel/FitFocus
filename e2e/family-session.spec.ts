@@ -25,7 +25,7 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(body) });
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: cookieSid }, bootstrapSync: { protocol: 1, guard: 1 },
-      profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 }, achievementSync: { protocol: 1, guard: 1 },
+      profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 }, achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 },
       ...(mode === 'no-capability' ? {} : { familySync: { protocol: 1, guard: 1, ...(mode === 'no-target-capability' ? {} : { target: 1 }) } }) } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {

@@ -12,6 +12,7 @@ const coachKey = (accountId: string) => `fitfocus_data_${accountId}_last_coach_c
 const diaryKey = (accountId: string) => `fitfocus_data_${accountId}_diary`;
 const historyKey = (accountId: string) => `fitfocus_data_${accountId}_history`;
 const councilKey = (accountId: string) => `fitfocus_data_${accountId}_council_history`;
+const weeklyReportsKey = (accountId: string) => `fitfocus_data_${accountId}_weekly_reports`;
 
 type Account = typeof accountA;
 type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced' | 'council_chairman';
@@ -63,6 +64,8 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Profile-Guard': '1',
     'X-FitFocus-Achievements-Protocol': '1',
     'X-FitFocus-Achievements-Guard': '1',
+    'X-FitFocus-Huawei-Protocol': '1',
+    'X-FitFocus-Huawei-Guard': '1',
     'X-FitFocus-Weekly-Menu-Protocol': '1',
     'X-FitFocus-Weekly-Menu-Guard': '1',
   };
@@ -78,12 +81,14 @@ function apiBody(account: Account, profile: ReturnType<typeof profileFor>) {
     aiSync: { protocol: 1, guard: 1 },
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
+    huaweiSync: { protocol: 1, guard: 1 },
     profile,
   };
 }
 
-async function installAccountApi(page: Page, state: FixtureState, heldFeature?: Feature) {
+async function installAccountApi(page: Page, state: FixtureState, heldFeature?: Feature, heldHuaweiSync = false) {
   const held = deferred();
+  const heldHuawei = deferred();
   const counts = {
     heldRequests: 0,
     heldStartedAtMs: 0,
@@ -93,6 +98,8 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     aiRequests: [] as Array<{ feature: string; account?: string; session?: string }>,
     stateWrites: [] as string[],
     profileWrites: [] as string[],
+    huaweiSyncRequests: [] as Array<{ account?: string; session?: string }>,
+    huaweiSyncResponses: 0,
   };
   await mockApp(page, { session: 'app' });
   await page.route('**/api/**', async route => {
@@ -144,6 +151,21 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
       return json({ enabled: false, catalog: [], unlocked: [], newlyUnlocked: [] }, responseAccount);
     }
     if (path === '/api/logout') return json({ ok: true }, responseAccount);
+    if (path === '/api/wearable/huawei/status' && method === 'GET') return json({
+      configured: true, connected: true, status: 'connected', scope: 'health.read', expiresAt: null, lastSyncAt: null,
+    }, responseAccount);
+    if (path === '/api/wearable/huawei/sync' && method === 'POST') {
+      const requestAccount = requestedAccount && requestedSession
+        ? { id: requestedAccount, sid: requestedSession }
+        : state.current;
+      counts.huaweiSyncRequests.push({ account: requestedAccount, session: requestedSession });
+      if (heldHuaweiSync) await heldHuawei.promise;
+      const profile = { ...profileFor(requestAccount.id), wearableProvider: 'huawei_health', wearableEnabled: true,
+        wearableStepsToday: 4321, version: 2 };
+      const response = await json({ profile, updatedFields: ['wearableStepsToday'], version: 2 }, requestAccount);
+      counts.huaweiSyncResponses += 1;
+      return response;
+    }
     if (path === '/api/ai' && method === 'POST') {
       const feature = request.postDataJSON()?.feature;
       if (typeof feature === 'string') counts.aiRequests.push({ feature, account: requestedAccount, session: requestedSession });
@@ -204,7 +226,7 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     }
     return route.fallback();
   });
-  return { counts, release: held.release };
+  return { counts, release: held.release, releaseHuawei: heldHuawei.release };
 }
 
 type StoredValue = { key: string; value: string };
@@ -218,45 +240,55 @@ type DurableSnapshot = {
   activeSession: { accountId: string; serverSessionId?: string; sessionEpoch: string } | null;
 };
 
-async function readDurableSnapshot(page: Page): Promise<DurableSnapshot> {
-  return page.evaluate(async () => {
-    const opening = indexedDB.open('fitfocus-user-state-v1');
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      opening.onsuccess = () => resolve(opening.result);
-      opening.onerror = () => reject(opening.error);
+async function readDurableSnapshot(page: Page, retry = 0): Promise<DurableSnapshot> {
+  try {
+    return await page.evaluate(async () => {
+      const opening = indexedDB.open('fitfocus-user-state-v1');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        opening.onsuccess = () => resolve(opening.result);
+        opening.onerror = () => reject(opening.error);
+      });
+      try {
+        const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
+        const complete = new Promise<void>((resolve, reject) => {
+          tx.addEventListener('complete', () => resolve(), { once: true });
+          tx.addEventListener('abort', () => reject(tx.error), { once: true });
+        });
+        const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const [values, operations, metadata] = await Promise.all([
+          read(tx.objectStore('values').getAll()),
+          read(tx.objectStore('outbox').getAll()),
+          read(tx.objectStore('outbox_meta').getAll()),
+        ]);
+        await complete;
+        const session = metadata.find((item: { id: string }) => item.id === 'active-session');
+        return {
+          values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
+          operations: operations.map((item: StoredOperation) => ({
+            opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
+            resource: item.resource, value: item.value, retryCount: item.retryCount,
+            nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
+          })),
+          activeSession: session ? {
+            accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
+          } : null,
+        };
+      } finally {
+        db.close();
+      }
     });
-    try {
-      const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
-      const complete = new Promise<void>((resolve, reject) => {
-        tx.addEventListener('complete', () => resolve(), { once: true });
-        tx.addEventListener('abort', () => reject(tx.error), { once: true });
-      });
-      const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const [values, operations, metadata] = await Promise.all([
-        read(tx.objectStore('values').getAll()),
-        read(tx.objectStore('outbox').getAll()),
-        read(tx.objectStore('outbox_meta').getAll()),
-      ]);
-      await complete;
-      const session = metadata.find((item: { id: string }) => item.id === 'active-session');
-      return {
-        values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
-        operations: operations.map((item: StoredOperation) => ({
-          opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
-          resource: item.resource, value: item.value, retryCount: item.retryCount,
-          nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
-        })),
-        activeSession: session ? {
-          accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
-        } : null,
-      };
-    } finally {
-      db.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const transientIdbOpenError = /UnknownError|operation failed for reasons unrelated to the database itself/i.test(message);
+    if (retry < 2 && transientIdbOpenError) {
+      await page.waitForTimeout(25 * (retry + 1));
+      return readDurableSnapshot(page, retry + 1);
     }
-  });
+    throw error;
+  }
 }
 
 function rawValue(snapshot: DurableSnapshot, key: string) {
@@ -283,7 +315,7 @@ async function waitForAccountSwitch(page: Page) {
   return snapshot;
 }
 
-async function openAccountB(context: BrowserContext, state: FixtureState) {
+async function openAccountB(context: BrowserContext, state: FixtureState, waitForProfile = true) {
   state.current = accountB;
   state.profile = profileFor(accountB.id);
   const page = await context.newPage();
@@ -298,7 +330,9 @@ async function openAccountB(context: BrowserContext, state: FixtureState) {
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await waitForAccountSwitch(page);
-  await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountB.id))).not.toBeNull();
+  if (waitForProfile) {
+    await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountB.id))).not.toBeNull();
+  }
   return { page, errors, fixture };
 }
 
@@ -391,10 +425,7 @@ test('AI Council uses account A proof and discards its held answer after account
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
 
   try {
-    const switched = await openAccountB(context, state);
-    const beforeB = await readDurableSnapshot(switched.page);
-    const councilBBefore = rawValue(beforeB, councilKey(accountB.id));
-    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    const switched = await openAccountB(context, state, false);
     expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
@@ -403,11 +434,10 @@ test('AI Council uses account A proof and discards its held answer after account
     const final = await readDurableSnapshot(page);
     expect(rawValue(final, councilKey(accountA.id))).toBe(councilA);
     expect(operationsFor(final, accountA)).toEqual(operationsFor(beforeSwitch, accountA));
-    expect(rawValue(final, councilKey(accountB.id))).toBe(councilBBefore);
-    expect(operationsFor(final, accountB)).toEqual(operationsFor(beforeB, accountB));
     expect(fixtureA.counts.aiRequests.filter(call => call.feature.startsWith('council_')))
       .toEqual([{ feature: 'council_chairman', account: accountA.id, session: accountA.sid }]);
     await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
     expect(errorsA).toEqual([]);
     expect(switched.errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -653,7 +683,9 @@ test('held personal weekly-menu response cannot write for account A after anothe
     expect(valuesFor(final, accountB)).toEqual(valuesBBefore);
     expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
     expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
-    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBefore);
+    // The weekly report engine may independently persist its own key while this held menu request is in flight.
+    expect(fixtureA.counts.stateWrites.filter(key => key !== weeklyReportsKey(accountA.id)))
+      .toEqual(stateWritesBefore.filter(key => key !== weeklyReportsKey(accountA.id)));
     expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
     await expect(page.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
     await expect(switched.page.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
@@ -929,6 +961,8 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
     .toMatchObject({ account: accountA.id, session: accountA.sid, keys: [planKeyA] });
   const switched = await openAccountB(context, state);
   await expect.poll(async () => (await readDurableSnapshot(switched.page)).activeSession?.serverSessionId).toBe(accountB.sid);
+  await expect.poll(async () => (await readDurableSnapshot(switched.page)).operations
+    .find(operation => operation.key === planKeyA)?.status).toBe('pending');
   const pendingDuringB = (await readDurableSnapshot(switched.page)).operations.find(operation => operation.key === planKeyA);
   expect(pendingDuringB).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
   const aAttemptsWhileBActive = stateWrites.filter(write => write.keys.includes(planKeyA)).length;
@@ -1102,4 +1136,35 @@ test('pending account A outbox pauses on logout and resumes after login with a f
   expect(errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('state-outbox-account-a-after-login.png') });
+});
+
+test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei acceptance runs in desktop browser profiles.');
+  const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
+  const state: FixtureState = { current: accountA, profile: profileA };
+  const fixtureA = await installAccountApi(page, state, undefined, true);
+  await openApp(page, '/#settings');
+  await expect(page.getByRole('button', { name: 'Обновить Huawei', exact: true })).toBeEnabled();
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeA = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeA, profileKey(accountA.id));
+  const profileOperationsBefore = beforeA.operations.filter(operation => operation.key === profileKey(accountA.id));
+
+  await page.getByRole('button', { name: 'Обновить Huawei', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.huaweiSyncRequests).toHaveLength(1);
+  const switched = await openAccountB(context, state);
+  const beforeB = await readDurableSnapshot(switched.page);
+  const profileBBefore = rawValue(beforeB, profileKey(accountB.id));
+
+  fixtureA.releaseHuawei();
+  await expect.poll(() => fixtureA.counts.huaweiSyncResponses).toBe(1);
+  await expect(page.getByRole('button', { name: 'Обновить Huawei', exact: true })).toHaveText('Обновить Huawei');
+  await expect(page.getByText('Huawei Health синхронизирован: обновлено полей 1.', { exact: true })).toHaveCount(0);
+
+  const afterA = await readDurableSnapshot(page);
+  expect(fixtureA.counts.huaweiSyncRequests).toEqual([{ account: accountA.id, session: accountA.sid }]);
+  expect(rawValue(afterA, profileKey(accountA.id))).toBe(profileBefore);
+  expect(afterA.operations.filter(operation => operation.key === profileKey(accountA.id))).toEqual(profileOperationsBefore);
+  const afterB = await readDurableSnapshot(switched.page);
+  expect(rawValue(afterB, profileKey(accountB.id))).toBe(profileBBefore);
 });

@@ -1,6 +1,5 @@
-import { fetchWithResilience } from '../../services/httpClient';
-
-type JsonRecord = Record<string, unknown>;
+import { SessionReadError } from '../../storage/sessionRead';
+import { requestHuaweiJson, type HuaweiSession } from '../../services/huaweiSession';
 
 export type HuaweiHealthStatus = {
   configured: boolean;
@@ -13,63 +12,64 @@ export type HuaweiHealthStatus = {
 
 type HuaweiProfileResponse = { profile?: unknown; updatedFields?: unknown };
 
-async function readJsonRecord(response: Response): Promise<JsonRecord | null> {
-  const value: unknown = await response.json().catch(() => null);
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
-}
-
 function errorFor(code: unknown, fallback: string): Error {
-  return new Error(code === 'UNAUTH' ? 'Сначала войдите в аккаунт FitFocus.' : fallback);
+  if (code === 'UNAUTH' || code === 'SESSION_MISMATCH') return new Error('Сначала войдите в аккаунт FitFocus.');
+  return new Error(fallback);
 }
 
-/** Reads Huawei connection status through the retryable GET transport. */
-export async function requestHuaweiHealthStatus(): Promise<HuaweiHealthStatus> {
-  const response = await fetchWithResilience('/api/wearable/huawei/status', {
-    credentials: 'include',
+export async function requestHuaweiHealthStatus(session: HuaweiSession): Promise<HuaweiHealthStatus> {
+  const { response, body } = await requestHuaweiJson(session, '/api/wearable/huawei/status', {
     headers: { Accept: 'application/json' },
-  }, { retries: 1 });
-  const payload = await readJsonRecord(response);
-  if (!response.ok || !payload) throw errorFor(payload?.error, 'Не удалось проверить Huawei Health.');
+  });
+  if (!response.ok || !body) throw errorFor(body?.error, 'Не удалось проверить Huawei Health.');
   return {
-    configured: payload.configured === true,
-    connected: payload.connected === true,
-    status: typeof payload.status === 'string' ? payload.status : 'disconnected',
-    scope: typeof payload.scope === 'string' ? payload.scope : '',
-    expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : null,
-    lastSyncAt: typeof payload.lastSyncAt === 'number' ? payload.lastSyncAt : null,
+    configured: body.configured === true,
+    connected: body.connected === true,
+    status: typeof body.status === 'string' ? body.status : 'disconnected',
+    scope: typeof body.scope === 'string' ? body.scope : '',
+    expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : null,
+    lastSyncAt: typeof body.lastSyncAt === 'number' ? body.lastSyncAt : null,
   };
 }
 
-/** Disconnects without automatic retry because it changes server-side credentials. */
-export async function disconnectHuaweiHealth(): Promise<HuaweiProfileResponse> {
-  const response = await fetchWithResilience('/api/wearable/huawei/disconnect', {
+export async function startHuaweiHealthOAuth(session: HuaweiSession, redirect: string): Promise<string> {
+  const { response, body } = await requestHuaweiJson(session, '/api/wearable/huawei/start', {
     method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ redirect }),
   });
-  const payload = await readJsonRecord(response);
-  if (!response.ok || !payload) throw errorFor(payload?.error, 'Не удалось отключить Huawei Health.');
-  return payload;
+  if (!response.ok || !body || typeof body.authorizeUrl !== 'string') {
+    throw errorFor(body?.error, 'Не удалось начать подключение Huawei Health.');
+  }
+  let target: URL;
+  try { target = new URL(body.authorizeUrl); } catch { throw new SessionReadError('protocol'); }
+  if (target.protocol !== 'https:') throw new SessionReadError('protocol');
+  return target.toString();
 }
 
-/** Syncs a single local day without automatic retry to avoid duplicate provider work. */
-export async function syncHuaweiHealth(timezone: string, date: string): Promise<HuaweiProfileResponse> {
-  const response = await fetchWithResilience('/api/wearable/huawei/sync', {
+export async function disconnectHuaweiHealth(session: HuaweiSession): Promise<HuaweiProfileResponse> {
+  const { response, body } = await requestHuaweiJson(session, '/api/wearable/huawei/disconnect', {
+    method: 'POST', headers: { Accept: 'application/json' },
+  });
+  if (!response.ok || !body) throw errorFor(body?.error, 'Не удалось отключить Huawei Health.');
+  return body;
+}
+
+export async function syncHuaweiHealth(session: HuaweiSession, timezone: string, date: string): Promise<HuaweiProfileResponse> {
+  const { response, body } = await requestHuaweiJson(session, '/api/wearable/huawei/sync', {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ timezone, date }),
   });
-  const payload = await readJsonRecord(response);
-  if (!response.ok || !payload) {
-    const message = payload?.error === 'HUAWEI_NOT_CONNECTED'
+  if (!response.ok || !body) {
+    const message = body?.error === 'HUAWEI_NOT_CONNECTED'
       ? 'Huawei Health ещё не подключён.'
-      : payload?.error === 'NO_HUAWEI_DATA'
+      : body?.error === 'NO_HUAWEI_DATA'
         ? 'Huawei Health не вернул данные за сегодня.'
-        : payload?.error === 'UNAUTH'
+        : body?.error === 'UNAUTH'
           ? 'Сначала войдите в аккаунт FitFocus.'
           : 'Не удалось синхронизировать Huawei Health.';
     throw new Error(message);
   }
-  return payload;
+  return body;
 }

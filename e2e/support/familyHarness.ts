@@ -4,7 +4,7 @@ import { familyTestMenu } from '../../tests/_helpers/familyMenu';
 
 const account = 'google-e2e-sub', sid = 'a'.repeat(64), familyId = 'family-durable-e2e';
 const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid,
-  ...Object.fromEntries(['State', 'Profile', 'Bootstrap', 'AI', 'Weekly-Menu', 'Achievements', 'Family', 'Family-Menu'].flatMap(resource =>
+  ...Object.fromEntries(['State', 'Profile', 'Bootstrap', 'AI', 'Weekly-Menu', 'Achievements', 'Huawei', 'Family', 'Family-Menu'].flatMap(resource =>
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 export async function saved(page: Page) {
@@ -62,7 +62,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
-      ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'familySync'].map(name =>
+      ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'huaweiSync', 'familySync'].map(name =>
         [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
@@ -75,6 +75,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
       return json(request.method() === 'GET' ? { items: [] } : { ok: true, items: request.postDataJSON().items.map((item: { key: string; baseVersion: number }) => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
     }
     if (path === '/api/logout') { active = false; return json({ ok: true }); }
+    if (path === '/api/wearable/huawei/status') return json({ configured: false, connected: false });
     if (path === '/api/achievements' && request.method() === 'POST') { counts.achievements += 1; return json({ ok: true, unlocked: [] }); }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },
       members: [{ user_id: account, role: 'owner', status: 'active' }] });

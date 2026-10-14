@@ -1,17 +1,18 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { requireUser, json } from "../../_lib/auth";
+import { json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { ensureHuaweiConnectionsSchema, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { disconnectHuaweiProfile } from '../../_lib/huawei_disconnect';
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
+import { requireStateUser, withSessionGuard } from '../../_lib/state_session';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
 const handleHuaweiDisconnectPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);
@@ -28,5 +29,5 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const response = await handleHuaweiDisconnectPost(context);
   const requestId = requestIdFor(context.request);
   logApiEvent("wearable.huawei.disconnect.response", { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withSessionGuard(withRequestId(response, requestId), context.request, 'Huawei');
 };

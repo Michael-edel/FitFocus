@@ -6,6 +6,7 @@ import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, verif
 import { ensureHuaweiConnectionsSchema, encryptHuaweiTokenSet, exchangeHuaweiCode, huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { connectHuaweiProfile } from '../../_lib/huawei_connect';
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
+import { stateSessionId, withSessionGuard } from '../../_lib/state_session';
 
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
@@ -28,15 +29,23 @@ const handleHuaweiOAuthCallback: PagesFunction<Env> = async ({ request, env }) =
     const parsed = await verifyState(state, env.AUTH_JWT_SECRET, {
       expectedNonce: oauthNonce,
       maxAgeMs: OAUTH_STATE_TTL_MS,
-    }) as { u?: string; r?: string; n?: string; t?: number } | null;
-    if (!parsed || parsed.u !== user.sub) return json({ error: "Invalid state" }, 400);
+    }) as { u?: string; s?: string; r?: string; n?: string; t?: number } | null;
+    if (!parsed || parsed.u !== user.sub || !parsed.s || parsed.s !== await stateSessionId(user)) {
+      return json({ error: "Invalid state" }, 400);
+    }
 
     const db = requireDB(env);
     await ensureHuaweiConnectionsSchema(db);
     const tokenSet = await exchangeHuaweiCode(env, request, code);
     const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
+    // Revalidate after the external OAuth exchange before writing credentials/profile.
+    const currentUser = await requireUser(request, env);
+    await requireBetaAccess(env, currentUser);
+    if (currentUser.sub !== parsed.u || await stateSessionId(currentUser) !== parsed.s) {
+      return json({ error: "Invalid state" }, 401);
+    }
     const now = Math.floor(Date.now() / 1000);
-    const connection = await connectHuaweiProfile({ db, user, tokenSet, encrypted, nowSeconds: now });
+    const connection = await connectHuaweiProfile({ db, user: currentUser, tokenSet, encrypted, nowSeconds: now });
     if (connection.kind === 'conflict') return json({ error: 'PROFILE_CONFLICT', profile: connection.profile, version: connection.version }, 409);
 
     const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
@@ -73,5 +82,5 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const response = await handleHuaweiOAuthCallback(context);
   const requestId = requestIdFor(context.request);
   logApiEvent("wearable.huawei.callback.response", { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withSessionGuard(withRequestId(response, requestId), context.request, 'Huawei');
 };

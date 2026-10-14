@@ -12,9 +12,11 @@ import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 import { requestMobileToken } from './features/settings/mobileTokenApi';
-import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
 import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSession } from './services/mobileTokenSession';
-import { disconnectHuaweiHealth, requestHuaweiHealthStatus, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
+import { prepareHuaweiSession, type HuaweiSession } from './services/huaweiSession';
+import { disconnectHuaweiHealth, requestHuaweiHealthStatus, startHuaweiHealthOAuth, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
+import { SessionReadError } from './storage/sessionRead';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -61,7 +63,7 @@ type Props = {
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
-  onChangeUser?: (next: UserProfile) => void;
+  onChangeUser?: (next: UserProfile, guard?: OutboxCommitGuard) => Promise<void> | void;
   onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
   onProfileDraftChange?: (dirty: boolean) => void;
   onExportBackup?: () => void;
@@ -433,6 +435,8 @@ export default function SettingsScreen({
   const [validatedMobileTokenScope, setValidatedMobileTokenScope] = useState<string | null>(null);
   const mobileTokenControllerRef = useRef<AbortController | null>(null);
   const mobileTokenAttemptRef = useRef(0);
+  const huaweiControllerRef = useRef<AbortController | null>(null);
+  const huaweiAttemptRef = useRef(0);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -598,27 +602,86 @@ export default function SettingsScreen({
     };
   }, [isCurrentSession, mobileTokenCredential, mobileTokenScopeKey, serverSession]);
 
-  const loadHuaweiStatus = React.useCallback(async () => {
-    if (!serverSession) {
+  const huaweiScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
+  type HuaweiAttempt = { id: number; controller: AbortController; scopeKey: string };
+  const beginHuaweiAttempt = useCallback((): HuaweiAttempt | null => {
+    if (!serverSession || !loginGuard || !isCurrentSession || !huaweiScopeKey) return null;
+    huaweiControllerRef.current?.abort();
+    const attempt = { id: ++huaweiAttemptRef.current, controller: new AbortController(), scopeKey: huaweiScopeKey };
+    huaweiControllerRef.current = attempt.controller;
+    return attempt;
+  }, [huaweiScopeKey, isCurrentSession, loginGuard, serverSession]);
+  const isHuaweiAttemptCurrent = useCallback((attempt: HuaweiAttempt) =>
+    huaweiAttemptRef.current === attempt.id && huaweiControllerRef.current === attempt.controller
+      && !attempt.controller.signal.aborted && huaweiScopeKey === attempt.scopeKey
+      && !!serverSession && !!isCurrentSession?.(),
+  [huaweiScopeKey, isCurrentSession, serverSession]);
+  const prepareHuawei = useCallback(async (attempt: HuaweiAttempt) => {
+    if (!loginGuard || !isHuaweiAttemptCurrent(attempt)) throw new SessionReadError('session');
+    return prepareHuaweiSession(loginGuard, attempt.controller, () => isHuaweiAttemptCurrent(attempt));
+  }, [isHuaweiAttemptCurrent, loginGuard]);
+  const finishHuaweiAttempt = (attempt: HuaweiAttempt) => {
+    if (huaweiAttemptRef.current !== attempt.id) return;
+    huaweiControllerRef.current = null;
+  };
+  const huaweiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof SessionReadError) {
+      return error.kind === 'protocol'
+        ? 'Сервер пока не поддерживает безопасную синхронизацию Huawei Health. Обновите приложение.'
+        : error.kind === 'access'
+          ? 'Нет доступа к Huawei Health.'
+          : 'Сессия изменилась. Войдите снова и повторите действие.';
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+  const refreshHuaweiStatus = useCallback(async (attempt: HuaweiAttempt, session?: HuaweiSession) => {
+    const activeSession = session ?? await prepareHuawei(attempt);
+    const next = await requestHuaweiHealthStatus(activeSession);
+    if (isHuaweiAttemptCurrent(attempt)) setHuaweiStatus(next);
+    return next;
+  }, [isHuaweiAttemptCurrent, prepareHuawei]);
+  const loadHuaweiStatus = useCallback(async () => {
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) {
       setHuaweiStatus(null);
+      setHuaweiBusy(null);
       return null;
     }
-    setHuaweiBusy((current) => current || 'status');
+    setHuaweiBusy('status');
     try {
-      const next = await requestHuaweiHealthStatus();
-      setHuaweiStatus(next);
+      const next = await refreshHuaweiStatus(attempt);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(null);
       return next;
     } catch (error) {
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось проверить Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось проверить Huawei Health.'));
       return null;
     } finally {
-      setHuaweiBusy((current) => current === 'status' ? null : current);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiBusy(null);
+      finishHuaweiAttempt(attempt);
     }
-  }, [serverSession]);
+  }, [beginHuaweiAttempt, isHuaweiAttemptCurrent, refreshHuaweiStatus]);
 
   useEffect(() => {
     void loadHuaweiStatus();
-  }, [loadHuaweiStatus]);
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      huaweiControllerRef.current?.abort();
+      huaweiControllerRef.current = null;
+      huaweiAttemptRef.current += 1;
+      setHuaweiBusy(null);
+      setWearableBusy(null);
+      void loadHuaweiStatus();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      huaweiAttemptRef.current += 1;
+      huaweiControllerRef.current?.abort();
+      huaweiControllerRef.current = null;
+    };
+  }, [loadHuaweiStatus, huaweiScopeKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -627,28 +690,35 @@ export default function SettingsScreen({
       setHuaweiNotice('Huawei Health подключён. Нажмите «Обновить Huawei», чтобы подтянуть данные за сегодня.');
       url.searchParams.delete('connected');
       window.history.replaceState({}, '', url.toString());
-      void loadHuaweiStatus();
     }
-  }, [loadHuaweiStatus]);
+  }, []);
 
   const connectHuaweiHealth = async () => {
     if (!serverSession) {
       setHuaweiError('Сначала войдите в аккаунт FitFocus.');
       return;
     }
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) return;
     setHuaweiBusy('connect');
     setHuaweiError(null);
     setHuaweiNotice(null);
     try {
-      const status = huaweiStatus || await loadHuaweiStatus();
+      const session = await prepareHuawei(attempt);
+      const status = huaweiStatus || await refreshHuaweiStatus(attempt, session);
       if (status && !status.configured) {
         throw new Error('Huawei Health API еще не настроен на сервере FitFocus.');
       }
       const redirect = typeof window !== 'undefined' ? window.location.href : bridgeBaseUrl;
-      window.location.href = `/api/wearable/huawei/start?redirect=${encodeURIComponent(redirect)}`;
+      const authorizeUrl = await startHuaweiHealthOAuth(session, redirect);
+      if (isHuaweiAttemptCurrent(attempt)) window.location.href = authorizeUrl;
     } catch (error) {
-      setHuaweiBusy(null);
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось начать подключение Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) {
+        setHuaweiBusy(null);
+        setHuaweiError(huaweiErrorMessage(error, 'Не удалось начать подключение Huawei Health.'));
+      }
+    } finally {
+      finishHuaweiAttempt(attempt);
     }
   };
 
@@ -675,24 +745,30 @@ export default function SettingsScreen({
   const disconnectWearable = async () => {
     if (!user || !onPatchUser) return;
     if (user.wearableProvider === 'huawei_health') {
+      const attempt = beginHuaweiAttempt();
+      if (!attempt) return;
       setWearableBusy('disconnect');
       setHuaweiBusy('disconnect');
       setHuaweiError(null);
       setHuaweiNotice(null);
       try {
-        const payload = await disconnectHuaweiHealth();
-        if (isUserProfilePayload(payload?.profile) && onChangeUser) {
-          onChangeUser(payload.profile);
-        } else {
-          await onPatchUser({ wearableEnabled: false });
-        }
+        const session = await prepareHuawei(attempt);
+        const payload = await disconnectHuaweiHealth(session);
+        if (!isHuaweiAttemptCurrent(attempt)) return;
+        if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
+        const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
+        await onChangeUser(payload.profile, commitGuard);
+        if (!isHuaweiAttemptCurrent(attempt)) return;
         setHuaweiNotice('Huawei Health отключён.');
-        await loadHuaweiStatus();
+        await refreshHuaweiStatus(attempt, session);
       } catch (error) {
-        setHuaweiError(error instanceof Error ? error.message : 'Не удалось отключить Huawei Health.');
+        if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось отключить Huawei Health.'));
       } finally {
-        setWearableBusy(null);
-        setHuaweiBusy(null);
+        if (isHuaweiAttemptCurrent(attempt)) {
+          setWearableBusy(null);
+          setHuaweiBusy(null);
+        }
+        finishHuaweiAttempt(attempt);
       }
       return;
     }
@@ -707,6 +783,8 @@ export default function SettingsScreen({
   };
 
   const syncHuaweiHealth = async () => {
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) return;
     setHuaweiBusy('sync');
     setHuaweiError(null);
     setHuaweiNotice(null);
@@ -714,17 +792,21 @@ export default function SettingsScreen({
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const today = new Date();
       const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const payload = await requestHuaweiHealthSync(timezone, date);
-      if (isUserProfilePayload(payload?.profile) && onChangeUser) {
-        onChangeUser(payload.profile);
-      }
+      const session = await prepareHuawei(attempt);
+      const payload = await requestHuaweiHealthSync(session, timezone, date);
+      if (!isHuaweiAttemptCurrent(attempt)) return;
+      if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
+      const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
+      await onChangeUser(payload.profile, commitGuard);
+      if (!isHuaweiAttemptCurrent(attempt)) return;
       const count = Array.isArray(payload.updatedFields) ? payload.updatedFields.length : 0;
       setHuaweiNotice(`Huawei Health синхронизирован: обновлено полей ${count}.`);
-      await loadHuaweiStatus();
+      await refreshHuaweiStatus(attempt, session);
     } catch (error) {
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось синхронизировать Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось синхронизировать Huawei Health.'));
     } finally {
-      setHuaweiBusy(null);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiBusy(null);
+      finishHuaweiAttempt(attempt);
     }
   };
 

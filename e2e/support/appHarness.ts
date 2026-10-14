@@ -121,6 +121,10 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
         'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
         'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
+      } : path.startsWith('/api/wearable/huawei') && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-Huawei-Protocol': '1', 'X-FitFocus-Huawei-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
       } : path.startsWith('/api/achievements') ? {
         'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
@@ -156,6 +160,7 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         aiSync: { protocol: 1, guard: 1 },
         weeklyMenuSync: { protocol: 1, guard: 1 },
         achievementSync: { protocol: 1, guard: 1 },
+        huaweiSync: { protocol: 1, guard: 1 },
       });
       return;
     }
@@ -171,6 +176,9 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
 
     if (path === '/api/achievements' || path === '/api/achievements/check') {
       await json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] }); return;
+    }
+    if (path === '/api/wearable/huawei/status' && method === 'GET') {
+      await json({ configured: false, connected: false, status: 'disconnected', scope: '', expiresAt: null, lastSyncAt: null }); return;
     }
     if (path === '/api/state' && method === 'GET') { await json({ items: [] }); return; }
     // Default mocks retain outgoing intents via protocol pause; verified writer tests install their own acknowledgements.

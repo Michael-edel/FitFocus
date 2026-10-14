@@ -2,6 +2,7 @@ import React from 'react';
 import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxCommitGuard } from './storage/durableOutbox';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
@@ -41,7 +42,7 @@ type AppWorkspaceData = {
     googleMe: { sub?: string } | null;
     logout: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
-    persistUser?: (user: UserProfile) => Promise<void> | void;
+    persistUser?: (user: UserProfile, guard?: OutboxCommitGuard) => Promise<unknown> | void;
     patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
     onProfileDraftChange?: (dirty: boolean) => void;
     onExportBackup?: () => void;
@@ -387,6 +388,9 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'settings' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
           <SettingsScreen
+            key={loginGuard
+              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
+              : `no-session:${currentUser?.id || 'anonymous'}`}
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}
@@ -395,7 +399,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onServerLogout={logout}
             onDeleteAccount={deleteAccount}
             user={currentUser}
-            onChangeUser={(u: UserProfile) => void persistUser?.(u)}
+            onChangeUser={async (u: UserProfile, guard?: OutboxCommitGuard) => { await persistUser?.(u, guard); }}
             onPatchUser={(patch: Partial<UserProfile>) => patchProfileInCloud?.(patch)}
             onProfileDraftChange={onProfileDraftChange}
             onExportBackup={onExportBackup}
