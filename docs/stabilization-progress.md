@@ -3592,3 +3592,24 @@ body. Старые сборки без proof получают 401 при рег�
 файлах, `npm run typecheck`, `npm run check:api-invariants`, `npm run build`
 и `git diff --check`. CI этого SHA ожидает push; staging-регистрация,
 реальные OAuth/BFCache проверки и общий P0.5 lifecycle остаются открытыми.
+
+## P0.5 — обязательный proof для family/shopping API, `2866985`, 15.10.2026
+
+Все `/api/family/*` и `/api/shopping/*` endpoints теперь используют
+`requireScopedStateUser`: отсутствующий, неполный или устаревший account/session
+proof получает 401 до чтения тела запроса и прикладных D1-эффектов. Это включает
+чтение/запись семьи и меню, CAS `family/menu/state`, список и отметки покупок,
+старый bulk route и CSV export. Bulk, как и остальные routes, возвращает
+проверяемые session markers. Тесты проверяют чужую cookie и старый запрос без
+proof для каждого handler; бизнес-тесты передают корректный scope. Старым
+сборкам нужно обновиться до rollout обязательного proof.
+
+На точном локальном SHA
+[`2866985`](https://github.com/Michael-edel/FitFocus/commit/2866985267adb3b9f36c40c28fe400e3696cee57)
+полный unit suite прошёл 1234/1234 в 208 файлах; typecheck, API invariants,
+auth-scope, production build и `git diff --check` прошли. Целевые family/session
+тесты — 85/85; после форматирования bulk wrapper повторно прошли затронутые
+тесты 34/34. Workflow [38691565994](https://github.com/Michael-edel/FitFocus/actions/runs/38691565994)
+запущен для предыдущего SHA `e2e7020` и не проверяет этот код. CI точного SHA,
+проверка в браузерах, staging rollout и полный family lifecycle остаются
+открытыми.

@@ -975,6 +975,12 @@ CI документирующего `59a3630` прошёл: 860 unit, 152 browse
 и durable `familyMenu` outbox. Остальные AI/report/retry/family callbacks,
 staging и общий lifecycle остаются открытыми; весь P0.5 не закрыт.
 
+Последний локальный шаг P0.5 — [`2866985`](https://github.com/Michael-edel/FitFocus/commit/2866985267adb3b9f36c40c28fe400e3696cee57): все family и shopping
+HTTP routes требуют парный account/session proof до чтения body и D1-эффектов.
+Локально прошли 1234 unit-теста в 208 файлах, typecheck, API/auth guards,
+production build и diff check. Сборки без proof получают 401. CI этого SHA,
+staging, rollout и полный family lifecycle ещё не подтверждены.
+
 ## Что остаётся
 
 1. Завершить приёмку [семейного меню](family-menu-state.md) на `405238b`:
