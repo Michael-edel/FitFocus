@@ -1,6 +1,6 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Текущая локальная ветка — `durable-outbox`, основана на
+Обновлено: 16.10.2026. Текущая локальная ветка — `durable-outbox`, основана на
 [`24aa070`](https://github.com/Michael-edel/FitFocus/commit/24aa070). Работа над
 безопасной миграцией старой очереди не завершена: операции без доказанного
 серверного поколения теперь остаются конфликтами, а payload сохраняется в
@@ -587,6 +587,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   15/15 на desktop Chromium/Firefox/WebKit без retries; unit 1308/1308, три
   typecheck, production build и diff check прошли. Остальные callbacks/cache,
   staging и полный P0.4 lifecycle остаются открытыми.
+  - [x] Защитить выбранный день личного недельного меню: restore, отображение,
+    сохранение и setter теперь требуют разрешённого account cache и гидратации
+    точного ключа аккаунта. Регрессия до исправления оставляла вторник A выбранным
+    в старой вкладке после входа B; после исправления кэш A сохранён, но скрыт.
+    [`c1f8180`](https://github.com/Michael-edel/FitFocus/commit/c1f818080c1554feaf36ce24f78b91145ea607ec): E2E 3/3 на desktop
+    Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
+    typecheck и production build прошли. Остальной аудит P0.4 не закрыт.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

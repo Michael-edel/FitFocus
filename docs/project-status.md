@@ -3,8 +3,12 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последнее
 локально проверенное исправление —
-[`2e2c1d1`](https://github.com/Michael-edel/FitFocus/commit/2e2c1d165e2d138d6d426052137b284e0500c381) в ветке
-`durable-outbox`; после публикации нужно проверить CI на точном HEAD.
+[`c1f8180`](https://github.com/Michael-edel/FitFocus/commit/c1f818080c1554feaf36ce24f78b91145ea607ec) в ветке
+`durable-outbox`: выбранный день личного недельного меню скрывается в старой
+вкладке, пока активная IndexedDB-сессия не разрешает account cache. E2E прошёл
+3/3 на desktop Chromium/Firefox/WebKit; unit 1308/1308, общий и оба strict
+typecheck, build и diff check прошли. Точный CI этого коммита проверяется после
+push.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
