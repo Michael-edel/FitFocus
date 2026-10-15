@@ -5,6 +5,7 @@ import { isRecord, parseJson } from "./safeJson";
 import { requestFamilyJson } from './services/familySession';
 import { assertReadSession } from './storage/sessionRead';
 import type { OutboxReadGuard } from './storage/durableOutbox';
+import { buildPersonalShoppingCsv } from './services/shoppingExport';
 
 type ShoppingItem = {
   name: string;
@@ -80,6 +81,8 @@ export default function ShoppingListCard({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [fallbackCheckedSnapshot, setFallbackCheckedSnapshot] = useState<FallbackCheckedSnapshot | null>(null);
   const [pageGeneration, setPageGeneration] = useState(0);
+  const [csvExporting, setCsvExporting] = useState(false);
+  const [csvExportError, setCsvExportError] = useState<string | null>(null);
   const activeControllersRef = useRef(new Set<AbortController>());
   const scopeKey = userId && loginGuard?.accountId === userId && isCurrentSession()
     ? JSON.stringify([loginGuard.accountId, loginGuard.serverSessionId, loginGuard.sessionEpoch, loginGuard.authFence, weekStart])
@@ -253,6 +256,33 @@ export default function ShoppingListCard({
     }
   }, [groups, fallbackList]);
 
+  const exportCsv = useCallback(async () => {
+    const capturedGuard = loginGuard;
+    const capturedItems = items;
+    const capturedSession = isCurrentSession;
+    if (!scopeKey || !capturedGuard || capturedGuard.accountId !== userId || !capturedItems || !capturedSession()) return;
+    setCsvExporting(true);
+    setCsvExportError(null);
+    try {
+      await assertReadSession(capturedGuard, { isCurrentSession: capturedSession });
+      const csv = buildPersonalShoppingCsv(capturedItems);
+      await assertReadSession(capturedGuard, { isCurrentSession: capturedSession });
+      const objectUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `shopping_${weekStart}.csv`;
+      link.hidden = true;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch {
+      if (capturedSession()) setCsvExportError('Сессия изменилась. Обновите список и повторите экспорт.');
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [isCurrentSession, items, loginGuard, scopeKey, userId, weekStart]);
+
   const fallbackParsed = useMemo(() => (fallbackList || []).map((row) => {
     const parts = String(row || '').split('—');
     return {
@@ -290,14 +320,18 @@ export default function ShoppingListCard({
             >
               Скопировать
             </button>
-            <a
-              href={`/api/shopping/export?week=${encodeURIComponent(weekStart)}`}
+            <button
+              type="button"
+              onClick={() => void exportCsv()}
+              disabled={csvExporting || !scopeKey}
               className="px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-200 font-black text-xs hover:bg-slate-900/70"
             >
-              CSV
-            </a>
+              {csvExporting ? 'Подготовка…' : 'CSV'}
+            </button>
           </div>
         </div>
+
+        {csvExportError && <p role="status" className="text-xs text-amber-300">{csvExportError}</p>}
 
         {groups.map((g) => {
           const isCollapsed = Boolean(collapsed[g.department]);

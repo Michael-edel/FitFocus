@@ -797,6 +797,44 @@ test('a delayed personal shopping-list read cannot cross the account boundary', 
   }
 });
 
+test('personal shopping CSV exports only the current account snapshot', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab shopping export account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  await installAccountApi(page, state, false, errorsA, false, false, true);
+  await openApp(page, '/#plan');
+  await expect(page.locator('#shopping-list')).toBeVisible();
+  await expect(page.getByText('Список A', { exact: true })).toBeVisible();
+
+  const accountBPage = await openAccountB(context, state, errorsB, true, 'plan');
+  await expect(accountBPage.getByText('Список B', { exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+
+  const staleDownload = page.waitForEvent('download', { timeout: 1_000 }).then(() => true).catch(() => false);
+  await page.getByRole('button', { name: 'CSV', exact: true }).click();
+  expect(await staleDownload).toBe(false);
+
+  const currentDownloadPromise = accountBPage.waitForEvent('download');
+  await accountBPage.getByRole('button', { name: 'CSV', exact: true }).click();
+  const currentDownload = await currentDownloadPromise;
+  expect(currentDownload.suggestedFilename()).toBe('shopping_2026-10-12.csv');
+  const stream = await currentDownload.createReadStream();
+  expect(stream).not.toBeNull();
+  let csv = '';
+  for await (const chunk of stream!) csv += Buffer.from(chunk).toString('utf8');
+  expect(csv).toContain('Список B');
+  expect(csv).not.toContain('Список A');
+  expect(errorsA).toEqual([]);
+  expect(errorsB).toEqual([]);
+});
+
 test('a delayed personal shopping check from account A is rejected after account B signs in', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
