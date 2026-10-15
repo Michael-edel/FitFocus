@@ -4,6 +4,12 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+`GET /api/support/attachment` требует полный proof для владельца и admin;
+оба клиента загружают media scoped fetch-запросами и проверяют markers/echo.
+Route, transport, API invariant и три typecheck прошли в изолированном sandbox
+на SHA `a396a30`. Unit, точный CI, старые bundles и staging media smoke ещё
+открыты. [Контракт](support-session.md).
+
 AdminScreen загружает вложения поддержки через scoped request и проверяет
 `Support-Attachment` protocol/guard markers; API echo-возвращает account/session,
 а temporary Blob URLs отзываются при размонтировании. Маршрут, session transport,

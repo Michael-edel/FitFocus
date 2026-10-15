@@ -40,7 +40,8 @@
   Проверить обновление Settings bundle, реальный OAuth, смену login и возврат
   из BFCache на staging и целевом устройстве.
 - [ ] Для [поддержки](docs/support-session.md) пользовательские и admin
-  endpoints требуют парный account/session proof; старые bundles без него
+  endpoints, включая `GET /api/support/attachment`, требуют парный
+  account/session proof; старые bundles без него
   получают 401 до разбора тела и прикладных запросов. Проверить обновление
   клиента, создание/ответ пользователя, чтение/изменение тикетов и открытие
   вложений из admin панели с проверкой scope на staging.

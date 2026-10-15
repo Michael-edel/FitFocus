@@ -3,6 +3,17 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный follow-up — обязательный proof и scoped fetch для всех вложений поддержки, `a396a30`
+
+`GET /api/support/attachment` теперь требует полный account/session proof до
+проверки тикета и чтения файла; доступ владельца/admin сохраняется после guard.
+SupportScreen и AdminScreen скачивают media scoped fetch-запросом, сверяют
+Support-Attachment markers и показывают временные Blob URL. Regression cases
+покрывают запросы с proof, отказ без proof и marker validation. В изолированном
+sandbox прошли API/auth/admin guards и три typecheck. Unit и CI точного SHA ещё
+не подтверждены; обновление старых bundles и staging media smoke остаются
+открытыми. [Контракт](support-session.md).
+
 ## Локальный follow-up — guarded media загрузка admin-вложений поддержки, `f949842`
 
 После обязательного session proof у `requireAdminRequest` прямые `<img>`,

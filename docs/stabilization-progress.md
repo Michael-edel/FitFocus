@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — session proof для owner/admin attachment reads, `a396a30`, 15.10.2026
+
+`GET /api/support/attachment` ранее принимал cookie-only запросы пользователя.
+Теперь до проверки тикета и чтения файла требуется полный account/session proof;
+после guard route проверяет владельца тикета или admin-доступ и возвращает
+Support-Attachment protocol/guard markers с точным echo scope.
+
+SupportScreen и AdminScreen больше не используют прямой media `src` к приватному
+endpoint. Они загружают Blob через свои session-bound transports, сверяют
+response markers и отзывают временные URLs при смене тикета/размонтировании.
+Добавлены route regression tests для scoped владельца/admin, отказа owner/admin
+без proof, transport proof и marker mismatch. В сетево-отключённом sandbox
+прошли API invariants, auth-scope, admin guards и три typecheck. Unit и полный CI
+SHA `a396a30` ещё не подтверждены; старые bundles и staging media smoke остаются
+открытыми. [Контракт](support-session.md).
+
 ## P0.5 — guarded загрузка вложений из admin-поддержки, `f949842`, 15.10.2026
 
 После того как `/api/admin/*` стал требовать account/session proof, media

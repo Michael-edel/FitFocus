@@ -324,16 +324,20 @@ protocol/guard markers. Старые bundles без proof получают 401 �
 выпуска нового серверного контракта. Контракт React lifetime и локальных проверок — в
 [документе сессии поддержки](docs/support-session.md).
 
-`GET /api/support/attachment` возвращает приватный файл с `private, no-store`,
-`nosniff` и sandbox CSP. Каждый ответ получает
+`GET /api/support/attachment` также требует полный account/session proof через
+`requireScopedStateUser`; отсутствующий, неполный или несовпадающий proof
+получает 401 до проверки тикета и чтения файла. Доступ после этого ограничен
+владельцем тикета или администратором. Приватный файл возвращается с
+`private, no-store`, `nosniff` и sandbox CSP. Каждый ответ получает
 `X-FitFocus-Support-Attachment-Protocol: 1` и
 `X-FitFocus-Support-Attachment-Guard: 1`; переданные account/session headers
-эхо-возвращаются. Запрос администратора проверяет полный proof через
+эхо-возвращаются. Для администратора дополнительно проверяется роль через
 `requireAdminRequest`. Поскольку `<img>`, `<video>` и `<audio>` не могут задать
-эти заголовки, AdminScreen загружает вложение через `requestAdminResponse`,
-проверяет scope markers и показывает временный Blob URL, удаляемый при размонтировании.
-Для пользователя сервер также проверяет cookie, владельца тикета и допустимость
-вложения; вызов по URL без proof остаётся owner-scoped.
+эти заголовки, SupportScreen использует `requestSupportAttachmentBlob`, а
+AdminScreen — `requestAdminResponse`; оба проверяют scope markers и показывают
+временный Blob URL, удаляемый при смене тикета или размонтировании. Старые
+bundles, загружающие файл напрямую из media tag без proof, получают 401 и должны
+обновиться до rollout.
 
 ## Выдача мобильного bearer-токена
 

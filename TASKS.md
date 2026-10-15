@@ -532,9 +532,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
   `3abb374` вводит обязательный серверный proof для всех `/api/state` и
-  `/api/profile` handlers; follow-up `4edeb0a` закрыл такой же legacy-путь в
-  `GET /api/export` до построения GDPR-выгрузки. Остальные callback-контракты,
-  точный CI, проверка внешних потребителей и staging остаются открытыми.
+  `/api/profile` handlers; `4edeb0a` закрыл такой же legacy-путь в
+  `GET /api/export`, а `a396a30` добавил proof для чтения вложений поддержки.
+  Остальные callback-контракты, точный CI, проверка внешних потребителей и
+  staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует
   обязательный парный scope на сервере и проверяет ответ перед очисткой. Чужой
   proof отклоняется до удаления, scoped logout не отзывает другую сессию и не
@@ -570,8 +571,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   отсутствие/частичную пару до D1 lookup и guarded 401 middleware. API/auth/admin
   guards и три typecheck прошли в изолированном контейнере; точный CI после push.
   `f949842` добавляет scoped fetch и response markers для admin-вложений поддержки,
-  которые браузерные media tags не могли загрузить с proof header. Старые
-  AdminScreen bundles требуют обновления. [Контракт](docs/admin-session.md).
+  которые браузерные media tags не могли загрузить с proof header. Follow-up
+  `a396a30` требует proof и для всех attachment reads; SupportScreen и AdminScreen
+  теперь получают media через scoped fetch и проверяют markers. [Контракт](docs/support-session.md).
+  Старые bundles требуют обновления.
   Предыдущий PR CI [`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
   на `01bfa05` остановился на unit: 1263/1264 теста прошли, а единственная
   ошибка была в legacy fixture, который общий helper уже делал scoped. Follow-up
