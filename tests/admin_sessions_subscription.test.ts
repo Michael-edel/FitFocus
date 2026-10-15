@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost as postSession } from '../functions/api/admin/sessions';
 import { onRequestPost as postSubscription } from '../functions/api/admin/subscription';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminSessionContext = Parameters<typeof postSession>[0];
 
 const SECRET = 'unit-test-secret';
@@ -134,6 +135,14 @@ async function adminRequestRaw(url: string, body: string, extraHeaders: Record<s
   });
 }
 
+async function adminScopedRequest(url: string, body: string, extraHeaders: Record<string, string> = {}) {
+  return adminRequestRaw(url, body, {
+    'X-FitFocus-State-Account': 'admin-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' }),
+    ...extraHeaders,
+  });
+}
+
 describe('admin session and subscription mutations', () => {
   it('rejects session revoke for missing or deleted target users', async () => {
     const db = makeDb({ targetExists: false });
@@ -199,10 +208,10 @@ describe('admin session and subscription mutations', () => {
 
   it('rejects subscription changes for missing or deleted target users', async () => {
     const db = makeDb({ targetExists: false });
-    const request = await adminRequest('https://fitfocus.test/api/admin/subscription', {
+    const request = await adminScopedRequest('https://fitfocus.test/api/admin/subscription', JSON.stringify({
       user_id: 'missing-user',
       plan: 'pro',
-    });
+    }));
 
     const res = await postSubscription(context(request, db));
 
@@ -213,7 +222,7 @@ describe('admin session and subscription mutations', () => {
 
   it('rejects oversized subscription JSON before writing', async () => {
     const db = makeDb();
-    const request = await adminRequestRaw(
+    const request = await adminScopedRequest(
       'https://fitfocus.test/api/admin/subscription',
       `{"user_id":"user-1","plan":"pro","payload":"${'x'.repeat(70 * 1024)}"}`,
     );
@@ -227,10 +236,10 @@ describe('admin session and subscription mutations', () => {
 
   it('updates a subscription and writes an audit event', async () => {
     const db = makeDb();
-    const request = await adminRequest('https://fitfocus.test/api/admin/subscription', {
+    const request = await adminScopedRequest('https://fitfocus.test/api/admin/subscription', JSON.stringify({
       user_id: 'user-1',
       plan: 'pro',
-    });
+    }));
 
     const res = await postSubscription(context(request, db));
 
@@ -244,9 +253,21 @@ describe('admin session and subscription mutations', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
+  it('rejects an unscoped legacy subscription request before parsing the body', async () => {
+    const db = makeDb();
+    const request = await adminRequestRaw('https://fitfocus.test/api/admin/subscription', '{');
+
+    const res = await postSubscription(context(request, db));
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: 'UNAUTH' });
+    expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
+    expect(db.auditEvents).toHaveLength(0);
+  });
+
   it('rejects an admin subscription callback bound to a replaced account before writing', async () => {
     const db = makeDb();
-    const request = await adminRequestRaw(
+    const request = await adminScopedRequest(
       'https://fitfocus.test/api/admin/subscription',
       JSON.stringify({ user_id: 'user-1', plan: 'pro' }),
       { 'X-FitFocus-State-Account': 'another-account', 'X-FitFocus-State-Session': 'b'.repeat(64) },
@@ -261,10 +282,10 @@ describe('admin session and subscription mutations', () => {
 
   it('upserts a canceled free subscription row instead of silently skipping missing rows', async () => {
     const db = makeDb();
-    const request = await adminRequest('https://fitfocus.test/api/admin/subscription', {
+    const request = await adminScopedRequest('https://fitfocus.test/api/admin/subscription', JSON.stringify({
       user_id: 'user-1',
       plan: 'free',
-    });
+    }));
 
     const res = await postSubscription(context(request, db));
 

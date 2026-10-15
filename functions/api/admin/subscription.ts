@@ -6,11 +6,11 @@ import { normalizePlan, updateAdminSubscription } from '../_lib/admin_subscripti
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
 import { asString, isJsonObject } from '../_lib/json';
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 const handleAdminSubscriptionPost: PagesFunction<Env> = async ({ request, env }) => {
-  let user; try { user = await requireStateUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
+  let user; try { user = await requireScopedStateUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
   try { requireRole(user, 'admin'); } catch { return json({ error: 'FORBIDDEN' }, 403); }
   const db = requireDB(env); await requireAdminRequest(user, request, db);
   let body: unknown = null; try { body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES); } catch (error) { if (error instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413); throw error; }

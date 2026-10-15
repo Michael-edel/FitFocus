@@ -999,8 +999,8 @@ assertIncludes(
 );
 assertIncludes(
   billingCheckout,
-  'requireStateUser(request, env)',
-  'billing checkout must bind its mutation to the initiating account and session',
+  'requireScopedStateUser(request, env)',
+  'billing checkout must require proof for the initiating account and session',
 );
 assertIncludes(
   billingCheckout,
@@ -1009,8 +1009,8 @@ assertIncludes(
 );
 assertIncludes(
   billingAdminSubscription,
-  'requireStateUser(request, env)',
-  'admin subscription mutation must bind to the initiating account and session',
+  'requireScopedStateUser(request, env)',
+  'admin subscription mutation must require proof for the initiating account and session',
 );
 assertIncludes(
   billingAdminSubscription,

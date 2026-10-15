@@ -3,14 +3,14 @@ import { asString } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 import { createBillingCheckout, type BillingCheckoutEnv } from '../_lib/billing_checkout';
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = BillingCheckoutEnv;
 
 async function handleCheckoutPost({ request, env }: { request: Request; env: Env }) {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }

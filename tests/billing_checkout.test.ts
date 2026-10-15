@@ -52,19 +52,22 @@ function db() {
   };
 }
 
-async function checkoutContext(account = USER_ID, session?: string) {
-  const scopeSession = session ?? await stateSessionId({ sub: USER_ID, sid: SESSION_ID });
+async function checkoutContext(options: { account?: string; session?: string; includeScope?: boolean; body?: string } = {}) {
+  const account = options.account ?? USER_ID;
+  const scopeSession = options.session ?? await stateSessionId({ sub: USER_ID, sid: SESSION_ID });
   const token = await signedSession();
   const request = new Request('https://fitfocus.test/api/billing/checkout', {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
-      'X-FitFocus-State-Account': account,
-      'X-FitFocus-State-Session': scopeSession,
+      ...(options.includeScope === false ? {} : {
+        'X-FitFocus-State-Account': account,
+        'X-FitFocus-State-Session': scopeSession,
+      }),
       'X-Request-ID': 'billing-checkout-test-01',
     },
-    body: JSON.stringify({ plan: 'pro' }),
+    body: options.body ?? JSON.stringify({ plan: 'pro' }),
   });
   return { request, env: {
     AUTH_JWT_SECRET: SECRET,
@@ -109,7 +112,7 @@ describe('billing checkout plan resolution', () => {
   });
 
   it('creates checkout only after the request scope matches the authenticated session', async () => {
-    const context = await checkoutContext('another-account');
+    const context = await checkoutContext({ account: 'another-account' });
     const response = await postCheckout(context);
 
     expect(response.status).toBe(401);
@@ -128,5 +131,13 @@ describe('billing checkout plan resolution', () => {
     expect(response.headers.get('X-FitFocus-State-Account')).toBe(USER_ID);
     expect(response.headers.get('X-FitFocus-State-Session')).toBe(await stateSessionId({ sub: USER_ID, sid: SESSION_ID }));
     expect(createCheckoutSession).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an unscoped legacy request before parsing the body or creating a checkout', async () => {
+    const context = await checkoutContext({ includeScope: false, body: '{' });
+    const response = await postCheckout(context);
+
+    expect(response.status).toBe(401);
+    expect(createCheckoutSession).not.toHaveBeenCalled();
   });
 });
