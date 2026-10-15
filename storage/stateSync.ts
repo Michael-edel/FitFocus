@@ -60,6 +60,12 @@ function managedLegacyStateKey(accountId: string, key: string): UserStateKey | n
   return USER_STATE_KEYS.includes(stateKey as typeof USER_STATE_KEYS[number]) ? stateKey as UserStateKey : null;
 }
 
+function resolvableLegacyStateKey(accountId: string, key: string): boolean {
+  const prefix = `fitfocus_data_${accountId}_`;
+  return key.startsWith(prefix) && !key.startsWith(`${prefix}family_menu:`)
+    && !key.endsWith('_profile') && !key.endsWith('_all_users') && !key.endsWith('__ffv');
+}
+
 
 export class StateSync {
   private readonly outbox: DurableOutbox;
@@ -190,6 +196,54 @@ export class StateSync {
     const guard = { ...this.readGuard };
     const resolved = await this.outbox.resolveConflictGroup({
       accountId, key, expectedOpIds: [...expectedOpIds], choice, readGuard: guard, nowMs: this.now(),
+    });
+    if (!resolved) {
+      reportStateQueue(accountId, await this.outbox.list(accountId));
+      return false;
+    }
+    reportStateQueue(accountId, await this.outbox.list(accountId));
+    if (choice === 'keep-latest-local' && generation === this.generation && this.accountId === accountId) await this.flush();
+    return true;
+  }
+
+  /** A legacy operation has no trusted generation; an explicit action first reads the exact server key. */
+  async resolveLegacyConflictedKey(accountId: string, key: string, expectedOpIds: readonly string[], choice: 'keep-latest-local' | 'accept-server'): Promise<boolean> {
+    if (this.accountId !== accountId || !resolvableLegacyStateKey(accountId, key)) return false;
+    const generation = this.generation;
+    if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard || !this.session?.serverSessionId) return false;
+    const guard = { ...this.readGuard };
+    const serverSessionId = this.session.serverSessionId;
+    const controller = new AbortController();
+    this.requests.add(controller);
+    let snapshot: { value: string; version: number; exists: boolean } | undefined;
+    try {
+      const prefix = `fitfocus_data_${accountId}_`;
+      const query = new URLSearchParams({ prefix, includeDeleted: '1' });
+      const { response, body } = await requestJson(this.fetchFn, `/api/state?${query}`, { headers: {
+        'X-FitFocus-State-Account': accountId, 'X-FitFocus-State-Session': serverSessionId,
+      } }, controller, this.timeoutMs);
+      if (generation !== this.generation || this.accountId !== accountId || this.session?.serverSessionId !== serverSessionId
+        || this.readGuard?.sessionEpoch !== guard.sessionEpoch || this.readGuard.authFence !== guard.authFence
+        || !response.ok || !this.stateScope(response, accountId, serverSessionId) || !Array.isArray(body?.items)) return false;
+      const matches = body.items.filter((item) => isRecord(item) && item.key === key);
+      if (matches.length > 1) return false;
+      if (matches.length === 0) snapshot = { value: '', version: 0, exists: false };
+      else {
+        const item = matches[0] as Record<string, unknown>;
+        if (typeof item.value !== 'string' || typeof item.exists !== 'boolean'
+          || typeof item.version !== 'number' || !Number.isSafeInteger(item.version) || item.version < 0
+          || (item.exists && item.version < 1) || (!item.exists && item.value !== '')) return false;
+        snapshot = { value: item.value, version: item.version, exists: item.exists };
+      }
+    } catch {
+      return false;
+    } finally {
+      this.requests.delete(controller);
+    }
+    if (!snapshot || generation !== this.generation || this.accountId !== accountId || this.session?.serverSessionId !== serverSessionId
+      || this.readGuard?.sessionEpoch !== guard.sessionEpoch || this.readGuard.authFence !== guard.authFence) return false;
+    const resolved = await this.outbox.resolveLegacyConflictGroup({
+      accountId, key, expectedOpIds: [...expectedOpIds], choice, readGuard: guard, nowMs: this.now(), serverSnapshot: snapshot,
     });
     if (!resolved) {
       reportStateQueue(accountId, await this.outbox.list(accountId));
@@ -552,6 +606,11 @@ export class StateSync {
 
   private profileScope(response: Response, accountId: string, sessionId: string): boolean {
     return response.headers.get('X-FitFocus-Profile-Protocol') === '1' && response.headers.get('X-FitFocus-Profile-Guard') === '1'
+      && response.headers.get('X-FitFocus-State-Account') === accountId && response.headers.get('X-FitFocus-State-Session') === sessionId;
+  }
+
+  private stateScope(response: Response, accountId: string, sessionId: string): boolean {
+    return response.headers.get('X-FitFocus-State-Protocol') === '2' && response.headers.get('X-FitFocus-State-Guard') === '1'
       && response.headers.get('X-FitFocus-State-Account') === accountId && response.headers.get('X-FitFocus-State-Session') === sessionId;
   }
 }

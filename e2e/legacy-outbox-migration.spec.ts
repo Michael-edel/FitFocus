@@ -14,7 +14,8 @@ const taskEntry = `0:${taskText}`;
 type LegacyRecord = { type: string; key: string; value?: string; baseVersion?: number; retryCount?: number };
 type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; baseVersion: number;
   status: string; reason?: string; nextAttemptAtMs: number; attempt?: { startedAtMs: number } };
-type MigrationItem = { id: string; canonical: string; state: string; reason?: string; accountId?: string; opId?: string; acknowledgedVersion?: number };
+type MigrationItem = { id: string; canonical: string; state: string; reason?: string; accountId?: string; opId?: string;
+  acknowledgedVersion?: number; resolution?: { kind: string; serverVersion: number; atMs: number; replacementOpId?: string } };
 type MigrationUnknown = { rawRecord: unknown; reason: string };
 
 async function oldQueueRecord(page: Page, key: string): Promise<LegacyRecord | null> {
@@ -312,6 +313,29 @@ test('preserves legacy intent without sending an operation whose server generati
     await expect(currentPage.getByText('1/3 выполнено', { exact: true })).toBeVisible();
     await expect(oldPage.getByText('1/3 выполнено', { exact: true })).toBeVisible();
     await expect(currentPage).toHaveTitle(/FitFocus/);
+
+    // An explicit user action reads the current server version, retires the
+    // imported records in the same transaction, then sends a new operation.
+    const acceptedBeforeResolution = server.counts.currentStatePutAccepted;
+    server.recoverCurrentState();
+    await currentPage.locator('[data-state-notice-region] details summary').click();
+    const recovery = currentPage.getByRole('region', { name: 'План питания' });
+    const keepLocal = recovery.getByRole('button', { name: 'Оставить последнюю локальную версию' });
+    await expect(keepLocal).toBeVisible();
+    const confirmation = currentPage.waitForEvent('dialog').then(async dialog => {
+      const message = dialog.message();
+      await dialog.accept();
+      return message;
+    });
+    await keepLocal.click();
+    expect(await confirmation).toContain('свежей версии сервера');
+    await expect.poll(async () => (await migrationState(currentPage)).operations.filter(operation => operation.key === targetKey)).toHaveLength(0);
+    const resolvedState = await migrationState(currentPage);
+    const resolvedReceipt = itemForRecord(resolvedState.migrationItems, targetKey, previousOldRecord.value!);
+    expect(resolvedReceipt?.resolution).toMatchObject({ kind: 'keep-latest-local', serverVersion: 0 });
+    expect(server.stateWriteKeys).toContain(targetKey);
+    expect(server.counts.currentStatePutAccepted).toBeGreaterThan(acceptedBeforeResolution);
+    expect(resolvedState.value).toBe(updatedOldValue);
     await info.attach('legacy-outbox-migration', { body: JSON.stringify({
       sourceRecord: generatedRecord, oldSource, databaseVersion: (await migrationState(currentPage)).databaseVersion,
       acceptedStateKeys: server.stateWriteKeys, counts: server.counts,

@@ -10,6 +10,10 @@ export type NormalizedLegacyQueueRecord =
   | { type: 'put'; key: string; value: string; baseVersion: number; retryCount: number }
   | { type: 'delete'; key: string; baseVersion: number; retryCount: number };
 
+export type LegacyMigrationResolution =
+  | { kind: 'keep-latest-local'; atMs: number; serverVersion: number; replacementOpId: string }
+  | { kind: 'accept-server'; atMs: number; serverVersion: number };
+
 export type LegacyInvalidReason =
   | 'not-an-object'
   | 'invalid-type'

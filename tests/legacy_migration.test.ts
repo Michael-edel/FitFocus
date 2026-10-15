@@ -54,6 +54,57 @@ describe('atomic resumable legacy migration', () => {
     expect(await claim()).toBeNull();
   });
 
+  it.each(['keep-latest-local', 'accept-server'] as const)('resolves an imported conflict with fresh server generation: %s', async (choice) => {
+    const originalSource = rawSource;
+    await migration.migrate(options());
+    const [legacyOperation] = await outbox.list(accountId);
+    await outbox.activateSession(accountId, 'resolution-session');
+    const state = await outbox.sessionState();
+    const guard = await outbox.acceptReadSession(accountId, 'b'.repeat(64), state.fence);
+    expect(guard).not.toBeNull();
+
+    expect(await outbox.resolveLegacyConflictGroup({
+      accountId, key, expectedOpIds: [legacyOperation.opId], choice, readGuard: guard!, nowMs: 123,
+      serverSnapshot: { value: 'verified remote value', version: 5, exists: true },
+    })).toBe(true);
+
+    const [receipt] = await rows<MigrationItem>(STATE_STORES.migrationItems);
+    expect(receipt).toMatchObject({ state: 'imported', opId: legacyOperation.opId, accountId,
+      resolution: { kind: choice, atMs: 123, serverVersion: 5 } });
+    if (choice === 'keep-latest-local') {
+      const [replacement] = await outbox.list(accountId);
+      expect(replacement).toMatchObject({ type: 'put', key, value: put.value, baseVersion: 5, status: 'pending' });
+      expect(replacement).not.toHaveProperty('migrationSourceKey');
+      expect(receipt.resolution).toMatchObject({ replacementOpId: replacement.opId });
+      expect(await outbox.snapshot(accountId, key)).toMatchObject({ value: put.value, confirmedVersion: 5 });
+    } else {
+      expect(await outbox.list(accountId)).toEqual([]);
+      expect(await outbox.snapshot(accountId, key)).toMatchObject({ value: 'verified remote value', confirmedVersion: 5 });
+      expect(receipt.resolution).not.toHaveProperty('replacementOpId');
+    }
+
+    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 1, unresolvedRecords: 0 });
+    expect(rawSource).toBe(originalSource);
+    if (choice === 'keep-latest-local') expect(await outbox.list(accountId)).toHaveLength(1);
+    else expect(await outbox.list(accountId)).toEqual([]);
+  });
+
+  it('resolves a normalized integer legacy baseVersion above the safe-integer range', async () => {
+    rawSource = JSON.stringify([{ ...put, baseVersion: Number.MAX_SAFE_INTEGER + 2 }]);
+    await migration.migrate(options());
+    const [legacyOperation] = await outbox.list(accountId);
+    await outbox.activateSession(accountId, 'large-version-resolution');
+    const state = await outbox.sessionState();
+    const guard = await outbox.acceptReadSession(accountId, 'c'.repeat(64), state.fence);
+
+    expect(await outbox.resolveLegacyConflictGroup({
+      accountId, key, expectedOpIds: [legacyOperation.opId], choice: 'accept-server', readGuard: guard!, nowMs: 124,
+      serverSnapshot: { value: '', version: 0, exists: false },
+    })).toBe(true);
+    const [receipt] = await rows<MigrationItem>(STATE_STORES.migrationItems);
+    expect(receipt.resolution).toMatchObject({ kind: 'accept-server', serverVersion: 0 });
+  });
+
   it('does not reimport a legacy operation after account deletion and reauthentication', async () => {
     const originalSource = rawSource;
     await migration.migrate(options());

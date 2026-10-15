@@ -1,6 +1,6 @@
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId,
   legacyDeletedAccountMetaId, legacyFingerprint, legacyFingerprintFields, normalizeLegacyRecord,
-  type LegacyInvalidReason, type NormalizedLegacyQueueRecord } from './legacyQueue';
+  type LegacyInvalidReason, type LegacyMigrationResolution, type NormalizedLegacyQueueRecord } from './legacyQueue';
 import { isCurrentLegacyWriterFenceProof, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { outboxKeyOwnerId, outboxKeyStateId, writeOutboxInTransaction, type OutboxOperation } from './durableOutbox';
 import { StateDatabase, StateStorageError, STATE_STORES, afterIndexedRequests, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
@@ -23,6 +23,7 @@ export type MigrationItem = {
   rawRecords: unknown[]; rawCanonicals: string[]; state: 'imported' | 'unknown';
   unknownIds: string[]; reason?: MigrationUnknownReason; opId?: string; accountId?: string;
   acknowledgedVersion?: number; acknowledgedAtMs?: number;
+  resolution?: LegacyMigrationResolution;
 };
 export type MigrationProgress = {
   sourceKey: string; snapshotId: string; status: 'importing' | 'partial' | 'completed';
@@ -39,6 +40,15 @@ type PreparedItem = {
   deletedAccountMarkerId?: string; evidenceHash: string; unknownNonce: string; opId: string;
 };
 type PreparedSnapshot = { snapshotId: string; rawSource: string | null; items: PreparedItem[]; total: number };
+
+function validMigrationResolution(value: unknown): value is LegacyMigrationResolution {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  if (!Number.isSafeInteger(row.atMs) || (row.atMs as number) < 0
+    || !Number.isSafeInteger(row.serverVersion) || (row.serverVersion as number) < 0) return false;
+  if (row.kind === 'accept-server') return row.replacementOpId === undefined;
+  return row.kind === 'keep-latest-local' && typeof row.replacementOpId === 'string' && row.replacementOpId.length > 0;
+}
 
 /** Type tags preserve invalid numeric metadata (including overflow) without collapsing it to null. */
 function rawTree(value: unknown): unknown {
@@ -416,6 +426,8 @@ export class LegacyQueueMigration {
           && typeof prior.accountId === 'string' && prior.accountId.length > 0;
         const acknowledged = !!(validBinding && record && Number.isSafeInteger(prior.acknowledgedVersion)
           && prior.acknowledgedVersion! > record.baseVersion && Number.isSafeInteger(prior.acknowledgedAtMs) && prior.acknowledgedAtMs! >= 0);
+        const resolved = !!(validBinding && record && validMigrationResolution(prior.resolution));
+        if (resolved && operation) reason = 'missing-imported-operation';
         if (!reason && prior && (prior.state === 'imported' || prior.opId)) {
           const matches = operation && record && operation.accountId === prior.accountId && operation.opId === prior.opId
             && operation.migrationSourceKey === LEGACY_QUEUE_SOURCE_KEY && operation.migrationCanonical === item.canonical
@@ -424,11 +436,13 @@ export class LegacyQueueMigration {
             && (operation.baseVersion === record.baseVersion
               || operation.status === 'conflicted' && operation.reason === LEGACY_GENERATION_UNPROVEN && operation.baseVersion === 0)
             && (record.type === 'put' ? operation.type === 'put' && operation.value === record.value : !('value' in operation));
-          if (!validBinding || (!operation && !acknowledged) || (operation && (!matches
-            || prior.acknowledgedVersion !== undefined || prior.acknowledgedAtMs !== undefined))) reason = 'missing-imported-operation';
+          if (!validBinding || (!operation && !acknowledged && !resolved) || (operation && (!matches
+            || prior.acknowledgedVersion !== undefined || prior.acknowledgedAtMs !== undefined || prior.resolution !== undefined))) {
+            reason = 'missing-imported-operation';
+          }
         }
         // The completion audit can quarantine missing evidence, but must never recreate an operation.
-        if (!reason && verifyOnly && (!prior || (!operation && !acknowledged))) reason = 'missing-imported-operation';
+        if (!reason && verifyOnly && (!prior || (!operation && !acknowledged && !resolved))) reason = 'missing-imported-operation';
         if (!reason && accountId && record) {
           const owner = read<{ accountId: string }>('owner');
           const value = read<{ accountId?: string }>('value');
@@ -506,7 +520,7 @@ export class LegacyQueueMigration {
           return findUnknownId(baseId, 0);
         }
 
-        if (!operation && !acknowledged) {
+        if (!operation && !acknowledged && !resolved) {
           const legacyRecord = record!;
           const nowMs = Date.now();
           let nextResult!: T;

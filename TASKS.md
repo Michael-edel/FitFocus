@@ -1002,6 +1002,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
   - [x] Подтвердить CI следующей ревизии с multi-edit сценарием: 1092 unit / 197
     файлов, 453 browser passed / 9 skipped, audit без уязвимостей, три typecheck,
     build и rollback-проверка прошли в [run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668).
+  - [x] Добавить явное разрешение импортированного конфликта для обычных
+    account-owned state keys: свежий scoped GET, подтверждение пользователя,
+    атомарное обновление outbox и migration ledger, повторный импорт не воскрешает
+    старую операцию. Legacy retry, профиль и family-menu остаются вне этого пути.
+    Unit-проверки прошли 1286/1286; migration E2E — 7/7 browser/PWA проектов,
+    workers=2/retries=0; точный GitHub CI этой ревизии ожидается.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

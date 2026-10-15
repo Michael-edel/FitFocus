@@ -104,6 +104,12 @@ function validateMigrationItem(row: unknown): row is Record<string, unknown> {
     || !strings(row.canonicalVariants) || !Array.isArray(row.rawRecords) || !strings(row.rawCanonicals)
     || row.rawRecords.length !== row.rawCanonicals.length || !['imported', 'unknown'].includes(String(row.state))
     || !strings(row.unknownIds)) return false;
+  if (row.resolution !== undefined) {
+    if (!isRecord(row.resolution) || !integer(row.resolution.atMs) || !integer(row.resolution.serverVersion)) return false;
+    if (row.resolution.kind === 'keep-latest-local') {
+      if (!text(row.resolution.replacementOpId)) return false;
+    } else if (row.resolution.kind !== 'accept-server' || row.resolution.replacementOpId !== undefined) return false;
+  }
   return (row.accountId === undefined || text(row.accountId)) && (row.opId === undefined || text(row.opId))
     && (row.reason === undefined || typeof row.reason === 'string')
     && (row.acknowledgedVersion === undefined || integer(row.acknowledgedVersion))

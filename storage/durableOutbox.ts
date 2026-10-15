@@ -1,6 +1,6 @@
 import { StateDatabase, STATE_STORES, StateStorageError, afterIndexedRequests, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
-  legacyDeletedAccountMetaId } from './legacyQueue';
+  legacyDeletedAccountMetaId, type LegacyMigrationResolution } from './legacyQueue';
 import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
 
 export type OutboxIntent = { type: 'put'; key: string; value: string } | { type: 'delete'; key: string };
@@ -66,6 +66,12 @@ function requireOwnedKey(accountId: string, key: string): void {
   if (!key.startsWith(`fitfocus_data_${accountId}_`) || key.endsWith('_all_users') || key.endsWith('__ffv')) {
     throw new Error('OUTBOX_KEY_OWNERSHIP');
   }
+}
+
+function isResolvableLegacyStateKey(accountId: string, key: string): boolean {
+  const prefix = `fitfocus_data_${accountId}_`;
+  return key.startsWith(prefix) && !key.startsWith(`${prefix}family_menu:`)
+    && !key.endsWith('_profile') && !key.endsWith('_all_users') && !key.endsWith('__ffv');
 }
 
 export type OutboxWrite = {
@@ -209,6 +215,7 @@ type LegacyGate = { sourceKey: string; sendAllowed: boolean };
 type LegacyReceipt = {
   id: string; sourceKey: string; fingerprint: string; canonical: string; canonicalVariants: string[]; state: 'imported' | 'unknown';
   opId?: string; accountId?: string; acknowledgedVersion?: number; acknowledgedAtMs?: number;
+  resolution?: LegacyMigrationResolution;
 };
 
 function canSendLegacy(operation: OutboxOperation, gate: LegacyGate | undefined, receipt: LegacyReceipt | undefined): boolean {
@@ -219,7 +226,7 @@ function canSendLegacy(operation: OutboxOperation, gate: LegacyGate | undefined,
     && receipt.state === 'imported' && receipt.opId === operation.opId && receipt.accountId === operation.accountId
     && receipt.canonical === operation.migrationCanonical && receipt.canonical === legacyFingerprintFields(operation)
     && Array.isArray(receipt.canonicalVariants) && receipt.canonicalVariants.length === 1 && receipt.canonicalVariants[0] === receipt.canonical
-    && receipt.acknowledgedVersion === undefined && receipt.acknowledgedAtMs === undefined;
+    && receipt.acknowledgedVersion === undefined && receipt.acknowledgedAtMs === undefined && receipt.resolution === undefined;
 }
 
 function hasLegacyProvenance(operation: OutboxOperation): boolean {
@@ -570,6 +577,130 @@ export class DurableOutbox {
         metaStore.put({ ...meta, lastRevision: revision, valueRevision: revision, confirmedVersion: baseVersion, headOpId: operation.opId });
         metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
         return true;
+      });
+    });
+  }
+
+  /** Resolve imported state only after a fresh, authenticated server read. */
+  async resolveLegacyConflictGroup(input: {
+    accountId: string; key: string; expectedOpIds: readonly string[];
+    choice: 'keep-latest-local' | 'accept-server'; readGuard: OutboxReadGuard; nowMs: number;
+    serverSnapshot: { value: string; version: number; exists: boolean };
+  }): Promise<boolean> {
+    requireOwnedKey(input.accountId, input.key);
+    const snapshot = input.serverSnapshot;
+    if (!isResolvableLegacyStateKey(input.accountId, input.key) || !finiteInteger(input.nowMs)
+      || input.readGuard.accountId !== input.accountId || !input.readGuard.sessionEpoch
+      || !/^[a-f0-9]{64}$/.test(input.readGuard.serverSessionId) || !finiteInteger(input.readGuard.authFence)
+      || !['keep-latest-local', 'accept-server'].includes(input.choice)
+      || !snapshot || !finiteInteger(snapshot.version) || typeof snapshot.exists !== 'boolean' || typeof snapshot.value !== 'string'
+      || (!snapshot.exists && snapshot.value !== '')
+      || input.expectedOpIds.length === 0 || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
+      || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
+
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', (tx) => {
+      const metaStore = tx.objectStore(STATE_STORES.meta);
+      const outbox = tx.objectStore(STATE_STORES.outbox);
+      const migrationItems = tx.objectStore(STATE_STORES.migrationItems);
+      const requests = [
+        metaStore.get('active-session'), metaStore.get('auth-fence'),
+        metaStore.get(outboxKeyOwnerId(input.key)), tx.objectStore(STATE_STORES.values).get(input.key),
+        metaStore.get(keyStateId(input.accountId, input.key)),
+        outbox.index('accountKey').getAll([input.accountId, input.key]),
+      ] as IDBRequest<unknown>[];
+      return afterIndexedRequests(tx, requests, ([activeValue, fenceValue, ownerValue, valueValue, metaValue, operationsValue]) => {
+        const active = activeValue as ActiveOutboxSession | undefined;
+        const fence = fenceValue as { revision: number } | undefined;
+        const owner = ownerValue as { accountId: string } | undefined;
+        const value = valueValue as { value: string; accountId?: string } | undefined;
+        const meta = metaValue as KeyState | undefined;
+        const operations = operationsValue as OutboxOperation[];
+        const guard = input.readGuard;
+        if (active?.accountId !== input.accountId || active.serverSessionId !== guard.serverSessionId
+          || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) return false;
+        if (owner && owner.accountId !== input.accountId || value?.accountId && value.accountId !== input.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
+
+        operations.sort((left, right) => left.revision - right.revision || left.createdAtMs - right.createdAtMs || left.opId.localeCompare(right.opId));
+        const expected = new Set(input.expectedOpIds);
+        if (operations.length !== expected.size || operations.some((operation) => !expected.has(operation.opId))
+          || operations.some((operation) => operation.status === 'sending' || operation.resource !== undefined)
+          || !operations.some((operation) => operation.status === 'conflicted' && hasLegacyProvenance(operation))) return false;
+
+        const legacyOperations = operations.filter(hasLegacyProvenance);
+        if (legacyOperations.length === 0 || legacyOperations.some((operation) => operation.status !== 'conflicted')) return false;
+        const receiptRequests = legacyOperations.map((operation) =>
+          migrationItems.get(legacyMigrationItemId(operation.migrationFingerprint ?? '')) as IDBRequest<unknown>);
+        return afterIndexedRequests(tx, receiptRequests, (receiptValues) => {
+          const receipts = new Map(legacyOperations.map((operation, index) =>
+            [operation.opId, receiptValues[index] as LegacyReceipt | undefined]));
+          if (legacyOperations.some((operation) => {
+            const fingerprint = operation.migrationFingerprint ?? '';
+            const receipt = receipts.get(operation.opId);
+            let canonical: unknown;
+            try { canonical = JSON.parse(operation.migrationCanonical ?? ''); } catch {}
+            const fields = Array.isArray(canonical) ? canonical : [];
+            const expectedValue = operation.type === 'put' ? operation.value : null;
+            return operation.migrationSourceKey !== LEGACY_QUEUE_SOURCE_KEY || !fingerprint
+              || operation.writerId !== `legacy:${fingerprint}` || fields.length !== 4
+              || JSON.stringify(fields) !== operation.migrationCanonical || typeof fields[3] !== 'number'
+              || !Number.isInteger(fields[3]) || (fields[3] as number) < 0
+              || fields[0] !== operation.type || fields[1] !== input.key || fields[2] !== expectedValue
+              || !receipt || receipt.sourceKey !== LEGACY_QUEUE_SOURCE_KEY || receipt.state !== 'imported'
+              || receipt.fingerprint !== fingerprint || receipt.opId !== operation.opId || receipt.accountId !== input.accountId
+              || receipt.canonical !== operation.migrationCanonical || !Array.isArray(receipt.canonicalVariants) || receipt.canonicalVariants.length !== 1
+              || receipt.canonicalVariants[0] !== receipt.canonical || receipt.acknowledgedVersion !== undefined
+              || receipt.acknowledgedAtMs !== undefined || receipt.resolution !== undefined;
+          })) return false;
+
+          if (!operations.some((operation) => operation.status === 'conflicted') || !meta
+            || !finiteInteger(meta.lastRevision) || !finiteInteger(meta.valueRevision)
+            || !finiteInteger(meta.confirmedVersion) || !finiteInteger(meta.lastRevision + 1)
+            || snapshot.version < meta.confirmedVersion) return false;
+
+          const migrationStore = tx.objectStore(STATE_STORES.migrationItems);
+          const markResolved = (replacementOpId?: string) => {
+            if (input.choice === 'keep-latest-local' && !replacementOpId) throw new Error('OUTBOX_MISSING_REPLACEMENT_OPERATION');
+            for (const operation of legacyOperations) {
+              const receipt = receipts.get(operation.opId)!;
+              const resolution: LegacyMigrationResolution = input.choice === 'keep-latest-local'
+                ? { kind: 'keep-latest-local', atMs: input.nowMs, serverVersion: snapshot.version, replacementOpId: replacementOpId! }
+                : { kind: 'accept-server', atMs: input.nowMs, serverVersion: snapshot.version };
+              migrationStore.put({ ...receipt, resolution });
+            }
+          };
+          const values = tx.objectStore(STATE_STORES.values);
+          if (input.choice === 'accept-server') {
+            if (snapshot.exists) values.put({ key: input.key, accountId: input.accountId, value: snapshot.value, updatedAt: input.nowMs });
+            else values.delete(input.key);
+            for (const operation of operations) outbox.delete(operation.opId);
+            const resolvedMeta: KeyState = { ...meta, lastRevision: meta.lastRevision + 1,
+              valueRevision: meta.lastRevision + 1, confirmedVersion: snapshot.version };
+            delete resolvedMeta.headOpId;
+            metaStore.put(resolvedMeta);
+            metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
+            markResolved();
+            return true;
+          }
+
+          const latest = operations[operations.length - 1];
+          if (!latest || !validResolvedLocalIntent(input.accountId, input.key, latest)) return false;
+          const revision = meta.lastRevision + 1;
+          const operation: OutboxOperation = {
+            ...(latest.type === 'put' ? { type: 'put' as const, key: input.key, value: latest.value } : { type: 'delete' as const, key: input.key }),
+            opId: crypto.randomUUID(), accountId: input.accountId, writerId: `manual-resolution:${crypto.randomUUID()}`,
+            revision, baseVersion: snapshot.version, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs,
+            createdAtMs: input.nowMs, updatedAtMs: input.nowMs,
+          };
+          for (const previous of operations) outbox.delete(previous.opId);
+          if (operation.type === 'put') values.put({ key: input.key, accountId: input.accountId, value: operation.value, updatedAt: input.nowMs });
+          else values.delete(input.key);
+          outbox.add(operation);
+          metaStore.put({ ...meta, lastRevision: revision, valueRevision: revision, confirmedVersion: snapshot.version, headOpId: operation.opId });
+          metaStore.put({ id: outboxKeyOwnerId(input.key), key: input.key, accountId: input.accountId });
+          markResolved(operation.opId);
+          return true;
+        });
       });
     });
   }

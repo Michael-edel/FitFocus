@@ -32,6 +32,13 @@ const labels: Record<string, string> = {
 type RecoveryGroup = { key: string; label: string; operations: StateQueueOperation[] };
 type RecoveryChoice = 'keep-latest-local' | 'accept-server';
 
+function canResolveLegacyStateKey(accountId: string | undefined, key: string): boolean {
+  if (!accountId) return false;
+  const prefix = `fitfocus_data_${accountId}_`;
+  return key.startsWith(prefix) && !key.startsWith(`${prefix}family_menu:`)
+    && !key.endsWith('_profile') && !key.endsWith('_all_users') && !key.endsWith('__ffv');
+}
+
 function labelFor(operation: StateQueueOperation): string {
   if (operation.resource === 'profile') return 'Профиль';
   if (operation.resource === 'familyMenu') return 'Семейное меню';
@@ -94,12 +101,15 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
 
   async function resolve(group: RecoveryGroup, choice: RecoveryChoice): Promise<void> {
     if (!accountId) return;
+    const legacy = group.operations.some((operation) => operation.legacy);
     if (choice === 'accept-server') {
       const accepted = window.confirm('Принять проверенную серверную версию и перезагрузить FitFocus? Локальные изменения этого раздела будут удалены; незавершённые поля форм могут потеряться.');
       if (!accepted) return;
-    } else if (group.operations.length > 1) {
+    } else if (legacy || group.operations.length > 1) {
       const discarded = group.operations.length - 1;
-      const accepted = window.confirm(`Оставить последнюю локальную версию? Она заменит остальные ${discarded} несинхронизированные операции этого раздела.`);
+      const accepted = window.confirm(legacy
+        ? 'Сохранить последнюю локальную версию и отправить её на основе свежей версии сервера? Прежние записи миграции будут сохранены в журнале как разрешённые.'
+        : `Оставить последнюю локальную версию? Она заменит остальные ${discarded} несинхронизированные операции этого раздела.`);
       if (!accepted) return;
     }
     const id = JSON.stringify([accountId, group.key]);
@@ -107,7 +117,9 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
     setActionError(null);
     try {
       const expectedOpIds = group.operations.map((operation) => operation.opId);
-      const resolved = await stateSync.resolveConflictedKey(accountId, group.key, expectedOpIds, choice);
+      const resolved = legacy
+        ? await stateSync.resolveLegacyConflictedKey(accountId, group.key, expectedOpIds, choice)
+        : await stateSync.resolveConflictedKey(accountId, group.key, expectedOpIds, choice);
       if (!resolved) {
         setActionError('Сеанс или очередь изменились. Обновите статус и повторите действие.');
         return;
@@ -166,7 +178,11 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
                     .sort((left, right) => right - left)[0];
                   const missingServerVersion = conflicted.some((operation) => operation.reason === 'server-version-conflict' && operation.serverVersion === undefined);
                   const canResolve = conflicted.length > 0 && !legacy && !sending && !missingServerVersion;
-                  const canAcceptServer = canResolve && serverVersion !== undefined;
+                  const canResolveLegacy = conflicted.length > 0 && legacy && !sending
+                    && group.operations.every((operation) => operation.resource === undefined)
+                    && canResolveLegacyStateKey(accountId, group.key);
+                  const canKeepLocal = canResolve || canResolveLegacy;
+                  const canAcceptServer = canResolveLegacy || (canResolve && serverVersion !== undefined);
                   const canRetry = conflicted.length === 0 && failed.length > 0 && !legacy && !sending;
                   return (
                     <section key={group.key} className="rounded-lg border border-slate-700 p-3" aria-label={group.label}>
@@ -176,12 +192,12 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
                           ? `Конфликт: ${conflicted.length} локальных операций${serverVersion === undefined ? '' : `; версия сервера ${serverVersion}`}. ${recoveryReason(group.operations)}`
                           : `Не отправлено: ${failed.length} операций. ${recoveryReason(group.operations)}`}
                       </p>
-                      {legacy ? <p className="mt-2 text-xs text-amber-200">Это запись из прежней очереди. Её доказательство миграции сохранено; автоматическое изменение этой записи недоступно.</p>
+                      {legacy ? <p className="mt-2 text-xs text-amber-200">Это запись из прежней очереди. Автоматическая отправка отключена; ручное разрешение сначала проверит свежую серверную версию.{canResolveLegacy ? '' : ' Для этого типа данных ручное разрешение недоступно.'}</p>
                         : missingServerVersion ? <p className="mt-2 text-xs text-amber-200">Сервер не предоставил проверенную версию. Локальные данные сохранены, разрешение пока недоступно.</p>
                           : sending ? <p className="mt-2 text-xs text-slate-300">Дождитесь завершения текущей отправки.</p>
                             : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {canResolve && <button type="button" disabled={busyKey === id}
+                        {canKeepLocal && <button type="button" disabled={busyKey === id}
                           onClick={() => void resolve(group, 'keep-latest-local')}
                           className="rounded-lg border border-amber-300/40 px-3 py-2 font-bold text-amber-100 disabled:opacity-50">
                           {busyKey === id ? 'Обновляю…' : 'Оставить последнюю локальную версию'}

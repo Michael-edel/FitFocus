@@ -1,8 +1,10 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DurableOutbox } from '../storage/durableOutbox';
-import { StateDatabase } from '../storage/stateDatabase';
+import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction } from '../storage/stateDatabase';
 import { StateSync } from '../storage/stateSync';
+import { LegacyQueueMigration, type MigrationItem } from '../storage/legacyMigration';
+import { LEGACY_QUEUE_SOURCE_KEY } from '../storage/legacyQueue';
 
 const account = 'account-a';
 const key = `fitfocus_data_${account}_settings`;
@@ -29,6 +31,15 @@ function client(mutation: (input: RequestInfo | URL, init?: RequestInit) => Prom
   clients.push(instance); return { instance, fetchFn };
 }
 const ack = (version = 1) => json({ ok: true, items: [{ key, version, exists: true }] }, 200, scope);
+
+async function importLegacyConflict() {
+  const record = { type: 'put', key, value: '{"theme":"light"}' };
+  const raw = JSON.stringify([record]);
+  const migration = new LegacyQueueMigration({ getItem: (requested) => requested === LEGACY_QUEUE_SOURCE_KEY ? raw : null }, db);
+  await migration.migrate({ verifiedOwners: new Map([[key, [account]]]),
+    verifyWritersStopped: async () => ({ buildId: 'test-build', checkedAtMs: now, challengeId: 'test-challenge', clientIds: ['test-client'] }) });
+  return (await outbox.list(account))[0];
+}
 
 describe('durable HTTP sender', () => {
   it('does not let an automatic queue flush activate or switch an account', async () => {
@@ -327,5 +338,45 @@ describe('durable HTTP sender', () => {
     await instance.connect(account); await instance.flush(); pending = false; await instance.flush();
     expect(fetchFn).toHaveBeenCalledTimes(3);
     expect(await outbox.list(account)).toEqual([]);
+  });
+
+  it('reads a scoped current server snapshot before rebasing an imported intent', async () => {
+    const legacy = await importLegacyConflict();
+    const bodies: Array<{ method: string; body?: unknown }> = [];
+    const { instance } = client(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.startsWith('/api/state?')) return json({ items: [{ key, value: 'verified remote value', version: 7, exists: true }] }, 200, scope);
+      if (url === '/api/state' && method === 'PUT') {
+        const body = JSON.parse(String(init?.body)) as { items: Array<{ baseVersion: number }> };
+        bodies.push({ method, body });
+        return json({ ok: true, items: [{ key, version: 8, exists: true }] }, 200, scope);
+      }
+      return json({ error: 'UNEXPECTED_REQUEST' }, 500, scope);
+    });
+    await instance.connect(account);
+
+    expect(await instance.resolveLegacyConflictedKey(account, key, [legacy.opId], 'keep-latest-local')).toBe(true);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].body).toMatchObject({ items: [{ key, value: '{"theme":"light"}', baseVersion: 7 }] });
+    expect(await outbox.list(account)).toEqual([]);
+    const [receipt] = await stateTransaction(await db.open(), [STATE_STORES.migrationItems], 'readonly', (tx) =>
+      indexedRequest(tx.objectStore(STATE_STORES.migrationItems).getAll())) as MigrationItem[];
+    expect(receipt.resolution).toMatchObject({ kind: 'keep-latest-local', serverVersion: 7 });
+  });
+
+  it.each(['missing-scope', 'wrong-session', 'invalid-version'] as const)('does not resolve imported intent with %s server proof', async (fault) => {
+    const legacy = await importLegacyConflict();
+    const headers = fault === 'missing-scope' ? {} : fault === 'wrong-session' ? { ...scope, 'X-FitFocus-State-Session': 'c'.repeat(64) } : scope;
+    const { instance } = client(async (input) => String(input).startsWith('/api/state?')
+      ? json({ items: [{ key, value: 'remote', version: fault === 'invalid-version' ? -1 : 7, exists: true }] }, 200, headers)
+      : ack());
+    await instance.connect(account);
+
+    expect(await instance.resolveLegacyConflictedKey(account, key, [legacy.opId], 'keep-latest-local')).toBe(false);
+    expect(await outbox.list(account)).toEqual([expect.objectContaining({ opId: legacy.opId, status: 'conflicted', baseVersion: 0 })]);
+    const [receipt] = await stateTransaction(await db.open(), [STATE_STORES.migrationItems], 'readonly', (tx) =>
+      indexedRequest(tx.objectStore(STATE_STORES.migrationItems).getAll())) as MigrationItem[];
+    expect(receipt.resolution).toBeUndefined();
   });
 });
