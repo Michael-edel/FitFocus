@@ -3,6 +3,22 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Старая вкладка: сохранение local-only изменения
+
+После отказа старому unscoped API старая вкладка могла сохранить следующее
+изменение account-scoped state только в localStorage: legacy queue при этом не
+обновлялась. Новый runtime теперь сохраняет строковую запись известного ключа
+подтверждённого аккаунта как `legacy-writer-local-only` conflict в IndexedDB,
+не меняя активное durable value и не отправляя конфликт. Проверка выполняет
+реальный второй клик в старом bundle на том же origin и подтверждает, что legacy
+queue осталась прежней.
+
+Локально прошли полный unit-набор (1278/1278), `typecheck`, domain/storage strict
+typecheck, production build и old/new migration E2E (7/7 браузерных/PWA-проектов,
+без retries). Точный CI нового SHA и staging ещё требуют проверки. Profile
+callbacks и удаление localStorage ключа старой вкладкой остаются отдельными
+lifecycle-сценариями.
+
 ## Offline retry при обновлении PWA и flaky acceptance — `ad89020`, `aa4073c`
 
 Rollback E2E получает offline `503`, задерживает следующую отправку и активирует

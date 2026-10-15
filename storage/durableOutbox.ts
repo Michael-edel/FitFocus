@@ -71,7 +71,7 @@ export type OutboxWrite = {
   accountId: string; writerId: string; intent: OutboxIntent; expectedRevision: number;
   resource?: 'profile' | 'familyMenu';
   baseVersion: number; parentOpId?: string;
-  conflictReason?: 'editor-not-loaded';
+  conflictReason?: 'editor-not-loaded' | 'legacy-writer-local-only';
   /** Generated results require the captured proof; ordinary offline edits omit it. */
   readGuard?: OutboxReadGuard;
   /** User-authored local edits are session-bound but remain allowed during sender pauses. */

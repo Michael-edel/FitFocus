@@ -1,11 +1,12 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome, type OutboxReadGuard } from './durableOutbox';
-import { reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
+import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
 import { LegacyQueueMigration } from './legacyMigration';
 import { checkLegacyWriterFence, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { isUserProfilePayload } from '../profileValidation';
 import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuSnapshot } from '../familyMenuValidation';
+import { USER_STATE_KEYS, type UserStateKey } from './userStateRepository';
 
 import { requestJson, type JsonResponse } from './sessionTransport';
 type Options = {
@@ -50,6 +51,13 @@ function verifiedLegacyOwners(rawSource: string | null, authenticatedAccountId: 
     if (normalized.ok && normalized.value.key.startsWith(prefix)) owners.set(normalized.value.key, [authenticatedAccountId]);
   }
   return owners;
+}
+
+function managedLegacyStateKey(accountId: string, key: string): UserStateKey | null {
+  const prefix = `fitfocus_data_${accountId}_`;
+  if (!key.startsWith(prefix)) return null;
+  const stateKey = key.slice(prefix.length);
+  return USER_STATE_KEYS.includes(stateKey as typeof USER_STATE_KEYS[number]) ? stateKey as UserStateKey : null;
 }
 
 
@@ -278,9 +286,48 @@ export class StateSync {
 
   private readonly legacySourceChanged = (event: Event) => {
     const storageEvent = event as StorageEvent;
-    if (storageEvent.key !== null && storageEvent.key !== LEGACY_QUEUE_SOURCE_KEY) return;
-    this.reverify();
+    if (storageEvent.key === null || storageEvent.key === LEGACY_QUEUE_SOURCE_KEY) {
+      this.reverify();
+      return;
+    }
+    if (!this.legacyRuntime || typeof storageEvent.newValue !== 'string') return;
+    const accountId = this.accountId;
+    const key = storageEvent.key;
+    if (!accountId || !managedLegacyStateKey(accountId, key)) return;
+    void this.preserveLegacyLocalWrite(accountId, key, storageEvent.newValue);
   };
+
+  /** Preserve a legacy tab's local-only edit without making it eligible for sending. */
+  private async preserveLegacyLocalWrite(accountId: string, key: string, value: string): Promise<void> {
+    const session = this.session;
+    const generation = this.generation;
+    if (!session || session.accountId !== accountId || !session.serverSessionId) return;
+    try {
+      const observed = await this.outbox.snapshot(accountId, key);
+      if (generation !== this.generation || accountId !== this.accountId || session.sessionEpoch !== this.session?.sessionEpoch
+        || observed.value === value) return;
+      const operation = await this.outbox.write({
+        accountId,
+        writerId: 'legacy-local-storage',
+        intent: { type: 'put', key, value },
+        expectedRevision: observed.revision,
+        baseVersion: observed.confirmedVersion,
+        conflictReason: 'legacy-writer-local-only',
+        localCommitGuard: { accountId, sessionEpoch: session.sessionEpoch, serverSessionId: session.serverSessionId },
+        canCommit: () => generation === this.generation && accountId === this.accountId
+          && session.sessionEpoch === this.session?.sessionEpoch,
+      });
+      if (generation !== this.generation || accountId !== this.accountId) return;
+      reportStateOperation(accountId, operation);
+      if (operation.status === 'conflicted') {
+        reportStateSaveIssue({ accountId, key, kind: 'conflicted', reason: operation.reason ?? 'legacy-writer-local-only' });
+      }
+    } catch {
+      if (generation === this.generation && accountId === this.accountId) {
+        reportStateSaveIssue({ accountId, key, kind: 'error', reason: 'legacy-writer-local-only' });
+      }
+    }
+  }
 
   private readonly wake = () => {
     if (!this.accountId || this.running) return;

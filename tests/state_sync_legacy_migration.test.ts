@@ -33,7 +33,7 @@ beforeEach(() => {
   source = { getItem: vi.fn((key: string) => key === LEGACY_QUEUE_SOURCE_KEY ? legacySourceValue : null) };
   migration = new LegacyQueueMigration(source, db);
 });
-afterEach(() => { sync?.stop(); db.close(); vi.restoreAllMocks(); });
+afterEach(() => { sync?.stop(); db.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('imports only records owned by the freshly authenticated account and preserves other owners in quarantine', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
@@ -49,6 +49,30 @@ it('imports only records owned by the freshly authenticated account and preserve
     .toMatchObject({ key: ownKey, value: '{"theme":"dark"}' });
   expect(fetchImpl).toHaveBeenCalledTimes(1);
   expect(source.getItem(LEGACY_QUEUE_SOURCE_KEY)).toBe(legacySourceValue);
+});
+
+it('retains a value-only write from an open legacy tab as a non-sendable conflict', async () => {
+  const eventTarget = new EventTarget();
+  vi.stubGlobal('window', eventTarget);
+  vi.stubGlobal('navigator', {});
+  const fetchImpl = vi.fn<typeof fetch>(async (input) => String(input) === '/api/me'
+    ? json(proof())
+    : new Response(JSON.stringify({ error: 'offline' }), { status: 503 }));
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped: async () => writerFence() });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await migration.progress())?.sendAllowed).toBe(true);
+  await expect.poll(async () => (await outbox.list(accountId)).some((operation) => operation.key === ownKey)).toBe(true);
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: ownKey,
+    newValue: '{"theme":"light"}',
+  }));
+
+  await expect.poll(async () => (await outbox.list(accountId)).find((operation) => operation.reason === 'legacy-writer-local-only'))
+    .toMatchObject({ type: 'put', key: ownKey, value: '{"theme":"light"}', status: 'conflicted' });
+  expect((await outbox.snapshot(accountId, ownKey)).value).toBe('{"theme":"dark"}');
+  expect(await outbox.list('other-account')).toEqual([]);
 });
 
 it('imports durably but cannot claim or send when the service-worker writer fence is unavailable', async () => {

@@ -10,7 +10,6 @@ const targetKey = `fitfocus_data_${account}_plan_task_done`;
 const orphanKey = 'fitfocus_data_another-account_orphan';
 const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
-const nextTaskEntry = '1:Проверить настройки push';
 // Keep in sync with the production sender lease in storage/stateSync.ts.
 const SENDER_LEASE_MS = 30_000;
 
@@ -194,39 +193,29 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     expect(server.counts.currentStatePutAttempts).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
 
-    // A still-open old bundle can replace its legacy snapshot after the new
-    // bundle imported it. The new sender must re-audit that source and keep the
-    // changed same-key intent as a conflict while the old writer is present.
+    // The old bundle can persist a local value after its legacy sender is
+    // auth-blocked, without changing its Map-backed legacy queue. The new
+    // bundle must retain that value as a conflict rather than silently lose it.
     const previousOldRecord = generatedRecord!;
-    const updatedOldValue = JSON.stringify({ [taskEntry]: true, [nextTaskEntry]: true });
-    const updatedOldSource = await oldPage.evaluate(({ sourceKey, key, value }) => {
-      const records = JSON.parse(localStorage.getItem(sourceKey) ?? '[]') as LegacyRecord[];
-      const index = records.findIndex((record) => record.key === key);
-      if (index < 0 || records[index].type !== 'put') throw new Error('LEGACY_SOURCE_RECORD_MISSING');
-      records[index] = { ...records[index], value };
-      // Model the old safeSetItem pair: its user value and Map-backed queue are
-      // both localStorage writes on the still-open old bundle's origin.
-      localStorage.setItem(key, value);
-      const raw = JSON.stringify(records);
-      localStorage.setItem(sourceKey, raw);
-      return raw;
-    }, { sourceKey: legacySourceKey, key: targetKey, value: updatedOldValue });
-    expect(updatedOldSource).toBeTruthy();
+    const updatedOldValue = JSON.stringify({ [taskEntry]: false });
+    await oldPage.getByRole('button', { name: taskText, exact: true }).click();
+    await expect.poll(() => oldPage.evaluate((key) => localStorage.getItem(key), targetKey)).toBe(updatedOldValue);
+    const updatedOldSource = await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey);
+    expect(updatedOldSource).toBe(oldSource);
+    expect(await oldQueueRecord(oldPage, targetKey)).toEqual(previousOldRecord);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
       const original = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
-      const updated = itemForRecord(state.migrationItems, targetKey, updatedOldValue);
-      const updatedOperation = state.operations.find((entry) => entry.opId === updated?.opId);
+      const preserved = state.operations.find((entry) => entry.reason === 'legacy-writer-local-only');
       return {
         source: state.source,
         sourceMatches: state.progress?.sourceMatches,
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
         originalImported: original?.state,
-        updatedImported: updated?.state,
-        updatedOperationStatus: updatedOperation?.status,
-        updatedOperationReason: updatedOperation?.reason,
-        updatedOperationValue: updatedOperation?.value,
+        preservedKey: preserved?.key,
+        preservedOperationStatus: preserved?.status,
+        preservedOperationValue: preserved?.value,
       };
     }).toEqual({
       source: updatedOldSource,
@@ -234,10 +223,9 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       sendAllowed: false,
       writersStopped: false,
       originalImported: 'imported',
-      updatedImported: 'imported',
-      updatedOperationStatus: 'conflicted',
-      updatedOperationReason: 'independent-snapshot',
-      updatedOperationValue: updatedOldValue,
+      preservedKey: targetKey,
+      preservedOperationStatus: 'conflicted',
+      preservedOperationValue: updatedOldValue,
     });
     legacyWritesBeforeUpdate = server.counts.legacyStatePutAttempts;
     expect(server.counts.currentStatePutAttempts).toBe(0);
@@ -285,19 +273,17 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
       const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
-      const changed = itemForRecord(state.migrationItems, targetKey, updatedOldValue);
+      const preserved = state.operations.find((entry) => entry.reason === 'legacy-writer-local-only');
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
-      const changedOperation = state.operations.find((entry) => entry.opId === changed?.opId);
       return {
         sourceFingerprintFields: legacySourceFingerprintFields(state.source),
         targetState: imported?.state,
         targetOwner: imported?.accountId,
         acknowledgedVersion: imported?.acknowledgedVersion,
         operationPresent,
-        changedState: changed?.state,
-        changedOperationStatus: changedOperation?.status,
-        changedOperationReason: changedOperation?.reason,
-        changedOperationValue: changedOperation?.value,
+        preservedOperationStatus: preserved?.status,
+        preservedOperationReason: preserved?.reason,
+        preservedOperationValue: preserved?.value,
         foreignState: itemForKey(state.migrationItems, orphanKey)?.state,
         foreignReason: itemForKey(state.migrationItems, orphanKey)?.reason,
         foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
@@ -305,15 +291,14 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         writersStopped: state.progress?.writersStopped,
       };
     }).toEqual({
-      sourceFingerprintFields: legacySourceFingerprintFields(updatedOldSource),
+      sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
       targetState: 'imported',
       targetOwner: account,
       acknowledgedVersion: 1,
       operationPresent: false,
-      changedState: 'imported',
-      changedOperationStatus: 'conflicted',
-      changedOperationReason: 'independent-snapshot',
-      changedOperationValue: updatedOldValue,
+      preservedOperationStatus: 'conflicted',
+      preservedOperationReason: 'legacy-writer-local-only',
+      preservedOperationValue: updatedOldValue,
       foreignState: 'unknown',
       foreignReason: 'unknown-owner',
       foreignRawRetained: true,

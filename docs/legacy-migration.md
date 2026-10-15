@@ -41,6 +41,27 @@ API fixture отвечает 503 на новые пакетные записи �
 iPhone Safari и iPhone PWA: 7/7, `workers=1/retries=0`. Используется HTTP API
 fixture; реальный OAuth/D1/staging и полный lifecycle этим smoke не подтверждены.
 
+## Изменение старой вкладки после импорта
+
+Вторая настоящая команда старого интерфейса может записать account-scoped user
+value в localStorage, но не обновить legacy Map queue: после отказа старому
+unscoped API-клиенту его sender приостанавливается. Новый `StateSync` сохраняет
+межвкладочное изменение известного ключа текущего подтверждённого аккаунта в
+IndexedDB как операцию `conflicted` с причиной
+`legacy-writer-local-only`. Оно не заменяет текущее durable value и не становится
+доступным для отправки. Legacy queue остаётся только источником миграции и не
+изменяется этим путём.
+
+Регрессионный сценарий теперь выполняет второй клик в старом UI после запуска
+новой сборки на том же origin; он проверяет фактическое изменение localStorage,
+неизменность старой очереди и сохранение нового значения как конфликта. Локально
+прошли unit-тесты migration/sync (69/69), `storage-strict` typecheck и E2E
+`legacy-outbox-migration.spec.ts` в desktop Chromium (1/1, без retries). Полная
+браузерная матрица прошла 7/7 проектов без retries; точный CI SHA и staging ещё
+не проверены. Этот обработчик
+покрывает строковые записи для известных user-state ключей; profile callbacks и
+удаления localStorage требуют отдельной lifecycle-приёмки.
+
 ## IDB-транзакции импорта — 37dc4b0
 
 В текущем импортере readwrite-транзакции не ждут завершения promise между
