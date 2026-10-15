@@ -69,8 +69,10 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(operation.opId);
     expect((await saved(page)).operations[0].value).toBe(operation.value); expect((await saved(page)).version).toBe(3);
     await expect.poll(() => server.counts.familyPutAborted).toBeGreaterThan(0);
+    const lifecycle = await page.evaluate(() => JSON.parse(sessionStorage.getItem('__fitfocusPwaRollbackLifecycle') ?? '[]') as Array<{ type?: string }>);
+    expect(lifecycle.filter(event => event.type === 'unhandledrejection')).toEqual([]);
+    expect(lifecycle.filter(event => event.type === 'error')).toEqual([]);
     await healthy(page, errors); expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
-    const lifecycle = await page.evaluate(() => sessionStorage.getItem('__fitfocusPwaRollbackLifecycle'));
     await page.screenshot({ path: info.outputPath('fresh-rollback-updated.png') });
     await info.attach('fresh-rollback-proof', { body: JSON.stringify({ installedScript, candidateScript, navigations, operation,
       counts: server.counts, googleRequests, lifecycle }), contentType: 'application/json' });
