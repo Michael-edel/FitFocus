@@ -3,6 +3,7 @@ import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import type { OutboxCommitGuard } from './storage/durableOutbox';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox } from './storage/durableOutbox';
 import { accountSessionRenderKey } from './features/state/accountScopedUi';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
@@ -94,8 +95,55 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
-  // Ephemeral screen drafts belong to the active login scope and must not survive an identity transition.
-  const screenSessionKey = accountSessionRenderKey(loginGuard, currentUser?.id);
+  // Ephemeral screen drafts belong to the active IndexedDB session. The login guard
+  // captured by this tab can become stale when another tab accepts a new session.
+  const [durableSessionKey, setDurableSessionKey] = React.useState('checking');
+  React.useEffect(() => {
+    const outbox = new DurableOutbox();
+    let disposed = false;
+    let checking = false;
+    const refreshSessionKey = () => {
+      if (checking) return;
+      checking = true;
+      void outbox.sessionState()
+        .then(({ fence, active }) => {
+          if (disposed) return;
+          const next = JSON.stringify([
+            fence,
+            active?.accountId ?? null,
+            active?.serverSessionId ?? null,
+            active?.sessionEpoch ?? null,
+          ]);
+          setDurableSessionKey(previous => previous === next ? previous : next);
+        })
+        .catch(() => {
+          if (!disposed) setDurableSessionKey('unavailable');
+        })
+        .finally(() => { checking = false; });
+    };
+    refreshSessionKey();
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    } catch {
+      // The interval and focus listeners remain as a fallback when channels are unavailable.
+    }
+    channel?.addEventListener('message', refreshSessionKey);
+    const interval = window.setInterval(refreshSessionKey, 2_000);
+    const refreshWhenVisible = () => { if (!document.hidden) refreshSessionKey(); };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      channel?.removeEventListener('message', refreshSessionKey);
+      channel?.close();
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+  // A second tab can change IndexedDB's active session without changing this tab's React props.
+  const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>

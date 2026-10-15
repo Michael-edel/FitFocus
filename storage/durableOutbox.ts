@@ -48,6 +48,7 @@ export type OutboxLocalCommitGuard = {
 export type OutboxWriteGuard = OutboxCommitGuard | OutboxLocalCommitGuard;
 type ActiveSession = ActiveOutboxSession;
 export type OutboxClaim = OutboxOperation & { status: 'sending'; attempt: OutboxAttempt };
+export const ACTIVE_SESSION_CHANNEL = 'fitfocus-active-session-v1';
 export type OutboxOutcome =
   | { kind: 'acknowledged'; version: number }
   | { kind: 'conflicted'; reason: string; serverSnapshot?: OutboxOperation['serverSnapshot'] }
@@ -59,6 +60,19 @@ const keyStateId = outboxKeyStateId;
 export const outboxKeyOwnerId = (key: string) => `owner:${JSON.stringify(key)}`;
 const finiteInteger = (value: number) => Number.isSafeInteger(value) && value >= 0;
 function requireText(value: string): void { if (typeof value !== 'string' || !value.length) throw new Error('OUTBOX_INVALID_IDENTITY'); }
+
+function notifyActiveSessionChanged(): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  let channel: BroadcastChannel | undefined;
+  try {
+    channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    channel.postMessage('changed');
+  } catch {
+    // The channel is only a wake-up hint; IndexedDB remains the source of truth.
+  } finally {
+    channel?.close();
+  }
+}
 
 /** Account identity is provided by the caller, never inferred from a legacy/global key. */
 function requireOwnedKey(accountId: string, key: string): void {
@@ -309,7 +323,7 @@ export class DurableOutbox {
     requireText(accountId); requireText(serverSessionId);
     if (!finiteInteger(expectedFence)) throw new Error('OUTBOX_INVALID_AUTH_FENCE');
     const db = await this.connection.open();
-    return stateTransaction(db, [STATE_STORES.meta], 'readwrite', (tx) => {
+    const result = await stateTransaction(db, [STATE_STORES.meta], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
       const fenceRequest = store.get('auth-fence');
       const currentRequest = store.get('active-session');
@@ -325,15 +339,19 @@ export class DurableOutbox {
         if (previous && (previous.accountId !== accountId || previous.serverSessionId !== serverSessionId
           || previous.authFence !== expectedFence || current?.accountId !== previous.accountId
           || current.serverSessionId !== previous.serverSessionId || current.sessionEpoch !== previous.sessionEpoch || current.pause)) return null;
-        if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) return { session: current, authFence: expectedFence };
+        if (current?.accountId === accountId && current.serverSessionId === serverSessionId && !current.pause) {
+          return { session: current, authFence: expectedFence, changed: false };
+        }
         const revision = (fence?.revision ?? 0) + 1;
         if (!finiteInteger(revision)) throw new Error('OUTBOX_AUTH_FENCE_EXHAUSTED');
         const active: ActiveOutboxSession = { id: 'active-session', accountId, serverSessionId, sessionEpoch: crypto.randomUUID() };
         store.put({ id: 'auth-fence', revision });
         store.put(active);
-        return { session: active, authFence: revision };
+        return { session: active, authFence: revision, changed: true };
       });
     });
+    if (result?.changed) notifyActiveSessionChanged();
+    return result ? { session: result.session, authFence: result.authFence } : null;
   }
 
   async invalidateSessions(): Promise<void> {
@@ -354,6 +372,7 @@ export class DurableOutbox {
         store.delete('active-session');
       });
     });
+    notifyActiveSessionChanged();
   }
 
   async activateSession(accountId: string, sessionEpoch: string): Promise<void> {
@@ -362,19 +381,25 @@ export class DurableOutbox {
     await stateTransaction(database, [STATE_STORES.meta], 'readwrite', (tx) => {
       tx.objectStore(STATE_STORES.meta).put({ id: 'active-session', accountId, sessionEpoch } satisfies ActiveSession);
     });
+    notifyActiveSessionChanged();
   }
 
   async clearSession(accountId: string, expectedEpoch: string): Promise<void> {
     requireText(accountId); requireText(expectedEpoch);
     const database = await this.connection.open();
-    await stateTransaction(database, [STATE_STORES.meta], 'readwrite', (tx) => {
+    const cleared = await stateTransaction(database, [STATE_STORES.meta], 'readwrite', (tx) => {
       const store = tx.objectStore(STATE_STORES.meta);
       const request = store.get('active-session') as IDBRequest<ActiveSession | undefined>;
       return afterIndexedRequests(tx, [request as unknown as IDBRequest<unknown>], ([value]) => {
         const session = value as ActiveSession | undefined;
-        if (session?.accountId === accountId && session.sessionEpoch === expectedEpoch) store.delete('active-session');
+        if (session?.accountId === accountId && session.sessionEpoch === expectedEpoch) {
+          store.delete('active-session');
+          return true;
+        }
+        return false;
       });
     });
+    if (cleared) notifyActiveSessionChanged();
   }
 
   async snapshot(accountId: string, key: string, requireOwnership = false): Promise<{ value: string | null; revision: number; confirmedVersion: number }> {

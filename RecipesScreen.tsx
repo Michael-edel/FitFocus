@@ -122,6 +122,12 @@ const nutritionNumber = (value: unknown): number => {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
 };
 
+const createDraftRecipeId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+  return String(Date.now());
+};
+
 const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
   const rawRecipe = item.recipe as Partial<Recipe> | undefined;
   const legacy = item as unknown as {
@@ -272,7 +278,7 @@ const editorToFavoriteRecipe = (editor: RecipeEditorState): FavoriteRecipe => {
 export const buildDraftRecipeFromAi = (
   ai: EnhancedFoodPhotoAnalysisResult,
   photo: string,
-  id = globalThis.crypto?.randomUUID?.() || String(Date.now()),
+  id = createDraftRecipeId(),
 ): DraftRecipe => {
   const title = (ai.name || 'Рецепт').toString().slice(0, 80);
   const ingredients = toRecipeIngredients(ai.ingredients);

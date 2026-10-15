@@ -260,44 +260,53 @@ type DurableSnapshot = {
 
 async function readDurableSnapshot(page: Page, retry = 0): Promise<DurableSnapshot> {
   try {
-    return await page.evaluate(async () => {
-      const opening = indexedDB.open('fitfocus-user-state-v1');
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        opening.onsuccess = () => resolve(opening.result);
-        opening.onerror = () => reject(opening.error);
-      });
+    const result = await page.evaluate(async () => {
       try {
-        const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
-        const complete = new Promise<void>((resolve, reject) => {
-          tx.addEventListener('complete', () => resolve(), { once: true });
-          tx.addEventListener('abort', () => reject(tx.error), { once: true });
+        const opening = indexedDB.open('fitfocus-user-state-v1');
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          opening.onsuccess = () => resolve(opening.result);
+          opening.onerror = () => reject(opening.error);
         });
-        const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        });
-        const [values, operations, metadata] = await Promise.all([
-          read(tx.objectStore('values').getAll()),
-          read(tx.objectStore('outbox').getAll()),
-          read(tx.objectStore('outbox_meta').getAll()),
-        ]);
-        await complete;
-        const session = metadata.find((item: { id: string }) => item.id === 'active-session');
-        return {
-          values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
-          operations: operations.map((item: StoredOperation) => ({
-            opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
-            resource: item.resource, value: item.value, retryCount: item.retryCount,
-            nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
-          })),
-          activeSession: session ? {
-            accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
-          } : null,
-        };
-      } finally {
-        db.close();
+        try {
+          const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
+          const complete = new Promise<void>((resolve, reject) => {
+            tx.addEventListener('complete', () => resolve(), { once: true });
+            tx.addEventListener('abort', () => reject(tx.error), { once: true });
+          });
+          const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          const [values, operations, metadata] = await Promise.all([
+            read(tx.objectStore('values').getAll()),
+            read(tx.objectStore('outbox').getAll()),
+            read(tx.objectStore('outbox_meta').getAll()),
+          ]);
+          await complete;
+          const session = metadata.find((item: { id: string }) => item.id === 'active-session');
+          return {
+            ok: true as const,
+            snapshot: {
+              values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
+              operations: operations.map((item: StoredOperation) => ({
+                opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
+                resource: item.resource, value: item.value, retryCount: item.retryCount,
+                nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
+              })),
+              activeSession: session ? {
+                accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
+              } : null,
+            },
+          };
+        } finally {
+          db.close();
+        }
+      } catch (error) {
+        return { ok: false as const, message: error instanceof Error ? error.message : String(error) };
       }
     });
+    if (!result.ok) throw new Error(result.message);
+    return result.snapshot;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const transientIdbOpenError = /UnknownError|operation failed for reasons unrelated to the database itself/i.test(message);
@@ -904,6 +913,61 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   } finally {
     fixtureA.release();
   }
+});
+
+test('an unsaved recipe draft from account A is cleared when the same tab adopts account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on('dialog', async dialog => { errorsA.push(`dialog: ${dialog.message()}`); await dialog.dismiss(); });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#recipes');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const photoInput = page.locator('input[type="file"]').nth(1);
+  await expect(photoInput).toHaveCount(1);
+  await photoInput.setInputFiles({
+    name: 'recipe-draft.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="green"/></svg>'),
+  });
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto_enhanced');
+  try {
+    await expect(page.getByText('Новое блюдо', { exact: true })).toBeVisible({ timeout: 15_000 });
+  } catch (error) {
+    throw new Error(`Recipe draft diagnostics: ${JSON.stringify({
+      completedAiFeatures: fixtureA.counts.completedAiFeatures,
+      aiRequests: fixtureA.counts.aiRequests,
+      errorsA,
+    })}`, { cause: error });
+  }
+  const draftTitle = page.locator('div.fixed.inset-0 input').first();
+  await expect(draftTitle).toHaveValue('Тестовый рецепт');
+  await draftTitle.fill('Черновик профиля A');
+  const beforeSwitch = await readDurableSnapshot(page);
+  const operationsBefore = operationsFor(beforeSwitch, accountA);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Новое блюдо', { exact: true })).toHaveCount(0);
+  await expect(draftTitle).toHaveCount(0);
+
+  const afterSwitch = await readDurableSnapshot(page);
+  expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);
+  expect(operationsFor(afterSwitch, accountA)).toEqual(operationsBefore);
+  expect(await switched.page.getByText('Черновик профиля A', { exact: true }).count()).toBe(0);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('recipe-draft-cleared-on-account-switch.png') });
+  expect(fixtureA.counts.profileWrites).toEqual([]);
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
