@@ -35,6 +35,10 @@
   На staging проверены отказ старых запросов без proof до side effects, чужая
   cookie, новый login того же аккаунта, поздний ответ, отказ checkbox с
   восстановлением и повтор после реального BFCache.
+- [ ] Для [Push](docs/push-session.md) все четыре API требуют свежий парный
+  account/session proof до чтения тела, D1 и отправки уведомлений. На staging
+  старые unscoped Settings/Service Worker запросы получают 401, а новый клиент
+  успешно читает статус и восстанавливает подписку после обновления.
 - [ ] На staging проверены семейный AI-путь `useFamilyMenu`, явная
   family/week-привязка, CAS-запись через `familyMenu` outbox, reload/конфликт
   и отказ старых writers после migration barrier. Session guard и отмена fetch

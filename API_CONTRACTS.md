@@ -324,6 +324,18 @@ guard и проверяет его перед копированием. Стар
 совместимыми, но не имеют account/session binding. Проверки и ограничения:
 [wearable sync](docs/wearable-sync.md).
 
+## Push: обязательная привязка к сессии
+
+`GET /api/push/status` и `POST /api/push/subscribe`, `/unsubscribe`, `/test`
+требуют парные `X-FitFocus-State-Account` / `X-FitFocus-State-Session` через
+`requireScopedStateUser`. Отсутствующая, неполная или устаревшая пара получает
+401 до чтения JSON, работы с подписками или отправки уведомления. Ответы кроме
+401 возвращают `X-FitFocus-Push-Protocol: 1`, `X-FitFocus-Push-Guard: 1` и
+публичный scope; новый клиент проверяет markers перед применением результата.
+Старые открытые сборки без proof получают 401 и требуют обновления до server
+rollout. Подробности Service Worker и lifecycle — в
+[контракте push-сессии](docs/push-session.md).
+
 ## Huawei Health: session guard
 
 Текущий Settings-клиент получает Huawei capability из `/api/me`, затем передаёт

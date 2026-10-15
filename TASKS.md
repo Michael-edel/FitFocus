@@ -565,7 +565,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [ ] Привязать операции Push в Settings и Service Worker к свежему `/api/me`
   proof, активной IDB-сессии и проверяемым server response markers. Проверить
   поздний status-ответ аккаунта A после входа B и восстановление подписки при
-  смене сессии; критерии — в [контракте](docs/push-session.md). Код реализован
+  смене сессии; сервер требует парный scope на status/subscribe/unsubscribe/test
+  до body и прикладных эффектов; критерии — в [контракте](docs/push-session.md).
+  Запросы старых открытых сборок без proof получают 401. Код реализован
   и закоммичен в `daec94d`: 1180 unit-тестов / 202 файла, общий и строгие
   typecheck, build/guards и весь account-switch spec (42/42 на трёх desktop
   engines, без retries) прошли.
@@ -575,8 +577,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Сценарий прошёл 1/1 в Chromium; связанная PWA-регрессия — 6/6, typecheck прошёл.
   CI run `38679312640` для опубликованного SHA `45575d2` завершился с двумя
   flaky E2E после retry; локальный push test и assertion follow-up в commits
-  `ba973c1`/`636d2c7` ожидают точного CI. Scope guard старых открытых bundle
-  остаётся отдельным ограничением.
+  `ba973c1`/`636d2c7` ожидают точного CI. На следующем follow-up обязательная
+  серверная привязка для Push проверяется профильными API-тестами и полным CI
+  точного SHA; staging, реальный provider и устройство остаются открытыми.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному `requireStateUser`, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:

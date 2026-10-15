@@ -98,12 +98,27 @@ function makeDb() {
   };
 }
 
-async function postPushTest(db: ReturnType<typeof makeDb>, body = JSON.stringify({ title: 'hello' }), extraHeaders: Record<string, string> = {}) {
+async function postPushTest(
+  db: ReturnType<typeof makeDb>,
+  body = JSON.stringify({ title: 'hello' }),
+  extraHeaders: Record<string, string> = {},
+  includeScope = true,
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const headers = new Headers({
+    Cookie: `ff_session=${token}`,
+    'Content-Type': 'application/json',
+    'X-Request-ID': 'push-test-route-01',
+  });
+  if (includeScope) {
+    headers.set('X-FitFocus-State-Account', 'user-1');
+    headers.set('X-FitFocus-State-Session', await stateSessionId({ sub: 'user-1', sid: 'sid-1' }));
+  }
+  for (const [key, value] of Object.entries(extraHeaders)) headers.set(key, value);
   const context: PushTestContext = {
     request: new Request('https://fitfocus.test/api/push/test', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'push-test-route-01', ...extraHeaders },
+      headers,
       body,
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -158,6 +173,17 @@ describe('/api/push/test', () => {
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(sendPushNotification).not.toHaveBeenCalled();
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects an unscoped legacy request before reading the body or sending notifications', async () => {
+    const db = makeDb();
+
+    const response = await postPushTest(db, '{', {}, false);
+
+    expect(response.status).toBe(401);
+    expect(sendPushNotification).not.toHaveBeenCalled();
+    expect(db.runs).toHaveLength(0);
     expect(db.batches).toHaveLength(0);
   });
 

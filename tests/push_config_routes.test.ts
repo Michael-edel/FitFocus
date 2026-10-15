@@ -102,11 +102,17 @@ function makeDb(options?: {
   };
 }
 
-async function authedRequest(url: string, init: RequestInit = {}) {
+async function authedRequest(url: string, init: RequestInit = {}, includeScope = true) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const headers = new Headers(init.headers);
   headers.set('Cookie', `ff_session=${token}`);
   if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', 'push-route-test-01');
+  if (includeScope) {
+    if (!headers.has('X-FitFocus-State-Account')) headers.set('X-FitFocus-State-Account', 'user-1');
+    if (!headers.has('X-FitFocus-State-Session')) {
+      headers.set('X-FitFocus-State-Session', await stateSessionId({ sub: 'user-1', sid: 'sid-1' }));
+    }
+  }
   return new Request(url, { ...init, headers });
 }
 
@@ -124,6 +130,43 @@ function context(request: Request, db: ReturnType<typeof makeDb>, env: Record<st
 }
 
 describe('push runtime configuration routes', () => {
+  it('rejects unscoped status before reading push subscriptions', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {}, false);
+
+    const response = await getPushStatus(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects unscoped subscribe before reading the body or writing', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{',
+    }, false);
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects unscoped unsubscribe before reading the body or writing', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/unsubscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{',
+    }, false);
+
+    const response = await postPushUnsubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
   it('returns configured status with the public VAPID key', async () => {
     const db = makeDb();
     const request = await authedRequest('https://fitfocus.test/api/push/status', {

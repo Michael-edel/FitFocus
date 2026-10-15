@@ -5,7 +5,7 @@ import { deliverPushTest } from '../_lib/push_test_delivery';
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -17,7 +17,7 @@ type Env = {
 const handlePushTestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
