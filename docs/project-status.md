@@ -3,12 +3,14 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
-[`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
+[`0646e3d`](https://github.com/Michael-edel/FitFocus/commit/0646e3ddc699692d2f05e1bbe1b130e01b8cd8c0)
 в ветке `durable-outbox`; точный GitHub CI этой ревизии ожидает push.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
-desktop Chromium/Firefox/WebKit, без retries). В плане остаются 34 пункта:
+desktop Chromium/Firefox/WebKit, без retries). Follow-up `0646e3d` также прошёл
+20 профильных unit, общий typecheck, production build и тот же E2E 3/3 после
+перевода всех AI action reads на явный accountId. В плане остаются 34 пункта:
 20 P0, 7 P1 и 7 следующих задач. P0.4 и P0.5 остаются открытыми до проверки
 остальных callbacks, staging и полного lifecycle.
 

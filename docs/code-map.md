@@ -7,7 +7,7 @@
 profile flush — `f3930ec`; сессия/очередь достижений — `57da2cf`,
 атомарная проверка позднего proof — `4528e2b`, постоянная область notice — `724ecf1`.
 Личные покупки следуют profile CAS на `4736ff5`; валидация меню дополнена
-на `830caf4`; AI retry metadata привязана к account scope на `18af4ee`.
+на `830caf4`; AI retry metadata и action reads привязаны к account scope на `0646e3d`.
 CI каждой ревизии сверяется отдельно.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).

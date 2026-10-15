@@ -562,6 +562,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   1300/1300 в 209 файлах; root/domain/storage typecheck и production build
   прошли; Coach retry account-switch E2E — 3/3 на desktop Chromium/Firefox/WebKit,
   workers=1/retries=0. Точный CI этого коммита ожидает push.
+  Follow-up [`0646e3d`](https://github.com/Michael-edel/FitFocus/commit/0646e3ddc699692d2f05e1bbe1b130e01b8cd8c0)
+  передаёт accountId во все проверки последнего действия в Coach, Plateau и
+  retry; 20 профильных unit, typecheck, production build и E2E 3/3 прошли
+  локально. Полный CI точного HEAD запускается после push.
   Остальные callback-контракты, точный CI, проверка внешних потребителей и
   staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует

@@ -4129,3 +4129,17 @@ Coach retry account-switch E2E прошёл 3/3 на desktop Chromium, Firefox �
 Точный GitHub CI этого SHA ожидает push. Это закрывает лишь локальный scope
 retry metadata; общий P0.5, остальные AI/family callbacks, staging и lifecycle
 остаются открытыми.
+
+## P0.5 — явный accountId для AI action reads, [`0646e3d`](https://github.com/Michael-edel/FitFocus/commit/0646e3ddc699692d2f05e1bbe1b130e01b8cd8c0), 15.10.2026
+
+После account-scoped записи retry metadata все проверки текущего действия в
+Coach, Plateau и общем retry теперь читают запись по явному `currentUser.id`.
+Это убирает зависимость сохранения/проверки текущей AI-попытки от момента, когда
+React effect переключит ambient storage scope.
+
+Профильные unit-наборы прошли 20/20; общий typecheck, production build,
+`git diff --check` и Coach retry account-switch E2E прошли. E2E — 3/3 на desktop
+Chromium, Firefox и WebKit с `workers=1,retries=0`. Полный unit suite 1300/1300
+в 209 файлах прошёл на непосредственно предшествующем компоненте `18af4ee`;
+полный CI для нового HEAD запускается после push. Остальные AI/family callbacks,
+staging и общий P0.5 lifecycle остаются открытыми.
