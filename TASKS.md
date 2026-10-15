@@ -539,6 +539,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   отслеживает владельца и значение глюкозы. Unit 1305/1305, typecheck, build и
   diff check прошли локально. Account-switch UI E2E для этого экрана и остальные
   cloud callbacks/cache остаются открытыми; P0.4 не закрыт.
+  [`cdc872b`](https://github.com/Michael-edel/FitFocus/commit/cdc872bae6cfef13642051d847b23cd03923a791)
+  переносит тот же lifecycle key на остальные account-aware экраны: dashboard,
+  plan, архив прогресса, питание, рецепты, семью, AI-совет и курс. Это сбрасывает
+  несохранённый recipe editor и account UI cache при смене login scope. Unit
+  1305/1305, typecheck и build прошли; recipe account-switch E2E — 3/3, семейное
+  меню — 39/39 на desktop Chromium/Firefox/WebKit без retries. P0.4 остаётся
+  открытым до браузерной проверки draft transition и аудита остальных callbacks/cache.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

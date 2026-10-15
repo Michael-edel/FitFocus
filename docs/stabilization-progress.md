@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## 15.10.2026 — account/session lifecycle для всех профильных экранов (`cdc872b`)
+
+Несколько account-aware экранов оставляли локальное React state между входами:
+в частности, editor рецепта, выбранный день плана и раскрытые разделы архива.
+Теперь dashboard, plan, progress/archive, nutrition, recipes, family, council и
+course монтируются с ключом активной login scope. При смене account, session
+epoch, server session или auth fence старый экран размонтируется; его локальные
+черновики не передаются новому входу. Static help, changelog и policy screens
+этим ключом не затронуты.
+
+Полный unit suite — 1305/1305 в 210 файлах; typecheck, production build и
+`git diff --check` прошли. Recipe photo account-switch acceptance прошёл 3/3,
+family-menu durable suite — 39/39 на desktop Chromium, Firefox и WebKit,
+`workers=1,retries=0`. Точный GitHub CI этого SHA проверяется после push. Полная
+браузерная приёмка перехода между аккаунтами для каждого локального черновика и
+остальной P0.4 аудит остаются открытыми.
+
 ## 15.10.2026 — сброс локальных черновиков прогресса при смене login-scope (`f814234`)
 
 Экран прогресса содержал несохранённые замеры и данные импорта в React state.

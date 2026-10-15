@@ -4,7 +4,9 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
 [`f814234`](https://github.com/Michael-edel/FitFocus/commit/f8142349291fd592c58a857ae88e0ee28c6b098e)
-в ветке `durable-outbox`; точный GitHub CI запускается после push.
+в ветке `durable-outbox`; follow-up
+[`cdc872b`](https://github.com/Michael-edel/FitFocus/commit/cdc872bae6cfef13642051d847b23cd03923a791)
+также локально проверен, его точный GitHub CI запускается после push.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
@@ -20,6 +22,12 @@ unit suite прошёл 1305/1305 в 210 файлах, общий typecheck и p
 прошли; два целевых Push E2E прошли по 1/1 в desktop Chromium без retries.
 P0.4 остаётся открытым: для экрана прогресса ещё нужен browser account-switch
 acceptance, кроме проверки остальных callbacks/cache и staging.
+
+`cdc872b` распространяет account/session render key на все account-aware
+workspace screens, включая рецепты с несохранённым editor draft. После этой
+ревизии полный unit suite — 1305/1305, typecheck/build прошли; recipe
+account-switch E2E — 3/3 и family-menu durable E2E — 39/39 на desktop
+Chromium/Firefox/WebKit без retries. Точный CI этого HEAD выполняется после push.
 
 ## P0.5 — AI retry metadata с областью аккаунта, [`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
 
