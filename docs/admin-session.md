@@ -23,22 +23,19 @@ scope headers. CSV загружается тем же транспортом, а
 
 ## Серверный контракт
 
-`requireAdminRequest` проверяет переданный scope до запроса роли в D1 и до
-записи admin-session activity. Это работает для обоих поддерживаемых стилей
-вызова guard. Middleware `/api/admin/*` добавляет response markers и возвращает
-401 при исключении `STATE_SESSION_CHANGED`. Административные GET/PATCH
-`/api/support/feedback` и `/api/logout_all`, которые находятся вне этой
-директории, также проверяют scope. Support endpoints и `/api/logout_all`
-требуют его обязательно; global logout отклоняет старые запросы без полного
-proof до auth lookup, отзыва сессий и очистки cookie.
+`requireAdminRequest` требует полный account/session proof для всех `/api/admin/*`
+до запроса admin-роли в D1 и записи admin-session activity. Это действует для
+обоих поддерживаемых стилей вызова guard. Отсутствующая или неполная пара
+возвращает `STATE_SESSION_REQUIRED`, устаревшая — `STATE_SESSION_CHANGED`;
+middleware превращает оба исхода в 401 с admin response markers. Старые
+административные bundles без proof должны обновиться до rollout.
 
-Для остальных `requireAdminRequest`-маршрутов проверка включается, когда клиент
-передал хотя бы один scope header: тогда оба должны присутствовать и совпасть с
-cookie-сессией. Запросы старых клиентов к этим маршрутам без proof сохраняют
-прежнее поведение; новый клиент от такого ответа защиту не принимает. В
-заголовки попадает только публичный hash сессии, не cookie и не сырой session id.
+Административные GET/PATCH `/api/support/feedback` и `/api/logout_all`, которые
+находятся вне `/api/admin/*`, тоже требуют proof. `/api/logout_all` отклоняет
+запрос до отзыва сессий и очистки cookie. В заголовки попадает только публичный
+hash сессии, не cookie и не сырой session id.
 
 Регрессии покрывают transport markers и late response после смены IDB-сессии,
-проверку guard до D1 side effects, middleware и `logout_all`. Общий критерий
-P0.5 остаётся открытым, пока не проверены остальные API callbacks и полный
-lifecycle.
+отсутствующий, частичный и устаревший proof до D1 role lookup, оба стиля вызова
+guard, middleware и `logout_all`. Общий критерий P0.5 остаётся открытым, пока не
+проверены остальные API callbacks и полный lifecycle.

@@ -18,6 +18,16 @@ Linux Rollup optional binary. Точный PR CI [38703208009](https://github.co
 OAuth, BFCache, устройство и staging требуют отдельной проверки.
 [Контракт](huawei-health-session.md).
 
+## Follow-up — обязательный proof для admin routes, `90bd734`
+
+Все `/api/admin/*` теперь требуют полного account/session proof через общий
+admin guard. Отсутствующая или частичная пара возвращает 401 до D1 role lookup
+и admin-session activity; middleware добавляет response markers. Тесты покрывают
+оба guard overload и отказ до auth lookup в request/env стиле. В изолированном
+контейнере прошли API/auth/admin guards и три typecheck; точный CI SHA запускается
+после push. Обновление старых admin bundles и staging остаются открытыми.
+[Контракт](admin-session.md).
+
 ## Follow-up — обязательный proof для `logout_all`, `c778515`
 
 `POST /api/logout_all` отзывает все сессии и теперь требует полный account/session

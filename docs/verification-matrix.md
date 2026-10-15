@@ -10,6 +10,12 @@
 revocation; локально прошли API/auth/admin guards и три typecheck. Точный CI и
 staging проверяются отдельно. [Контракт](admin-session.md).
 
+Все `/api/admin/*` требуют полный account/session proof в follow-up
+[`90bd734`](https://github.com/Michael-edel/FitFocus/commit/90bd7347a1bbdea51f27737f530a5f4a8c562c46).
+Missing/partial proof проверяется до D1 role lookup и admin-session activity;
+локально прошли API/auth/admin guards и три typecheck. Точный CI и обновление
+старых bundles/staging проверяются отдельно. [Контракт](admin-session.md).
+
 Huawei Health session guard впервые проверен в кодовом SHA
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae):
 26 профильных unit/API-тестов, 15/15 выбранных account-switch E2E без retries и

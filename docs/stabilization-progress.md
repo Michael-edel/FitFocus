@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — обязательный proof для всех admin routes, `90bd734`, 15.10.2026
+
+`requireAdminRequest` раньше сравнивал scope только при наличии хотя бы одного
+заголовка, поэтому cookie-only запросы старых admin bundles доходили до D1
+проверки роли и admin-session activity. Теперь оба guard overload требуют полную
+account/session пару; отсутствие или неполная пара отклоняются до D1 role query,
+а устаревшая пара остаётся отклонённой. `/api/admin/*` middleware переводит оба
+исхода в guarded 401. Клиент `AdminScreen` уже отправляет пару proof-заголовков.
+
+Добавлены регрессии для missing/account-only/session-only proof, обоих стилей
+вызова `requireAdminRequest`, успешной пары и guarded middleware 401. Regression
+fixtures валидных admin endpoints теперь передают настоящий session digest. В
+сетево-отключённом sandbox прошли API invariants, auth-scope, admin guard и три
+typecheck. Unit suite и полный CI этого SHA ожидают push; старые bundles и
+staging остаются открытыми. [Контракт](admin-session.md).
+
 ## P0.5 — обязательный proof для глобального выхода, `c778515`, 15.10.2026
 
 `POST /api/logout_all` отзывает все сессии аккаунта и истекал общую cookie,

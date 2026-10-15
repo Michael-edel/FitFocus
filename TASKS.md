@@ -559,7 +559,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   требует полный proof для destructive `/api/logout_all`; legacy no-scope и
   account-only запросы получают 401 до auth lookup, revocation и cookie clearing.
   API/auth/admin guards и три typecheck прошли в изолированном контейнере;
-  точный CI запускается после push. [Контракт](docs/admin-session.md).
+  follow-up [`90bd734`](https://github.com/Michael-edel/FitFocus/commit/90bd7347a1bbdea51f27737f530a5f4a8c562c46)
+  требует proof для всех `/api/admin/*`; тесты покрывают оба guard overload,
+  отсутствие/частичную пару до D1 lookup и guarded 401 middleware. API/auth/admin
+  guards и три typecheck прошли в изолированном контейнере; точный CI после push.
+  Старые AdminScreen bundles требуют обновления. [Контракт](docs/admin-session.md).
   Остальные callbacks и общий lifecycle остаются открытыми.
 - [x] Проверить выдачу мобильного bearer-токена из Settings: fresh
   account/session proof, server scope до mint, guarded no-store response,

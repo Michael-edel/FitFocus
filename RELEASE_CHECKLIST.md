@@ -46,6 +46,9 @@
 - [ ] `POST /api/logout_all` требует полный proof до отзыва всех сессий и
   истечения cookie; старый AdminScreen bundle получает 401. На staging проверить
   успешный выход всех устройств и отказ без/с неполным proof без side effects.
+- [ ] Все [`/api/admin/*`](API_CONTRACTS.md) требуют полный account/session
+  proof до D1-проверки admin-роли и admin-session side effects. Старые bundles
+  без proof получают guarded 401; проверить обновление панели и ролевые операции.
 - [ ] Для [`/api/state` и `/api/profile`](API_CONTRACTS.md) все GET/PUT/PATCH/
   DELETE handlers требуют парный account/session proof и отвечают 401 старым
   bundles без него. Проверить обновление клиента, pending/outbox writes,

@@ -294,6 +294,17 @@ RETURNING version. 409 содержит проверенный snapshot без �
 Generic state отклоняет family-menu key с 403. Empty canonical не читает
 legacy; повреждённый canonical возвращает ошибку и требует восстановления.
 
+## Административные маршруты: session guard
+
+Все `/api/admin/*` требуют парные `X-FitFocus-State-Account` и
+`X-FitFocus-State-Session`, совпадающие с cookie-сессией. `requireAdminRequest`
+проверяет обязательную пару до D1-проверки admin-роли и записи admin-session
+activity. Отсутствующий/неполный proof возвращает 401 как `STATE_SESSION_REQUIRED`,
+устаревший — 401 как `STATE_SESSION_CHANGED`; middleware добавляет admin
+protocol/guard markers. Старые bundles без proof получают 401 и должны быть
+обновлены до серверного rollout. Клиентский контракт и тесты описаны в
+[документе сессии административной панели](docs/admin-session.md).
+
 ## Обращения пользователя в поддержку: session guard
 
 Новые клиенты читают свои тикеты через `GET /api/support/feedback/my` и
