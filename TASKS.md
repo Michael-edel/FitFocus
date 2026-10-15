@@ -623,9 +623,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует
   старое меню после смены аккаунта. Оба сценария прошли на трёх desktop engines;
-  последующий `e705875` добавил поздний `PATCH /api/family/member` после входа B:
+  последующий `5d3e4d6` добавил поздний `PATCH /api/family/member` после входа B:
   Chromium, Firefox и WebKit прошли 3/3 без retries, callback не запускает новую
-  загрузку семьи аккаунта A или B. Точный CI для этого follow-up ещё ожидается;
+  загрузку семьи аккаунта A после ответа. Trace первого полного прогона показал,
+  что более ранний baseline включал незавершённую стартовую загрузку A; после
+  переноса baseline за вход B сценарий прошёл. Точный CI follow-up ещё ожидается;
   остальные callbacks и staging остаются открытыми.
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в
