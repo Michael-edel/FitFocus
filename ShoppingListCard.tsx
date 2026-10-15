@@ -66,6 +66,7 @@ export default function ShoppingListCard({
   title = "Список покупок",
   fallbackList,
   userId,
+  allowCachedUiStateRestore = true,
   loginGuard,
   isCurrentSession,
 }: {
@@ -73,6 +74,7 @@ export default function ShoppingListCard({
   title?: string;
   fallbackList?: string[];
   userId?: string | null;
+  allowCachedUiStateRestore?: boolean;
   loginGuard: OutboxReadGuard | null;
   isCurrentSession: () => boolean;
 }) {
@@ -89,7 +91,7 @@ export default function ShoppingListCard({
     : null;
   const items = itemsSnapshot?.scopeKey === scopeKey ? itemsSnapshot.items : null;
   const fallbackStorageKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : null;
-  const fallbackChecked = fallbackStorageKey && fallbackCheckedSnapshot?.storageKey === fallbackStorageKey
+  const fallbackChecked = allowCachedUiStateRestore && fallbackStorageKey && fallbackCheckedSnapshot?.storageKey === fallbackStorageKey
     ? fallbackCheckedSnapshot.checked
     : EMPTY_FALLBACK_CHECKED;
 
@@ -125,7 +127,7 @@ export default function ShoppingListCard({
 
   useEffect(() => {
     try {
-      if (!fallbackStorageKey) {
+      if (!allowCachedUiStateRestore || !fallbackStorageKey) {
         setFallbackCheckedSnapshot(null);
         return;
       }
@@ -138,14 +140,14 @@ export default function ShoppingListCard({
     } catch {
       if (fallbackStorageKey) setFallbackCheckedSnapshot({ storageKey: fallbackStorageKey, checked: {} });
     }
-  }, [fallbackStorageKey]);
+  }, [allowCachedUiStateRestore, fallbackStorageKey]);
 
   useEffect(() => {
     try {
-      if (!fallbackStorageKey || fallbackCheckedSnapshot?.storageKey !== fallbackStorageKey) return;
+      if (!allowCachedUiStateRestore || !fallbackStorageKey || fallbackCheckedSnapshot?.storageKey !== fallbackStorageKey) return;
       localStorage.setItem(fallbackStorageKey, JSON.stringify(fallbackCheckedSnapshot.checked));
     } catch {}
-  }, [fallbackCheckedSnapshot, fallbackStorageKey]);
+  }, [allowCachedUiStateRestore, fallbackCheckedSnapshot, fallbackStorageKey]);
 
   useEffect(() => {
     if (!scopeKey || !loginGuard || !weekStart) return;
@@ -185,7 +187,7 @@ export default function ShoppingListCard({
   const updateFallbackChecked = useCallback((
     updater: React.SetStateAction<Record<string, boolean>>,
   ) => {
-    if (!fallbackStorageKey) return;
+    if (!allowCachedUiStateRestore || !fallbackStorageKey) return;
     setFallbackCheckedSnapshot((previous) => {
       const current = previous?.storageKey === fallbackStorageKey
         ? previous.checked
@@ -193,7 +195,7 @@ export default function ShoppingListCard({
       const checked = typeof updater === 'function' ? updater(current) : updater;
       return { storageKey: fallbackStorageKey, checked };
     });
-  }, [fallbackStorageKey]);
+  }, [allowCachedUiStateRestore, fallbackStorageKey]);
 
   const groups = useMemo(
     () => groupShoppingItemsByDepartment(items || [], { onlyUnchecked }),

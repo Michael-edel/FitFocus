@@ -986,9 +986,30 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).not.toBeNull();
   await waitForAccountOutboxIdle(page, accountA);
 
+  const progressUiKeyA = `fitfocus.progress.ui.v1:${accountA.id}`;
+  const progressUiStateA = {
+    selectedMetric: 'bloodGlucoseMmolL',
+    activeSection: 'dynamics',
+    mobileDetailsOpen: false,
+    timelineFilter: 'all',
+    compareFromKey: '',
+    compareToKey: '',
+    compareMode: 'matched',
+  };
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
+    key: progressUiKeyA,
+    value: progressUiStateA,
+  });
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByRole('button', { name: 'Сахар', exact: true })).toHaveClass(/border-indigo-500/);
+
   const weightDraft = page.getByLabel('Вес');
   await weightDraft.fill('98.765');
   await expect(weightDraft).toHaveValue('98.765');
+  const progressUiCacheBeforeSwitch = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), progressUiKeyA);
+  expect(progressUiCacheBeforeSwitch.selectedMetric).toBe('bloodGlucoseMmolL');
   const beforeSwitch = await readDurableSnapshot(page);
   const profileBefore = rawValue(beforeSwitch, profileKey(accountA.id));
   const operationsBefore = operationsFor(beforeSwitch, accountA);
@@ -998,6 +1019,10 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await waitForAccountSwitch(page);
   await expect(page.getByRole('heading', { name: 'Новый замер', exact: true })).toBeVisible();
   await expect(weightDraft).not.toHaveValue('98.765');
+  await expect(page.getByRole('button', { name: 'Вес', exact: true })).toHaveClass(/border-indigo-500/);
+  await expect(page.getByRole('button', { name: 'Сахар', exact: true })).not.toHaveClass(/border-indigo-500/);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), progressUiKeyA))
+    .toEqual(progressUiCacheBeforeSwitch);
 
   const afterSwitch = await readDurableSnapshot(page);
   expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);

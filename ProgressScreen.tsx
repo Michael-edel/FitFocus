@@ -35,6 +35,7 @@ type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type ProgressScreenProps = {
   currentUser: UserProfile | null;
+  allowCachedUiStateRestore?: boolean;
   weightHistory: UserProfile['weightHistory'];
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
@@ -207,6 +208,7 @@ const parseWearableImport = (text: string): WearableImportPayload | null => {
 
 export default function ProgressScreen({
   currentUser,
+  allowCachedUiStateRestore = true,
   weightHistory,
   measurementsHistory,
   progressPhotos,
@@ -343,6 +345,17 @@ export default function ProgressScreen({
   }, [compareKeys]);
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      uiSkipSaveRef.current = true;
+      setSelectedMetric('weight');
+      setActiveSection('summary');
+      setMobileDetailsOpen(false);
+      setTimelineFilter('all');
+      setCompareFromKey('');
+      setCompareToKey('');
+      setCompareMode('matched');
+      return;
+    }
     try {
       uiSkipSaveRef.current = true;
       const raw = window.localStorage.getItem(storageKey);
@@ -388,9 +401,10 @@ export default function ProgressScreen({
       setCompareToKey('');
       setCompareMode('matched');
     }
-  }, [storageKey]);
+  }, [allowCachedUiStateRestore, storageKey]);
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) return;
     if (uiSkipSaveRef.current) {
       uiSkipSaveRef.current = false;
       return;
@@ -408,7 +422,7 @@ export default function ProgressScreen({
     } catch {
       // Ignore storage failures and keep the screen usable.
     }
-  }, [activeSection, compareFromKey, compareMode, compareToKey, mobileDetailsOpen, selectedMetric, storageKey, timelineFilter]);
+  }, [activeSection, allowCachedUiStateRestore, compareFromKey, compareMode, compareToKey, mobileDetailsOpen, selectedMetric, storageKey, timelineFilter]);
 
   const timelineGroups = useMemo(() => {
     type TimelineItem =

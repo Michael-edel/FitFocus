@@ -223,6 +223,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <PlanScreen
             key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
             planTaskDone={planTaskDone}
             setPlanTaskDone={setPlanTaskDone}
             setActiveTab={setActiveTab}
@@ -266,6 +267,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <ProgressScreen
             key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
             progressPhotos={progressPhotos}
@@ -294,6 +296,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <ProgressArchiveScreen
             key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
             progressPhotos={progressPhotos}

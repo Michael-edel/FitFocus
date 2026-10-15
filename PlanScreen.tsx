@@ -23,6 +23,7 @@ type ShoppingListCardComponent = React.ComponentType<{
   title?: string;
   fallbackList?: string[];
   userId?: string | null;
+  allowCachedUiStateRestore?: boolean;
   loginGuard: OutboxReadGuard | null;
   isCurrentSession: () => boolean;
 }>;
@@ -32,6 +33,7 @@ type FamilyShoppingState = { week_start: string; items: FamilyShoppingItem[] } |
 
 type PlanScreenProps = {
   currentUser: UserProfile | null;
+  allowCachedUiStateRestore?: boolean;
   planTaskDone: Record<string, boolean>;
   setPlanTaskDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setActiveTab: (tab: string) => void;
@@ -71,6 +73,7 @@ type PlanScreenProps = {
 
 export default function PlanScreen({
   currentUser,
+  allowCachedUiStateRestore = true,
   planTaskDone,
   setPlanTaskDone,
   setActiveTab,
@@ -538,6 +541,7 @@ export default function PlanScreen({
                     : weeklyMenu.shoppingList
                 }
                 userId={currentUser?.id ?? null}
+                allowCachedUiStateRestore={allowCachedUiStateRestore}
                 loginGuard={loginGuard}
                 isCurrentSession={isCurrentSession}
               />
