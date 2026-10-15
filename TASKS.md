@@ -1003,11 +1003,17 @@ all-client Service Worker fence, атомарные migration items и quarantin
     файлов, 453 browser passed / 9 skipped, audit без уязвимостей, три typecheck,
     build и rollback-проверка прошли в [run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668).
   - [x] Добавить явное разрешение импортированного конфликта для обычных
-    account-owned state keys: свежий scoped GET, подтверждение пользователя,
-    атомарное обновление outbox и migration ledger, повторный импорт не воскрешает
-    старую операцию. Legacy retry, профиль и family-menu остаются вне этого пути.
-    Unit-проверки прошли 1286/1286; migration E2E — 7/7 browser/PWA проектов,
-    workers=2/retries=0; точный GitHub CI этой ревизии ожидается.
+    account-owned state keys и профиля. State читает свежий scoped GET; профиль
+    читает `/api/profile` и отправляет новую typed profile-операцию через CAS.
+    Outbox и migration ledger обновляются атомарно; повторный импорт не воскрешает
+    старую операцию. Legacy retry запрещён; динамический family-menu key
+    появился после legacy writer, а его текущий typed conflict использует
+    отдельный resource-specific recovery.
+    State recovery: 1286 unit и 7/7 browser/PWA проектов. Profile recovery:
+    122 целевой unit; полный набор — 1291/1291 в 208 файлах. Общий, domain и
+    storage typecheck, auth/API guards и production build прошли; legacy migration
+    E2E — 14/14 на семи desktop/mobile/PWA проектах, workers=2/retries=0.
+    Точный CI актуальной ревизии ожидается.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

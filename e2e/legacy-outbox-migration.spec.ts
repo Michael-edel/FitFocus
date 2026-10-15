@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { legacyWriterPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
-import { mockApp, openApp } from './support/appHarness';
+import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const account = 'google-e2e-sub';
 const legacySourceKey = 'fitfocus.remote-kv-outbox.v1';
@@ -25,7 +25,7 @@ async function oldQueueRecord(page: Page, key: string): Promise<LegacyRecord | n
   }, { sourceKey: legacySourceKey, target: key });
 }
 
-async function migrationState(page: Page) {
+async function migrationState(page: Page, valueKey = targetKey) {
   return page.evaluate(async ({ sourceKey, valueKey }) => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -66,7 +66,7 @@ async function migrationState(page: Page) {
         nowMs: Date.now(),
       };
     } finally { db.close(); }
-  }, { sourceKey: legacySourceKey, valueKey: targetKey });
+  }, { sourceKey: legacySourceKey, valueKey });
 }
 
 function itemForKey(items: MigrationItem[], key: string): MigrationItem | undefined {
@@ -352,6 +352,71 @@ test('preserves legacy intent without sending an operation whose server generati
     throw error;
   } finally {
     await Promise.allSettled([oldPage.close(), currentPage.close()]);
+    await server.close();
+  }
+});
+
+test('resolves a legacy profile through its guarded profile CAS endpoint', async ({ context }, info) => {
+  test.setTimeout(120_000);
+  const profileKey = `fitfocus_data_${account}_profile`;
+  const profileValue = JSON.stringify({ ...buildMockProfile(), name: 'Локальный профиль из прежней очереди' });
+  const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
+  server.release();
+  const page = await context.newPage();
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true });
+    await page.addInitScript(({ sourceKey, record }) => localStorage.setItem(sourceKey, JSON.stringify([record])), {
+      sourceKey: legacySourceKey, record: { type: 'put', key: profileKey, value: profileValue },
+    });
+    await openApp(page, `${server.origin}/?legacy-profile=1#plan`);
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect(page.getByRole('alert')).toContainText('Обнаружен конфликт данных');
+    await expect.poll(async () => {
+      const state = await migrationState(page, profileKey);
+      return state.operations.some(operation => operation.key === profileKey && operation.status === 'conflicted');
+    }, { timeout: 30_000 }).toBe(true);
+
+    const updateNotice = page.getByRole('status', { name: 'Обновление FitFocus' });
+    const postponeUpdate = updateNotice.getByRole('button', { name: 'Позже' });
+    if (await postponeUpdate.isVisible().catch(() => false)) {
+      await postponeUpdate.click();
+      await expect(updateNotice).toBeHidden();
+    }
+    await page.locator('[data-state-notice-region] details summary').click();
+    const group = page.getByRole('region', { name: 'Профиль' });
+    const keepLocal = group.getByRole('button', { name: 'Оставить последнюю локальную версию' });
+    await expect(keepLocal).toBeVisible();
+    if (info.project.name === 'desktop-chromium') {
+      await info.attach('legacy-profile-recovery-panel.png', { body: await page.screenshot({ fullPage: false }), contentType: 'image/png' });
+    }
+    const confirmation = page.waitForEvent('dialog').then(async dialog => {
+      const message = dialog.message();
+      await dialog.accept();
+      return message;
+    });
+    await keepLocal.click();
+    expect(await confirmation).toContain('свежей версии сервера');
+
+    await expect.poll(async () => {
+      const state = await migrationState(page, profileKey);
+      const receipt = itemForRecord(state.migrationItems, profileKey, profileValue);
+      return { pending: state.operations.some(operation => operation.key === profileKey), resolution: receipt?.resolution };
+    }).toEqual({ pending: false, resolution: expect.objectContaining({ kind: 'keep-latest-local', serverVersion: 1 }) });
+    expect(server.counts.profile).toBe(1);
+    expect(server.stateWriteKeys).not.toContain(profileKey);
+    expect(server.unexpectedApi).toEqual([]);
+    expect((await migrationState(page, profileKey)).value).toBe(profileValue);
+    await info.attach('legacy-profile-resolution', { body: JSON.stringify({ counts: server.counts, unexpectedApi: server.unexpectedApi }),
+      contentType: 'application/json' });
+  } catch (error) {
+    const diagnostic = { counts: server.counts, unexpectedApi: server.unexpectedApi,
+      migration: await migrationState(page, profileKey).catch(cause => ({ error: String(cause) })),
+      body: await page.locator('body').innerText().catch(() => '') };
+    await info.attach('legacy-profile-resolution-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
+    console.error('LEGACY_PROFILE_RESOLUTION_FAILURE', JSON.stringify(diagnostic));
+    throw error;
+  } finally {
+    await page.close().catch(() => undefined);
     await server.close();
   }
 });

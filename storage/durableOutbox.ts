@@ -2,6 +2,7 @@ import { StateDatabase, STATE_STORES, StateStorageError, afterIndexedRequests, i
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
   legacyDeletedAccountMetaId, type LegacyMigrationResolution } from './legacyQueue';
 import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
+import { isUserProfilePayload } from '../profileValidation';
 
 export type OutboxIntent = { type: 'put'; key: string; value: string } | { type: 'delete'; key: string };
 export type OutboxAttempt = {
@@ -68,10 +69,16 @@ function requireOwnedKey(accountId: string, key: string): void {
   }
 }
 
-function isResolvableLegacyStateKey(accountId: string, key: string): boolean {
+export type LegacyRecoveryResource = 'state' | 'profile';
+
+/** Allowlist imported account keys; profile recovery has a separate guarded endpoint. */
+export function legacyRecoveryResource(accountId: string, key: string): LegacyRecoveryResource | null {
   const prefix = `fitfocus_data_${accountId}_`;
-  return key.startsWith(prefix) && !key.startsWith(`${prefix}family_menu:`)
-    && !key.endsWith('_profile') && !key.endsWith('_all_users') && !key.endsWith('__ffv');
+  if (!accountId || !key.startsWith(prefix) || key.endsWith('_all_users') || key.endsWith('__ffv')) return null;
+  if (key === `${prefix}profile`) return 'profile';
+  // Dynamic family-menu keys were added after the legacy KV writer; current ones use typed recovery.
+  if (key.startsWith(`${prefix}family_menu:`) || key.endsWith('_profile')) return null;
+  return 'state';
 }
 
 export type OutboxWrite = {
@@ -262,8 +269,7 @@ function validResolvedLocalIntent(accountId: string, key: string, operation: Out
   if (operation.resource === 'profile') {
     let profile: unknown;
     try { profile = JSON.parse(operation.value); } catch { return false; }
-    return typeof profile === 'object' && profile !== null && !Array.isArray(profile)
-      && (profile as Record<string, unknown>).id === accountId;
+    return isUserProfilePayload(profile) && profile.id === accountId;
   }
   if (operation.resource === 'familyMenu') {
     let intent: unknown;
@@ -585,11 +591,12 @@ export class DurableOutbox {
   async resolveLegacyConflictGroup(input: {
     accountId: string; key: string; expectedOpIds: readonly string[];
     choice: 'keep-latest-local' | 'accept-server'; readGuard: OutboxReadGuard; nowMs: number;
+    resource: LegacyRecoveryResource;
     serverSnapshot: { value: string; version: number; exists: boolean };
   }): Promise<boolean> {
     requireOwnedKey(input.accountId, input.key);
     const snapshot = input.serverSnapshot;
-    if (!isResolvableLegacyStateKey(input.accountId, input.key) || !finiteInteger(input.nowMs)
+    if (legacyRecoveryResource(input.accountId, input.key) !== input.resource || !finiteInteger(input.nowMs)
       || input.readGuard.accountId !== input.accountId || !input.readGuard.sessionEpoch
       || !/^[a-f0-9]{64}$/.test(input.readGuard.serverSessionId) || !finiteInteger(input.readGuard.authFence)
       || !['keep-latest-local', 'accept-server'].includes(input.choice)
@@ -597,6 +604,12 @@ export class DurableOutbox {
       || (!snapshot.exists && snapshot.value !== '')
       || input.expectedOpIds.length === 0 || input.expectedOpIds.some((id) => typeof id !== 'string' || !id)
       || new Set(input.expectedOpIds).size !== input.expectedOpIds.length) throw new Error('OUTBOX_INVALID_RECOVERY_REQUEST');
+    if (input.resource === 'profile') {
+      let profile: unknown;
+      try { profile = JSON.parse(snapshot.value); } catch {}
+      if (!snapshot.exists || snapshot.version < 1 || !isUserProfilePayload(profile)
+        || profile.id !== input.accountId || profile.version !== snapshot.version) throw new Error('OUTBOX_INVALID_RECOVERY_SNAPSHOT');
+    }
 
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.values, STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.migrationItems], 'readwrite', (tx) => {
@@ -684,10 +697,12 @@ export class DurableOutbox {
           }
 
           const latest = operations[operations.length - 1];
-          if (!latest || !validResolvedLocalIntent(input.accountId, input.key, latest)) return false;
+          const latestWithResource = input.resource === 'profile' && latest ? { ...latest, resource: 'profile' as const } : latest;
+          if (!latest || !latestWithResource || !validResolvedLocalIntent(input.accountId, input.key, latestWithResource)) return false;
           const revision = meta.lastRevision + 1;
           const operation: OutboxOperation = {
             ...(latest.type === 'put' ? { type: 'put' as const, key: input.key, value: latest.value } : { type: 'delete' as const, key: input.key }),
+            ...(input.resource === 'profile' ? { resource: 'profile' as const } : {}),
             opId: crypto.randomUUID(), accountId: input.accountId, writerId: `manual-resolution:${crypto.randomUUID()}`,
             revision, baseVersion: snapshot.version, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs,
             createdAtMs: input.nowMs, updatedAtMs: input.nowMs,

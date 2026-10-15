@@ -64,7 +64,7 @@ describe('atomic resumable legacy migration', () => {
     expect(guard).not.toBeNull();
 
     expect(await outbox.resolveLegacyConflictGroup({
-      accountId, key, expectedOpIds: [legacyOperation.opId], choice, readGuard: guard!, nowMs: 123,
+      accountId, key, expectedOpIds: [legacyOperation.opId], choice, resource: 'state', readGuard: guard!, nowMs: 123,
       serverSnapshot: { value: 'verified remote value', version: 5, exists: true },
     })).toBe(true);
 
@@ -98,7 +98,7 @@ describe('atomic resumable legacy migration', () => {
     const guard = await outbox.acceptReadSession(accountId, 'c'.repeat(64), state.fence);
 
     expect(await outbox.resolveLegacyConflictGroup({
-      accountId, key, expectedOpIds: [legacyOperation.opId], choice: 'accept-server', readGuard: guard!, nowMs: 124,
+      accountId, key, expectedOpIds: [legacyOperation.opId], choice: 'accept-server', resource: 'state', readGuard: guard!, nowMs: 124,
       serverSnapshot: { value: '', version: 0, exists: false },
     })).toBe(true);
     const [receipt] = await rows<MigrationItem>(STATE_STORES.migrationItems);

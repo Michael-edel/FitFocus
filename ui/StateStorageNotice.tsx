@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 import { stateSync } from '../storage/stateSync';
+import { legacyRecoveryResource } from '../storage/durableOutbox';
 import { userStateDatabase } from '../storage/stateDatabase';
 import {
   getStateQueueOperations, getStateQueueSummaries, getStateSaveIssues, getStateSyncPauses,
@@ -31,13 +32,6 @@ const labels: Record<string, string> = {
 
 type RecoveryGroup = { key: string; label: string; operations: StateQueueOperation[] };
 type RecoveryChoice = 'keep-latest-local' | 'accept-server';
-
-function canResolveLegacyStateKey(accountId: string | undefined, key: string): boolean {
-  if (!accountId) return false;
-  const prefix = `fitfocus_data_${accountId}_`;
-  return key.startsWith(prefix) && !key.startsWith(`${prefix}family_menu:`)
-    && !key.endsWith('_profile') && !key.endsWith('_all_users') && !key.endsWith('__ffv');
-}
 
 function labelFor(operation: StateQueueOperation): string {
   if (operation.resource === 'profile') return 'Профиль';
@@ -180,7 +174,7 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
                   const canResolve = conflicted.length > 0 && !legacy && !sending && !missingServerVersion;
                   const canResolveLegacy = conflicted.length > 0 && legacy && !sending
                     && group.operations.every((operation) => operation.resource === undefined)
-                    && canResolveLegacyStateKey(accountId, group.key);
+                    && !!accountId && legacyRecoveryResource(accountId, group.key) !== null;
                   const canKeepLocal = canResolve || canResolveLegacy;
                   const canAcceptServer = canResolveLegacy || (canResolve && serverVersion !== undefined);
                   const canRetry = conflicted.length === 0 && failed.length > 0 && !legacy && !sending;

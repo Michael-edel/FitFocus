@@ -111,13 +111,16 @@ Repository запоминает ревизию прочитанного сним
   перезагружается, чтобы перечитать профиль и данные из общей базы.
 
 Legacy-записи с migration provenance не получают ручной retry. Для обычных
-account-owned state keys панель предлагает явное разрешение: сначала читает
-свежий серверный снимок с account/session/protocol scope, затем атомарно
-фиксирует выбор и legacy ledger. Сохранение локального намерения создаёт новую
-операцию без старого migration provenance и с текущей server version. Профиль,
-family-menu и неизвестные ключи остаются вне этого пути. Если ответ 409 не
-содержит корректный scope и снимок, sender ставится на `protocol`-паузу; такой
-ответ не становится разрешаемым конфликтом. Устаревшие operation IDs, смена
+account-owned state keys панель читает свежий scoped state snapshot; для профиля
+использует guarded `/api/profile`, проверяя account ID и версию. Выбор и legacy
+ledger записываются атомарно. Сохранение локального намерения создаёт новую
+операцию без старого migration provenance и с текущей server version; профиль
+получает typed `profile` operation и идёт через profile CAS. Динамический
+family-menu key появился после legacy KV writer; его актуальные конфликты
+разрешаются typed family-menu путем. Неизвестные ключи остаются вне legacy
+recovery. Если серверный ответ не содержит
+корректный scope и снимок, sender ставится на `protocol`-паузу; такой ответ не
+становится разрешаемым конфликтом. Устаревшие operation IDs, смена
 auth-fence/сессии и операция в `sending` отклоняют действие без изменения очереди.
 
 Проверки реализации: [тесты outbox](../tests/durable_outbox.test.ts),
