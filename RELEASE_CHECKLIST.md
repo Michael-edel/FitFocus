@@ -123,7 +123,8 @@ Actions, наличие workflow в нужной ветке и состояни�
   без заголовков не считается барьером старых writers.
 - [ ] Для [регистрации](docs/registration-persistence.md) invite guard и
   `inviteSync: { protocol: 1, guard: 1 }` выпущены до нового клиента;
-  проверены смена cookie перед redeem, потерянный ответ и повтор того же кода.
+  проверены смена cookie перед redeem, отказ старого клиента без proof,
+  потерянный ответ и повтор того же кода.
   Проверены profile create с baseVersion=0, локальный commit до AI,
   quota/rollback, auth-пауза и reload без OAuth-маркера.
 - [ ] Проверен [lifecycle sender](docs/state-sender.md#жизненный-цикл-страницы):

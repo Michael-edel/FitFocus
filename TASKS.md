@@ -531,6 +531,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   auth/API/admin/privacy guards прошли локально на `956cf96`; точный CI после
   push ещё не подтверждён. Старый unscoped logout и полный lifecycle остаются
   открытыми. [Контракт](docs/account-lifecycle-session.md).
+- [x] Требовать парный account/session proof для расходования invite при
+  регистрации; отсутствие и stale proof отклоняются до body/consume. Проверки
+  invite guard и oversized body проходят; старые клиенты без proof получают
+  401. Общая приёмка registration и staging остаются открытыми.
 - [x] Привязать административную панель, CSV-аудит, admin support и `logout_all`
   к исходному account/session proof; сервер проверяет его до D1 role lookup и
   admin-session side effects. Локальные transport/server regression tests,

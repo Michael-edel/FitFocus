@@ -975,8 +975,10 @@ Bootstrap 401/403 и некорректный профиль не активир
 
 Invite redeem требует свежий `/me` account/session proof и inviteSync capability;
 сервер проверяет binding до расходования кода. Ack проверяет invite guard
-и scope. Старые запросы без scope пока совместимы. Порядок выкладки capability
-и guard добавлен в чек-лист; сама регистрация не заменяет legacy writer barrier.
+и scope. Сервер отклоняет запрос без парных proof-заголовков до чтения body и
+расходования приглашения; старые сборки без proof получают 401. Порядок
+выкладки capability и guard добавлен в чек-лист; сама регистрация не заменяет
+legacy writer barrier.
 
 ### Проверка компонента 2e41742
 

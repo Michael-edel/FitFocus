@@ -2,7 +2,7 @@
 // Authenticated endpoint to redeem (consume) beta invite code for the current user.
 
 import { json } from "../_lib/auth";
-import { requireStateUser } from '../_lib/state_session';
+import { requireScopedStateUser } from '../_lib/state_session';
 import { requireDB, nowMs, toApiError } from "../_lib/db";
 import { consumeInviteCode } from "../_lib/invites";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
@@ -13,7 +13,7 @@ type Env = { DB: D1Database };
 
 const handleInviteRedeemPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
-  try { user = await requireStateUser(request, env); }
+  try { user = await requireScopedStateUser(request, env); }
   catch { return json({ ok: false, error: 'UNAUTH' }, 401); }
   try {
     const db = requireDB(env);

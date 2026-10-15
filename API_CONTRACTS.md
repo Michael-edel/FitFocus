@@ -54,11 +54,12 @@ State принимает парные `X-FitFocus-State-Account` и `X-FitFocus-
 `/api/me` также возвращает `inviteSync: { protocol: 1, guard: 1 }`.
 Новая регистрация требует эту capability и свежий state account/session proof
 перед POST `/api/invite/redeem`. [Обработчик](functions/api/invite/redeem.ts)
-проверяет парные заголовки до body/DB/consume; смена аккаунта, cookie или
-неполная привязка → 401 `{"ok":false,"error":"UNAUTH"}`.
+проверяет парные заголовки до body/DB/consume; смена аккаунта или cookie,
+отсутствующая либо неполная привязка → 401 `{"ok":false,"error":"UNAUTH"}`.
 Ответ содержит `X-FitFocus-Invite-Guard: 1` и переданные account/session.
 Новый клиент требует совпадающий scope и ok=true для подтверждения успеха.
-Запрос без заголовков поддерживается для прежних клиентов; это не writer barrier.
+Запрос без парных заголовков отклоняется до чтения body и consume; старые
+сборки, которые не передают scope, должны обновиться до регистрации с invite.
 Profile создаётся локальной операцией, затем отправляется общим sender,
 без прямого PUT из регистрации. [Порядок и границы](docs/registration-persistence.md).
 

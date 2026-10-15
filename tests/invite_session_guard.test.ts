@@ -13,12 +13,14 @@ it.each(['session', 'account'])('rejects a changed cookie %s before consuming an
   if (change === 'session') mocks.user.sid = 'another-cookie'; else mocks.user.sub = 'account-b';
   expect((await invoke(scope)).status).toBe(401); expect(mocks.consume).not.toHaveBeenCalled();
 });
-it('rejects incomplete scope, acknowledges the validated binding, and supports older requests without scope', async () => {
+it('rejects missing or incomplete scope before consuming an invite', async () => {
+  expect((await invoke({})).status).toBe(401);
   expect((await invoke({ 'X-FitFocus-State-Account': mocks.user.sub })).status).toBe(401);
   expect(mocks.consume).not.toHaveBeenCalled();
+});
+it('acknowledges the validated binding and consumes only with a complete matching scope', async () => {
   const sid = await stateSessionId(mocks.user);
   const response = await invoke({ 'X-FitFocus-State-Account': mocks.user.sub, 'X-FitFocus-State-Session': sid });
   expect(response.status).toBe(200); expect(response.headers.get('X-FitFocus-Invite-Guard')).toBe('1');
   expect(response.headers.get('X-FitFocus-State-Session')).toBe(sid); expect(mocks.consume).toHaveBeenCalledWith(env.DB, 'SYNTHETIC', 'account-a', expect.any(Number));
-  expect((await invoke({})).status).toBe(200);
 });
