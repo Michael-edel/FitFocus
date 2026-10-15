@@ -1,5 +1,15 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — browser acceptance scoped media поддержки, локальный кандидат, 15.10.2026
+
+К маршруту и session transport вложений добавлен E2E для изображения в исходном
+обращении и отдельного изображения в ответе администратора. Mock route требует
+парные account/session headers, отвечает Support-Attachment protocol/guard и
+echo scope; браузер должен отобразить обе картинки из Blob URL с ненулевой
+шириной. Это закрывает клиентское отображение этой границы в mock API, но не
+реальный R2, admin UI, staging или старые bundles. Точный новый CI ещё ожидается.
+[Тест](../e2e/family-callback-account-switch.spec.ts), [контракт](support-session.md).
+
 ## P0.5 — session proof для owner/admin attachment reads, `a396a30`, 15.10.2026
 
 `GET /api/support/attachment` ранее принимал cookie-only запросы пользователя.

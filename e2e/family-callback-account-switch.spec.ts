@@ -38,6 +38,7 @@ type FixtureState = {
   releasedFamilyShoppingLists?: number;
   supportListAccounts?: string[];
   releasedSupportLists?: number;
+  supportAttachmentRequests?: Array<{ account: string | undefined; session: string | undefined }>;
   mobileTokenAccounts?: string[];
   releasedMobileTokens?: number;
   pushStatusAccounts?: string[];
@@ -246,11 +247,28 @@ async function installAccountApi(
       }
       return json({ url: `https://checkout.stripe.com/c/pay/${scopedAccount.id}` });
     }
+    if (path === '/api/support/attachment') {
+      state.supportAttachmentRequests?.push({ account: requestedAccount, session: requestedSession });
+      expect(requestedAccount).toBe(scopedAccount.id);
+      expect(requestedSession).toBe(scopedAccount.sid);
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ...scopedHeaders(scopedAccount),
+          'Content-Type': 'image/gif',
+          'X-FitFocus-Support-Attachment-Protocol': '1',
+          'X-FitFocus-Support-Attachment-Guard': '1',
+        },
+        body: Buffer.from('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', 'base64'),
+      });
+    }
     if (path === '/api/support/feedback/my') {
       expect(requestedAccount).toBe(scopedAccount.id);
       expect(requestedSession).toBe(scopedAccount.sid);
+      const ticketId = `ticket-${scopedAccount.id}`;
+      const hasAttachmentFixture = state.supportAttachmentRequests !== undefined;
       const ticket = {
-        id: `ticket-${scopedAccount.id}`,
+        id: ticketId,
         created_at: 1,
         updated_at: 1,
         category: 'Ошибка',
@@ -259,8 +277,15 @@ async function installAccountApi(
         message: `Секретное обращение ${scopedAccount.id}`,
         status: 'new',
         priority: 'normal',
-        attachment_count: 0,
-        messages: [],
+        attachment_count: hasAttachmentFixture ? 2 : 0,
+        ...(hasAttachmentFixture ? {
+          attachments: [{ name: 'ticket-evidence.gif', mime: 'image/gif', size: 26, kind: 'photo',
+            data_url: `/api/support/attachment?id=${encodeURIComponent(ticketId)}&index=0` }],
+          messages: [{ id: 'message-1', author_role: 'admin', author_user_id: 'support-agent',
+            message: 'Ответ с файлом', created_at: 2, attachment_count: 1,
+            attachments: [{ name: 'reply-evidence.gif', mime: 'image/gif', size: 26, kind: 'photo',
+              data_url: `/api/support/attachment?id=${encodeURIComponent(ticketId)}&messageId=message-1&index=0` }] }],
+        } : { messages: [] }),
       };
       if (request.method() === 'GET' && !url.searchParams.has('id')) {
         (state.supportListAccounts ??= []).push(scopedAccount.id);
@@ -920,6 +945,35 @@ test('a delayed support ticket list from account A cannot appear in account B', 
   } finally {
     fixtureA.releaseSupportList();
   }
+});
+
+test('loads support ticket and reply attachments with the captured session proof', async ({ page }) => {
+  const errors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    releasedMembers: 0, supportAttachmentRequests: [],
+  };
+  await installAccountApi(page, state, false, errors);
+  await openApp(page, '/#support');
+
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  const ticketImage = page.getByRole('img', { name: 'ticket-evidence.gif' });
+  const replyImage = page.getByRole('img', { name: 'reply-evidence.gif' });
+  await expect(ticketImage).toBeVisible();
+  await expect(replyImage).toBeVisible();
+  await expect.poll(() => ticketImage.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBe(1);
+  await expect.poll(() => replyImage.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBe(1);
+
+  expect(state.supportAttachmentRequests).toEqual([
+    { account: accountA.id, session: accountA.sid },
+    { account: accountA.id, session: accountA.sid },
+  ]);
+  expect(errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
 test('a delayed mobile token from account A is neither shown nor copied after account B signs in', async ({ page, context }, info) => {

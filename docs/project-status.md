@@ -14,6 +14,12 @@ sandbox прошли API/auth/admin guards и три typecheck. Unit и CI то�
 не подтверждены; обновление старых bundles и staging media smoke остаются
 открытыми. [Контракт](support-session.md).
 
+К этому исправлению добавлен браузерный сценарий для приватных вложений тикета
+и ответа поддержки. Он проверяет парный account/session proof на обоих fetch-
+запросах и то, что полученные Blob действительно отображаются как изображения.
+Это mock API acceptance; выполнение на точном новом SHA и staging media smoke
+ещё ожидаются.
+
 ## Локальный follow-up — guarded media загрузка admin-вложений поддержки, `f949842`
 
 После обязательного session proof у `requireAdminRequest` прямые `<img>`,

@@ -574,6 +574,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   которые браузерные media tags не могли загрузить с proof header. Follow-up
   `a396a30` требует proof и для всех attachment reads; SupportScreen и AdminScreen
   теперь получают media через scoped fetch и проверяют markers. [Контракт](docs/support-session.md).
+  Browser E2E дополнительно проверяет ticket- и reply-вложения через paired proof
+  и фактическое отображение Blob; точный CI нового HEAD ещё ожидается.
   Старые bundles требуют обновления.
   Предыдущий PR CI [`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
   на `01bfa05` остановился на unit: 1263/1264 теста прошли, а единственная
