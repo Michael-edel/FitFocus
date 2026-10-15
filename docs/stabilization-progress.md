@@ -4309,3 +4309,19 @@ Firefox и WebKit с `workers=1,retries=0`. Полный unit suite — 1308/130
 `git diff --check` прошли. CI точного опубликованного HEAD проверяется после
 push. Общий P0.4 остаётся открытым до проверки остальных callbacks/cache,
 staging и полного lifecycle.
+
+## P0.4 — кэш экранов прогресса и покупок, [`2e2c1d1`](https://github.com/Michael-edel/FitFocus/commit/2e2c1d165e2d138d6d426052137b284e0500c381), 16.10.2026
+
+Follow-up распространяет проверку активной IndexedDB-сессии на localStorage
+настройки графика и разделов прогресса, а также на fallback-отметки списка
+покупок. При несовпадении владельца view state возвращается к безопасным
+значениям, кэш не читается и не перезаписывается; после возврата аккаунта его
+настройки доступны снова. Progress account-switch acceptance теперь загружает
+сохранённый показатель A, подтверждает его сброс в старой вкладке после входа B
+и проверяет сохранность исходного account A cache.
+
+Проверки на `2e2c1d1`: draft account-switch matrix — 15/15 на desktop Chromium,
+Firefox и WebKit с `workers=1,retries=0`; полный unit suite — 1308/1308 в 210
+файлах; общий, domain-strict и storage-strict typecheck, production build и
+`git diff --check` прошли. Полный P0.4 audit остаётся открытым до проверки
+остальных callbacks/cache, staging и общего lifecycle.

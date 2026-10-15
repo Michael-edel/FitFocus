@@ -579,6 +579,14 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   прошла 15/15 на desktop Chromium/Firefox/WebKit без retries, unit suite —
   1308/1308, три typecheck, production build и diff check прошли. P0.4 всё ещё
   открыт до остальных cloud callbacks/cache, staging и полного lifecycle.
+  Follow-up [`2e2c1d1`](https://github.com/Michael-edel/FitFocus/commit/2e2c1d165e2d138d6d426052137b284e0500c381)
+  распространяет тот же gate на экранные кэши графиков/разделов прогресса и
+  fallback-отметки списка покупок. Расширенный progress account-switch E2E
+  подтверждает, что выбранный account A показатель скрывается после входа B, а
+  сохранённый A cache остаётся неизменным. Полная draft matrix повторно прошла
+  15/15 на desktop Chromium/Firefox/WebKit без retries; unit 1308/1308, три
+  typecheck, production build и diff check прошли. Остальные callbacks/cache,
+  staging и полный P0.4 lifecycle остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

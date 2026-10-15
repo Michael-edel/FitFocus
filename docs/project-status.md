@@ -3,7 +3,7 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последнее
 локально проверенное исправление —
-[`6c53b68`](https://github.com/Michael-edel/FitFocus/commit/6c53b68fadb48ccc798b0ac25b8c197d5d18327d) в ветке
+[`2e2c1d1`](https://github.com/Michael-edel/FitFocus/commit/2e2c1d165e2d138d6d426052137b284e0500c381) в ветке
 `durable-outbox`; после публикации нужно проверить CI на точном HEAD.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
@@ -23,7 +23,9 @@ account-scoped UI-кэшей, пока активная IndexedDB-сессия �
 пользователя; сохранённый кэш account A остаётся доступен при возврате к A.
 Полный unit suite — 1308/1308, общий и два strict typecheck, production build и
 diff check прошли; draft account-switch матрица — 15/15 на desktop
-Chromium/Firefox/WebKit без retries. План содержит 34 открытых пункта: общий
+Chromium/Firefox/WebKit без retries. Follow-up `2e2c1d1` расширяет gate на
+screen-local caches прогресса и списка покупок; повторная draft matrix и полные
+локальные проверки также прошли. План содержит 34 открытых пункта: общий
 P0.4/P0.5, остальные callbacks/cache, staging и полный lifecycle открыты.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
