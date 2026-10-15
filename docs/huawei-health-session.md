@@ -28,17 +28,21 @@ commit не используется.
 
 | Endpoint | Поведение |
 |---|---|
-| `GET /api/wearable/huawei/status` | Проверяет scoped session до чтения соединения; legacy-запросы без scope совместимы. |
-| `POST /api/wearable/huawei/start` | Проверяет scope и возвращает authorization URL в JSON для безопасного redirect клиентом. |
-| `GET /api/wearable/huawei/start` | Сохраняет совместимость старого redirect-потока; его OAuth state также привязывается к исходной сессии. |
+| `GET /api/wearable/huawei/status` | Требует парный scope до чтения соединения. |
+| `POST /api/wearable/huawei/start` | Требует парный scope и возвращает authorization URL в JSON для безопасного redirect клиентом. |
+| `GET /api/wearable/huawei/start` | Redirect-вариант также требует парный scope; OAuth state привязывается к исходной сессии. Старые direct-navigation вызовы без proof получают 401. |
 | `GET /api/wearable/huawei/callback` | Подписанный OAuth state хранит user id и публичный digest session id. Callback сверяет их до обмена code и повторно проверяет активный вход после внешнего обмена до записи credentials/profile. |
-| `POST /api/wearable/huawei/sync` | Проверяет scope до чтения токена и повторно после запроса к Huawei до CAS-записи профиля. |
-| `POST /api/wearable/huawei/disconnect` | Проверяет scope до изменения соединения и профиля. |
+| `POST /api/wearable/huawei/sync` | Требует парный scope до чтения body, D1 и токена; повторно проверяет вход после запроса к Huawei до CAS-записи профиля. |
+| `POST /api/wearable/huawei/disconnect` | Требует парный scope до чтения соединения и изменения соединения/профиля. |
 
-`requireStateUser` сравнивает переданные account/session с cookie-сессией;
-несовпадение или неполная пара отклоняется до прикладного действия. Ответы
-scoped endpoints помечаются Huawei protocol/guard и эхо scope. Старые запросы
-без scope остаются совместимыми, но не получают эту защиту. OAuth state не
+`requireScopedStateUser` сначала требует оба заголовка, затем сравнивает
+account/session с cookie-сессией. Отсутствующая или неполная пара отклоняется
+до session lookup; чужая пара — после проверки cookie-сессии, но до чтения body
+и route-specific D1/provider действий. Ответы помечаются Huawei protocol/guard
+и эхо scope, если он был передан. Старые сборки без proof получают 401 и
+должны быть обновлены до server rollout. OAuth callback получает запрос от
+провайдера без клиентских scope headers, поэтому вместо них проверяет nonce и
+подписанные user/session данные state до обмена кода и записи. OAuth state не
 содержит raw sid, токенов или данных здоровья.
 
 ## Регрессии и границы
@@ -47,6 +51,10 @@ scoped endpoints помечаются Huawei protocol/guard и эхо scope. С�
   профильную outbox-запись, не меняет активный профиль и не показывает success.
 - Сервер отклоняет несовпадающий scope до обращения к provider API или записи
   профиля; scoped OAuth start возвращает ожидаемый signed session digest.
+- Все status/start/sync/disconnect варианты с валидной cookie, но без полного
+  proof (включая account-only pair), возвращают 401 до чтения тела и
+  route-specific D1/provider действий; start не выпускает OAuth redirect и
+  nonce-cookie.
 - OAuth callback с другим session digest отвергается до обмена кода и сохранения
   Huawei credentials.
 - Проверки находятся в [transport tests](../tests/huawei_session_transport.test.ts),

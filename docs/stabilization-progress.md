@@ -1,5 +1,32 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — обязательный Huawei session proof, `a127bf5`, 15.10.2026
+
+До follow-up status/start/sync/disconnect использовали `requireStateUser`,
+который проверял scope только если клиент его передал. Это оставляло старым
+сборкам cookie-only путь и не закрывало гонку между действием Settings и сменой
+входа. Все четыре route теперь используют `requireScopedStateUser`; для sync
+проверка повторяется после внешнего запроса к Huawei перед profile CAS. OAuth
+callback остаётся без клиентских headers и сверяет подписанные user/session
+state и nonce до обмена и записи.
+
+Добавлен regression test с валидной cookie и без proof для status, обоих start
+вариантов, sync и disconnect. Он проверяет 401 до чтения oversized тела,
+route-specific D1, provider fetch, Location и OAuth nonce-cookie. Follow-up
+[`9782ef0`](https://github.com/Michael-edel/FitFocus/commit/9782ef02d94278ec31878ada3c14878f1d4aa0fa)
+добавляет account-only partial-proof случай. API invariants теперь требуют
+`requireScopedStateUser` на всех четырёх route-файлах.
+
+В изолированном контейнере с выключенной сетью прошли API invariants, admin
+guard и общий/domain-strict/storage-strict typecheck. Профильный Vitest не
+запустился: Linux image использовал Windows `node_modules`, где отсутствует
+`@rollup/rollup-linux-x64-gnu`; зависимости не скачивались. Точный PR CI
+[`38703208009`](https://github.com/Michael-edel/FitFocus/actions/runs/38703208009)
+на `a127bf5` подтвердил dependency/schema/privacy/auth/API checks, unit, три
+typecheck и build; E2E выполнялся при добавлении follow-up. Точный CI с тестом
+`9782ef0` и обновлённой документацией запускается после push. Старые Settings bundles без proof,
+реальный OAuth, BFCache, устройство и staging остаются непроверенными.
+
 ## Итог полного CI и разбор двух flaky, `45575d2` / `636d2c7`, 15.10.2026
 
 Точный workflow `38679312640` для опубликованного SHA `45575d2` завершился

@@ -34,6 +34,11 @@
 - [ ] Выдача [мобильного bearer-токена](docs/wearable-sync.md) требует proof;
   старый Settings bundle получает 401. Проверить свежую выдачу и установку на
   целевом устройстве после обновления клиента.
+- [ ] Для [Huawei Health](docs/huawei-health-session.md) status/start/sync/
+  disconnect требуют парный proof и отклоняют старые запросы с 401 до body и
+  прикладных D1/provider действий. Callback проверяет подписанный OAuth state и nonce.
+  Проверить обновление Settings bundle, реальный OAuth, смену login и возврат
+  из BFCache на staging и целевом устройстве.
 - [ ] Для [поддержки](docs/support-session.md) пользовательские и admin
   endpoints требуют парный account/session proof; старые bundles без него
   получают 401 до разбора тела и прикладных запросов. Проверить обновление

@@ -347,19 +347,22 @@ rollout. Подробности Service Worker и lifecycle — в
 
 Текущий Settings-клиент получает Huawei capability из `/api/me`, затем передаёт
 парные `X-FitFocus-State-Account` / `X-FitFocus-State-Session` в status, OAuth
-start, sync и disconnect. `requireStateUser` сверяет scope с cookie-сессией до
-прикладных эффектов; scoped-ответы содержат
+start, sync и disconnect. Все эти routes требуют обе части proof через
+`requireScopedStateUser`: отсутствующий или неполный scope (включая
+account-only) отклоняется до session lookup, чужой — после аутентификации, но
+до чтения body и прикладных D1/provider действий. Scoped-ответы содержат
 `X-FitFocus-Huawei-Protocol: 1`, `X-FitFocus-Huawei-Guard: 1` и точное эхо scope.
-POST start возвращает authorization URL только для совпавшей сессии. Старый GET
-redirect остаётся совместимым.
+POST start возвращает authorization URL только для совпавшей сессии. GET
+redirect также требует proof; старые вызовы без scope получают 401 и требуют
+обновить Settings bundle до rollout.
 
-Signed OAuth state дополнительно содержит публичный digest исходного session id.
-Callback сверяет user/session до обмена authorization code и повторно проверяет
-вход перед записью credentials и profile. Huawei sync повторяет серверную
+OAuth callback не получает клиентские scope headers от провайдера. Подписанный
+OAuth state содержит публичный digest исходного session id; callback сверяет
+user/session до обмена authorization code и повторно проверяет вход перед
+записью credentials и profile. Huawei sync повторяет серверную
 проверку после внешнего запроса к provider перед CAS-профильной записью.
 Клиент отбрасывает поздний ответ после смены IndexedDB session и пишет профиль
-через guarded outbox commit. Legacy-вызовы без scope сохраняют прежний путь, но
-не защищены session binding. Подробности и границы проверок:
+через guarded outbox commit. Подробности и границы проверок:
 [Huawei session contract](docs/huawei-health-session.md).
 
 ## Stripe Checkout и смена тарифа: session guard

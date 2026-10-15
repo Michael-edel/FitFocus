@@ -572,8 +572,18 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Связать Huawei Health status, OAuth start/callback, sync и disconnect
   с исходными account/session proof; профиль фиксировать только через guarded
   outbox commit. `455cb01`: 26 профильных unit/API-тестов и 15/15 выбранных
-  account-switch E2E на desktop Chromium/Firefox/WebKit без retries; typecheck,
-  guards, schema/privacy и build прошли. [Контракт](docs/huawei-health-session.md).
+  account-switch E2E на desktop Chromium/Firefox/WebKit без retries. Follow-up
+  [`a127bf5`](https://github.com/Michael-edel/FitFocus/commit/a127bf5e6bb2f77fb83051d66b782bbc8baf8d6f)
+  требует proof на status/start/sync/disconnect; запросы без полного scope
+  получают 401 до body и route-specific D1/provider действий. Локальные API
+  invariants, admin guard и три typecheck прошли в изолированном контейнере.
+  Локальный Vitest не стартовал из-за Windows `node_modules` в Linux sandbox.
+  `9782ef0` добавляет проверку частичной account-only пары.
+  Точный PR CI [38703208009](https://github.com/Michael-edel/FitFocus/actions/runs/38703208009)
+  на `a127bf5` подтвердил dependency/schema/privacy/auth/API checks, unit, три
+  typecheck и build; E2E выполнялся на момент follow-up. Для `9782ef0` и
+  документов точный CI запускается после push. Старые bundles нужно обновить.
+  [Контракт](docs/huawei-health-session.md).
 - [x] Подтвердить полный PR CI на точном SHA `455cb01`: run
   [38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
   завершился success; E2E, unit, guards, typecheck, build и rollback/CAS прошли.

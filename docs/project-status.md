@@ -3,6 +3,21 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Новый кандидат — обязательный Huawei session proof, `a127bf5`
+
+Status, OAuth start, sync и disconnect требуют парные account/session headers;
+запросы без полного proof получают 401 до body и прикладных D1/Huawei вызовов.
+OAuth callback проверяет nonce и подписанный user/session state; профиль
+остаётся под guarded outbox commit. В sandbox прошли API invariants, admin guard и три
+typecheck. Локальный Vitest не стартовал: общий Windows `node_modules` не содержит
+Linux Rollup optional binary. Точный PR CI [38703208009](https://github.com/Michael-edel/FitFocus/actions/runs/38703208009)
+на `a127bf5` подтвердил guards, unit, typechecks и build; E2E выполнялся при
+добавлении теста неполного scope в
+[`9782ef0`](https://github.com/Michael-edel/FitFocus/commit/9782ef02d94278ec31878ada3c14878f1d4aa0fa).
+Точный CI нового HEAD запускается после push. Старые Settings bundles, настоящий
+OAuth, BFCache, устройство и staging требуют отдельной проверки.
+[Контракт](huawei-health-session.md).
+
 ## Локальный кандидат — обязательный proof для bootstrap, `84e735c`
 
 `/api/bootstrap` теперь требует парный account/session proof через

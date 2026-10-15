@@ -4,14 +4,19 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Huawei Health session guard реализован в кодовом SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae).
-Локально прошли 26 профильных unit/API-тестов и 15/15 выбранных account-switch
-E2E в desktop Chromium, Firefox и WebKit (`workers=1,retries=0`). Общий
-typecheck, domain/storage strict typecheck, build и API/auth/schema/privacy
-checks прошли. Полный PR CI [`38656586334`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
-завершился success, включая E2E и rollback/CAS; Cloudflare Pages preview опубликован.
-Реальный OAuth/staging не проверен;
-P0.5 остаётся открыт до общей lifecycle-приёмки. [Контракт](huawei-health-session.md).
+Huawei Health session guard впервые проверен в кодовом SHA
+[`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae):
+26 профильных unit/API-тестов, 15/15 выбранных account-switch E2E без retries и
+полный CI [`38656586334`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334).
+Follow-up [`a127bf5`](https://github.com/Michael-edel/FitFocus/commit/a127bf5e6bb2f77fb83051d66b782bbc8baf8d6f)
+сделал proof обязательным для status/start/sync/disconnect; API invariants,
+admin guard и три typecheck прошли локально в изолированном контейнере. Точный
+PR CI follow-up HEAD [38703208009](https://github.com/Michael-edel/FitFocus/actions/runs/38703208009)
+на `a127bf5` подтвердил guards, unit, typechecks и build; E2E выполнялся при
+добавлении account-only regression test в `9782ef0`. Новый точный CI запускается
+после push. Старые Settings bundles без proof нужно обновить; реальный
+OAuth/staging ещё не пройден. P0.5 остаётся открыт до общей lifecycle-приёмки.
+[Контракт](huawei-health-session.md).
 
 Коммит-кандидат P0.5 для Push `daec94d` требует свежую IDB/account
 session guard в Settings и Service Worker. Полный unit suite прошёл: 1180 тестов /
