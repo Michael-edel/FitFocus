@@ -192,6 +192,10 @@ AI account-switch сценария `bca2eda` ещё ожидается.
   на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`); два новых
   сценария находятся в коммитах [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
   и [`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa).
+  Коммит [`e705875`](https://github.com/Michael-edel/FitFocus/commit/e705875dc9827d14676c4776b264d6f08feb44d4)
+  добавляет задержанный member `PATCH` после входа B: 3/3 на desktop Chromium,
+  Firefox и WebKit без retries; после позднего ответа не запускается новая
+  загрузка семьи A или B. Полный CI этого follow-up ещё не подтверждён.
   Покрытие остальных callbacks всё ещё неполное.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.

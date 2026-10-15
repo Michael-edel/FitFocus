@@ -359,7 +359,10 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   17 попыток с IDB open/versionchange logging и одна с полной стадийной
   диагностикой. На опубликованной `47da77c` прошли 3+8 запусков с IDB-логами
   и 3+8 без instrumentation (временно восстановлены тест/helper `076f4ac`);
-  все `workers=1/retries=0`. Причина timeout пока не установлена.
+  все `workers=1/retries=0`. Причина timeout пока не установлена. На исходном
+  code HEAD `a3e5b6f` перед новым test commit тест повторён ещё 10 раз в desktop
+  Firefox (`workers=1,retries=0`), все 10 прошли; это не устанавливает
+  историческую причину, поэтому пункт остаётся открыт.
   Working tree пишет IDB open/blocked/upgrade, versionchange/close и стадии
   transaction/read в failure attachment.
 - [ ] Разобрать исторический native WebKit sender pageerror после PWA update
@@ -620,6 +623,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует
   старое меню после смены аккаунта. Оба сценария прошли на трёх desktop engines;
+  последующий `e705875` добавил поздний `PATCH /api/family/member` после входа B:
+  Chromium, Firefox и WebKit прошли 3/3 без retries, callback не запускает новую
+  загрузку семьи аккаунта A или B. Точный CI для этого follow-up ещё ожидается;
   остальные callbacks и staging остаются открытыми.
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в

@@ -26,6 +26,12 @@ typecheck, build, canonical readers/CAS after rollback и сохранение �
 провайдером, устройство, staging и production не проверялись; общий P0.5,
 staging и выпуск остаются открытыми. [Контракт](huawei-health-session.md).
 
+После него acceptance-only commit [`e705875`](https://github.com/Michael-edel/FitFocus/commit/e705875dc9827d14676c4776b264d6f08feb44d4)
+проверяет задержанный `PATCH /api/family/member` аккаунта A после входа B.
+Локально прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries;
+typecheck и admin guards прошли. Runtime-код не менялся, полный CI этого commit
+ещё не подтверждён. Остальные callback/lifecycle проверки остаются открытыми.
+
 Предыдущая полная проверка ветки до Huawei session guard была на source HEAD
 [`943d4c0`](https://github.com/Michael-edel/FitFocus/commit/943d4c0f658d05150b78a5a41925ea7f8ae03aa8).
 Точный PR CI [`38641088114`](https://github.com/Michael-edel/FitFocus/actions/runs/38641088114)

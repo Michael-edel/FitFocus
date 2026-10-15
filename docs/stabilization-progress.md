@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний family member update при входе другого аккаунта, `e705875`, 15.10.2026
+
+В `e2e/family-callback-account-switch.spec.ts` добавлен сценарий: вкладка A
+начинает `PATCH /api/family/member`, ответ удерживается, затем соседняя вкладка
+входит в аккаунт B и принимает его семейный контекст. После освобождения ответа
+проверяется, что запрос остался адресован целевой семье A, callback не запускает
+повторную загрузку контекста ни для A, ни для B, а активным остаётся B.
+
+Тест прошёл 3/3 в desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+`npm run typecheck` и admin guards прошли. Это acceptance-покрытие, runtime-код
+не менялся. Полный CI точного branch HEAD после push ещё требуется; остальные
+family callbacks, полный P0.5 lifecycle и staging остаются открытыми.
+
+## P0.8 — повтор Firefox PWA update без retries, `a3e5b6f`, 15.10.2026
+
+На опубликованной до нового теста ревизии `a3e5b6f` настоящий Service Worker /
+native HTTP сценарий `e2e/pwa-update.spec.ts` прошёл ещё 10 последовательных
+раз в desktop Firefox (`workers=1,retries=0`), каждый запуск завершился за
+26–29 секунд. Исходный timeout не воспроизвёлся. Результат подтверждает текущую
+повторяемость, но не устанавливает причину исторического Firefox timeout;
+пункт TASKS остаётся открытым до диагностического объяснения.
+
 ## P0.5 — session guard Huawei Health, `455cb01`, 15.10.2026
 
 В `SettingsScreen` и `huaweiHealthApi` действия Huawei теперь принадлежат
