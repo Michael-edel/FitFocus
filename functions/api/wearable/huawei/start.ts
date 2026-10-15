@@ -6,7 +6,7 @@ import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_ST
 import { buildHuaweiAuthorizeUrl, getHuaweiConfig, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
-import { requireStateUser, stateSessionId, withSessionGuard } from "../../_lib/state_session";
+import { requireScopedStateUser, stateSessionId, withSessionGuard } from "../../_lib/state_session";
 
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
@@ -48,7 +48,7 @@ async function buildHuaweiStart(request: Request, env: Env, user: SessionUser, r
 const handleHuaweiOAuthStartGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);
@@ -60,7 +60,7 @@ const handleHuaweiOAuthStartGet: PagesFunction<Env> = async ({ request, env }) =
 const handleHuaweiOAuthStartPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);
@@ -83,7 +83,7 @@ async function respond(context: Parameters<PagesFunction<Env>>[0], handler: Page
   return withSessionGuard(withRequestId(response, requestId), context.request, 'Huawei');
 }
 
-/** Legacy redirect entry point remains available to older clients. */
+/** Redirect-compatible entry point; it still requires an explicit account/session proof. */
 export const onRequestGet: PagesFunction<Env> = (context) => respond(context, handleHuaweiOAuthStartGet);
 /** Session-scoped JSON entry point used by the current Settings screen. */
 export const onRequestPost: PagesFunction<Env> = (context) => respond(context, handleHuaweiOAuthStartPost);

@@ -1185,6 +1185,24 @@ assertNotIncludes(
   'requireStateUser(request, env)',
   'state endpoints must not preserve unscoped legacy authentication',
 );
+for (const route of [
+  'functions/api/wearable/huawei/start.ts',
+  'functions/api/wearable/huawei/status.ts',
+  'functions/api/wearable/huawei/sync.ts',
+  'functions/api/wearable/huawei/disconnect.ts',
+]) {
+  const source = read(route);
+  assertIncludes(
+    source,
+    'requireScopedStateUser(request, env)',
+    `${route} must require an explicit account/session proof`,
+  );
+  assertNotIncludes(
+    source,
+    'requireStateUser(request, env)',
+    `${route} must not preserve unscoped legacy authentication`,
+  );
+}
 const stateWrite = read('functions/api/_lib/state_write.ts');
 const stateStore = read('functions/api/_lib/state_store.ts');
 assertIncludes(

@@ -14,7 +14,7 @@ import {
 } from "../../_lib/huawei_health";
 import { syncHuaweiProfile } from '../../_lib/huawei_sync';
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../../_lib/state_session';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -22,7 +22,7 @@ type Env = HuaweiHealthEnv & { DB: D1Database };
 const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);
@@ -49,7 +49,7 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const snapshot = await fetchHuaweiDailySnapshot(env, request, accessToken, { timezone, date });
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);

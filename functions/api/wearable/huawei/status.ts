@@ -4,14 +4,14 @@ import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { ensureHuaweiConnectionsSchema, getHuaweiConfig, readHuaweiConnectionStatus, type HuaweiHealthEnv } from "../../_lib/huawei_health";
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../../_lib/state_session';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
 const handleHuaweiStatusGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);

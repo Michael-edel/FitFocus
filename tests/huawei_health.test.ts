@@ -46,9 +46,12 @@ async function signJwt(payload: Record<string, unknown>) {
 
 function makeDb(connection?: Record<string, unknown>) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const prepared: string[] = [];
   return {
     runs,
+    prepared,
     prepare(sql: string) {
+      prepared.push(sql);
       const stmt = {
         sql,
         binds: [] as unknown[],
@@ -151,6 +154,50 @@ describe('Huawei Health integration', () => {
     expect(disconnect.headers.get('X-Request-ID')).toBe('huawei-disconnect-test-01');
   });
 
+  it('rejects Huawei routes without account/session proof before parsing bodies or touching D1/provider APIs', async () => {
+    const db = makeDb();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const context = { params: {}, data: {}, waitUntil: () => undefined, next: () => Promise.resolve(new Response(null, { status: 404 })) };
+    const oversizedBody = JSON.stringify({ payload: 'x'.repeat(80 * 1024) });
+    const responses = await Promise.all([
+      startHuaweiOAuth({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/start'),
+        env: env(db),
+      } as unknown as HuaweiStartContext),
+      startHuaweiOAuthScoped({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: oversizedBody,
+        }),
+        env: env(db),
+      } as unknown as HuaweiStartScopedContext),
+      getHuaweiStatus({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status'),
+        env: env(db),
+      } as unknown as HuaweiStatusContext),
+      postHuaweiSync({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: oversizedBody,
+        }),
+        env: env(db),
+      } as unknown as HuaweiSyncContext),
+      disconnectHuawei({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/disconnect', { method: 'POST' }),
+        env: env(db),
+      } as unknown as HuaweiDisconnectContext),
+    ]);
+
+    expect(responses.map(response => response.status)).toEqual([401, 401, 401, 401, 401]);
+    expect(responses.every(response => !response.headers.has('Location') && !response.headers.has('Set-Cookie'))).toBe(true);
+    expect(db.prepared).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('returns connection status without leaking encrypted tokens', async () => {
     const encrypted = await encryptHuaweiTokenSet(env(makeDb()), new Request('https://fitfocus.test'), {
       accessToken: 'access-token',
@@ -176,7 +223,7 @@ describe('Huawei Health integration', () => {
 
     const response = await getHuaweiStatus({
       request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status', {
-        headers: { 'X-Request-ID': 'huawei-status-test-01' },
+        headers: { ...await scopedHeaders(), 'X-Request-ID': 'huawei-status-test-01' },
       }),
       env: env(db) as unknown as HuaweiStatusContext['env'],
       params: {},
@@ -231,7 +278,7 @@ describe('Huawei Health integration', () => {
     const response = await postHuaweiSync({
       request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'huawei-sync-test-01' },
+        headers: { ...await scopedHeaders(), 'Content-Type': 'application/json', 'X-Request-ID': 'huawei-sync-test-01' },
         body: JSON.stringify({ timezone: 'Asia/Yekaterinburg', date: '2026-06-28' }),
       }),
       env: env(db) as unknown as HuaweiSyncContext['env'],
@@ -330,7 +377,7 @@ describe('Huawei Health integration', () => {
     const response = await postHuaweiSync({
       request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...await scopedHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ payload: 'x'.repeat(80 * 1024) }),
       }),
       env: env(db) as unknown as HuaweiSyncContext['env'],
