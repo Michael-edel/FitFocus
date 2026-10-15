@@ -23,6 +23,13 @@ it.each(['cookie', 'account', 'incomplete'])('rejects %s changes before bootstra
   expect(result.status).toBe(401);
   expect(mocks.profile).not.toHaveBeenCalled(); expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.features).not.toHaveBeenCalled();
 });
+it('rejects an unscoped legacy bootstrap before reading profile, state, or features', async () => {
+  const result = await invoke();
+  expect(result.status).toBe(401);
+  expect(mocks.profile).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
+  expect(mocks.features).not.toHaveBeenCalled();
+});
 it('acknowledges the bound bootstrap without exposing a raw session id', async () => {
   const expected = await scope(); const response = await invoke(expected); const body = await response.json();
   expect(response.status).toBe(200);

@@ -3,7 +3,7 @@
 // Returns public user, profile, items and schema/feature metadata.
 
 import { json } from "./_lib/auth";
-import { requireStateUser } from './_lib/state_session';
+import { requireScopedStateUser } from './_lib/state_session';
 import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
@@ -30,7 +30,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }

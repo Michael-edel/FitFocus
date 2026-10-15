@@ -84,7 +84,11 @@ describe('beta access route boundaries', () => {
     const env = { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' };
 
     const bootstrapResponse = await getBootstrap({
-      ...baseContext(new Request('https://fitfocus.test/api/bootstrap', { headers: { Cookie: `ff_session=${token}` } })),
+      ...baseContext(new Request('https://fitfocus.test/api/bootstrap', { headers: {
+        Cookie: `ff_session=${token}`,
+        'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof,
+      } })),
       env,
     } as unknown as BootstrapContext);
     const exportResponse = await getExport({

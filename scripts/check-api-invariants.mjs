@@ -1164,6 +1164,17 @@ if (shoppingBulkRoute.includes('INSERT INTO shopping_checked') && shoppingBulkRo
 }
 
 const stateRoute = read('functions/api/state.ts');
+const bootstrapRoute = read('functions/api/bootstrap.ts');
+assertIncludes(
+  bootstrapRoute,
+  'requireScopedStateUser(request, env)',
+  'bootstrap must require an explicit account/session proof',
+);
+assertNotIncludes(
+  bootstrapRoute,
+  'requireStateUser(request, env)',
+  'bootstrap must not preserve unscoped legacy authentication',
+);
 assertIncludes(
   stateRoute,
   'requireScopedStateUser(request, env)',
