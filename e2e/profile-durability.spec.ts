@@ -119,9 +119,9 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
   expect((await saved(page)).operations[0].opId).toBe(operationId);
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
-  // The reloaded field is already in the first viewport; scrolling it caused a
-  // WebKit-only detach during an otherwise successful durable-state assertion.
-  await expect(name).toBeInViewport({ ratio: 1 });
+  // The mobile settings form places the profile field below the initial viewport.
+  // Verify it is rendered and restored without imposing a desktop viewport layout.
+  await expect(name).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('profile-local-reload.png') });
 });
 
