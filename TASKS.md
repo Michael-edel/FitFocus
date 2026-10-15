@@ -547,7 +547,15 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   несохранённый recipe editor и account UI cache при смене login scope. Unit
   1305/1305, typecheck и build прошли; recipe account-switch E2E — 3/3, семейное
   меню — 39/39 на desktop Chromium/Firefox/WebKit без retries. P0.4 остаётся
-  открытым до браузерной проверки draft transition и аудита остальных callbacks/cache.
+  открытым до завершения оставшихся browser acceptance и аудита callbacks/cache.
+  Follow-up [`a67ed17`](https://github.com/Michael-edel/FitFocus/commit/a67ed177f7214bf41e02259f1602d2e72d8ddc9c)
+  обнаружил и исправил production-сбой генерации ID черновика рецепта: вызов
+  optional `crypto.randomUUID` превращался production-сборщиком в обращение к
+  необъявленному `n`. Приёмка черновика перед сменой аккаунта теперь проходит
+  3/3 на desktop Chromium/Firefox/WebKit; смена активной IndexedDB-сессии между
+  вкладками обновляет render key через advisory BroadcastChannel с polling и
+  visibility fallback. Общий P0.4 остаётся открытым: нужны проверки остальных
+  переходов, cloud callbacks/cache и staging.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

@@ -4220,3 +4220,24 @@ staging и общий P0.5 lifecycle остаются открытыми.
 Это подтверждает отсутствие воспроизведения в данном сценарии и на текущем HEAD,
 но не устанавливает причину исторического WebKit `/api/me due to access control
 checks`. Пункт P0.4 остаётся открытым; общий CORS-фильтр не добавлялся.
+
+## P0.4 — production ID рецепта и черновик при cross-tab session switch, [`a67ed17`](https://github.com/Michael-edel/FitFocus/commit/a67ed177f7214bf41e02259f1602d2e72d8ddc9c), 15.10.2026
+
+Новый recipe account-switch acceptance воспроизвёл два дефекта. Production
+bundle компилировал optional call `globalThis.crypto?.randomUUID?.()` в код,
+который обращался к необъявленному `n`; из-за исключения успешный AI-анализ не
+открывал черновик. Генерация ID переведена на явную проверку метода и вызов.
+Второй дефект был в том, что render key основывался только на guard текущей
+вкладки: он не менялся, когда соседняя вкладка принимала новую active-session в
+IndexedDB. Теперь workspace наблюдает авторитетную IDB-сессию, получает
+advisory-сигнал через BroadcastChannel и сохраняет polling/focus fallback.
+Поэтому account-aware экраны перемонтируются при смене активной сессии; channel
+не несёт account data и не заменяет IndexedDB.
+
+Проверки на `a67ed17`: полный unit suite — 1305/1305 в 210 файлах; общий,
+domain-strict и storage-strict typecheck прошли; production build прошёл как
+часть Playwright preview; новый unsaved-recipe-draft account-switch E2E прошёл
+3/3 на desktop Chromium, Firefox и WebKit с `workers=1,retries=0`;
+`git diff --check` прошёл. Точный GitHub CI ожидается после push. Эта локальная acceptance
+закрывает только recipe-draft переход; остальные callbacks/cache, staging,
+устройства и полный P0.4 lifecycle остаются открытыми.
