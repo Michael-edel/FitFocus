@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { createAccountScopedUiUpdater, getAccountScopedUiValue } from '../features/state/accountScopedUi';
+import { accountSessionRenderKey, createAccountScopedUiUpdater, getAccountScopedUiValue } from '../features/state/accountScopedUi';
 
 describe('account-scoped UI state visibility', () => {
+  it('changes stateful screen identity when account or login session changes', () => {
+    const accountA = { accountId: 'user-a', sessionEpoch: 'epoch-a', serverSessionId: 'a'.repeat(64), authFence: 1 };
+    const accountB = { accountId: 'user-b', sessionEpoch: 'epoch-b', serverSessionId: 'b'.repeat(64), authFence: 2 };
+    const newSessionA = { ...accountA, serverSessionId: 'c'.repeat(64), authFence: 3 };
+
+    expect(accountSessionRenderKey(accountA, 'user-a')).not.toBe(accountSessionRenderKey(accountB, 'user-b'));
+    expect(accountSessionRenderKey(accountA, 'user-a')).not.toBe(accountSessionRenderKey(newSessionA, 'user-a'));
+    expect(accountSessionRenderKey(null, 'user-a')).not.toBe(accountSessionRenderKey(null, 'user-b'));
+  });
+
   it('does not expose a prior profile weight draft or search query before hydration', () => {
     const accountA = 'fitfocus.dashboard.new-weight.v1:user-a';
     const accountB = 'fitfocus.dashboard.new-weight.v1:user-b';

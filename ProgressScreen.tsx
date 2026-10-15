@@ -267,7 +267,7 @@ export default function ProgressScreen({
     setDraftSteps(typeof wearableStepsToday === 'number' ? String(wearableStepsToday) : '');
     setDraftActiveMinutes(typeof wearableActiveMinutesToday === 'number' ? String(wearableActiveMinutesToday) : '');
     setDraftSleepHours(typeof wearableSleepHoursLastNight === 'number' ? String(wearableSleepHoursLastNight) : '');
-  }, [currentWeight, recentMeasurements, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableStepsToday]);
+  }, [currentUser?.bloodGlucoseMmolL, currentUser?.id, currentWeight, recentMeasurements, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableStepsToday]);
 
   const latestMeasurement = recentMeasurements.length ? recentMeasurements[recentMeasurements.length - 1] : null;
   const previousMeasurement = recentMeasurements.length > 1 ? recentMeasurements[recentMeasurements.length - 2] : null;

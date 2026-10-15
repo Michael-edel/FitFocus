@@ -3,6 +3,7 @@ import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import type { OutboxCommitGuard } from './storage/durableOutbox';
+import { accountSessionRenderKey } from './features/state/accountScopedUi';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
@@ -93,6 +94,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
+  const screenSessionKey = accountSessionRenderKey(loginGuard, currentUser?.id);
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
@@ -196,6 +198,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'progress' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка прогресса...</div>}>
           <ProgressScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
@@ -356,9 +359,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'admin' && isAdmin && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
           <AdminScreen
-            key={loginGuard
-              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
-              : `no-session:${currentUser?.id || 'anonymous'}`}
+            key={screenSessionKey}
             loginGuard={loginGuard}
             isCurrentSession={isCurrentSession}
           />
@@ -367,9 +368,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'support' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка поддержки...</div>}>
           <SupportScreen
-            key={loginGuard
-              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
-              : `no-session:${currentUser?.id || 'anonymous'}`}
+            key={screenSessionKey}
             currentUser={currentUser}
             loginGuard={loginGuard}
             isCurrentSession={isCurrentSession}
@@ -394,9 +393,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'settings' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
           <SettingsScreen
-            key={loginGuard
-              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
-              : `no-session:${currentUser?.id || 'anonymous'}`}
+            key={screenSessionKey}
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}

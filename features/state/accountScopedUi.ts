@@ -1,4 +1,15 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
+
+/** Stable React key for stateful screens whose drafts belong to one login scope. */
+export function accountSessionRenderKey(
+  guard: OutboxReadGuard | null,
+  accountId: string | null | undefined,
+): string {
+  return guard
+    ? `${guard.accountId}:${guard.sessionEpoch}:${guard.serverSessionId}:${guard.authFence}`
+    : `no-session:${accountId || 'anonymous'}`;
+}
 
 /** Hide account-owned UI state until the active account's storage key is loaded. */
 export function getAccountScopedUiValue<T>(
