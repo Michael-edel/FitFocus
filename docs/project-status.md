@@ -3,10 +3,8 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
-[`64d14a4`](https://github.com/Michael-edel/FitFocus/commit/64d14a4a87fa1f8a163309c60f34d081bae75e73) в ветке
-`durable-outbox`; он ещё ожидает push. CI run
-[`38778637083`](https://github.com/Michael-edel/FitFocus/actions/runs/38778637083)
-проверяет предыдущий SHA `8ec86a2` и пока выполняет E2E.
+[`32818d1`](https://github.com/Michael-edel/FitFocus/commit/32818d15e11e1b61cde267eff4050a9e9d4904d4)
+в ветке `durable-outbox`; точный GitHub CI для него запускается после push.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
@@ -31,6 +29,13 @@ Chromium/Firefox/WebKit с `workers=1,retries=0`; diff check прошёл. GitHu
 этого SHA ожидает push. Компонент закрывает только локальную часть AI
 retry-metadata scope; остальные AI/family callbacks, staging и полный P0.5
 lifecycle остаются открытыми.
+
+Follow-up `32818d1` распространяет account-scope gate на остальные локальные UI
+preferences: search query, weight draft, PDF flag, diary date, camera facing и
+plan controls. В App plan scope теперь помечен owner id; setters старого scope
+отбрасывают запоздавшие обновления. Полный unit прошёл 1304/1304 в 210 файлах;
+общий typecheck, production build и `git diff --check` прошли. Broad P0.4 и P0.5
+остаются открытыми.
 
 Коммит `64d14a4` скрывает локальное состояние урока и викторины, пока hook не
 загрузит снимок для текущего account key. Это устраняет кратковременный показ

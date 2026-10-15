@@ -527,7 +527,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   активного аккаунта; targeted unit — 3/3. Полный запуск выполнил 1297 тестов
   в 207 файлах; две suite столкнулись с Windows `EBUSY`, затем прошли отдельно
   последовательно (4/4 теста). Typecheck и production build прошли. Остальные
-  cloud callbacks и cache остаются открытыми; P0.4 не закрыт.
+  cloud callbacks и cache остаются открытыми; P0.4 не закрыт. Follow-up
+  [`32818d1`](https://github.com/Michael-edel/FitFocus/commit/32818d15e11e1b61cde267eff4050a9e9d4904d4)
+  распространяет scope gate на черновик веса/PDF, поиск еды, выбранную дату,
+  направление камеры и UI плана. `planScope` теперь также owner-bound. Старые
+  setters отбрасываются после смены storage key. Полный unit: 1304/1304 в 210
+  файлах; typecheck, production build и diff check прошли локально.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
