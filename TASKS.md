@@ -510,12 +510,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [ ] Привязать операции Push в Settings и Service Worker к свежему `/api/me`
   proof, активной IDB-сессии и проверяемым server response markers. Проверить
   поздний status-ответ аккаунта A после входа B и восстановление подписки при
-  смене сессии; критерии — в [контракте](docs/push-session.md). Изменения
-  реализованы в рабочем дереве: 1180 unit-тестов / 202 файла, общий и строгие
+  смене сессии; критерии — в [контракте](docs/push-session.md). Код реализован
+  и закоммичен в `daec94d`: 1180 unit-тестов / 202 файла, общий и строгие
   typecheck, build/guards и весь account-switch spec (42/42 на трёх desktop
   engines, без retries) прошли.
-  Требуют commit/push и точного полного CI; native PWA/Service Worker recovery
-  и scope guard старых открытых bundle отдельно не подтверждены.
+  Точный полный CI, native PWA/Service Worker recovery и scope guard старых
+  открытых bundle отдельно не подтверждены.
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
   компонент не закрывает остальные writers и общий lifecycle P0.5.
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один

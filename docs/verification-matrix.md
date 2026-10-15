@@ -13,13 +13,13 @@ checks прошли. Полный PR CI [`38656586334`](https://github.com/Micha
 Реальный OAuth/staging не проверен;
 P0.5 остаётся открыт до общей lifecycle-приёмки. [Контракт](huawei-health-session.md).
 
-Локальный кандидат P0.5 для Push поверх `b2d787f` требует свежую IDB/account
+Коммит-кандидат P0.5 для Push `daec94d` требует свежую IDB/account
 session guard в Settings и Service Worker. Полный unit suite прошёл: 1180 тестов /
 202 файла, включая 41 профильный; общий и strict typecheck,
 admin/API/auth/schema/privacy checks и production build прошли.
 Полный `family-callback-account-switch.spec.ts` прошёл 42/42 в desktop Chromium,
 Firefox и WebKit без retries; новый delayed push status сценарий прошёл в каждом
-из трёх движков. Код остаётся незакоммиченным; полный CI, native PWA/SW recovery
+из трёх движков. Полный CI, native PWA/SW recovery
 и old-bundle lifecycle не подтверждены. CI baseline `b2d787f` прошёл в
 [run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
 но не проверял эти изменения. [Контракт](push-session.md),
