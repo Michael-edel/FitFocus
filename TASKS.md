@@ -594,6 +594,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     [`c1f8180`](https://github.com/Michael-edel/FitFocus/commit/c1f818080c1554feaf36ce24f78b91145ea607ec): E2E 3/3 на desktop
     Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
     typecheck и production build прошли. Остальной аудит P0.4 не закрыт.
+  - [x] Скрыть AI status badge и retry metadata до подтверждения активной
+    IndexedDB-сессии. До исправления `AI: online` и `Retry: Coach` оставались
+    видны в старой вкладке после входа B. [`ca49b0d`](https://github.com/Michael-edel/FitFocus/commit/ca49b0db8406a7ec124c05d90345402ba1a98d79): E2E 3/3 на desktop
+    Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
+    typecheck и production build прошли. P0.4 остаётся открытым для остальных
+    callbacks и кэшей.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

@@ -3,12 +3,12 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последнее
 локально проверенное исправление —
-[`c1f8180`](https://github.com/Michael-edel/FitFocus/commit/c1f818080c1554feaf36ce24f78b91145ea607ec) в ветке
-`durable-outbox`: выбранный день личного недельного меню скрывается в старой
-вкладке, пока активная IndexedDB-сессия не разрешает account cache. E2E прошёл
-3/3 на desktop Chromium/Firefox/WebKit; unit 1308/1308, общий и оба strict
-typecheck, build и diff check прошли. Точный CI этого коммита проверяется после
-push.
+[`ca49b0d`](https://github.com/Michael-edel/FitFocus/commit/ca49b0db8406a7ec124c05d90345402ba1a98d79) в ветке
+`durable-outbox`: account gate теперь скрывает выбранный день личного меню,
+AI status badge и retry metadata в старой вкладке после смены активной
+IndexedDB-сессии. Оба account-switch E2E проходят 3/3 на desktop
+Chromium/Firefox/WebKit; unit 1308/1308, общий и оба strict typecheck, build и
+diff check прошли. Точный CI этого коммита проверяется после push.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
