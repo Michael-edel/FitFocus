@@ -1045,6 +1045,32 @@ test('a profile draft cached for account A is not restored after another tab act
   expect(fixtureA.counts.profileWrites).toEqual([]);
 });
 
+test('a dashboard weight draft cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const weightDraft = page.getByLabel('Вес сегодня');
+  await weightDraft.fill('98.765');
+  const weightDraftKeyA = `fitfocus.dashboard.new-weight.v1:${accountA.id}`;
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByLabel('Вес сегодня')).toHaveValue('98.765');
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
+  expect(await page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(switched.errors).toEqual([]);
+});
+
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

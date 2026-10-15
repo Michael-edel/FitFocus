@@ -57,6 +57,7 @@ type AppWorkspaceData = {
     syncAllLocalDataNow?: () => Promise<void> | void;
     reloadUserFromCloud?: () => Promise<void> | void;
     resetUiState?: () => void;
+    onAccountUiCacheRestoreAllowedChange?: (allowed: boolean) => void;
     aiBadge: PassThroughProp;
     retryMeta: PassThroughProp;
   };
@@ -82,7 +83,7 @@ type AppWorkspaceData = {
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { meta, dashboard, plan, nutrition, progress, family, council, content } = workspaceProps;
 
-  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onProfileDraftChange, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
+  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onProfileDraftChange, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, onAccountUiCacheRestoreAllowedChange, aiBadge, retryMeta } = meta;
 
   const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, generatePlateauExplanation, adaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
 
@@ -149,12 +150,15 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   }, []);
   // A second tab can change IndexedDB's active session without changing this tab's React props.
   const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
-  const allowCachedProfileDraftRestore = durableSessionKey !== 'checking'
+  const allowCachedAccountUiStateRestore = durableSessionKey !== 'checking'
     && durableSessionKey !== 'unavailable'
     && (!loginGuard || loginGuard.accountId === currentUser?.id)
     && (durableSessionAccountId === null
-      ? !loginGuard
+      ? !loginGuard && !currentUser?.id
       : durableSessionAccountId === currentUser?.id);
+  React.useLayoutEffect(() => {
+    onAccountUiCacheRestoreAllowedChange?.(allowCachedAccountUiStateRestore);
+  }, [allowCachedAccountUiStateRestore, onAccountUiCacheRestoreAllowedChange]);
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
@@ -462,7 +466,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
           <SettingsScreen
             key={screenSessionKey}
-            allowCachedProfileDraftRestore={allowCachedProfileDraftRestore}
+            allowCachedProfileDraftRestore={allowCachedAccountUiStateRestore}
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}

@@ -17,7 +17,7 @@ export function parseDashboardPreferences(
 }
 
 /** Persists dashboard-only preferences after the active profile has been loaded. */
-export function useDashboardPreferences(userId: string | null | undefined) {
+export function useDashboardPreferences(userId: string | null | undefined, allowCachedUiStateRestore = true) {
   const storageKeys = useMemo(() => ({
     newWeight: `fitfocus.dashboard.new-weight.v1:${userId ?? 'anon'}`,
     pdfIncludeMealLog: `fitfocus.dashboard.pdf-include-meal-log.v1:${userId ?? 'anon'}`,
@@ -28,6 +28,12 @@ export function useDashboardPreferences(userId: string | null | undefined) {
   const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      setNewWeight('');
+      setPdfIncludeMealLog(false);
+      setHydratedStorageKey(null);
+      return;
+    }
     try {
       const next = parseDashboardPreferences(
         localStorage.getItem(storageKeys.newWeight),
@@ -40,24 +46,24 @@ export function useDashboardPreferences(userId: string | null | undefined) {
       setPdfIncludeMealLog(false);
     }
     setHydratedStorageKey(scopeKey);
-  }, [scopeKey, storageKeys]);
+  }, [allowCachedUiStateRestore, scopeKey, storageKeys]);
 
   useEffect(() => {
-    if (hydratedStorageKey !== scopeKey) return;
+    if (!allowCachedUiStateRestore || hydratedStorageKey !== scopeKey) return;
     try {
       localStorage.setItem(storageKeys.newWeight, newWeight);
       localStorage.setItem(storageKeys.pdfIncludeMealLog, pdfIncludeMealLog ? '1' : '0');
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [hydratedStorageKey, newWeight, pdfIncludeMealLog, scopeKey, storageKeys]);
+  }, [allowCachedUiStateRestore, hydratedStorageKey, newWeight, pdfIncludeMealLog, scopeKey, storageKeys]);
 
   const visibleState = getAccountScopedUiValue(scopeKey, hydratedStorageKey, {
     newWeight,
     pdfIncludeMealLog,
-  }, { newWeight: '', pdfIncludeMealLog: false });
-  const setNewWeightForScope = useAccountScopedUiSetter(scopeKey, setNewWeight);
-  const setPdfIncludeMealLogForScope = useAccountScopedUiSetter(scopeKey, setPdfIncludeMealLog);
+  }, { newWeight: '', pdfIncludeMealLog: false }, allowCachedUiStateRestore);
+  const setNewWeightForScope = useAccountScopedUiSetter(scopeKey, setNewWeight, allowCachedUiStateRestore);
+  const setPdfIncludeMealLogForScope = useAccountScopedUiSetter(scopeKey, setPdfIncludeMealLog, allowCachedUiStateRestore);
 
   return {
     newWeight: visibleState.newWeight,

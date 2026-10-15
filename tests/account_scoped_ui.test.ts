@@ -33,6 +33,11 @@ describe('account-scoped UI state visibility', () => {
     expect(getAccountScopedUiValue(null, key, state, { query: '', open: false })).toEqual({ query: '', open: false });
   });
 
+  it('hides a matching cache until the durable account session is confirmed', () => {
+    const key = 'fitfocus.dashboard.new-weight.v1:user-a';
+    expect(getAccountScopedUiValue(key, key, '98.765', '', false)).toBe('');
+  });
+
   it('discards a queued setter when its account scope changes before React applies it', () => {
     let activeStorageKey: string | null = 'fitfocus.dashboard.new-weight.v1:user-a';
     const updater = createAccountScopedUiUpdater(
@@ -43,6 +48,21 @@ describe('account-scoped UI state visibility', () => {
 
     expect(updater('7')).toBe('71');
     activeStorageKey = 'fitfocus.dashboard.new-weight.v1:user-b';
+    expect(updater('7')).toBe('7');
+  });
+
+  it('discards a queued setter when the durable account-session gate closes', () => {
+    let enabled = true;
+    const key = 'fitfocus.dashboard.new-weight.v1:user-a';
+    const updater = createAccountScopedUiUpdater(
+      key,
+      () => key,
+      previous => `${previous}1`,
+      () => enabled,
+    );
+
+    expect(updater('7')).toBe('71');
+    enabled = false;
     expect(updater('7')).toBe('7');
   });
 });

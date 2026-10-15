@@ -268,6 +268,7 @@ const App: React.FC = () => {
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [allowCachedUiStateRestore, setAllowCachedUiStateRestore] = useState(false);
   const { inviteCode, setInviteCode } = useInviteCodeState(currentUser?.id);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
@@ -281,14 +282,16 @@ const App: React.FC = () => {
     planScopeState.ownerId,
     planScopeState.value,
     'personal',
+    allowCachedUiStateRestore,
   );
   const setPlanScope = useCallback<React.Dispatch<React.SetStateAction<'personal' | 'family'>>>((update) => {
+    if (!allowCachedUiStateRestore) return;
     const ownerId = currentUser?.id ?? null;
     setPlanScopeState((previous) => {
       const currentValue = previous.ownerId === ownerId ? previous.value : 'personal';
       return { ownerId, value: typeof update === 'function' ? update(currentValue) : update };
     });
-  }, [currentUser?.id]);
+  }, [allowCachedUiStateRestore, currentUser?.id]);
   const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
   const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
   const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);
@@ -416,7 +419,7 @@ const App: React.FC = () => {
     setSelectedDiaryDayKey,
     resolvedDiaryDayKey,
     selectedDiaryStats,
-  } = useDiaryDaySelection(currentUser?.id, foodDiary);
+  } = useDiaryDaySelection(currentUser?.id, foodDiary, allowCachedUiStateRestore);
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
@@ -447,13 +450,13 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id);
+  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id, allowCachedUiStateRestore);
   const {
     newWeight,
     setNewWeight,
     pdfIncludeMealLog,
     setPdfIncludeMealLog,
-  } = useDashboardPreferences(currentUser?.id);
+  } = useDashboardPreferences(currentUser?.id, allowCachedUiStateRestore);
   
   const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
   const {
@@ -468,6 +471,7 @@ const App: React.FC = () => {
   } = useCourseUiState({
     currentUser,
     courseLibrary,
+    allowCachedUiStateRestore,
   });
 
   // Metabolic Adaptation States
@@ -571,7 +575,7 @@ const App: React.FC = () => {
     setSearchQuery,
     showSearchResults,
     setShowSearchResults,
-  } = useNutritionSearchState(currentUser?.id);
+  } = useNutritionSearchState(currentUser?.id, allowCachedUiStateRestore);
 
   const openEditFood = (item: FoodEntry) => {
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
@@ -621,6 +625,7 @@ const App: React.FC = () => {
     setPlanWeekExpanded,
   } = usePlanUiState({
     userId: currentUser?.id,
+    allowCachedUiStateRestore,
     weekDayKeys: currentUser?.aiPlan?.weeklyMenu?.days.map((day) => day.day) ?? [],
     planScope,
     setPlanScope,
@@ -1424,6 +1429,7 @@ const logWeight = useCallback(() => {
       syncAllLocalDataNow,
       reloadUserFromCloud,
       resetUiState,
+      onAccountUiCacheRestoreAllowedChange: setAllowCachedUiStateRestore,
       aiBadge,
       retryMeta,
     },
@@ -1753,7 +1759,7 @@ const logWeight = useCallback(() => {
         />
       )}
       {/* Family menu pre-questions */}
-      {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
+      {allowCachedUiStateRestore && familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
           <FamilyMenuPrefsModal
             allUsers={familyMenuProfiles}

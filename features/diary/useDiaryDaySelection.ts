@@ -40,7 +40,11 @@ export function calculateDiaryDayStats(foodDiary: FoodItem[], dayKey: string): D
     }), EMPTY_DAY_STATS);
 }
 
-export function useDiaryDaySelection(userId: string | null | undefined, foodDiary: FoodItem[]) {
+export function useDiaryDaySelection(
+  userId: string | null | undefined,
+  foodDiary: FoodItem[],
+  allowCachedUiStateRestore = true,
+) {
   const storageKey = useMemo(
     () => `fitfocus.nutrition.selected-day.v1:${userId ?? 'anon'}`,
     [userId],
@@ -49,6 +53,11 @@ export function useDiaryDaySelection(userId: string | null | undefined, foodDiar
   const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState('');
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      setSelectedDiaryDayKey('');
+      setHydratedStorageKey(null);
+      return;
+    }
     try {
       const todayKey = toLocalDayKey(new Date()) || '';
       const savedKey = localStorage.getItem(storageKey) || '';
@@ -57,12 +66,12 @@ export function useDiaryDaySelection(userId: string | null | undefined, foodDiar
       setSelectedDiaryDayKey('');
     }
     setHydratedStorageKey(storageKey);
-  }, [storageKey]);
+  }, [allowCachedUiStateRestore, storageKey]);
 
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
+    if (!allowCachedUiStateRestore || hydratedStorageKey !== storageKey) return;
     try {
-      const visibleSelection = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '');
+      const visibleSelection = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '', allowCachedUiStateRestore);
       if (visibleSelection) {
         localStorage.setItem(storageKey, visibleSelection);
       } else {
@@ -71,9 +80,9 @@ export function useDiaryDaySelection(userId: string | null | undefined, foodDiar
     } catch {
       // The day selection is an optional browser preference.
     }
-  }, [hydratedStorageKey, selectedDiaryDayKey, storageKey]);
+  }, [allowCachedUiStateRestore, hydratedStorageKey, selectedDiaryDayKey, storageKey]);
 
-  const visibleSelectedDiaryDayKey = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '');
+  const visibleSelectedDiaryDayKey = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '', allowCachedUiStateRestore);
 
   const diaryDayKeys = useMemo(() => getDiaryDayKeys(foodDiary), [foodDiary]);
   const resolvedDiaryDayKey = useMemo(
@@ -84,7 +93,7 @@ export function useDiaryDaySelection(userId: string | null | undefined, foodDiar
     () => calculateDiaryDayStats(foodDiary, resolvedDiaryDayKey),
     [foodDiary, resolvedDiaryDayKey],
   );
-  const setSelectedDayForScope = useAccountScopedUiSetter(storageKey, setSelectedDiaryDayKey);
+  const setSelectedDayForScope = useAccountScopedUiSetter(storageKey, setSelectedDiaryDayKey, allowCachedUiStateRestore);
 
   return {
     selectedDiaryDayKey: visibleSelectedDiaryDayKey,

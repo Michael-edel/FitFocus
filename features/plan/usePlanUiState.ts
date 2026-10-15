@@ -45,6 +45,7 @@ export function parsePlanUiState(raw: string | null, weekDays: readonly string[]
 /** Keeps persisted plan-screen controls scoped to the active profile. */
 export function usePlanUiState({
   userId,
+  allowCachedUiStateRestore = true,
   weekDayKeys,
   planScope,
   setPlanScope,
@@ -52,6 +53,7 @@ export function usePlanUiState({
   setFamilyMenuPrefsOpen,
 }: {
   userId: string | null | undefined;
+  allowCachedUiStateRestore?: boolean;
   weekDayKeys: readonly string[];
   planScope: PlanScope;
   setPlanScope: Dispatch<SetStateAction<PlanScope>>;
@@ -70,6 +72,15 @@ export function usePlanUiState({
 
   useEffect(() => {
     skipNextSaveRef.current = true;
+    if (!allowCachedUiStateRestore) {
+      setPlanIntroOpen(false);
+      setPlanRulesExpanded(false);
+      setPlanScope('personal');
+      setFamilyMenuPrefsOpen(false);
+      setPlanWeekExpanded(defaultWeekExpanded);
+      setHydratedStorageKey(null);
+      return;
+    }
     try {
       const next = parsePlanUiState(localStorage.getItem(storageKey), stableWeekDayKeys);
       setPlanIntroOpen(next.planIntroOpen);
@@ -85,10 +96,10 @@ export function usePlanUiState({
       setPlanWeekExpanded(buildWeekExpanded(stableWeekDayKeys, {}));
     }
     setHydratedStorageKey(storageKey);
-  }, [setFamilyMenuPrefsOpen, setPlanScope, stableWeekDayKeys, storageKey]);
+  }, [allowCachedUiStateRestore, defaultWeekExpanded, setFamilyMenuPrefsOpen, setPlanScope, stableWeekDayKeys, storageKey]);
 
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
+    if (!allowCachedUiStateRestore || hydratedStorageKey !== storageKey) return;
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
       return;
@@ -104,7 +115,7 @@ export function usePlanUiState({
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [familyMenuPrefsOpen, hydratedStorageKey, planIntroOpen, planRulesExpanded, planScope, planWeekExpanded, storageKey]);
+  }, [allowCachedUiStateRestore, familyMenuPrefsOpen, hydratedStorageKey, planIntroOpen, planRulesExpanded, planScope, planWeekExpanded, storageKey]);
 
   const visibleState = getAccountScopedUiValue(storageKey, hydratedStorageKey, {
     planIntroOpen,
@@ -114,10 +125,10 @@ export function usePlanUiState({
     planIntroOpen: false,
     planRulesExpanded: false,
     planWeekExpanded: defaultWeekExpanded,
-  });
-  const setPlanIntroOpenForScope = useAccountScopedUiSetter(storageKey, setPlanIntroOpen);
-  const setPlanRulesExpandedForScope = useAccountScopedUiSetter(storageKey, setPlanRulesExpanded);
-  const setPlanWeekExpandedForScope = useAccountScopedUiSetter(storageKey, setPlanWeekExpanded);
+  }, allowCachedUiStateRestore);
+  const setPlanIntroOpenForScope = useAccountScopedUiSetter(storageKey, setPlanIntroOpen, allowCachedUiStateRestore);
+  const setPlanRulesExpandedForScope = useAccountScopedUiSetter(storageKey, setPlanRulesExpanded, allowCachedUiStateRestore);
+  const setPlanWeekExpandedForScope = useAccountScopedUiSetter(storageKey, setPlanWeekExpanded, allowCachedUiStateRestore);
 
   return {
     planIntroOpen: visibleState.planIntroOpen,

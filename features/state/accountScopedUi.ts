@@ -17,8 +17,9 @@ export function getAccountScopedUiValue<T>(
   hydratedStorageKey: string | null,
   currentValue: T,
   fallbackValue: T,
+  enabled = true,
 ): T {
-  return activeStorageKey !== null && activeStorageKey === hydratedStorageKey
+  return enabled && activeStorageKey !== null && activeStorageKey === hydratedStorageKey
     ? currentValue
     : fallbackValue;
 }
@@ -27,9 +28,10 @@ export function createAccountScopedUiUpdater<T>(
   ownerStorageKey: string | null,
   getCurrentStorageKey: () => string | null,
   update: SetStateAction<T>,
+  isEnabled: () => boolean = () => true,
 ): (previous: T) => T {
   return (previous) => {
-    if (getCurrentStorageKey() !== ownerStorageKey) return previous;
+    if (!isEnabled() || getCurrentStorageKey() !== ownerStorageKey) return previous;
     return typeof update === 'function'
       ? (update as (previous: T) => T)(previous)
       : update;
@@ -40,13 +42,21 @@ export function createAccountScopedUiUpdater<T>(
 export function useAccountScopedUiSetter<T>(
   activeStorageKey: string | null,
   setValue: Dispatch<SetStateAction<T>>,
+  enabled = true,
 ): Dispatch<SetStateAction<T>> {
   const currentStorageKeyRef = useRef(activeStorageKey);
+  const enabledRef = useRef(enabled);
   currentStorageKeyRef.current = activeStorageKey;
+  enabledRef.current = enabled;
 
   return useCallback((update) => {
     const ownerKey = activeStorageKey;
-    if (currentStorageKeyRef.current !== ownerKey) return;
-    setValue(createAccountScopedUiUpdater(ownerKey, () => currentStorageKeyRef.current, update));
-  }, [activeStorageKey, setValue]);
+    if (!enabled || !enabledRef.current || currentStorageKeyRef.current !== ownerKey) return;
+    setValue(createAccountScopedUiUpdater(
+      ownerKey,
+      () => currentStorageKeyRef.current,
+      update,
+      () => enabledRef.current,
+    ));
+  }, [activeStorageKey, enabled, setValue]);
 }
