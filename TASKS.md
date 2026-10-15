@@ -605,6 +605,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     модалки оставались видимыми после переключения. [`66a7362`](https://github.com/Michael-edel/FitFocus/commit/66a73623309d46d8ca5bcdc89a71068cf6004a9f): E2E 3/3 на desktop
     Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
     typecheck и production build прошли. Остальной P0.4 audit остаётся открытым.
+  - [x] Скрыть сохранённую историю AI-отчётов account A в старой вкладке после
+    активации B. Регрессия с заранее сохранённым отчётом воспроизводилась до
+    исправления; теперь dashboard получает её только при совпадении активной
+    сессии и UI-аккаунта. Проверка — desktop Chromium/Firefox/WebKit, без retries;
+    общий typecheck прошёл. Остальной P0.4 audit остаётся открытым.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

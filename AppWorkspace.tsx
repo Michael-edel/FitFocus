@@ -203,7 +203,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             adaptRead={adaptRead}
             setAdaptRead={setAdaptRead}
             weekly={weekly}
-            weeklyReports={weeklyReports}
+            weeklyReports={allowCachedAccountUiStateRestore ? weeklyReports : []}
             exportWeeklyPDF={exportWeeklyPDF}
             onShareWisCard={onShareWisCard}
             shareWisState={shareWisState}

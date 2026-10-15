@@ -736,9 +736,21 @@ test('held weekly report cannot write for account A after another tab signs in a
     if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
   });
   const fixtureA = await installAccountApi(page, state, 'wis_text');
+  await page.addInitScript(({ key, report }) => {
+    localStorage.setItem(key, JSON.stringify([report]));
+  }, {
+    key: weeklyReportsKey(accountA.id),
+    report: {
+      weekKey: '1999-01',
+      createdAt: '1999-01-01T00:00:00.000Z',
+      data: { wis: 42, weightDelta7: 0, weightDelta30: 0, compliance: 50, adaptationIndex: 0, status: 'stable' },
+      aiText: 'Сохранённый отчёт недели из аккаунта A',
+    },
+  });
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toBeVisible();
 
   const reportKeyA = weeklyReportsKey(accountA.id);
   const reportKeyB = weeklyReportsKey(accountB.id);
@@ -750,6 +762,13 @@ test('held weekly report cannot write for account A after another tab signs in a
 
   try {
     const switched = await openAccountB(context, state);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
     await expect.poll(() => switched.fixture.counts.completedAiFeatures).toContain('wis_text');
     await expect.poll(async () => (await readDurableSnapshot(switched.page)).operations
       .filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB)).toEqual([]);
@@ -758,10 +777,6 @@ test('held weekly report cannot write for account A after another tab signs in a
     const reportBBefore = rawValue(beforeB, reportKeyB);
     const reportOperationsBBefore = beforeB.operations.filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB);
     expect(reportBBefore).not.toBeNull();
-    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
-
-    fixtureA.release();
-    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
 
     const final = await readDurableSnapshot(switched.page);
