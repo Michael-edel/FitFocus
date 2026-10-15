@@ -18,9 +18,9 @@ import { onRequestPost as items } from '../functions/api/weekly_menu/items';
 import { stateSessionId } from '../functions/api/_lib/state_session';
 
 const db = { prepare: vi.fn() };
-const invoke = (handler: typeof ai | typeof items, headers: HeadersInit) => handler({
+const invoke = (handler: typeof ai | typeof items, headers: HeadersInit, body = '{"items":[]}') => handler({
   request: new Request('https://example.test/api/' + (handler === ai ? 'ai' : 'weekly_menu/items'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: '{"items":[]}',
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body,
   }), env: { AUTH_JWT_SECRET: 'test-only', DB: db },
 } as unknown as Parameters<typeof handler>[0]) as Promise<Response>;
 
@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 for (const [name, handler, resource] of [['AI', ai, 'AI'], ['weekly items', items, 'Weekly-Menu']] as const) {
-  it.each(['account', 'same-account-login', 'account-only', 'session-only', 'malformed'])
+  it.each(['account', 'same-account-login', 'account-only', 'session-only', 'malformed', 'unscoped'])
   (`${name} rejects %s before protected work`, async change => {
     const sessionId = await stateSessionId(mocks.user);
     let scope: Record<string, string> = {
@@ -43,8 +43,9 @@ for (const [name, handler, resource] of [['AI', ai, 'AI'], ['weekly items', item
     if (change === 'account-only') scope = { 'X-FitFocus-State-Account': mocks.user.sub };
     if (change === 'session-only') scope = { 'X-FitFocus-State-Session': sessionId };
     if (change === 'malformed') scope['X-FitFocus-State-Session'] = 'not-a-session-proof';
+    if (change === 'unscoped') scope = {};
 
-    expect((await invoke(handler, scope)).status).toBe(401);
+    expect((await invoke(handler, scope, change === 'unscoped' ? '{' : undefined)).status).toBe(401);
     expect(mocks.access).not.toHaveBeenCalled();
     expect(mocks.ensureUser).not.toHaveBeenCalled();
     expect(mocks.saveItems).not.toHaveBeenCalled();
@@ -66,10 +67,12 @@ for (const [name, handler, resource] of [['AI', ai, 'AI'], ['weekly items', item
     else expect(mocks.saveItems).toHaveBeenCalledWith({ db, userId: mocks.user.sub, body: { items: [] } });
   });
 
-  it(`${name} keeps unscoped old clients explicit, without claiming their session binding`, async () => {
-    const response = await invoke(handler, {});
-    expect(response.status).toBe(handler === ai ? 403 : 200);
-    expect(response.headers.get('X-FitFocus-State-Account')).toBeNull();
-    expect(response.headers.get('X-FitFocus-State-Session')).toBeNull();
+  it(`${name} rejects unscoped legacy clients before reading the body`, async () => {
+    const response = await invoke(handler, {}, '{');
+    expect(response.status).toBe(401);
+    expect(mocks.access).not.toHaveBeenCalled();
+    expect(mocks.ensureUser).not.toHaveBeenCalled();
+    expect(mocks.saveItems).not.toHaveBeenCalled();
+    expect(db.prepare).not.toHaveBeenCalled();
   });
 }

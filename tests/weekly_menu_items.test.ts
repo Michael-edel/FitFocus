@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/weekly_menu/items';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type WeeklyMenuItemsContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -71,10 +72,13 @@ function makeDb() {
 
 async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: WeeklyMenuItemsContext = {
     request: new Request('https://fitfocus.test/api/weekly_menu/items', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json',
+        'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof,
+        ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
