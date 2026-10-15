@@ -98,6 +98,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   // Ephemeral screen drafts belong to the active IndexedDB session. The login guard
   // captured by this tab can become stale when another tab accepts a new session.
   const [durableSessionKey, setDurableSessionKey] = React.useState('checking');
+  const [durableSessionAccountId, setDurableSessionAccountId] = React.useState<string | null>(null);
   React.useEffect(() => {
     const outbox = new DurableOutbox();
     let disposed = false;
@@ -108,6 +109,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       void outbox.sessionState()
         .then(({ fence, active }) => {
           if (disposed) return;
+          setDurableSessionAccountId(active?.accountId ?? null);
           const next = JSON.stringify([
             fence,
             active?.accountId ?? null,
@@ -117,7 +119,10 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           setDurableSessionKey(previous => previous === next ? previous : next);
         })
         .catch(() => {
-          if (!disposed) setDurableSessionKey('unavailable');
+          if (!disposed) {
+            setDurableSessionAccountId(null);
+            setDurableSessionKey('unavailable');
+          }
         })
         .finally(() => { checking = false; });
     };
@@ -144,6 +149,12 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   }, []);
   // A second tab can change IndexedDB's active session without changing this tab's React props.
   const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
+  const allowCachedProfileDraftRestore = durableSessionKey !== 'checking'
+    && durableSessionKey !== 'unavailable'
+    && (!loginGuard || loginGuard.accountId === currentUser?.id)
+    && (durableSessionAccountId === null
+      ? !loginGuard
+      : durableSessionAccountId === currentUser?.id);
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
@@ -451,6 +462,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
           <SettingsScreen
             key={screenSessionKey}
+            allowCachedProfileDraftRestore={allowCachedProfileDraftRestore}
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}

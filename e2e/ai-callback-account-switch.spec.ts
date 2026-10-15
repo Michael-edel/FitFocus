@@ -1012,6 +1012,39 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await switched.page.screenshot({ path: info.outputPath('progress-draft-cleared-on-account-switch.png') });
 });
 
+test('a profile draft cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const nameDraft = page.getByPlaceholder('Как к вам обращаться');
+  await expect(nameDraft).toHaveValue('Профиль A');
+  await nameDraft.fill('Черновик настроек аккаунта A');
+  const settingsKeyA = `fitfocus.settings.ui.v1:${accountA.id}`;
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), settingsKeyA))
+    .toContain('"profileDirty":true');
+
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Черновик настроек аккаунта A');
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect.poll(() => page.getByPlaceholder('Как к вам обращаться').inputValue())
+    .not.toBe('Черновик настроек аккаунта A');
+
+  const cachedDraft = await page.evaluate(key => localStorage.getItem(key), settingsKeyA);
+  expect(cachedDraft).toContain('"profileDirty":true');
+  expect(cachedDraft).toContain('Черновик настроек аккаунта A');
+  await switched.page.goto('/#settings');
+  await expect(switched.page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль B');
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+});
+
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

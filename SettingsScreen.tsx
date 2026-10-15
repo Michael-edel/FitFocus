@@ -55,6 +55,7 @@ type SettingsUiState = {
 const SETTINGS_UI_STORAGE_KEY = 'fitfocus.settings.ui.v1';
 
 type Props = {
+  allowCachedProfileDraftRestore?: boolean;
   serverSession?: boolean;
   loginGuard?: OutboxReadGuard | null;
   isCurrentSession?: () => boolean;
@@ -355,6 +356,7 @@ const Toggle: React.FC<{
 );
 
 export default function SettingsScreen({
+  allowCachedProfileDraftRestore = true,
   settings,
   onChange,
   user,
@@ -1325,7 +1327,7 @@ export default function SettingsScreen({
     if (!user) return;
     settingsUiSkipSaveRef.current = true;
     try {
-      const raw = localStorage.getItem(settingsUiStorageKey);
+      const raw = allowCachedProfileDraftRestore ? localStorage.getItem(settingsUiStorageKey) : null;
       if (raw) {
         const parsed = parseJsonRecord(raw);
         if (!parsed) throw new Error('Invalid settings UI state');
@@ -1418,7 +1420,7 @@ export default function SettingsScreen({
         return;
       }
     } catch {
-      // fall through to user snapshot
+      // fall through to the current profile snapshot
     }
 
     setDraftName(user.name || '');
@@ -1442,7 +1444,7 @@ export default function SettingsScreen({
     setAckLoss(!!user.riskAcknowledgedLoss);
     setAckGain(!!user.riskAcknowledgedGain);
     setProfileDirty(false);
-  }, [settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
+  }, [allowCachedProfileDraftRestore, settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -1462,6 +1464,7 @@ export default function SettingsScreen({
       settingsUiSkipSaveRef.current = false;
       return;
     }
+    if (!allowCachedProfileDraftRestore) return;
     try {
       localStorage.setItem(settingsUiStorageKey, JSON.stringify({
         profileDirty,
@@ -1512,6 +1515,7 @@ export default function SettingsScreen({
     progressPhotoNote,
     profileDirty,
     settingsUiStorageKey,
+    allowCachedProfileDraftRestore,
   ]);
 
   useEffect(() => {
