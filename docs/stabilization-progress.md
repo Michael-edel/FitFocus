@@ -4274,3 +4274,18 @@ build, выполняемый Playwright preview, и `git diff --check` прош
 1306/1306 в 210 файлах; общий, domain-strict и storage-strict typecheck,
 production build и `git diff --check` прошли. CI точного опубликованного HEAD
 проверяется после push; общий аудит callbacks/cache P0.4 остаётся открытым.
+
+## P0.4 — черновик профиля в старой вкладке после смены аккаунта, [`02a12e2`](https://github.com/Michael-edel/FitFocus/commit/02a12e2), 16.10.2026
+
+Регрессионный сценарий воспроизвёл, что после входа account B в соседней вкладке
+старая вкладка account A перемонтировала Settings и снова показывала сохранённый
+черновик профиля A. Теперь Settings восстанавливает account-scoped draft только
+после проверки текущего IndexedDB account. При несовпадении экран использует
+профильный snapshot, не перезаписывает сохранённый черновик A и не показывает его
+в B; reload при активном A по-прежнему восстанавливает введённые данные.
+
+Проверки на `02a12e2`: новый Settings account-switch E2E — 3/3 на desktop
+Chromium/Firefox/WebKit; recipe и progress account-switch E2E — 6/6; полный unit
+suite — 1306/1306 в 210 файлах; общий, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли. CI точного опубликованного HEAD
+проверяется после push; общий P0.4 audit остаётся открытым.

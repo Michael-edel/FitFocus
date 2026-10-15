@@ -3,7 +3,7 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последнее
 локально проверенное исправление —
-[`a8d20ee`](https://github.com/Michael-edel/FitFocus/commit/a8d20ee) в ветке
+[`02a12e2`](https://github.com/Michael-edel/FitFocus/commit/02a12e2) в ветке
 `durable-outbox`; после публикации нужно проверить CI на точном HEAD.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
@@ -12,11 +12,14 @@
 задаёт начальный размер графиков прогресса, устраняя предупреждение Recharts
 при первом layout. Follow-up `a8d20ee` дополняет сброс UI-кэша выбранной датой
 дневника питания: при сбросе удаляется запись активного аккаунта, но не данные
-другого аккаунта или профиль. Полный unit suite — 1306/1306; общий,
-domain-strict и storage-strict typecheck, production build и `git diff --check`
-прошли. Recipe и progress draft account-switch E2E прошли по 3/3 на desktop
-Chromium, Firefox и WebKit без retries. План содержит 34 открытых пункта:
-общий P0.4/P0.5, остальные callbacks/cache, staging и полный lifecycle открыты.
+другого аккаунта или профиль. `02a12e2` также предотвращает восстановление
+черновика настроек аккаунта A в старой вкладке, если IndexedDB уже активирует
+аккаунт B; запись A сохраняется и восстанавливается при reload, пока активен A.
+Полный unit suite — 1306/1306; общий, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли. Settings draft account-switch E2E
+прошёл 3/3, прежние recipe/progress draft сценарии — 6/6 на desktop
+Chromium/Firefox/WebKit без retries. План содержит 34 открытых пункта: общий
+P0.4/P0.5, остальные callbacks/cache, staging и полный lifecycle открыты.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
