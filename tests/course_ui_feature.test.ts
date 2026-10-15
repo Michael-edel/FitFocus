@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Goal, type CourseLesson, type UserProfile } from '../types';
 import {
+  getVisibleCourseUiState,
   parseCourseUiSnapshot,
   pickLessonForToday,
+  type CourseUiVisibleState,
 } from '../features/course/useCourseUiState';
 
 const lessons = [
@@ -33,5 +35,36 @@ describe('course UI feature', () => {
 
     const completed = { ...user, courseProgress: { completedLessonIds: ['l1', 'l2'], streak: 2 } };
     expect(pickLessonForToday(completed, lessons)?.id).toBe('l1');
+  });
+
+  it('hides the previous account course state until the new account is hydrated', () => {
+    const previousAccountState: CourseUiVisibleState = {
+      currentLesson: lessons[1],
+      isLessonViewOpen: true,
+      isQuizActive: true,
+      selectedQuizOption: { id: 'option-a', text: 'Ответ A' },
+    };
+
+    expect(getVisibleCourseUiState(
+      'fitfocus.course.ui.v1:user-b',
+      'fitfocus.course.ui.v1:user-a',
+      previousAccountState,
+    )).toEqual({
+      currentLesson: null,
+      isLessonViewOpen: false,
+      isQuizActive: false,
+      selectedQuizOption: null,
+    });
+    expect(getVisibleCourseUiState(
+      'fitfocus.course.ui.v1:user-a',
+      'fitfocus.course.ui.v1:user-a',
+      previousAccountState,
+    )).toBe(previousAccountState);
+    expect(getVisibleCourseUiState(null, 'fitfocus.course.ui.v1:user-a', previousAccountState)).toMatchObject({
+      currentLesson: null,
+      isLessonViewOpen: false,
+      isQuizActive: false,
+      selectedQuizOption: null,
+    });
   });
 });

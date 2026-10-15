@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parseJson } from '../../safeJson';
 import type { CourseLesson, LessonQuizOption, UserProfile } from '../../types';
 
@@ -8,6 +8,30 @@ export type CourseUiSnapshot = {
   isQuizActive: boolean;
   selectedQuizOptionId: string | null;
 };
+
+export type CourseUiVisibleState = {
+  currentLesson: CourseLesson | null;
+  isLessonViewOpen: boolean;
+  isQuizActive: boolean;
+  selectedQuizOption: LessonQuizOption | null;
+};
+
+const EMPTY_COURSE_UI_STATE: CourseUiVisibleState = {
+  currentLesson: null,
+  isLessonViewOpen: false,
+  isQuizActive: false,
+  selectedQuizOption: null,
+};
+
+export function getVisibleCourseUiState(
+  currentStorageKey: string | null,
+  hydratedStorageKey: string | null,
+  state: CourseUiVisibleState,
+): CourseUiVisibleState {
+  return currentStorageKey !== null && currentStorageKey === hydratedStorageKey
+    ? state
+    : EMPTY_COURSE_UI_STATE;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -48,7 +72,7 @@ export function useCourseUiState({
   courseLibrary: CourseLesson[] | null;
 }) {
   const courseUiStorageKey = currentUser?.id ? `fitfocus.course.ui.v1:${currentUser.id}` : null;
-  const courseUiHydratedKeyRef = useRef<string | null>(null);
+  const [courseUiHydratedKey, setCourseUiHydratedKey] = useState<string | null>(null);
   const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
@@ -57,7 +81,7 @@ export function useCourseUiState({
   useEffect(() => {
     if (!currentUser || !courseLibrary || !courseUiStorageKey) return;
 
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) {
+    if (courseUiHydratedKey !== courseUiStorageKey) {
       let savedCourseUi: CourseUiSnapshot | null = null;
       try {
         savedCourseUi = parseCourseUiSnapshot(localStorage.getItem(courseUiStorageKey));
@@ -77,17 +101,17 @@ export function useCourseUiState({
       } else {
         setSelectedQuizOption(null);
       }
-      courseUiHydratedKeyRef.current = courseUiStorageKey;
+      setCourseUiHydratedKey(courseUiStorageKey);
       return;
     }
 
     if (currentLesson) return;
     const nextLesson = pickLessonForToday(currentUser, courseLibrary);
     if (nextLesson) setCurrentLesson(nextLesson);
-  }, [courseLibrary, courseUiStorageKey, currentLesson, currentUser]);
+  }, [courseLibrary, courseUiHydratedKey, courseUiStorageKey, currentLesson, currentUser]);
 
   useEffect(() => {
-    if (!courseUiStorageKey || courseUiHydratedKeyRef.current !== courseUiStorageKey) return;
+    if (!courseUiStorageKey || courseUiHydratedKey !== courseUiStorageKey) return;
     const payload: CourseUiSnapshot = {
       lessonId: currentLesson?.id || null,
       isLessonViewOpen,
@@ -99,16 +123,23 @@ export function useCourseUiState({
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
+  }, [courseUiHydratedKey, courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
+
+  const visibleState = getVisibleCourseUiState(courseUiStorageKey, courseUiHydratedKey, {
+    currentLesson,
+    isLessonViewOpen,
+    isQuizActive,
+    selectedQuizOption,
+  });
 
   return {
-    currentLesson,
+    currentLesson: visibleState.currentLesson,
     setCurrentLesson,
-    isLessonViewOpen,
+    isLessonViewOpen: visibleState.isLessonViewOpen,
     setIsLessonViewOpen,
-    isQuizActive,
+    isQuizActive: visibleState.isQuizActive,
     setIsQuizActive,
-    selectedQuizOption,
+    selectedQuizOption: visibleState.selectedQuizOption,
     setSelectedQuizOption,
   };
 }
