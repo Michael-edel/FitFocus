@@ -70,7 +70,7 @@ function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain'
     const sid = 'sid-1';
     const token = await signJwt({ sub: userId, sid, roles: options.role === 'admin' ? ['admin'] : [] });
     const headers = new Headers({ Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-attachment-test-01' });
-    if (options.scoped) {
+    if (options.scoped !== false) {
       headers.set('X-FitFocus-State-Account', userId);
       headers.set('X-FitFocus-State-Session', await stateSessionId({ sub: userId, sid }));
     }
@@ -147,7 +147,15 @@ describe('/api/support/attachment', () => {
   });
 
   it('rejects an admin attachment request without proof before reading the attachment', async () => {
-    const response = await makeContext('admin-1', 'user-1', 'text/plain', { role: 'admin' })();
+    const response = await makeContext('admin-1', 'user-1', 'text/plain', { role: 'admin', scoped: false })();
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+  });
+
+  it('rejects an owner attachment request without session proof', async () => {
+    const response = await makeContext('user-1', 'user-1', 'text/plain', { scoped: false })();
 
     expect(response.status).toBe(401);
     expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');

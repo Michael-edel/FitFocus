@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { StateDatabase } from '../storage/stateDatabase';
-import { prepareSupportSession, requestSupportJson } from '../services/supportSession';
+import { prepareSupportSession, requestSupportAttachmentBlob, requestSupportJson } from '../services/supportSession';
 
 const account = 'support-owner', sid = 'a'.repeat(64);
 let db: StateDatabase, outbox: DurableOutbox, guard: OutboxReadGuard;
@@ -10,6 +10,9 @@ const me = (extra: Record<string, unknown> = {}) => ({ user: { sub: account }, h
   stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, ...extra });
 const headers = () => ({ 'Content-Type': 'application/json', 'X-FitFocus-Support-Protocol': '1',
   'X-FitFocus-Support-Guard': '1', 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid });
+const attachmentHeaders = () => ({ 'Content-Type': 'image/png',
+  'X-FitFocus-Support-Attachment-Protocol': '1', 'X-FitFocus-Support-Attachment-Guard': '1',
+  'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid });
 const json = (body: unknown, responseHeaders: HeadersInit = {}, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: responseHeaders });
 
@@ -37,6 +40,30 @@ it('refreshes the captured proof and scopes JSON and multipart support requests'
   expect(requestHeaders.get('X-FitFocus-State-Account')).toBe(account);
   expect(requestHeaders.get('X-FitFocus-State-Session')).toBe(sid);
   expect(requestHeaders.has('Content-Type')).toBe(false);
+});
+
+it('downloads support media with the captured proof and verifies attachment markers', async () => {
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response('private-image', { headers: attachmentHeaders() }));
+  const session = await prepare(fetchImpl);
+  const blob = await requestSupportAttachmentBlob(session, '/api/support/attachment?id=ticket-1&index=0');
+
+  await expect(blob.text()).resolves.toBe('private-image');
+  const [url, init] = fetchImpl.mock.calls[1];
+  expect(url).toContain('/api/support/attachment');
+  const requestHeaders = new Headers(init?.headers);
+  expect(requestHeaders.get('X-FitFocus-State-Account')).toBe(account);
+  expect(requestHeaders.get('X-FitFocus-State-Session')).toBe(sid);
+});
+
+it('rejects support media whose resource markers do not match the session', async () => {
+  const badHeaders = { ...attachmentHeaders(), 'X-FitFocus-State-Session': 'b'.repeat(64) };
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response('private-image', { headers: badHeaders }));
+  const session = await prepare(fetchImpl);
+
+  await expect(requestSupportAttachmentBlob(session, '/api/support/attachment?id=ticket-1&index=0'))
+    .rejects.toThrow('PROTOCOL');
 });
 
 it.each(['Protocol', 'Guard', 'Account', 'Session'])('rejects a mismatched response %s', async field => {

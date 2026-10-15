@@ -1,4 +1,4 @@
-import { json, requireUser } from "../_lib/auth";
+import { json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { requireRole } from "../_lib/rbac";
 import { requireAdminRequest } from "../_lib/admin_guard";
@@ -11,7 +11,7 @@ import {
 } from "../_lib/support_attachments";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 import { readSupportAttachmentRecord } from '../_lib/support_attachment_read';
-import { withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 function safeFileName(name: string) {
@@ -33,7 +33,7 @@ function attachmentHeaders(attachment: SupportAttachmentRecord, fileName: string
 const handleSupportAttachmentGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }

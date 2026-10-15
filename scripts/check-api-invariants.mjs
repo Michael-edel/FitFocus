@@ -305,6 +305,11 @@ assertIncludes(
   "withSessionGuard(response, context.request, 'Support-Attachment')",
   'support attachment responses must expose verifiable session scope markers',
 );
+assertIncludes(
+  supportAttachmentRoute,
+  'requireScopedStateUser(request, env)',
+  'support attachment reads must require the captured account/session proof',
+);
 
 const userSupport = [
   read('functions/api/support/feedback/my.ts'),

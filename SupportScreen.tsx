@@ -5,7 +5,7 @@ import { BUILD_SHORT_LABEL } from './versioning';
 import { isRecord, responseErrorMessage } from './safeJson';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { SessionReadError } from './storage/sessionRead';
-import { prepareSupportSession, requestSupportJson, supportSessionErrorMessage } from './services/supportSession';
+import { prepareSupportSession, requestSupportAttachmentBlob, requestSupportJson, supportSessionErrorMessage } from './services/supportSession';
 
 type AttachmentDraft = {
   file: File;
@@ -50,6 +50,53 @@ type SupportTicket = {
   attachments?: SupportAttachment[];
   messages?: SupportMessage[];
 };
+
+async function hydrateSupportTicketAttachments(
+  ticket: SupportTicket,
+  fetchAttachment: (url: string) => Promise<Blob>,
+  signal: AbortSignal,
+): Promise<{ ticket: SupportTicket; objectUrls: string[] }> {
+  const objectUrls: string[] = [];
+  const hydrateAttachment = async (attachment: SupportAttachment): Promise<SupportAttachment> => {
+    if (!attachment.data_url?.startsWith('/api/support/attachment')) return attachment;
+    try {
+      if (signal.aborted) throw new Error('STATE_REQUEST_ABORTED');
+      const blob = await fetchAttachment(attachment.data_url);
+      if (signal.aborted) throw new Error('STATE_REQUEST_ABORTED');
+      const dataUrl = URL.createObjectURL(blob);
+      objectUrls.push(dataUrl);
+      return { ...attachment, data_url: dataUrl };
+    } catch (error) {
+      if (signal.aborted || error instanceof SessionReadError) throw error;
+      return { ...attachment, data_url: undefined };
+    }
+  };
+
+  try {
+    const attachments = ticket.attachments
+      ? await Promise.all(ticket.attachments.map(hydrateAttachment))
+      : undefined;
+    const messages = ticket.messages
+      ? await Promise.all(ticket.messages.map(async (message) => ({
+        ...message,
+        ...(message.attachments
+          ? { attachments: await Promise.all(message.attachments.map(hydrateAttachment)) }
+          : {}),
+      })))
+      : undefined;
+    return {
+      ticket: {
+        ...ticket,
+        ...(attachments ? { attachments } : {}),
+        ...(messages ? { messages } : {}),
+      },
+      objectUrls,
+    };
+  } catch (error) {
+    objectUrls.forEach(URL.revokeObjectURL);
+    throw error;
+  }
+}
 
 type Props = {
   currentUser?: UserProfile | null;
@@ -272,6 +319,7 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
     tickets: null, detail: null, submit: null, reply: null,
   });
   const previewUrlsRef = React.useRef(new Set<string>());
+  const ticketAttachmentUrlsRef = React.useRef(new Set<string>());
   const componentControllerRef = React.useRef(new AbortController());
 
   const supportIdentityIsCurrent = React.useCallback(() => Boolean(
@@ -303,6 +351,11 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
   const revokePreviewUrl = React.useCallback((url: string) => {
     URL.revokeObjectURL(url);
     previewUrlsRef.current.delete(url);
+  }, []);
+
+  const clearTicketAttachmentUrls = React.useCallback(() => {
+    ticketAttachmentUrlsRef.current.forEach(URL.revokeObjectURL);
+    ticketAttachmentUrlsRef.current.clear();
   }, []);
 
   React.useEffect(() => {
@@ -346,8 +399,23 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
         { method: 'GET' },
       );
       if (!response.ok) throw new Error(responseErrorMessage(body, 'Не удалось загрузить обращение.'));
-      if (controller.signal.aborted || selectedTicketIdRef.current !== ticketId || !supportIdentityIsCurrent()) return;
-      setSelectedTicket(isRecord(body) && isSupportTicket(body.ticket) ? body.ticket : null);
+      if (!isRecord(body) || !isSupportTicket(body.ticket)) {
+        clearTicketAttachmentUrls();
+        setSelectedTicket(null);
+        return;
+      }
+      const hydrated = await hydrateSupportTicketAttachments(
+        body.ticket,
+        (url) => requestSupportAttachmentBlob(session, url),
+        controller.signal,
+      );
+      if (controller.signal.aborted || selectedTicketIdRef.current !== ticketId || !supportIdentityIsCurrent()) {
+        hydrated.objectUrls.forEach(URL.revokeObjectURL);
+        return;
+      }
+      clearTicketAttachmentUrls();
+      hydrated.objectUrls.forEach((url) => ticketAttachmentUrlsRef.current.add(url));
+      setSelectedTicket(hydrated.ticket);
     } catch (requestError: unknown) {
       if (!controller.signal.aborted && supportIdentityIsCurrent()) {
         setError(supportSessionErrorMessage(requestError, 'Не удалось загрузить обращение.'));
@@ -355,7 +423,7 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
     } finally {
       finishSupportRequest('detail', controller);
     }
-  }, [beginSupportRequest, finishSupportRequest, prepareCurrentSupportSession, supportIdentityIsCurrent]);
+  }, [beginSupportRequest, clearTicketAttachmentUrls, finishSupportRequest, prepareCurrentSupportSession, supportIdentityIsCurrent]);
 
   React.useEffect(() => {
     void loadMyTickets(false);
@@ -364,12 +432,14 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
   React.useEffect(() => {
     if (!selectedTicketId) {
       requestsRef.current.detail?.abort();
+      clearTicketAttachmentUrls();
       setSelectedTicket(null);
       return;
     }
+    clearTicketAttachmentUrls();
     setSelectedTicket(null);
     void loadMyTicketDetail(selectedTicketId);
-  }, [loadMyTicketDetail, selectedTicketId]);
+  }, [clearTicketAttachmentUrls, loadMyTicketDetail, selectedTicketId]);
 
   React.useEffect(() => {
     return () => {
@@ -379,6 +449,8 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
       streamRef.current?.getTracks().forEach((track) => track.stop());
       previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
       previewUrlsRef.current.clear();
+      ticketAttachmentUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      ticketAttachmentUrlsRef.current.clear();
     };
   }, []);
 
@@ -631,10 +703,10 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
       });
       if (!response.ok) throw new Error(supportReplyErrorMessage(response.status, body));
       if (controller.signal.aborted || selectedTicketIdRef.current !== selectedTicketId || !supportIdentityIsCurrent()) return;
-      setSelectedTicket(isRecord(body) && isSupportTicket(body.ticket) ? body.ticket : null);
       setReplyMessage('');
       replyAttachments.forEach((item) => item.previewUrl && revokePreviewUrl(item.previewUrl));
       setReplyAttachments([]);
+      await loadMyTicketDetail(selectedTicketId);
       await loadMyTickets();
     } catch (e: unknown) {
       if (!controller.signal.aborted && supportIdentityIsCurrent()) {
@@ -644,7 +716,7 @@ export default function SupportScreen({ currentUser, loginGuard, isCurrentSessio
       if (requestsRef.current.reply === controller) setReplySending(false);
       finishSupportRequest('reply', controller);
     }
-  }, [beginSupportRequest, finishSupportRequest, loadMyTickets, prepareCurrentSupportSession, replyAttachments,
+  }, [beginSupportRequest, finishSupportRequest, loadMyTicketDetail, loadMyTickets, prepareCurrentSupportSession, replyAttachments,
     replyMessage, revokePreviewUrl, selectedTicketId, supportIdentityIsCurrent]);
 
   const audioPreview = voiceAttachment?.previewUrl || null;

@@ -81,6 +81,82 @@ export async function requestSupportJson(session: SupportSession, url: string, i
   }
 }
 
+/** Loads private support media with the captured session proof; media tags cannot add these headers. */
+export async function requestSupportAttachmentBlob(session: SupportSession, url: string): Promise<Blob> {
+  await assertSupportSession(session);
+  const requestController = new AbortController();
+  const abort = () => requestController.abort();
+  session.controller.signal.addEventListener('abort', abort, { once: true });
+  if (session.controller.signal.aborted) requestController.abort();
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('pagehide', abort);
+  const timeout = setTimeout(abort, session.timeoutMs ?? 12_000);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let removeAbortListener: (() => void) | undefined;
+  let completed = false;
+  try {
+    const headers = new Headers({ 'X-Request-ID': `web-${crypto.randomUUID()}` });
+    headers.set('X-FitFocus-State-Account', session.guard.accountId);
+    headers.set('X-FitFocus-State-Session', session.guard.serverSessionId);
+    const response = await (session.fetchImpl ?? fetch)(url, {
+      headers,
+      credentials: 'include',
+      cache: 'no-store',
+      redirect: 'error',
+      signal: requestController.signal,
+    });
+    await assertSupportSession(session);
+    if (response.status === 401) throw new SessionReadError('auth');
+    if (response.status === 403) throw new SessionReadError('access');
+    const responseHeaders = response.headers;
+    if (responseHeaders.get('X-FitFocus-Support-Attachment-Protocol') !== '1'
+      || responseHeaders.get('X-FitFocus-Support-Attachment-Guard') !== '1'
+      || responseHeaders.get('X-FitFocus-State-Account') !== session.guard.accountId
+      || responseHeaders.get('X-FitFocus-State-Session') !== session.guard.serverSessionId) {
+      void response.body?.cancel().catch(() => {});
+      throw new SessionReadError('protocol');
+    }
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error('SUPPORT_ATTACHMENT_FAILED');
+    }
+
+    reader = response.body?.getReader();
+    const chunks: ArrayBuffer[] = [];
+    let size = 0;
+    let rejectAbort: (reason: Error) => void = () => {};
+    const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
+    const onAbort = () => rejectAbort(new Error('STATE_REQUEST_ABORTED'));
+    requestController.signal.addEventListener('abort', onAbort, { once: true });
+    removeAbortListener = () => requestController.signal.removeEventListener('abort', onAbort);
+    if (requestController.signal.aborted) onAbort();
+    if (reader) for (;;) {
+      const next = await Promise.race([reader.read(), aborted]);
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > 5 * 1024 * 1024) {
+        void reader?.cancel().catch(() => {});
+        throw new SessionReadError('protocol');
+      }
+      const chunk = new Uint8Array(next.value.byteLength);
+      chunk.set(next.value);
+      chunks.push(chunk.buffer);
+    }
+    completed = true;
+    await assertSupportSession(session);
+    return new Blob(chunks, { type: responseHeaders.get('content-type') || 'application/octet-stream' });
+  } catch (error) {
+    if (requestController.signal.aborted) throw new Error('STATE_REQUEST_ABORTED');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    removeAbortListener?.();
+    if (!completed) void reader?.cancel().catch(() => {});
+    session.controller.signal.removeEventListener('abort', abort);
+    target?.removeEventListener('pagehide', abort);
+  }
+}
+
 export function supportSessionErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof SessionReadError) {
     if (error.kind === 'access') return 'Нет доступа к обращениям поддержки.';
