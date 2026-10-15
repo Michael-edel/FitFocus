@@ -3,15 +3,27 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-## Локальный follow-up — offline retry при обновлении PWA в WebKit
+## Offline retry при обновлении PWA и flaky acceptance — `ad89020`, `aa4073c`
 
-E2E сценарий rollback-клиента теперь воспроизводит первый offline `503`,
-задержанную повторную отправку и активацию обновления во время `sending`.
-Локально прошли desktop WebKit 4/4, Chromium 1/1, Firefox 1/1 и typecheck.
-Изменение ожидает точного GitHub CI; текущий run на `9f09fb5` нового сценария
-не содержит и всё ещё выполняет E2E. Trace сузил исторический сбой до
-пересечения retry и обновления, но точная первопричина не установлена.
-[План](../TASKS.md), [запись проверок](stabilization-progress.md).
+Rollback E2E получает offline `503`, задерживает следующую отправку и активирует
+обновление при `sending`; операция сохраняет тот же `opId` и payload, старый
+запрос прерывается. `ad89020` дополнительно проверяет между навигациями отсутствие
+`unhandledrejection` и `window.error`. Локально прошли desktop WebKit 4/4,
+Chromium 1/1 и Firefox 1/1; отдельная повторная серия после lifecycle assertions
+дала 6/6, `npm run typecheck` прошёл.
+
+Точный CI [`38729850933`](https://github.com/Michael-edel/FitFocus/actions/runs/38729850933)
+для parent SHA `96937ea` завершился success: 1277 unit, 632 browser passed и
+143 skipped. Итог отметил две flaky проверки: Firefox delete-операция оставалась
+в корректном `sending` lease, а задержанный WebKit menu GET давал access-control
+console warning при дополнительном `page.route` поверх mock API. В `aa4073c`
+первая проверка принимает только durable `pending`/`sending`; вторая держит GET
+внутри того же API handler. После изменений локально прошли
+`family-menu-durable.spec.ts` 39/39 на Chromium/Firefox/WebKit и
+`owned-state.spec.ts` 4/4 на Firefox. CI точного нового HEAD запускается после
+push. Исторический WebKit trace всё ещё не устанавливает точную первопричину;
+устройство и staging не проверялись. [План](../TASKS.md),
+[запись проверок](stabilization-progress.md).
 
 ## Follow-up — обновление семейных данных после BFCache, `29b1e3a`
 

@@ -18,6 +18,29 @@ run [`38720252389`](https://github.com/Michael-edel/FitFocus/actions/runs/387202
 на `9f09fb5` всё ещё выполняет E2E и не содержит нового сценария. Реальная
 установка на устройстве и staging этим тестом не проверяются.
 
+## 15.10.2026 — lifecycle assertions и flaky E2E follow-up (`ad89020`, `aa4073c`)
+
+`ad89020` проверяет не только Playwright `pageerror`, но и диагностические
+`unhandledrejection`/`window.error`, накопленные в `sessionStorage` при update.
+Rollback lifecycle прошёл локально 6/6 без retries на desktop WebKit, Chromium
+и Firefox; общий typecheck прошёл.
+
+Точный PR CI [`38729850933`](https://github.com/Michael-edel/FitFocus/actions/runs/38729850933)
+для parent `96937ea` завершился success: 1277 unit / 208 файлов и 632 browser
+passed / 143 skipped. Workflow отметил две flaky-проверки: в Firefox owned-state
+delete оставался в корректном `sending` lease после reload, а WebKit delayed
+family-menu GET печатал access-control warning, когда ответ удерживался вторым
+`page.route` поверх общей API-фикстуры.
+
+`aa4073c` считает для unacknowledged операции оба допустимых durable состояния
+`pending` и `sending`, не считая активный lease подтверждением записи. Семейный
+тест теперь задерживает GET в том же mock API handler и отпускает его только
+после принятия сессии аккаунта B. Без retries прошли delayed WebKit сценарий
+8/8, полный `family-menu-durable.spec.ts` 39/39 на Chromium/Firefox/WebKit и
+`owned-state.spec.ts` 4/4 на Firefox. Новый точный CI `aa4073c` ещё ожидается.
+Это тестовые изменения; production sender не менялся. Установка PWA на устройстве,
+staging и точная причина исторического WebKit trace остаются открытыми.
+
 ## 15.10.2026 — обновление семейных данных после BFCache (`29b1e3a`)
 
 `useFamilyCloud` инвалидировал callbacks при `pagehide`, но обработчик

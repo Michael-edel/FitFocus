@@ -283,3 +283,20 @@ Android/iPhone и PWA-конфигурации (`workers=1/retries=0`). Подт
 quarantine, неизменность legacy snapshot, закрытый send gate до обновления всех
 same-origin вкладок и ack новой операции после update. Новый CI ещё ожидается;
 этот API fixture не подтверждает OAuth/D1 или staging.
+
+## Offline retry и ошибки lifecycle при обновлении — 15.10.2026
+
+В rollback acceptance сервер возвращает первый `503`, удерживает retry, а новый
+кандидат активируется при `sending`. После update проверяется тот же `opId` и
+payload, прерывание старого запроса, отсутствие Playwright `pageerror`,
+`unhandledrejection` и `window.error`. `ad89020` прошёл локально 6/6 без retries
+на desktop WebKit, Chromium и Firefox.
+
+В точном CI parent SHA `96937ea` (`38729850933`) этот сценарий прошёл, но полный
+run отметил две flaky-проверки в других specs. В `aa4073c` фикстура delayed
+family-state GET перестала добавлять отдельный route поверх общего mock API;
+owned-state тест теперь сохраняет операцию в `pending` или пока действующем
+`sending` lease. После этого локально прошли полный family-menu spec 39/39 на
+трёх desktop engines, Firefox owned-state 4/4 и задержанный WebKit GET 8/8.
+Точный CI нового HEAD ещё ожидается. Реальное устройство, staging и причина
+исторического WebKit trace этим локальным acceptance не подтверждены.

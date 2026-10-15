@@ -7,6 +7,13 @@
 Firefox и WebKit без retries; 1275 unit-тестов, три typecheck и production build
 прошли локально. Точный CI нового опубликованного HEAD проверяется отдельно.
 
+Тестовые follow-up `ad89020` и `aa4073c` усиливают PWA update acceptance и
+устраняют две flaky-проверки, замеченные в CI на `96937ea`. Локально прошли
+rollback lifecycle 6/6 на desktop engines, `family-menu-durable.spec.ts` 39/39
+на Chromium/Firefox/WebKit, `owned-state.spec.ts` 4/4 на Firefox и typecheck.
+Точный CI `96937ea` завершился success, но отметил эти 2 flaky; CI нового HEAD
+после push ещё ожидается.
+
 В `TASKS.md` остаются 34 незакрытых checkbox: 20 P0, 7 P1 и 7 пунктов вне этих
 приоритетных разделов, которые нужно сверить на дубли. Все P0 остаются открытыми
 до остальных writers/callbacks, staging и полной приёмки lifecycle/release.
@@ -378,21 +385,27 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   17 попыток с IDB open/versionchange logging и одна с полной стадийной
   диагностикой. На опубликованной `47da77c` прошли 3+8 запусков с IDB-логами
   и 3+8 без instrumentation (временно восстановлены тест/helper `076f4ac`);
-  все `workers=1/retries=0`. Причина timeout пока не установлена. На исходном
-  code HEAD `a3e5b6f` перед новым test commit тест повторён ещё 10 раз в desktop
-  Firefox (`workers=1,retries=0`), все 10 прошли; это не устанавливает
-  историческую причину, поэтому пункт остаётся открыт.
-  Working tree пишет IDB open/blocked/upgrade, versionchange/close и стадии
-  transaction/read в failure attachment.
+  все `workers=1,retries=0`. В `96937ea` test helper и failure-only probe
+  используют уже открытую приложением IDB v3 connection вместо независимых
+  `indexedDB.open()` запросов; trace связывает задержку с очередью наблюдателя
+  на том же origin рядом с открытием legacy v2. Firefox прошёл ещё 10/10
+  локальных повторов, а точный CI [`38729850933`](https://github.com/Michael-edel/FitFocus/actions/runs/38729850933)
+  для `96937ea` завершился success. В том запуске были 2 flaky в других E2E;
+  они исправлены в `aa4073c`. Точный CI нового HEAD ещё ожидается, поэтому пункт
+  пока открыт. Working tree сохраняет IDB open/blocked/upgrade,
+  versionchange/close и стадии transaction/read в failure attachment.
+
 - [ ] Завершить диагностику исторического native WebKit sender pageerror после PWA update
   из trace CI `5b90249`. Артефакт показывает `503` на семейный PUT в
   rollback-клиенте и повтор отправки во время активации PWA. WebKit сообщил
   fetch pageerror из старого `drain`. Новый regression-сценарий ждёт первый
   `503`, задерживает следующую попытку и активирует обновление при `sending`.
-  Операция сохраняет opId/payload, старый запрос прерывается, pageerror нет.
-  Локально: desktop WebKit 4/4 (`workers=1,retries=0`), Chromium 1/1, Firefox
-  1/1, typecheck прошёл. Точный CI follow-up ожидает push; текущий run `9f09fb5`
-  не включает сценарий и всё ещё выполняет E2E.
+  Операция сохраняет opId/payload, старый запрос прерывается. `ad89020` также
+  проверяет сохранённые между навигациями `unhandledrejection` и `window.error`.
+  После этого WebKit прошёл 4/4 повторов; Chromium и Firefox — по 1/1,
+  `npm run typecheck` прошёл. CI [`38729850933`](https://github.com/Michael-edel/FitFocus/actions/runs/38729850933)
+  для `96937ea` успешен, но не содержит новых lifecycle assertions; точный CI
+  `aa4073c` ожидается. Установка на устройстве и staging не проверялись.
 - [x] Реализовать локальный прототип упаковки полного client/SW/Pages Worker из точного Git SHA,
   manifest SHA-256, проверки целостности и настоящий локальный HTTP/D1 smoke
   распакованного `.tar`. База `574de76`, кандидат `d3a9496`, 23 HTTP прошли;
@@ -492,9 +505,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
-  Дополнительно delayed durable family-menu state GET прошёл account-switch
-  проверку без гидратации старых данных; остальные cloud callbacks и cache
-  остаются открытыми.
+  Delayed durable family-menu state GET проверяет account switch без
+  гидратации старых данных; задержка теперь управляется тем же mock API handler,
+  без дополнительного route/fallback. Полный `family-menu-durable.spec.ts` после
+  изменения прошёл 39/39 на трёх desktop engines. Точный CI `aa4073c` ожидается;
+  остальные cloud callbacks и cache остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
