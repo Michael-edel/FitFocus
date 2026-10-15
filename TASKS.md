@@ -568,6 +568,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   отсутствие/частичную пару до D1 lookup и guarded 401 middleware. API/auth/admin
   guards и три typecheck прошли в изолированном контейнере; точный CI после push.
   Старые AdminScreen bundles требуют обновления. [Контракт](docs/admin-session.md).
+  Предыдущий PR CI [`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
+  на `01bfa05` остановился на unit: 1263/1264 теста прошли, а единственная
+  ошибка была в legacy fixture, который общий helper уже делал scoped. Follow-up
+  [`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58) отключает
+  scope именно в этом тесте; полный CI нового HEAD ожидает push.
   Остальные callbacks и общий lifecycle остаются открытыми.
 - [x] Проверить выдачу мобильного bearer-токена из Settings: fresh
   account/session proof, server scope до mint, guarded no-store response,

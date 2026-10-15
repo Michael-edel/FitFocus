@@ -80,7 +80,10 @@ proof, чтобы старый callback не изменил другую сес�
 legacy logout ещё оставался открытым. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
 требует proof для `/api/logout`; запросы без полного proof получают 401 до cookie
 lookup/revoke. Guards и три typecheck прошли в изолированном контейнере; точный
-CI этого follow-up ожидает push. Реальный OAuth, staging, полный P0.5/P0.8
+CI текущего HEAD ещё не подтверждён. Предыдущий PR run
+[`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
+на `01bfa05` нашёл один ошибочный test fixture; исправление [`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58)
+отправляет в этом тесте запрос без proof. Реальный OAuth, staging, полный P0.5/P0.8
 lifecycle и выпуск в main остаются открытыми. См. [контракт](docs/account-lifecycle-session.md),
 [статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
 

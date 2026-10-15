@@ -34,8 +34,13 @@ staging остаются открытыми. [Контракт](account-lifecycl
 admin guard. Отсутствующая или частичная пара возвращает 401 до D1 role lookup
 и admin-session activity; middleware добавляет response markers. Тесты покрывают
 оба guard overload и отказ до auth lookup в request/env стиле. В изолированном
-контейнере прошли API/auth/admin guards и три typecheck; точный CI SHA запускается
-после push. Обновление старых admin bundles и staging остаются открытыми.
+контейнере прошли API/auth/admin guards и три typecheck. Предыдущий PR CI
+[`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
+на `01bfa05` остановился на unit: 1263/1264 теста прошли, единственная ошибка
+была в legacy request fixture, который helper автоматически сделал scoped.
+Исправление [`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58)
+явно отправляет в этом тесте запрос без proof; полный CI нового HEAD ожидает push.
+Обновление старых admin bundles и staging остаются открытыми.
 [Контракт](admin-session.md).
 
 ## Follow-up — обязательный proof для `logout_all`, `c778515`

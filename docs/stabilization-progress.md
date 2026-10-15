@@ -29,8 +29,12 @@ account/session пару; отсутствие или неполная пара 
 вызова `requireAdminRequest`, успешной пары и guarded middleware 401. Regression
 fixtures валидных admin endpoints теперь передают настоящий session digest. В
 сетево-отключённом sandbox прошли API invariants, auth-scope, admin guard и три
-typecheck. Unit suite и полный CI этого SHA ожидают push; старые bundles и
-staging остаются открытыми. [Контракт](admin-session.md).
+typecheck. PR CI [`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
+на `01bfa05` дошёл до unit: 1263/1264 теста прошли. Единственное падение было
+в тесте legacy subscription: helper уже добавлял proof, поэтому malformed body
+дал 400 вместо ожидаемого 401. Follow-up [`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58)
+явно отключает proof для этой фикстуры; полный CI нового HEAD ещё не завершён.
+Старые bundles и staging остаются открытыми. [Контракт](admin-session.md).
 
 ## P0.5 — обязательный proof для глобального выхода, `c778515`, 15.10.2026
 

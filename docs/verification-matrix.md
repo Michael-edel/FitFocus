@@ -20,8 +20,12 @@ Missing/partial proof отклоняется до cookie lookup и revoke; stale
 Все `/api/admin/*` требуют полный account/session proof в follow-up
 [`90bd734`](https://github.com/Michael-edel/FitFocus/commit/90bd7347a1bbdea51f27737f530a5f4a8c562c46).
 Missing/partial proof проверяется до D1 role lookup и admin-session activity;
-локально прошли API/auth/admin guards и три typecheck. Точный CI и обновление
-старых bundles/staging проверяются отдельно. [Контракт](admin-session.md).
+локально прошли API/auth/admin guards и три typecheck. Предыдущий PR CI
+[`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
+нашёл одну устаревшую fixture: общий helper добавлял proof в тест legacy-запроса.
+[`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58) исправляет
+фикстуру; полный CI нового HEAD и обновление старых bundles/staging проверяются
+отдельно. [Контракт](admin-session.md).
 
 Huawei Health session guard впервые проверен в кодовом SHA
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae):
