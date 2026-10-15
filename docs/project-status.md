@@ -25,6 +25,12 @@ strict typecheck, production build и `git diff --check`. Точный CI для
 SHA запускается после push. P0.5 остаётся открытым для остальных callbacks,
 staging и общей lifecycle-приёмки.
 
+Браузерный follow-up [`ad77aec`](https://github.com/Michael-edel/FitFocus/commit/ad77aec)
+проверяет тот же риск через реальный экран: тест удерживает загрузку шрифта,
+переключает активную сессию в другой вкладке и подтверждает отсутствие позднего
+PDF download. Chromium, Firefox и WebKit прошли 3/3 без retries; typecheck и
+`git diff --check` прошли. Общий P0.5 и staging остаются открытыми.
+
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
 `beedbee` добавляет такую же браузерную приёмку черновика измерения веса и

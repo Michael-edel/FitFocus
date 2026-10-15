@@ -4430,3 +4430,12 @@ WIS-отчёту; root и экранные обработчики также о�
 `git diff --check` прошли. Точный GitHub CI ожидается после push. Этот follow-up
 закрывает лишь один PDF callback; общий P0.5, staging и lifecycle остаются
 открытыми.
+
+Browser follow-up [`ad77aec`](https://github.com/Michael-edel/FitFocus/commit/ad77aec)
+проверяет смену аккаунта на уровне приложения: Playwright удерживает реальный
+запрос шрифта после нажатия «Краткий PDF», открывает account B в соседней
+вкладке, дожидается его active-session и отпускает запрос. В account A не
+возникает download; обе вкладки остаются без runtime errors и Vite overlay.
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries; общий
+typecheck и `git diff --check` прошли. Это acceptance одного PDF-пути, а не
+закрытие общего P0.5. Точный CI нового HEAD запускается после push.
