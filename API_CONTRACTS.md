@@ -172,13 +172,15 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 Компонент `dac2de2` добавляет в `/api/me` независимую
 `bootstrapSync: { protocol: 1, guard: 1 }`. Новый клиент передаёт парные
 `X-FitFocus-State-Account` / `X-FitFocus-State-Session` для bootstrap и state GET.
-Bootstrap проверяет привязку до чтения профиля, state и features; успешный
-ответ подтверждает scope и `X-FitFocus-Bootstrap-Protocol: 1` /
+Bootstrap требует их через `requireScopedStateUser` и проверяет привязку до
+чтения профиля, state и features; отсутствующая, неполная или устаревшая пара
+возвращает 401. Успешный ответ подтверждает scope и
+`X-FitFocus-Bootstrap-Protocol: 1` /
 `X-FitFocus-Bootstrap-Guard: 1`. `user` содержит публичные поля без сырого sid.
 State GET использует protocol 2 / guard 1 и ту же пару scope headers.
 
-Старый bootstrap без обоих scope headers обслуживается для совместимости;
-новый клиент не принимает его как доказанный снимок. До применения облачных
+Старые bundles без scope headers получают 401 до чтения данных и должны
+обновиться до rollout. До применения облачных
 данных IDB-транзакция проверяет epoch/auth-fence, revision и pending.
 [Контракт, исходники и границы проверки](docs/bootstrap-hydration.md).
 Capability и серверный guard должны быть развёрнуты до включения нового

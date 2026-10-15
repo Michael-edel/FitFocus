@@ -3728,3 +3728,23 @@ admin guards, schema parity, privacy coverage, production build и
 остаются открытыми. PR CI
 [38699271370](https://github.com/Michael-edel/FitFocus/actions/runs/38699271370)
 на опубликованном tip прошёл guards, unit, typechecks и build; E2E выполняется.
+
+## P0.3/P0.5 — обязательный proof для bootstrap, `84e735c`, 15.10.2026
+
+`GET /api/bootstrap` использует `requireScopedStateUser`: отсутствующая,
+неполная или устаревшая account/session пара получает 401 до чтения профиля,
+state и features. Действующий login transport уже передаёт scope и проверяет
+bootstrap markers/ответ. Добавлен unscoped regression; beta-access тест теперь
+передаёт валидный proof, чтобы проверять именно отказ доступа. API-invariants
+фиксирует mandatory helper. Старые клиентские bundles должны обновиться до
+rollout.
+
+На точном кодовом SHA
+[`84e735c`](https://github.com/Michael-edel/FitFocus/commit/84e735ccf58a1ae0f2dd3bea86a5af9b27993cb4)
+прошли профильные bootstrap tests (29/29), полный unit suite (1256/1256 в 208
+файлах), общий/domain-strict/storage-strict typecheck, API invariants,
+auth-scope, admin guards, schema parity, privacy coverage, production build и
+`git diff --check`. Текущий PR CI [38699271370](https://github.com/Michael-edel/FitFocus/actions/runs/38699271370)
+проверяет предыдущий опубликованный tip `2206120`; точный CI этого кандидата
+запустится после push. Старые bundles, login/OAuth на staging и полный callback
+lifecycle остаются открытыми.

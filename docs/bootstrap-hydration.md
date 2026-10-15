@@ -54,9 +54,10 @@
 | `/api/bootstrap` | `X-FitFocus-Bootstrap-Protocol: 1` | `X-FitFocus-Bootstrap-Guard: 1` | `body.user.sub` совпадает с account; профиль принадлежит ему и имеет допустимую версию |
 | `/api/state` | `X-FitFocus-State-Protocol: 2` | `X-FitFocus-State-Guard: 1` | Все items имеют допустимые key/value/exists/version; повторяющиеся key запрещены |
 
-Сервер сохраняет обработку старого bootstrap-запроса без обоих scope headers.
-Это не разрешает новому клиенту считать такой ответ подтверждённым.
-Проверка заголовков не заменяет авторизацию cookie на сервере.
+Серверный bootstrap требует парный account/session proof через
+`requireScopedStateUser`; unscoped legacy-запрос получает 401 до чтения профиля,
+state и features. Старые bundles нужно обновить до rollout. Проверка заголовков
+не заменяет авторизацию cookie на сервере.
 Применение снимка дополнительно проверяет локальную сессию в IndexedDB.
 Подробности действующих state/profile-контрактов: [API_CONTRACTS](../API_CONTRACTS.md).
 

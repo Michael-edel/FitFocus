@@ -127,8 +127,9 @@ Actions, наличие workflow в нужной ветке и состояни�
 ## Staging и данные
 
 - [ ] Для [bootstrap/hydration](docs/bootstrap-hydration.md) сервер объявляет
-  `bootstrapSync: { protocol: 1, guard: 1 }` и проверяет account/session
-  до чтения данных. Новый клиент включается после доступности этого контракта.
+  `bootstrapSync: { protocol: 1, guard: 1 }`, требует account/session proof и
+  отдаёт 401 старым unscoped bundles до чтения данных. Новый клиент включается
+  после доступности этого контракта; проверить обновление bundle до rollout.
   Проверены смена cookie между `/me` и bootstrap/state GET, поздний ответ
   после logout/смены аккаунта, отказ доступа, неподдерживаемый протокол,
   ограничение тела/времени, owned local fallback при временной недоступности

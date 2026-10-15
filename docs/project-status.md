@@ -3,6 +3,18 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для bootstrap, `84e735c`
+
+`/api/bootstrap` теперь требует парный account/session proof через
+`requireScopedStateUser`; старые запросы получают 401 до чтения профиля, state
+и features. Текущий login transport уже отправляет scope и проверяет ответ.
+Bootstrap-тесты прошли 29/29, полный unit suite — 1256/1256 в 208 файлах;
+общий/domain-strict/storage-strict typecheck, API/auth/admin guards,
+schema/privacy и production build прошли. CI run `38699271370` проверяет
+предыдущий опубликованный SHA `2206120`; новый кандидат ждёт push после его
+завершения. Staging и старые bundles остаются открытыми.
+[Контракт](bootstrap-hydration.md).
+
 ## Локальный кандидат — обязательный proof для state/profile, `3abb374`
 
 `/api/state` GET/PUT/DELETE и `/api/profile` GET/PUT/PATCH требуют парный

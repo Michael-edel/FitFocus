@@ -490,7 +490,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] Проверять HTTP bootstrap/state-hydration и profile seed по proof сессии
   и атомарному auth-fence; подтверждённый отказ `/me` останавливает вход.
 - [ ] Завершить auth-координацию legacy и остальных callbacks,
-  затем приёмку выпуска.
+  затем приёмку выпуска. Серверные barriers обязательного proof добавлены для
+  `/api/bootstrap`, `/api/state`, `/api/profile` и Support feedback; остаются
+  остальные callbacks, старые bundles и staging.
 
 Готово, когда изменения, сделанные во время auth-паузы, не теряются и
 после входа отправляются только от подтверждённого владельца.
