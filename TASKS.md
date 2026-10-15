@@ -523,8 +523,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   изменения прошёл 39/39 на трёх desktop engines. Точный CI `aa4073c` ожидается;
   `baba226` дополнительно изолирует локальный recipe-usage cache по accountId;
   unit suite 1295/1295 и целевые account-switch E2E 4 passed / 2 project skips.
-  Общий CI этого SHA ожидает push; остальные cloud callbacks и cache остаются
-  открытыми.
+  Коммит `64d14a4` скрывает состояние урока/викторины до гидратации ключа
+  активного аккаунта; targeted unit — 3/3. Полный запуск выполнил 1297 тестов
+  в 207 файлах; две suite столкнулись с Windows `EBUSY`, затем прошли отдельно
+  последовательно (4/4 теста). Typecheck и production build прошли. Остальные
+  cloud callbacks и cache остаются открытыми; P0.4 не закрыт.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

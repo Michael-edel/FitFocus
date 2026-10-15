@@ -3,8 +3,10 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
-[`0646e3d`](https://github.com/Michael-edel/FitFocus/commit/0646e3ddc699692d2f05e1bbe1b130e01b8cd8c0)
-в ветке `durable-outbox`; точный GitHub CI этой ревизии ожидает push.
+[`64d14a4`](https://github.com/Michael-edel/FitFocus/commit/64d14a4a87fa1f8a163309c60f34d081bae75e73) в ветке
+`durable-outbox`; он ещё ожидает push. CI run
+[`38778637083`](https://github.com/Michael-edel/FitFocus/actions/runs/38778637083)
+проверяет предыдущий SHA `8ec86a2` и пока выполняет E2E.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
@@ -29,6 +31,13 @@ Chromium/Firefox/WebKit с `workers=1,retries=0`; diff check прошёл. GitHu
 этого SHA ожидает push. Компонент закрывает только локальную часть AI
 retry-metadata scope; остальные AI/family callbacks, staging и полный P0.5
 lifecycle остаются открытыми.
+
+Коммит `64d14a4` скрывает локальное состояние урока и викторины, пока hook не
+загрузит снимок для текущего account key. Это устраняет кратковременный показ
+состояния прошлого аккаунта во время переключения и после выхода. Проверки:
+course UI unit 3/3; общий unit запуск — 1297 тестов в 207 файлах, а две suite,
+не загрузившиеся из-за Windows `EBUSY`, прошли отдельным последовательным
+повтором (4/4); typecheck, production build и diff check прошли.
 
 ## P0.7/P0.8 — legacy intent без доказанного поколения
 
