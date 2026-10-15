@@ -3,20 +3,23 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
-## Рабочее дерево — billing session guard
+## Рабочее дерево — запрет AI proxy без session proof
 
-Незакоммиченный follow-up поверх `9fb0cff` привязывает Stripe Checkout и
-административную смену тарифа к account/session proof, проверяет server response
-markers и не открывает поздний Checkout URL после смены аккаунта. Транспорт,
-серверные guards и локальный account-switch E2E прошли; 18 профильных unit-тестов,
-typecheck и API/auth/admin guards зелёные. E2E прошёл 3/3 на desktop Chromium,
-Firefox и WebKit без retries; четыре не-desktop проекта пропущены по условию
-теста. Workflow [run 38671885368](https://github.com/Michael-edel/FitFocus/actions/runs/38671885368)
-завершился E2E failure на предыдущем SHA `9fb0cff`; найденные проблемы mock-
-ответа, route-навигации и короткого account-switch retry исправлены локально.
-Дополнительные push/backup E2E прошли 21/21 по полной браузерной матрице,
-account-switch suite — 45/45 применимых desktop сценариев. Точный CI этого
-рабочего дерева ожидает commit/push. [Контракт](billing-session.md).
+Follow-up поверх опубликованного `1b80734` удаляет из `callAiProxy` обычный
+unscoped `/api/ai` fallback. Помощник теперь требует `AiSession`, а отсутствие
+сессии отклоняется до сети; все действующие вызовы уже используют scoped
+transport. Локально прошли профильный AI transport — 24/24, полный unit suite —
+1188/1188 в 203 файлах, `typecheck`, auth-scope и production build. Эти изменения
+пока не вошли в GitHub CI.
+
+На опубликованном `1b80734` workflow [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
+прошёл audit, guards, unit, три typecheck и build; E2E выполняется. Найденные
+после предыдущего E2E failure проблемы исправлены и целевые browser-проверки
+прошли. После отправки follow-up нужно проверить CI точного нового HEAD.
+
+Billing guard Checkout и административной смены тарифа включён в `1b80734`;
+его точные локальные проверки и контракт приведены в [журнале](stabilization-progress.md)
+и [контракте billing](billing-session.md).
 
 ## Кандидат — push session guard, `daec94d`
 

@@ -4,7 +4,6 @@ import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodIt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
-import { fetchWithResilience } from './services/httpClient';
 import { postScopedAiJson, type AiSession } from './services/aiSession';
 import { SessionReadError } from './storage/sessionRead';
 
@@ -364,9 +363,10 @@ async function callAiProxy(
   model: string,
   contents: unknown,
   feature: string,
-  config?: AiProxyConfig,
-  session?: AiSession,
+  config: AiProxyConfig | undefined,
+  session: AiSession,
 ): Promise<AiProxyResponse> {
+  if (!session) throw new SessionReadError('session');
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
   // ✅ Глобальная языковая политика продукта
@@ -404,18 +404,8 @@ async function callAiProxy(
 
   const doReq = async (m: string) => {
     const payload = { ...basePayload, model: m };
-    if (session) {
-      const result = await postScopedAiJson(session, '/api/ai', payload);
-      return { res: result.response, data: asRecord(result.body) };
-    }
-    const res = await fetchWithResilience("/api/ai", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = asRecord(await res.json().catch(() => ({})));
-    return { res, data };
+    const result = await postScopedAiJson(session, '/api/ai', payload);
+    return { res: result.response, data: asRecord(result.body) };
   };
 
   // 1) пробуем основную модель

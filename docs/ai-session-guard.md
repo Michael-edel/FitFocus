@@ -122,6 +122,19 @@ guards, schema/privacy, build и audit прошли. Это локальные �
 транспортной ошибкой. В интерфейсе desktop-панель теперь прокручивается;
 «Настройки» и logout доступны в окне высотой 720 px.
 
+### Fail-closed для AI proxy
+
+`callAiProxy` принимает обязательный `AiSession` и отправляет запросы только
+через `postScopedAiJson`. Если вызов из старого или небезопасного JS всё же
+передаёт пустую сессию, клиент возвращает `LOGIN_SESSION_CHANGED` до HTTP-запроса;
+обычный unscoped `/api/ai` fallback удалён. В действующих вызовах все публичные
+AI-функции уже передают подготовленную сессию.
+
+Регрессия проверена в `tests/ai_session_transport.test.ts`: отсутствующая
+сессия не вызывает сеть. Follow-up поверх `1b80734` прошёл 24/24 профильных
+теста, полный unit suite (1188/1188), typecheck, auth-scope и production build.
+Эти локальные проверки ещё не заменяют CI точного follow-up SHA.
+
 Локальные проверки: **900 unit / 183 файла**, три typecheck,
 admin/auth/API guards, schema/privacy, audit и production build прошли.
 Полная браузерная матрица: **200 passed / 1 failed / 9 skips**, workers=4, retries=0;

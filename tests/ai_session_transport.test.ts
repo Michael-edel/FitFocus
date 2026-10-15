@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DurableOutbox } from '../storage/durableOutbox';
 import { StateDatabase } from '../storage/stateDatabase';
-import { prepareAiSession, postScopedAiJson } from '../services/aiSession';
+import { prepareAiSession, postScopedAiJson, type AiSession } from '../services/aiSession';
 import { callAiCouncil, generatePersonalPlan, generatePlateauExplanation, generateWeeklyMenu, getCoachAdvice } from '../geminiService';
 import { Goal, type UserProfile } from '../types';
 
@@ -161,6 +161,13 @@ it('generates the plateau explanation only through the captured account/session 
   expect(new Headers(init?.headers).get('X-FitFocus-State-Account')).toBe(account);
   expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sid);
   expect(JSON.parse(String(init?.body)).feature).toBe('plateau');
+});
+it('fails closed when an AI request reaches the proxy without a captured session', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+  await expect(generatePlateauExplanation({ weightDelta: 0 }, undefined as unknown as AiSession))
+    .rejects.toThrow('LOGIN_SESSION_CHANGED');
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 it('sends every AI Council expert request through the captured account/session scope', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {

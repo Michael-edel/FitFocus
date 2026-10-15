@@ -1,11 +1,12 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Последний полный PR CI проверил source SHA
-`9fb0cffe90d0a6b8f444b19e1f55eae67a68403d` в [run 38671885368](https://github.com/Michael-edel/FitFocus/actions/runs/38671885368)
-и завершился с ошибкой в E2E; unit, audit, guards, три typecheck и build прошли.
-Логи выявили сбои в push mock, навигационном mock для backup restore и
-нестабильном account-switch ожидании. Локальные исправления и повторы описаны в
-[журнале](docs/stabilization-progress.md); точный CI нового SHA ожидает push.
+Обновлено: 15.10.2026. Последний опубликованный source SHA —
+`1b807347e56604829f3fd0f5da824d488a8d7dc5`; его [CI run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
+прошёл audit, guards, unit, три typecheck и build и сейчас выполняет E2E.
+Предыдущий E2E failure на `9fb0cff` выявил сбои в push mock, навигационном mock
+backup restore и коротком account-switch ожидании; локальные исправления прошли
+целевые browser-проверки. Следующий follow-up в рабочем дереве убирает
+незащищённый AI fallback; его проверки ещё не входят в этот CI.
 Последний полный успешный CI до этого проверил source HEAD
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
 в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
@@ -641,6 +642,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Подробности: [журнал](docs/stabilization-progress.md).
 - [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
   серверный guard сам по себе недостаточен.
+  - [x] Запретить незащищённый `/api/ai` из `callAiProxy`: помощник требует
+    `AiSession`, а отсутствующий proof отклоняется до сети. Проверены 24 теста
+    AI transport, полный unit suite (1188), typecheck, auth-scope и production
+    build на follow-up поверх `1b80734`; точный CI этого follow-up ожидает push.
   Отдельно добавлена account-switch проверка позднего ответа
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует

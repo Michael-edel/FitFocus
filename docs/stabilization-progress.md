@@ -1,6 +1,22 @@
 # Стабилизация: проверяемые изменения
 
-## P0.5 — привязка Stripe Checkout к login-сессии, незакоммиченное дерево поверх `9fb0cff`, 15.10.2026
+## P0.5 — запретить AI proxy без session proof, рабочее follow-up поверх `1b80734`, 15.10.2026
+
+`callAiProxy` оставлял runtime fallback на обычный `/api/ai`, если внутренний
+вызов передавал пустой `AiSession`. Хотя все текущие публичные AI-функции уже
+передают сессию, такой fallback обходил контракт и мог принять cookie другого
+аккаунта при смене входа. Теперь `AiSession` обязателен, отсутствие proof даёт
+`LOGIN_SESSION_CHANGED` до сети, а запрос всегда проходит через
+`postScopedAiJson` с исходными account/session headers и проверкой ответа.
+
+Проверки локального follow-up: AI transport — 24/24; полный unit suite —
+1188/1188 в 203 файлах; `npm run typecheck`, `npm run check:auth-scope` и
+production build прошли. Рабочее дерево основано на `1b80734`; эти изменения
+не входят в CI [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045),
+который выполняется на опубликованном SHA `1b80734` и сейчас проходит E2E.
+После push follow-up требуется проверить workflow точного нового HEAD.
+
+## P0.5 — привязка Stripe Checkout к login-сессии, `1b80734`, 15.10.2026
 
 Paywall теперь получает `billingSync` из свежего `/api/me`, передаёт исходные
 account/session headers в Checkout и административную смену тарифа, проверяет
@@ -28,8 +44,9 @@ Firefox завершить вход B до повторной отправки A
 `typecheck`, API invariants, auth scope и admin guards прошли; delayed checkout
 URL — 3/3 desktop; account-switch файл — 45/45 применимых desktop-тестов, 60
 не-desktop конфигураций штатно пропущены; push и backup restore — 21/21 во всей
-Playwright-матрице. Новый точный CI ещё не запущен. Старые bundles, staging и
-реальный Stripe Checkout не проверены.
+Playwright-матрице. Точный CI [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
+запущен на опубликованном SHA `1b80734`; до полной приёмки остаются старые
+bundles, staging и реальный Stripe Checkout.
 
 ## P0.5 — session guard push-настроек и восстановления, код `daec94d`, 15.10.2026
 
