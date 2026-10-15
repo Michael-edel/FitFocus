@@ -3,6 +3,14 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для billing, `28341ed`
+
+Checkout и admin subscription требуют парный session proof; unscoped старые
+запросы получают 401 до разбора body и платежных/административных эффектов.
+На точном локальном SHA прошли 1244 unit, три typecheck, API/auth/admin/schema/
+privacy guards и build. Точный CI ожидает push; rollout старых bundles, staging
+и Stripe acceptance остаются открытыми. [Контракт](billing-session.md).
+
 ## Локальный кандидат — обязательный proof для достижений, `616f42c`
 
 `GET /api/achievements` и `POST /api/achievements/check` требуют парную

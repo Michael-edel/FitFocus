@@ -586,7 +586,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   серверная привязка для Push проверяется профильными API-тестами и полным CI
   точного SHA; staging, реальный provider и устройство остаются открытыми.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
-  account/session proof, серверному `requireStateUser`, response markers и
+  account/session proof, серверному guard, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
   18 профильных unit в трёх файлах, typecheck и API/auth/admin guards прошли;
   account-switch E2E — 3/3 на desktop Chromium, Firefox и WebKit без retries,
@@ -594,6 +594,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   последующий HEAD `45575d2`, содержащий этот guard, прошёл CI с двумя flaky
   E2E после retry в
   [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640).
+  Follow-up переводит оба route на обязательный proof; unscoped checkout и
+  admin subscription получают 401 до body/прикладных эффектов. На точном
+  локальном SHA [`28341ed`](https://github.com/Michael-edel/FitFocus/commit/28341ed27d399dbed61e3bf51b6d79ff61f8c590)
+  прошли 1244 unit / 208 файлов, 16 billing/admin тестов, три typecheck,
+  API/auth/admin/schema/privacy guards и build. Старые bundles нужно обновить;
+  точный CI, staging и Stripe остаются открытыми.
   [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
   компонент не закрывает остальные writers и общий lifecycle P0.5.

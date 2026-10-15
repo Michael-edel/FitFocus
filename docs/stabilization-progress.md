@@ -3660,3 +3660,18 @@ suite (1242/1242 в 208 файлах), общий/domain-strict/storage-strict t
 API invariants, auth-scope, schema parity, privacy coverage, production build и
 `git diff --check`. Точный CI этого follow-up ожидает push; настоящий staging,
 старые/новые bundles и BFCache остаются открытыми.
+
+## P0.5 — обязательный proof для billing mutations, `28341ed`, 15.10.2026
+
+`POST /api/billing/checkout` и `/api/admin/subscription` переведены на
+`requireScopedStateUser`. Отсутствующий, неполный или устаревший proof даёт 401
+до разбора body, Checkout creation, admin role lookup и записи тарифа. Старые
+bundles без proof нужно обновить до rollout. API-invariants guard теперь также
+требует обязательный helper; регрессии проверяют unscoped malformed body для
+обоих endpoints.
+
+На точном локальном SHA `28341ed` прошли профильные billing/admin тесты (16/16),
+полный unit suite (1244/1244 в 208 файлах), общий/domain-strict/storage-strict
+typecheck, API invariants, auth-scope, admin guards, schema parity, privacy
+coverage, production build и `git diff --check`. Точный CI follow-up ожидает
+push; старые bundles, staging и реальная Stripe-приёмка остаются открытыми.

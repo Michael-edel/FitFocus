@@ -28,6 +28,9 @@
   Проверены scoped GET/POST, смена cookie, новый вход того же аккаунта и
   отказ до прикладных эффектов. Старые bundles без proof получают 401; проверить
   обновление клиента и реальный unlock до rollout.
+- [ ] Для [Checkout и смены тарифа](docs/billing-session.md) оба endpoints
+  требуют парный proof и отклоняют старые unscoped bundles с 401 до side effects.
+  Проверить обновление клиента, смену аккаунта и Stripe return на staging.
 - [ ] Очередь достижений сохраняет исходный login proof и завершается при
   logout/pagehide/истечении lifetime; поздний GET не отменяет подтверждённый unlock.
   Реальный BFCache проверен отдельно. Временная очередь и best-effort счётчики

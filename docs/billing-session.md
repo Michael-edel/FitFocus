@@ -1,5 +1,15 @@
 # Сессия оплаты и смены тарифа
 
+## Актуальное уточнение — обязательный proof, `28341ed`, 15.10.2026
+
+Follow-up [`28341ed`](https://github.com/Michael-edel/FitFocus/commit/28341ed27d399dbed61e3bf51b6d79ff61f8c590)
+переводит checkout и admin subscription на `requireScopedStateUser`. Старые
+unscoped-запросы получают 401 до разбора body, создания Stripe session, role
+lookup или записи тарифа. Локально прошли профильные тесты (16/16), полный unit
+suite (1244/1244), три typecheck, API/auth/admin/schema/privacy guards и build.
+Точный CI этого follow-up ожидает push; staging, старые bundles и реальный
+Stripe остаются открытыми.
+
 Документ описывает привязку открытия Stripe Checkout и административной смены
 тарифа к login-сессии, из которой пользователь начал действие. Это один
 компонент P0.5; он не закрывает остальные callbacks, полный lifecycle или выпуск.
@@ -13,9 +23,10 @@
 
 `POST /api/billing/checkout` и `POST /api/admin/subscription` передают парные
 `X-FitFocus-State-Account` и `X-FitFocus-State-Session`. Сервер сверяет их с
-cookie-сессией через `requireStateUser` до создания Checkout session или
-административной записи. Запросы старых клиентов без обоих заголовков пока
-сохраняют прежнюю совместимость; они не получают защиту от смены сессии.
+cookie-сессией через `requireScopedStateUser` до разбора body, создания Checkout
+session, role lookup или административной записи. Отсутствующий, неполный или
+устаревший proof получает 401. Старые открытые bundles без proof нужно
+обновить до rollout.
 
 Ответы, кроме 401, получают `X-FitFocus-Billing-Protocol: 1`,
 `X-FitFocus-Billing-Guard: 1` и публичный scope исходного запроса. Ответы

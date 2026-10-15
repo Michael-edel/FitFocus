@@ -362,16 +362,17 @@ Callback сверяет user/session до обмена authorization code и п�
 
 `POST /api/billing/checkout` и `POST /api/admin/subscription` в новом paywall
 получают capability `billingSync` из `/api/me` и передают исходный публичный
-account/session scope. Сервер сверяет scope с cookie через `requireStateUser`
-до создания Stripe Checkout session или записи тарифа. Ответы кроме 401 несут
+account/session scope. Сервер требует парный scope через `requireScopedStateUser`
+до разбора тела, создания Stripe Checkout session, role lookup или записи тарифа.
+Старые запросы без proof получают 401 и требуют обновления клиента до rollout.
+Ответы кроме 401 несут
 `X-FitFocus-Billing-Protocol: 1`, `X-FitFocus-Billing-Guard: 1` и echo scope;
 ответы используют `Cache-Control: no-store`.
 
 Клиент выполняет mutation один раз, затем проверяет маркеры, совпадение активной
 IDB-сессии и lifetime действия до открытия HTTPS Checkout URL или публикации
-нового тарифа. Старый клиент без state-заголовков временно сохраняет прежний
-серверный путь, но не имеет этой привязки. Полный CI, старые bundles, staging и
-реальный Stripe checkout проверяются отдельно. [Контракт](docs/billing-session.md).
+нового тарифа. Полный CI, старые bundles, staging и реальный Stripe checkout
+проверяются отдельно. [Контракт](docs/billing-session.md).
 
 ## Выход и удаление аккаунта: session guard
 
