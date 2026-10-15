@@ -1,6 +1,6 @@
 import { ACHIEVEMENT_CATALOG } from "../../../achievements/catalog";
 import { json } from "./auth";
-import { requireStateUser, withSessionGuard } from './state_session';
+import { requireScopedStateUser, withSessionGuard } from './state_session';
 import { checkAchievements } from "./achievement_check";
 import { readUserAchievements } from "./achievement_read";
 import { requireDB } from "./db";
@@ -13,7 +13,7 @@ type AchievementContext = Parameters<PagesFunction<AchievementEnv>>[0];
 
 async function requireEnabledAchievements(request: Request, env: AchievementEnv) {
   try {
-    const user = await requireStateUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const features = await loadFeatures(env, String(user.sub));
     return { user, enabled: isEnabled(features, "achievements_enabled", true) };
   } catch {

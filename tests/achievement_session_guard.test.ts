@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 for (const [name, handler] of [['read', get], ['check', post]] as const) {
-  it.each(['account', 'same-account-login', 'account-only', 'session-only', 'malformed'])
+  it.each(['account', 'same-account-login', 'account-only', 'session-only', 'malformed', 'unscoped'])
   (`achievement ${name} rejects %s before feature/application DB effects`, async change => {
     const sid = await stateSessionId(mocks.user);
     let scope: Record<string, string> = {
@@ -43,7 +43,8 @@ for (const [name, handler] of [['read', get], ['check', post]] as const) {
     if (change === 'account-only') scope = { 'X-FitFocus-State-Account': mocks.user.sub };
     if (change === 'session-only') scope = { 'X-FitFocus-State-Session': sid };
     if (change === 'malformed') scope['X-FitFocus-State-Session'] = 'not-a-proof';
-    expect((await invoke(handler, scope)).status).toBe(401);
+    if (change === 'unscoped') scope = {};
+    expect((await invoke(handler, scope, change === 'unscoped' ? '{' : undefined)).status).toBe(401);
     expect(mocks.features).not.toHaveBeenCalled(); expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.check).not.toHaveBeenCalled(); expect(db.prepare).not.toHaveBeenCalled();
   });
@@ -61,11 +62,13 @@ for (const [name, handler] of [['read', get], ['check', post]] as const) {
     expect(mocks.features).toHaveBeenCalledOnce();
   });
 
-  it(`achievement ${name} identifies compatibility requests without claiming scope`, async () => {
-    const response = await invoke(handler, {});
-    expect(response.status).toBe(200);
-    expect(response.headers.get('X-FitFocus-State-Account')).toBeNull();
-    expect(response.headers.get('X-FitFocus-State-Session')).toBeNull();
+  it(`achievement ${name} rejects unscoped legacy requests before protected work`, async () => {
+    const response = await invoke(handler, {}, '{');
+    expect(response.status).toBe(401);
+    expect(mocks.features).not.toHaveBeenCalled();
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(mocks.check).not.toHaveBeenCalled();
+    expect(db.prepare).not.toHaveBeenCalled();
   });
 }
 
