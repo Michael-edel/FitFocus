@@ -23,6 +23,7 @@ type FixtureState = {
   profile: ReturnType<typeof profileFor>;
   stateWriteLog?: StateWriteAttempt[];
   holdStateWriteFailures?: { key: string; active: boolean; retryAfterSeconds?: number };
+  holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -143,6 +144,13 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
       })) }, responseAccount);
     }
     if (path === '/api/profile') {
+      if (method === 'GET' && state.holdProfileRead?.active) {
+        const hold = state.holdProfileRead;
+        hold.active = false;
+        hold.started();
+        await hold.wait;
+        return json({ profile: hold.profile, version: hold.profile.version }, responseAccount);
+      }
       if (method === 'PUT') {
         const body = request.postDataJSON() as Record<string, unknown>;
         counts.profileWrites.push(requestedAccount ?? 'missing');
@@ -342,7 +350,7 @@ async function waitForAccountSwitch(page: Page) {
   return snapshot;
 }
 
-async function openAccountB(context: BrowserContext, state: FixtureState, waitForProfile = true) {
+async function openAccountB(context: BrowserContext, state: FixtureState, waitForProfile = true, path = '/#dashboard') {
   state.current = accountB;
   state.profile = profileFor(accountB.id);
   const page = await context.newPage();
@@ -354,7 +362,7 @@ async function openAccountB(context: BrowserContext, state: FixtureState, waitFo
     }
   });
   const fixture = await installAccountApi(page, state);
-  await openApp(page, '/#dashboard');
+  await openApp(page, path);
   await expect(page).toHaveTitle(/FitFocus/);
   await waitForAccountSwitch(page);
   if (waitForProfile) {
@@ -1636,6 +1644,62 @@ test('health report PDF is not downloaded when the account changes during font l
     await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
     releaseFontRequest.release();
+  }
+});
+
+test('a late profile refresh from account A cannot hydrate after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile refresh acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  const profileNameA = page.getByPlaceholder('Как к вам обращаться');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(profileNameA).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeSwitch = await readDurableSnapshot(page);
+  const profileABefore = rawValue(beforeSwitch, profileKey(accountA.id));
+
+  let started!: () => void;
+  const refreshStarted = new Promise<void>(resolve => { started = resolve; });
+  const releaseRefresh = deferred();
+  state.holdProfileRead = {
+    active: true,
+    started,
+    wait: releaseRefresh.promise,
+    profile: { ...state.profile },
+  };
+
+  try {
+    await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+    await refreshStarted;
+
+    const switched = await openAccountB(context, state, true, '/#settings');
+    await waitForAccountSwitch(page);
+    await expect(switched.page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль B');
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    const lateProfileResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'GET');
+    releaseRefresh.release();
+    const response = await lateProfileResponse;
+    expect(response.status()).toBe(200);
+    expect((await response.json()).profile.name).toBe('Профиль A');
+    await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).toBe(profileABefore);
+    const afterResponse = await readDurableSnapshot(switched.page);
+    expect(rawValue(afterResponse, profileKey(accountB.id))).not.toBeNull();
+    expect(JSON.parse(rawValue(afterResponse, profileKey(accountB.id))!).name).toBe('Профиль B');
+    expect(operationsFor(afterResponse, accountB)).toEqual([]);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseRefresh.release();
   }
 });
 
