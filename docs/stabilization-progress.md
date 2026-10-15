@@ -4261,3 +4261,16 @@ Chromium, Firefox и WebKit, `workers=1,retries=0`; полный unit — 1305/1
 build, выполняемый Playwright preview, и `git diff --check` прошли. Новый HEAD
 ожидает push и точный GitHub CI. Остальные callbacks/cache, устройства, staging
 и полный P0.4 lifecycle остаются открытыми.
+
+## P0.4 — выбранная дата дневника при сбросе UI, [`a8d20ee`](https://github.com/Michael-edel/FitFocus/commit/a8d20ee), 16.10.2026
+
+Аудит account-scoped UI-кэшей обнаружил, что полный сброс интерфейса не удалял
+`fitfocus.nutrition.selected-day.v1:<accountId>`. Ключ добавлен в
+`clearAppUiStorage`; сброс теперь возвращает дневник к выбору даты по умолчанию.
+Регрессионный тест подтверждает, что очищается дата только выбранного аккаунта,
+а дата другого аккаунта и синхронизированный профиль остаются на месте.
+
+Проверки на кодовом коммите `a8d20ee`: адресный unit — 3/3; полный unit suite —
+1306/1306 в 210 файлах; общий, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли. CI точного опубликованного HEAD
+проверяется после push; общий аудит callbacks/cache P0.4 остаётся открытым.

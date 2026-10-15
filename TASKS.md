@@ -564,6 +564,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   контейнера; графикам задан положительный initialDimension, повторный прогон
   чистый. Unit 1305/1305, три typecheck и production build прошли. Общий P0.4
   остаётся открытым до аудита остальных переходов, cloud callbacks/cache и staging.
+  Follow-up `a8d20ee` добавляет account-scoped `nutrition.selected-day` в сброс UI;
+  unit подтверждает, что очищается ключ только выбранного аккаунта, без удаления
+  чужого ключа или профиля.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
