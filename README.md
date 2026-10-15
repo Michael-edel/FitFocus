@@ -76,10 +76,11 @@ lifecycle ещё продолжается: оставшиеся пункты и 
 
 Кодовый SHA [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3)
 привязывает logout и удаление аккаунта в текущем клиенте к исходному login
-proof, чтобы старый callback не изменил другую сессию. Unscoped logout старых
-вкладок остаётся открытым lifecycle-риском. На SHA локально прошли 1215 unit-тестов,
-три typecheck, production build и auth/API/admin/privacy checks. Точный CI
-этого кандидата ещё не подтверждён. Реальный OAuth, staging, полный P0.5/P0.8
+proof, чтобы старый callback не изменил другую сессию. На этом SHA server-side
+legacy logout ещё оставался открытым. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
+требует proof для `/api/logout`; запросы без полного proof получают 401 до cookie
+lookup/revoke. Guards и три typecheck прошли в изолированном контейнере; точный
+CI этого follow-up ожидает push. Реальный OAuth, staging, полный P0.5/P0.8
 lifecycle и выпуск в main остаются открытыми. См. [контракт](docs/account-lifecycle-session.md),
 [статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
 

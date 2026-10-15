@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — обязательный proof для обычного logout, `b2f6938`, 15.10.2026
+
+`POST /api/logout` ранее сохранял legacy-путь: запрос без scope отзывал session
+из текущей cookie и возвращал `Set-Cookie`, даже если он запоздал после входа в
+другой вкладке. Теперь полный account/session proof обязателен. Missing/partial
+proof отклоняется до чтения cookie и revoke; mismatched proof отклоняется после
+проверки подписанного token, до side effects. Успешный и ошибочный ответы не
+меняют cookie.
+
+Добавлены профильные регрессии для запроса без cookie/proof, валидной cookie без
+proof, account-only и session-only пары, а также существующие success/stale
+cases. API invariants проверяют порядок proof gate перед cookie/revoke. В
+сетево-отключённом sandbox прошли API invariants, auth-scope, admin guard и три
+typecheck; unit suite и полный CI этого SHA ещё не подтверждены. Старые bundles,
+OAuth/device и staging остаются открытыми. [Контракт](account-lifecycle-session.md).
+
 ## P0.5 — обязательный proof для всех admin routes, `90bd734`, 15.10.2026
 
 `requireAdminRequest` раньше сравнивал scope только при наличии хотя бы одного

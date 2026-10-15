@@ -18,6 +18,16 @@ Linux Rollup optional binary. Точный PR CI [38703208009](https://github.co
 OAuth, BFCache, устройство и staging требуют отдельной проверки.
 [Контракт](huawei-health-session.md).
 
+## Follow-up — обязательный proof для обычного logout, `b2f6938`
+
+`POST /api/logout` больше не отзывает текущую cookie-сессию по unscoped legacy
+запросу. Отсутствующий или неполный proof получает 401 до cookie lookup и
+revocation; mismatched proof также получает 401, все ответы оставляют cookie
+нетронутой. Профильные тесты покрывают missing/partial scope и сохранение
+сессии/cookie. В изолированном контейнере прошли API/auth/admin guards и три
+typecheck; unit suite и точный CI ждут push. Старые bundles, реальный OAuth и
+staging остаются открытыми. [Контракт](account-lifecycle-session.md).
+
 ## Follow-up — обязательный proof для admin routes, `90bd734`
 
 Все `/api/admin/*` теперь требуют полного account/session proof через общий

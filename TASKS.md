@@ -538,8 +538,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   proof отклоняется до удаления, scoped logout не отзывает другую сессию и не
   очищает cookie поздним ответом. Проверки 1215 unit, три typecheck, build,
   auth/API/admin/privacy guards прошли локально на `956cf96`; точный CI после
-  push ещё не подтверждён. Старый unscoped logout и полный lifecycle остаются
-  открытыми. [Контракт](docs/account-lifecycle-session.md).
+  push ещё не подтверждён. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
+  требует полный proof для `/api/logout`; отсутствие или неполная пара дают 401
+  до cookie lookup/revocation, а все ответы не меняют cookie. API/auth/admin
+  guards и три typecheck прошли в изолированном контейнере; точный CI запускается
+  после push. Старые bundles, device/staging и полный lifecycle остаются открытыми.
+  [Контракт](docs/account-lifecycle-session.md).
 - [x] Требовать парный account/session proof для расходования invite при
   регистрации; отсутствие и устаревший proof отклоняются до body/consume. Проверки
   invite guard и oversized body проходят. На `55bc09e`: полный unit suite

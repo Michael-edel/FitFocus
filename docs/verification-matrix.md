@@ -10,6 +10,13 @@
 revocation; локально прошли API/auth/admin guards и три typecheck. Точный CI и
 staging проверяются отдельно. [Контракт](admin-session.md).
 
+Обычный `POST /api/logout` также требует полный proof в follow-up
+[`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6).
+Missing/partial proof отклоняется до cookie lookup и revoke; stale proof не отзывает
+чужую сессию, Set-Cookie не применяется. Локально прошли API/auth/admin guards и
+три typecheck; точный CI и staging проверяются отдельно.
+[Контракт](account-lifecycle-session.md).
+
 Все `/api/admin/*` требуют полный account/session proof в follow-up
 [`90bd734`](https://github.com/Michael-edel/FitFocus/commit/90bd7347a1bbdea51f27737f530a5f4a8c562c46).
 Missing/partial proof проверяется до D1 role lookup и admin-session activity;
