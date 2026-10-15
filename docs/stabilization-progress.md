@@ -4289,3 +4289,23 @@ Chromium/Firefox/WebKit; recipe и progress account-switch E2E — 6/6; полн
 suite — 1306/1306 в 210 файлах; общий, domain-strict и storage-strict typecheck,
 production build и `git diff --check` прошли. CI точного опубликованного HEAD
 проверяется после push; общий P0.4 audit остаётся открытым.
+
+## P0.4 — account-scoped UI cache до подтверждения IndexedDB-сессии, [`6c53b68`](https://github.com/Michael-edel/FitFocus/commit/6c53b68fadb48ccc798b0ac25b8c197d5d18327d), 16.10.2026
+
+Новый account-switch E2E сначала воспроизвёл, что старая вкладка account A
+продолжает показывать сохранённый вес `98.765` после входа account B в соседней
+вкладке. Причина: account-scoped UI-кэши загружались по `currentUser.id`, хотя
+активная IndexedDB-сессия уже принадлежала B. Workspace теперь открывает
+восстановление кэша только после совпадения активного durable account и
+пользователя интерфейса. Пока сессия не подтверждена, UI-кэш скрыт, setters и
+save effects закрыты; кэш A не удаляется. Проверка применяется к dashboard
+weight/PDF, nutrition search и выбранной дате, camera preference, plan controls,
+course UI и уже закрывает ранее исправленный Settings draft.
+
+Проверки на `6c53b68`: до исправления новый тест падал, показывая `98.765`; после
+исправления полный draft account-switch matrix прошёл 15/15 на desktop Chromium,
+Firefox и WebKit с `workers=1,retries=0`. Полный unit suite — 1308/1308 в 210
+файлах; общий, domain-strict и storage-strict typecheck, production build и
+`git diff --check` прошли. CI точного опубликованного HEAD проверяется после
+push. Общий P0.4 остаётся открытым до проверки остальных callbacks/cache,
+staging и полного lifecycle.

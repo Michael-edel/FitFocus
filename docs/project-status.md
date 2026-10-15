@@ -3,7 +3,7 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последнее
 локально проверенное исправление —
-[`02a12e2`](https://github.com/Michael-edel/FitFocus/commit/02a12e2) в ветке
+[`6c53b68`](https://github.com/Michael-edel/FitFocus/commit/6c53b68fadb48ccc798b0ac25b8c197d5d18327d) в ветке
 `durable-outbox`; после публикации нужно проверить CI на точном HEAD.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
@@ -18,6 +18,11 @@
 Полный unit suite — 1306/1306; общий, domain-strict и storage-strict typecheck,
 production build и `git diff --check` прошли. Settings draft account-switch E2E
 прошёл 3/3, прежние recipe/progress draft сценарии — 6/6 на desktop
+Chromium/Firefox/WebKit без retries. Follow-up `6c53b68` блокирует восстановление
+account-scoped UI-кэшей, пока активная IndexedDB-сессия не подтверждает текущего
+пользователя; сохранённый кэш account A остаётся доступен при возврате к A.
+Полный unit suite — 1308/1308, общий и два strict typecheck, production build и
+diff check прошли; draft account-switch матрица — 15/15 на desktop
 Chromium/Firefox/WebKit без retries. План содержит 34 открытых пункта: общий
 P0.4/P0.5, остальные callbacks/cache, staging и полный lifecycle открыты.
 

@@ -569,7 +569,16 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   чужого ключа или профиля. Follow-up `02a12e2` не восстанавливает локальный
   черновик Settings в старой вкладке, пока IndexedDB активен другой аккаунт;
   черновик остаётся в account A cache и снова восстанавливается после обычного
-  reload при активном account A.
+  reload при активном account A. Follow-up `6c53b68` закрыл воспроизведённую
+  утечку account-scoped UI cache в старой вкладке: restore и setters теперь
+  разрешаются только после совпадения текущего профиля с активной IndexedDB
+  session. Gate распространяется на dashboard weight/PDF, nutrition search и
+  selected day, camera preference, plan controls и course UI; cache A остаётся
+  нетронутым для возврата к A. Новый сценарий до исправления показывал черновик
+  веса `98.765` после входа B в другой вкладке. После исправления draft matrix
+  прошла 15/15 на desktop Chromium/Firefox/WebKit без retries, unit suite —
+  1308/1308, три typecheck, production build и diff check прошли. P0.4 всё ещё
+  открыт до остальных cloud callbacks/cache, staging и полного lifecycle.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
