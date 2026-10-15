@@ -9,7 +9,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, next }) => {
   try {
     response = await next();
   } catch (error) {
-    if (!(error instanceof Error) || error.message !== 'STATE_SESSION_CHANGED') throw error;
+    if (!(error instanceof Error) || !['STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(error.message)) throw error;
     response = json({ error: 'UNAUTH' }, 401);
   }
   return withSessionGuard(response, request, 'Admin');

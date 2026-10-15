@@ -123,12 +123,15 @@ async function adminRequest(url: string, body: Record<string, unknown>) {
 
 async function adminRequestRaw(url: string, body: string, extraHeaders: Record<string, string> = {}) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   return new Request(url, {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
       'X-Request-ID': 'admin-sessions-test-01',
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       ...extraHeaders,
     },
     body,

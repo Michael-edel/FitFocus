@@ -14,6 +14,18 @@ export async function assertStateRequestScope(user: Pick<SessionUser, 'sub' | 's
     && (account !== user.sub || session !== await stateSessionId(user))) throw new Error('STATE_SESSION_CHANGED');
 }
 
+function requireStateProofHeaders(request: Request): void {
+  if (!request.headers.get('X-FitFocus-State-Account') || !request.headers.get('X-FitFocus-State-Session')) {
+    throw new Error('STATE_SESSION_REQUIRED');
+  }
+}
+
+/** Require both public proof headers, then verify that they belong to this login. */
+export async function assertScopedStateRequestScope(user: Pick<SessionUser, 'sub' | 'sid'>, request: Request): Promise<void> {
+  requireStateProofHeaders(request);
+  await assertStateRequestScope(user, request);
+}
+
 /** Opt-in guard closes the cookie-change race between /me and the state mutation. */
 export async function requireStateUser(request: Request, env: Parameters<typeof requireUser>[1]): Promise<SessionUser> {
   const user = await requireUser(request, env);
@@ -21,11 +33,9 @@ export async function requireStateUser(request: Request, env: Parameters<typeof 
   return user;
 }
 
-/** Destructive account actions must reject legacy requests without a session proof. */
+/** Scoped API actions must reject legacy requests without a session proof. */
 export async function requireScopedStateUser(request: Request, env: Parameters<typeof requireUser>[1]): Promise<SessionUser> {
-  if (!request.headers.get('X-FitFocus-State-Account') || !request.headers.get('X-FitFocus-State-Session')) {
-    throw new Error('STATE_SESSION_REQUIRED');
-  }
+  requireStateProofHeaders(request);
   return requireStateUser(request, env);
 }
 

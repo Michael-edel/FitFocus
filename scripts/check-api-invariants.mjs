@@ -1521,5 +1521,11 @@ assertIncludes(pushTransport, 'fetchWithTimeout(subscription.endpoint', 'Web Pus
 assertIncludes(pushTransport, 'timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS)', 'Web Push must pass its delivery deadline to the transport');
 assertIncludes(pushTransport, 'timeoutError: "PUSH_REQUEST_TIMEOUT"', 'Web Push must preserve its timeout error code');
 
+const adminGuard = read('functions/api/_lib/admin_guard.ts');
+assertIncludes(adminGuard, 'requireScopedStateUser(request, env)', 'admin request guard must require account/session proof before the role lookup');
+assertIncludes(adminGuard, 'assertScopedStateRequestScope(user, request)', 'admin request guard must require proof when the caller already resolved the session');
+const adminMiddleware = read('functions/api/admin/_middleware.ts');
+assertIncludes(adminMiddleware, "'STATE_SESSION_REQUIRED'", 'admin middleware must convert missing scope proof to a guarded 401');
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

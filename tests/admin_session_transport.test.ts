@@ -102,3 +102,16 @@ it('turns a stale session proof into a guarded unauthenticated response', async 
   expect(response.headers.get('X-FitFocus-Admin-Guard')).toBe('1');
   expect(await response.json()).toMatchObject({ error: 'UNAUTH' });
 });
+
+it('turns a missing required session proof into a guarded unauthenticated response', async () => {
+  const request = new Request('https://example.test/api/admin/settings');
+  const response = await adminMiddleware({
+    request,
+    next: async () => { throw new Error('STATE_SESSION_REQUIRED'); },
+  } as never);
+  expect(response.status).toBe(401);
+  expect(response.headers.get('X-FitFocus-Admin-Protocol')).toBe('1');
+  expect(response.headers.get('X-FitFocus-Admin-Guard')).toBe('1');
+  expect(response.headers.has('X-FitFocus-State-Account')).toBe(false);
+  expect(await response.json()).toMatchObject({ error: 'UNAUTH' });
+});
