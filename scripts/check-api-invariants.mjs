@@ -1527,5 +1527,11 @@ assertIncludes(adminGuard, 'assertScopedStateRequestScope(user, request)', 'admi
 const adminMiddleware = read('functions/api/admin/_middleware.ts');
 assertIncludes(adminMiddleware, "'STATE_SESSION_REQUIRED'", 'admin middleware must convert missing scope proof to a guarded 401');
 
+const logoutRoute = read('functions/api/logout.ts');
+assertIncludes(logoutRoute, 'if (!account || !session) return unauth()', 'ordinary logout must require both account and session proof headers');
+assertOrder(logoutRoute, 'if (!account || !session)', 'const token = readCookie', 'ordinary logout must reject missing proof before reading the cookie');
+assertOrder(logoutRoute, 'if (!account || !session)', 'revokeSession(env.DB, sid, sub)', 'ordinary logout must reject missing proof before revoking a session');
+assertNotIncludes(logoutRoute, 'Set-Cookie', 'ordinary logout must not clear a newer login cookie in a late response');
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

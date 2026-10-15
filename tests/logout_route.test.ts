@@ -33,16 +33,35 @@ const invoke = (request: Request, env: LogoutContext['env'] = {}) => onRequestPo
 } as LogoutContext);
 
 describe('/api/logout', () => {
-  it('keeps legacy logout behavior for requests without session proof', async () => {
+  it('rejects logout without a session proof and leaves the cookie untouched', async () => {
     const response = await invoke(new Request('https://fitfocus.test/api/logout', {
       method: 'POST',
       headers: { 'X-Request-ID': 'logout-route-test-01' },
     }));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     expect(response.headers.get('X-Request-ID')).toBe('logout-route-test-01');
-    expect(response.headers.get('Set-Cookie')).toContain('ff_session=');
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+    expect(response.headers.get('X-FitFocus-Logout-Protocol')).toBe('1');
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: 'UNAUTH' });
+  });
+
+  it.each([
+    {},
+    { 'X-FitFocus-State-Account': 'account-a' },
+    { 'X-FitFocus-State-Session': 'a'.repeat(64) },
+  ])('rejects missing or partial proof before revoking the cookie session', async (scopeHeaders) => {
+    const token = await signJwt('account-a', 'session-a');
+    const { db, run } = makeDb();
+    const response = await invoke(new Request('https://fitfocus.test/api/logout', {
+      method: 'POST',
+      headers: { Cookie: `ff_session=${token}`, ...scopeHeaders },
+    }), { AUTH_JWT_SECRET: SECRET, DB: db });
+
+    expect(response.status).toBe(401);
+    expect(run).not.toHaveBeenCalled();
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: 'UNAUTH' });
   });
 
   it('revokes only the captured session and does not clear a shared cookie on a scoped logout', async () => {
