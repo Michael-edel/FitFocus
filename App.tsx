@@ -1658,15 +1658,15 @@ const logWeight = useCallback(() => {
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
-      <StateStorageNotice accountId={currentUser?.id} />
+      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
-      {isScanning && (
+      {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
           <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
         </div>
       )}
-      {paywall.isPaywallOpen && (
+      {allowCachedUiStateRestore && paywall.isPaywallOpen && (
         <PaywallDialog
           currentPlan={paywall.plan}
           currentUser={currentUser}
@@ -1751,7 +1751,7 @@ const logWeight = useCallback(() => {
       <AppWorkspace
         workspaceProps={workspaceProps}
       />
-      {activeTab === 'dashboard' && currentUser && weekly && (
+      {allowCachedUiStateRestore && activeTab === 'dashboard' && currentUser && weekly && (
         <ShareWisCard
           ref={wisShareCardRef}
           weekly={weekly}
@@ -1777,18 +1777,20 @@ const logWeight = useCallback(() => {
         </React.Suspense>
       )}
 
+      {allowCachedUiStateRestore && (
+        <React.Suspense fallback={null}>
+          <PlanIntroModal
+            currentUser={currentUser}
+            planError={planError}
+            open={planIntroOpen}
+            onClose={() => setPlanIntroOpen(false)}
+            onOpenPlan={() => setActiveTab('plan')}
+            onOpenNutrition={() => setActiveTab('nutrition')}
+          />
+        </React.Suspense>
+      )}
       <React.Suspense fallback={null}>
-        <PlanIntroModal
-          currentUser={currentUser}
-          planError={planError}
-          open={planIntroOpen}
-          onClose={() => setPlanIntroOpen(false)}
-          onOpenPlan={() => setActiveTab('plan')}
-          onOpenNutrition={() => setActiveTab('nutrition')}
-        />
-      </React.Suspense>
-      <React.Suspense fallback={null}>
-        {isLessonViewOpen && currentLesson && (
+        {allowCachedUiStateRestore && isLessonViewOpen && currentLesson && (
           <LessonViewModal
             currentLesson={currentLesson}
             isQuizActive={isQuizActive}

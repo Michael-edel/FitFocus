@@ -605,13 +605,14 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     модалки оставались видимыми после переключения. [`66a7362`](https://github.com/Michael-edel/FitFocus/commit/66a73623309d46d8ca5bcdc89a71068cf6004a9f): E2E 3/3 на desktop
     Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
     typecheck и production build прошли. Остальной P0.4 audit остаётся открытым.
-  - [x] Скрывать account-зависимое содержимое активного экрана, пока
+  - [x] Скрывать account-зависимые экраны и root overlays/notice, пока
     IndexedDB-сессия не совпадает с аккаунтом UI; статические «Гид», «Политика»
     и «Обновления» остаются доступны. Регрессия воспроизводила одновременно
     приветствие профиля A и сохранённую историю AI-отчётов после входа B. После
-    фикса оба скрыты, данные A сохраняются. Account-switch E2E — desktop
-    Chromium/Firefox/WebKit без retries; typecheck и production build прошли.
-    Остальной P0.4 audit остаётся открытым.
+    фикса account-данные и модальные поверхности старой вкладки скрыты, данные A
+    сохраняются. Account-switch E2E — desktop Chromium/Firefox/WebKit без
+    retries; typecheck и production build прошли. Остальной P0.4 audit остаётся
+    открытым.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
