@@ -554,6 +554,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.
+  Компонент [`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
+  привязывает retry metadata к `userId`: регистрация пишет действие в ключ
+  нового аккаунта до смены ambient scope, а unscoped legacy action принимается
+  только при совпадении владельца. AI activity hook читает явную область аккаунта
+  и скрывает прежний снимок сразу при смене профиля. Unit suite прошёл
+  1300/1300 в 209 файлах; root/domain/storage typecheck и production build
+  прошли; Coach retry account-switch E2E — 3/3 на desktop Chromium/Firefox/WebKit,
+  workers=1/retries=0. Точный CI этого коммита ожидает push.
   Остальные callback-контракты, точный CI, проверка внешних потребителей и
   staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует

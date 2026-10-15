@@ -4112,3 +4112,20 @@ value и outbox A/B, отсутствие late text в обеих вкладка
 общий typecheck и `git diff --check` прошли. Точный GitHub CI должен быть
 проверен на опубликованном HEAD. Остальные AI/family callbacks, staging и полный
 P0.5 lifecycle остаются открытыми.
+
+## P0.5 — AI retry metadata с областью аккаунта, [`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d), 15.10.2026
+
+Последнее AI-действие теперь записывается в ключ аккаунта из самого action,
+поэтому начальная генерация плана при регистрации не попадает в общий ключ до
+обновления активного scope. Hook читает status/action по явному accountId и
+скрывает сохранённое состояние предыдущего профиля уже на первом render после
+переключения. Старый unscoped action принимается только если его поле `userId`
+точно совпадает с выбранным аккаунтом; status без owner не мигрируется.
+
+Полный unit suite прошёл 1300/1300 в 209 файлах; общий, domain-strict и
+storage-strict typecheck, production build и `git diff --check` прошли. Адресный
+Coach retry account-switch E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit
+с `workers=1,retries=0`; account B не показывает Retry: Coach из account A.
+Точный GitHub CI этого SHA ожидает push. Это закрывает лишь локальный scope
+retry metadata; общий P0.5, остальные AI/family callbacks, staging и lifecycle
+остаются открытыми.

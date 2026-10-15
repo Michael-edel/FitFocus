@@ -7,7 +7,8 @@
 profile flush — `f3930ec`; сессия/очередь достижений — `57da2cf`,
 атомарная проверка позднего proof — `4528e2b`, постоянная область notice — `724ecf1`.
 Личные покупки следуют profile CAS на `4736ff5`; валидация меню дополнена
-на `830caf4`. CI каждой ревизии сверяется отдельно.
+на `830caf4`; AI retry metadata привязана к account scope на `18af4ee`.
+CI каждой ревизии сверяется отдельно.
 Это навигация по реализации; готовность задач определяется в
 [TASKS](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 Наличие файла или теста не подтверждает выпуск функции в production.
@@ -35,6 +36,7 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 | Guarded generated commit | [stateEditor.ts](../storage/stateEditor.ts), [durableOutbox.ts](../storage/durableOutbox.ts), [useProfilePersistence.ts](../features/profile/useProfilePersistence.ts) | [Профиль](profile-persistence.md#сохранение-сгенерированного-результата), [транзакционные проверки](../tests/generated_result_commit.test.ts) |
 | Прокрутка desktop-панели | [SidebarNavigation.tsx](../SidebarNavigation.tsx) | Переход к настройкам/правке/logout в [menu E2E](../e2e/weekly-menu-durability.spec.ts); pointer/viewport проверяются без force click |
 | AI-отчёт за неделю | [useWeeklyAiReport.ts](../features/ai/useWeeklyAiReport.ts), [weeklyAutoEngine.ts](../weeklyAutoEngine.ts), [aiRetry.ts](../features/ai/aiRetry.ts) | [Session guard и durable save](weekly-ai-report-session.md), [unit tests](../tests/weekly_ai_report_feature.test.ts), [logout E2E](../e2e/weekly-ai-report-session.spec.ts), [account-switch E2E](../e2e/ai-callback-account-switch.spec.ts); остальные AI/family callbacks остаются задачей [P0](../TASKS.md) |
+| AI activity и retry metadata аккаунта | [useAiActivityStatus.ts](../features/ai/useAiActivityStatus.ts), [geminiService.ts](../geminiService.ts), [App.tsx](../App.tsx) | [unit](../tests/ai_activity_status_feature.test.ts), [account-switch E2E](../e2e/ai-callback-account-switch.spec.ts); последний action scoped по userId, stale snapshot скрывается при смене аккаунта |
 | Серверная привязка AI и items | [ai_request_handler.ts](../functions/api/_lib/ai_request_handler.ts), [weekly_menu/items.ts](../functions/api/weekly_menu/items.ts), [state_session.ts](../functions/api/_lib/state_session.ts) | [Контракт](ai-session-guard.md), [HTTP-регрессии](../tests/ai_menu_session_guard.test.ts); персональное меню подключено, остальные callbacks открыты |
 | Достижения | [useAchievements.ts](../useAchievements.ts), [achievementClient.ts](../features/achievements/achievementClient.ts), [achievementSession.ts](../services/achievementSession.ts), [achievement_handlers.ts](../functions/api/_lib/achievement_handlers.ts) | [Контракт](achievement-session.md), [client tests](../tests/achievement_client.test.ts), [HTTP guard tests](../tests/achievement_session_guard.test.ts), [E2E](../e2e/achievement-session.spec.ts); исходный login proof и page/attempt lifetime на `57da2cf`, прочие producers ещё требуют приёмки |
 | Обращения поддержки пользователя | [SupportScreen.tsx](../SupportScreen.tsx), [supportSession.ts](../services/supportSession.ts), [support handlers](../functions/api/_lib/support_feedback_my_handler.ts) | [Контракт сессии](support-session.md), [transport tests](../tests/support_session_transport.test.ts), [server tests](../tests/support_feedback_my.test.ts), [account-switch E2E](../e2e/family-callback-account-switch.spec.ts); проверенные результаты привязаны к SHA в [журнале](stabilization-progress.md) |

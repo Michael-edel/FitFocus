@@ -2,16 +2,31 @@
 
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
-проверенный кодовый коммит —
-[`d2cbb25`](https://github.com/Michael-edel/FitFocus/commit/d2cbb25bb511ab518e95cb87f84baa90f9263f64)
-в ветке `durable-outbox`; точный CI нужно сверять по SHA текущего PR.
+локально проверенный кодовый коммит —
+[`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
+в ветке `durable-outbox`; точный GitHub CI этой ревизии ожидает push.
 
-Для этой ревизии прошли полный unit suite (1295/1295 в 209 файлах), общий и два
-strict typecheck, production build, recipe account-switch E2E (4 passed, 2 skips
-по конфигурации проектов) и weekly report account-switch E2E (3/3 desktop engines).
-В плане остаются 34 пункта: 20 P0, 7 P1 и 7
-следующих задач. P0.4 и P0.5 остаются открытыми до проверки остальных callback,
-staging и полного lifecycle.
+Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
+strict typecheck, production build и Coach retry account-switch E2E (3/3 на
+desktop Chromium/Firefox/WebKit, без retries). В плане остаются 34 пункта:
+20 P0, 7 P1 и 7 следующих задач. P0.4 и P0.5 остаются открытыми до проверки
+остальных callbacks, staging и полного lifecycle.
+
+## P0.5 — AI retry metadata с областью аккаунта, [`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
+
+Последнее AI-действие теперь сохраняется под `userId` самой записи, в том числе
+при первичной регистрации до установки активной области. Чтение принимает явный
+accountId; прежний unscoped action совместим только если его сохранённый
+`userId` совпадает с текущим аккаунтом. У старого status без владельца нет
+такого fallback. Hook привязывает snapshot к профилю и сразу возвращает пустой
+AI activity при смене scope, пока не прочитаны данные нового аккаунта.
+
+Проверки: 1300 unit в 209 файлах, общий/domain/storage strict typecheck,
+production build, адресный Coach retry account-switch E2E 3/3 на desktop
+Chromium/Firefox/WebKit с `workers=1,retries=0`; diff check прошёл. GitHub CI
+этого SHA ожидает push. Компонент закрывает только локальную часть AI
+retry-metadata scope; остальные AI/family callbacks, staging и полный P0.5
+lifecycle остаются открытыми.
 
 ## P0.7/P0.8 — legacy intent без доказанного поколения
 
