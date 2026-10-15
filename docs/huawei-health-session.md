@@ -49,6 +49,9 @@ account/session с cookie-сессией. Отсутствующая или не
 
 - Задержанный Huawei sync аккаунта A после входа B в соседней вкладке не создаёт
   профильную outbox-запись, не меняет активный профиль и не показывает success.
+- Задержанный sync исходного входа также отклоняется после повторного входа в тот
+  же account с новым server session id; равный accountId не делает старый callback
+  актуальным.
 - Сервер отклоняет несовпадающий scope до обращения к provider API или записи
   профиля; scoped OAuth start возвращает ожидаемый signed session digest.
 - Все status/start/sync/disconnect варианты с валидной cookie, но без полного
@@ -72,3 +75,10 @@ Mock E2E не проверяет настоящий Huawei OAuth, отозван
 устройство, BFCache во всех браузерах, staging или production. Полный PR CI
 на `455cb01` прошёл, но не заменяет эти интеграционные проверки. Общий P0.5 и выпуск остаются
 открытыми; см. [TASKS](../TASKS.md#p05--защититься-от-запоздавших-ответов).
+
+Дополнение [`6fd0bb0`](https://github.com/Michael-edel/FitFocus/commit/6fd0bb0459f989f7c04de087d83d49ff6b7739e7): новый двухвкладочный сценарий удерживает Huawei sync
+первого входа, повторно открывает тот же аккаунт с новым server session id и
+затем отпускает старый ответ. Профиль и outbox остаются неизменными в обеих
+вкладках. Проверка прошла 3/3 на desktop Chromium, Firefox и WebKit при
+`workers=1,retries=0`; точный CI этого SHA ожидает push. Это mock acceptance,
+она не подтверждает OAuth у провайдера, реальный BFCache или staging.

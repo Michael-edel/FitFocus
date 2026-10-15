@@ -669,7 +669,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   точный CI, staging и Stripe остаются открытыми.
   [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
-  компонент не закрывает остальные writers и общий lifecycle P0.5.
+  компонент не закрывает остальные writers и общий lifecycle P0.5. Дополнение
+  [`6fd0bb0`](https://github.com/Michael-edel/FitFocus/commit/6fd0bb0459f989f7c04de087d83d49ff6b7739e7) закрывает локальную mock-проверку запоздавшего sync после повторного
+  входа в тот же аккаунт с новым server session id: 3/3 desktop Chromium,
+  Firefox и WebKit без retries; точный CI и реальные OAuth/BFCache/staging всё
+  ещё открыты.
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
   account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.

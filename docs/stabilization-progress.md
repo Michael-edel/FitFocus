@@ -4058,7 +4058,23 @@ Firefox `pwa-update.spec.ts` — 1/1 без retries. `tests/push_session.test.ts
 
 CI run
 [`38766175287`](https://github.com/Michael-edel/FitFocus/actions/runs/38766175287)
-проверяет SHA `bf8bf40` со старой настройкой `retries: 1`; он всё ещё на E2E и
-не подтверждает first-try приёмку. После отправки настройки должен запуститься
-полный no-retry CI для нового SHA. Более старый run `38762320204` для `42e14c9`
-отменён при push новой ревизии.
+проверял SHA `bf8bf40` со старой настройкой `retries: 1` и был отменён при
+отправке следующей ревизии. No-retry CI
+[`38767363066`](https://github.com/Michael-edel/FitFocus/actions/runs/38767363066)
+проверяет `f3bdccc`: dependency/schema/privacy/auth/API checks, unit, три
+typecheck и build прошли; E2E ещё выполняется. Более старый run `38762320204`
+для `42e14c9` также отменён при push новой ревизии.
+
+## P0.5 — Huawei sync после повторного входа того же аккаунта, [`6fd0bb0`](https://github.com/Michael-edel/FitFocus/commit/6fd0bb0459f989f7c04de087d83d49ff6b7739e7), 15.10.2026
+
+Добавлен двухвкладочный сценарий: пока старый вход account A ждёт ответа
+Huawei sync, новая вкладка входит в тот же `accountId` с другим server session
+id. После отпускания старого ответа его профиль и outbox остаются прежними;
+проверяются обе вкладки. Это закрывает только локальную границу session
+replacement для одного callback и не заменяет настоящий OAuth, BFCache,
+устройство, staging или общий P0.5 lifecycle.
+
+Точный тест прошёл 3/3 на desktop Chromium, Firefox и WebKit с
+`workers=1,retries=0`; `git diff --check` прошёл. Полный CI этого SHA запускается
+после push; run `38767363066` относится к родительскому `f3bdccc` и не включает
+этот сценарий.
