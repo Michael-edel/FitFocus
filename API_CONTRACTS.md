@@ -265,6 +265,12 @@ shopping list/check/export/bulk проверяют их до body и прикл�
 несовпадение возвращают 401 до чтения body/DB side effects. Старые сборки без
 proof должны обновиться; сервер больше не принимает их family/shopping запросы.
 
+При возврате из BFCache (`pageshow.persisted`) клиент заново получает ранее
+запрошенный семейный контекст и, если он уже загружался, список покупок.
+Запросы до `pagehide` остаются недействительными; новые чтения используют
+исходный login guard и обычные response markers. HTTP-мутации автоматически не
+повторяются.
+
 Ответы этих handlers содержат `X-FitFocus-Family-Protocol: 1`,
 `X-FitFocus-Family-Guard: 1` и публичный scope. Клиент проверяет headers,
 IDB epoch/auth-fence, familyId/week и форму загружаемых данных до применения.

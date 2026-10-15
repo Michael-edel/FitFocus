@@ -3,6 +3,22 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Follow-up — обновление семейных данных после BFCache, `29b1e3a`
+
+После `pagehide` семейный hook отменял запросы, но при BFCache-возврате только
+снимал признак загрузки. Он не перечитывал изменившийся в соседней вкладке
+семейный контекст или список покупок. Теперь `pageshow.persisted` запускает
+новые GET для ранее запрошенного семейного контекста и списка покупок; scope
+старых ответов остаётся инвалидированным. Новый регрессионный тест воспроизвёл прежнее
+отсутствие запросов и прошёл после исправления.
+
+Проверки `29b1e3a`: `family-session.spec.ts` — 24/24 на Chromium, Firefox и
+WebKit (`workers=1`, `retries=0`); unit — 1275/1275; общий, domain-strict и
+storage-strict typecheck, production build и `git diff --check` прошли.
+Проверка использует синтетическое событие BFCache; реальное устройство, OAuth,
+staging и полный P0 lifecycle остаются открытыми. Точный GitHub CI проверяется
+на опубликованном HEAD. [Контракт](family-session.md), [план](../TASKS.md).
+
 ## Локальный follow-up — обязательный proof и scoped fetch для всех вложений поддержки, `a396a30`
 
 `GET /api/support/attachment` теперь требует полный account/session proof до

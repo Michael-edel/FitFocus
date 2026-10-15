@@ -1,28 +1,11 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Последний опубликованный source SHA —
-`ee9a0039521ae537452a04ae1f876b371cf1ddb3`; его [CI run 38687213387](https://github.com/Michael-edel/FitFocus/actions/runs/38687213387)
-на момент проверки проходил E2E; unit, guards, typechecks и build прошли.
-Новый локальный кодовый кандидат `956cf96` закрывает account/session scope для
-logout и удаления аккаунта; 1215 unit-тестов, три typecheck, build и guards
-прошли локально, его точный CI запускается после публикации.
-
-Первый flaky был слишком строгим ожиданием `pending`: durable outbox успела
-назначить допустимую lease `sending`. В `636d2c7` тест принимает оба состояния,
-сохраняя проверки типа операции, её наличие после reload и видимый pending статус.
-Целевой сценарий прошёл 5/5 на Chromium и 7/7 по всей browser/PWA-матрице;
-typecheck прошёл.
-
-Второй flaky — WebKit `pageerror` про access control во время отложенного
-`GET /api/family/menu/state` после входа аккаунта B. CI trace показывает HTTP 200
-и правильные session markers, но причину browser error установить не удалось.
-Локальный iPhone PWA повтор прошёл 5/5; сообщение не фильтруется и остаётся
-открытым до точной CI-проверки.
-
-В неопубликованных commits `ba973c1` и `636d2c7` добавлены native Service Worker
-push recovery E2E и исправление первого flaky assertion. Push-сценарий прошёл
-1/1 Chromium, соседние PWA-regressions — 6/6. Новый точный CI ещё не запускался.
-В `45575d2` также удалён незашищённый AI fallback.
+Обновлено: 15.10.2026. Текущая ветка — `fix/durable-outbox`. Последняя кодовая
+правка [`29b1e3a`](https://github.com/Michael-edel/FitFocus/commit/29b1e3abe63d4e3f62aa5d2415048978482b86b4)
+повторно загружает использованный семейный контекст и список покупок после
+возврата из BFCache. Полный `family-session.spec.ts` прошёл 24/24 на Chromium,
+Firefox и WebKit без retries; 1275 unit-тестов, три typecheck и production build
+прошли локально. Точный CI нового опубликованного HEAD проверяется отдельно.
 
 В `TASKS.md` остаются 34 незакрытых checkbox: 20 P0, 7 P1 и 7 пунктов вне этих
 приоритетных разделов, которые нужно сверить на дубли. Все P0 остаются открытыми
@@ -30,7 +13,7 @@ push recovery E2E и исправление первого flaky assertion. Push
 Подробности — в [журнале](docs/stabilization-progress.md) и
 [матрице](docs/verification-matrix.md).
 
-Последний полный CI без flaky до этого проверил source HEAD
+Последний полный CI без flaky ранее проверил source HEAD
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
 в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
 unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
@@ -810,6 +793,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` закрыл unscoped серверный доступ к state/profile, но нужны проверки
   client lifecycle, старых writers и staging. Runtime legacy уже использует
   auth-derived owner и all-client Service Worker fence.
+  - [x] При возврате из BFCache заново загружать уже использованные семейный
+    контекст и список покупок; старые ответы остаются недействительны.
+    Регрессия прошла 24/24 на трёх desktop engines без retries (`29b1e3a`);
+    полный lifecycle и реальный BFCache на устройстве остаются открытыми.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:
