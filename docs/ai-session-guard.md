@@ -133,9 +133,11 @@ AI-функции уже передают подготовленную сесс�
 Регрессия проверена в `tests/ai_session_transport.test.ts`: отсутствующая
 сессия не вызывает сеть. Follow-up поверх `1b80734` прошёл 24/24 профильных
 теста, полный unit suite (1188/1188), typecheck, auth-scope и production build.
-Точный CI SHA `45575d2` выполняется в
-[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640);
-на момент этой записи E2E ещё не завершён.
+Точный CI SHA `45575d2` завершился success в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640),
+с двумя flaky E2E после retry. Локальный follow-up исправляет только
+неверное ожидание `pending`/`sending`; отдельный WebKit access-control pageerror
+остаётся открытым и не фильтруется. Подробности — в [журнале](stabilization-progress.md).
 
 Локальные проверки: **900 unit / 183 файла**, три typecheck,
 admin/auth/API guards, schema/privacy, audit и production build прошли.

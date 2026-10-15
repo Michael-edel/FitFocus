@@ -1,5 +1,31 @@
 # Стабилизация: проверяемые изменения
 
+## Итог полного CI и разбор двух flaky, `45575d2` / `636d2c7`, 15.10.2026
+
+Точный workflow `38679312640` для опубликованного SHA `45575d2` завершился
+success: audit, guards, 1188 unit-тестов / 203 файла, три typecheck, build,
+E2E и rollback/CAS прошли; артефакт rollback сохранён. E2E отметил 614 passed,
+133 skipped и два flaky, прошедших retry.
+
+Flaky `storage-durability.spec.ts` ожидал только `pending`, хотя отправитель уже
+назначил допустимое состояние lease `sending`. В `636d2c7` assertion допускает
+`pending` и `sending` до и после reload и продолжает проверять сохранность
+операции и незавершённый UI-статус. Сценарий прошёл 5/5 на Chromium и 7/7 по
+browser/PWA-матрице; typecheck прошёл.
+
+Flaky `family-menu-durable.spec.ts` на iPhone PWA записал WebKit `pageerror`
+«due to access control checks» для отложенного GET после смены аккаунта.
+Сохранённый trace показывает ответ HTTP 200 с правильными session markers и
+ответом прежней сессии A; durable rows аккаунта B не изменились. Локальный
+повтор сценария прошёл 5/5, но первопричина не установлена. Ошибка не
+игнорируется; приёмка остаётся открытой до точного CI нового HEAD.
+
+Commit `ba973c1` добавил native HTTP E2E для настоящего собранного Service
+Worker: `pushsubscriptionchange` отправляет подписку с proof текущей сессии, а
+после logout повторное событие не запускает `/api/me` и не отправляет подписку.
+Локально push-сценарий прошёл 1/1 Chromium, соседний PWA regression pack — 6/6.
+Commits `ba973c1` и `636d2c7` ещё не проверены точным CI.
+
 ## P0.3 — повторная приёмка profile reload в Safari, `45575d2`, 15.10.2026
 
 Исторический Safari pageerror после сохранения профиля с ответом 409 повторно
@@ -21,9 +47,10 @@
 
 Проверки коммита `45575d2`: AI transport — 24/24; полный unit suite —
 1188/1188 в 203 файлах; `npm run typecheck`, `npm run check:auth-scope` и
-production build прошли. Полный CI точного SHA выполняется в
+production build прошли. Полный CI точного SHA завершился в
 [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640):
-audit, guards, unit, typechecks и build прошли; E2E ещё работает.
+614 E2E passed, 133 skipped, два flaky прошли retry; rollback/CAS также прошёл.
+Подробный разбор flake приведён выше.
 
 ## P0.5 — привязка Stripe Checkout к login-сессии, `1b80734`, 15.10.2026
 
@@ -55,9 +82,11 @@ URL — 3/3 desktop; account-switch файл — 45/45 применимых desk
 не-desktop конфигураций штатно пропущены; push и backup restore — 21/21 во всей
 Playwright-матрице. Точный CI предыдущего billing-коммита `1b80734`
 [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
-отменён после нового push branch concurrency; полный CI текущего HEAD
-проверяется в run `38679312640`. До полной приёмки остаются старые
-bundles, staging и реальный Stripe Checkout.
+отменён после нового push branch concurrency. Следующий полный CI `45575d2`
+завершился success с двумя flaky E2E после retry в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640);
+разбор приведён в начале журнала. До полной приёмки остаются старые bundles,
+staging и реальный Stripe Checkout.
 
 ## P0.5 — session guard push-настроек и восстановления, код `daec94d`, 15.10.2026
 

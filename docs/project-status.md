@@ -13,9 +13,13 @@ auth-scope и production build. Дополнительно профильный 
 8/8 на desktop WebKit, 8/8 на iPhone Safari и 8/8 на iPhone PWA без retries;
 первопричина исторического pageerror не установлена.
 
-Полный CI точного HEAD выполняется в [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640):
-audit, guards, unit, три typecheck и build прошли; E2E ещё работает.
-Предыдущий run отменён branch concurrency после нового push.
+Полный CI точного SHA `45575d2` завершился success в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640):
+audit, guards, 1188 unit / 203 файла, три typecheck, build и rollback/CAS прошли;
+E2E отметил 614 passed, 133 skipped и 2 flaky, прошедших retry. Один flaky
+устранён в assertion `636d2c7` (локально 7/7 browser/PWA-проектов). Второй
+WebKit access-control `pageerror` пока не воспроизведён локально (5/5), но его
+первопричина не установлена. Commits `ba973c1` и `636d2c7` ожидают точного CI.
 
 Billing guard Checkout и административной смены тарифа включён в `1b80734`;
 его точные локальные проверки и контракт приведены в [журнале](stabilization-progress.md)
@@ -38,13 +42,14 @@ API invariants, auth-scope, schema и privacy checks прошли. В рабоч
 добавлен native HTTP E2E: событие реального собранного Service Worker отправило
 подписку с account/session proof активной IDB-сессии; после logout повторное
 событие не вызвало `/api/me` и повторную подписку. Тест прошёл 1/1 в Chromium,
-а шесть соседних PWA-регрессий — 6/6 без retries; typecheck прошёл. Полный CI
-точного опубликованного `45575d2` выполняется в
-[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640),
-но эта новая локальная проверка в него ещё не входит. Это проверенный локальный
-кандидат, а не принятый релиз. Старые открытые bundle и scope guard старых
-клиентов отдельно не приняты; совместимость старых клиентов сохраняется. Общий P0.5 и
-остановка старых writers остаются открытыми. CI предыдущего baseline `b2d787f` прошёл в
+а шесть соседних PWA-регрессий — 6/6 без retries; typecheck прошёл. CI точного
+`45575d2` завершился с двумя flaky E2E после retry в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640).
+Commits `ba973c1` и `636d2c7` локально проверены, но ожидают точного CI. Это
+проверенный локальный кандидат, а не принятый релиз. Старые открытые bundle и
+scope guard старых клиентов отдельно не приняты; совместимость старых клиентов
+сохраняется. Общий P0.5 и остановка старых writers остаются открытыми. CI
+предыдущего baseline `b2d787f` прошёл в
 [run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
 но завершился до коммита `daec94d` и его не проверяет.
 

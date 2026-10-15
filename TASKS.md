@@ -2,12 +2,34 @@
 
 Обновлено: 15.10.2026. Последний опубликованный source SHA —
 `45575d2e75d9abfadbba804d1ac26d2c8a86d467`; его [CI run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640)
-прошёл audit, guards, unit, три typecheck и build и сейчас выполняет E2E.
-Предыдущий E2E failure на `9fb0cff` выявил сбои в push mock, навигационном mock
-backup restore и коротком account-switch ожидании; локальные исправления прошли
-целевые browser-проверки. В `45575d2` также удалён незашищённый AI fallback;
-локально прошли 1188 unit-тестов, typecheck, auth-scope и production build.
-Последний полный успешный CI до этого проверил source HEAD
+завершился success: audit, guards, 1188 unit-тестов / 203 файла, три typecheck,
+build, rollback/CAS и сохранение артефакта прошли. В E2E — 614 passed, 133 skipped
+и 2 flaky, завершившиеся retry; это не чистая браузерная приёмка.
+
+Первый flaky был слишком строгим ожиданием `pending`: durable outbox успела
+назначить допустимую lease `sending`. В `636d2c7` тест принимает оба состояния,
+сохраняя проверки типа операции, её наличие после reload и видимый pending статус.
+Целевой сценарий прошёл 5/5 на Chromium и 7/7 по всей browser/PWA-матрице;
+typecheck прошёл.
+
+Второй flaky — WebKit `pageerror` про access control во время отложенного
+`GET /api/family/menu/state` после входа аккаунта B. CI trace показывает HTTP 200
+и правильные session markers, но причину browser error установить не удалось.
+Локальный iPhone PWA повтор прошёл 5/5; сообщение не фильтруется и остаётся
+открытым до точной CI-проверки.
+
+В неопубликованных commits `ba973c1` и `636d2c7` добавлены native Service Worker
+push recovery E2E и исправление первого flaky assertion. Push-сценарий прошёл
+1/1 Chromium, соседние PWA-regressions — 6/6. Новый точный CI ещё не запускался.
+В `45575d2` также удалён незашищённый AI fallback.
+
+В `TASKS.md` остаются 34 незакрытых checkbox: 20 P0, 7 P1 и 7 пунктов вне этих
+приоритетных разделов, которые нужно сверить на дубли. Все P0 остаются открытыми
+до остальных writers/callbacks, staging и полной приёмки lifecycle/release.
+Подробности — в [журнале](docs/stabilization-progress.md) и
+[матрице](docs/verification-matrix.md).
+
+Последний полный CI без flaky до этого проверил source HEAD
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
 в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
 unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
@@ -22,9 +44,7 @@ unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
 прошла 39/39 на Chromium, Firefox и WebKit без retries; follow-up включён в
 полный CI `455cb01` и завершился success.
 Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
-приёмки lifecycle/release. Подробности — в
-[журнале](docs/stabilization-progress.md) и
-[матрице](docs/verification-matrix.md).
+приёмки lifecycle/release.
 
 Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
 добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
@@ -528,16 +548,18 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `pushsubscriptionchange` отправил подписку со scope текущего аккаунта/сессии;
   после logout повторное событие не запросило `/api/me` и не отправило подписку.
   Сценарий прошёл 1/1 в Chromium; связанная PWA-регрессия — 6/6, typecheck прошёл.
-  Точный CI run `38679312640` сейчас проверяет опубликованный SHA `45575d2` и не
-  содержит этого локального follow-up. Scope guard старых открытых bundle остаётся
-  отдельным ограничением.
+  CI run `38679312640` для опубликованного SHA `45575d2` завершился с двумя
+  flaky E2E после retry; локальный push test и assertion follow-up в commits
+  `ba973c1`/`636d2c7` ожидают точного CI. Scope guard старых открытых bundle
+  остаётся отдельным ограничением.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному `requireStateUser`, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
   18 профильных unit в трёх файлах, typecheck и API/auth/admin guards прошли;
   account-switch E2E — 3/3 на desktop Chromium, Firefox и WebKit без retries,
   4 не-desktop проекта штатно пропущены. Код закоммичен в `1b80734`; точный
-  последующий HEAD `45575d2`, содержащий этот guard, проверяется в CI
+  последующий HEAD `45575d2`, содержащий этот guard, прошёл CI с двумя flaky
+  E2E после retry в
   [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640).
   [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
