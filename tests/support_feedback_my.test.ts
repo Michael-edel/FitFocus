@@ -33,6 +33,13 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
+async function validSupportScope() {
+  return {
+    'X-FitFocus-State-Account': 'user-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'user-1', sid: 'sid-1' }),
+  };
+}
+
 function makeDb(
   captured: { messageAttachmentsJson?: string | null },
   options: {
@@ -134,11 +141,12 @@ async function getMyTicket(
   ticketId: string,
   requestId = 'support-my-get-test-01',
   extraHeaders: Record<string, string> = {},
+  includeScope = true,
 ) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: SupportFeedbackMyGetContext = {
     request: new Request(`https://fitfocus.test/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, {
-      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId, ...extraHeaders },
+      headers: { Cookie: `ff_session=${token}`, ...(includeScope ? await validSupportScope() : {}), 'X-Request-ID': requestId, ...extraHeaders },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
@@ -168,16 +176,25 @@ describe('/api/support/feedback/my', () => {
 
 
   it('binds a guarded ticket read to the verified account and session', async () => {
-    const sid = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
+    const scope = await validSupportScope();
     const response = await getMyTicket(makeDb({}), 'ticket-1', 'support-my-scoped-get', {
-      'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sid,
+      ...scope,
     });
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-FitFocus-Support-Protocol')).toBe('1');
     expect(response.headers.get('X-FitFocus-Support-Guard')).toBe('1');
     expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-1');
-    expect(response.headers.get('X-FitFocus-State-Session')).toBe(sid);
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe(scope['X-FitFocus-State-Session']);
+  });
+
+  it('rejects an unscoped legacy ticket read before application queries', async () => {
+    const db = makeDb({});
+    const response = await getMyTicket(db, 'ticket-1', 'support-my-unscoped-get', {}, false);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBeNull();
+    expect(db.preparedSql.some(sql => sql.includes('FROM support_feedback'))).toBe(false);
   });
 
   it('rejects a ticket read when the supplied state session differs from the cookie', async () => {
@@ -216,6 +233,26 @@ describe('/api/support/feedback/my', () => {
     expect(bucketWrites).toEqual([]);
   });
 
+  it('rejects an unscoped legacy reply before parsing the form or writing', async () => {
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const db = makeDb({});
+    const form = new FormData(); form.set('ticket_id', 'ticket-1'); form.set('message', 'legacy reply');
+    const context: SupportFeedbackMyContext = {
+      request: new Request('https://fitfocus.test/api/support/feedback/my', {
+        method: 'POST', headers: { Cookie: `ff_session=${token}` }, body: form,
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+      params: {}, data: {}, waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+    };
+    const response = await onRequestPost(context);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBeNull();
+    expect(db.batches).toHaveLength(0);
+    expect(db.preparedSql.some(sql => sql.includes('FROM support_feedback'))).toBe(false);
+  });
+
   it('stores large reply attachments in R2 with message-scoped keys', async () => {
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
     const captured: { messageAttachmentsJson?: string | null } = {};
@@ -239,7 +276,7 @@ describe('/api/support/feedback/my', () => {
     const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-my-post-test-01' },
+        headers: { Cookie: `ff_session=${token}`, ...await validSupportScope(), 'X-Request-ID': 'support-my-post-test-01' },
         body: form,
       }),
       env: {
@@ -289,7 +326,7 @@ describe('/api/support/feedback/my', () => {
     const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}` },
+        headers: { Cookie: `ff_session=${token}`, ...await validSupportScope() },
         body: form,
       }),
       env: {
@@ -319,6 +356,7 @@ describe('/api/support/feedback/my', () => {
         method: 'POST',
         headers: {
           Cookie: `ff_session=${token}`,
+          ...await validSupportScope(),
           'Content-Type': 'multipart/form-data; boundary=x',
         },
         body: 'x'.repeat(9 * 1024 * 1024),
@@ -351,7 +389,7 @@ describe('/api/support/feedback/my', () => {
     const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}` },
+        headers: { Cookie: `ff_session=${token}`, ...await validSupportScope() },
         body: form,
       }),
       env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },

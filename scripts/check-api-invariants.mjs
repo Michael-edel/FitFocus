@@ -319,6 +319,11 @@ assertIncludes(
 );
 assertIncludes(
   userSupport,
+  'requireScopedStateUser',
+  'user support endpoints must require an explicit account/session proof',
+);
+assertIncludes(
+  userSupport,
   'writeResults = await db.batch(statements);',
   'user support reply must write message and ticket update through one batch',
 );
@@ -820,6 +825,11 @@ assertIncludes(
   supportFeedback,
   'BAD_STATUS',
   'admin support patch must reject invalid ticket statuses',
+);
+assertIncludes(
+  supportFeedback,
+  'requireScopedStateUser',
+  'support feedback endpoints must require an explicit account/session proof',
 );
 assertIncludes(
   supportFeedback,
