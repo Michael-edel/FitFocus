@@ -270,6 +270,11 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   handler: проверка menu use case до вызова не защищает последующий POST.
   Реализовано в `57da2cf` с поправками до `724ecf1`; локально прошли 950 unit
   и полная матрица 229 passed / 9 skips. CI `42ee434` подтверждён.
+  Follow-up [`616f42c`](https://github.com/Michael-edel/FitFocus/commit/616f42ca2bb973cfb034f50112328843eaf837a4)
+  требует proof также от legacy-запросов и отклоняет unscoped POST до разбора
+  body. Локально прошли 1242 unit / 208 файлов, 18 профильных тестов, три
+  typecheck, API/auth/schema/privacy guards и build. Старые bundles нужно
+  обновить; точный CI, staging/BFCache остаются открытыми.
   Счётчики остаются best effort; staging/BFCache ещё открыты.
   [Контракт и границы](docs/achievement-session.md).
 - [x] Личный список покупок переведён на profile CAS и SQL-проекцию без

@@ -1,5 +1,15 @@
 # Сессия и очередь достижений
 
+## Актуальное уточнение — обязательный proof, `616f42c`, 15.10.2026
+
+Follow-up [`616f42c`](https://github.com/Michael-edel/FitFocus/commit/616f42ca2bb973cfb034f50112328843eaf837a4)
+переводит оба achievement handlers на `requireScopedStateUser`. Legacy-запросы
+без proof получают 401; unscoped POST отклоняется до разбора некорректного body.
+Локально прошли профильные тесты (18/18), полный unit suite (1242/1242), три
+typecheck, API/auth/schema/privacy guards, production build и `git diff --check`.
+Точный CI этого follow-up ещё не запущен; rollout старых bundles, staging и
+реальный BFCache остаются открытыми.
+
 Сверено: 12.10.2026. Компонент [`57da2cf`](https://github.com/Michael-edel/FitFocus/commit/57da2cf3d8bcb682242db87994126d1c816158d4),
 поправки отмены [`a407373`](https://github.com/Michael-edel/FitFocus/commit/a4073731ea2d30c107b49ff8cf7170dbffc8ed83)
 и атомарного proof [`4528e2b`](https://github.com/Michael-edel/FitFocus/commit/4528e2bba08c7868ad2b24be2285c9547140b865),
@@ -32,16 +42,17 @@ Auth-пауза запрещает запрос, автоматическая п
 
 GET `/api/achievements` и POST `/api/achievements/check` передают парные
 `X-FitFocus-State-Account` / `X-FitFocus-State-Session`. [Серверный handler](../functions/api/_lib/achievement_handlers.ts)
-проверяет их после аутентификации, до feature-чтения и прикладных SQL/эффектов.
-Другой аккаунт, новая сессия того же аккаунта и неполная пара получают 401.
+обязательно проверяет их после аутентификации, до feature-чтения и прикладных
+SQL/эффектов. Отсутствующая/неполная пара, другой аккаунт и новая сессия того
+же аккаунта получают 401.
 Чтения, необходимые самой аутентификации, предшествуют этой проверке.
 
 Ответ содержит `X-FitFocus-Achievements-Protocol: 1`, `-Guard: 1` и переданный
 scope, включая ответы с отказом. Клиент проверяет scope, статус и IDB guard
 после чтения тела. POST требует JSON-объект; повреждённое тело получает 400.
 Deadline включает тело ответа, есть предел размера; скрытых повторов POST нет.
-Запросы прежних клиентов без обоих заголовков остаются совместимыми и не
-получают подтверждение account/session scope. Это не барьер старых сборок.
+Запрос без обоих заголовков также получает 401; старые открытые bundles нужно
+обновить до rollout. Полностью unscoped POST отклоняется до разбора тела.
 
 ## Очередь и UI
 

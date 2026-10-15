@@ -3,6 +3,15 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для достижений, `616f42c`
+
+`GET /api/achievements` и `POST /api/achievements/check` требуют парную
+account/session-привязку. Unscoped legacy-запросы получают 401; POST отклоняется
+до разбора body. Локально прошли полный unit suite (1242/1242), три typecheck,
+API/auth/schema/privacy guards и production build. Точный CI follow-up ожидает
+push; старые bundles, staging и реальный BFCache остаются открытыми.
+[Контракт](achievement-session.md).
+
 ## Локальный кандидат — обязательный proof для AI/items, `7240fec`
 
 `/api/ai` и `/api/weekly_menu/items` требуют парную account/session-привязку

@@ -3647,3 +3647,16 @@ API invariants, auth-scope, schema parity, privacy coverage, production build и
 проверяет только предыдущий `929573d`; его E2E не включает этот follow-up.
 Точный CI, старые/новые bundles на staging и OAuth/menu lifecycle остаются
 открытыми.
+
+## P0.5 — обязательный proof для achievement API, `616f42c`, 15.10.2026
+
+`GET /api/achievements` и `POST /api/achievements/check` используют
+`requireScopedStateUser`. Отсутствующий, неполный или устаревший proof даёт 401
+до feature/application effects; unscoped POST не разбирает body. Старые открытые
+bundles нужно обновить до rollout.
+
+На точном локальном SHA `616f42c` прошли профильные тесты (18/18), полный unit
+suite (1242/1242 в 208 файлах), общий/domain-strict/storage-strict typecheck,
+API invariants, auth-scope, schema parity, privacy coverage, production build и
+`git diff --check`. Точный CI этого follow-up ожидает push; настоящий staging,
+старые/новые bundles и BFCache остаются открытыми.

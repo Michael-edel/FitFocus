@@ -225,10 +225,11 @@ durable `familyMenu` outbox. [Личный контракт и проверки]
 Компонент достижений `57da2cf` добавляет capability
 `achievementSync: { protocol: 1, guard: 1 }` в `/api/me` и account/session guard
 для GET `/api/achievements` и POST `/api/achievements/check` до прикладных
-эффектов. Ответы содержат `X-FitFocus-Achievements-Protocol` / `-Guard: 1`
-и переданный scope. Новый клиент требует исходный login proof и проверяет
-поздние ответы; POST требует JSON-объект. Старые unscoped-запросы не получают
-подтверждения владельца. [Подробный контракт](docs/achievement-session.md).
+эффектов. Оба scope headers обязательны: отсутствие proof возвращает 401 до
+feature/application effects; старые bundles нужно обновить до rollout. Ответы
+содержат `X-FitFocus-Achievements-Protocol` / `-Guard: 1` и переданный scope.
+Новый клиент требует исходный login proof и проверяет поздние ответы; POST
+требует JSON-объект. [Подробный контракт](docs/achievement-session.md).
 
 ## Оставшиеся условия выпуска
 
