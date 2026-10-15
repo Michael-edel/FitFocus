@@ -255,13 +255,18 @@ family/user/active в SQL `UPDATE`. Отсутствующая цель возв
 `useFamilyCloud` получает исходный login guard из hydration и обновляет proof
 перед каждым HTTP, не принимая другой вход того же аккаунта. Запросы передают
 `X-FitFocus-State-Account` / `X-FitFocus-State-Session`; family handlers и
-shopping list/check проверяют их до прикладных эффектов. Неверная привязка — 401.
+shopping list/check/export/bulk проверяют их до body и прикладных эффектов.
+Все семейные endpoints требуют парный scope: отсутствие, неполная пара или
+несовпадение возвращают 401 до чтения body/DB side effects. Старые сборки без
+proof должны обновиться; сервер больше не принимает их family/shopping запросы.
 
 Ответы этих handlers содержат `X-FitFocus-Family-Protocol: 1`,
 `X-FitFocus-Family-Guard: 1` и публичный scope. Клиент проверяет headers,
 IDB epoch/auth-fence, familyId/week и форму загружаемых данных до применения.
 Mutation HTTP не повторяется автоматически. Запросы без scope сохраняют
-прежнюю совместимость и этой привязкой не защищены.
+совместимость лишь на других endpoints; каждый семейный и shopping route выше
+требует парный scope. `/api/family/menu/state` возвращает `Family-Menu`
+protocol/guard markers.
 
 Это не вводит family CAS или постоянную очередь. AI-путь `useFamilyMenu`
 пока использует прежние writers; полные границы, методы и проверки —

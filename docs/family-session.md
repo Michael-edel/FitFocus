@@ -35,17 +35,21 @@
 | `/api/family/join` | POST | Scope до расходования кода |
 | `/api/family/member` | PATCH | Scope, `familySync.target` и точный `familyId`; только членство в целевой семье |
 | `/api/family/menu` | GET, POST | Scope до чтения/сохранения меню |
+| `/api/family/menu/state` | GET, PUT | Mandatory scope, CAS snapshot; Family-Menu markers |
 | `/api/family/menu/generate` | POST | Scope до серверной генерации |
 | `/api/shopping/list` | GET | Scope до чтения покупок |
 | `/api/shopping/check` | PATCH, POST | Scope до изменения отметки |
+| `/api/shopping/bulk` | PATCH | Scope до пакетного изменения отметок |
 | `/api/shopping/export` | GET | Scope до чтения CSV; Family markers и no-store |
 
-Handlers используют `requireStateUser` перед прикладными эффектами.
-Несовпадение account/session возвращает 401. Ответы, включая ошибки,
+Все перечисленные endpoints используют `requireScopedStateUser` до чтения body
+или прикладных эффектов. Отсутствующий, неполный или несовпадающий account/session
+proof возвращает 401. Ответы, включая ошибки,
 содержат `X-FitFocus-Family-Protocol: 1`, `X-FitFocus-Family-Guard: 1`
 и переданную публичную привязку. Приватный sid не возвращается.
-Запросы прежних клиентов без scope продолжают прежний путь; этот guard
-их не останавливает и не заменяет проверку членства/тарифа.
+`/api/family/menu/state` отдельно возвращает Family-Menu markers.
+Старые сборки без парных заголовков получают 401; до server rollout клиент
+должен обновиться и проверить family capability.
 
 В `useFamilyCloud` подключены загрузка семьи/меню/покупок, создание,
 приглашение, присоединение, смена цели, серверная генерация меню и отметки.
@@ -82,10 +86,9 @@ CSV для новой карточки строится из уже загруж
 второго запроса с cookie. Перед подготовкой и перед скачиванием повторно
 проверяется исходный `loginGuard`; поэтому старая вкладка после входа B не может
 скачать список A или данные B. CSV сохраняет серверные заголовки и формат
-количества. Endpoint `/api/shopping/export` для прямых и старых клиентов тоже
+количества. Endpoint `/api/shopping/export` для прямых вызовов также
 проверяет переданный scope до `ensureUserRow` и возвращает Family protocol/guard
-markers. Proof остаётся опциональным для совместимости старых запросов без
-заголовков.
+markers. Proof обязателен и для экспорта.
 
 ## Lifetime и транспорт
 

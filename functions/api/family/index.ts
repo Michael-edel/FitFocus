@@ -1,7 +1,7 @@
 // /api/family
 // GET: returns current user's family (if any) and members (active)
 // POST: create a new family (owner) and add creator as member
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { createFamily } from "../_lib/family_create";
 import { readActiveFamilyContext } from "../_lib/family_read";
@@ -14,21 +14,21 @@ type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const handleGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireStateUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
     return familyResponse('family.read', requestId, await readActiveFamilyContext(db, user.sub), 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return familyResponse('family.read', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : 400);
+    return familyResponse('family.read', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : 400);
   }
 };
 
 const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireStateUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -47,7 +47,7 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
     return familyResponse('family.create', requestId, { family: result.family }, 201);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return familyResponse('family.create', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
+    return familyResponse('family.create', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400);
   }
 };
 

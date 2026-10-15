@@ -32,8 +32,9 @@
   не объявлены гарантированной доставкой событий после offline/reload.
 - [ ] Для [семейных запросов](docs/family-session.md) серверный scope и
   `familySync: { protocol: 1, guard: 1 }` выпущены до нового клиента.
-  На staging проверены чужая cookie, новый login того же аккаунта, поздний ответ,
-  отказ checkbox с восстановлением и повтор после реального BFCache.
+  На staging проверены отказ старых запросов без proof до side effects, чужая
+  cookie, новый login того же аккаунта, поздний ответ, отказ checkbox с
+  восстановлением и повтор после реального BFCache.
 - [ ] На staging проверены семейный AI-путь `useFamilyMenu`, явная
   family/week-привязка, CAS-запись через `familyMenu` outbox, reload/конфликт
   и отказ старых writers после migration barrier. Session guard и отмена fetch

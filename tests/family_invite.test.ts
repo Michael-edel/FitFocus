@@ -11,6 +11,7 @@ vi.mock('../functions/api/_lib/db', async () => {
 });
 
 const { onRequestPost } = await import('../functions/api/family/invite');
+const { stateSessionId } = await import('../functions/api/_lib/state_session');
 type FamilyInviteContext = Parameters<typeof onRequestPost>[0];
 type InviteResponseBody = { code?: string; expiresAt?: number; error?: string };
 
@@ -85,10 +86,12 @@ function makeDb(options: { insertChanges?: number[]; memberExists?: boolean } = 
 
 async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { familyId: 'family-1', ttlHours: 24 }, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyInviteContext = {
     request: new Request('https://fitfocus.test/api/family/invite', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost } from '../functions/api/family/index';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -75,10 +76,12 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFa
 
 async function postFamily(db: ReturnType<typeof makeDb>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyHandlerContext = {
     request: new Request('https://fitfocus.test/api/family', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify({ name: 'Моя семья' }),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -92,9 +95,10 @@ async function postFamily(db: ReturnType<typeof makeDb>, requestId?: string) {
 
 async function getFamily(db: ReturnType<typeof makeDb>, requestId: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyHandlerContext = {
     request: new Request('https://fitfocus.test/api/family', {
-      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId, 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},

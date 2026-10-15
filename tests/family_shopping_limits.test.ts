@@ -7,6 +7,7 @@ import { onRequestPost as postFamilyMenu } from '../functions/api/family/menu';
 import { onRequestPatch as patchShoppingBulk } from '../functions/api/shopping/bulk';
 import { onRequestPatch as patchShoppingCheck } from '../functions/api/shopping/check';
 import { onRequestPost as postWeeklyMenuItems } from '../functions/api/weekly_menu/items';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyIndexContext = Parameters<typeof postFamily>[0];
 type FamilyInviteContext = Parameters<typeof postFamilyInvite>[0];
 type FamilyJoinContext = Parameters<typeof postFamilyJoin>[0];
@@ -95,9 +96,11 @@ function makeDb() {
 
 async function authedJsonRequest(url: string, method: string, body: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   return new Request(url, {
     method,
-    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+      'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     body,
   });
 }

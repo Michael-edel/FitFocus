@@ -1,6 +1,6 @@
 // /api/family/join
 // POST: join a family by invite code
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
 import { joinFamilyByInvite } from "../_lib/family_join_by_invite";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
@@ -12,7 +12,7 @@ type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireStateUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -29,7 +29,7 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
     return familyResponse('family.invite.join', requestId, { ok: true, familyId: result.familyId, ...(result.alreadyMember ? { alreadyMember: true } : {}) }, 200);
   } catch (e: unknown) {
     const apiErr = toApiError(e);
-    return familyResponse('family.invite.join', requestId, { error: apiErr }, (apiErr.code === 'UNAUTH' || apiErr.code === 'STATE_SESSION_CHANGED') ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
+    return familyResponse('family.invite.join', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === "FAMILY_PLAN_INACTIVE" ? 402 : 400);
   }
 };
 

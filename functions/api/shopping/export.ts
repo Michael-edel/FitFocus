@@ -4,13 +4,13 @@ import { json } from '../_lib/auth';
 import { ensureUserRow, requireDB, toApiError } from '../_lib/db';
 import { buildPersonalShoppingExport, isShoppingExportWeek } from '../_lib/shopping_export';
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
 const handleShoppingExportGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const user = await requireStateUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
     const week = String(new URL(request.url).searchParams.get('week') || '');
@@ -26,7 +26,7 @@ const handleShoppingExportGet: PagesFunction<Env> = async ({ request, env }) => 
     });
   } catch (error: unknown) {
     const apiError = toApiError(error);
-    return json({ error: apiError }, apiError.code === 'UNAUTH' || apiError.code === 'STATE_SESSION_CHANGED' ? 401 : apiError.code === 'FORBIDDEN' ? 403 : 400);
+    return json({ error: apiError }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiError.code) ? 401 : apiError.code === 'FORBIDDEN' ? 403 : 400);
   }
 };
 

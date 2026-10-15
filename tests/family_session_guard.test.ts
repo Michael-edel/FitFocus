@@ -12,12 +12,15 @@ import { onRequestPost as invite } from '../functions/api/family/invite';
 import { onRequestPost as join } from '../functions/api/family/join';
 import { onRequestPatch as member } from '../functions/api/family/member';
 import { onRequestGet as menuRead, onRequestPost as menuSave } from '../functions/api/family/menu';
+import { onRequestGet as menuStateRead, onRequestPut as menuStateWrite } from '../functions/api/family/menu/state';
 import { onRequestPost as generate } from '../functions/api/family/menu/generate';
 import { onRequestGet as shopping } from '../functions/api/shopping/list';
 import { onRequestPatch as check } from '../functions/api/shopping/check';
+import { onRequestPatch as bulk } from '../functions/api/shopping/bulk';
+import { onRequestGet as shoppingExport } from '../functions/api/shopping/export';
 import { stateSessionId } from '../functions/api/_lib/state_session';
 
-const handlers = [read, create, invite, join, member, menuRead, menuSave, generate, shopping, check];
+const handlers = [read, create, invite, join, member, menuRead, menuSave, menuStateRead, menuStateWrite, generate, shopping, check, bulk, shoppingExport];
 beforeEach(() => { vi.clearAllMocks(); mocks.user = { sub: 'family-account', sid: 'private-family-session', roles: ['user'] }; });
 
 it.each(handlers.map((handler, index) => ({ handler, index })))('rejects a changed cookie before family effects (handler $index)', async ({ handler }) => {
@@ -29,9 +32,19 @@ it.each(handlers.map((handler, index) => ({ handler, index })))('rejects a chang
   }), env: { DB: { prepare } } } as unknown as Parameters<typeof handler>[0]);
   expect(response.status).toBe(401);
   expect(mocks.ensure).not.toHaveBeenCalled(); expect(prepare).not.toHaveBeenCalled();
-  expect(response.headers.get('X-FitFocus-Family-Protocol')).toBe('1');
+  expect(response.headers.get('X-FitFocus-Family-Protocol') ?? response.headers.get('X-FitFocus-Family-Menu-Protocol')).toBe('1');
   expect(response.headers.get('X-FitFocus-State-Session')).toBe(session);
   expect(await response.text()).not.toContain(mocks.user.sid);
+});
+
+it.each(handlers.map((handler, index) => ({ handler, index })))('rejects an unscoped legacy request before family effects (handler $index)', async ({ handler }) => {
+  const prepare = vi.fn(() => { throw new Error('Must not access application data'); });
+  const response = await handler({ request: new Request('https://example.test/api/family', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{',
+  }), env: { DB: { prepare } } } as unknown as Parameters<typeof handler>[0]);
+  expect(response.status).toBe(401);
+  expect(mocks.ensure).not.toHaveBeenCalled(); expect(prepare).not.toHaveBeenCalled();
+  expect(response.headers.get('X-FitFocus-Family-Guard') ?? response.headers.get('X-FitFocus-Family-Menu-Guard')).toBe('1');
 });
 
 it.each(['account', 'account-only', 'session-only', 'malformed'])('rejects %s family scope before writes', async kind => {

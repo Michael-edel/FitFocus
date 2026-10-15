@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPatch } from '../functions/api/family/member';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyMemberContext = Parameters<typeof onRequestPatch>[0];
 
 const SECRET = 'unit-test-secret';
@@ -69,10 +70,12 @@ function makeDb(options: { updateChanges?: number; memberExists?: boolean } = {}
 
 async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMemberContext = {
     request: new Request('https://fitfocus.test/api/family/member', {
       method: 'PATCH',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },

@@ -1,4 +1,4 @@
-import { requireStateUser, withSessionGuard } from '../../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../../_lib/state_session';
 import { requireDB, toApiError } from '../../_lib/db';
 import { familyMenuStateReady, readFamilyMenuState, writeFamilyMenuState } from '../../_lib/family_menu_state';
 import { isFamilyWeek } from '../../../../familyMenuValidation';
@@ -13,10 +13,7 @@ async function handle(context: Parameters<PagesFunction<Env>>[0], write: boolean
   const requestId = requestIdFor(request);
   const json = (body: unknown, status = 200) => tracedJsonResponse(`family.menu.state.${write ? 'write' : 'read'}.response`, requestId, body, status);
   try {
-    const user = await requireStateUser(request, env);
-    if (!request.headers.has('X-FitFocus-State-Account') || !request.headers.has('X-FitFocus-State-Session')) {
-      return json({ error: 'STATE_SESSION_CHANGED' }, 401);
-    }
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     if (!await familyMenuStateReady(db)) return json({ error: 'FAMILY_MENU_MIGRATION_REQUIRED' }, 503);
     if (!write) {
@@ -32,7 +29,7 @@ async function handle(context: Parameters<PagesFunction<Env>>[0], write: boolean
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
     const apiError = toApiError(error);
-    const status = ['UNAUTH', 'STATE_SESSION_CHANGED'].includes(apiError.code) ? 401 : apiError.code === 'FORBIDDEN' ? 403
+    const status = ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiError.code) ? 401 : apiError.code === 'FORBIDDEN' ? 403
       : apiError.code === 'PLAN_REQUIRED_FAMILY' ? 402 : apiError.code === 'FAMILY_MENU_CORRUPT' ? 409
       : apiError.code === 'FAMILY_MENU_MIGRATION_REQUIRED' ? 503 : 500;
     return json({ error: apiError }, status);

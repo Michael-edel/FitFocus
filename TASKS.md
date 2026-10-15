@@ -537,6 +537,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   1216/1216 в 208 файлах, typecheck, API invariants, production build и
   `git diff --check` прошли; точный CI ожидает push. Старые клиенты без proof
   получают 401. Общая приёмка registration и staging остаются открытыми.
+- [x] Обязать парный scope для всех family/shopping HTTP endpoints, включая
+  чтения, `family/menu/state`, корзину, CSV и старый bulk route. Отсутствующий
+  или устаревший proof отклоняется до body/D1 side effects; transport нового
+  клиента передаёт proof. Профильный suite прошёл 85/85. Старые сборки без proof
+  получают 401; staging и общий family lifecycle остаются открытыми.
 - [x] Привязать административную панель, CSV-аудит, admin support и `logout_all`
   к исходному account/session proof; сервер проверяет его до D1 role lookup и
   admin-session side effects. Локальные transport/server regression tests,
