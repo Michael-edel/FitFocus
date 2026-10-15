@@ -178,6 +178,13 @@ describe('Huawei Health integration', () => {
         request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status'),
         env: env(db),
       } as unknown as HuaweiStatusContext),
+      getHuaweiStatus({
+        ...context,
+        request: await contextRequest('https://fitfocus.test/api/wearable/huawei/status', {
+          headers: { 'X-FitFocus-State-Account': 'user-1' },
+        }),
+        env: env(db),
+      } as unknown as HuaweiStatusContext),
       postHuaweiSync({
         ...context,
         request: await contextRequest('https://fitfocus.test/api/wearable/huawei/sync', {
@@ -192,7 +199,7 @@ describe('Huawei Health integration', () => {
       } as unknown as HuaweiDisconnectContext),
     ]);
 
-    expect(responses.map(response => response.status)).toEqual([401, 401, 401, 401, 401]);
+    expect(responses.map(response => response.status)).toEqual([401, 401, 401, 401, 401, 401]);
     expect(responses.every(response => !response.headers.has('Location') && !response.headers.has('Set-Cookie'))).toBe(true);
     expect(db.prepared).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
