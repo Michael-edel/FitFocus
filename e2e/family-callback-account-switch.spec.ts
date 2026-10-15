@@ -40,6 +40,8 @@ type FixtureState = {
   releasedSupportLists?: number;
   mobileTokenAccounts?: string[];
   releasedMobileTokens?: number;
+  pushStatusAccounts?: string[];
+  releasedPushStatuses?: number;
 };
 
 function profileFor(account: Account, includePersonalShopping = false) {
@@ -91,6 +93,8 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Support-Guard': '1',
     'X-FitFocus-Mobile-Token-Protocol': '1',
     'X-FitFocus-Mobile-Token-Guard': '1',
+    'X-FitFocus-Push-Protocol': '1',
+    'X-FitFocus-Push-Guard': '1',
   };
 }
 
@@ -105,6 +109,7 @@ function apiBody(account: Account, includePersonalShopping = false) {
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
     huaweiSync: { protocol: 1, guard: 1 },
+    pushSync: { protocol: 1, guard: 1 },
     familySync: { protocol: 1, guard: 1, target: 1 },
     familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
     profile: profileFor(account, includePersonalShopping),
@@ -132,6 +137,7 @@ async function installAccountApi(
   holdFamilyShoppingList = false,
   holdSupportList = false,
   holdMobileToken = false,
+  holdPushStatus = false,
 ) {
   await mockApp(page, { session: 'app' });
   if (holdMobileToken) {
@@ -154,6 +160,7 @@ async function installAccountApi(
   const heldFamilyShoppingListResponse = deferred();
   const heldSupportListResponse = deferred();
   const heldMobileTokenResponse = deferred();
+  const heldPushStatusResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -195,6 +202,30 @@ async function installAccountApi(
         return json({ token: 'account-a-mobile-token-secret', expiresAt: Date.now() + 60_000 }, accountA);
       }
       return json({ token: `mobile-token-${scopedAccount.id}`, expiresAt: Date.now() + 60_000 });
+    }
+    if (path === '/api/push/status' && request.method() === 'GET') {
+      expect(requestedAccount).toBe(scopedAccount.id);
+      expect(requestedSession).toBe(scopedAccount.sid);
+      (state.pushStatusAccounts ??= []).push(scopedAccount.id);
+      const status = {
+        configured: true,
+        vapid_public_key: 'mock-public-key',
+        current_subscription_id: `push-${scopedAccount.id}`,
+        current_browser_label: 'Тестовый браузер',
+        count: 1,
+        subscriptions: [{
+          id: `push-${scopedAccount.id}`,
+          device_label: 'Тестовое устройство',
+          user_agent: 'Playwright',
+          last_error: scopedAccount.id === accountA.id ? 'ACCOUNT_A_PUSH_STATUS_ONLY' : 'ACCOUNT_B_PUSH_STATUS_ONLY',
+        }],
+      };
+      if (holdPushStatus && scopedAccount.id === accountA.id) {
+        await heldPushStatusResponse.promise;
+        state.releasedPushStatuses = (state.releasedPushStatuses ?? 0) + 1;
+        return json(status, accountA);
+      }
+      return json(status);
     }
     if (path === '/api/support/feedback/my') {
       expect(requestedAccount).toBe(scopedAccount.id);
@@ -367,6 +398,7 @@ async function installAccountApi(
     releaseFamilyShoppingList: heldFamilyShoppingListResponse.release,
     releaseSupportList: heldSupportListResponse.release,
     releaseMobileToken: heldMobileTokenResponse.release,
+    releasePushStatus: heldPushStatusResponse.release,
   };
 }
 
@@ -873,6 +905,44 @@ test('a delayed mobile token from account A is neither shown nor copied after ac
     await accountBPage.screenshot({ path: info.outputPath('mobile-token-account-b.png') });
   } finally {
     fixtureA.releaseMobileToken();
+  }
+});
+
+test('a delayed push status from account A cannot update Settings after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab push account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    pushStatusAccounts: [], releasedPushStatuses: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await expect.poll(() => state.pushStatusAccounts).toContain(accountA.id);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB, false, 'settings');
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    await expect(accountBPage.getByText(/ACCOUNT_B_PUSH_STATUS_ONLY/)).toBeVisible();
+
+    fixtureA.releasePushStatus();
+    await expect.poll(() => state.releasedPushStatuses).toBe(1);
+    await expect(page.getByText(/ACCOUNT_A_PUSH_STATUS_ONLY/)).toHaveCount(0);
+    await expect(accountBPage.getByText(/ACCOUNT_B_PUSH_STATUS_ONLY/)).toBeVisible();
+    expect(await activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('push-status-account-switch-b.png') });
+  } finally {
+    fixtureA.releasePushStatus();
   }
 });
 

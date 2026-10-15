@@ -9,6 +9,7 @@ import {
   LEGACY_WRITER_FENCE_REPLY,
   doesLegacyWriterFenceCoverCurrentClients,
 } from './storage/legacyWriterFence';
+import { prepareActivePushSession, requestPushJson } from './services/pushSession';
 
 const APP_TITLE = 'FitFocus';
 const APP_ICON = '/icon.svg';
@@ -257,9 +258,10 @@ sw.addEventListener('pushsubscriptionchange', (event) => {
     }
 
     if (subscription) {
-      await fetch(new URL('/api/push/subscribe', sw.location.origin), {
+      const session = await prepareActivePushSession();
+      if (!session) return;
+      await requestPushJson(session, '/api/push/subscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: subscription.toJSON() }),
       });

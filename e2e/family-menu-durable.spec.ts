@@ -17,6 +17,7 @@ async function openSwitchAccount(page: Page) {
     'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
     'X-FitFocus-Weekly-Menu-Protocol': '1', 'X-FitFocus-Weekly-Menu-Guard': '1',
     'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
+    'X-FitFocus-Push-Protocol': '1', 'X-FitFocus-Push-Guard': '1',
     'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1',
     'X-FitFocus-Family-Menu-Protocol': '1', 'X-FitFocus-Family-Menu-Guard': '1',
   };
@@ -29,7 +30,7 @@ async function openSwitchAccount(page: Page) {
       stateSync: { protocol: 2, guard: 1, accountId: switchAccount.id, sessionId: switchAccount.sid },
       bootstrapSync: { protocol: 1, guard: 1 }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
-      achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 }, familySync: { protocol: 1, guard: 1, target: 1 },
+      achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 }, pushSync: { protocol: 1, guard: 1 }, familySync: { protocol: 1, guard: 1, target: 1 },
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 }, profile });
     if (path === '/api/bootstrap') return json({ user: { sub: switchAccount.id }, profile, items: [] });
     if (path === '/api/state') {

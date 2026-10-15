@@ -27,6 +27,7 @@ it('exposes a stable public session binding but never the raw sid', async () => 
   expect(body.weeklyMenuSync).toEqual({ protocol: 1, guard: 1 });
   expect(body.familySync).toEqual({ protocol: 1, guard: 1, target: 1 });
   expect(body.huaweiSync).toEqual({ protocol: 1, guard: 1 });
+  expect(body.pushSync).toEqual({ protocol: 1, guard: 1 });
   expect(text).not.toContain(mocks.user.sid); expect(body.stateSync.sessionId).toMatch(/^[a-f0-9]{64}$/);
   expect(await stateSessionId({ sub: 'other', sid: mocks.user.sid })).not.toBe(body.stateSync.sessionId);
 });

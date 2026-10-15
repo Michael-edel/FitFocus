@@ -3,6 +3,27 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Рабочее дерево — push session guard
+
+В `fix/durable-outbox` поверх `b2d787f` добавлена привязка push-статуса,
+подписки, отключения и тестового уведомления в Settings к свежей account/session
+проверке. PWA recovery и `pushsubscriptionchange` используют владельца,
+подтверждённого активной IDB-сессией. Добавлены серверные scope checks и
+регрессионный сценарий с задержанным status-ответом аккаунта A после входа B.
+Контракт: [push session](push-session.md).
+
+На незакоммиченном дереве прошли 1180 unit-тестов / 202 файла (включая 41
+профильный тест в 5 файлах), общий и domain/storage strict typecheck; полный
+`family-callback-account-switch.spec.ts` прошёл 42/42 на
+desktop Chromium, Firefox и WebKit без retries и skips. `npm run build`, admin,
+API invariants, auth-scope, schema и privacy checks прошли. Точный CI нового кода
+не запускался. Это кандидат в рабочем дереве, а не принятый релиз. Native
+PWA/Service Worker recovery, старые открытые bundle и запросы без scope отдельно
+не приняты; совместимость старых клиентов сохраняется. Общий P0.5 и остановка
+старых writers остаются открытыми. CI предыдущего baseline `b2d787f` прошёл в
+[run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
+но этот run не включает текущие незакоммиченные изменения.
+
 ## P0.5 — пошаговый рецепт из дневникового фото
 
 Кодовый commit [`71d2ca4`](https://github.com/Michael-edel/FitFocus/commit/71d2ca4)

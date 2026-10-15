@@ -117,7 +117,11 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
     const json = async (payload: unknown, status = 200) => route.fulfill({
       status,
       contentType: 'application/json',
-      headers: path === '/api/ai' && method === 'POST' && request.headers()['x-fitfocus-state-account'] ? {
+      headers: path.startsWith('/api/push/') && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-Push-Protocol': '1', 'X-FitFocus-Push-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
+      } : path === '/api/ai' && method === 'POST' && request.headers()['x-fitfocus-state-account'] ? {
         'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
         'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
         'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
@@ -161,6 +165,7 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         weeklyMenuSync: { protocol: 1, guard: 1 },
         achievementSync: { protocol: 1, guard: 1 },
         huaweiSync: { protocol: 1, guard: 1 },
+        pushSync: { protocol: 1, guard: 1 },
       });
       return;
     }

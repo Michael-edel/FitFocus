@@ -21,6 +21,7 @@ vi.mock('../functions/api/_lib/push', () => ({
 }));
 
 const { onRequestPost } = await import('../functions/api/push/test');
+const { stateSessionId } = await import('../functions/api/_lib/state_session');
 type PushTestContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -97,12 +98,12 @@ function makeDb() {
   };
 }
 
-async function postPushTest(db: ReturnType<typeof makeDb>, body = JSON.stringify({ title: 'hello' })) {
+async function postPushTest(db: ReturnType<typeof makeDb>, body = JSON.stringify({ title: 'hello' }), extraHeaders: Record<string, string> = {}) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: PushTestContext = {
     request: new Request('https://fitfocus.test/api/push/test', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'push-test-route-01' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'push-test-route-01', ...extraHeaders },
       body,
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -156,6 +157,20 @@ describe('/api/push/test', () => {
 
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
+    expect(sendPushNotification).not.toHaveBeenCalled();
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects a stale session scope before sending or cleaning up subscriptions', async () => {
+    const db = makeDb();
+    const staleSession = await stateSessionId({ sub: 'user-1', sid: 'sid-stale' });
+
+    const response = await postPushTest(db, JSON.stringify({ title: 'hello' }), {
+      'X-FitFocus-State-Account': 'user-1',
+      'X-FitFocus-State-Session': staleSession,
+    });
+
+    expect(response.status).toBe(401);
     expect(sendPushNotification).not.toHaveBeenCalled();
     expect(db.batches).toHaveLength(0);
   });

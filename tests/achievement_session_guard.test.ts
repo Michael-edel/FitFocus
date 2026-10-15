@@ -82,6 +82,7 @@ it('/me advertises the achievement guard without exposing the private login id',
     env: { AUTH_JWT_SECRET: 'test-only', DB: db } } as unknown as Parameters<typeof me>[0]) as Response;
   const body = await response.json();
   expect(body.achievementSync).toEqual({ protocol: 1, guard: 1 });
+  expect(body.pushSync).toEqual({ protocol: 1, guard: 1 });
   expect(body.stateSync.sessionId).toBe(await stateSessionId(mocks.user));
   expect(JSON.stringify(body)).not.toContain(mocks.user.sid);
 });

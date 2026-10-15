@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — session guard push-настроек и восстановления, рабочее дерево поверх `b2d787f`, 15.10.2026
+
+Settings запрашивает свежий `/api/me` proof и capability `pushSync`, затем
+передаёт account/session scope каждому push API и проверяет guard markers ответа.
+Поздний ответ проверяется против текущего IDB auth-fence до обновления интерфейса;
+`pagehide` отменяет попытку. Фоновое восстановление в PWA и Service Worker
+начинается только с уже активной IDB-сессии. Серверные handlers проверяют scope
+до побочных эффектов, сохраняя совместимость для запросов старых клиентов без
+scope-заголовков. [Контракт](push-session.md).
+
+На текущем рабочем дереве прошли полный unit suite: 1180 тестов / 202 файла,
+включая 41 профильный тест / 5 файлов; общий, domain и storage strict typecheck,
+admin guards, API invariants, auth-scope, schema parity, privacy coverage и
+production build. Полный
+`family-callback-account-switch.spec.ts` прошёл 42/42 на desktop Chromium,
+Firefox и WebKit (`workers=1,retries=0`), включая новый push сценарий во всех
+трёх движках. Проверки и сборка локальные; код не закоммичен, точный полный CI,
+native PWA/Service Worker recovery, старые открытые bundle и staging отдельно
+не проверены. CI предыдущего baseline `b2d787f` прошёл в
+[run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
+но не покрывает этот рабочий diff. Весь P0.5 остаётся открытым.
+
 ## P0.5 — генерация пошагового рецепта из фото с account/session guard, `71d2ca4`, 15.10.2026
 
 `FoodInsightCard` вызывал `getRecipeFromPhoto` без `AiSession`, а после ответа

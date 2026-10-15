@@ -66,6 +66,8 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Achievements-Guard': '1',
     'X-FitFocus-Huawei-Protocol': '1',
     'X-FitFocus-Huawei-Guard': '1',
+    'X-FitFocus-Push-Protocol': '1',
+    'X-FitFocus-Push-Guard': '1',
     'X-FitFocus-Weekly-Menu-Protocol': '1',
     'X-FitFocus-Weekly-Menu-Guard': '1',
   };
@@ -82,6 +84,7 @@ function apiBody(account: Account, profile: ReturnType<typeof profileFor>) {
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
     huaweiSync: { protocol: 1, guard: 1 },
+    pushSync: { protocol: 1, guard: 1 },
     profile,
   };
 }

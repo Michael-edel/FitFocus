@@ -1264,8 +1264,8 @@ assertIncludes(
 );
 assertIncludes(
   settingsScreen,
-  "fetchWithResilience('/api/push/status'",
-  'settings screen must load push runtime config from the server',
+  "requestPushJson(session, '/api/push/status'",
+  'settings screen must load push runtime config through its guarded session transport',
 );
 assertIncludes(
   settingsScreen,

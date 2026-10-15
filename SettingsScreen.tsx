@@ -17,6 +17,7 @@ import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSe
 import { prepareHuaweiSession, type HuaweiSession } from './services/huaweiSession';
 import { disconnectHuaweiHealth, requestHuaweiHealthStatus, startHuaweiHealthOAuth, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
 import { SessionReadError } from './storage/sessionRead';
+import { assertPushSession, preparePushSession, requestPushJson, type PushSession } from './services/pushSession';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -379,6 +380,9 @@ export default function SettingsScreen({
   const mobileTokenScopeKey = loginGuard
     ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
     : null;
+  const pushScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
   const gainSur = user?.gainSurplus ?? DEFAULT_SURPLUS;
@@ -452,6 +456,9 @@ export default function SettingsScreen({
   const [pushLastDeliveryError, setPushLastDeliveryError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushNotice, setPushNotice] = useState<string | null>(null);
+  type PushAttempt = { id: number; controller: AbortController; scopeKey: string };
+  const pushControllerRef = useRef<AbortController | null>(null);
+  const pushAttemptRef = useRef(0);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const latestMeasurement = useMemo(() => {
@@ -979,18 +986,45 @@ export default function SettingsScreen({
     return navigator.serviceWorker.ready;
   };
 
-  const readPushStatus = async () => {
-    const browserLabel = getPushBrowserLabel();
-    const response = await fetchWithResilience('/api/push/status', {
-      cache: 'no-store',
-      credentials: 'include',
+  const beginPushAttempt = useCallback((): PushAttempt | null => {
+    if (!serverSession || !loginGuard || loginGuard.accountId !== user?.id || !isCurrentSession?.() || !pushScopeKey) return null;
+    pushControllerRef.current?.abort();
+    const attempt = { id: ++pushAttemptRef.current, controller: new AbortController(), scopeKey: pushScopeKey };
+    pushControllerRef.current = attempt.controller;
+    return attempt;
+  }, [isCurrentSession, loginGuard, pushScopeKey, serverSession, user?.id]);
+  const isPushAttemptCurrent = useCallback((attempt: PushAttempt) =>
+    pushAttemptRef.current === attempt.id && pushControllerRef.current === attempt.controller
+      && !attempt.controller.signal.aborted && pushScopeKey === attempt.scopeKey
+      && !!serverSession && !!isCurrentSession?.(),
+  [isCurrentSession, pushScopeKey, serverSession]);
+  const preparePush = useCallback(async (attempt: PushAttempt) => {
+    if (!loginGuard || !isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
+    return preparePushSession(loginGuard, attempt.controller, () => isPushAttemptCurrent(attempt));
+  }, [isPushAttemptCurrent, loginGuard]);
+  const finishPushAttempt = (attempt: PushAttempt) => {
+    if (pushAttemptRef.current !== attempt.id) return;
+    pushControllerRef.current = null;
+  };
+  const pushSessionError = (error: unknown, fallback: string) => {
+    if (error instanceof SessionReadError) {
+      return error.kind === 'protocol'
+        ? 'Сервер пока не поддерживает безопасную работу с push. Обновите приложение.'
+        : error.kind === 'access'
+          ? 'Нет доступа к push-уведомлениям.'
+          : 'Сессия изменилась. Войдите снова и повторите действие.';
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+
+  const readPushStatus = async (attempt: PushAttempt, session: PushSession) => {
+    const { response, body: payload } = await requestPushJson(session, '/api/push/status', {
       headers: {
         Accept: 'application/json',
-        'Cache-Control': 'no-store',
-        'X-FitFocus-Browser-Label': browserLabel,
+        'X-FitFocus-Browser-Label': getPushBrowserLabel(),
       },
     });
-    const payload = await readJsonRecord(response);
+    if (!isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
     if (!response.ok || !payload) {
       const code = trimmedTextFromUnknown(payload?.error);
       if (response.status === 401 || code === 'UNAUTH') {
@@ -1005,6 +1039,7 @@ export default function SettingsScreen({
     const currentSubscriptionId = trimmedTextFromUnknown(payload.current_subscription_id) || null;
     const currentBrowserLabel = trimmedTextFromUnknown(payload.current_browser_label) || null;
     const lastDeliveryError = subscriptions.find((item) => item.lastError)?.lastError || null;
+    if (!isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
@@ -1015,10 +1050,10 @@ export default function SettingsScreen({
     setPushDeviceCount(subscriptions.length || numberFromUnknown(payload.count));
     setPushLastDeliveryError(lastDeliveryError);
     setPushSubscribed(Boolean(currentSubscriptionId));
-    return { configured, publicKey, lastDeliveryError, currentSubscriptionId };
+    return { configured, publicKey, lastDeliveryError, currentSubscriptionId, payload };
   };
 
-  const refreshPushStatus = async () => {
+  const refreshPushStatus = useCallback(async () => {
     const supported = isPushSupported();
     setPushSupported(supported);
     setPushPermission(supported ? Notification.permission : 'unsupported');
@@ -1034,7 +1069,7 @@ export default function SettingsScreen({
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
-      return;
+      return null;
     }
 
     if (!serverSession) {
@@ -1048,25 +1083,35 @@ export default function SettingsScreen({
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
-      return;
+      return null;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return null;
     setPushStatusChecked(false);
 
     try {
-      await readPushStatus();
+      const session = await preparePush(attempt);
+      if (!isPushAttemptCurrent(attempt)) return null;
+      return await readPushStatus(attempt, session);
     } catch (error) {
-      setPushConfigured(false);
-      setPushStatusChecked(true);
-      setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
-      setPushCurrentSubscriptionId(null);
-      setPushCurrentBrowserLabel(null);
-      setPushPublicKey('');
-      setPushSubscriptionCount(0);
-      setPushDeviceCount(0);
-      setPushLastDeliveryError(null);
+      if (isPushAttemptCurrent(attempt)) {
+        setPushConfigured(false);
+        setPushStatusChecked(true);
+        setPushStatusError(pushSessionError(error, 'Не удалось проверить push-сервер.'));
+        setPushCurrentSubscriptionId(null);
+        setPushCurrentBrowserLabel(null);
+        setPushPublicKey('');
+        setPushSubscriptionCount(0);
+        setPushDeviceCount(0);
+        setPushLastDeliveryError(null);
+      }
+      return null;
+    } finally {
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
-  };
+  }, [beginPushAttempt, isPushAttemptCurrent, preparePush]);
 
   const subscribeToPush = async () => {
     if (!serverSession) {
@@ -1077,40 +1122,36 @@ export default function SettingsScreen({
       setPushError('Этот браузер не поддерживает push-уведомления.');
       return;
     }
-    let publicKey = pushPublicKey || readBuildTimePushPublicKey();
-    try {
-      const status = await readPushStatus();
-      if (!status.configured) {
-        setPushError('Push-сервер не настроен.');
-        return;
-      }
-      publicKey = status.publicKey;
-    } catch (error) {
-      if (!publicKey) {
-        setPushError(error instanceof Error ? error.message : 'Не удалось получить push-конфигурацию.');
-        return;
-      }
-    }
-    if (!publicKey) {
-      setPushError('Push-сервер не настроен.');
-      return;
-    }
-
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
-
     try {
+      const session = await preparePush(attempt);
+      const status = await readPushStatus(attempt, session);
+      if (!status.configured) {
+        if (isPushAttemptCurrent(attempt)) setPushError('Push-сервер не настроен.');
+        return;
+      }
+      const publicKey = status.publicKey || pushPublicKey || readBuildTimePushPublicKey();
+      if (!publicKey) throw new Error('Push-сервер не настроен.');
       const permission = Notification.permission === 'granted'
         ? 'granted'
         : await Notification.requestPermission();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushPermission(permission);
       if (permission !== 'granted') {
         throw new Error('Разрешите уведомления в браузере.');
       }
 
       const registration = await getReadyServiceWorkerRegistration();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       let subscription = await registration.pushManager.getSubscription();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -1118,9 +1159,10 @@ export default function SettingsScreen({
         });
       }
 
-      const response = await fetchWithResilience('/api/push/subscribe', {
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
+      const { response, body: payload } = await requestPushJson(session, '/api/push/subscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subscription: subscription.toJSON(),
@@ -1128,18 +1170,19 @@ export default function SettingsScreen({
           browserLabel: getPushBrowserLabel(),
         }),
       });
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось сохранить push-подписку.'));
       }
 
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushSubscribed(true);
       setPushNotice(`Уведомления включены на устройстве ${trimmedTextFromUnknown(payload?.deviceLabel) || getPushDeviceDisplayLabel()}.`);
-      await refreshPushStatus();
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось включить push-уведомления.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось включить push-уведомления.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -1150,50 +1193,61 @@ export default function SettingsScreen({
       return;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
 
     try {
+      const session = await preparePush(attempt);
+      const status = await readPushStatus(attempt, session);
+      if (!isPushAttemptCurrent(attempt)) return;
       const requestBody: Record<string, unknown> = {};
       let subscription: PushSubscription | null = null;
-      if (pushCurrentSubscriptionId) requestBody.subscriptionId = pushCurrentSubscriptionId;
+      if (status.currentSubscriptionId) requestBody.subscriptionId = status.currentSubscriptionId;
 
-      if (!pushCurrentSubscriptionId) {
+      if (!status.currentSubscriptionId) {
         const registration = await getReadyServiceWorkerRegistration();
+        await assertPushSession(session);
+        if (!isPushAttemptCurrent(attempt)) return;
         subscription = await registration.pushManager.getSubscription().catch(() => null);
+        await assertPushSession(session);
+        if (!isPushAttemptCurrent(attempt)) return;
         if (subscription?.endpoint) {
           requestBody.endpoint = subscription.endpoint;
         }
       }
 
-      const response = await fetchWithResilience('/api/push/unsubscribe', {
+      const { response, body: payload } = await requestPushJson(session, '/api/push/unsubscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
 
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось отключить push-уведомления.'));
       }
 
+      if (!isPushAttemptCurrent(attempt)) return;
       if (subscription) {
         try {
           await subscription.unsubscribe();
+          await assertPushSession(session);
         } catch {
           // server-side removal already happened; keep the UI moving
         }
       }
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushSubscribed(false);
       setPushCurrentSubscriptionId(null);
       setPushNotice('Уведомления на этом устройстве отключены.');
-      await refreshPushStatus();
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось отключить push-уведомления.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось отключить push-уведомления.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -1207,14 +1261,21 @@ export default function SettingsScreen({
       return;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
 
     try {
+      const session = await preparePush(attempt);
       const registration = await getReadyServiceWorkerRegistration();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       const subscription = await registration.pushManager.getSubscription();
-      const response = await fetchWithResilience('/api/push/test', {
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
+      const { response, body: payload } = await requestPushJson(session, '/api/push/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1224,11 +1285,10 @@ export default function SettingsScreen({
           url: '/',
         }),
       });
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось отправить тестовое уведомление.'));
       }
-      await refreshPushStatus();
+      if (!isPushAttemptCurrent(attempt)) return;
       const sent = numberFromUnknown(payload?.sent);
       const failed = numberFromUnknown(payload?.failed);
       const removed = numberFromUnknown(payload?.removed);
@@ -1252,10 +1312,12 @@ export default function SettingsScreen({
       } else {
         setPushNotice('Тест отправлен: 0 уведомлений.');
       }
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось отправить push-тест.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось отправить push-тест.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -1459,18 +1521,49 @@ export default function SettingsScreen({
   }, [uiResetAt]);
 
   useEffect(() => {
-    if (!serverSession) {
-      setPushSupported(false);
-      setPushPermission('unsupported');
+    pushAttemptRef.current += 1;
+    pushControllerRef.current?.abort();
+    pushControllerRef.current = null;
+    setPushBusy(false);
+    setPushError(null);
+    setPushNotice(null);
+    if (!serverSession || !loginGuard || loginGuard.accountId !== user?.id || !isCurrentSession?.()) {
+      const supported = isPushSupported();
+      setPushSupported(supported);
+      setPushPermission(supported ? Notification.permission : 'unsupported');
       setPushSubscribed(false);
       setPushConfigured(false);
+      setPushStatusChecked(true);
+      setPushStatusError(serverSession ? 'Нет подтверждённой сессии для безопасной проверки push.' : 'Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
+      setPushCurrentSubscriptionId(null);
+      setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
       setPushDeviceCount(0);
       setPushSubscriptionCount(0);
+      setPushLastDeliveryError(null);
       return;
     }
+
+    const hide = () => {
+      pushAttemptRef.current += 1;
+      pushControllerRef.current?.abort();
+      pushControllerRef.current = null;
+      setPushBusy(false);
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted) void refreshPushStatus();
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
     void refreshPushStatus();
-  }, [serverSession, user?.id]);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+      pushAttemptRef.current += 1;
+      pushControllerRef.current?.abort();
+      pushControllerRef.current = null;
+    };
+  }, [isCurrentSession, loginGuard, pushScopeKey, refreshPushStatus, serverSession, user?.id]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
   const gainTooAggressive = user?.goal === Goal.GAIN && tdee && gainSur > AGGRESSIVE_SURPLUS;

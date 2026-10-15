@@ -6,9 +6,9 @@
  * поэтому мы просто ничего не делаем.
  */
 import { isRecord } from './safeJson';
-import { fetchWithResilience } from './services/httpClient';
 import { registerPwaUpdates } from './services/pwaRegistration';
 import { respondToLegacyWriterFence } from './storage/legacyWriterFence';
+import { assertPushSession, prepareActivePushSession, requestPushJson } from './services/pushSession';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
@@ -35,20 +35,19 @@ async function recoverPushSubscription(): Promise<void> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const statusResponse = await fetchWithResilience('/api/push/status', {
-    credentials: 'include',
-    cache: 'no-store',
+  const session = await prepareActivePushSession();
+  if (!session) return;
+  const { response: statusResponse, body: statusRecord } = await requestPushJson(session, '/api/push/status', {
     headers: { Accept: 'application/json' },
   });
-  if (!statusResponse.ok) return;
-  const status: unknown = await statusResponse.json().catch(() => null);
-  if (!isRecord(status)) return;
-  const statusRecord = status;
+  if (!statusResponse.ok || !isRecord(statusRecord)) return;
   const publicKey = typeof statusRecord.vapid_public_key === 'string' ? statusRecord.vapid_public_key.trim() : '';
   if (!publicKey || statusRecord.configured !== true) return;
 
   const registration = await navigator.serviceWorker.ready;
+  await assertPushSession(session);
   let subscription = await registration.pushManager.getSubscription();
+  await assertPushSession(session);
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -56,9 +55,9 @@ async function recoverPushSubscription(): Promise<void> {
     });
   }
 
-  await fetchWithResilience('/api/push/subscribe', {
+  await assertPushSession(session);
+  await requestPushJson(session, '/api/push/subscribe', {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ subscription: subscription.toJSON() }),
   });
