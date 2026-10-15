@@ -3,8 +3,8 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
-[`32818d1`](https://github.com/Michael-edel/FitFocus/commit/32818d15e11e1b61cde267eff4050a9e9d4904d4)
-в ветке `durable-outbox`; точный GitHub CI для него запускается после push.
+[`f814234`](https://github.com/Michael-edel/FitFocus/commit/f8142349291fd592c58a857ae88e0ee28c6b098e)
+в ветке `durable-outbox`; точный GitHub CI запускается после push.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
@@ -13,6 +13,13 @@ desktop Chromium/Firefox/WebKit, без retries). Follow-up `0646e3d` также
 перевода всех AI action reads на явный accountId. В плане остаются 34 пункта:
 20 P0, 7 P1 и 7 следующих задач. P0.4 и P0.5 остаются открытыми до проверки
 остальных callbacks, staging и полного lifecycle.
+
+`f814234` сбрасывает черновики экрана прогресса при смене account/session и
+добавляет в зависимости гидратации id профиля и его значения глюкозы. Полный
+unit suite прошёл 1305/1305 в 210 файлах, общий typecheck и production build
+прошли; два целевых Push E2E прошли по 1/1 в desktop Chromium без retries.
+P0.4 остаётся открытым: для экрана прогресса ещё нужен browser account-switch
+acceptance, кроме проверки остальных callbacks/cache и staging.
 
 ## P0.5 — AI retry metadata с областью аккаунта, [`18af4ee`](https://github.com/Michael-edel/FitFocus/commit/18af4ee48cf1cde471dd85cea892715a04691d2d)
 

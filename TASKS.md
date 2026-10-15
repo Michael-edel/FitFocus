@@ -533,6 +533,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   направление камеры и UI плана. `planScope` теперь также owner-bound. Старые
   setters отбрасываются после смены storage key. Полный unit: 1304/1304 в 210
   файлах; typecheck, production build и diff check прошли локально.
+  Follow-up [`f814234`](https://github.com/Michael-edel/FitFocus/commit/f8142349291fd592c58a857ae88e0ee28c6b098e) применяет
+  общий account/session render key к экрану прогресса: черновики замеров и импорта
+  не переживают смену аккаунта или login-session; заполнение черновиков также
+  отслеживает владельца и значение глюкозы. Unit 1305/1305, typecheck, build и
+  diff check прошли локально. Account-switch UI E2E для этого экрана и остальные
+  cloud callbacks/cache остаются открытыми; P0.4 не закрыт.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
