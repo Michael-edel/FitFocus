@@ -1096,6 +1096,54 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   expect(switched.errors).toEqual([]);
 });
 
+test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
+  const baseProfileA = profileFor(accountA.id);
+  const state: FixtureState = {
+    current: accountA,
+    profile: Object.assign({}, baseProfileA, {
+      aiPlan: {
+        ...baseProfileA.aiPlan,
+        weeklyMenu: {
+          days: ['Понедельник', 'Вторник'].map(day => ({
+            day,
+            breakfast: 'Овсянка',
+            lunch: 'Курица с рисом',
+            dinner: 'Рыба с овощами',
+            snack: 'Йогурт',
+          })),
+          shoppingList: [],
+        },
+      },
+    }),
+  };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#plan');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const activeDayKeyA = `fitfocus.plan.active-day.v1:${accountA.id}`;
+  const monday = page.getByRole('button', { name: 'Понедельник', exact: true });
+  const tuesday = page.getByRole('button', { name: 'Вторник', exact: true });
+  await expect(monday).toBeVisible();
+  await tuesday.click();
+  await expect(tuesday).toHaveClass(/bg-indigo-500\/20/);
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), activeDayKeyA)).toBe('Вторник');
+
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByRole('button', { name: 'Вторник', exact: true })).toHaveClass(/bg-indigo-500\/20/);
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(monday).toHaveClass(/bg-indigo-500\/20/);
+  await expect(tuesday).not.toHaveClass(/bg-indigo-500\/20/);
+  expect(await page.evaluate(key => localStorage.getItem(key), activeDayKeyA)).toBe('Вторник');
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(switched.errors).toEqual([]);
+});
+
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

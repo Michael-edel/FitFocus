@@ -16,6 +16,7 @@ import {
   type UserProfile,
 } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from './features/state/accountScopedUi';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -128,24 +129,44 @@ export default function PlanScreen({
   );
   const activeWeekDaySkipSaveRef = React.useRef(false);
   const [activeWeekDay, setActiveWeekDay] = React.useState<string>('');
+  const [hydratedActiveWeekDayStorageKey, setHydratedActiveWeekDayStorageKey] = React.useState<string | null>(null);
+  const setActiveWeekDayForScope = useAccountScopedUiSetter(
+    activeWeekDayStorageKey,
+    setActiveWeekDay,
+    allowCachedUiStateRestore,
+  );
 
   React.useEffect(() => {
+    activeWeekDaySkipSaveRef.current = true;
+    if (!allowCachedUiStateRestore) {
+      setActiveWeekDay('');
+      setHydratedActiveWeekDayStorageKey(null);
+      return;
+    }
     try {
-      activeWeekDaySkipSaveRef.current = true;
       setActiveWeekDay(localStorage.getItem(activeWeekDayStorageKey) || '');
     } catch {
-      activeWeekDaySkipSaveRef.current = true;
       setActiveWeekDay('');
     }
-  }, [activeWeekDayStorageKey]);
+    setHydratedActiveWeekDayStorageKey(activeWeekDayStorageKey);
+  }, [activeWeekDayStorageKey, allowCachedUiStateRestore]);
+
+  const visibleActiveWeekDay = getAccountScopedUiValue(
+    activeWeekDayStorageKey,
+    hydratedActiveWeekDayStorageKey,
+    activeWeekDay,
+    '',
+    allowCachedUiStateRestore,
+  );
 
   React.useEffect(() => {
     const nextDay = weeklyMenu?.days?.[0]?.day || '';
     if (!nextDay) return;
-    setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d) => d.day === prev) ? prev : nextDay));
-  }, [weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
+    setActiveWeekDayForScope((prev) => (prev && weeklyMenu.days.some((d) => d.day === prev) ? prev : nextDay));
+  }, [setActiveWeekDayForScope, weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
 
   React.useEffect(() => {
+    if (!allowCachedUiStateRestore || hydratedActiveWeekDayStorageKey !== activeWeekDayStorageKey) return;
     if (activeWeekDaySkipSaveRef.current) {
       activeWeekDaySkipSaveRef.current = false;
       return;
@@ -157,13 +178,13 @@ export default function PlanScreen({
     } catch {
       // no-op
     }
-  }, [activeWeekDay, activeWeekDayStorageKey]);
+  }, [activeWeekDay, activeWeekDayStorageKey, allowCachedUiStateRestore, hydratedActiveWeekDayStorageKey]);
 
   const weeklyMenuDay = React.useMemo(() => {
     const days = weeklyMenu?.days ?? [];
     if (!days.length) return null;
-    return days.find((d) => d.day === activeWeekDay) || days[0];
-  }, [weeklyMenu?.days, activeWeekDay]);
+    return days.find((d) => d.day === visibleActiveWeekDay) || days[0];
+  }, [weeklyMenu?.days, visibleActiveWeekDay]);
 
   const mealTemplateFields = [
     { key: 'breakfast', label: 'Завтрак', value: currentUserAiPlan?.mealTemplate?.breakfast || '' },
@@ -396,7 +417,7 @@ export default function PlanScreen({
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setActiveWeekDay(d.day)}
+                      onClick={() => setActiveWeekDayForScope(d.day)}
                       className={clsx(
                         'shrink-0 min-h-[42px] px-4 py-2 rounded-full border font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap',
                         active
