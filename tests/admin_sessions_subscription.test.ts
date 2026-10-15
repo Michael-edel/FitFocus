@@ -121,7 +121,7 @@ async function adminRequest(url: string, body: Record<string, unknown>) {
   return adminRequestRaw(url, JSON.stringify(body));
 }
 
-async function adminRequestRaw(url: string, body: string, extraHeaders: Record<string, string> = {}) {
+async function adminRequestRaw(url: string, body: string, extraHeaders: Record<string, string> = {}, includeScope = true) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   return new Request(url, {
@@ -130,8 +130,10 @@ async function adminRequestRaw(url: string, body: string, extraHeaders: Record<s
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
       'X-Request-ID': 'admin-sessions-test-01',
-      'X-FitFocus-State-Account': 'admin-1',
-      'X-FitFocus-State-Session': stateSession,
+      ...(includeScope ? {
+        'X-FitFocus-State-Account': 'admin-1',
+        'X-FitFocus-State-Session': stateSession,
+      } : {}),
       ...extraHeaders,
     },
     body,
@@ -258,7 +260,7 @@ describe('admin session and subscription mutations', () => {
 
   it('rejects an unscoped legacy subscription request before parsing the body', async () => {
     const db = makeDb();
-    const request = await adminRequestRaw('https://fitfocus.test/api/admin/subscription', '{');
+    const request = await adminRequestRaw('https://fitfocus.test/api/admin/subscription', '{', {}, false);
 
     const res = await postSubscription(context(request, db));
 
