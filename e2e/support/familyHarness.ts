@@ -14,12 +14,20 @@ export async function saved(page: Page) {
         console.log('[FITFOCUS-SAVED]', JSON.stringify({ event, ...detail }));
       }
     };
-    const request = indexedDB.open('fitfocus-user-state-v1');
-    report('open-requested');
-    request.addEventListener('blocked', () => report('open-blocked'));
-    request.addEventListener('error', () => report('open-error', { error: request.error?.name ?? null }));
-    const db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    report('open-success', { version: db.version });
+    // The native PWA test reuses its app connection so probes do not enqueue extra opens behind old clients.
+    let db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
+    let closeDatabase = false;
+    if (db) {
+      report('connection-reused', { version: db.version });
+    } else {
+      const request = indexedDB.open('fitfocus-user-state-v1');
+      report('open-requested');
+      request.addEventListener('blocked', () => report('open-blocked'));
+      request.addEventListener('error', () => report('open-error', { error: request.error?.name ?? null }));
+      db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      closeDatabase = true;
+      report('open-success', { version: db.version });
+    }
     try {
       const tx = db.transaction(['values', 'outbox'], 'readonly');
       report('transaction-created');
@@ -40,7 +48,7 @@ export async function saved(page: Page) {
       return { version: db.version, menus: values.filter(value => value.key.includes('_family_menu:')).map(value => JSON.parse(value.value)),
         profiles: values.filter(value => value.key === `fitfocus_data_${account}_profile`).map(value => JSON.parse(value.value)),
         operations: operations.filter(op => op.resource === 'familyMenu').map(op => ({ opId: op.opId, status: op.status, retryCount: op.retryCount, value: op.value, serverSnapshot: op.serverSnapshot })) };
-    } finally { db.close(); }
+    } finally { if (closeDatabase) db.close(); }
   }, account);
 }
 

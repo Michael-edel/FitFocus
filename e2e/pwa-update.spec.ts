@@ -16,6 +16,7 @@ async function openNative(page: Page, url: string, standalone: boolean) {
   await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
   await openApp(page, url); await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+  await expectCapturedAppDatabase(page);
   return errors;
 }
 
@@ -42,13 +43,24 @@ function isExpectedFirefoxIdbNavigationWarning(message: string): boolean {
     && message.includes('/assets/ai-');
 }
 
+async function expectCapturedAppDatabase(page: Page) {
+  await expect.poll(() => page.evaluate(() => Boolean(
+    (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase,
+  ))).toBe(true);
+}
+
 async function stateDebug(page: Page) {
   return page.evaluate(async () => {
-    const request = indexedDB.open('fitfocus-user-state-v1');
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    let db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
+    let closeDatabase = false;
+    if (!db) {
+      const request = indexedDB.open('fitfocus-user-state-v1');
+      db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      closeDatabase = true;
+    }
     try {
       const tx = db.transaction(['outbox_meta', 'outbox'], 'readonly');
       const complete = new Promise<void>((resolve, reject) => {
@@ -71,7 +83,7 @@ async function stateDebug(page: Page) {
         opId: operation.opId, resource: operation.resource, status: operation.status, reason: operation.reason, baseVersion: operation.baseVersion,
         })),
       };
-    } finally { db.close(); }
+    } finally { if (closeDatabase) db.close(); }
   });
 }
 
@@ -125,27 +137,43 @@ test('real service worker waits for an explicit update and preserves durable fam
     // closes its connection; this makes Firefox's intermittent open() hang diagnosable.
     await tab.addInitScript(() => {
       (window as Window & { __fitfocusE2eIdbDiagnostics?: boolean }).__fitfocusE2eIdbDiagnostics = true;
+      const report = (event: string, detail: Record<string, unknown> = {}) => {
+        console.log('[FITFOCUS-IDB]', JSON.stringify({ event, ...detail }));
+      };
+      let openRequestSequence = 0;
       const originalOpen = IDBFactory.prototype.open;
       IDBFactory.prototype.open = function(name: string, version?: number) {
+        const requestId = ++openRequestSequence;
+        const detail = {
+          name,
+          requestId,
+          requestedVersion: version ?? null,
+          callStack: new Error().stack?.split('\n').slice(1, 7),
+        };
+        report('open-requested', detail);
         const request = version === undefined
           ? originalOpen.call(this, name)
           : originalOpen.call(this, name, version);
-        const report = (event: string, detail: Record<string, unknown> = {}) => {
-          console.log('[FITFOCUS-IDB]', JSON.stringify({ name, requestedVersion: version ?? null, event, ...detail }));
-        };
-        request.addEventListener('blocked', () => report('blocked'));
-        request.addEventListener('upgradeneeded', event => report('upgradeneeded', {
+        request.addEventListener('blocked', () => report('blocked', detail));
+        request.addEventListener('upgradeneeded', event => report('upgradeneeded', { ...detail,
           oldVersion: event.oldVersion, newVersion: event.newVersion,
         }));
-        request.addEventListener('error', () => report('error', { error: request.error?.name ?? null }));
+        request.addEventListener('error', () => report('error', { ...detail, error: request.error?.name ?? null }));
         request.addEventListener('success', () => {
           const database = request.result;
-          report('success', { databaseVersion: database.version });
-          database.addEventListener('versionchange', event => report('versionchange', {
-            databaseVersion: database.version, newVersion: event.newVersion,
-          }));
+          report('success', { ...detail, databaseVersion: database.version });
+          const diagnosticWindow = window as Window & { __fitfocusE2eDatabase?: IDBDatabase };
+          diagnosticWindow.__fitfocusE2eDatabase = database;
+          database.addEventListener('versionchange', event => {
+            report('versionchange', { databaseVersion: database.version, newVersion: event.newVersion });
+            if (diagnosticWindow.__fitfocusE2eDatabase === database) delete diagnosticWindow.__fitfocusE2eDatabase;
+          });
           const close = database.close.bind(database);
-          database.close = () => { report('close', { databaseVersion: database.version }); close(); };
+          database.close = () => {
+            report('close', { databaseVersion: database.version });
+            if (diagnosticWindow.__fitfocusE2eDatabase === database) delete diagnosticWindow.__fitfocusE2eDatabase;
+            close();
+          };
         });
         return request;
       };
@@ -221,6 +249,7 @@ test('real service worker waits for an explicit update and preserves durable fam
     await Promise.all(reloaded);
     await Promise.all([page.waitForLoadState('load'), oldPage.waitForLoadState('load')]);
     expect(navigations).toBeGreaterThan(0); expect(oldNavigations).toBeGreaterThan(0);
+    await Promise.all([expectCapturedAppDatabase(page), expectCapturedAppDatabase(oldPage)]);
     await expect(page.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
     await expect(oldPage.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting === null)).toBe(true);
