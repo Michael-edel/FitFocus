@@ -3675,3 +3675,17 @@ bundles без proof нужно обновить до rollout. API-invariants gu
 typecheck, API invariants, auth-scope, admin guards, schema parity, privacy
 coverage, production build и `git diff --check`. Точный CI follow-up ожидает
 push; старые bundles, staging и реальная Stripe-приёмка остаются открытыми.
+
+## P0.5 — обязательный proof для mobile-token issuance, `a1e79ac`, 15.10.2026
+
+`POST /api/mobile/token` теперь требует парный account/session proof через
+`requireScopedStateUser`; unscoped legacy POST получает 401 до чтения source
+session и mint bearer-токена. Beta-access regression передаёт валидный scope,
+чтобы проверять именно access отказ, а API-invariants guard фиксирует mandatory
+helper.
+
+На точном локальном SHA `a1e79ac` прошли профильные тесты (9/9), полный unit
+suite (1244/1244 в 208 файлах), общий/domain-strict/storage-strict typecheck,
+API invariants, auth-scope, admin guards, schema parity, privacy coverage,
+production build и `git diff --check`. Точный CI follow-up ожидает push; старый
+Settings bundle, staging и настоящее устройство остаются открытыми.

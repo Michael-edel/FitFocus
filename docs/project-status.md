@@ -3,6 +3,14 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для mobile token, `a1e79ac`
+
+`POST /api/mobile/token` отклоняет unscoped legacy запрос с 401 до mint bearer
+токена. Локально прошли 1244 unit, девять профильных mobile/beta тестов, три
+typecheck, API/auth/admin/schema/privacy guards и production build. Точный CI
+ожидает push; обновление старого Settings bundle, staging и реальное устройство
+остаются открытыми. [Контракт](wearable-sync.md).
+
 ## Локальный кандидат — обязательный proof для billing, `28341ed`
 
 Checkout и admin subscription требуют парный session proof; unscoped старые

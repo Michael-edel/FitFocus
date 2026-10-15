@@ -31,6 +31,9 @@
 - [ ] Для [Checkout и смены тарифа](docs/billing-session.md) оба endpoints
   требуют парный proof и отклоняют старые unscoped bundles с 401 до side effects.
   Проверить обновление клиента, смену аккаунта и Stripe return на staging.
+- [ ] Выдача [мобильного bearer-токена](docs/wearable-sync.md) требует proof;
+  старый Settings bundle получает 401. Проверить свежую выдачу и установку на
+  целевом устройстве после обновления клиента.
 - [ ] Очередь достижений сохраняет исходный login proof и завершается при
   logout/pagehide/истечении lifetime; поздний GET не отменяет подтверждённый unlock.
   Реальный BFCache проверен отдельно. Временная очередь и best-effort счётчики

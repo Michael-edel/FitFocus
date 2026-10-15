@@ -558,7 +558,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   очистка токена/setup link при смене логина и delayed account-switch E2E.
   Все проверки включены в точный PR CI HEAD `08618e3`, run
   [38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894),
-  завершившийся success. [Контракт](docs/wearable-sync.md).
+  завершившийся success. Follow-up переводит выдачу токена на обязательный proof;
+  legacy unscoped POST получает 401 до mint. На точном локальном SHA
+  [`a1e79ac`](https://github.com/Michael-edel/FitFocus/commit/a1e79ac85d1f77c2112d121fd21deb3da03a5fdc)
+  прошли 1244 unit / 208 файлов, 9 mobile/beta тестов, три typecheck,
+  API/auth/admin/schema/privacy guards и build. CI, staging и устройство остаются
+  открытыми.
+  [Контракт](docs/wearable-sync.md).
 - [x] Связать Huawei Health status, OAuth start/callback, sync и disconnect
   с исходными account/session proof; профиль фиксировать только через guarded
   outbox commit. `455cb01`: 26 профильных unit/API-тестов и 15/15 выбранных

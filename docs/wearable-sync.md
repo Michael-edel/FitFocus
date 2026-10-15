@@ -1,5 +1,15 @@
 # FitFocus wearable sync contract
 
+## Актуальное уточнение — обязательный proof для выдачи токена, `a1e79ac`, 15.10.2026
+
+Follow-up [`a1e79ac`](https://github.com/Michael-edel/FitFocus/commit/a1e79ac85d1f77c2112d121fd21deb3da03a5fdc)
+переводит `POST /api/mobile/token` на `requireScopedStateUser`: legacy-запрос без
+proof получает 401 до чтения source-session и mint bearer-токена. Локально прошли
+9 профильных mobile/beta tests, полный unit suite (1244/1244), три typecheck,
+API/auth/admin/schema/privacy guards и production build. Точный CI follow-up
+ожидает push; update старого Settings bundle и реальное устройство остаются
+открытыми.
+
 Endpoint: `POST /api/wearable/sync`
 
 Purpose: accept a snapshot from an iPhone bridge, typically a small native app or helper that reads Apple HealthKit and forwards the data to FitFocus.
@@ -16,9 +26,8 @@ marked `Cache-Control: no-store`. The token-issuing POST is not retried.
 
 Settings keeps the token only for the captured account/session guard, checks the
 guard again before showing or copying it, and hides the token and setup link when
-the login changes. Requests without scope remain compatible with older web
-clients, but do not receive account/session binding; the current UI always sends
-scope and requires the matching guarded response.
+the login changes. Both scope headers are required; unscoped requests receive 401
+before token minting. Older open web bundles must update before rollout.
 
 ## Required transport
 
