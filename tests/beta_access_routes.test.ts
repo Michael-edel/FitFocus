@@ -93,7 +93,12 @@ describe('beta access route boundaries', () => {
     } as unknown as BootstrapContext);
     const exportResponse = await getExport({
       ...baseContext(new Request('https://fitfocus.test/api/export', {
-        headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'export-beta-test-01' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'X-FitFocus-State-Account': 'user-1',
+          'X-FitFocus-State-Session': sessionProof,
+          'X-Request-ID': 'export-beta-test-01',
+        },
       })),
       env,
     } as unknown as ExportContext);
@@ -112,7 +117,32 @@ describe('beta access route boundaries', () => {
     }
     expect(bootstrapResponse.headers.get('X-Request-ID')).toBeTruthy();
     expect(exportResponse.headers.get('X-Request-ID')).toBe('export-beta-test-01');
+    expect(exportResponse.headers.get('X-FitFocus-Export-Protocol')).toBe('1');
+    expect(exportResponse.headers.get('X-FitFocus-Export-Guard')).toBe('1');
+    expect(exportResponse.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(exportResponse.headers.get('X-FitFocus-State-Session')).toBe(sessionProof);
 
     expect(db.queries.filter((sql) => sql.includes('SELECT profile_json') || sql.includes('SELECT k, v') || sql.includes('SELECT id, email'))).toHaveLength(0);
+  });
+
+  it.each([
+    {},
+    { 'X-FitFocus-State-Account': 'user-1' },
+  ])('rejects missing or partial export proof before reading private data', async (scopeHeaders) => {
+    const token = await signJwt();
+    const db = makeDb();
+    const response = await getExport({
+      ...baseContext(new Request('https://fitfocus.test/api/export', {
+        headers: { Cookie: `ff_session=${token}`, ...scopeHeaders },
+      })),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' },
+    } as unknown as ExportContext);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Export-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Export-Guard')).toBe('1');
+    expect(response.headers.has('Set-Cookie')).toBe(false);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+    expect(db.queries).toHaveLength(0);
   });
 });

@@ -1533,5 +1533,9 @@ assertOrder(logoutRoute, 'if (!account || !session)', 'const token = readCookie'
 assertOrder(logoutRoute, 'if (!account || !session)', 'revokeSession(env.DB, sid, sub)', 'ordinary logout must reject missing proof before revoking a session');
 assertNotIncludes(logoutRoute, 'Set-Cookie', 'ordinary logout must not clear a newer login cookie in a late response');
 
+const userDataExport = read('functions/api/export.ts');
+assertIncludes(userDataExport, 'requireScopedStateUser(request, env)', 'GDPR user data export must require the initiating account/session proof');
+assertIncludes(userDataExport, "withSessionGuard(response, context.request, 'Export')", 'GDPR user data export responses must carry verifiable scope markers');
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
