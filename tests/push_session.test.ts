@@ -10,17 +10,17 @@ let db: StateDatabase;
 let outbox: DurableOutbox;
 let guard: OutboxReadGuard;
 
-const me = (capability: unknown = { protocol: 1, guard: 1 }) => ({
-  user: { sub: account },
+const me = (capability: unknown = { protocol: 1, guard: 1 }, accountId = account, sessionId = serverSessionId) => ({
+  user: { sub: accountId },
   hasAccess: true,
-  stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: serverSessionId },
+  stateSync: { protocol: 2, guard: 1, accountId, sessionId },
   pushSync: capability,
 });
-const scopeHeaders = () => ({
+const scopeHeaders = (accountId = account, sessionId = serverSessionId) => ({
   'X-FitFocus-Push-Protocol': '1',
   'X-FitFocus-Push-Guard': '1',
-  'X-FitFocus-State-Account': account,
-  'X-FitFocus-State-Session': serverSessionId,
+  'X-FitFocus-State-Account': accountId,
+  'X-FitFocus-State-Session': sessionId,
 });
 const json = (body: unknown, headers: HeadersInit = {}, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -88,10 +88,51 @@ describe('push session transport', () => {
     await expect(result).rejects.toThrow('LOGIN_SESSION_CHANGED');
   });
 
+  it('discards a late push status response from account A after account B becomes active', async () => {
+    let release!: (response: Response) => void;
+    let requested!: () => void;
+    const started = new Promise<void>(resolve => { requested = resolve; });
+    const pending = new Promise<Response>(resolve => { release = resolve; });
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      if (String(input).startsWith('/api/me')) return json(me());
+      expect(String(input)).toBe('/api/push/status');
+      requested();
+      return pending;
+    });
+    const session = await prepare(fetchImpl);
+
+    const status = requestPushJson(session, '/api/push/status');
+    await started;
+    await outbox.acceptReadSession('account-b', 'b'.repeat(64), guard.authFence);
+    release(json({ configured: true, current_subscription_id: 'account-a-subscription' }, scopeHeaders()));
+
+    await expect(status).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  });
+
   it('uses only the already active IDB owner for background subscription recovery', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me()));
     const activeSession = await prepareActivePushSession({ outbox, fetchImpl, timeoutMs: 200 });
     expect(activeSession?.guard).toMatchObject({ accountId: account, serverSessionId });
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('rebinds background subscription recovery to the newer active IDB login session', async () => {
+    const nextSessionId = 'b'.repeat(64);
+    await outbox.acceptReadSession(account, nextSessionId, guard.authFence);
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).startsWith('/api/me')) return json(me(undefined, account, nextSessionId));
+      expect(String(input)).toBe('/api/push/subscribe');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('X-FitFocus-State-Account')).toBe(account);
+      expect(headers.get('X-FitFocus-State-Session')).toBe(nextSessionId);
+      return json({ ok: true }, scopeHeaders(account, nextSessionId));
+    });
+
+    const activeSession = await prepareActivePushSession({ outbox, fetchImpl, timeoutMs: 200 });
+    expect(activeSession?.guard).toMatchObject({ accountId: account, serverSessionId: nextSessionId });
+    await requestPushJson(activeSession!, '/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: { endpoint: 'https://push.example/' } }),
+    });
+    expect(fetchImpl.mock.calls.filter(([input]) => String(input) === '/api/push/subscribe')).toHaveLength(1);
   });
 });

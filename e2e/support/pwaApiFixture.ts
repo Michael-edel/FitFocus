@@ -2,14 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildMockProfile } from './appHarness';
 import { familyTestMenu } from '../../tests/_helpers/familyMenu';
 
-const account = 'google-e2e-sub', sid = 'a'.repeat(64), familyId = 'family-durable-e2e';
-const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid,
+const account = 'google-e2e-sub', initialSessionId = 'a'.repeat(64), familyId = 'family-durable-e2e';
+const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': account,
   ...Object.fromEntries(['State', 'Profile', 'Bootstrap', 'AI', 'Weekly-Menu', 'Achievements', 'Huawei', 'Push', 'Family', 'Family-Menu'].flatMap(resource =>
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
   conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
+  let sessionId = initialSessionId;
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
   let available = options.conflictFirstFamilyPut === true, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
@@ -20,14 +21,19 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
     currentStatePutAttempts: 0, currentStatePutAccepted: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
-  return { unexpectedApi, counts, stateWriteKeys, pushRequests, recoverState: () => { stateAvailable = true; },
+  return { unexpectedApi, counts, stateWriteKeys, pushRequests,
+    setActiveSessionId: (nextSessionId: string) => { sessionId = nextSessionId; },
+    recoverState: () => { stateAvailable = true; },
     recoverCurrentState: () => { currentStateAvailable = true; }, recover: (conflict = false) => {
     available = true;
     stateAvailable = true;
     if (conflict) { familyVersion += 1; familyMenu = familyTestMenu(account, 900, week); }
   }, async respond(request: IncomingMessage, response: ServerResponse, url: URL) {
     const path = url.pathname, method = request.method;
-    const json = (body: unknown, status = 200, extra: Record<string, string> = {}) => { response.writeHead(status, { ...headers, ...extra }); response.end(JSON.stringify(body)); };
+    const json = (body: unknown, status = 200, extra: Record<string, string> = {}) => {
+      response.writeHead(status, { ...headers, 'X-FitFocus-State-Session': sessionId, ...extra });
+      response.end(JSON.stringify(body));
+    };
     const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const raw = Buffer.concat(chunks).toString('utf8');
     const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
@@ -37,7 +43,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       if (!stateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
     }
     if (method !== 'GET' && !['/api/achievements/check'].includes(path) && path !== '/api/ai' && path !== '/api/logout'
-      && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sid)) {
+      && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sessionId)) {
       if (legacySingleStateWrite) { counts.legacyStateScopeRejected += 1; return json({ error: 'INVALID_SCOPE' }, 403); }
       unexpectedApi.push(`INVALID_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
     }
@@ -51,7 +57,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       return;
     }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId },
       ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'huaweiSync', 'pushSync', 'familySync'].map(name =>
         [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 } });

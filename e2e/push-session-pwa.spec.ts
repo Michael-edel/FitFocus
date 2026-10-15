@@ -85,6 +85,21 @@ test('native Service Worker push recovery uses the active session and stops afte
     expect(server.counts.me).toBe(meRequestsAfterLogout);
     expect(server.counts.pushSubscribe).toBe(1);
     expect(server.pushRequests).toHaveLength(1);
+
+    const nextSessionId = 'b'.repeat(64);
+    server.setActiveSessionId(nextSessionId);
+    await page.reload();
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await activeSession(page))?.serverSessionId).toBe(nextSessionId);
+    const reboundWorker = context.serviceWorkers().find(candidate => new URL(candidate.url()).pathname === '/sw.js');
+    expect(reboundWorker).toBeTruthy();
+    await dispatchSubscriptionChange(reboundWorker!);
+    expect(server.counts.me).toBeGreaterThan(meRequestsAfterLogout);
+    expect(server.counts.pushSubscribe).toBe(2);
+    expect(server.pushRequests).toEqual([
+      { path: '/api/push/subscribe', method: 'POST', account: accountId, session: serverSessionId },
+      { path: '/api/push/subscribe', method: 'POST', account: accountId, session: nextSessionId },
+    ]);
     expect(server.unexpectedApi).toEqual([]);
   } finally {
     await page.close().catch(() => {});
