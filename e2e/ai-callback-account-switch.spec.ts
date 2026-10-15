@@ -1175,6 +1175,33 @@ test('AI activity cached for account A is hidden after another tab activates acc
   expect(switched.errors).toEqual([]);
 });
 
+test('an open food insight from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace content account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Корректировать', exact: true }).click();
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

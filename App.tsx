@@ -580,6 +580,7 @@ const App: React.FC = () => {
   } = useNutritionSearchState(currentUser?.id, allowCachedUiStateRestore);
 
   const openEditFood = (item: FoodEntry) => {
+    if (!allowCachedUiStateRestore) return;
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
   const [regData, setRegData] = useState<RegistrationData>({
@@ -1560,7 +1561,10 @@ const logWeight = useCallback(() => {
       bulkRemoveSelectedFoods,
       deleteFoodEntry,
       deleteFoodPhoto,
-      openInsight: (item: FoodItem) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
+      openInsight: (item: FoodItem) => {
+        if (!allowCachedUiStateRestore) return;
+        setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true });
+      },
       openEditFood,
       formatTime,
       mealTypeLabel,
@@ -1674,7 +1678,7 @@ const logWeight = useCallback(() => {
         />
       )}
       
-      {editFoodModal && (
+      {allowCachedUiStateRestore && editFoodModal && (
         <FoodEditModal
           draft={editFoodModal}
           onChange={setEditFoodModal}
@@ -1696,7 +1700,7 @@ const logWeight = useCallback(() => {
         />
       )}
 
-{insightModal && (
+{allowCachedUiStateRestore && insightModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
             <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
