@@ -551,6 +551,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` вводит обязательный серверный proof для всех `/api/state` и
   `/api/profile` handlers; `4edeb0a` закрыл такой же legacy-путь в
   `GET /api/export`, а `a396a30` добавил proof для чтения вложений поддержки.
+  `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
+  удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
+  сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.
   Остальные callback-контракты, точный CI, проверка внешних потребителей и
   staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует

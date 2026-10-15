@@ -4099,3 +4099,16 @@ production build и `git diff --check` прошли. Два целевых accou
 так как другие cloud callbacks/cache ещё требуют проверки. Всего в `TASKS.md`
 остаётся 34 открытых пункта; staging и полная приёмка lifecycle/release не
 выполнены.
+
+## P0.5 — поздний weekly AI report при смене аккаунта, [`d2cbb25`](https://github.com/Michael-edel/FitFocus/commit/d2cbb25bb511ab518e95cb87f84baa90f9263f64), 15.10.2026
+
+Новый сценарий удерживает `wis_text` ответ account A, пока в соседней вкладке
+выполняется вход account B. После ответа проверяются неизменность weekly-report
+value и outbox A/B, отсутствие late text в обеих вкладках и ошибок браузера.
+Это дополняет прежнюю проверку logout: два сценария закрывают разные переходы.
+
+Новый E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit с
+`workers=1,retries=0`; `weekly_auto_engine` и `ai_retry` unit-наборы — 11/11,
+общий typecheck и `git diff --check` прошли. Точный GitHub CI должен быть
+проверен на опубликованном HEAD. Остальные AI/family callbacks, staging и полный
+P0.5 lifecycle остаются открытыми.

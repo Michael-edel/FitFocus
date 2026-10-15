@@ -3,12 +3,13 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 проверенный кодовый коммит —
-[`baba226`](https://github.com/Michael-edel/FitFocus/commit/baba2261bf6610d0f76a22e0b84830ef1c53e093)
-в локальной ветке `durable-outbox`; отправка и точный GitHub CI ещё ожидают.
+[`d2cbb25`](https://github.com/Michael-edel/FitFocus/commit/d2cbb25bb511ab518e95cb87f84baa90f9263f64)
+в ветке `durable-outbox`; точный CI нужно сверять по SHA текущего PR.
 
 Для этой ревизии прошли полный unit suite (1295/1295 в 209 файлах), общий и два
-strict typecheck, production build и целевые recipe account-switch E2E (4 passed,
-2 skips по конфигурации проектов). В плане остаются 34 пункта: 20 P0, 7 P1 и 7
+strict typecheck, production build, recipe account-switch E2E (4 passed, 2 skips
+по конфигурации проектов) и weekly report account-switch E2E (3/3 desktop engines).
+В плане остаются 34 пункта: 20 P0, 7 P1 и 7
 следующих задач. P0.4 и P0.5 остаются открытыми до проверки остальных callback,
 staging и полного lifecycle.
 
