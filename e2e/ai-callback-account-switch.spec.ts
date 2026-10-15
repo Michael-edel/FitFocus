@@ -268,6 +268,7 @@ type StoredValue = { key: string; value: string };
 type StoredOperation = {
   opId: string; accountId: string; key: string; status: string; resource?: string; value?: string;
   retryCount: number; nextAttemptAtMs: number; reason?: string;
+  attempt?: { attemptId: string; owner: string; sessionEpoch: string; startedAtMs: number };
 };
 type DurableSnapshot = {
   values: StoredValue[];
@@ -309,6 +310,10 @@ async function readDurableSnapshot(page: Page, retry = 0): Promise<DurableSnapsh
                 opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
                 resource: item.resource, value: item.value, retryCount: item.retryCount,
                 nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
+                ...(item.attempt ? { attempt: {
+                  attemptId: item.attempt.attemptId, owner: item.attempt.owner,
+                  sessionEpoch: item.attempt.sessionEpoch, startedAtMs: item.attempt.startedAtMs,
+                } } : {}),
               })),
               activeSession: session ? {
                 accountId: session.accountId, serverSessionId: session.serverSessionId, sessionEpoch: session.sessionEpoch,
@@ -1720,6 +1725,7 @@ test('a late profile save from account A cannot acknowledge or overwrite after a
   let started!: () => void;
   const writeStarted = new Promise<void>(resolve => { started = resolve; });
   const releaseWrite = deferred();
+  const releaseRecoveredWrite = deferred();
   const state: FixtureState = {
     current: accountA,
     profile: profileFor(accountA.id),
@@ -1779,8 +1785,53 @@ test('a late profile save from account A cannot acknowledge or overwrite after a
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
     await switched.page.screenshot({ path: info.outputPath('late-profile-save-account-b.png') });
+
+    await Promise.all([switched.page.goto('about:blank'), page.goto('about:blank')]);
+    const accountAReauthenticated: Account = { id: accountA.id, sid: 'c'.repeat(64) };
+    state.current = accountAReauthenticated;
+    state.profile = profileFor(accountA.id);
+    let recoveredWriteStarted!: () => void;
+    const recoveredWriteBegan = new Promise<void>(resolve => { recoveredWriteStarted = resolve; });
+    state.holdProfileWrite = { active: true, started: recoveredWriteStarted, wait: releaseRecoveredWrite.promise };
+    const resumedPage = await context.newPage();
+    const resumedErrors: string[] = [];
+    resumedPage.on('pageerror', error => resumedErrors.push(error.message));
+    resumedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) resumedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    const resumedFixture = await installAccountApi(resumedPage, state);
+    const recoveredSave = resumedPage.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'PUT');
+    await openApp(resumedPage, '/#settings');
+    await expect(resumedPage.getByPlaceholder('Как к вам обращаться')).toHaveValue('Локальное имя аккаунта A');
+    await recoveredWriteBegan;
+
+    const retrySnapshot = await readDurableSnapshot(resumedPage);
+    const recoveredOperation = operationsFor(retrySnapshot, accountA)
+      .find(entry => entry.key === profileKey(accountA.id));
+    expect(recoveredOperation).toMatchObject({ opId: operation!.opId, status: 'sending', value: operation!.value });
+    expect(recoveredOperation?.attempt?.sessionEpoch).not.toBe(operation!.attempt?.sessionEpoch);
+    expect(retrySnapshot.activeSession?.serverSessionId).toBe(accountAReauthenticated.sid);
+    releaseRecoveredWrite.release();
+
+    const recoveredResponse = await recoveredSave;
+    expect(recoveredResponse.status()).toBe(200);
+    expect(recoveredResponse.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(recoveredResponse.headers()['x-fitfocus-state-session']).toBe(accountAReauthenticated.sid);
+    await expect.poll(() => resumedFixture.counts.profileWrites).toEqual([accountA.id]);
+    await expect.poll(async () => operationsFor(await readDurableSnapshot(resumedPage), accountA)
+      .filter(entry => entry.key === profileKey(accountA.id))).toEqual([]);
+
+    const afterRecovery = await readDurableSnapshot(resumedPage);
+    expect(afterRecovery.activeSession?.accountId).toBe(accountA.id);
+    expect(afterRecovery.activeSession?.serverSessionId).toBe(accountAReauthenticated.sid);
+    expect(JSON.parse(rawValue(afterRecovery, profileKey(accountA.id))!).name).toBe('Локальное имя аккаунта A');
+    expect(resumedErrors).toEqual([]);
+    await expect(resumedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await resumedPage.screenshot({ path: info.outputPath('late-profile-save-account-a-recovered.png') });
   } finally {
     releaseWrite.release();
+    releaseRecoveredWrite.release();
   }
 });
 

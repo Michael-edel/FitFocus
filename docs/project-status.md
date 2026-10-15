@@ -15,6 +15,19 @@ production build прошли; unit suite — 1309/1309. P0.4 остаётся �
 остальных callbacks, staging и полного lifecycle. CI для отправленного HEAD
 проверяется отдельно.
 
+Новый P0.6 browser follow-up проверяет поздний `PUT /api/profile` после смены
+A → B и восстановление после повторного входа A с новой server session:
+исходный opId получает новый attempt/sessionEpoch и удаляется только после ack
+свежей попытки. Локальная desktop matrix прошла 3/3 без retries, typecheck
+прошёл. [CI run `38819200660`](https://github.com/Michael-edel/FitFocus/actions/runs/38819200660)
+относится к предыдущему SHA `9c78726` и не проверяет этот новый follow-up;
+нужен CI именно новой ревизии после push.
+
+Read-only smoke commit preview `9c78726` подтвердил точный bundle и корректные
+анонимные 401/`user: null`. `/api/auth/google/start` вернул
+`AUTH_UNAVAILABLE`, поэтому реальный OAuth на preview пока недоступен. D1,
+`APP_URL`, callback и edge rules также не подтверждены.
+
 Follow-up `e7d5a5c` закрывает один подтверждённый late-session путь: все пять
 PDF-экспортов повторно проверяют account/session непосредственно перед
 `doc.save()`, а root отчёты также проверяют сессию до и после динамического

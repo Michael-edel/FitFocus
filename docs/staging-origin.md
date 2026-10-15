@@ -94,6 +94,31 @@ OAuth callback, безопасный тестовый аккаунт или ми
 `CLOUDFLARE_API_TOKEN`; конфигурацию Pages/D1 через dashboard не меняли.
 Поэтому staging acceptance ниже остаётся незавершённой.
 
+### Read-only API smoke: `9c78726`, 16.10.2026
+
+Проверен commit preview `https://2d2f058c.fitfocus.pages.dev/`: корень ответил
+200, а `assets/index-DA9SX_GT.js` содержит полный SHA
+`9c78726fd6acb65b12a5ddbeb63e5c2afe9c8545`. В Chromium на этом же origin
+отрисовался экран входа FitFocus без console/page errors; ссылка Google OAuth
+содержит redirect на этот preview hostname.
+
+Все API-запросы ниже — GET, без cookie или account proof:
+
+- `/api/env` — 200; `requireInvite=false`, публичные Google client IDs не
+  настроены.
+- `/api/me` — 200 с `user: null`, без redirect.
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401
+  `UNAUTH`; bootstrap/profile/state также возвращают ожидаемые protocol/guard
+  headers.
+- `/api/auth/google/start` — 500 `AUTH_UNAVAILABLE`; ответ не установил cookie.
+  OAuth redirect к Google не открывался. Код маршрута возвращает этот ответ,
+  если отсутствует `GOOGLE_CLIENT_ID` или `AUTH_JWT_SECRET`; по публичному
+  ответу определить, какая именно переменная не задана, нельзя.
+
+Статическая сборка и анонимный отказ API подтверждены. Реальный OAuth, D1,
+серверный `APP_URL`, callback и edge rules остаются незавершёнными; preview
+сейчас не позволяет пройти OAuth start.
+
 - [ ] Подтвердить адрес и точный build SHA preview; браузер и edge-правила
   не переводят его на production, API-запросы остаются на выбранном origin.
 - [ ] Проверить D1 binding конкретного deployment и безопасные тестовые

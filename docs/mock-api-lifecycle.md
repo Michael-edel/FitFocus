@@ -37,6 +37,15 @@ Proxy errors в таблице — число `ECONNREFUSED` в соответс
 | Две вкладки без Web Locks, три desktop-движка, workers=1 | 3 passed, 53,9 с | 0 |
 | После разделения bootstrap/экрана, оба семейных набора × семь конфигураций, workers=2 | 98 passed, 7,8 мин | 0 |
 
+### Follow-up P0.6 — выгрузка вкладок после позднего profile PUT, 16.10.2026
+
+В первый вариант account-switch теста были добавлены явные `page.close()` для
+старых вкладок. Функционально он прошёл 3/3, но Vite записал один
+`ECONNREFUSED /api/state` при teardown. Закрытие заменено выгрузкой документов
+через `about:blank`, пока per-page mock routes ещё установлены. Повтор матрицы
+прошёл 3/3 (Chromium, Firefox, WebKit, retries=0); в выводе Vite нет proxy
+ошибок. Функциональный результат и proxy-журнал проверены отдельно.
+
 Падение расширенного прогона: `family local storage failure preserves the
 previous menu and sends no menu mutation`, проект `iphone-pwa`.
 `familyHarness.ts:95` не дождался текста «Семья с постоянным меню» за 10 с.

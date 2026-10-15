@@ -101,6 +101,10 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
+  - [x] Проверить preview SHA `9c78726` только GET-запросами: bundle содержит
+    полный SHA, публичная страница открывается на preview origin, анонимные API
+    отказывают ожидаемо. Реальный OAuth start вернул `AUTH_UNAVAILABLE`;
+    конфигурация OAuth в Pages и остальные staging gates остаются открытыми.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.
@@ -982,6 +986,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     очередь не меняются. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit без
     retries; typecheck и `git diff --check` прошли. Это не заменяет приёмку
     повторного входа A и остальных writers/staging.
+    - [x] После позднего ответа войти в A с новой server session: тот же opId
+      получает новый attempt/sessionEpoch и отправляется только с новым proof;
+      запись удаляется после проверенного 200. Проверка прошла 3/3 без retries.
   - [x] При возврате из BFCache заново загружать уже использованные семейный
     контекст и список покупок; старые ответы остаются недействительны.
     Регрессия прошла 24/24 на трёх desktop engines без retries (`29b1e3a`);
