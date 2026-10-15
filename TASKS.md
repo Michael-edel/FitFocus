@@ -620,6 +620,14 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     сессии. E2E с сохранённым отчётом и темой прошёл 3/3 desktop-браузера без
     retries; root, domain-strict и storage-strict typecheck и production build
     прошли. P0.4 остаётся открытым для остальных callbacks, кэшей и staging.
+  - [x] Ограничить результат WIS-share исходной UI/session scope: notice hook
+    теперь хранит поколение владельца, а после системного share повторно
+    подтверждается durable read guard до успеха, телеметрии и достижения. До
+    фикса поздний callback после перехода A → B → A показывал успех старой
+    операции в активном экране. Account-switch E2E прошёл 3/3 на desktop
+    Chromium/Firefox/WebKit без retries; unit 1308/1308 в 210 файлах, общий и
+    оба strict typecheck, production build и `git diff --check` прошли. CI нового
+    SHA ожидает push. Остальной P0.4 audit, staging и полный lifecycle открыты.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

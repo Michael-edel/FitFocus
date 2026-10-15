@@ -129,7 +129,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
-import { getAccountScopedUiValue } from './features/state/accountScopedUi';
+import { accountSessionRenderKey, getAccountScopedUiValue } from './features/state/accountScopedUi';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
@@ -740,10 +740,26 @@ const App: React.FC = () => {
   const exportWeeklyPDF = exportWeeklyReportPdf;
 
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
-  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice();
+  const wisShareScope = accountSessionRenderKey(loginReadGuard, currentUser?.id);
+  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice(
+    wisShareScope,
+    allowCachedUiStateRestore,
+  );
+
+  const isWisShareSessionCurrent = useCallback(async () => {
+    if (!allowCachedUiStateRestore || !isCurrentProfileSession()) return false;
+    if (loginReadGuard) {
+      try {
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      } catch {
+        return false;
+      }
+    }
+    return allowCachedUiStateRestore && isCurrentProfileSession();
+  }, [allowCachedUiStateRestore, isCurrentProfileSession, loginReadGuard]);
 
   const handleShareWisCard = useCallback(async () => {
-    if (!currentUser || !weekly) return;
+    if (!currentUser || !weekly || !allowCachedUiStateRestore || !isCurrentProfileSession()) return;
     const card = wisShareCardRef.current;
     if (!card) {
       setWisShareNotice('error', 'Не удалось подготовить карточку WIS. Попробуйте ещё раз.');
@@ -756,6 +772,7 @@ const App: React.FC = () => {
 
     try {
       const method = await shareWisCard({ card, wis: weekly.wis, waitForFonts: waitForDocumentFonts });
+      if (!await isWisShareSessionCurrent()) return;
       setWisShareNotice('success', method === 'share_sheet'
         ? 'Карточка готова и передана в системное меню отправки.'
         : 'Системная отправка недоступна — PNG скачан на устройство.');
@@ -763,11 +780,13 @@ const App: React.FC = () => {
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
       return;
     } catch (error: unknown) {
+      if (!await isWisShareSessionCurrent()) return;
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
       trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
-  }, [checkAchievements, currentUser, weekly, weeklyReports.length, setWisShareNotice]);
+  }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isWisShareSessionCurrent,
+    weekly, weeklyReports.length, setWisShareNotice]);
 
   const aiReportGenerationRef = useWeeklyAiReport({
     currentUser,

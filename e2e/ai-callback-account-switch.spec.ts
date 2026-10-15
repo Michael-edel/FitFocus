@@ -1507,6 +1507,92 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
   await returningPage.screenshot({ path: info.outputPath('state-outbox-account-a-resumed.png') });
 });
 
+test('WIS share completion from a retired session cannot restore its notice after account reactivation', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab WIS share lifecycle acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect(page.getByRole('button', { name: 'Поделиться', exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    const testWindow = window as Window & {
+      __ffShareStarted?: boolean;
+      __ffShareFinished?: boolean;
+      __ffReleaseShare?: () => void;
+    };
+    const card = document.querySelector('[aria-hidden="true"].fixed') as HTMLDivElement | null;
+    if (card) {
+      card.style.width = '1px';
+      card.style.height = '1px';
+      card.style.left = '0';
+      card.style.boxShadow = 'none';
+      card.replaceChildren(document.createElement('div'));
+    }
+    const fonts = document.fonts as FontFaceSet & { ready: Promise<FontFace[]> };
+    Object.defineProperty(fonts, 'ready', { configurable: true, value: Promise.resolve([]) });
+    testWindow.__ffShareStarted = false;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: () => new Promise<void>(resolve => {
+        testWindow.__ffShareStarted = true;
+        testWindow.__ffReleaseShare = () => {
+          testWindow.__ffShareFinished = true;
+          resolve();
+        };
+      }),
+    });
+  });
+  await page.getByRole('button', { name: 'Поделиться', exact: true }).click();
+  await expect(page.getByText('Готовим PNG-карточку WIS...', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __ffShareStarted?: boolean }).__ffShareStarted)).toBe(true);
+
+  try {
+    const switched = await openAccountB(context, state);
+    await waitForAccountSwitch(page);
+
+    state.current = accountA;
+    state.profile = profileFor(accountA.id);
+    const reactivatedPage = await context.newPage();
+    const reactivatedErrors: string[] = [];
+    reactivatedPage.on('pageerror', error => reactivatedErrors.push(error.message));
+    reactivatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reactivatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    const reactivated = await installAccountApi(reactivatedPage, state);
+    await openApp(reactivatedPage, '/#dashboard');
+    await expect(reactivatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reactivatedPage)).activeSession?.accountId).toBe(accountA.id);
+    await expect(page.getByText('Профиль A', { exact: true })).toBeVisible();
+    await waitForAccountOutboxIdle(reactivatedPage, accountA);
+
+    await page.evaluate(async () => {
+      const testWindow = window as Window & { __ffReleaseShare?: () => void };
+      testWindow.__ffReleaseShare?.();
+      await new Promise<void>(resolve => window.setTimeout(resolve, 0));
+    });
+    await expect.poll(() => page.evaluate(() => (window as Window & { __ffShareFinished?: boolean }).__ffShareFinished)).toBe(true);
+    await page.waitForTimeout(100);
+
+    await expect(page.getByText('Карточка готова и передана в системное меню отправки.', { exact: true })).toHaveCount(0);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    expect(reactivatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    await page.evaluate(() => (window as Window & { __ffReleaseShare?: () => void }).__ffReleaseShare?.());
+  }
+});
+
 test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox reload acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
