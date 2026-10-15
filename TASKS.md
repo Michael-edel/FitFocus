@@ -614,6 +614,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `ba973c1`/`636d2c7` ожидают точного CI. На следующем follow-up обязательная
   серверная привязка для Push проверяется профильными API-тестами и полным CI
   точного SHA; staging, реальный provider и устройство остаются открытыми.
+  В follow-up `04b61dd` добавлена native-SW проверка повторного входа с новым
+  session id и unit-проверка свежего proof. Полный unit suite прошёл 1277/1277;
+  delayed-status E2E прошёл 3/3 desktop-браузера, native SW — 1/1 Chromium,
+  typecheck прошёл. Это синтетическая локальная сессия; staging, provider и
+  устройство остаются обязательными. CI `04b61dd` ожидает push.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному guard, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:

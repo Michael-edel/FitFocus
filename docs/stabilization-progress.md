@@ -280,6 +280,24 @@ native PWA/Service Worker recovery, старые открытые bundle и stag
 устройства, старые открытые bundle и staging не проверены. Новый тест пока не
 входит в опубликованный SHA `45575d2`; точный CI для follow-up ещё предстоит.
 
+## Native Push recovery после повторного входа — `04b61dd`, 15.10.2026
+
+Тестовый API backend теперь может сменить session id. `push-session-pwa.spec.ts`
+проверяет настоящий собранный Service Worker на одном origin: после logout
+событие прекращается без запроса proof; после reload с новым session id приложение
+обновляет active-session в IDB, а следующее `pushsubscriptionchange` получает
+свежий `/api/me` proof и отправляет подписку с новым session header.
+`tests/push_session.test.ts` отдельно проверяет поздний status response и
+перепривязку фонового запроса к новому IDB session.
+
+Проверки для `04b61dd`: полный unit suite — 1277/1277 (208 файлов); общий
+typecheck прошёл; `family-callback-account-switch.spec.ts --grep "delayed push
+status"` — 3/3 desktop Chromium/Firefox/WebKit без retries; native
+`push-session-pwa.spec.ts` — 1/1 desktop Chromium без retries (6 других проектов
+пропущены по конфигурации). Это локальный синтетический HTTP backend, не реальный
+OAuth, push provider, установленное устройство или staging. Точный GitHub CI
+ещё не запущен для `04b61dd`; run `38716861362` проверяет предыдущий SHA.
+
 ## P0.5 — генерация пошагового рецепта из фото с account/session guard, `71d2ca4`, 15.10.2026
 
 `FoodInsightCard` вызывал `getRecipeFromPhoto` без `AiSession`, а после ответа

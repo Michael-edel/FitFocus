@@ -277,6 +277,17 @@ scope guard старых клиентов отдельно не приняты; 
 [run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
 но завершился до коммита `daec94d` и его не проверяет.
 
+## Push recovery после повторного входа — `04b61dd`
+
+Native Service Worker acceptance дополнена сценарием смены server session:
+после logout тест перезагружает приложение с новым session id, ждёт обновления
+active-session в IndexedDB и отправляет `pushsubscriptionchange` в собранный
+`/sw.js`. Запрос подписки использует новый account/session proof; событие до
+повторного входа не вызывает `/api/me` и не отправляет данные. Это локальный
+HTTP fixture и Chromium, не реальный OAuth, push provider, устройство или
+staging. Ветка содержит проверенный commit `04b61dd`; точный CI для него ожидает
+push. Общий P0.5 остаётся открытым до staging-приёмки.
+
 ## P0.5 — пошаговый рецепт из дневникового фото
 
 Кодовый commit [`71d2ca4`](https://github.com/Michael-edel/FitFocus/commit/71d2ca4)

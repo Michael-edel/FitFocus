@@ -74,7 +74,8 @@
 - [ ] Для [Push](docs/push-session.md) все четыре API требуют свежий парный
   account/session proof до чтения тела, D1 и отправки уведомлений. На staging
   старые unscoped Settings/Service Worker запросы получают 401, а новый клиент
-  успешно читает статус и восстанавливает подписку после обновления.
+  успешно читает статус и восстанавливает подписку после обновления и повторного
+  входа с новым server session proof.
 - [ ] На staging проверены семейный AI-путь `useFamilyMenu`, явная
   family/week-привязка, CAS-запись через `familyMenu` outbox, reload/конфликт
   и отказ старых writers после migration barrier. Session guard и отмена fetch
