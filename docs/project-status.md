@@ -19,9 +19,16 @@ production build прошли; unit suite — 1309/1309. P0.4 остаётся �
 A → B и восстановление после повторного входа A с новой server session:
 исходный opId получает новый attempt/sessionEpoch и удаляется только после ack
 свежей попытки. Локальная desktop matrix прошла 3/3 без retries, typecheck
-прошёл. [CI run `38819200660`](https://github.com/Michael-edel/FitFocus/actions/runs/38819200660)
-относится к предыдущему SHA `9c78726` и не проверяет этот новый follow-up;
-нужен CI именно новой ревизии после push.
+прошёл. [CI run `38820843334`](https://github.com/Michael-edel/FitFocus/actions/runs/38820843334)
+проверяет предыдущий кодовый SHA `b49dd3f`: все шаги до E2E были зелёными,
+E2E ещё выполнялись при последней проверке. Он не содержит новые BFCache-тест
+и WebKit-диагностику ниже; для них нужен CI текущей ревизии после push.
+
+Дополнительный P0.6 тест связывает profile sender с BFCache lifecycle: после
+`pagehide` и `pageshow.persisted` серверная сессия проверяется повторно, тот же
+opId получает новую attempt epoch и очередь очищает только свежий PUT. Сценарий
+прошёл 3/3 на desktop Chromium/Firefox/WebKit без retries. CI SHA `b49dd3f`
+не содержит этот новый сценарий; точный CI нужно проверить после push.
 
 Read-only smoke commit preview `9c78726` подтвердил точный bundle и корректные
 анонимные 401/`user: null`. `/api/auth/google/start` вернул

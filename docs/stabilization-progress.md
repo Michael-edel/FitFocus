@@ -4492,3 +4492,25 @@ payload, но получает новый `attempt.sessionEpoch`; HTTP-запр�
 штатный `about:blank` unload повторная матрица прошла без proxy errors. В
 production-коде дефект не воспроизведён, это regression acceptance для P0.6.
 Остальные callbacks, writers, реальный BFCache и staging остаются открытыми.
+
+## P0.6 — профильный sender после BFCache, 16.10.2026
+
+Новый сценарий `profile-durability.spec.ts` удерживает первый durable PUT профиля,
+отправляет `pagehide`, затем возвращает страницу синтетическим
+`pageshow.persisted`. Сессия аккаунта подтверждается заново; операция сохраняет
+тот же `opId` и payload, но получает новый `attempt.sessionEpoch` и отправляется
+с новым server-session proof. После успешного ответа новой попытки запись
+удаляется; позднее завершение старого mock-запроса не возвращает её в очередь.
+
+Проверка прошла 3/3 на desktop Chromium, Firefox и WebKit при
+`workers=1,retries=0`. Это проверяет app wiring и sender на синтетическом
+BFCache lifecycle, но не реальное восстановление страницы на устройстве.
+Изменений production-кода не потребовалось; P0.6 остаётся открытым для других
+callbacks/writers, старых bundles и staging. CI предыдущего SHA `b49dd3f`
+не содержит этот новый тест. В первом полном профильном прогоне 62 сценария
+прошли, а один старый desktop WebKit auth-reload сценарий упал на
+`scrollIntoViewIfNeeded`: screenshot показал восстановленное поле в viewport,
+ошибок приложения не было. Прокрутка заменена прямой проверкой полной
+видимости; оба WebKit сценария (auth reload и новый BFCache) после изменения
+прошли по три раза каждый, без retries. Остальная полная матрица отдельно после
+этой правки не перезапускалась.

@@ -993,6 +993,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     контекст и список покупок; старые ответы остаются недействительны.
     Регрессия прошла 24/24 на трёх desktop engines без retries (`29b1e3a`);
     полный lifecycle и реальный BFCache на устройстве остаются открытыми.
+  - [x] Для profile sender проверить `pagehide` → BFCache return с новой
+    проверенной сессией: та же durable-операция получает новый attempt и
+    завершается только после нового scoped PUT. E2E — 3/3 desktop engines,
+    `workers=1,retries=0`; synthetic lifecycle не заменяет реальный BFCache.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:

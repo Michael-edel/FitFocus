@@ -20,20 +20,22 @@ async function saved(page: Page) {
       return { value: value?.value as string | undefined,
         pause: active?.pause as string | undefined,
         stateOperationCount: operations.filter(op => op.resource !== 'profile').length,
-        operations: operations.filter(op => op.key === key) as Array<{ opId: string; status: string; resource: string; baseVersion: number; value: string; serverSnapshot?: { version: number } }> };
+      operations: operations.filter(op => op.key === key) as Array<{ opId: string; status: string; resource: string; baseVersion: number; value: string; attempt?: { sessionEpoch: string; attemptId: string; startedAtMs: number }; serverSnapshot?: { version: number } }> };
     } finally { db.close(); }
   }, key);
 }
-async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGate?: { started: () => void; wait: Promise<void> }) {
+async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal', stateGate?: { started: () => void; wait: Promise<void> },
+  profileGates: Array<{ started: () => void; wait: Promise<void> }> = []) {
   let conflict = mode === 'conflict';
   let expectedProfileBaseVersion = mode === 'refresh' ? 9 : 2;
+  let currentSid = sid;
   let expired = false;
   let rejectedProofs = 0;
   // A new document can start with a restored server login; focus within the old document cannot.
   page.on('request', request => {
     if (request.isNavigationRequest() && request.resourceType() === 'document' && request.frame() === page.mainFrame()) expired = false;
   });
-  const errors: string[] = []; const mutations: string[] = []; const profileBases: number[] = [];
+  const errors: string[] = []; const mutations: string[] = []; const profileBases: number[] = []; const routeErrors: string[] = [];
   const expectedHttpErrors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
@@ -49,22 +51,33 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
   await mockApp(page, { session: 'app' });
   await page.route('**/api/**', async route => {
     const request = route.request(); const path = new URL(request.url()).pathname;
-    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
+    const json = (body: unknown, status = 200, headers = { ...scope, 'X-FitFocus-State-Session': currentSid }) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
     if (path === '/api/me' && expired) { rejectedProofs += 1; return json({ error: 'UNAUTH' }, 401); }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: currentSid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile' && request.method() === 'PUT') {
+      const writeIndex = mutations.length;
+      const responseScope = { ...scope, 'X-FitFocus-State-Session': currentSid };
       mutations.push(request.method());
       const body = request.postDataJSON() as { baseVersion: number };
       profileBases.push(body.baseVersion);
       expect(request.headers()['x-fitfocus-state-account']).toBe(account);
-      expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
+      expect(request.headers()['x-fitfocus-state-session']).toBe(currentSid);
       expect(body.baseVersion).toBe(expectedProfileBaseVersion);
-      if (mode === 'refresh') return json({ profile: { ...body, id: account, version: 10 }, version: 10 });
-      if (mode === 'auth') { expired = true; return json({ error: 'UNAUTH' }, 401); }
-      if (conflict) return json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409);
-      return json({ profile: { ...body, id: account, version: body.baseVersion + 1 }, version: body.baseVersion + 1 });
+      const gate = profileGates[writeIndex];
+      const respond = () => {
+        if (mode === 'refresh') return json({ profile: { ...body, id: account, version: 10 }, version: 10 }, 200, responseScope);
+        if (mode === 'auth') { expired = true; return json({ error: 'UNAUTH' }, 401, responseScope); }
+        if (conflict) return json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409, responseScope);
+        return json({ profile: { ...body, id: account, version: body.baseVersion + 1 }, version: body.baseVersion + 1 }, 200, responseScope);
+      };
+      if (gate) {
+        gate.started(); await gate.wait;
+        try { return await respond(); }
+        catch (error) { routeErrors.push(String(error)); return; }
+      }
+      return respond();
     }
     if (path === '/api/profile') return json({ profile: mode === 'refresh' ? { ...profile, name: 'Cloud refreshed', version: 9 } : profile });
     if (path === '/api/state' && request.method() === 'GET') return json({ items: [] });
@@ -76,7 +89,8 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh', stateGat
     }
     return route.fallback();
   });
-  return { errors, mutations, profileBases, expectedHttpErrors,
+  return { errors, mutations, profileBases, expectedHttpErrors, routeErrors,
+    setSession: (sessionId: string) => { currentSid = sessionId; },
     resolveConflict: () => { conflict = false; expectedProfileBaseVersion = 8; } };
 }
 test('profile edits survive reload and a different bootstrap snapshot during an auth pause', async ({ page }, testInfo) => {
@@ -105,8 +119,72 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
   expect((await saved(page)).operations[0].opId).toBe(operationId);
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#settings$/);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
-  await name.scrollIntoViewIfNeeded(); await expect(name).toBeInViewport({ ratio: 1 });
+  // The reloaded field is already in the first viewport; scrolling it caused a
+  // WebKit-only detach during an otherwise successful durable-state assertion.
+  await expect(name).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: testInfo.outputPath('profile-local-reload.png') });
+});
+
+test('profile outbox resumes the same operation after BFCache with a newly verified session', async ({ page }) => {
+  let releaseOldResponse!: () => void;
+  let oldWriteStarted!: () => void;
+  let releaseFreshResponse!: () => void;
+  let freshWriteStarted!: () => void;
+  const oldResponseGate = new Promise<void>(resolve => { releaseOldResponse = resolve; });
+  const freshResponseGate = new Promise<void>(resolve => { releaseFreshResponse = resolve; });
+  const oldWrite = new Promise<void>(resolve => { oldWriteStarted = resolve; });
+  const freshWrite = new Promise<void>(resolve => { freshWriteStarted = resolve; });
+  const nextSid = 'c'.repeat(64);
+  const { errors, mutations, setSession, routeErrors } = await setup(page, 'normal', undefined, [
+    { started: oldWriteStarted, wait: oldResponseGate },
+    { started: freshWriteStarted, wait: freshResponseGate },
+  ]);
+
+  try {
+    await openApp(page, '/#settings');
+    const name = page.getByPlaceholder('Как к вам обращаться');
+    await name.fill('Профиль после возврата из BFCache');
+    await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await oldWrite;
+
+    const beforeHide = await saved(page);
+    const original = beforeHide.operations[0];
+    expect(original).toMatchObject({ status: 'sending', resource: 'profile', value: expect.stringContaining('Профиль после возврата из BFCache') });
+    expect(original?.attempt?.sessionEpoch).toBeTruthy();
+
+    const oldRequestFailed = page.waitForEvent('requestfailed', request =>
+      new URL(request.url()).pathname === '/api/profile' && request.method() === 'PUT');
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+    await oldRequestFailed;
+    setSession(nextSid);
+
+    const freshResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'PUT'
+      && response.request().headers()['x-fitfocus-state-session'] === nextSid);
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await freshWrite;
+
+    const resumed = (await saved(page)).operations[0];
+    expect(resumed).toMatchObject({ opId: original?.opId, status: 'sending', resource: 'profile', value: original?.value });
+    expect(resumed?.attempt?.sessionEpoch).toBeTruthy();
+    expect(resumed?.attempt?.sessionEpoch).not.toBe(original?.attempt?.sessionEpoch);
+    expect(mutations).toEqual(['PUT', 'PUT']);
+
+    releaseFreshResponse();
+    expect((await freshResponse).status()).toBe(200);
+    await expect.poll(async () => (await saved(page)).operations).toEqual([]);
+
+    // The old server request may complete after the new attempt; it must not restore or settle the outbox item.
+    releaseOldResponse();
+    await expect.poll(async () => (await saved(page)).operations).toEqual([]);
+    expect((await saved(page)).value).toContain('Профиль после возврата из BFCache');
+    expect(errors).toEqual([]);
+    expect(routeErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseOldResponse();
+    releaseFreshResponse();
+  }
 });
 test('a profile conflict retains the local name and never retries against the cloud version', async ({ page }, testInfo) => {
   const { errors, mutations } = await setup(page, 'conflict');
