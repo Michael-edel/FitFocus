@@ -31,6 +31,12 @@ staging и общей lifecycle-приёмки.
 PDF download. Chromium, Firefox и WebKit прошли 3/3 без retries; typecheck и
 `git diff --check` прошли. Общий P0.5 и staging остаются открытыми.
 
+Follow-up [`e5a22df`](https://github.com/Michael-edel/FitFocus/commit/e5a22df)
+проверяет поздний GET `/api/profile`: после входа B выпускается удержанный ответ
+A, но A не гидратирует его в UI/IDB, а профиль B остаётся своим. 3/3 desktop
+Chromium/Firefox/WebKit без retries; typecheck прошёл. Другие profile/API
+callbacks, старые writers и staging остаются открытыми; полный P0.6 не закрыт.
+
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
 `beedbee` добавляет такую же браузерную приёмку черновика измерения веса и

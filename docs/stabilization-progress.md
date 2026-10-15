@@ -4439,3 +4439,18 @@ Browser follow-up [`ad77aec`](https://github.com/Michael-edel/FitFocus/commit/ad
 Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries; общий
 typecheck и `git diff --check` прошли. Это acceptance одного PDF-пути, а не
 закрытие общего P0.5. Точный CI нового HEAD запускается после push.
+
+## P0.6 — поздний `/api/profile` ответ после смены аккаунта, [`e5a22df`](https://github.com/Michael-edel/FitFocus/commit/e5a22df), 16.10.2026
+
+Новый account-switch E2E нажимает «Перезагрузить из облака» в Settings аккаунта A,
+удерживает ответ GET `/api/profile`, активирует B в соседней вкладке и только
+после смены общей IndexedDB-сессии выпускает ответ A с HTTP 200 и прежним
+профилем A. Старая вкладка показывает session notice, а не данные профиля;
+профиль B и durable value A остаются неизменны, B не получает чужую outbox
+операцию. Обе страницы проходят проверки console/pageerror и Vite overlay.
+
+Локально: 3/3 на desktop Chromium, Firefox и WebKit, `workers=1,retries=0`;
+общий typecheck и `git diff --check` прошли. Воспроизводимого дефекта в этом
+сценарии нет, поэтому изменён только browser acceptance. Это подтверждает один
+путь reload профиля, но не закрывает остальные callbacks, старые writers,
+реальный BFCache и staging. Точный CI этого SHA запускается после push.

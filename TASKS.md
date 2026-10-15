@@ -965,6 +965,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` закрыл unscoped серверный доступ к state/profile, но нужны проверки
   client lifecycle, старых writers и staging. Runtime legacy уже использует
   auth-derived owner и all-client Service Worker fence.
+  - [x] Удержать GET `/api/profile` аккаунта A, активировать B в соседней вкладке
+    и отпустить ответ A после переключения. Старый экран закрыт session notice;
+    профиль B и обе durable-записи не изменились, новых B-операций нет. E2E
+    [`e5a22df`](https://github.com/Michael-edel/FitFocus/commit/e5a22df) прошёл
+    3/3 на desktop Chromium, Firefox и WebKit без retries; typecheck прошёл.
   - [x] При возврате из BFCache заново загружать уже использованные семейный
     контекст и список покупок; старые ответы остаются недействительны.
     Регрессия прошла 24/24 на трёх desktop engines без retries (`29b1e3a`);
