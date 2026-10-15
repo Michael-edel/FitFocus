@@ -1332,7 +1332,7 @@ export async function getWeeklyIntelligenceInterpretation(data: unknown, session
 /**
  * Генерация рецепта по изображению
  */
-export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
+export async function getRecipeFromPhoto(photoBase64: string, session: AiSession): Promise<Recipe> {
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
@@ -1371,6 +1371,6 @@ export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
       },
       required: ["title", "ingredients", "steps"]
     }
-  });
+  }, session);
   return normalizeRecipe(safeJsonObject(response.text));
 }

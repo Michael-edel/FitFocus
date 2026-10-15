@@ -67,6 +67,62 @@ describe('runtime repository and durable intent', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('updates a JSON value from the latest snapshot inside the per-key write queue', async () => {
+    const first = await repository.writeJson('diary', diary('meal-1'));
+    const result = await repository.updateJson(
+      'diary',
+      [],
+      (value): value is ReturnType<typeof diary> => Array.isArray(value),
+      current => current.map(entry => ({ ...entry, name: 'Суп с рецептом' })),
+    );
+
+    expect(result.operation).toMatchObject({ status: 'pending', parentOpId: first.opId });
+    expect(result.value).toEqual([{ ...diary('meal-1')[0], name: 'Суп с рецептом' }]);
+    expect(await repository.readJsonAsync('diary', [], (value): value is ReturnType<typeof diary> => Array.isArray(value)))
+      .toEqual(result.value);
+    expect(await outbox.list(accountId)).toHaveLength(2);
+  });
+
+  it('does not enqueue a JSON update when the updater returns the current value', async () => {
+    await repository.writeJson('diary', diary('meal-1'));
+    const before = await outbox.list(accountId);
+    const result = await repository.updateJson(
+      'diary',
+      [],
+      (value): value is ReturnType<typeof diary> => Array.isArray(value),
+      current => current,
+    );
+
+    expect(result.operation).toBeNull();
+    expect(result.value).toEqual(diary('meal-1'));
+    expect(await outbox.list(accountId)).toEqual(before);
+  });
+
+  it('retains a competing JSON update as a conflict instead of replacing another writer snapshot', async () => {
+    await repository.writeJson('diary', diary('meal-1'));
+    const second = new UserStateRepository(accountId, { outbox, writerId: 'writer-b' });
+    await Promise.all([
+      repository.readJsonAsync('diary', [], (value): value is ReturnType<typeof diary> => Array.isArray(value)),
+      second.readJsonAsync('diary', [], (value): value is ReturnType<typeof diary> => Array.isArray(value)),
+    ]);
+    const first = await repository.updateJson(
+      'diary',
+      [],
+      (value): value is ReturnType<typeof diary> => Array.isArray(value),
+      current => current.map(entry => ({ ...entry, name: 'Запись первого редактора' })),
+    );
+    const competing = await second.updateJson(
+      'diary',
+      [],
+      (value): value is ReturnType<typeof diary> => Array.isArray(value),
+      current => current.map(entry => ({ ...entry, name: 'Устаревшая запись' })),
+    );
+
+    expect(first.operation).toMatchObject({ status: 'pending' });
+    expect(competing.operation).toMatchObject({ status: 'conflicted', reason: 'independent-snapshot' });
+    expect((await outbox.snapshot(accountId, key)).value).toContain('Запись первого редактора');
+  });
+
   it('retains the write/delete causal chain and never revives stale localStorage', async () => {
     const first = repository.writeJson('diary', diary('meal-1'));
     const deletion = repository.remove('diary');

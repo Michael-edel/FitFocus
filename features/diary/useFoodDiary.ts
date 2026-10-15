@@ -143,6 +143,33 @@ export function useFoodDiary({
     });
   }, [persistFoodDiary, setSelectedDiaryDayKey, userId]);
 
+  const updateFoodEntryGuarded = useCallback(async (
+    id: string,
+    patch: Partial<FoodItem>,
+    guard: OutboxCommitGuard,
+    isCurrent: () => boolean,
+  ): Promise<boolean> => {
+    if (!userId || !repository || guard.readGuard.accountId !== userId || !isCurrent() || !guard.canCommit()) return false;
+    const result = await repository.updateJson(
+      'diary',
+      foodDiaryRef.current,
+      (value): value is FoodItem[] => Array.isArray(value),
+      current => {
+        if (!current.some(entry => entry.id === id)) return current;
+        const next = current.map(entry => entry.id === id ? { ...entry, ...patch } : entry);
+        return next.map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS);
+      },
+      guard,
+    );
+    if (result.operation?.status !== 'pending' || !isCurrent() || !guard.canCommit()
+      || !await repository.isReadSessionCurrent(guard.readGuard)) return false;
+
+    setFoodDiary(previous => isCurrent() && guard.canCommit()
+      ? previous.map(entry => entry.id === id ? { ...entry, ...patch } : entry)
+      : previous);
+    return true;
+  }, [repository, setFoodDiary, userId]);
+
   const deleteFoodPhoto = useCallback((id: string) => {
     updateFoodEntry(id, { photo: undefined, photoThumb: undefined });
   }, [updateFoodEntry]);
@@ -161,6 +188,7 @@ export function useFoodDiary({
     addFoodToDiary,
     addFoodToDiaryGuarded,
     updateFoodEntry,
+    updateFoodEntryGuarded,
     deleteFoodPhoto,
     deleteFoodEntry,
   };

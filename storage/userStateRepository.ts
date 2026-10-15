@@ -122,16 +122,71 @@ export class UserStateRepository {
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
         ...capturedGuard,
       });
-      reportStateOperation(this.accountId, operation);
-      if (operation.status === 'conflicted') {
-        reportStateSaveIssue({ accountId: this.accountId, key, kind: 'conflicted', reason: operation.reason ?? 'conflict' });
-      } else {
-        this.observations.set(key, { revision: operation.revision, confirmedVersion: operation.baseVersion, parentOpId: operation.opId });
-        // IDB is authoritative after commit, including a deletion. This is cleanup, not a second queue.
-        try { localStorage.removeItem(key); } catch {}
-        reportStateSaveSuccess(this.accountId, key);
-      }
+      this.recordOperation(key, operation);
       return operation;
+    }));
+  }
+
+  private recordOperation(key: string, operation: OutboxOperation): void {
+    reportStateOperation(this.accountId, operation);
+    if (operation.status === 'conflicted') {
+      reportStateSaveIssue({ accountId: this.accountId, key, kind: 'conflicted', reason: operation.reason ?? 'conflict' });
+      return;
+    }
+    this.observations.set(key, { revision: operation.revision, confirmedVersion: operation.baseVersion, parentOpId: operation.opId });
+    // IDB is authoritative after commit, including a deletion. This is cleanup, not a second queue.
+    try { localStorage.removeItem(key); } catch {}
+    reportStateSaveSuccess(this.accountId, key);
+  }
+
+  /** Read, derive, and commit a JSON value in this repository's per-key write queue. */
+  updateJson<K extends JsonUserStateKey>(
+    stateKey: K,
+    fallback: UserStateValue[K],
+    isValid: (value: unknown) => value is UserStateValue[K],
+    update: (current: UserStateValue[K]) => UserStateValue[K],
+    guard?: OutboxCommitGuard,
+  ): Promise<{ operation: OutboxOperation | null; value: UserStateValue[K] }> {
+    const capturedGuard = guard ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit } : undefined;
+    const key = this.key(stateKey);
+    return this.track(key, this.serialize(key, async () => {
+      const snapshot = await this.outbox.snapshot(this.accountId, key, stateKey === 'profile');
+      const previous = this.observations.get(key);
+      this.observations.set(key, {
+        revision: snapshot.revision,
+        confirmedVersion: snapshot.confirmedVersion,
+        ...(previous?.revision === snapshot.revision && previous.parentOpId ? { parentOpId: previous.parentOpId } : {}),
+      });
+
+      let raw = snapshot.value;
+      if (raw === null && snapshot.revision === 0) {
+        try { raw = localStorage.getItem(key); } catch {}
+      }
+      let current = fallback;
+      if (raw !== null) {
+        try {
+          const parsed = parseJson(raw);
+          if (isValid(parsed)) current = parsed;
+        } catch {}
+      }
+      const value = update(current);
+      if (Object.is(value, current)) return { operation: null, value };
+
+      const serialized = JSON.stringify(value);
+      if (typeof serialized !== 'string') throw new Error('USER_STATE_SERIALIZATION');
+      const observation = this.observations.get(key)!;
+      const operation = await this.outbox.write({
+        accountId: this.accountId,
+        writerId: this.writerId,
+        intent: { type: 'put', key, value: serialized },
+        expectedRevision: observation.revision,
+        baseVersion: observation.confirmedVersion,
+        ...(stateKey === 'profile' ? { resource: 'profile' as const } : {}),
+        ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
+        ...capturedGuard,
+      });
+      this.recordOperation(key, operation);
+      return { operation, value };
     }));
   }
 

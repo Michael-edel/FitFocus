@@ -646,6 +646,7 @@ const App: React.FC = () => {
     addFoodToDiary,
     addFoodToDiaryGuarded,
     updateFoodEntry,
+    updateFoodEntryGuarded,
     deleteFoodPhoto,
     deleteFoodEntry,
   } = useFoodDiary({
@@ -1663,13 +1664,25 @@ const logWeight = useCallback(() => {
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
             <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
               <FoodInsightCard
+                sourceId={insightModal.id}
+                currentUserId={currentUser?.id}
+                loginGuard={loginReadGuard}
+                isCurrentSession={isCurrentProfileSession}
                 photo={insightModal.photo}
                 name={insightModal.name}
                 insight={insightModal.insight}
                 nonFood={Boolean(insightEntry?.nonFood ?? insightModal.nonFood)}
                 isPro={paywall.canUsePro}
                 onEdit={insightEntry ? () => openEditFood(insightEntry) : undefined}
-                onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); persistFoodDiary(newDiary); setInsightModal({ ...insightModal, insight: next }); }}
+                onUpdateInsight={async (next, guard, isCurrent) => {
+                  const sourceId = insightModal.id;
+                  const saved = await updateFoodEntryGuarded(sourceId, { insight: next }, guard, isCurrent);
+                  if (!saved || !isCurrent()) return false;
+                  setInsightModal(previous => previous?.id === sourceId && isCurrent()
+                    ? { ...previous, insight: next }
+                    : previous);
+                  return true;
+                }}
                 onSaveRecipe={addFavoriteRecipe}
                 onClose={() => setInsightModal(null)}
               />

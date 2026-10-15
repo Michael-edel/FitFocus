@@ -1,16 +1,22 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FoodInsight, FoodIngredient, FavoriteRecipe } from './types';
-import { getRecipeFromPhoto } from './geminiService';
-import { bumpRecipeUsage, canGenerateRecipe } from './usage';
+import { canGenerateRecipe } from './usage';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { PhotoRecipeCommit } from './features/ai/usePhotoRecipeGeneration';
+import { usePhotoRecipeGeneration } from './features/ai/usePhotoRecipeGeneration';
 import { Heart } from 'lucide-react';
 
 type Props = {
+  sourceId: string;
+  currentUserId: string | null | undefined;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   photo: string;
   name: string;
   insight: FoodInsight;
   onClose?: () => void;
   isPro?: boolean;
-  onUpdateInsight?: (nextInsight: FoodInsight) => void;
+  onUpdateInsight: PhotoRecipeCommit;
   onSaveRecipe?: (fav: FavoriteRecipe) => void;
   onEdit?: () => void;
   nonFood?: boolean;
@@ -36,12 +42,16 @@ const isTotalSelection = (value: ActiveSelection | null): value is TotalSelectio
 const isIngredientSelection = (value: ActiveSelection | null): value is FoodIngredient =>
   Boolean(value) && !isTotalSelection(value);
 
-export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
+export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, isCurrentSession, photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
   const [active, setActive] = useState<ActiveSelection | null>(null);
   const [haloTheme, setHaloTheme] = useState<'light' | 'dark'>('light');
   const [focusMode, setFocusMode] = useState<boolean>(true);
-  const [recipeLoading, setRecipeLoading] = useState(false);
-  const [recipeErr, setRecipeErr] = useState<string | null>(null);
+  const { loading: recipeLoading, error: recipeErr, setError: setRecipeErr, generateRecipe } = usePhotoRecipeGeneration({
+    userId: currentUserId,
+    loginGuard,
+    sourceId,
+    isCurrentSession,
+  });
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const calloutRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -615,27 +625,12 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                           className="ff-infocard__recipeBtn"
                           disabled={recipeLoading}
                           onClick={async () => {
-                            try {
-                              setRecipeErr(null);
-                              setRecipeLoading(true);
-                              const gate = canGenerateRecipe(plan);
-                              if (!gate.allowed) {
-                                setRecipeErr(`Лимит исчерпан: ${gate.used}/${gate.limit} на этой неделе.`);
-                                return;
-                              }
-                              const r = await getRecipeFromPhoto(photo);
-                              if (r && onUpdateInsight) {
-                                const next = { ...insight, recipe: r };
-                                onUpdateInsight(next);
-                                bumpRecipeUsage();
-                              } else if (!r) {
-                                throw new Error("Не удалось распознать рецепт");
-                              }
-                            } catch {
-                              setRecipeErr('Не удалось получить рецепт');
-                            } finally {
-                              setRecipeLoading(false);
+                            const gate = canGenerateRecipe(plan);
+                            if (!gate.allowed) {
+                              setRecipeErr(`Лимит исчерпан: ${gate.used}/${gate.limit} на этой неделе.`);
+                              return;
                             }
+                            await generateRecipe(photo, insight, onUpdateInsight);
                           }}
                         >
                           {recipeLoading ? 'Генерирую рецепт…' : 'Получить пошаговый рецепт'}
