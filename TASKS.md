@@ -976,6 +976,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     профиль B и обе durable-записи не изменились, новых B-операций нет. E2E
     [`e5a22df`](https://github.com/Michael-edel/FitFocus/commit/e5a22df) прошёл
     3/3 на desktop Chromium, Firefox и WebKit без retries; typecheck прошёл.
+  - [x] Удержать PUT `/api/profile` с durable Save аккаунта A, активировать B,
+    затем отпустить ответ 200 со scope A. Старый opId и локальный payload A
+    остаются в `sending`, не подтверждаются в активной сессии B; профиль B и его
+    очередь не меняются. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit без
+    retries; typecheck и `git diff --check` прошли. Это не заменяет приёмку
+    повторного входа A и остальных writers/staging.
   - [x] При возврате из BFCache заново загружать уже использованные семейный
     контекст и список покупок; старые ответы остаются недействительны.
     Регрессия прошла 24/24 на трёх desktop engines без retries (`29b1e3a`);

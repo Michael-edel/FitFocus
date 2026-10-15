@@ -24,6 +24,7 @@ type FixtureState = {
   stateWriteLog?: StateWriteAttempt[];
   holdStateWriteFailures?: { key: string; active: boolean; retryAfterSeconds?: number };
   holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
+  holdProfileWrite?: { active: boolean; started: () => void; wait: Promise<void> };
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -154,7 +155,15 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
       if (method === 'PUT') {
         const body = request.postDataJSON() as Record<string, unknown>;
         counts.profileWrites.push(requestedAccount ?? 'missing');
-        state.profile = { ...state.profile, ...body, version: Number(body.baseVersion ?? 0) + 1 };
+        const writtenProfile = { ...state.profile, ...body, version: Number(body.baseVersion ?? 0) + 1 };
+        const hold = state.holdProfileWrite?.active ? state.holdProfileWrite : null;
+        if (hold) {
+          hold.active = false;
+          hold.started();
+          await hold.wait;
+          return json({ profile: writtenProfile, version: writtenProfile.version }, responseAccount);
+        }
+        state.profile = writtenProfile;
       }
       return json({ profile: state.profile, version: state.profile.version }, responseAccount);
     }
@@ -1703,6 +1712,75 @@ test('health report PDF is not downloaded when the account changes during font l
     await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
     releaseFontRequest.release();
+  }
+});
+
+test('a late profile save from account A cannot acknowledge or overwrite after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile save acceptance runs in desktop browser profiles.');
+  let started!: () => void;
+  const writeStarted = new Promise<void>(resolve => { started = resolve; });
+  const releaseWrite = deferred();
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    holdProfileWrite: { active: true, started, wait: releaseWrite.promise },
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state);
+  try {
+    await openApp(page, '/#settings');
+    const profileNameA = page.getByPlaceholder('Как к вам обращаться');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect(profileNameA).toHaveValue('Профиль A');
+    await waitForAccountOutboxIdle(page, accountA);
+    const beforeWrite = await readDurableSnapshot(page);
+    const profileBefore = rawValue(beforeWrite, profileKey(accountA.id));
+
+    await profileNameA.fill('Локальное имя аккаунта A');
+    const lateSaveResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await writeStarted;
+    expect(fixtureA.counts.profileWrites).toEqual([accountA.id]);
+
+    const sendingSnapshot = await readDurableSnapshot(page);
+    const operation = operationsFor(sendingSnapshot, accountA).find(entry => entry.key === profileKey(accountA.id));
+    expect(operation).toMatchObject({ status: 'sending', value: expect.stringContaining('Локальное имя аккаунта A') });
+    expect(operation).toBeTruthy();
+
+    const switched = await openAccountB(context, state, true, '/#settings');
+    await waitForAccountSwitch(page);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await expect(switched.page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль B');
+    releaseWrite.release();
+
+    const response = await lateSaveResponse;
+    expect(response.status()).toBe(200);
+    expect(response.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(response.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+    expect((await response.json()).profile.name).toBe('Локальное имя аккаунта A');
+
+    const afterResponse = await readDurableSnapshot(switched.page);
+    expect(afterResponse.activeSession?.accountId).toBe(accountB.id);
+    expect(rawValue(afterResponse, profileKey(accountA.id))).not.toBe(profileBefore);
+    expect(JSON.parse(rawValue(afterResponse, profileKey(accountA.id))!).name).toBe('Локальное имя аккаунта A');
+    expect(operationsFor(afterResponse, accountA)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ opId: operation!.opId, key: profileKey(accountA.id), value: operation!.value, status: 'sending' }),
+    ]));
+    expect(JSON.parse(rawValue(afterResponse, profileKey(accountB.id))!).name).toBe('Профиль B');
+    expect(operationsFor(afterResponse, accountB)).toEqual([]);
+    expect(switched.fixture.counts.profileWrites).toEqual([]);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('late-profile-save-account-b.png') });
+  } finally {
+    releaseWrite.release();
   }
 });
 

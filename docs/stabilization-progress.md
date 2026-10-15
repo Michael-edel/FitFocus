@@ -4469,3 +4469,17 @@ Account-switch E2E предварительно сохраняет для accoun
 уроков B. Дефект в production-коде не воспроизведён, добавлена acceptance одного
 cache-пути. Общий P0.4 audit, остальные callbacks, staging и полный lifecycle
 остаются открытыми.
+
+## P0.6 — позднее подтверждение сохранения профиля, 16.10.2026
+
+Account-switch E2E редактирует профиль A в Settings и удерживает его durable
+PUT `/api/profile` после отправки. Соседняя вкладка активирует B; только после
+появления session notice старой вкладки тест отпускает HTTP 200 с account/session
+markers A. Outbox сохраняет исходный opId и payload A в состоянии `sending`:
+ответ старой попытки не подтверждает запись под активной сессией B. Профиль B и
+его очередь остаются неизменны; ошибок runtime и Vite overlay нет.
+
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit с
+`workers=1,retries=0`. Это подтверждает атомарную защиту от позднего ack; возврат
+A и повторная отправка со свежей сессией проверяются отдельной P0.6 матрицей.
+Остальные callbacks, writers, реальный BFCache и staging остаются открытыми.
