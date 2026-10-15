@@ -629,6 +629,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Chromium/Firefox/WebKit без retries; unit 1309/1309 в 210 файлах, общий и
     оба strict typecheck, production build и `git diff --check` прошли. CI нового
     SHA ожидает push. Остальной P0.4 audit, staging и полный lifecycle открыты.
+  - [x] Проверить account-scoped кэш открытого урока и выбранного ответа
+    викторины: после активации account B старая вкладка скрывает UI account A,
+    исходный кэш A не меняется, а курс B не открывает чужой урок. Новый E2E
+    прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+    typecheck и `git diff --check` прошли. Это приёмка одного cache-пути;
+    остальной P0.4 audit и staging остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

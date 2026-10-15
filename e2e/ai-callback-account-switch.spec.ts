@@ -1180,6 +1180,65 @@ test('a selected weekly-menu day cached for account A is hidden after another ta
   expect(switched.errors).toEqual([]);
 });
 
+test('a course lesson and quiz cached for account A stay hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state);
+  const courseUiKeyA = `fitfocus.course.ui.v1:${accountA.id}`;
+  const courseUiStateA = {
+    lessonId: 'l2_hunger',
+    isLessonViewOpen: true,
+    isQuizActive: true,
+    selectedQuizOptionId: 'opt_habits',
+  };
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
+    key: courseUiKeyA,
+    value: courseUiStateA,
+  });
+  await openApp(page, '/#course');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const quizQuestion = page.getByRole('heading', {
+    name: 'Что ты возьмёшь с собой из этого урока сегодня?', exact: true,
+  });
+  const selectedAnswer = page.getByRole('button', {
+    name: 'Сфокусируюсь на воде и шагах', exact: true,
+  });
+  await expect(quizQuestion).toBeVisible();
+  await expect(selectedAnswer).toHaveClass(/border-indigo-500/);
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), courseUiKeyA))
+    .toBe(JSON.stringify(courseUiStateA));
+  await page.screenshot({ path: info.outputPath('course-quiz-account-a-before-switch.png') });
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByText(/Сессия изменилась в другой вкладке/)).toBeVisible();
+  await expect(quizQuestion).toHaveCount(0);
+  await expect(selectedAnswer).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), courseUiKeyA))
+    .toBe(JSON.stringify(courseUiStateA));
+
+  await switched.page.goto('/#course');
+  await expect(switched.page.getByRole('heading', { name: 'Обучение', exact: true })).toBeVisible();
+  await expect(switched.page.getByRole('heading', {
+    name: 'Что ты возьмёшь с собой из этого урока сегодня?', exact: true,
+  })).toHaveCount(0);
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), `fitfocus.course.ui.v1:${accountB.id}`))
+    .not.toContain('l2_hunger');
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('course-account-b-after-switch.png') });
+});
+
 test('AI activity cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
