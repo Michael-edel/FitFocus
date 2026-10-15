@@ -15,6 +15,13 @@ production build прошли; unit suite — 1309/1309. P0.4 остаётся �
 остальных callbacks, staging и полного lifecycle. CI для отправленного HEAD
 проверяется отдельно.
 
+На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
+размещает поле ниже первого viewport, поэтому тест проверяет восстановленное
+значение и отображение, а не desktop-геометрию. Полная
+`profile-durability.spec.ts` прошла 63/63 без retries на семи проектах.
+Это локальная mock-API проверка одной suite; полный E2E, реальный BFCache,
+OAuth и staging остаются отдельными приёмками. Точный CI `d6946af` ожидает push.
+
 Новый P0.6 browser follow-up проверяет поздний `PUT /api/profile` после смены
 A → B и восстановление после повторного входа A с новой server session:
 исходный opId получает новый attempt/sessionEpoch и удаляется только после ack
