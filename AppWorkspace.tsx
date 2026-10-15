@@ -94,6 +94,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
+  // Ephemeral screen drafts belong to the active login scope and must not survive an identity transition.
   const screenSessionKey = accountSessionRenderKey(loginGuard, currentUser?.id);
 
   return (
@@ -101,6 +102,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'dashboard' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка dashboard...</div>}>
           <DashboardScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             paywallPlan={paywall.plan}
             canUsePro={paywall.canUsePro}
@@ -156,6 +158,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'plan' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка плана...</div>}>
           <PlanScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             planTaskDone={planTaskDone}
             setPlanTaskDone={setPlanTaskDone}
@@ -226,6 +229,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'progress-archive' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка архива прогресса...</div>}>
           <ProgressArchiveScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
@@ -244,6 +248,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'nutrition' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
           <NutritionScreen
+            key={screenSessionKey}
             cameraOpen={cameraOpen}
             setCameraOpen={setCameraOpen}
             cameraFacing={cameraFacing}
@@ -281,6 +286,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'recipes' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
           <RecipesScreen
+            key={screenSessionKey}
             userId={currentUser?.id}
             loginGuard={loginGuard}
             isCurrentSession={isCurrentSession}
@@ -299,6 +305,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'family' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка семьи...</div>}>
           <FamilyScreen
+            key={screenSessionKey}
             cloudFamily={cloudFamily}
             cloudFamilyMembers={cloudFamilyMembers}
             cloudFamilyLoading={cloudFamilyLoading}
@@ -326,6 +333,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'council' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка AI Совета...</div>}>
           <CouncilScreen
+            key={screenSessionKey}
             councilInput={councilInput}
             setCouncilInput={setCouncilInput}
             councilLoading={councilLoading}
@@ -348,6 +356,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'course' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка курса...</div>}>
           <CourseScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             courseLibrary={courseLibrary}
             lessons={lessons}
