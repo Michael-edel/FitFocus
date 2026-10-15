@@ -38,6 +38,7 @@
 | `/api/family/menu/generate` | POST | Scope до серверной генерации |
 | `/api/shopping/list` | GET | Scope до чтения покупок |
 | `/api/shopping/check` | PATCH, POST | Scope до изменения отметки |
+| `/api/shopping/export` | GET | Scope до чтения CSV; Family markers и no-store |
 
 Handlers используют `requireStateUser` перед прикладными эффектами.
 Несовпадение account/session возвращает 401. Ответы, включая ошибки,
@@ -76,6 +77,15 @@ Controllers отменяются при размонтировании, смен
 и только затем может быть записано обратно; прежнее состояние не копируется в
 новый ключ. Проверки account switch находятся в
 [`family-callback-account-switch.spec.ts`](../e2e/family-callback-account-switch.spec.ts).
+
+CSV для новой карточки строится из уже загруженного account-scoped снимка, без
+второго запроса с cookie. Перед подготовкой и перед скачиванием повторно
+проверяется исходный `loginGuard`; поэтому старая вкладка после входа B не может
+скачать список A или данные B. CSV сохраняет серверные заголовки и формат
+количества. Endpoint `/api/shopping/export` для прямых и старых клиентов тоже
+проверяет переданный scope до `ensureUserRow` и возвращает Family protocol/guard
+markers. Proof остаётся опциональным для совместимости старых запросов без
+заголовков.
 
 ## Lifetime и транспорт
 

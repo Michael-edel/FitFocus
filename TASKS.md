@@ -633,7 +633,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   другой семьи тем же login. Затем личная `ShoppingListCard` подключена к
   исходному login guard: GET/PATCH требуют свежий account/session proof,
   поздние ответы не меняют данные аккаунта B, а server/local React state
-  ограничены аккаунтом и неделей. Затем проверены отложенные family join/create
+  ограничены аккаунтом и неделей. CSV теперь собирается из этого scoped snapshot
+  и повторно проверяет guard перед скачиванием; серверный export endpoint также
+  проверяет переданный proof. E2E при входе B запретил экспорт старого A и
+  подтвердил CSV только со списком B (3/3 desktop engines). Затем проверены
+  отложенные family join/create
   family-context GET и family-shopping GET: после входа B ответы A не очищают
   ввод, не появляются в UI B, не запускают повторную загрузку семьи и не
   вызывают `family_join_or_create`. Тестовые commits `69c739a`, `1b6444a`,

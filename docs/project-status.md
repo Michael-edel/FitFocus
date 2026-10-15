@@ -12,10 +12,20 @@ response markers и IDB auth-fence; сервер отклоняет scope от �
 D1 role lookup и admin-session side effects. Локально прошли 1203 unit-теста /
 206 файлов, общий и domain/storage strict typecheck, admin/API/auth guards и
 production build. Точный CI этого commit запускается после push.
-Предыдущий run [38684238196](https://github.com/Michael-edel/FitFocus/actions/runs/38684238196)
-проверяет `5ea58df` и ещё выполняет E2E; он не содержит `5e163e6`. Реальный
-browser/admin account-switch acceptance, остальные callbacks, общий P0.5
-lifecycle, staging и выпуск остаются открытыми. [Контракт](admin-session.md).
+PR run [38685738198](https://github.com/Michael-edel/FitFocus/actions/runs/38685738198)
+проверяет `acb561a`; audit, guards, unit, typechecks и build прошли, E2E шёл
+перед новым follow-up и этот run не включает `bb4773b`. Реальный browser/admin
+account-switch acceptance, остальные callbacks, общий P0.5 lifecycle, staging
+и выпуск остаются открытыми. [Контракт](admin-session.md).
+
+## Локальный кандидат — CSV экспорт личной корзины, `bb4773b`
+
+CSV строится из уже загруженного account-scoped списка, с повторной проверкой
+исходной сессии до скачивания. Серверный `/api/shopping/export` также проверяет
+переданный proof и отмечает ответ Family guard headers. Локально прошли полный
+unit suite — 1207/1207, общий typecheck, auth/API guards, production build и
+новый двухвкладочный сценарий 3/3 на Chromium/Firefox/WebKit. Точный CI HEAD с
+этим компонентом ожидает push. [Контракт](family-session.md).
 
 ## Рабочее дерево — запрет AI proxy без session proof
 

@@ -3537,3 +3537,22 @@ admin guard, middleware, `logout_all` и state-session regressions прошли 
 проверяет предыдущий SHA `5ea58df` и на момент публикации выполнял E2E; он не
 подтверждает этот commit. Browser/admin account-switch acceptance, остальные
 callbacks, полный P0.5 lifecycle, staging и выпуск остаются открытыми.
+
+## P0.5 — session-bound export личной корзины, `bb4773b`, 15.10.2026
+
+`ShoppingListCard` больше не открывает CSV URL с одной cookie. Файл строится из
+уже загруженного account-scoped снимка; `assertReadSession` проверяет исходный
+login guard до подготовки и перед скачиванием. CSV сохраняет серверные заголовки,
+экранирование и формат количества. Серверный `/api/shopping/export` также
+проверяет переданный proof перед `ensureUserRow` и помечает ответ Family markers;
+старые запросы без proof остаются совместимыми.
+
+Новый двухвкладочный acceptance прошёл 3/3 на desktop Chromium, Firefox и
+WebKit: старая вкладка A после входа B не скачивает файл, экспорт B содержит
+список B и не содержит A. Полный unit suite прошёл 1207/1207 в 208 файлах;
+общий, domain-strict и storage-strict typecheck, production build,
+`check:auth-scope`, `check:api-invariants`, `check:admin-guards` и
+`git diff --check` прошли. CI [38685738198](https://github.com/Michael-edel/FitFocus/actions/runs/38685738198)
+проверяет предыдущий SHA `acb561a` и на момент нового follow-up ещё выполняет
+E2E; он не содержит `bb4773b`. Полный P0.5 lifecycle, остальные callbacks,
+staging и выпуск остаются открытыми.
