@@ -600,6 +600,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
     typecheck и production build прошли. P0.4 остаётся открытым для остальных
     callbacks и кэшей.
+  - [x] Скрыть открытый разбор еды и редактор account A, если другая вкладка
+    активировала B; также запретить открыть их из устаревшего экрана. До фикса
+    модалки оставались видимыми после переключения. [`66a7362`](https://github.com/Michael-edel/FitFocus/commit/66a73623309d46d8ca5bcdc89a71068cf6004a9f): E2E 3/3 на desktop
+    Chromium/Firefox/WebKit без retries, unit 1308/1308, typecheck, оба strict
+    typecheck и production build прошли. Остальной P0.4 audit остаётся открытым.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
