@@ -4,16 +4,48 @@
 import { readCookie, verifySessionJwt } from "./_lib/auth";
 import { revokeSession } from "./_lib/session_revocation";
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
+import { assertStateRequestScope, withSessionGuard } from './_lib/state_session';
 
 const handleLogoutPost: PagesFunction<Env> = async ({ request, env }) => {
+  const hasSessionScope = request.headers.get('X-FitFocus-State-Account') !== null
+    || request.headers.get('X-FitFocus-State-Session') !== null;
+
   const isHttps =
     new URL(request.url).protocol === "https:" ||
     request.headers.get("x-forwarded-proto") === "https" ||
     (request.headers.get("origin") || "").startsWith("https://");
 
+  // Scoped clients may revoke only the session represented by their captured
+  // proof. A stale tab must not revoke a newer login that replaced the cookie.
+  const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
+  if (hasSessionScope) {
+    if (!token || !env.AUTH_JWT_SECRET) {
+      return withSessionGuard(new Response(JSON.stringify({ ok: false, error: 'UNAUTH' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      }), request, 'Logout');
+    }
+    const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
+    const sid = String(payload?.sid || '');
+    const sub = String(payload?.sub || '');
+    if (!sid || !sub) {
+      return withSessionGuard(new Response(JSON.stringify({ ok: false, error: 'UNAUTH' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      }), request, 'Logout');
+    }
+    try {
+      await assertStateRequestScope({ sub, sid }, request);
+    } catch {
+      return withSessionGuard(new Response(JSON.stringify({ ok: false, error: 'STATE_SESSION_CHANGED' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      }), request, 'Logout');
+    }
+  }
+
   // Best-effort revoke
   try {
-    const token = readCookie(request.headers.get("Cookie") || "", "ff_session");
     if (token && env.AUTH_JWT_SECRET && env.DB) {
       const payload = await verifySessionJwt(token, env.AUTH_JWT_SECRET);
       const sid = String(payload?.sid || "");
@@ -36,9 +68,12 @@ const handleLogoutPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const headers = new Headers();
   headers.set("Content-Type", "application/json; charset=utf-8");
-  headers.append("Set-Cookie", cookie);
+  // Do not let a delayed, scoped logout response erase another tab's newer
+  // login cookie. The captured session is revoked server-side; its cookie is no
+  // longer usable and the next OAuth callback replaces it.
+  if (!hasSessionScope) headers.append("Set-Cookie", cookie);
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  return withSessionGuard(new Response(JSON.stringify({ ok: true }), { status: 200, headers }), request, 'Logout');
 };
 
 /** Correlates logout completion without recording session or user information. */

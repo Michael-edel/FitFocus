@@ -773,17 +773,27 @@ const App: React.FC = () => {
       });
     },
     googleSub: googleMe?.sub,
+    loginGuard: loginReadGuard,
+    assertCurrentSession: async () => {
+      if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+      await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+    },
     setGoogleMe,
     setCurrentUser,
     setProfileSyncState,
     setLastProfileSyncAt,
     setAuthState,
-  }), [googleMe?.sub]);
+  }), [googleMe?.sub, isCurrentProfileSession, loginReadGuard]);
 
   const deleteAccount = useCallback(async () => {
     const deletedUserId = googleMe?.sub ?? currentUser?.id ?? null;
     await deleteAccountSession({
       googleSub: googleMe?.sub,
+      loginGuard: loginReadGuard,
+      assertCurrentSession: async () => {
+        if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      },
       clearLocalData: deletedUserId ? async () => {
         const cleanup = await clearLocalUserData(deletedUserId);
         setAllUsers(prev => prev.filter(user => user.id !== deletedUserId));
@@ -798,7 +808,7 @@ const App: React.FC = () => {
       } : undefined,
       onLogout: logout,
     });
-  }, [currentUser?.id, googleMe?.sub, logout, setAllUsers]);
+  }, [currentUser?.id, googleMe?.sub, isCurrentProfileSession, loginReadGuard, logout, setAllUsers]);
 
   const loginAsUser = useCallback(async (
     user: UserProfile,

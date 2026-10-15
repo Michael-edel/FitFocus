@@ -42,11 +42,15 @@ type InviteCheckParams = Pick<AuthStateSetters, 'setInviteError' | 'setInviteChe
 type LogoutParams = Pick<AuthStateSetters, 'setGoogleMe' | 'setCurrentUser' | 'setProfileSyncState' | 'setLastProfileSyncAt' | 'setAuthState'> & {
   onClearLocalSession?: () => void;
   googleSub?: string | null;
+  loginGuard?: OutboxReadGuard | null;
+  assertCurrentSession?: () => Promise<void>;
   fetchImpl?: typeof fetch;
 };
 
 type DeleteAccountParams = {
   googleSub?: string | null;
+  loginGuard?: OutboxReadGuard | null;
+  assertCurrentSession?: () => Promise<void>;
   confirmFn?: (message: string) => string | null;
   fetchImpl?: typeof fetch;
   clearLocalData?: () => void | Promise<void>;
@@ -305,6 +309,7 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
 
 export function createLogoutSession(params: LogoutParams) {
   let serverLogoutInFlight: Promise<void> | null = null;
+  let logoutStarted = false;
 
   const clearClientSession = () => {
     params.onClearLocalSession?.();
@@ -319,6 +324,8 @@ export function createLogoutSession(params: LogoutParams) {
 
   const sendServerLogout = async () => {
     const fetchFn = params.fetchImpl ?? fetch;
+    const guard = params.loginGuard;
+    if (!guard || guard.accountId !== params.googleSub) return;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller ? globalThis.setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS) : null;
     try {
@@ -327,6 +334,10 @@ export function createLogoutSession(params: LogoutParams) {
         credentials: 'include',
         cache: 'no-store',
         keepalive: true,
+        headers: {
+          'X-FitFocus-State-Account': guard.accountId,
+          'X-FitFocus-State-Session': guard.serverSessionId,
+        },
         signal: controller?.signal,
       });
     } catch {
@@ -337,9 +348,29 @@ export function createLogoutSession(params: LogoutParams) {
   };
 
   return async () => {
+    if (logoutStarted) {
+      await serverLogoutInFlight;
+      return;
+    }
+    const guard = params.loginGuard;
+    if (params.googleSub && (!guard || guard.accountId !== params.googleSub)) return;
+    if (guard) {
+      try {
+        if (params.assertCurrentSession) await params.assertCurrentSession();
+        else await assertReadSession(guard);
+      } catch {
+        return;
+      }
+    }
+    if (logoutStarted) {
+      await serverLogoutInFlight;
+      return;
+    }
+    logoutStarted = true;
     clearClientSession();
 
     if (!params.googleSub) return;
+    if (!guard) return;
     if (!serverLogoutInFlight) {
       serverLogoutInFlight = sendServerLogout().finally(() => {
         serverLogoutInFlight = null;
@@ -351,23 +382,52 @@ export function createLogoutSession(params: LogoutParams) {
 
 export async function deleteAccountSession(params: DeleteAccountParams): Promise<void> {
   if (!params.googleSub) return;
+  const guard = params.loginGuard;
+  if (!guard || guard.accountId !== params.googleSub) {
+    alert('Сессия изменилась. Обновите страницу и войдите снова перед удалением аккаунта.');
+    return;
+  }
+
+  const assertCurrent = params.assertCurrentSession ?? (() => assertReadSession(guard));
+  try {
+    await assertCurrent();
+  } catch {
+    alert('Сессия изменилась. Обновите страницу и войдите снова перед удалением аккаунта.');
+    return;
+  }
+
   const confirmFn = params.confirmFn ?? globalThis.prompt;
   const typed = (confirmFn?.('Чтобы удалить аккаунт, введите слово DELETE (латиницей).') || '').trim().toUpperCase();
   if (typed !== 'DELETE') return;
 
   const fetchFn = params.fetchImpl ?? fetch;
   try {
+    await assertCurrent();
     const r = await fetchFn('/api/account/delete', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-FitFocus-State-Account': guard.accountId,
+        'X-FitFocus-State-Session': guard.serverSessionId,
+      },
       body: JSON.stringify({ confirm: 'DELETE' }),
     });
 
     if (!r.ok) {
       const j = await readJsonRecord(r);
       const error = typeof j?.error === 'string' ? j.error : null;
-      alert(error ? `Ошибка удаления: ${error}` : 'Не удалось удалить аккаунт.');
+      alert(error === 'UNAUTH'
+        ? 'Сессия изменилась или истекла. Войдите снова и повторите удаление аккаунта.'
+        : error ? `Ошибка удаления: ${error}` : 'Не удалось удалить аккаунт.');
+      return;
+    }
+
+    if (r.headers.get('X-FitFocus-Account-Delete-Protocol') !== '1'
+      || r.headers.get('X-FitFocus-Account-Delete-Guard') !== '1'
+      || r.headers.get('X-FitFocus-State-Account') !== guard.accountId
+      || r.headers.get('X-FitFocus-State-Session') !== guard.serverSessionId) {
+      alert('Сервер не подтвердил удаление в текущей сессии. Обновите страницу и проверьте состояние аккаунта.');
       return;
     }
   } catch {
@@ -375,6 +435,14 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
     return;
   }
 
-  await params.clearLocalData?.();
+  try {
+    await assertCurrent();
+  } catch {
+    // Deletion belongs to the captured account, so its local data can still be
+    // cleared. Do not run the captured logout callback against a newer session.
+    await params.clearLocalData?.();
+    return;
+  }
   await params.onLogout();
+  await params.clearLocalData?.();
 }

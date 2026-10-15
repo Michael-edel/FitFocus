@@ -2,12 +2,13 @@
 // B2C-safe delete: soft delete + schedule hard delete in 30 days.
 // Requires confirmation token in body: { confirm: "DELETE" }
 
-import { requireUser, json } from "../_lib/auth";
+import { json } from "../_lib/auth";
 import { requireDB } from "../_lib/db";
 import { checkIfOwnerOfActiveFamily, ensureNotLastAdmin, logSelfServiceAccountDeletion, softDeleteAccount } from "../_lib/account_delete";
 import { asString } from "../_lib/json";
 import { readJsonObjectRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
 
@@ -16,7 +17,8 @@ function publicDeleteError(error: unknown) {
     return json({ ok: false, error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
   }
   const code = error instanceof Error ? error.message : "";
-  if (code === "UNAUTH" || code === "AUTH_CONFIG" || code === "DB_CONFIG") {
+  if (code === "UNAUTH" || code === "AUTH_CONFIG" || code === "DB_CONFIG"
+    || code === "STATE_SESSION_CHANGED" || code === "STATE_SESSION_REQUIRED") {
     return json({ ok: false, error: "UNAUTH" }, 401);
   }
   if (code.includes("последнего администратора")) {
@@ -32,7 +34,7 @@ function publicDeleteError(error: unknown) {
 const handleAccountDeletePost: PagesFunction<Env> = async ({ request, env }) => {
   const t0 = Date.now();
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
 
     const body = await readJsonObjectRequest(request, SMALL_JSON_BODY_LIMIT_BYTES).catch((error) => {
@@ -57,10 +59,10 @@ const handleAccountDeletePost: PagesFunction<Env> = async ({ request, env }) => 
 
     await logSelfServiceAccountDeletion(db, user.sub, Date.now() - t0);
 
-    const h = new Headers();
-    // Clear cookie on client side too
-    h.append("Set-Cookie", "ff_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
-    return json({ ok: true, scheduled_days: 30 }, 200, h);
+    // The account and all of its sessions are revoked by softDeleteAccount. Do not
+    // expire the shared cookie here: a slower response could otherwise erase a
+    // different account's cookie installed by another tab after this request.
+    return json({ ok: true, scheduled_days: 30 });
   } catch (error: unknown) {
     return publicDeleteError(error);
   }
@@ -71,5 +73,5 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const response = await handleAccountDeletePost(context);
   const requestId = requestIdFor(context.request);
   logApiEvent('account.delete.response', { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withRequestId(withSessionGuard(response, context.request, 'Account-Delete'), requestId);
 };

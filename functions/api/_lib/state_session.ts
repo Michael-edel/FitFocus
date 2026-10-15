@@ -21,8 +21,16 @@ export async function requireStateUser(request: Request, env: Parameters<typeof 
   return user;
 }
 
+/** Destructive account actions must reject legacy requests without a session proof. */
+export async function requireScopedStateUser(request: Request, env: Parameters<typeof requireUser>[1]): Promise<SessionUser> {
+  if (!request.headers.get('X-FitFocus-State-Account') || !request.headers.get('X-FitFocus-State-Session')) {
+    throw new Error('STATE_SESSION_REQUIRED');
+  }
+  return requireStateUser(request, env);
+}
+
 /** A capability marker plus public scope lets a new client verify the guarded response. */
-export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing' | 'Admin'): Response {
+export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing' | 'Admin' | 'Account-Delete' | 'Logout'): Response {
   response.headers.set(`X-FitFocus-${resource}-Protocol`, '1');
   response.headers.set(`X-FitFocus-${resource}-Guard`, '1');
   for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {
