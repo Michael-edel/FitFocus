@@ -4042,7 +4042,23 @@ invariants, production build, `git diff --check` и legacy migration E2E (14/14
 
 GitHub run
 [`38762320204`](https://github.com/Michael-edel/FitFocus/actions/runs/38762320204)
-проверяет предыдущий опубликованный SHA `42e14c9` и всё ещё выполняет E2E;
-он не включает этот profile recovery. Точный CI `5eeba7d` ожидает push. Staging,
+проверял предыдущий опубликованный SHA `42e14c9` и был отменён при push новой
+ревизии; он не включает этот profile recovery. Затем запущен CI `38766175287`
+на `bf8bf40`; staging,
 остальные callbacks, полная lifecycle-матрица и интеграция в защищённую `main`
 остаются открытыми.
+
+## Приёмка CI без автоматических повторов, 15.10.2026
+
+В `playwright.config.ts` установлен `retries: 0` во всех средах: CI больше не
+может скрыть flaky-сценарий успешным повтором. При `CI=true` выбранные Push/PWA
+проверки прошли с настройкой из конфига: 5 passed, 1 штатный skip; отдельный
+Firefox `pwa-update.spec.ts` — 1/1 без retries. `tests/push_session.test.ts` —
+6/6. Это целевые проверки, полную матрицу они не заменяют.
+
+CI run
+[`38766175287`](https://github.com/Michael-edel/FitFocus/actions/runs/38766175287)
+проверяет SHA `bf8bf40` со старой настройкой `retries: 1`; он всё ещё на E2E и
+не подтверждает first-try приёмку. После отправки настройки должен запуститься
+полный no-retry CI для нового SHA. Более старый run `38762320204` для `42e14c9`
+отменён при push новой ревизии.
