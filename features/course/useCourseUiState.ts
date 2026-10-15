@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { parseJson } from '../../safeJson';
 import type { CourseLesson, LessonQuizOption, UserProfile } from '../../types';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type CourseUiSnapshot = {
   lessonId: string | null;
@@ -22,16 +23,6 @@ const EMPTY_COURSE_UI_STATE: CourseUiVisibleState = {
   isQuizActive: false,
   selectedQuizOption: null,
 };
-
-export function getVisibleCourseUiState(
-  currentStorageKey: string | null,
-  hydratedStorageKey: string | null,
-  state: CourseUiVisibleState,
-): CourseUiVisibleState {
-  return currentStorageKey !== null && currentStorageKey === hydratedStorageKey
-    ? state
-    : EMPTY_COURSE_UI_STATE;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -125,21 +116,25 @@ export function useCourseUiState({
     }
   }, [courseUiHydratedKey, courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
 
-  const visibleState = getVisibleCourseUiState(courseUiStorageKey, courseUiHydratedKey, {
+  const visibleState = getAccountScopedUiValue(courseUiStorageKey, courseUiHydratedKey, {
     currentLesson,
     isLessonViewOpen,
     isQuizActive,
     selectedQuizOption,
-  });
+  }, EMPTY_COURSE_UI_STATE);
+  const setCurrentLessonForScope = useAccountScopedUiSetter(courseUiStorageKey, setCurrentLesson);
+  const setLessonViewOpenForScope = useAccountScopedUiSetter(courseUiStorageKey, setIsLessonViewOpen);
+  const setQuizActiveForScope = useAccountScopedUiSetter(courseUiStorageKey, setIsQuizActive);
+  const setSelectedQuizOptionForScope = useAccountScopedUiSetter(courseUiStorageKey, setSelectedQuizOption);
 
   return {
     currentLesson: visibleState.currentLesson,
-    setCurrentLesson,
+    setCurrentLesson: setCurrentLessonForScope,
     isLessonViewOpen: visibleState.isLessonViewOpen,
-    setIsLessonViewOpen,
+    setIsLessonViewOpen: setLessonViewOpenForScope,
     isQuizActive: visibleState.isQuizActive,
-    setIsQuizActive,
+    setIsQuizActive: setQuizActiveForScope,
     selectedQuizOption: visibleState.selectedQuizOption,
-    setSelectedQuizOption,
+    setSelectedQuizOption: setSelectedQuizOptionForScope,
   };
 }

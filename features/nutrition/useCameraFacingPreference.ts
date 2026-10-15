@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type CameraFacing = 'user' | 'environment';
 
@@ -12,29 +13,30 @@ export function useCameraFacingPreference(userId: string | null | undefined) {
     () => `fitfocus.nutrition.camera-facing.v1:${userId ?? 'anon'}`,
     [userId],
   );
-  const skipNextSaveRef = useRef(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const [cameraFacing, setCameraFacing] = useState<CameraFacing>('environment');
 
   useEffect(() => {
-    skipNextSaveRef.current = true;
     try {
       setCameraFacing(parseCameraFacing(localStorage.getItem(storageKey)));
     } catch {
       setCameraFacing('environment');
     }
+    setHydratedStorageKey(storageKey);
   }, [storageKey]);
 
   useEffect(() => {
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
+    if (hydratedStorageKey !== storageKey) return;
     try {
       localStorage.setItem(storageKey, cameraFacing);
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [cameraFacing, storageKey]);
+  }, [cameraFacing, hydratedStorageKey, storageKey]);
 
-  return { cameraFacing, setCameraFacing };
+  const setCameraFacingForScope = useAccountScopedUiSetter(storageKey, setCameraFacing);
+  return {
+    cameraFacing: getAccountScopedUiValue(storageKey, hydratedStorageKey, cameraFacing, 'environment'),
+    setCameraFacing: setCameraFacingForScope,
+  };
 }

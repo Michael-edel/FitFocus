@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Goal, type CourseLesson, type UserProfile } from '../types';
+import { getAccountScopedUiValue } from '../features/state/accountScopedUi';
 import {
-  getVisibleCourseUiState,
   parseCourseUiSnapshot,
   pickLessonForToday,
   type CourseUiVisibleState,
@@ -45,22 +45,29 @@ describe('course UI feature', () => {
       selectedQuizOption: { id: 'option-a', text: 'Ответ A' },
     };
 
-    expect(getVisibleCourseUiState(
+    expect(getAccountScopedUiValue(
       'fitfocus.course.ui.v1:user-b',
       'fitfocus.course.ui.v1:user-a',
       previousAccountState,
+      { currentLesson: null, isLessonViewOpen: false, isQuizActive: false, selectedQuizOption: null },
     )).toEqual({
       currentLesson: null,
       isLessonViewOpen: false,
       isQuizActive: false,
       selectedQuizOption: null,
     });
-    expect(getVisibleCourseUiState(
+    expect(getAccountScopedUiValue(
       'fitfocus.course.ui.v1:user-a',
       'fitfocus.course.ui.v1:user-a',
       previousAccountState,
+      { currentLesson: null, isLessonViewOpen: false, isQuizActive: false, selectedQuizOption: null },
     )).toBe(previousAccountState);
-    expect(getVisibleCourseUiState(null, 'fitfocus.course.ui.v1:user-a', previousAccountState)).toMatchObject({
+    expect(getAccountScopedUiValue(null, 'fitfocus.course.ui.v1:user-a', previousAccountState, {
+      currentLesson: null,
+      isLessonViewOpen: false,
+      isQuizActive: false,
+      selectedQuizOption: null,
+    })).toMatchObject({
       currentLesson: null,
       isLessonViewOpen: false,
       isQuizActive: false,

@@ -129,6 +129,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { getAccountScopedUiValue } from './features/state/accountScopedUi';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
@@ -271,7 +272,23 @@ const App: React.FC = () => {
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
-  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
+  const [planScopeState, setPlanScopeState] = useState<{ ownerId: string | null; value: 'personal' | 'family' }>({
+    ownerId: null,
+    value: 'personal',
+  });
+  const planScope = getAccountScopedUiValue(
+    currentUser?.id ?? null,
+    planScopeState.ownerId,
+    planScopeState.value,
+    'personal',
+  );
+  const setPlanScope = useCallback<React.Dispatch<React.SetStateAction<'personal' | 'family'>>>((update) => {
+    const ownerId = currentUser?.id ?? null;
+    setPlanScopeState((previous) => {
+      const currentValue = previous.ownerId === ownerId ? previous.value : 'personal';
+      return { ownerId, value: typeof update === 'function' ? update(currentValue) : update };
+    });
+  }, [currentUser?.id]);
   const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
   const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
   const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);

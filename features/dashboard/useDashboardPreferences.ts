@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type DashboardPreferences = {
   newWeight: string;
@@ -21,12 +22,12 @@ export function useDashboardPreferences(userId: string | null | undefined) {
     newWeight: `fitfocus.dashboard.new-weight.v1:${userId ?? 'anon'}`,
     pdfIncludeMealLog: `fitfocus.dashboard.pdf-include-meal-log.v1:${userId ?? 'anon'}`,
   }), [userId]);
-  const skipNextSaveRef = useRef(false);
+  const scopeKey = storageKeys.newWeight;
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const [newWeight, setNewWeight] = useState('');
   const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState(false);
 
   useEffect(() => {
-    skipNextSaveRef.current = true;
     try {
       const next = parseDashboardPreferences(
         localStorage.getItem(storageKeys.newWeight),
@@ -38,25 +39,30 @@ export function useDashboardPreferences(userId: string | null | undefined) {
       setNewWeight('');
       setPdfIncludeMealLog(false);
     }
-  }, [storageKeys]);
+    setHydratedStorageKey(scopeKey);
+  }, [scopeKey, storageKeys]);
 
   useEffect(() => {
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
+    if (hydratedStorageKey !== scopeKey) return;
     try {
       localStorage.setItem(storageKeys.newWeight, newWeight);
       localStorage.setItem(storageKeys.pdfIncludeMealLog, pdfIncludeMealLog ? '1' : '0');
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [newWeight, pdfIncludeMealLog, storageKeys]);
+  }, [hydratedStorageKey, newWeight, pdfIncludeMealLog, scopeKey, storageKeys]);
+
+  const visibleState = getAccountScopedUiValue(scopeKey, hydratedStorageKey, {
+    newWeight,
+    pdfIncludeMealLog,
+  }, { newWeight: '', pdfIncludeMealLog: false });
+  const setNewWeightForScope = useAccountScopedUiSetter(scopeKey, setNewWeight);
+  const setPdfIncludeMealLogForScope = useAccountScopedUiSetter(scopeKey, setPdfIncludeMealLog);
 
   return {
-    newWeight,
-    setNewWeight,
-    pdfIncludeMealLog,
-    setPdfIncludeMealLog,
+    newWeight: visibleState.newWeight,
+    setNewWeight: setNewWeightForScope,
+    pdfIncludeMealLog: visibleState.pdfIncludeMealLog,
+    setPdfIncludeMealLog: setPdfIncludeMealLogForScope,
   };
 }

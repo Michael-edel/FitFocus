@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FoodItem } from '../../types';
 import { toLocalDayKey } from '../../dateUtils';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type DiaryDayStats = {
   calories: number;
@@ -44,50 +45,50 @@ export function useDiaryDaySelection(userId: string | null | undefined, foodDiar
     () => `fitfocus.nutrition.selected-day.v1:${userId ?? 'anon'}`,
     [userId],
   );
-  const skipSaveRef = useRef(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState('');
 
   useEffect(() => {
     try {
       const todayKey = toLocalDayKey(new Date()) || '';
       const savedKey = localStorage.getItem(storageKey) || '';
-      skipSaveRef.current = true;
       setSelectedDiaryDayKey(savedKey === todayKey ? savedKey : '');
     } catch {
-      skipSaveRef.current = true;
       setSelectedDiaryDayKey('');
     }
+    setHydratedStorageKey(storageKey);
   }, [storageKey]);
 
   useEffect(() => {
-    if (skipSaveRef.current) {
-      skipSaveRef.current = false;
-      return;
-    }
+    if (hydratedStorageKey !== storageKey) return;
     try {
-      if (selectedDiaryDayKey) {
-        localStorage.setItem(storageKey, selectedDiaryDayKey);
+      const visibleSelection = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '');
+      if (visibleSelection) {
+        localStorage.setItem(storageKey, visibleSelection);
       } else {
         localStorage.removeItem(storageKey);
       }
     } catch {
       // The day selection is an optional browser preference.
     }
-  }, [selectedDiaryDayKey, storageKey]);
+  }, [hydratedStorageKey, selectedDiaryDayKey, storageKey]);
+
+  const visibleSelectedDiaryDayKey = getAccountScopedUiValue(storageKey, hydratedStorageKey, selectedDiaryDayKey, '');
 
   const diaryDayKeys = useMemo(() => getDiaryDayKeys(foodDiary), [foodDiary]);
   const resolvedDiaryDayKey = useMemo(
-    () => resolveDiaryDayKey(diaryDayKeys, selectedDiaryDayKey),
-    [diaryDayKeys, selectedDiaryDayKey],
+    () => resolveDiaryDayKey(diaryDayKeys, visibleSelectedDiaryDayKey),
+    [diaryDayKeys, visibleSelectedDiaryDayKey],
   );
   const selectedDiaryStats = useMemo(
     () => calculateDiaryDayStats(foodDiary, resolvedDiaryDayKey),
     [foodDiary, resolvedDiaryDayKey],
   );
+  const setSelectedDayForScope = useAccountScopedUiSetter(storageKey, setSelectedDiaryDayKey);
 
   return {
-    selectedDiaryDayKey,
-    setSelectedDiaryDayKey,
+    selectedDiaryDayKey: visibleSelectedDiaryDayKey,
+    setSelectedDiaryDayKey: setSelectedDayForScope,
     resolvedDiaryDayKey,
     selectedDiaryStats,
   };
