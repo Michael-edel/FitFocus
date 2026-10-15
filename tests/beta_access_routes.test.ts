@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onRequestGet as getBootstrap } from '../functions/api/bootstrap';
 import { onRequestGet as getExport } from '../functions/api/export';
 import { onRequestPost as postMobileToken } from '../functions/api/mobile/token';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 
 type BootstrapContext = Parameters<typeof getBootstrap>[0];
 type ExportContext = Parameters<typeof getExport>[0];
@@ -78,6 +79,7 @@ function baseContext(request: Request) {
 describe('beta access route boundaries', () => {
   it('blocks bootstrap, export, and mobile token issuance without an invite', async () => {
     const token = await signJwt();
+    const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
     const db = makeDb();
     const env = { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' };
 
@@ -92,7 +94,11 @@ describe('beta access route boundaries', () => {
       env,
     } as unknown as ExportContext);
     const mobileResponse = await postMobileToken({
-      ...baseContext(new Request('https://fitfocus.test/api/mobile/token', { method: 'POST', headers: { Cookie: `ff_session=${token}` } })),
+      ...baseContext(new Request('https://fitfocus.test/api/mobile/token', { method: 'POST', headers: {
+        Cookie: `ff_session=${token}`,
+        'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof,
+      } })),
       env,
     } as unknown as MobileTokenContext);
 

@@ -128,13 +128,13 @@ describe('/api/mobile/token', () => {
     expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBeNull();
   });
 
-  it('keeps compatibility for unscoped legacy callers without claiming an echoed scope', async () => {
-    const response = await postMobileToken(makeDb(), 'mobile-token-legacy-client', false);
+  it('rejects unscoped legacy callers before minting a bearer token', async () => {
+    const fake = makeDb();
+    const response = await postMobileToken(fake, 'mobile-token-legacy-client', false);
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get('X-FitFocus-Mobile-Token-Protocol')).toBe('1');
-    expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBe('1');
-    expect(response.headers.get('X-FitFocus-State-Account')).toBeNull();
-    expect(response.headers.get('X-FitFocus-State-Session')).toBeNull();
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+    expect(fake.calls.tokenSessionReads).toBe(0);
+    expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBeNull();
   });
 });

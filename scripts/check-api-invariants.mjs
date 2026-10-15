@@ -986,6 +986,7 @@ const billingCheckout = [
   read('functions/api/_lib/billing_checkout.ts'),
 ].join('\n');
 const billingAdminSubscription = read('functions/api/admin/subscription.ts');
+const mobileTokenRoute = read('functions/api/mobile/token.ts');
 const meRoute = read('functions/api/me.ts');
 assertIncludes(
   billingCheckout,
@@ -1016,6 +1017,11 @@ assertIncludes(
   billingAdminSubscription,
   "withSessionGuard(response, context.request, 'Billing')",
   'admin subscription response must expose verifiable account/session markers',
+);
+assertIncludes(
+  mobileTokenRoute,
+  'requireScopedStateUser(request, env)',
+  'mobile bearer token issuance must require proof for the initiating account and session',
 );
 assertIncludes(
   meRoute,

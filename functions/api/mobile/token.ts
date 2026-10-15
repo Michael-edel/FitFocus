@@ -7,12 +7,12 @@ import { requireBetaAccess } from '../_lib/access';
 import { requireDB } from '../_lib/db';
 import { issueMobileToken } from '../_lib/mobile_token';
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
-import { requireStateUser, withSessionGuard } from '../_lib/state_session';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 const handleMobileTokenPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
-  try { user = await requireStateUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
+  try { user = await requireScopedStateUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
   try { await requireBetaAccess(env, user); } catch { return json({ error: 'ACCESS_REQUIRED' }, 403); }
   if (!env.AUTH_JWT_SECRET) return json({ error: 'AUTH_CONFIG' }, 500);
   const payload = await issueMobileToken({ db: requireDB(env), secret: env.AUTH_JWT_SECRET, user });
