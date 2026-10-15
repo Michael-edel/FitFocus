@@ -1285,3 +1285,47 @@ test('late Huawei sync after another tab signs in as account B cannot commit acc
   const afterB = await readDurableSnapshot(switched.page);
   expect(rawValue(afterB, profileKey(accountB.id))).toBe(profileBBefore);
 });
+
+test('late Huawei sync is rejected after the same account signs in with a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei session-replacement acceptance runs in desktop browser profiles.');
+  const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
+  const state: FixtureState = { current: accountA, profile: profileA };
+  const fixtureA = await installAccountApi(page, state, undefined, true);
+  await openApp(page, '/#settings');
+  await expect(page.getByRole('button', { name: 'Обновить Huawei', exact: true })).toBeEnabled();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const before = await readDurableSnapshot(page);
+  const profileBefore = rawValue(before, profileKey(accountA.id));
+  const operationsBefore = before.operations.filter(operation => operation.key === profileKey(accountA.id));
+  await page.getByRole('button', { name: 'Обновить Huawei', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.huaweiSyncRequests).toHaveLength(1);
+  expect(fixtureA.counts.huaweiSyncRequests).toEqual([{ account: accountA.id, session: accountA.sid }]);
+
+  const reauthenticated = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#settings');
+  await expect(reauthenticatedPage.getByRole('button', { name: 'Обновить Huawei', exact: true })).toBeEnabled();
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(reauthenticated.sid);
+
+  try {
+    fixtureA.releaseHuawei();
+    await expect.poll(() => fixtureA.counts.huaweiSyncResponses).toBe(1);
+    await expect(page.getByText('Huawei Health синхронизирован: обновлено полей 1.', { exact: true })).toHaveCount(0);
+
+    const afterOriginalPage = await readDurableSnapshot(page);
+    expect(afterOriginalPage.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+    expect(rawValue(afterOriginalPage, profileKey(accountA.id))).toBe(profileBefore);
+    expect(afterOriginalPage.operations.filter(operation => operation.key === profileKey(accountA.id))).toEqual(operationsBefore);
+
+    const afterReauthenticatedPage = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterReauthenticatedPage.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+    expect(rawValue(afterReauthenticatedPage, profileKey(accountA.id))).toBe(profileBefore);
+    expect(afterReauthenticatedPage.operations.filter(operation => operation.key === profileKey(accountA.id))).toEqual(operationsBefore);
+  } finally {
+    fixtureA.releaseHuawei();
+  }
+});
