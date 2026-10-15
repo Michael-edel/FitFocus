@@ -750,6 +750,7 @@ test('held weekly report cannot write for account A after another tab signs in a
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Профиль A', { exact: true })).toBeVisible();
   await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toBeVisible();
 
   const reportKeyA = weeklyReportsKey(accountA.id);
@@ -763,6 +764,7 @@ test('held weekly report cannot write for account A after another tab signs in a
   try {
     const switched = await openAccountB(context, state);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    await expect(page.getByText('Профиль A', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
     await expect(switched.page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
     expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
@@ -770,8 +772,14 @@ test('held weekly report cannot write for account A after another tab signs in a
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
 
     await expect.poll(() => switched.fixture.counts.completedAiFeatures).toContain('wis_text');
-    await expect.poll(async () => (await readDurableSnapshot(switched.page)).operations
-      .filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB)).toEqual([]);
+    await expect.poll(async () => {
+      const snapshot = await readDurableSnapshot(switched.page);
+      return {
+        reportSaved: rawValue(snapshot, reportKeyB) !== null,
+        pendingOperations: snapshot.operations.filter(operation => operation.accountId === accountB.id
+          && operation.key === reportKeyB).length,
+      };
+    }).toEqual({ reportSaved: true, pendingOperations: 0 });
     const beforeB = await readDurableSnapshot(switched.page);
     expect(beforeB.activeSession?.accountId).toBe(accountB.id);
     const reportBBefore = rawValue(beforeB, reportKeyB);

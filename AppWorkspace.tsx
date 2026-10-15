@@ -156,12 +156,27 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
     && (durableSessionAccountId === null
       ? !loginGuard && !currentUser?.id
       : durableSessionAccountId === currentUser?.id);
+  const canRenderActiveTab = allowCachedAccountUiStateRestore
+    || activeTab === 'guide'
+    || activeTab === 'privacy'
+    || activeTab === 'updates';
+  const accountSessionMessage = durableSessionKey === 'checking'
+    ? 'Проверяем активную сессию…'
+    : durableSessionKey === 'unavailable'
+      ? 'Не удалось подтвердить активную сессию. Данные аккаунта скрыты; повторите вход.'
+      : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
   React.useLayoutEffect(() => {
     onAccountUiCacheRestoreAllowedChange?.(allowCachedAccountUiStateRestore);
   }, [allowCachedAccountUiStateRestore, onAccountUiCacheRestoreAllowedChange]);
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
+      {!canRenderActiveTab ? (
+        <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
+          {accountSessionMessage}
+        </div>
+      ) : (
+        <>
       {activeTab === 'dashboard' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка dashboard...</div>}>
           <DashboardScreen
@@ -493,6 +508,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onResetUiState={resetUiState}
           />
         </React.Suspense>
+      )}
+        </>
       )}
     </main>
   );
