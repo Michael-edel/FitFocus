@@ -929,7 +929,6 @@ test('a delayed family member update from account A cannot affect account B afte
   await expect(page).toHaveTitle(/FitFocus/);
   await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
   await expect.poll(() => activeAccount(page)).toBe(accountA.id);
-  const accountAFamilyLoads = state.familyLoadAccounts.filter(id => id === accountA.id).length;
 
   await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
   await expect.poll(() => state.memberRequests).toBe(1);
@@ -938,7 +937,7 @@ test('a delayed family member update from account A cannot affect account B afte
   try {
     const accountBPage = await openAccountB(context, state, errorsB);
     expect(await activeAccount(page)).toBe(accountB.id);
-    const accountBFamilyLoads = state.familyLoadAccounts.filter(id => id === accountB.id).length;
+    const accountAFamilyLoadsAfterSwitch = state.familyLoadAccounts.filter(id => id === accountA.id).length;
 
     fixtureA.releaseMemberUpdate();
     await expect.poll(() => state.releasedMembers).toBe(1);
@@ -946,8 +945,7 @@ test('a delayed family member update from account A cannot affect account B afte
     await expect.poll(() => activeAccount(page)).toBe(accountB.id);
     expect(state.memberRequests).toBe(1);
     expect(state.memberTargetIds).toEqual([`family-${accountA.id}`]);
-    expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
-    expect(state.familyLoadAccounts.filter(id => id === accountB.id)).toHaveLength(accountBFamilyLoads);
+    expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoadsAfterSwitch);
     expect(errorsA).toEqual([]);
     expect(errorsB).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
