@@ -226,8 +226,10 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   это не объясняет автоматически все исторические сообщения. На `45575d2`
   profile durability прошёл без retries: 8/8 desktop WebKit, 8/8 iPhone Safari,
   8/8 iPhone PWA; pageerror не возник. На HEAD `404b3da` те же три проекта
-  повторно прошли 24/24 (`workers=1,retries=0`); историческая причина пока
-  не установлена.
+  повторно прошли 24/24 (`workers=1,retries=0`). На точном HEAD `62bd28c`
+  конфликт профиля после 409 прошёл ещё 24/24 повторов на desktop WebKit,
+  iPhone Safari и iPhone PWA (`workers=1,retries=0`); pageerror не возник.
+  Историческая причина пока не установлена.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
