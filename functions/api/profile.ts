@@ -2,7 +2,7 @@
 // Server-driven source-of-truth for UserProfile (stored as JSON in D1)
 
 import { json } from "./_lib/auth";
-import { requireStateUser } from './_lib/state_session';
+import { requireScopedStateUser } from './_lib/state_session';
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
@@ -71,7 +71,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }
@@ -86,7 +86,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }
@@ -101,7 +101,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }

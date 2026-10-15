@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestDelete, onRequestGet, onRequestPut } from '../functions/api/state';
 import { isAllowedStateKey } from '../functions/api/_lib/state_keyspace';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type StatePutContext = Parameters<typeof onRequestPut>[0];
 type StateGetContext = Parameters<typeof onRequestGet>[0];
 type StateDeleteContext = Parameters<typeof onRequestDelete>[0];
@@ -31,6 +32,13 @@ async function signJwt(payload: Record<string, unknown>) {
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
   return `${data}.${b64url(sig)}`;
+}
+
+async function validStateScope() {
+  return {
+    'X-FitFocus-State-Account': 'user-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'user-1', sid: 'sid-1' }),
+  };
 }
 
 function makeDb(options: { atomicWriteChanges?: number } = {}) {
@@ -106,7 +114,7 @@ async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unkn
   const context: StatePutContext = {
     request: new Request('https://fitfocus.test/api/state', {
       method: 'PUT',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, ...await validStateScope(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
     env,
@@ -124,7 +132,7 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string, includeDe
   const context: StateGetContext = {
     request: new Request(`https://fitfocus.test/api/state?prefix=${encodeURIComponent(prefix)}${includeDeleted ? '&includeDeleted=1' : ''}`, {
       method: 'GET',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...await validStateScope() },
     }),
     env,
     params: {},
@@ -141,7 +149,7 @@ async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersi
   const context: StateDeleteContext = {
     request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}${baseVersion === undefined ? '' : `&baseVersion=${baseVersion}`}`, {
       method: 'DELETE',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...await validStateScope() },
     }),
     env,
     params: {},
@@ -342,7 +350,7 @@ describe('/api/state PUT', () => {
     const context: StatePutContext = {
       request: new Request('https://fitfocus.test/api/state', {
         method: 'PUT',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, ...await validStateScope(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: [{ key: 'fitfocus_data_user-1_food:1', value: 'x'.repeat(600 * 1024) }] }),
       }),
       env,

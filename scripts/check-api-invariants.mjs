@@ -1164,6 +1164,16 @@ if (shoppingBulkRoute.includes('INSERT INTO shopping_checked') && shoppingBulkRo
 }
 
 const stateRoute = read('functions/api/state.ts');
+assertIncludes(
+  stateRoute,
+  'requireScopedStateUser(request, env)',
+  'state GET/PUT/DELETE must require an explicit account/session proof',
+);
+assertNotIncludes(
+  stateRoute,
+  'requireStateUser(request, env)',
+  'state endpoints must not preserve unscoped legacy authentication',
+);
 const stateWrite = read('functions/api/_lib/state_write.ts');
 const stateStore = read('functions/api/_lib/state_store.ts');
 assertIncludes(
@@ -1218,6 +1228,16 @@ if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user
 
 const profileRoute = read('functions/api/profile.ts');
 const profileWrite = read('functions/api/_lib/profile_write.ts');
+assertIncludes(
+  profileRoute,
+  'requireScopedStateUser(request, env)',
+  'profile GET/PUT/PATCH must require an explicit account/session proof',
+);
+assertNotIncludes(
+  profileRoute,
+  'requireStateUser(request, env)',
+  'profile endpoints must not preserve unscoped legacy authentication',
+);
 assertIncludes(
   profileWrite,
   'Number.isInteger(parsedBaseVersion)',

@@ -22,6 +22,16 @@ it.each(['GET', 'PUT', 'PATCH'])('rejects a changed cookie before profile %s wor
     new Request('https://example.test/api/profile', { method, headers: expected, ...(method === 'GET' ? {} : { body: '{"name":"new","baseVersion":1}' }) }));
   expect(response.status).toBe(401); expect(mocks.write).not.toHaveBeenCalled(); expect(mocks.read).not.toHaveBeenCalled();
 });
+it.each(['GET', 'PUT', 'PATCH'])('rejects unscoped legacy profile %s before reads, parsing, or writes', async method => {
+  const response = await invoke(method === 'GET' ? onRequestGet : method === 'PUT' ? onRequestPut : onRequestPatch,
+    new Request('https://example.test/api/profile', {
+      method,
+      ...(method === 'GET' ? {} : { headers: { 'Content-Type': 'application/json' }, body: '{' }),
+    }));
+  expect(response.status).toBe(401);
+  expect(mocks.write).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
+});
 it('rejects wrong accounts and incomplete scope, and echoes a validated binding', async () => {
   const session = await stateSessionId(mocks.user);
   for (const headers of [{ 'X-FitFocus-State-Account': 'other', 'X-FitFocus-State-Session': session },

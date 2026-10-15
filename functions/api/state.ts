@@ -3,7 +3,7 @@
 // This enables cross-device sync while keeping the client code largely unchanged.
 
 import { json } from "./_lib/auth";
-import { requireStateUser } from './_lib/state_session';
+import { requireScopedStateUser } from './_lib/state_session';
 import { requireBetaAccess } from "./_lib/access";
 import { requireDB, nowMs } from "./_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError } from "./_lib/request_body";
@@ -31,7 +31,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }
@@ -56,7 +56,7 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }
@@ -99,7 +99,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireStateUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return respond(request, requestId, { error: "UNAUTH" }, 401);
   }

@@ -37,6 +37,13 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
+async function validProfileScope() {
+  return {
+    'X-FitFocus-State-Account': 'user-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'user-1', sid: 'sid-1' }),
+  };
+}
+
 function makeDb(options: { betaAccess?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
@@ -98,7 +105,7 @@ async function putProfileBody(db: ReturnType<typeof makeDb>, body: Record<string
   const context: PutProfileContext = {
     request: new Request('https://fitfocus.test/api/profile', {
       method: 'PUT',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
     env,
@@ -116,7 +123,7 @@ async function patchProfileBody(db: ReturnType<typeof makeDb>, body: Record<stri
   const context: PatchProfileContext = {
     request: new Request('https://fitfocus.test/api/profile', {
       method: 'PATCH',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
     env,
@@ -136,7 +143,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: PutProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PUT',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
       env,
@@ -189,7 +196,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: PatchProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PATCH',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
       env,

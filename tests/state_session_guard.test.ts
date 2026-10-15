@@ -43,10 +43,20 @@ it('rejects account mismatch and incomplete expected scope', async () => {
     expect((await invoke(onRequestGet, new Request('https://example.test/api/state?prefix=fitfocus_data_account-a_', { headers: expected }))).status).toBe(401);
   }
 });
-it('acknowledges the validated request scope and preserves unguarded old clients', async () => {
+it('acknowledges the validated request scope', async () => {
   const expected = await headers();
   const response = await invoke(onRequestPut, new Request('https://example.test/api/state', { method: 'PUT', headers: expected, body: JSON.stringify({ key, value: 'local', baseVersion: 0 }) }));
   expect(response.status).toBe(200); expect(response.headers.get('X-FitFocus-State-Guard')).toBe('1');
   expect(response.headers.get('X-FitFocus-State-Session')).toBe(expected['X-FitFocus-State-Session']);
-  expect((await invoke(onRequestGet, new Request('https://example.test/api/state?prefix=fitfocus_data_account-a_'))).status).toBe(200);
+});
+it.each(['GET', 'PUT', 'DELETE'])('rejects an unscoped legacy %s before application reads or writes', async method => {
+  const handler = method === 'GET' ? onRequestGet : method === 'PUT' ? onRequestPut : onRequestDelete;
+  const response = await invoke(handler, new Request(`https://example.test/api/state?key=${key}&prefix=fitfocus_data_account-a_`, {
+    method,
+    ...(method === 'PUT' ? { headers: { 'Content-Type': 'application/json' }, body: '{' } : {}),
+  }));
+  expect(response.status).toBe(401);
+  expect(mocks.write).not.toHaveBeenCalled();
+  expect(mocks.deleted).not.toHaveBeenCalled();
+  expect(mocks.read).not.toHaveBeenCalled();
 });
