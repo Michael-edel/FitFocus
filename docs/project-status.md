@@ -5,17 +5,17 @@
 
 ## Рабочее дерево — запрет AI proxy без session proof
 
-Follow-up поверх опубликованного `1b80734` удаляет из `callAiProxy` обычный
-unscoped `/api/ai` fallback. Помощник теперь требует `AiSession`, а отсутствие
-сессии отклоняется до сети; все действующие вызовы уже используют scoped
-transport. Локально прошли профильный AI transport — 24/24, полный unit suite —
-1188/1188 в 203 файлах, `typecheck`, auth-scope и production build. Эти изменения
-пока не вошли в GitHub CI.
+Коммит `45575d2` удаляет из `callAiProxy` обычный `/api/ai` fallback без proof.
+Помощник требует `AiSession`, а отсутствие сессии отклоняется до сети; все
+действующие вызовы используют scoped transport. Локально прошли профильный AI
+transport — 24/24, полный unit suite — 1188/1188 в 203 файлах, `typecheck`,
+auth-scope и production build. Дополнительно профильный Safari reload spec прошёл
+8/8 на desktop WebKit, 8/8 на iPhone Safari и 8/8 на iPhone PWA без retries;
+первопричина исторического pageerror не установлена.
 
-На опубликованном `1b80734` workflow [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
-прошёл audit, guards, unit, три typecheck и build; E2E выполняется. Найденные
-после предыдущего E2E failure проблемы исправлены и целевые browser-проверки
-прошли. После отправки follow-up нужно проверить CI точного нового HEAD.
+Полный CI точного HEAD выполняется в [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640):
+audit, guards, unit, три typecheck и build прошли; E2E ещё работает.
+Предыдущий run отменён branch concurrency после нового push.
 
 Billing guard Checkout и административной смены тарифа включён в `1b80734`;
 его точные локальные проверки и контракт приведены в [журнале](stabilization-progress.md)
@@ -34,11 +34,17 @@ Billing guard Checkout и административной смены тариф
 профильный тест в 5 файлах), общий и domain/storage strict typecheck; полный
 `family-callback-account-switch.spec.ts` прошёл 42/42 на
 desktop Chromium, Firefox и WebKit без retries и skips. `npm run build`, admin,
-API invariants, auth-scope, schema и privacy checks прошли. Точный CI нового кода
-не подтверждён. Это проверенный локальный кандидат, а не принятый релиз. Native
-PWA/Service Worker recovery, старые открытые bundle и запросы без scope отдельно
-не приняты; совместимость старых клиентов сохраняется. Общий P0.5 и остановка
-старых writers остаются открытыми. CI предыдущего baseline `b2d787f` прошёл в
+API invariants, auth-scope, schema и privacy checks прошли. В рабочем дереве
+добавлен native HTTP E2E: событие реального собранного Service Worker отправило
+подписку с account/session proof активной IDB-сессии; после logout повторное
+событие не вызвало `/api/me` и повторную подписку. Тест прошёл 1/1 в Chromium,
+а шесть соседних PWA-регрессий — 6/6 без retries; typecheck прошёл. Полный CI
+точного опубликованного `45575d2` выполняется в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640),
+но эта новая локальная проверка в него ещё не входит. Это проверенный локальный
+кандидат, а не принятый релиз. Старые открытые bundle и scope guard старых
+клиентов отдельно не приняты; совместимость старых клиентов сохраняется. Общий P0.5 и
+остановка старых writers остаются открытыми. CI предыдущего baseline `b2d787f` прошёл в
 [run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
 но завершился до коммита `daec94d` и его не проверяет.
 

@@ -1,6 +1,6 @@
 # Origin preview и приёмка staging
 
-Сверено: 12.10.2026. Ветка `fix/durable-outbox`, база рабочего компонента —
+Сверено: 15.10.2026. Ветка `fix/durable-outbox`, база рабочего компонента —
 `aefc46320de11b83ffdb274e7dae1a911e69612e`. Компонент проверяется локально;
 опубликованный SHA и CI фиксируются в [статусе](project-status.md).
 
@@ -75,6 +75,24 @@ redirect rules. Native PWA-shell проверяется отдельно нас�
 HTTP на localhost; это не проверка SW установленного preview на устройстве.
 
 ## Обязательная приёмка целевого окружения
+
+### Read-only preview smoke: `45575d2`, 15.10.2026
+
+Публичный preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200.
+Production JS bundle содержит полный SHA `45575d2e75d9abfadbba804d1ac26d2c8a86d467`.
+В desktop Chromium страница FitFocus отрисовалась на том же origin; нажатие
+«Что нового» открыло changelog, который показал `45575d2e`. `/api/env` и
+анонимный `/api/me` запрашивались с `fix-durable-outbox.fitfocus.pages.dev`;
+`/api/me` вернул `user: null`, не выполнив redirect. При загрузке не было
+POST/PUT/PATCH/DELETE; браузер сообщил только предупреждение, что его сборка не
+распознаёт Permissions-Policy `ambient-light-sensor`.
+
+Это подтверждает текущий bundle, первый экран и эти GET-маршруты на preview
+origin; оно не доказывает edge-правила для всех путей, D1 binding, `APP_URL`,
+OAuth callback, безопасный тестовый аккаунт или миграции. Wrangler не смог
+получить deployment metadata в non-interactive shell без
+`CLOUDFLARE_API_TOKEN`; конфигурацию Pages/D1 через dashboard не меняли.
+Поэтому staging acceptance ниже остаётся незавершённой.
 
 - [ ] Подтвердить адрес и точный build SHA preview; браузер и edge-правила
   не переводят его на production, API-запросы остаются на выбранном origin.

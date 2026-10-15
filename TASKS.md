@@ -1,12 +1,12 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 15.10.2026. Последний опубликованный source SHA —
-`1b807347e56604829f3fd0f5da824d488a8d7dc5`; его [CI run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
+`45575d2e75d9abfadbba804d1ac26d2c8a86d467`; его [CI run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640)
 прошёл audit, guards, unit, три typecheck и build и сейчас выполняет E2E.
 Предыдущий E2E failure на `9fb0cff` выявил сбои в push mock, навигационном mock
 backup restore и коротком account-switch ожидании; локальные исправления прошли
-целевые browser-проверки. Следующий follow-up в рабочем дереве убирает
-незащищённый AI fallback; его проверки ещё не входят в этот CI.
+целевые browser-проверки. В `45575d2` также удалён незашищённый AI fallback;
+локально прошли 1188 unit-тестов, typecheck, auth-scope и production build.
 Последний полный успешный CI до этого проверил source HEAD
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
 в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
@@ -209,7 +209,10 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   локальный payload и серверный снимок. Повторный клик не считается исправлением.
 - [ ] Завершить диагностику остальных Safari reload sources, включая `/api/profile`.
   Источник profile debounce → `/api/me` установлен и исправлен на `f3930ec`;
-  это не объясняет автоматически все исторические сообщения. Общий CORS-фильтр не добавлять.
+  это не объясняет автоматически все исторические сообщения. На `45575d2`
+  profile durability прошёл без retries: 8/8 desktop WebKit, 8/8 iPhone Safari,
+  8/8 iPhone PWA; pageerror не возник. Историческая причина пока не установлена.
+  Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
 - [x] Проверить CI опубликованного исправления Save на точном `45315d9`:
@@ -521,15 +524,22 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   и закоммичен в `daec94d`: 1180 unit-тестов / 202 файла, общий и строгие
   typecheck, build/guards и весь account-switch spec (42/42 на трёх desktop
   engines, без retries) прошли.
-  Точный полный CI, native PWA/Service Worker recovery и scope guard старых
-  открытых bundle отдельно не подтверждены.
+  На рабочем дереве добавлен native HTTP E2E для настоящего собранного SW:
+  `pushsubscriptionchange` отправил подписку со scope текущего аккаунта/сессии;
+  после logout повторное событие не запросило `/api/me` и не отправило подписку.
+  Сценарий прошёл 1/1 в Chromium; связанная PWA-регрессия — 6/6, typecheck прошёл.
+  Точный CI run `38679312640` сейчас проверяет опубликованный SHA `45575d2` и не
+  содержит этого локального follow-up. Scope guard старых открытых bundle остаётся
+  отдельным ограничением.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному `requireStateUser`, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
   18 профильных unit в трёх файлах, typecheck и API/auth/admin guards прошли;
   account-switch E2E — 3/3 на desktop Chromium, Firefox и WebKit без retries,
-  4 не-desktop проекта штатно пропущены. Код пока в незакоммиченном дереве;
-  точный полный CI ожидается. [Контракт](docs/billing-session.md).
+  4 не-desktop проекта штатно пропущены. Код закоммичен в `1b80734`; точный
+  последующий HEAD `45575d2`, содержащий этот guard, проверяется в CI
+  [run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640).
+  [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
   компонент не закрывает остальные writers и общий lifecycle P0.5.
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один

@@ -1,5 +1,15 @@
 # Стабилизация: проверяемые изменения
 
+## P0.3 — повторная приёмка profile reload в Safari, `45575d2`, 15.10.2026
+
+Исторический Safari pageerror после сохранения профиля с ответом 409 повторно
+не воспроизвёлся на текущем HEAD. `profile-durability.spec.ts` прошёл без retries:
+8/8 desktop WebKit, 8/8 iPhone Safari и 8/8 iPhone PWA. Сценарии проверяют
+локальный профиль после reload, 409-конфликт, разрешение конфликта, отказ
+сохранения и обновление сессии; pageerror и неожиданные console error не возникли.
+Эти результаты сужают воспроизведение, но не устанавливают историческую причину,
+поэтому диагностика `/api/profile` остаётся открытой.
+
 ## P0.5 — запретить AI proxy без session proof, рабочее follow-up поверх `1b80734`, 15.10.2026
 
 `callAiProxy` оставлял runtime fallback на обычный `/api/ai`, если внутренний
@@ -9,12 +19,11 @@
 `LOGIN_SESSION_CHANGED` до сети, а запрос всегда проходит через
 `postScopedAiJson` с исходными account/session headers и проверкой ответа.
 
-Проверки локального follow-up: AI transport — 24/24; полный unit suite —
+Проверки коммита `45575d2`: AI transport — 24/24; полный unit suite —
 1188/1188 в 203 файлах; `npm run typecheck`, `npm run check:auth-scope` и
-production build прошли. Рабочее дерево основано на `1b80734`; эти изменения
-не входят в CI [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045),
-который выполняется на опубликованном SHA `1b80734` и сейчас проходит E2E.
-После push follow-up требуется проверить workflow точного нового HEAD.
+production build прошли. Полный CI точного SHA выполняется в
+[run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640):
+audit, guards, unit, typechecks и build прошли; E2E ещё работает.
 
 ## P0.5 — привязка Stripe Checkout к login-сессии, `1b80734`, 15.10.2026
 
@@ -44,8 +53,10 @@ Firefox завершить вход B до повторной отправки A
 `typecheck`, API invariants, auth scope и admin guards прошли; delayed checkout
 URL — 3/3 desktop; account-switch файл — 45/45 применимых desktop-тестов, 60
 не-desktop конфигураций штатно пропущены; push и backup restore — 21/21 во всей
-Playwright-матрице. Точный CI [run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
-запущен на опубликованном SHA `1b80734`; до полной приёмки остаются старые
+Playwright-матрице. Точный CI предыдущего billing-коммита `1b80734`
+[run 38678287045](https://github.com/Michael-edel/FitFocus/actions/runs/38678287045)
+отменён после нового push branch concurrency; полный CI текущего HEAD
+проверяется в run `38679312640`. До полной приёмки остаются старые
 bundles, staging и реальный Stripe Checkout.
 
 ## P0.5 — session guard push-настроек и восстановления, код `daec94d`, 15.10.2026
@@ -69,6 +80,17 @@ native PWA/Service Worker recovery, старые открытые bundle и stag
 не проверены. CI предыдущего baseline `b2d787f` прошёл в
 [run 38669030766](https://github.com/Michael-edel/FitFocus/actions/runs/38669030766),
 но завершился до `daec94d` и этот код не проверяет. Весь P0.5 остаётся открытым.
+
+Локальный follow-up для native Service Worker добавил
+`e2e/push-session-pwa.spec.ts`. На production build и native HTTP fixture тест
+диспетчеризовал `pushsubscriptionchange` в настоящий `/sw.js`, проверил POST
+`/api/push/subscribe` с точными account/session headers активной IndexedDB-сессии,
+затем выполнил logout и подтвердил, что повторное событие не делает `/api/me` и
+не отправляет подписку. Сценарий прошёл 1/1 на desktop Chromium без retries;
+шесть соседних PWA-регрессий прошли 6/6 (`workers=1,retries=0`), typecheck прошёл.
+Это синтетическое событие и локальный HTTP backend: реальный push provider,
+устройства, старые открытые bundle и staging не проверены. Новый тест пока не
+входит в опубликованный SHA `45575d2`; точный CI для follow-up ещё предстоит.
 
 ## P0.5 — генерация пошагового рецепта из фото с account/session guard, `71d2ca4`, 15.10.2026
 

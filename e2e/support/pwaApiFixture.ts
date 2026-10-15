@@ -17,9 +17,10 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   let currentStateAvailable = options.currentStateUnavailable !== true;
   const stateWriteKeys: string[] = [];
   const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null,
-    oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
+    me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
     currentStatePutAttempts: 0, currentStatePutAccepted: 0 };
-  return { unexpectedApi, counts, stateWriteKeys, recoverState: () => { stateAvailable = true; },
+  const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
+  return { unexpectedApi, counts, stateWriteKeys, pushRequests, recoverState: () => { stateAvailable = true; },
     recoverCurrentState: () => { currentStateAvailable = true; }, recover: (conflict = false) => {
     available = true;
     stateAvailable = true;
@@ -35,12 +36,13 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       counts.legacyStatePutAttempts += 1;
       if (!stateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
     }
-    if (method !== 'GET' && !['/api/achievements/check'].includes(path) && path !== '/api/ai'
+    if (method !== 'GET' && !['/api/achievements/check'].includes(path) && path !== '/api/ai' && path !== '/api/logout'
       && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sid)) {
       if (legacySingleStateWrite) { counts.legacyStateScopeRejected += 1; return json({ error: 'INVALID_SCOPE' }, 403); }
       unexpectedApi.push(`INVALID_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
     }
     if (path === '/api/env') return json({ requireInvite: false });
+    if (path === '/api/me') counts.me += 1;
     if (options.unauthenticated && path === '/api/me') return json({ user: null, hasAccess: false });
     if (options.unauthenticated && path === '/api/auth/google/start') {
       counts.oauth += 1;
@@ -108,6 +110,15 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     if (path === '/api/achievements' || path === '/api/achievements/check') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai' && body.feature === 'wis_text') return json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
     if (path === '/api/wearable/huawei/status') return json({ connected: false, configured: false });
+    if (path === '/api/logout' && method === 'POST') { counts.logout += 1; return json({ ok: true }); }
+    if (path === '/api/push/subscribe' && method === 'POST') {
+      counts.pushSubscribe += 1;
+      const accountHeader = request.headers['x-fitfocus-state-account'];
+      const sessionHeader = request.headers['x-fitfocus-state-session'];
+      pushRequests.push({ path, method, account: typeof accountHeader === 'string' ? accountHeader : null,
+        session: typeof sessionHeader === 'string' ? sessionHeader : null });
+      return json({ ok: true });
+    }
     if (path === '/api/push/status') return json({ configured: false, current_subscription_id: null, count: 0, subscriptions: [] });
     unexpectedApi.push(`${method}:${path}`); return json({ error: 'UNMOCKED_API' }, 500);
   } };
