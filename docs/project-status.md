@@ -3,6 +3,17 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный follow-up — guarded media загрузка admin-вложений поддержки, `f949842`
+
+После обязательного session proof у `requireAdminRequest` прямые `<img>`,
+`<video>` и `<audio>` URL вложений переставали работать: такие элементы не
+передают scope headers. AdminScreen теперь скачивает вложения через
+`requestAdminResponse`, проверяет `Support-Attachment` markers и показывает
+временный Blob URL; API возвращает маркеры и echo исходной сессии. Тесты
+покрывают маршрут и transport. В изолированном sandbox прошли API/auth/admin
+guards и три typecheck. Unit и CI этого SHA ещё не подтверждены; staging
+проверка открытия вложений остаётся открытой. [Контракт](support-session.md).
+
 ## Локальный кандидат — обязательный session proof для GDPR export, `4edeb0a`
 
 `GET /api/export` теперь требует полный account/session proof до формирования

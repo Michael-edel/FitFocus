@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — guarded загрузка вложений из admin-поддержки, `f949842`, 15.10.2026
+
+После того как `/api/admin/*` стал требовать account/session proof, media
+элементы AdminScreen не могли загрузить attachment URL: браузер не позволяет
+добавить scope headers в `<img>`, `<video>` или `<audio>`. AdminScreen теперь
+запрашивает attachment через `requestAdminResponse` с proof исходной сессии,
+проверяет `Support-Attachment` protocol/guard и точное echo scope, затем
+показывает временный Blob URL и отзывает его при размонтировании компонента.
+Endpoint возвращает соответствующие маркеры и сохраняет `private, no-store`,
+`nosniff` и sandbox CSP; доступ по-прежнему ограничен владельцем тикета или
+администратором, причём admin-вызов сверяется с обязательной парой proof.
+
+Добавлены регрессии response markers для обычного маршрута, scoped admin read и
+admin transport с выделенным resource marker; API invariants защищают response
+wrapper. В сетево-отключённом sandbox прошли API invariants, auth-scope, admin
+guard и три typecheck. Unit suite и полный CI SHA `f949842` ещё не подтверждены;
+staging проверка открытия фотографий/видео/аудио в admin панели остаётся открытой.
+[Контракт](../API_CONTRACTS.md).
+
 ## P0.5 — обязательный proof для GDPR export, `4edeb0a`, 15.10.2026
 
 `GET /api/export` ранее проверял только пользователя, поэтому legacy-вызов без

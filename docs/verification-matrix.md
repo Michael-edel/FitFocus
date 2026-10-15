@@ -4,6 +4,13 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+AdminScreen загружает вложения поддержки через scoped request и проверяет
+`Support-Attachment` protocol/guard markers; API echo-возвращает account/session,
+а temporary Blob URLs отзываются при размонтировании. Маршрут, session transport,
+API invariant и три typecheck прошли в изолированном sandbox на SHA
+[`f949842`](https://github.com/Michael-edel/FitFocus/commit/f949842393125ffbd321bbb07988771671c8e6eb).
+Unit, точный CI и staging media smoke ещё открыты. [Контракт](support-session.md).
+
 `GET /api/export` требует полный account/session proof в локальном SHA
 [`4edeb0a`](https://github.com/Michael-edel/FitFocus/commit/4edeb0a84d8836730bfc27f3f461f0f47bbf0058).
 Missing/partial proof и beta denial покрыты regression tests; отказ происходит

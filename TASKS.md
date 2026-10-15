@@ -569,7 +569,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   требует proof для всех `/api/admin/*`; тесты покрывают оба guard overload,
   отсутствие/частичную пару до D1 lookup и guarded 401 middleware. API/auth/admin
   guards и три typecheck прошли в изолированном контейнере; точный CI после push.
-  Старые AdminScreen bundles требуют обновления. [Контракт](docs/admin-session.md).
+  `f949842` добавляет scoped fetch и response markers для admin-вложений поддержки,
+  которые браузерные media tags не могли загрузить с proof header. Старые
+  AdminScreen bundles требуют обновления. [Контракт](docs/admin-session.md).
   Предыдущий PR CI [`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
   на `01bfa05` остановился на unit: 1263/1264 теста прошли, а единственная
   ошибка была в legacy fixture, который общий helper уже делал scoped. Follow-up

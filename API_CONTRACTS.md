@@ -324,6 +324,17 @@ protocol/guard markers. Старые bundles без proof получают 401 �
 выпуска нового серверного контракта. Контракт React lifetime и локальных проверок — в
 [документе сессии поддержки](docs/support-session.md).
 
+`GET /api/support/attachment` возвращает приватный файл с `private, no-store`,
+`nosniff` и sandbox CSP. Каждый ответ получает
+`X-FitFocus-Support-Attachment-Protocol: 1` и
+`X-FitFocus-Support-Attachment-Guard: 1`; переданные account/session headers
+эхо-возвращаются. Запрос администратора проверяет полный proof через
+`requireAdminRequest`. Поскольку `<img>`, `<video>` и `<audio>` не могут задать
+эти заголовки, AdminScreen загружает вложение через `requestAdminResponse`,
+проверяет scope markers и показывает временный Blob URL, удаляемый при размонтировании.
+Для пользователя сервер также проверяет cookie, владельца тикета и допустимость
+вложения; вызов по URL без proof остаётся owner-scoped.
+
 ## Выдача мобильного bearer-токена
 
 `POST /api/mobile/token` в актуальном Settings-клиенте сначала получает свежий
