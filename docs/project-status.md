@@ -981,6 +981,12 @@ HTTP routes требуют парный account/session proof до чтения 
 production build и diff check. Сборки без proof получают 401. CI этого SHA,
 staging, rollout и полный family lifecycle ещё не подтверждены.
 
+Следующий локальный шаг P0.5 — [`1ac44fb`](https://github.com/Michael-edel/FitFocus/commit/1ac44fb0a821a44029d1265c49f0a5a72eac160a): все четыре Push API требуют парный
+account/session proof; unscoped-запросы отклоняются до body, D1 и доставки.
+Прошли 1238 unit-тестов, три typecheck, API/auth/schema/privacy guards,
+production build и целевые Push E2E: 4 passed / 2 штатно skipped. Полный CI
+этого SHA и staging/provider-проверки ещё не подтверждены.
+
 ## Что остаётся
 
 1. Завершить приёмку [семейного меню](family-menu-state.md) на `405238b`:

@@ -204,6 +204,24 @@ GitGuardian не обнаружил секретов. Локальная account
 staging и production не проверены; общий P0.5, staging и выпуск остаются
 открытыми.
 
+## P0.5 — обязательный proof для Push API, `1ac44fb`, 15.10.2026
+
+`/api/push/status`, `subscribe`, `unsubscribe` и `test` теперь требуют
+`requireScopedStateUser`. Старые открытые Settings/Service Worker сборки без
+парных account/session headers получают 401. Проверка выполняется до чтения
+JSON, чтения/изменения подписок и отправки test notification. Остальные ответы
+сохраняют Push protocol/guard markers и публичный scope. Контракт и staging gate
+обновлены; для прежнего клиента нужен rollout с обновлением клиента/worker.
+
+На точном локальном SHA
+[`1ac44fb`](https://github.com/Michael-edel/FitFocus/commit/1ac44fb0a821a44029d1265c49f0a5a72eac160a)
+полный unit suite прошёл 1238/1238 в 208 файлах; прошли общий, domain-strict и
+storage-strict typecheck, API invariants, auth-scope, schema parity, privacy,
+production build и `git diff --check`. Push account-switch сценарий прошёл в
+desktop Chromium, Firefox и WebKit; настоящий собранный Service Worker с HTTP
+fixture прошёл в Chromium (4 passed, 2 ожидаемых skip). Полный CI этого SHA,
+реальный push provider, device/BFCache и staging остаются открытыми.
+
 ## P0.6 — возобновление outbox после смены аккаунта, reload и logout/login, 15.10.2026
 
 В `e2e/ai-callback-account-switch.spec.ts` добавлен desktop acceptance:
