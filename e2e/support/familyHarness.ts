@@ -39,7 +39,7 @@ export async function saved(page: Page) {
       report('read-complete', { values: values.length, operations: operations.length });
       return { version: db.version, menus: values.filter(value => value.key.includes('_family_menu:')).map(value => JSON.parse(value.value)),
         profiles: values.filter(value => value.key === `fitfocus_data_${account}_profile`).map(value => JSON.parse(value.value)),
-        operations: operations.filter(op => op.resource === 'familyMenu').map(op => ({ opId: op.opId, status: op.status, value: op.value, serverSnapshot: op.serverSnapshot })) };
+        operations: operations.filter(op => op.resource === 'familyMenu').map(op => ({ opId: op.opId, status: op.status, retryCount: op.retryCount, value: op.value, serverSnapshot: op.serverSnapshot })) };
     } finally { db.close(); }
   }, account);
 }

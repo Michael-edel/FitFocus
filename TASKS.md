@@ -384,11 +384,15 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   историческую причину, поэтому пункт остаётся открыт.
   Working tree пишет IDB open/blocked/upgrade, versionchange/close и стадии
   transaction/read в failure attachment.
-- [ ] Разобрать исторический native WebKit sender pageerror после PWA update
-  из trace CI `5b90249`. На опубликованной `47da77c` delayed native PUT
-  сценарий прошёл 3/3 (`workers=1/retries=0`) и подтвердился в полном CI;
-  операция сохранила opId/payload, pageerror не возник. Историческая ошибка
-  не воспроизведена, первопричина не установлена.
+- [ ] Завершить диагностику исторического native WebKit sender pageerror после PWA update
+  из trace CI `5b90249`. Артефакт показывает `503` на семейный PUT в
+  rollback-клиенте и повтор отправки во время активации PWA. WebKit сообщил
+  fetch pageerror из старого `drain`. Новый regression-сценарий ждёт первый
+  `503`, задерживает следующую попытку и активирует обновление при `sending`.
+  Операция сохраняет opId/payload, старый запрос прерывается, pageerror нет.
+  Локально: desktop WebKit 4/4 (`workers=1,retries=0`), Chromium 1/1, Firefox
+  1/1, typecheck прошёл. Точный CI follow-up ожидает push; текущий run `9f09fb5`
+  не включает сценарий и всё ещё выполняет E2E.
 - [x] Реализовать локальный прототип упаковки полного client/SW/Pages Worker из точного Git SHA,
   manifest SHA-256, проверки целостности и настоящий локальный HTTP/D1 smoke
   распакованного `.tar`. База `574de76`, кандидат `d3a9496`, 23 HTTP прошли;

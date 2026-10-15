@@ -8,7 +8,7 @@ import { saved, healthy } from './support/familyHarness';
 
 test('fresh rollback installation can explicitly update to the candidate and preserve its family intent', async ({ context }, info) => {
   test.setTimeout(90_000);
-  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { familyPutDelayMs: 5_000 });
+  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { retryFamilyPutDelayMs: 5_000 });
   const page = await context.newPage(), errors: string[] = [], googleRequests: string[] = [];
   let navigations = 0;
   page.on('pageerror', error => errors.push(error.message));
@@ -49,7 +49,11 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     const candidateScript = readFileSync(resolve('dist/index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
     expect(candidateScript).toBeTruthy(); expect(installedScript).not.toBe(candidateScript);
     await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
-    // Hold the native request open so this check exercises the exact pagehide/abort boundary.
+    // Let the rollback client receive an offline response, then hold its retry so
+    // activation exercises pagehide while the old sender is issuing that retry.
+    await expect.poll(() => server.counts.put).toBeGreaterThan(0);
+    await expect.poll(async () => (await saved(page)).operations[0]?.retryCount).toBeGreaterThan(0);
+    await expect.poll(() => server.counts.put).toBeGreaterThan(1);
     await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('sending');
     const operation = (await saved(page)).operations[0];
     page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations += 1; });

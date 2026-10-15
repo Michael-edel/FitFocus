@@ -9,7 +9,7 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
-  conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
+  retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
   let sessionId = initialSessionId;
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
@@ -90,7 +90,8 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     if (path === '/api/family/menu/state') {
       if (method === 'PUT') {
         counts.put += 1;
-        if (options.familyPutDelayMs) await new Promise(resolve => setTimeout(resolve, options.familyPutDelayMs));
+        const delayMs = counts.put > 1 ? options.retryFamilyPutDelayMs ?? options.familyPutDelayMs : options.familyPutDelayMs;
+        if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
         if (response.destroyed) { counts.familyPutAborted += 1; return; }
         if (options.conflictFirstFamilyPut && !firstFamilyConflictInjected) {
           firstFamilyConflictInjected = true;
