@@ -43,6 +43,9 @@
   endpoints требуют парный account/session proof; старые bundles без него
   получают 401 до разбора тела и прикладных запросов. Проверить обновление
   клиента, создание/ответ пользователя и чтение/изменение тикетов на staging.
+- [ ] `POST /api/logout_all` требует полный proof до отзыва всех сессий и
+  истечения cookie; старый AdminScreen bundle получает 401. На staging проверить
+  успешный выход всех устройств и отказ без/с неполным proof без side effects.
 - [ ] Для [`/api/state` и `/api/profile`](API_CONTRACTS.md) все GET/PUT/PATCH/
   DELETE handlers требуют парный account/session proof и отвечают 401 старым
   bundles без него. Проверить обновление клиента, pending/outbox writes,

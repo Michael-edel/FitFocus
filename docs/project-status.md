@@ -18,6 +18,15 @@ Linux Rollup optional binary. Точный PR CI [38703208009](https://github.co
 OAuth, BFCache, устройство и staging требуют отдельной проверки.
 [Контракт](huawei-health-session.md).
 
+## Follow-up — обязательный proof для `logout_all`, `c778515`
+
+`POST /api/logout_all` отзывает все сессии и теперь требует полный account/session
+proof через `requireScopedStateUser`. Отсутствующий или неполный scope отклоняется
+до auth lookup, session revocation и `Set-Cookie`; `AdminScreen` уже отправляет
+парную пару заголовков. В sandbox прошли API/auth/admin guards и три typecheck.
+Точный CI этого HEAD запускается после push; обновление старого AdminScreen bundle
+и реальные staging-проверки остаются открытыми. [Контракт](admin-session.md).
+
 ## Локальный кандидат — обязательный proof для bootstrap, `84e735c`
 
 `/api/bootstrap` теперь требует парный account/session proof через

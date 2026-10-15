@@ -4,6 +4,12 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+`POST /api/logout_all` теперь требует обязательный session proof в follow-up
+[`c778515`](https://github.com/Michael-edel/FitFocus/commit/c778515db0fe8481d8fa1a767493a000334cb1f6).
+Отсутствующий и partial account-only proof проверяются до auth lookup и
+revocation; локально прошли API/auth/admin guards и три typecheck. Точный CI и
+staging проверяются отдельно. [Контракт](admin-session.md).
+
 Huawei Health session guard впервые проверен в кодовом SHA
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae):
 26 профильных unit/API-тестов, 15/15 выбранных account-switch E2E без retries и

@@ -555,8 +555,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   к исходному account/session proof; сервер проверяет его до D1 role lookup и
   admin-session side effects. Локальные transport/server regression tests,
   общий unit suite, typechecks и build прошли; точный CI нового HEAD ожидает push.
-  [Контракт](docs/admin-session.md). Остальные callbacks и общий lifecycle
-  остаются открытыми.
+  Follow-up [`c778515`](https://github.com/Michael-edel/FitFocus/commit/c778515db0fe8481d8fa1a767493a000334cb1f6)
+  требует полный proof для destructive `/api/logout_all`; legacy no-scope и
+  account-only запросы получают 401 до auth lookup, revocation и cookie clearing.
+  API/auth/admin guards и три typecheck прошли в изолированном контейнере;
+  точный CI запускается после push. [Контракт](docs/admin-session.md).
+  Остальные callbacks и общий lifecycle остаются открытыми.
 - [x] Проверить выдачу мобильного bearer-токена из Settings: fresh
   account/session proof, server scope до mint, guarded no-store response,
   очистка токена/setup link при смене логина и delayed account-switch E2E.

@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — обязательный proof для глобального выхода, `c778515`, 15.10.2026
+
+`POST /api/logout_all` отзывает все сессии аккаунта и истекал общую cookie,
+но использовал `requireStateUser`, который принимал cookie-only legacy запрос.
+Теперь endpoint требует полный account/session proof через
+`requireScopedStateUser`; отсутствие или неполная пара завершается 401 до
+`requireUser`, отзыва сессий и выдачи `Set-Cookie`. Текущий `AdminScreen`
+использует `adminRequest` и уже отправляет proof.
+
+Regression tests покрывают отсутствие proof и account-only пару с валидной
+cookie; обе формы отклоняются до auth lookup и `revokeAllUserSessions`. API
+invariants требуют строгий guard на route. В сетево-отключённом sandbox прошли
+API invariants, auth-scope, admin guard и три typecheck; unit runner и полный CI
+для этого SHA ещё не подтверждены. Старые AdminScreen bundles, которые вызывают
+этот endpoint без proof, должны обновиться до rollout.
+
 ## P0.5 — обязательный Huawei session proof, `a127bf5`, 15.10.2026
 
 До follow-up status/start/sync/disconnect использовали `requireStateUser`,
