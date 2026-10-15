@@ -1185,6 +1185,17 @@ assertNotIncludes(
   'requireStateUser(request, env)',
   'state endpoints must not preserve unscoped legacy authentication',
 );
+const logoutAllRoute = read('functions/api/logout_all.ts');
+assertIncludes(
+  logoutAllRoute,
+  'requireScopedStateUser(request, env)',
+  'logout-all must require explicit account/session proof before revoking sessions',
+);
+assertNotIncludes(
+  logoutAllRoute,
+  'requireStateUser(request, env)',
+  'logout-all must not preserve unscoped legacy authentication',
+);
 for (const route of [
   'functions/api/wearable/huawei/start.ts',
   'functions/api/wearable/huawei/status.ts',

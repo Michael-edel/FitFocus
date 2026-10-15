@@ -2,13 +2,13 @@
 // Revokes ALL sessions for current user and clears ff_session cookie.
 
 import { json } from "./_lib/auth";
-import { requireStateUser, withSessionGuard } from "./_lib/state_session";
+import { requireScopedStateUser, withSessionGuard } from "./_lib/state_session";
 import { revokeAllUserSessions } from "./_lib/session_revocation";
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 const handleLogoutAllPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const u = await requireStateUser(request, env);
+    const u = await requireScopedStateUser(request, env);
 
     await revokeAllUserSessions(env.DB, u.sub);
 
