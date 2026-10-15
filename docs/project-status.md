@@ -3,6 +3,18 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для Support feedback, `bc3e7c2`
+
+Пользовательские и административные handlers `/api/support/feedback` теперь
+требуют `requireScopedStateUser`. Запросы без proof получают 401 до разбора
+тела, admin role lookup и прикладных запросов/записей. Текущие `SupportScreen`
+и `adminRequest` уже передают proof через свои transports. Профильные тесты
+прошли 34/34, полный unit suite — 1249/1249 в 208 файлах; общий/domain-strict/
+storage-strict typecheck, API invariants, auth-scope, admin guards, schema
+parity, privacy coverage и production build прошли. Точный CI ожидает push;
+обновление старых bundles и support CRUD на staging остаются открытыми.
+[Контракт](support-session.md).
+
 ## Локальный кандидат — обязательный proof для mobile token, `a1e79ac`
 
 `POST /api/mobile/token` отклоняет unscoped legacy запрос с 401 до mint bearer

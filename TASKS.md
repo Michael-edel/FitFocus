@@ -704,11 +704,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   5/5, затем полный spec — 25 passed / 2 skipped. Связанные unit — 11/11,
   typecheck прошёл. Тест входит в полный CI `455cb01`, завершившийся success.
 - [x] Привязать список, детали, создание тикета и ответ пользователя к исходной
-  login-сессии. Сервер требует совпадающие account/session до прикладных
-  чтений/записей тикетов и вложений;
+  login-сессии. Все пользовательские и admin handlers требуют совпадающие
+  account/session до разбора тела, проверки admin-роли и прикладных
+  чтений/записей тикетов;
   клиент проверяет response markers, IDB auth-fence и не применяет поздний
-  результат в другой сессии. Unit и account-switch E2E — локальная приёмка;
-  точный CI этого изменения проверяется после push. [Контракт](docs/support-session.md).
+  результат в другой сессии. `bc3e7c2`: профильные тесты 34/34, полный unit
+  1249/1249, typechecks, guards и build прошли; старые bundles и staging остаются
+  открытыми. [Контракт](docs/support-session.md).
 - [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
   guarded diary/history commit, profile usage и успешный UI только для текущей
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли

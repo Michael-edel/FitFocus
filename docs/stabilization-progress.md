@@ -3689,3 +3689,20 @@ suite (1244/1244 в 208 файлах), общий/domain-strict/storage-strict t
 API invariants, auth-scope, admin guards, schema parity, privacy coverage,
 production build и `git diff --check`. Точный CI follow-up ожидает push; старый
 Settings bundle, staging и настоящее устройство остаются открытыми.
+
+## P0.5 — обязательный proof для Support feedback, `bc3e7c2`, 15.10.2026
+
+Пять user/admin handlers `/api/support/feedback` используют
+`requireScopedStateUser`. Отсутствующий или неполный account/session proof
+отклоняется с 401 до разбора тела, admin role lookup и прикладных запросов или
+записей. Регрессии проверяют legacy GET/POST/PATCH с отсутствующим proof;
+транспорт `SupportScreen` и административный `requestAdminResponse` уже
+передают парный proof. В API-invariants добавлена проверка обязательного helper.
+
+На точном кодовом SHA
+[`bc3e7c2`](https://github.com/Michael-edel/FitFocus/commit/bc3e7c2c0be9009d017e928502d954af3d927c6f)
+прошли профильные тесты (34/34), полный unit suite (1249/1249 в 208 файлах),
+общий/domain-strict/storage-strict typecheck, API invariants, auth-scope,
+admin guards, schema parity, privacy coverage, production build и
+`git diff --check`. Точный CI ожидает публикации кандидата; проверка старых
+bundles, staging и полный P0.5 lifecycle остаются открытыми.
