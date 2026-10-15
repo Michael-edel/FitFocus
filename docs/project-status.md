@@ -3,6 +3,16 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для AI/items, `7240fec`
+
+`/api/ai` и `/api/weekly_menu/items` требуют парную account/session-привязку
+через `requireScopedStateUser`; старые запросы без proof получают 401 до чтения
+body и прикладных эффектов. Локально прошли полный unit suite (1240/1240),
+общий и два strict typecheck, API/auth/schema/privacy guards, production build и
+`git diff --check`. Точный CI этого follow-up ожидает push; старые bundles,
+staging rollout и реальная приёмка остаются открытыми.
+[Контракт](ai-session-guard.md).
+
 ## Локальный кандидат — proof для invite redeem, `55bc09e`
 
 `/api/invite/redeem` теперь требует парные account/session headers через

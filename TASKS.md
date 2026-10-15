@@ -607,7 +607,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   [Контракт](docs/ai-council-session.md); общий P0.5 остаётся открытым.
 - [x] Добавить серверную проверку account/session в AI и weekly-menu items
   до прикладных эффектов (`16d3c34`); capabilities и HTTP-регрессии проверены.
-  [Контракт](docs/ai-session-guard.md). Запросы без scope остаются прежними.
+  Follow-up [`7240fec`](https://github.com/Michael-edel/FitFocus/commit/7240fece7d9d66020599c96c6aa15f9b548c81e4)
+  запрещает также legacy-запросы без scope; тест проверяет 401 до разбора
+  некорректного body. Полный unit suite 1240/1240, общий и два strict typecheck,
+  API/auth/schema/privacy guards, build и diff check прошли локально. Старые
+  bundles нужно обновить до rollout; точный CI и staging остаются открытыми.
+  [Контракт](docs/ai-session-guard.md).
 - [x] Защитить недельный AI-отчёт и его retry свежим session proof, lifecycle
   guard и durable commit; локальные профильные проверки описаны в
   [контракте](docs/weekly-ai-report-session.md). GitHub CI коммита `0b7062d`

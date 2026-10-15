@@ -3631,3 +3631,19 @@ auth-scope, production build и `git diff --check` прошли. Целевые 
 запущен для предыдущего SHA `e2e7020` и не проверяет этот код. CI точного SHA,
 проверка в браузерах, staging rollout и полный family lifecycle остаются
 открытыми.
+
+## P0.5 — обязательный proof для AI и weekly-menu items, `7240fec`, 15.10.2026
+
+`/api/ai` и `/api/weekly_menu/items` переведены на `requireScopedStateUser`.
+Отсутствующий, неполный или устаревший account/session proof отклоняется с 401
+до разбора JSON и прикладных эффектов. Это включает legacy-запрос без обоих
+headers; старые открытые bundles нужно обновить до rollout. Целевые тесты
+проверяют оба handlers, в том числе некорректное тело unscoped запроса.
+
+На точном локальном SHA `7240fec` прошли профильные тесты (21/21), полный unit
+suite (1240/1240 в 208 файлах), общий/domain-strict/storage-strict typecheck,
+API invariants, auth-scope, schema parity, privacy coverage, production build и
+`git diff --check`. Запущенный CI [38694820144](https://github.com/Michael-edel/FitFocus/actions/runs/38694820144)
+проверяет только предыдущий `929573d`; его E2E не включает этот follow-up.
+Точный CI, старые/новые bundles на staging и OAuth/menu lifecycle остаются
+открытыми.
