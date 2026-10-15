@@ -1,20 +1,29 @@
 # Текущее состояние FitFocus
 
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
-здесь, результаты проверок — в [журнале](stabilization-progress.md).
+здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
+проверенный кодовый коммит —
+[`baba226`](https://github.com/Michael-edel/FitFocus/commit/baba2261bf6610d0f76a22e0b84830ef1c53e093)
+в локальной ветке `durable-outbox`; отправка и точный GitHub CI ещё ожидают.
+
+Для этой ревизии прошли полный unit suite (1295/1295 в 209 файлах), общий и два
+strict typecheck, production build и целевые recipe account-switch E2E (4 passed,
+2 skips по конфигурации проектов). В плане остаются 34 пункта: 20 P0, 7 P1 и 7
+следующих задач. P0.4 и P0.5 остаются открытыми до проверки остальных callback,
+staging и полного lifecycle.
 
 ## P0.7/P0.8 — legacy intent без доказанного поколения
 
-Рабочее дерево на базе `24aa070` сохраняет старую операцию как видимый конфликт
+Реализация этой части на базе `24aa070` сохраняет старую операцию как видимый конфликт
 `legacy-server-generation-unproven` с `baseVersion: 0`. Уже существующая
 pending/sending операция атомарно снимается с отправки; поздний ответ старого
 запроса не подтверждает новую версию. Исходный источник, payload и migration
 ledger сохраняются. Старое значение попадает в durable storage только когда
 это не перезаписывает другую текущую операцию; оно не становится sendable.
 
-Проверки текущего дерева: unit 1279/1279, общий и domain/storage strict
-typecheck, production build, old/new migration browser/PWA matrix 7/7 и
-`git diff --check`. Точный CI после публикации и staging ещё не проверены.
+Проверки предыдущей ревизии включали unit 1279/1279, общий и domain/storage
+strict typecheck, production build, old/new migration browser/PWA matrix 7/7 и
+`git diff --check`. Результаты новой ревизии приведены выше и в журнале.
 Безопасное ручное разрешение legacy-конфликтов, остальные callbacks и полный
 lifecycle остаются открытыми; в [плане](../TASKS.md) открыты 34 пункта.
 

@@ -521,7 +521,10 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   гидратации старых данных; задержка теперь управляется тем же mock API handler,
   без дополнительного route/fallback. Полный `family-menu-durable.spec.ts` после
   изменения прошёл 39/39 на трёх desktop engines. Точный CI `aa4073c` ожидается;
-  остальные cloud callbacks и cache остаются открытыми.
+  `baba226` дополнительно изолирует локальный recipe-usage cache по accountId;
+  unit suite 1295/1295 и целевые account-switch E2E 4 passed / 2 project skips.
+  Общий CI этого SHA ожидает push; остальные cloud callbacks и cache остаются
+  открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

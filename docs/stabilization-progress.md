@@ -4078,3 +4078,24 @@ replacement для одного callback и не заменяет настоящ
 `workers=1,retries=0`; `git diff --check` прошёл. Полный CI этого SHA запускается
 после push; run `38767363066` относится к родительскому `f3bdccc` и не включает
 этот сценарий.
+
+## P0.4 — recipe usage cache с областью аккаунта, [`baba226`](https://github.com/Michael-edel/FitFocus/commit/baba2261bf6610d0f76a22e0b84830ef1c53e093), 15.10.2026
+
+Лимит пошаговой генерации рецептов раньше хранился в одном localStorage-ключе,
+поэтому значение одного аккаунта влияло на другого. Счётчик теперь использует
+ключ с encoded `accountId`; общий legacy-ключ не присваивается пользователю,
+поскольку его владельца доказать нельзя. Ошибка localStorage не превращает
+успешный guarded diary commit в ошибку рецепта. Корневой `usage.ts` повторно
+экспортирует единственную реализацию из `domain/usage.ts`.
+
+Новый unit набор проверяет изоляцию аккаунтов, отсутствие угадывания владельца
+legacy-счётчика, отказ localStorage и поведение без accountId. Полный unit suite
+прошёл 1295/1295 в 209 файлах; общий, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли. Два целевых account-switch E2E
+сценария прошли 4 раза на Chromium/Firefox/WebKit; два ожидаемо пропущены
+проектной конфигурацией. Точный GitHub CI запускается после push.
+
+Закрыт только этот конкретный cache defect: общий критерий P0.4 остаётся открыт,
+так как другие cloud callbacks/cache ещё требуют проверки. Всего в `TASKS.md`
+остаётся 34 открытых пункта; staging и полная приёмка lifecycle/release не
+выполнены.
