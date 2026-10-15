@@ -28,6 +28,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 | [docs/support-session.md](docs/support-session.md) | Session guard списка, деталей, создания обращений и ответов пользователя |
 | [docs/huawei-health-session.md](docs/huawei-health-session.md) | Account/session guard Huawei OAuth, sync и профильных изменений |
 | [docs/weekly-ai-report-session.md](docs/weekly-ai-report-session.md) | Защита недельного AI-отчёта свежей сессией и durable commit |
+| [docs/account-lifecycle-session.md](docs/account-lifecycle-session.md) | Привязка выхода и удаления аккаунта к исходной login-сессии |
 | [docs/stabilization-progress.md](docs/stabilization-progress.md) | Журнал изменений, SHA, тесты и CI |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Локальный запуск, проверки и правила внесения изменений |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Проверки выпуска и отката |
@@ -73,14 +74,13 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 
-Кодовый SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
-привязывает Huawei OAuth, sync и guarded profile commit к account/session.
-Локально прошли 1167 unit-тестов, три typecheck, production build, API/auth/schema/privacy
-checks и 15/15 выбранных account-switch E2E в desktop Chromium, Firefox и WebKit
-без retries. Точный PR CI [`38656586334`](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
-завершился success: E2E, unit, guards, typecheck, build и rollback/CAS прошли.
-Cloudflare preview для SHA также опубликован. Настоящий Huawei OAuth, staging
-и выпуск в main остаются открытыми. См. [сессионный контракт Huawei](docs/huawei-health-session.md),
+Кодовый SHA [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3)
+привязывает logout и удаление аккаунта в текущем клиенте к исходному login
+proof, чтобы старый callback не изменил другую сессию. Unscoped logout старых
+вкладок остаётся открытым lifecycle-риском. На SHA локально прошли 1215 unit-тестов,
+три typecheck, production build и auth/API/admin/privacy checks. Точный CI
+этого кандидата ещё не подтверждён. Реальный OAuth, staging, полный P0.5/P0.8
+lifecycle и выпуск в main остаются открытыми. См. [контракт](docs/account-lifecycle-session.md),
 [статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
 
 Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)

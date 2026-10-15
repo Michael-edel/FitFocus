@@ -3556,3 +3556,24 @@ WebKit: старая вкладка A после входа B не скачив�
 проверяет предыдущий SHA `acb561a` и на момент нового follow-up ещё выполняет
 E2E; он не содержит `bb4773b`. Полный P0.5 lifecycle, остальные callbacks,
 staging и выпуск остаются открытыми.
+
+## P0.5 — session-bound logout и удаление аккаунта, `956cf96`, 15.10.2026
+
+`deleteAccountSession` требует текущий `loginGuard`, сверяет аккаунт с Google
+subject, проверяет guard до запроса и перед отправкой после prompt. `/api/account/delete`
+теперь требует обязательный парный session scope через `requireScopedStateUser`
+до правил/side effects и возвращает Account-Delete markers. Успех принимается
+только с совпавшим echo scope. Удаление больше не отвечает `Set-Cookie`: сервер
+отзывает аккаунтные сессии, а поздний ответ не должен стереть cookie соседнего
+входа. Локальное удаление scoped на захваченный account; смена сессии между
+удалением и logout не закрывает новую сессию.
+
+`createLogoutSession` проверяет IDB guard перед локальным logout и передаёт
+исходный scope. `/api/logout` отвергает несовпадающий proof до revoke и не
+истекает cookie для scoped вызова. Legacy logout без scope сохраняет старую
+совместимость и остаётся открытым риском до обновления всех вкладок.
+
+Локально прошли 1215 unit / 208 файлов, общий/domain-strict/storage-strict
+typecheck, production build, auth scope/API invariants/admin guards/privacy и
+diff check. Точный workflow SHA `956cf96` ещё ожидает публикации; полный P0.5,
+старые unscoped clients, OAuth/BFCache, staging и release gate не закрыты.

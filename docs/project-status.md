@@ -3,6 +3,17 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — logout и удаление аккаунта, `956cf96`
+
+Удаление аккаунта требует совпадающий account/session proof на клиенте и
+сервере; старые запросы без proof завершаются 401 до side effects. Обычный
+logout перед очисткой состояния проверяет актуальный IDB guard и передаёт scope;
+сервер отзывает только совпавшую сессию. Scoped ответы не истекают общую cookie,
+чтобы поздний ответ вкладки A не удалил новый вход B. Локально прошли 1215 unit
+в 208 файлах, три typecheck, build, auth/API/admin/privacy guards. Точный CI
+этого SHA ещё не подтверждён; legacy unscoped logout, остальная P0.5 матрица,
+staging и выпуск остаются открытыми. [Контракт](account-lifecycle-session.md).
+
 ## Локальный кандидат — session guard админ-панели, `5e163e6`
 
 Коммит [`5e163e6`](https://github.com/Michael-edel/FitFocus/commit/5e163e6cec0506dfad0085adaaa01465bbfd6c99)

@@ -1,10 +1,11 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 15.10.2026. Последний опубликованный source SHA —
-`45575d2e75d9abfadbba804d1ac26d2c8a86d467`; его [CI run 38679312640](https://github.com/Michael-edel/FitFocus/actions/runs/38679312640)
-завершился success: audit, guards, 1188 unit-тестов / 203 файла, три typecheck,
-build, rollback/CAS и сохранение артефакта прошли. В E2E — 614 passed, 133 skipped
-и 2 flaky, завершившиеся retry; это не чистая браузерная приёмка.
+`ee9a0039521ae537452a04ae1f876b371cf1ddb3`; его [CI run 38687213387](https://github.com/Michael-edel/FitFocus/actions/runs/38687213387)
+на момент проверки проходил E2E; unit, guards, typechecks и build прошли.
+Новый локальный кодовый кандидат `956cf96` закрывает account/session scope для
+logout и удаления аккаунта; 1215 unit-тестов, три typecheck, build и guards
+прошли локально, его точный CI запускается после публикации.
 
 Первый flaky был слишком строгим ожиданием `pending`: durable outbox успела
 назначить допустимую lease `sending`. В `636d2c7` тест принимает оба состояния,
@@ -523,6 +524,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
+- [x] Привязать обычный logout к актуальному IDB guard; account delete требует
+  обязательный парный scope на сервере и проверяет ответ перед очисткой. Чужой
+  proof отклоняется до удаления, scoped logout не отзывает другую сессию и не
+  очищает cookie поздним ответом. Проверки 1215 unit, три typecheck, build,
+  auth/API/admin/privacy guards прошли локально на `956cf96`; точный CI после
+  push ещё не подтверждён. Старый unscoped logout и полный lifecycle остаются
+  открытыми. [Контракт](docs/account-lifecycle-session.md).
 - [x] Привязать административную панель, CSV-аудит, admin support и `logout_all`
   к исходному account/session proof; сервер проверяет его до D1 role lookup и
   admin-session side effects. Локальные transport/server regression tests,

@@ -32,6 +32,7 @@
 | Как административная панель привязана к login-сессии? | [Сессия админ-панели](admin-session.md) |
 | Как настройки и Service Worker привязывают push к активной сессии? | [Сессия push-уведомлений](push-session.md) |
 | Как checkout и смена тарифа привязаны к login-сессии? | [Сессия оплаты](billing-session.md) |
+| Как выход и удаление аккаунта защищены при смене входа? | [Session guard account actions](account-lifecycle-session.md) |
 | Как Huawei OAuth, sync и профильные изменения привязаны к входу? | [Сессия Huawei Health](huawei-health-session.md), затем [wearable API](wearable-sync.md) |
 | С чего начать помощнику при следующей работе? | [AGENTS](../AGENTS.md), текущий статус, задача и её контракт |
 

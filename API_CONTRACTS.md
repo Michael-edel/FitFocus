@@ -351,3 +351,18 @@ IDB-сессии и lifetime действия до открытия HTTPS Checko
 нового тарифа. Старый клиент без state-заголовков временно сохраняет прежний
 серверный путь, но не имеет этой привязки. Полный CI, старые bundles, staging и
 реальный Stripe checkout проверяются отдельно. [Контракт](docs/billing-session.md).
+
+## Выход и удаление аккаунта: session guard
+
+Новый `POST /api/logout` передаёт proof исходного guard. Сервер проверяет пару
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session` по подписанному cookie и
+отзывает только совпавшую сессию. Для scoped logout сервер не истекает общую
+cookie в ответе, чтобы поздний ответ не удалил cookie более нового входа.
+Запрос без proof сохраняет поведение старых клиентов и не имеет этой защиты.
+
+`POST /api/account/delete` требует scope обязательно, сверяет его до account
+side effects и возвращает `Account-Delete` protocol/guard markers с эхом proof.
+Запрос legacy-клиента без пары заголовков получает 401. Успешный ответ не
+истекает общую cookie: удаление отзывает серверные сессии аккаунта, а клиент
+очищает только его локальные данные после проверки ответа.
+[Контракт и lifecycle-границы](docs/account-lifecycle-session.md).
