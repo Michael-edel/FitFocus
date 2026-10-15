@@ -3517,3 +3517,23 @@ merge и выпуск не закрыты.
 [38608666208](https://github.com/Michael-edel/FitFocus/actions/runs/38608666208)
 проверяет тот же HEAD и пока выполняется. Это подтверждает локальные тесты
 нормализатора/импорта, но не полный CI, P0.8 lifecycle, staging или выпуск.
+
+## P0.5 — session guard административной панели, `5e163e6`, 15.10.2026
+
+Все вызовы `AdminScreen`, включая CSV-журнал, теперь используют
+`AdminSession`: исходный `loginGuard`, `/api/me`, публичные account/session
+headers, проверяемые Admin response markers, IDB auth-fence и bounded response.
+Компонент отменяет текущие запросы при размонтировании/смене guard. Серверный
+guard проверяет proof до D1 role lookup и admin-session tracking; middleware
+помечает ответы `/api/admin/*` и преобразует stale proof в 401. Admin GET/PATCH
+обращений поддержки и `logout_all` также проверяют scope. Старые запросы без
+proof остаются совместимыми.
+
+Полный `npm run test:unit` прошёл 1203/1203 в 206 файлах; отдельно transport,
+admin guard, middleware, `logout_all` и state-session regressions прошли 21/21.
+Прошли общий, domain-strict и storage-strict typecheck, production build,
+`check:admin-guards`, `check:api-invariants`, `check:auth-scope` и
+`git diff --check`. Workflow [38684238196](https://github.com/Michael-edel/FitFocus/actions/runs/38684238196)
+проверяет предыдущий SHA `5ea58df` и на момент публикации выполнял E2E; он не
+подтверждает этот commit. Browser/admin account-switch acceptance, остальные
+callbacks, полный P0.5 lifecycle, staging и выпуск остаются открытыми.

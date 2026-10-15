@@ -3,6 +3,20 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — session guard админ-панели, `5e163e6`
+
+Коммит [`5e163e6`](https://github.com/Michael-edel/FitFocus/commit/5e163e6cec0506dfad0085adaaa01465bbfd6c99)
+привязал административные API-вызовы, support-очередь, `logout_all` и CSV-аудит
+к login proof панели. Все запросы используют общий transport, проверяющий
+response markers и IDB auth-fence; сервер отклоняет scope от другой сессии до
+D1 role lookup и admin-session side effects. Локально прошли 1203 unit-теста /
+206 файлов, общий и domain/storage strict typecheck, admin/API/auth guards и
+production build. Точный CI этого commit запускается после push.
+Предыдущий run [38684238196](https://github.com/Michael-edel/FitFocus/actions/runs/38684238196)
+проверяет `5ea58df` и ещё выполняет E2E; он не содержит `5e163e6`. Реальный
+browser/admin account-switch acceptance, остальные callbacks, общий P0.5
+lifecycle, staging и выпуск остаются открытыми. [Контракт](admin-session.md).
+
 ## Рабочее дерево — запрет AI proxy без session proof
 
 Коммит `45575d2` удаляет из `callAiProxy` обычный `/api/ai` fallback без proof.
