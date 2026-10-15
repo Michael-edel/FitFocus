@@ -407,3 +407,17 @@ side effects и возвращает `Account-Delete` protocol/guard markers с 
 истекает общую cookie: удаление отзывает серверные сессии аккаунта, а клиент
 очищает только его локальные данные после проверки ответа.
 [Контракт и lifecycle-границы](docs/account-lifecycle-session.md).
+
+## GET /api/export — экспорт пользовательских данных
+
+Экспорт требует полный account/session proof через `requireScopedStateUser`.
+Отсутствующий, частичный или не совпадающий с текущей cookie proof получает 401;
+отсутствующий/частичный proof отклоняется до построения экспорта и запросов к D1.
+Пользователь также должен иметь beta access; иначе возвращается 403
+`ACCESS_REQUIRED`. Успешный ответ — JSON-вложение с `Cache-Control: no-store`,
+`X-Content-Type-Options: nosniff` и `Referrer-Policy: no-referrer`.
+Ответы обёрнуты маркерами `X-FitFocus-Export-Protocol: 1` и
+`X-FitFocus-Export-Guard: 1`; переданные scope headers эхо-возвращаются.
+Старые внешние вызовы без полного proof должны обновиться. В текущем исходном
+коде frontend-вызов `/api/export` не найден; перед rollout это нужно подтвердить
+на staging и для любых внешних клиентов.

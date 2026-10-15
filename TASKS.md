@@ -532,7 +532,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
   `3abb374` вводит обязательный серверный proof для всех `/api/state` и
-  `/api/profile` handlers; остальные callback-контракты и staging остаются.
+  `/api/profile` handlers; follow-up `4edeb0a` закрыл такой же legacy-путь в
+  `GET /api/export` до построения GDPR-выгрузки. Остальные callback-контракты,
+  точный CI, проверка внешних потребителей и staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует
   обязательный парный scope на сервере и проверяет ответ перед очисткой. Чужой
   proof отклоняется до удаления, scoped logout не отзывает другую сессию и не

@@ -4,6 +4,13 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+`GET /api/export` требует полный account/session proof в локальном SHA
+[`4edeb0a`](https://github.com/Michael-edel/FitFocus/commit/4edeb0a84d8836730bfc27f3f461f0f47bbf0058).
+Missing/partial proof и beta denial покрыты regression tests; отказ происходит
+до чтения экспортируемых данных. Изолированные API/auth/admin guards и три
+typecheck прошли; unit suite и точный CI ещё не подтверждены. Staging export и
+возможные внешние клиенты требуют отдельной проверки. [Контракт](../API_CONTRACTS.md).
+
 `POST /api/logout_all` теперь требует обязательный session proof в follow-up
 [`c778515`](https://github.com/Michael-edel/FitFocus/commit/c778515db0fe8481d8fa1a767493a000334cb1f6).
 Отсутствующий и partial account-only proof проверяются до auth lookup и

@@ -49,6 +49,10 @@
 - [ ] `POST /api/logout` требует полный proof; без/с неполным proof сервер
   отвечает 401 до revoke, а успешный или поздний ответ не очищает cookie нового
   входа. Проверить обычный и повторный logout после обновления старого bundle.
+- [ ] `GET /api/export` требует полный account/session proof до чтения экспортируемых
+  данных; проверить 401 для отсутствующей/частичной/чужой пары, 403 без beta
+  access, scope markers и `no-store` при успешном экспорте на staging. Обновить
+  любые внешние клиенты: вызовы без proof теперь отклоняются.
 - [ ] Все [`/api/admin/*`](API_CONTRACTS.md) требуют полный account/session
   proof до D1-проверки admin-роли и admin-session side effects. Старые bundles
   без proof получают guarded 401; проверить обновление панели и ролевые операции.

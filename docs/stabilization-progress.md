@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — обязательный proof для GDPR export, `4edeb0a`, 15.10.2026
+
+`GET /api/export` ранее проверял только пользователя, поэтому legacy-вызов без
+привязки к сессии мог продолжить формирование личной выгрузки после смены
+аккаунта. Теперь route требует парные account/session headers через
+`requireScopedStateUser`; отсутствующая или неполная пара отклоняется до D1 и
+`buildUserDataExport`. Все ответы получают Export protocol/guard markers и echo
+предоставленного scope; успешный JSON download сохраняет `no-store`, `nosniff`
+и `no-referrer`.
+
+Добавлены regression cases для отсутствующей и account-only пары, beta denial,
+guard markers и отсутствия чтения приватных данных при отказе. В sandbox без
+сети прошли API invariants, auth-scope, admin guard и три typecheck. Полный unit
+suite локально не запускался: общий Windows `node_modules` не содержит Linux
+Rollup optional binary. Точный CI SHA `4edeb0a` запускается после push; staging
+экспорт и проверка внешних потребителей остаются открытыми. [Контракт](../API_CONTRACTS.md).
+
 ## P0.5 — обязательный proof для обычного logout, `b2f6938`, 15.10.2026
 
 `POST /api/logout` ранее сохранял legacy-путь: запрос без scope отзывал session

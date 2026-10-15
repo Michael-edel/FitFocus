@@ -3,6 +3,18 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный session proof для GDPR export, `4edeb0a`
+
+`GET /api/export` теперь требует полный account/session proof до формирования
+пользовательской выгрузки; отсутствующий или неполный proof получает 401 до
+запросов к данным. Ответы получают `Export` protocol/guard markers и echo scope;
+успешная выгрузка сохраняет `no-store`, `nosniff` и `no-referrer`. Найдены
+регрессии для отсутствующей/частичной пары и beta denial. В сетево-отключённом
+sandbox прошли API invariants, auth-scope, admin guard и три typecheck. Unit и
+точный CI этого SHA ещё не подтверждены; старых внешних клиентов и frontend
+вызовов в исходниках не найдено, staging и обновление любых таких клиентов
+остаются открытыми. [Контракт](../API_CONTRACTS.md).
+
 ## Новый кандидат — обязательный Huawei session proof, `a127bf5`
 
 Status, OAuth start, sync и disconnect требуют парные account/session headers;
