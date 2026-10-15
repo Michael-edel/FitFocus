@@ -1,5 +1,28 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — генерация пошагового рецепта из фото с account/session guard, `71d2ca4`, 15.10.2026
+
+`FoodInsightCard` вызывал `getRecipeFromPhoto` без `AiSession`, а после ответа
+сразу обновлял локальный дневник и recipe usage. Это оставляло пошаговую генерацию
+вне общих гарантий позднего AI callback, хотя соседние фотоанализы уже использовали
+scoped-запросы.
+
+Теперь `getRecipeFromPhoto` требует исходную `AiSession`; новый
+`usePhotoRecipeGeneration` связывает попытку с login proof, открытой записью и
+page lifecycle, повторно проверяет сессию до/после запроса и guarded commit.
+`UserStateRepository.updateJson` читает актуальный JSON-снимок в per-key очереди;
+параллельный независимый writer сохраняется конфликтом, а IDB value и operation
+коммитятся вместе. Recipe usage увеличивается после успешного сохранения и второй
+проверки сессии.
+
+Проверки на code SHA `71d2ca4`: 1173 unit-теста / 201 файл; root и
+storage-strict typecheck; admin guards; production build. Полный
+`ai-callback-account-switch.spec.ts` на desktop Chromium, Firefox и WebKit прошёл
+44/44 применимых сценария без retries, 4 Chromium-only случая корректно пропущены
+в двух других engines. Success E2E прошёл в Chromium; late recipe response после
+входа B прошёл во всех трёх engines. Точный CI для опубликованного HEAD ожидается;
+остальные AI/family callbacks и общий P0.5/P0.8 lifecycle остаются открытыми.
+
 ## P0.5 — поздний family member update при входе другого аккаунта, `5d3e4d6`, 15.10.2026
 
 В `e2e/family-callback-account-switch.spec.ts` добавлен сценарий: вкладка A

@@ -1,6 +1,6 @@
 # Защита клиентских AI callbacks
 
-Обновлено: 14.10.2026. Реализация контракта опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
+Обновлено: 15.10.2026. Реализация контракта опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e)
 ветки `fix/durable-outbox`. Push-run отменён concurrency после старта PR-события.
 Точный [PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
 завершился ошибкой E2E: 463 passed / 9 skipped, один failed и три flaky; audit,
@@ -96,6 +96,16 @@ scope не запускает unscoped запрос.
 а usage считается успешным только после подтверждённого профильного commit.
 В рецептах устаревший ответ не создаёт черновик и не меняет экран.
 
+В `71d2ca4` закрыт отдельный путь создания пошагового рецепта из уже сохранённого
+фото в `FoodInsightCard`: ранее `getRecipeFromPhoto` не требовал `AiSession`.
+Теперь каждая попытка использует исходный login guard и отдельный lifecycle scope,
+а `/api/ai` получает scoped account/session headers. После ответа повторно
+проверяется сессия и принадлежность исходной записи. Изменение дневника идёт через
+`UserStateRepository.updateJson` с `OutboxCommitGuard`: актуальный снимок читается
+в per-key очереди, конкурентное независимое изменение остаётся конфликтом, а
+value и outbox operation фиксируются вместе. Recipe usage увеличивается только
+после успешного commit и повторной проверки сессии.
+
 - **Coach:** hook получает proof от исходной login-сессии, сверяет action и
   профиль после ожиданий, записывает карточку через guarded repository, а usage
   через функциональный профильный commit. Карточка, usage и achievement не
@@ -116,6 +126,10 @@ scope не запускает unscoped запрос.
 - **Фото еды и рецепт:** дневниковый upload и `analyzeFoodPhotoEnhanced` в
   `RecipesScreen` передают scoped-сессию в `/api/ai`; поздний ответ не меняет
   дневник, историю, usage, achievement, insight UI или черновик рецепта.
+- **Пошаговый рецепт по фото в дневнике:** `getRecipeFromPhoto` требует
+  `AiSession`; `usePhotoRecipeGeneration` связывает ответ с исходной записью,
+  вкладкой и login session. Guarded diary commit выполняется до увеличения usage;
+  после смены аккаунта рецепт не записывается и не показывается.
 - **Задача дня при загрузке профиля:** при необходимости AI-запроса hydration
   заранее получает scoped proof и держит pagehide abort до завершения. При
   временном отказе AI используется локальный текст только после подтверждения
@@ -182,6 +196,12 @@ CI-подтверждения. Staging, реальный OAuth/BFCache и вес
 - Unit-тесты подтверждают отказ при другом аккаунте, повторном входе,
   отсутствующей capability, неверном response scope/protocol и неактуальном
   login guard.
+- Пошаговый рецепт из дневникового фото передаёт `AiSession` в `/api/ai`,
+  сохраняет результат через guarded diary commit и не обновляет дневник, экран
+  или usage после смены аккаунта/закрытия исходной записи. На `71d2ca4` success
+  проверен в Chromium, late response после входа B — в desktop Chromium,
+  Firefox и WebKit; полный локальный callback spec — 44 passed / 4 skipped,
+  без retries. Точный CI ещё требуется.
 - Задержанный ответ coach/plan/weekly-menu/plateau после logout, account switch, pagehide
   или unmount не меняет UI, profile, outbox, usage или achievements.
 - Новая попытка после возврата страницы может завершиться; завершение старой

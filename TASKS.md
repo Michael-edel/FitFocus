@@ -629,6 +629,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   что более ранний baseline включал незавершённую стартовую загрузку A; после
   переноса baseline за вход B сценарий прошёл. Точный CI follow-up ещё ожидается;
   остальные callbacks и staging остаются открытыми.
+- [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
+  lifecycle/source scope, guarded durable update дневника и usage только после
+  успешного commit. Код `71d2ca4`; полный локальный account-switch spec —
+  44 passed / 4 skipped без retries, success path — Chromium; точный CI после
+  push нужно подтвердить. [Контракт](docs/ai-callback-sessions.md).
 
 Критерии для coach/plan/plateau callbacks и повторов приведены в
 [контракте](docs/ai-callback-sessions.md).

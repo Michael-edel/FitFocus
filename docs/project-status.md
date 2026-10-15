@@ -3,6 +3,21 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## P0.5 — пошаговый рецепт из дневникового фото
+
+Кодовый commit [`71d2ca4`](https://github.com/Michael-edel/FitFocus/commit/71d2ca4)
+привязал `getRecipeFromPhoto` к обязательному `AiSession`. Поздний ответ после
+смены аккаунта или закрытия исходной записи больше не может изменить дневник,
+экран рецепта или локальный usage. Запись рецепта проходит через guarded
+`UserStateRepository.updateJson`; конкурентный независимый snapshot сохраняется
+как конфликт.
+
+Локально прошли 1173 unit-теста / 201 файл, общий и storage-strict typecheck,
+admin guards и production build. Полный account-switch spec на desktop Chromium,
+Firefox и WebKit: 44 passed / 4 skipped без retries; отдельный success path
+проверен в Chromium. CI для code SHA ожидается после push; остальные AI/family
+callbacks, общий P0.5/P0.8 lifecycle и staging остаются открытыми.
+
 ## Текущий кандидат — Huawei Health session guard
 
 Кодовый SHA [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)

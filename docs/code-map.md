@@ -1,6 +1,6 @@
 # Карта кода FitFocus
 
-Сверено: 14.10.2026. Код bootstrap/hydration — `dac2de2`, исправление
+Сверено: 15.10.2026. Фото-рецепт защищён на `71d2ca4`. Код bootstrap/hydration — `dac2de2`, исправление
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
 Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
@@ -26,7 +26,7 @@ profile flush — `f3930ec`; сессия/очередь достижений �
 | Автоматический profile flush | [useProfileAutoSync.ts](../features/profile/useProfileAutoSync.ts), [App.tsx](../App.tsx), [stateSync.ts](../storage/stateSync.ts) | `flushPending` сохраняет текущую паузу; ручной `syncNow` проверяет свежий proof. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии) |
 | Уведомление о сохранении и стабильность формы | [StateStorageNotice.tsx](../ui/StateStorageNotice.tsx) | [Контракт](profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026), [E2E](../e2e/profile-durability.spec.ts): область учитывает все переносы сообщений и не двигает Save после фонового ack |
 | Дневник питания | [useFoodDiary.ts](../features/diary/useFoodDiary.ts) | [Управляемые записи](owned-state-writers.md), [feature tests](../tests/food_diary_feature.test.ts), [storage tests](../tests/food_diary_storage.test.ts) |
-| Фотоанализ дневника и распознавание рецепта | [useFoodPhotoAnalysis.ts](../features/ai/useFoodPhotoAnalysis.ts), [useFoodDiary.ts](../features/diary/useFoodDiary.ts), [RecipesScreen.tsx](../RecipesScreen.tsx), [geminiService.ts](../geminiService.ts) | [AI callback session contract](ai-callback-sessions.md), [feature tests](../tests/food_photo_feature.test.ts), [account-switch and success E2E](../e2e/ai-callback-account-switch.spec.ts); локальная приёмка `d93ff53`, полный CI ожидается после push |
+| Фотоанализ дневника и генерация пошагового рецепта | [useFoodPhotoAnalysis.ts](../features/ai/useFoodPhotoAnalysis.ts), [usePhotoRecipeGeneration.ts](../features/ai/usePhotoRecipeGeneration.ts), [useFoodDiary.ts](../features/diary/useFoodDiary.ts), [geminiService.ts](../geminiService.ts), [FoodInsightCard.tsx](../FoodInsightCard.tsx) | [AI callback session contract](ai-callback-sessions.md), [photo analysis tests](../tests/food_photo_feature.test.ts), [recipe generation tests](../tests/photo_recipe_generation.test.ts), [account-switch/success E2E](../e2e/ai-callback-account-switch.spec.ts); `71d2ca4`: 44 passed / 4 skipped in desktop matrix, exact CI pending |
 | Настройки | [useSettingsPersistence.ts](../features/settings/useSettingsPersistence.ts) | [Управляемые записи](owned-state-writers.md), [проверки настроек](../tests/settings_persistence_feature.test.ts) |
 | Отметки заданий плана | [usePlanTaskState.ts](../features/plan/usePlanTaskState.ts) | [Feature tests](../tests/plan_task_feature.test.ts), [сценарии с reload](../e2e/owned-state.spec.ts) |
 | Избранные рецепты | [useFavoriteRecipes.ts](../features/recipes/useFavoriteRecipes.ts) | [Feature tests](../tests/favorite_recipes_feature.test.ts), [модель данных](data-model.md) |
