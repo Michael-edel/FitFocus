@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## 15.10.2026 — повторная проверка Safari, Firefox PWA и Push на `404b3da`
+
+После сохранения правок из auth-paused старой вкладки (коммит `404b3da`)
+повторно проверены три ранее открытых lifecycle-направления. `profile-durability.spec.ts`
+прошёл 24/24: 8 desktop WebKit, 8 iPhone Safari и 8 iPhone PWA,
+`workers=1,retries=0`; в этих прогонах pageerror не возник. Это подтверждает
+текущую работоспособность сценариев, но не объясняет исторические Safari
+`due to access control checks` при reload.
+
+`pwa-update.spec.ts` прошёл в desktop Firefox 5/5 последовательных запусков,
+`workers=1,retries=0`. Исторический timeout на `saved(page)` не повторился;
+корневая причина остаётся неустановленной, поэтому число повторов не закрывает
+диагностический пункт.
+
+Push account-switch сценарий с задержанным status-ответом A и native Service
+Worker recovery после logout прошли 2/2 на desktop Chromium без retries.
+Проверки использовали синтетическую API/сессию и не заменяют provider,
+устройство или staging. Полный CI [`38742243646`](https://github.com/Michael-edel/FitFocus/actions/runs/38742243646)
+для source HEAD `404b3da` на момент записи ещё выполняет E2E; release и
+staging gates остаются открытыми.
+
 ## 15.10.2026 — расследование native WebKit sender pageerror при обновлении PWA
 
 Trace исторического CI run [`38249434753`](https://github.com/Michael-edel/FitFocus/actions/runs/38249434753)

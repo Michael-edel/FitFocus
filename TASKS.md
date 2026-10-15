@@ -1,11 +1,15 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Текущая ветка — `fix/durable-outbox`. Последняя кодовая
-правка [`29b1e3a`](https://github.com/Michael-edel/FitFocus/commit/29b1e3abe63d4e3f62aa5d2415048978482b86b4)
-повторно загружает использованный семейный контекст и список покупок после
-возврата из BFCache. Полный `family-session.spec.ts` прошёл 24/24 на Chromium,
-Firefox и WebKit без retries; 1275 unit-тестов, три typecheck и production build
-прошли локально. Точный CI нового опубликованного HEAD проверяется отдельно.
+Обновлено: 15.10.2026. Текущая ветка — `durable-outbox`, HEAD
+[`404b3da`](https://github.com/Michael-edel/FitFocus/commit/404b3da1a5cc19ff94ac2ecb4809d55125d62c94).
+Последняя правка сохраняет запись старой вкладки с auth-паузой в IndexedDB
+как конфликт `legacy-writer-local-only`; UI-регрессия проверяет реальный второй
+клик. Полная migration-матрица прошла 7/7. Safari profile durability повторно
+прошёл 24/24, а Firefox PWA update — 5/5 последовательных прогонов без retries;
+оба исторических сбоя не воспроизвелись, их первопричина не подтверждена.
+Push late-response и native Service Worker recovery прошли 2/2 без retries.
+Точный CI `38742243646` для HEAD `404b3da` ещё выполняет E2E; локальные
+проверки не заменяют его итог.
 
 Тестовые follow-up `ad89020` и `aa4073c` усиливают PWA update acceptance и
 устраняют две flaky-проверки, замеченные в CI на `96937ea`. Локально прошли
@@ -222,7 +226,9 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   Источник profile debounce → `/api/me` установлен и исправлен на `f3930ec`;
   это не объясняет автоматически все исторические сообщения. На `45575d2`
   profile durability прошёл без retries: 8/8 desktop WebKit, 8/8 iPhone Safari,
-  8/8 iPhone PWA; pageerror не возник. Историческая причина пока не установлена.
+  8/8 iPhone PWA; pageerror не возник. На HEAD `404b3da` те же три проекта
+  повторно прошли 24/24 (`workers=1,retries=0`); историческая причина пока
+  не установлена.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
@@ -393,7 +399,10 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   для `96937ea` завершился success. В том запуске были 2 flaky в других E2E;
   они исправлены в `aa4073c`. Точный CI нового HEAD ещё ожидается, поэтому пункт
   пока открыт. Working tree сохраняет IDB open/blocked/upgrade,
-  versionchange/close и стадии transaction/read в failure attachment.
+  versionchange/close и стадии transaction/read в failure attachment. На HEAD
+  `404b3da` Firefox `pwa-update.spec.ts` прошёл ещё 5/5 последовательных
+  запусков (`workers=1,retries=0`); timeout снова не воспроизведён, поэтому
+  первопричина остаётся открытой.
 
 - [ ] Завершить диагностику исторического native WebKit sender pageerror после PWA update
   из trace CI `5b90249`. Артефакт показывает `503` на семейный PUT в
@@ -637,7 +646,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   session id и unit-проверка свежего proof. Полный unit suite прошёл 1277/1277;
   delayed-status E2E прошёл 3/3 desktop-браузера, native SW — 1/1 Chromium,
   typecheck прошёл. Это синтетическая локальная сессия; staging, provider и
-  устройство остаются обязательными. CI `04b61dd` ожидает push.
+  устройство остаются обязательными. CI `04b61dd` ожидает push. На HEAD
+  `404b3da` delayed-status account switch и native-SW recovery прошли 2/2 без
+  retries на Chromium; полный CI этого HEAD ещё выполняет E2E.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному guard, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
