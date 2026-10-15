@@ -4015,3 +4015,34 @@ WebKit нашёл устаревшее ожидание теста, будто l
 (20 P0, 7 P1, 7 прочих); этот follow-up закрывает только один критерий P0,
 не общий lifecycle. Требуются точный CI, staging, безопасный ручной путь
 разрешения конфликтов и интеграция в защищённую `main`.
+
+## P0.8 — восстановление legacy-профиля через profile CAS, `5eeba7d`, 15.10.2026
+
+Legacy-конфликт точного ключа `fitfocus_data_<accountId>_profile` теперь можно
+разрешить в recovery-панели. Клиент требует capability `/api/me`, свежий guarded
+GET `/api/profile`, совпадение account ID, профильный protocol/guard и целую
+версию. «Оставить локальную версию» создаёт typed `profile` operation с этой
+версией и отправляет её существующим profile CAS; «Принять серверную версию»
+применяет снимок без PUT. Значение, outbox и migration ledger меняются в одной
+IDB-транзакции; повторная миграция не воскрешает исходную операцию.
+
+Проверка истории показала, что динамический key family-menu появился в typed
+outbox после pinned legacy KV writer (`22a7788` → `405238b`); текущие family-menu
+конфликты проходят отдельный typed recovery, неизвестные владельцы остаются
+недоступны для разрешения.
+
+На точном кодовом SHA
+[`5eeba7d`](https://github.com/Michael-edel/FitFocus/commit/5eeba7de7031a16fc0bee12fc5317bca7535e285)
+прошли полный unit suite (1291/1291 в 208 файлах), целевые legacy/state tests
+(122/122), общий/domain-strict/storage-strict typecheck, auth-scope и API
+invariants, production build, `git diff --check` и legacy migration E2E (14/14
+на семи desktop/mobile/PWA-проектах, workers=2, retries=0). В iPhone PWA тест
+откладывает штатное окно обновления, чтобы проверить доступность recovery панели
+пока пользователь остаётся в приложении.
+
+GitHub run
+[`38762320204`](https://github.com/Michael-edel/FitFocus/actions/runs/38762320204)
+проверяет предыдущий опубликованный SHA `42e14c9` и всё ещё выполняет E2E;
+он не включает этот profile recovery. Точный CI `5eeba7d` ожидает push. Staging,
+остальные callbacks, полная lifecycle-матрица и интеграция в защищённую `main`
+остаются открытыми.
