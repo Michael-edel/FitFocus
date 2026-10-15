@@ -522,7 +522,9 @@ const App: React.FC = () => {
   });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
-  const { aiStatus, lastAiAction } = useAiActivityStatus(currentUser?.id ?? null);
+  const { aiStatus, lastAiAction } = useAiActivityStatus(
+    allowCachedUiStateRestore ? currentUser?.id ?? null : null,
+  );
 
   useDocumentTheme(settings.theme);
 

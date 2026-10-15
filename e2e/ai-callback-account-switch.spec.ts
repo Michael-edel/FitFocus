@@ -1144,6 +1144,37 @@ test('a selected weekly-menu day cached for account A is hidden after another ta
   expect(switched.errors).toEqual([]);
 });
 
+test('AI activity cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  await installAccountApi(page, state);
+  const aiStatusKeyA = `fitfocus_data_${accountA.id}_ai_last_status_v1`;
+  const aiActionKeyA = `fitfocus_data_${accountA.id}_ai_last_action_v1`;
+  const cachedStatusA = { ts: Date.now(), feature: 'coach_advice', source: 'live' };
+  const cachedActionA = { feature: 'coach_advice', type: 'coach', userId: accountA.id, actionId: 'cached-action-a' };
+  await page.addInitScript(({ statusKey, status, actionKey, action }) => {
+    localStorage.setItem(statusKey, JSON.stringify(status));
+    localStorage.setItem(actionKey, JSON.stringify(action));
+  }, {
+    statusKey: aiStatusKeyA,
+    status: cachedStatusA,
+    actionKey: aiActionKeyA,
+    action: cachedActionA,
+  });
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  expect(switched.errors).toEqual([]);
+});
+
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
