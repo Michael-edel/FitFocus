@@ -79,6 +79,21 @@ it('keeps CSV responses available while enforcing the bounded response limit', a
   await expect(response.text()).resolves.toBe('id,action\n1,test');
 });
 
+it('accepts a separately guarded support attachment response for the same admin session', async () => {
+  const attachmentHeaders = {
+    'X-FitFocus-Support-Attachment-Protocol': '1',
+    'X-FitFocus-Support-Attachment-Guard': '1',
+    'X-FitFocus-State-Account': account,
+    'X-FitFocus-State-Session': sid,
+  };
+  const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).startsWith('/api/me')
+    ? json(me()) : new Response('attachment', { headers: attachmentHeaders }));
+  const session = await prepare(fetchImpl);
+  const response = await requestAdminResponse(session, '/api/support/attachment?id=ticket-1&index=0', {}, 'Support-Attachment');
+
+  await expect(response.text()).resolves.toBe('attachment');
+});
+
 it('marks every admin response with the request session proof', async () => {
   const request = new Request('https://example.test/api/admin/settings', {
     headers: { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid },

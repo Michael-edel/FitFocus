@@ -71,7 +71,12 @@ async function drainBoundedResponse(response: Response, signal: AbortSignal, max
 }
 
 /** Sends one session-bound request; it never retries mutations or adopts a later login. */
-export async function requestAdminResponse(session: AdminSession, url: string, init: RequestInit = {}): Promise<Response> {
+export async function requestAdminResponse(
+  session: AdminSession,
+  url: string,
+  init: RequestInit = {},
+  resource: 'Admin' | 'Support-Attachment' = 'Admin',
+): Promise<Response> {
   await assertAdminSession(session);
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -98,8 +103,8 @@ export async function requestAdminResponse(session: AdminSession, url: string, i
     if (response.status === 401) throw new SessionReadError('auth');
     if (response.status === 403) throw new SessionReadError('access');
     const responseHeaders = response.headers;
-    if (responseHeaders.get('X-FitFocus-Admin-Protocol') !== '1'
-      || responseHeaders.get('X-FitFocus-Admin-Guard') !== '1'
+    if (responseHeaders.get(`X-FitFocus-${resource}-Protocol`) !== '1'
+      || responseHeaders.get(`X-FitFocus-${resource}-Guard`) !== '1'
       || responseHeaders.get('X-FitFocus-State-Account') !== session.guard.accountId
       || responseHeaders.get('X-FitFocus-State-Session') !== session.guard.serverSessionId) {
       throw new SessionReadError('protocol');

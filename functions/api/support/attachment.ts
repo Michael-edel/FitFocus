@@ -11,6 +11,7 @@ import {
 } from "../_lib/support_attachments";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 import { readSupportAttachmentRecord } from '../_lib/support_attachment_read';
+import { withSessionGuard } from '../_lib/state_session';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 function safeFileName(name: string) {
@@ -41,7 +42,18 @@ const handleSupportAttachmentGet: PagesFunction<Env> = async ({ request, env }) 
   let isAdmin = false;
   try { requireRole(user, "admin"); isAdmin = true; } catch {}
   if (isAdmin) {
-    await requireAdminRequest(user, request, db);
+    try {
+      await requireAdminRequest(user, request, db);
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code || '')
+        : '';
+      if (error instanceof Error && (error.message === 'STATE_SESSION_REQUIRED' || error.message === 'STATE_SESSION_CHANGED')) {
+        return json({ error: 'UNAUTH' }, 401);
+      }
+      if (code === 'FORBIDDEN') return json({ error: 'FORBIDDEN' }, 403);
+      throw error;
+    }
   }
 
   const url = new URL(request.url);
@@ -86,5 +98,5 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const response = await handleSupportAttachmentGet(context);
   const requestId = requestIdFor(context.request);
   logApiEvent('support.attachment.response', { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withRequestId(withSessionGuard(response, context.request, 'Support-Attachment'), requestId);
 };

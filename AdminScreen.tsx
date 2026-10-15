@@ -288,6 +288,50 @@ type SupportMessageRow = {
   attachments?: SupportAttachment[];
 };
 
+function AdminSupportAttachmentPreview({ attachment, session }: { attachment: SupportAttachment; session: AdminSession | null }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    setFailed(false);
+
+    if (!attachment.data_url.startsWith('/api/support/attachment')) {
+      setSrc(attachment.data_url);
+      return () => { active = false; };
+    }
+
+    setSrc(null);
+    if (!session) {
+      setFailed(true);
+      return () => { active = false; };
+    }
+
+    void requestAdminResponse(session, attachment.data_url, {}, 'Support-Attachment')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('SUPPORT_ATTACHMENT_FAILED');
+        const blob = await response.blob();
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => { if (active) setFailed(true); });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.data_url, session]);
+
+  if (failed) return <div className="mt-2 text-sm font-semibold text-amber-300">Не удалось загрузить вложение.</div>;
+  if (!src) return <div className="mt-2 text-sm font-semibold text-slate-500">Загружаем вложение…</div>;
+  if (attachment.kind === 'photo') return <img src={src} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />;
+  if (attachment.kind === 'video') return <video className="mt-2 w-full rounded-2xl" controls src={src} />;
+  if (attachment.kind === 'voice') return <audio className="mt-2 w-full" controls src={src} />;
+  return null;
+}
+
 type UserDetail = {
   user: {
     id: string;
@@ -2056,14 +2100,8 @@ export default function AdminScreen({ loginGuard, isCurrentSession }: AdminScree
                         <span className="truncate">{attachment.name}</span>
                       </div>
                       <div className="mt-1 text-slate-500 text-sm font-semibold">{attachment.mime} · {attachment.size} bytes</div>
-                      {attachment.kind === "photo" && (
-                        <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />
-                      )}
-                      {attachment.kind === "video" && (
-                        <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />
-                      )}
-                      {attachment.kind === "voice" && (
-                        <audio className="mt-2 w-full" controls src={attachment.data_url} />
+                      {attachment.kind !== "file" && (
+                        <AdminSupportAttachmentPreview attachment={attachment} session={adminSession} />
                       )}
                     </div>
                   ))}
@@ -2111,9 +2149,9 @@ export default function AdminScreen({ loginGuard, isCurrentSession }: AdminScree
                                 {attachment.kind === "file" && <Paperclip className="h-4 w-4 text-slate-300" />}
                                 <span className="truncate">{attachment.name}</span>
                               </div>
-                              {attachment.kind === "photo" && <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-56 w-full rounded-2xl object-cover" />}
-                              {attachment.kind === "video" && <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />}
-                              {attachment.kind === "voice" && <audio className="mt-2 w-full" controls src={attachment.data_url} />}
+                              {attachment.kind !== "file" && (
+                                <AdminSupportAttachmentPreview attachment={attachment} session={adminSession} />
+                              )}
                             </div>
                           ))}
                         </div>

@@ -40,7 +40,7 @@ export async function requireScopedStateUser(request: Request, env: Parameters<t
 }
 
 /** A capability marker plus public scope lets a new client verify the guarded response. */
-export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing' | 'Admin' | 'Account-Delete' | 'Logout' | 'Export'): Response {
+export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Support-Attachment' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing' | 'Admin' | 'Account-Delete' | 'Logout' | 'Export'): Response {
   response.headers.set(`X-FitFocus-${resource}-Protocol`, '1');
   response.headers.set(`X-FitFocus-${resource}-Guard`, '1');
   for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {

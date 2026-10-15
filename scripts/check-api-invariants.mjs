@@ -300,6 +300,11 @@ assertIncludes(
   "if (!input.isAdmin && ticket.user_id !== input.userId) return { kind: 'forbidden' };",
   'support attachment route must enforce owner/admin access',
 );
+assertIncludes(
+  supportAttachmentRoute,
+  "withSessionGuard(response, context.request, 'Support-Attachment')",
+  'support attachment responses must expose verifiable session scope markers',
+);
 
 const userSupport = [
   read('functions/api/support/feedback/my.ts'),
