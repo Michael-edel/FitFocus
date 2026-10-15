@@ -63,7 +63,7 @@ export async function runPhotoRecipeGeneration({
     await assertSession(session);
     if (!isCurrent()) return false;
 
-    incrementUsage();
+    incrementUsage(userId);
     return true;
   } catch (error) {
     if (!isCurrent()) return false;

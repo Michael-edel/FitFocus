@@ -613,7 +613,7 @@ export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, i
                       <>
                         {recipeErr ? <div className="ff-infocard__disclaimer text-rose-500">Ошибка: {recipeErr}</div> : null}
                         {(() => {
-                          const gate = canGenerateRecipe(plan);
+                          const gate = canGenerateRecipe(plan, currentUserId);
                           return (
                             <div className="ff-infocard__usageRow">
                               Лимит: {gate.used}/{gate.limit} на этой неделе
@@ -625,7 +625,7 @@ export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, i
                           className="ff-infocard__recipeBtn"
                           disabled={recipeLoading}
                           onClick={async () => {
-                            const gate = canGenerateRecipe(plan);
+                            const gate = canGenerateRecipe(plan, currentUserId);
                             if (!gate.allowed) {
                               setRecipeErr(`Лимит исчерпан: ${gate.used}/${gate.limit} на этой неделе.`);
                               return;

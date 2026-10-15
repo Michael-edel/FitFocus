@@ -13,6 +13,7 @@ const diaryKey = (accountId: string) => `fitfocus_data_${accountId}_diary`;
 const historyKey = (accountId: string) => `fitfocus_data_${accountId}_history`;
 const councilKey = (accountId: string) => `fitfocus_data_${accountId}_council_history`;
 const weeklyReportsKey = (accountId: string) => `fitfocus_data_${accountId}_weekly_reports`;
+const recipeUsageKey = (accountId: string) => `fitfocus_usage_counters_v1:${encodeURIComponent(accountId)}`;
 
 type Account = typeof accountA;
 type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced' | 'recipe' | 'council_chairman';
@@ -913,7 +914,7 @@ test('a held step-by-step recipe response cannot update the diary or usage after
   const diaryABefore = rawValue(settledBeforeSwitch, diaryKey(accountA.id));
   const profileABefore = rawValue(settledBeforeSwitch, profileKey(accountA.id));
   const operationsABefore = operationsFor(settledBeforeSwitch, accountA);
-  const usageBefore = await page.evaluate(() => localStorage.getItem('fitfocus_usage_counters_v1'));
+  const usageBefore = await page.evaluate((keys) => keys.map(key => localStorage.getItem(key)), [recipeUsageKey(accountA.id), recipeUsageKey(accountB.id)]);
 
   try {
     const switched = await openAccountB(context, state);
@@ -933,7 +934,8 @@ test('a held step-by-step recipe response cannot update the diary or usage after
     expect(rawValue(final, diaryKey(accountB.id))).toBe(diaryBBefore);
     expect(rawValue(final, profileKey(accountB.id))).toBe(profileBBefore);
     expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
-    expect(await page.evaluate(() => localStorage.getItem('fitfocus_usage_counters_v1'))).toBe(usageBefore);
+    expect(await page.evaluate((keys) => keys.map(key => localStorage.getItem(key)), [recipeUsageKey(accountA.id), recipeUsageKey(accountB.id)]))
+      .toEqual(usageBefore);
     await expect(page.getByText('Поздний пошаговый рецепт A', { exact: true })).toHaveCount(0);
     await expect(switched.page.getByText('Поздний пошаговый рецепт A', { exact: true })).toHaveCount(0);
     expect(errorsA).toEqual([]);
@@ -976,7 +978,8 @@ test('step-by-step recipe generation uses the active session and commits the dia
   expect(diary).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: 'Тестовый омлет', insight: expect.objectContaining({ recipe: expect.objectContaining({ title: 'Пошаговый тестовый рецепт' }) }) }),
   ]));
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fitfocus_usage_counters_v1') ?? '{}').recipes)).toBe(1);
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').recipes, recipeUsageKey(accountA.id))).toBe(1);
+  expect(await page.evaluate((key) => localStorage.getItem(key), recipeUsageKey(accountB.id))).toBeNull();
   expect(operationsFor(snapshot, accountA)).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('step-by-step-recipe-success.png') });
