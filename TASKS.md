@@ -555,7 +555,15 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   3/3 на desktop Chromium/Firefox/WebKit; смена активной IndexedDB-сессии между
   вкладками обновляет render key через advisory BroadcastChannel с polling и
   visibility fallback. Общий P0.4 остаётся открытым: нужны проверки остальных
-  переходов, cloud callbacks/cache и staging.
+  переходов, cloud callbacks/cache и staging. Follow-up
+  [`beedbee`](https://github.com/Michael-edel/FitFocus/commit/beedbeea594b8d501032ab10dfe80ad79f2f67fc)
+  добавляет account-switch acceptance для черновика измерения прогресса:
+  после активации account B во второй вкладке весовой черновик скрыт, профиль и
+  outbox account A неизменны. Тест прошёл 3/3 на desktop Chromium/Firefox/WebKit
+  без retries. Проверка выявила и предупреждения Recharts при первом измерении
+  контейнера; графикам задан положительный initialDimension, повторный прогон
+  чистый. Unit 1305/1305, три typecheck и production build прошли. Общий P0.4
+  остаётся открытым до аудита остальных переходов, cloud callbacks/cache и staging.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

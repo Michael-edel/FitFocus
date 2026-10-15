@@ -4241,3 +4241,23 @@ domain-strict и storage-strict typecheck прошли; production build про�
 `git diff --check` прошёл. Точный GitHub CI ожидается после push. Эта локальная acceptance
 закрывает только recipe-draft переход; остальные callbacks/cache, staging,
 устройства и полный P0.4 lifecycle остаются открытыми.
+
+## P0.4 — черновик измерения при cross-tab session switch, [`beedbee`](https://github.com/Michael-edel/FitFocus/commit/beedbeea594b8d501032ab10dfe80ad79f2f67fc), 16.10.2026
+
+В соседней вкладке активируется account B, пока на экране прогресса account A
+заполнен несохранённый вес. При смене active-session render key черновик
+сбрасывается; snapshot профиля A и его операции outbox остаются неизменны,
+account B не показывает значение из черновика A. Этот сценарий закрывает
+browser acceptance только для черновика замера, а не весь audit P0.4.
+
+Первый прогон также показал предупреждение Recharts при первоначальном размере
+`-1×-1` двух responsive charts. Для первого paint теперь задаётся положительная
+оценка размера по viewport; ResizeObserver затем устанавливает фактический
+размер. Повторная browser matrix не дала предупреждений или ошибок.
+
+Проверки на `beedbee`: progress-draft account-switch E2E — 3/3 на desktop
+Chromium, Firefox и WebKit, `workers=1,retries=0`; полный unit — 1305/1305 в
+210 файлах; общий, domain-strict и storage-strict typecheck прошли; production
+build, выполняемый Playwright preview, и `git diff --check` прошли. Новый HEAD
+ожидает push и точный GitHub CI. Остальные callbacks/cache, устройства, staging
+и полный P0.4 lifecycle остаются открытыми.

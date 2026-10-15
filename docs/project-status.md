@@ -3,16 +3,18 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
 локально проверенный кодовый коммит —
-[`a67ed17`](https://github.com/Michael-edel/FitFocus/commit/a67ed177f7214bf41e02259f1602d2e72d8ddc9c) в ветке
-`durable-outbox`; точный GitHub CI этого SHA запускается после push.
+[`beedbee`](https://github.com/Michael-edel/FitFocus/commit/beedbeea594b8d501032ab10dfe80ad79f2f67fc)
+в ветке `durable-outbox`; точный GitHub CI этого SHA запускается после push.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
-Полный unit suite — 1305/1305; общий, domain-strict и storage-strict typecheck
-прошли. Новый browser acceptance — 3/3 на desktop Chromium, Firefox и WebKit,
-без retries; production build и `git diff --check` прошли. План содержит 34
-открытых пункта: общий P0.4/P0.5, оставшиеся callbacks/cache, staging и полный
-lifecycle остаются открытыми.
+`beedbee` добавляет такую же браузерную приёмку черновика измерения веса и
+задаёт начальный размер графиков прогресса, устраняя предупреждение Recharts
+при первом layout. Полный unit suite — 1305/1305; общий, domain-strict и
+storage-strict typecheck прошли. Recipe и progress draft account-switch E2E
+прошли по 3/3 на desktop Chromium, Firefox и WebKit без retries; production
+build и `git diff --check` прошли. План содержит 34 открытых пункта: общий
+P0.4/P0.5, остальные callbacks/cache, staging и полный lifecycle открыты.
 
 Для `18af4ee` прошли полный unit suite (1300/1300 в 209 файлах), общий и два
 strict typecheck, production build и Coach retry account-switch E2E (3/3 на
