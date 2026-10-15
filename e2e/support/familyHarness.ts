@@ -56,9 +56,11 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
   let cloud = familyTestMenu(account), profile = buildMockProfile();
-  const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0 };
+  const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0, stateReads: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   let releasePreview!: () => void; const heldPreview = new Promise<void>(resolve => { releasePreview = resolve; });
+  let holdStateRead = false, stateReadHeld = false;
+  let releaseHeldStateRead!: () => void; const heldStateRead = new Promise<void>(resolve => { releaseHeldStateRead = resolve; });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
     if (!['error', 'warning'].includes(message.type())) return;
@@ -94,6 +96,11 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     }
     if (path === '/api/family/menu/state') {
       expect(request.headers()['x-fitfocus-state-account']).toBe(account); expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
+      if (request.method() === 'GET') {
+        counts.stateReads += 1;
+        if (holdStateRead) { stateReadHeld = true; await heldStateRead; }
+        return json({ ok: true, snapshot: { familyId, weekStart: week, version, menu: cloud } });
+      }
       if (request.method() === 'PUT') {
         counts.put += 1; const body = request.postDataJSON();
         counts.bases.push(body.baseVersion);
@@ -131,7 +138,9 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
-  return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview, close: () => { active = false; } };
+  return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview,
+    holdStateRead: () => { holdStateRead = true; }, releaseStateRead: releaseHeldStateRead, stateReadHeld: () => stateReadHeld,
+    close: () => { active = false; } };
 }
 export async function navigate(page: Page, name: string) {
   const button = page.getByRole('button', { name, exact: true });

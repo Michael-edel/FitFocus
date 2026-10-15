@@ -56,8 +56,10 @@ test('plan task changes survive reload without repopulating the old queue', asyn
   // upload because it deliberately does not acknowledge /api/state writes.
   await expect.poll(async () => {
     saved = await state(page, 'plan_task_done');
-    return { pause: saved.pause, status: saved.operations[0]?.status };
-  }).toEqual({ pause: 'protocol', status: 'pending' });
+    return saved.pause;
+  }).toBe('protocol');
+  // A reload can observe the previous page's valid claim lease before it expires.
+  expect(['pending', 'sending']).toContain(saved.operations[0]?.status);
   expect(saved.source).toBe(source); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'put', accountId: account, status: 'pending' });
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -83,8 +85,10 @@ test('cleared council history stays deleted despite a stale localStorage copy', 
   // upload because it deliberately does not acknowledge /api/state writes.
   await expect.poll(async () => {
     saved = await state(page, 'council_history');
-    return { pause: saved.pause, status: saved.operations[0]?.status };
-  }).toEqual({ pause: 'protocol', status: 'pending' });
+    return saved.pause;
+  }).toBe('protocol');
+  // The unacknowledged delete remains durable while a previous claim lease settles.
+  expect(['pending', 'sending']).toContain(saved.operations[0]?.status);
   expect(saved.value).toBeNull(); expect(saved.operations).toHaveLength(1);
   expect(saved.operations[0]).toMatchObject({ type: 'delete', accountId: account, status: 'pending' });
   expect(saved.source).toBe(source);
