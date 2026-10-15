@@ -41,7 +41,7 @@ export type AiRetryParams = {
   loginGuard: OutboxReadGuard | null;
   isCurrentSession: () => boolean;
   setWeeklyReports: (reports: WeeklyStoredReport[]) => void;
-  getLastAction?: () => AiAction | null;
+  getLastAction?: typeof getLastAiAction;
   allowRetry?: (feature?: string, opts?: { force?: boolean }) => boolean;
   requestPersonalPlan?: typeof generatePersonalPlan;
   buildFallbackPlan?: typeof buildFallbackAiPlan;
@@ -88,13 +88,13 @@ export async function retryLastAiAction({
   const current = () => !controller.signal.aborted && isCurrentSession();
   let last: AiAction | null;
   try {
-    last = getLastAction();
+    last = getLastAction(currentUser?.id ?? null);
   } catch {
     return;
   }
 
   if (!last || !currentUser || last.userId !== currentUser.id || !current()) return;
-  const stillLast = () => current() && sameAiAction(getLastAction(), last);
+  const stillLast = () => current() && sameAiAction(getLastAction(currentUser.id), last);
 
   if (last.type === 'coach') {
     if (!loginGuard || loginGuard.accountId !== currentUser.id || !allowRetry(last.feature, opts) || !stillLast()) return;
@@ -110,7 +110,7 @@ export async function retryLastAiAction({
       if (!stillLast() || sourceProfileRevision !== profileEditRevisionRef.current || !allowRetry(last.feature, opts)) return;
       const retryAction = { ...last, actionId: crypto.randomUUID() };
       recordLastAction(retryAction);
-      const isCurrentAttempt = () => current() && sameAiAction(getLastAction(), retryAction)
+      const isCurrentAttempt = () => current() && sameAiAction(getLastAction(currentUser.id), retryAction)
         && sourceProfileRevision === profileEditRevisionRef.current;
       if (!isCurrentAttempt()) return;
       let aiPlan;
@@ -164,9 +164,9 @@ export async function retryLastAiAction({
   try {
     const session = await prepareSession(currentUser.id, controller, current, { previous: loginGuard });
     if (!current()) return;
-    const latestAction = getLastAction();
+    const latestAction = getLastAction(currentUser.id);
     if (!sameAiAction(latestAction, last) || !allowRetry(last.feature, opts)) return;
-    const isCurrentRetry = () => current() && sameAiAction(getLastAction(), retryAction ?? last);
+    const isCurrentRetry = () => current() && sameAiAction(getLastAction(currentUser.id), retryAction ?? last);
     const weekKey = getWeekKeyImpl(new Date());
     const generationKey = `${currentUser.id}_${weekKey}_${weekly.wis}_${session.guard.sessionEpoch}_${session.guard.serverSessionId}_${session.guard.authFence}`;
     const generateAI = async () => {

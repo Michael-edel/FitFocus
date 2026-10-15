@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildCoachAdviceRequest, type CoachAdviceRequest } from '../features/ai/coachAdvice';
 import { requestCoachAdvice, type CoachAdviceRunParams } from '../features/ai/useCoachAdvice';
 import type { AiSession } from '../services/aiSession';
@@ -70,7 +70,7 @@ function params(overrides: Partial<CoachAdviceRunParams> = {}) {
       expect(options).toEqual({ previous: guard });
       return session;
     },
-    getLastAction: () => lastAction,
+    getLastAction: vi.fn(() => lastAction),
     recordLastAction: action => { lastAction = action; calls.push('last-action'); },
     getTodayKeyImpl: () => '2026-10-07',
     logError: () => calls.push('error'),
@@ -82,6 +82,7 @@ function params(overrides: Partial<CoachAdviceRunParams> = {}) {
     commitGuards,
     session,
     profileEditRevisionRef,
+    getLastAction: input.getLastAction!,
     get lastAction() { return lastAction; },
     setLastAction(action: typeof lastAction) { lastAction = action; },
     setCurrent(value: boolean) { current = value; },
@@ -122,6 +123,7 @@ describe('coach advice feature', () => {
     const result = await requestCoachAdvice(run.input);
 
     expect(result).toBe(advice);
+    expect(run.getLastAction).toHaveBeenCalledWith(user.id);
     expect(run.commitGuards).toHaveLength(2);
     expect(run.commitGuards.every(item => item.readGuard.accountId === user.id && typeof item.canCommit === 'function')).toBe(true);
     expect(run.calls).toEqual([

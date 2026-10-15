@@ -64,6 +64,7 @@ describe('AI retry feature', () => {
     await retryLastAiAction(input);
 
     expect(input.allowRetry).not.toHaveBeenCalled();
+    expect(input.getLastAction).toHaveBeenCalledWith(user.id);
     expect(input.requestPersonalPlan).not.toHaveBeenCalled();
     expect(input.persistUser).not.toHaveBeenCalled();
   });

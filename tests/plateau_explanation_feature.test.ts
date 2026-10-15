@@ -40,6 +40,7 @@ describe('plateau explanation', () => {
     await expect(test.run()).resolves.toBe('Проверьте точность порций и сон.');
 
     expect(test.prepareSession).toHaveBeenCalledWith(accountId, expect.any(AbortController), expect.any(Function), { previous: guard });
+    expect(test.getLastAction).toHaveBeenCalledWith(accountId);
     expect(test.requestExplanation).toHaveBeenCalledWith(input, test.session);
     expect(test.recordLastAction).toHaveBeenCalledWith(expect.objectContaining({ feature: 'plateau', actionId: expect.any(String) }));
     expect(test.setNote).toHaveBeenCalledWith('Проверьте точность порций и сон.');

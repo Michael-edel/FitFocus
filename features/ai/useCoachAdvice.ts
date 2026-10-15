@@ -77,7 +77,8 @@ export async function requestCoachAdvice({
   logError = console.error,
 }: CoachAdviceRunParams): Promise<CoachAdviceResult | null> {
   if (!currentUser || !repository || !loginGuard || loginGuard.accountId !== currentUser.id || !isCurrentSession()) return null;
-  const actionBeforeProof = getLastAction();
+  const readLastAction = () => getLastAction(currentUser.id);
+  const actionBeforeProof = readLastAction();
   if (expectedLastAction && !sameAiAction(actionBeforeProof, expectedLastAction)) return null;
   if (!canUseCoachAdvice()) {
     openPaywall();
@@ -89,12 +90,12 @@ export async function requestCoachAdvice({
   const requestedAction = { feature: 'coach_advice', type: 'coach', userId: currentUser.id, actionId: crypto.randomUUID() };
   try {
     const session = await prepareSession(currentUser.id, controller, isCurrentSession, { previous: loginGuard });
-    if (!sourceIsCurrent() || !sameAiAction(getLastAction(), actionBeforeProof)) return null;
-    if (expectedLastAction && (!sameAiAction(getLastAction(), expectedLastAction) || !allowRetry(expectedLastAction.feature, retryOptions))) return null;
+    if (!sourceIsCurrent() || !sameAiAction(readLastAction(), actionBeforeProof)) return null;
+    if (expectedLastAction && (!sameAiAction(readLastAction(), expectedLastAction) || !allowRetry(expectedLastAction.feature, retryOptions))) return null;
     recordLastAction(requestedAction);
-    const currentAction = getLastAction();
+    const currentAction = readLastAction();
     if (!sameAiAction(currentAction, requestedAction)) return null;
-    const isCurrentAction = () => sourceIsCurrent() && sameAiAction(getLastAction(), currentAction);
+    const isCurrentAction = () => sourceIsCurrent() && sameAiAction(readLastAction(), currentAction);
     const advice = await requestAdvice(buildCoachAdviceRequest(
       currentUser,
       targets,
@@ -110,7 +111,7 @@ export async function requestCoachAdvice({
     const usageOperation = await incrementUsage({
       readGuard: { ...session.guard }, canCommit: isCurrentAction,
     });
-    if (!sameAiAction(getLastAction(), currentAction) || controller.signal.aborted) return null;
+    if (!sameAiAction(readLastAction(), currentAction) || controller.signal.aborted) return null;
     if (usageOperation?.status === 'pending') {
       const committedRevision = profileEditRevisionRef.current;
       if (committedRevision !== profileRevisionBeforeUsage + 1) return null;

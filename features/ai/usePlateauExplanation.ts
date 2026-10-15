@@ -68,22 +68,23 @@ export async function runPlateauExplanation({
   logError = console.error,
 }: PlateauExplanationRunParams): Promise<string | null> {
   if (!isCurrentSession() || loginGuard.accountId !== currentUserId) return null;
-  const actionBeforeProof = getLastAction();
+  const readLastAction = () => getLastAction(currentUserId);
+  const actionBeforeProof = readLastAction();
   if (expectedLastAction && !sameAiAction(actionBeforeProof, expectedLastAction)) return null;
   let sourceProfileRevision = profileEditRevisionRef.current;
   const sourceIsCurrent = () => isCurrentSession() && sourceProfileRevision === profileEditRevisionRef.current;
   setLoading(true);
   try {
     const session = await prepareSession(currentUserId, controller, isCurrentSession, { previous: loginGuard });
-    if (!sourceIsCurrent() || !sameAiAction(getLastAction(), actionBeforeProof)) return null;
-    if (expectedLastAction && (!sameAiAction(getLastAction(), expectedLastAction)
+    if (!sourceIsCurrent() || !sameAiAction(readLastAction(), actionBeforeProof)) return null;
+    if (expectedLastAction && (!sameAiAction(readLastAction(), expectedLastAction)
       || !allowRetry(expectedLastAction.feature, retryOptions))) return null;
 
     const nextAction = { feature: 'plateau', type: 'plateau', userId: currentUserId, actionId: crypto.randomUUID() };
     recordLastAction(nextAction);
-    const currentAction = getLastAction();
+    const currentAction = readLastAction();
     if (!sameAiAction(currentAction, nextAction)) return null;
-    const isCurrentAction = () => sourceIsCurrent() && sameAiAction(getLastAction(), currentAction);
+    const isCurrentAction = () => sourceIsCurrent() && sameAiAction(readLastAction(), currentAction);
 
     const note = await requestExplanation(input, session);
     if (!isCurrentAction()) return null;
