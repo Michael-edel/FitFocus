@@ -10,10 +10,11 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
   'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
   'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1' };
 
-async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-invite' | 'check-refusal' = 'normal') {
+async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-invite' | 'check-refusal' | 'refresh-on-pageshow' = 'normal') {
   await mockApp(page, { session: 'app' });
-  const errors: string[] = [], counts = { context: 0, invites: 0, members: 0, checks: 0, released: 0 };
+  const errors: string[] = [], counts = { context: 0, shopping: 0, invites: 0, members: 0, checks: 0, released: 0 };
   let active = true, cookieSid = sid, profile = buildMockProfile();
+  let refreshed = false;
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
@@ -42,7 +43,8 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
     if (path === '/api/family') {
       counts.context += 1;
       if (mode === 'held-context') { await held; counts.released += 1; }
-      return json({ family: { id: 'family-e2e', name: 'Семья с проверенной сессией', owner_user_id: account },
+      const name = mode === 'refresh-on-pageshow' && refreshed ? 'Обновлённая семья' : 'Семья с проверенной сессией';
+      return json({ family: { id: 'family-e2e', name, owner_user_id: account },
         members: [{ user_id: account, name: 'E2E User', role: 'owner', goal: 'MAINTAIN' }] });
     }
     if (path === '/api/family/menu') return json({ weekStart: new URL(request.url()).searchParams.get('week'), shared: null, portions: null });
@@ -57,7 +59,11 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
       counts.members += 1;
       return json({ ok: true });
     }
-    if (path === '/api/shopping/list') return json({ family_id: 'family-e2e', week_start: new URL(request.url()).searchParams.get('week'), items: [{ name: 'Рис', grams: 400, checked: false }] });
+    if (path === '/api/shopping/list') {
+      counts.shopping += 1;
+      const item = mode === 'refresh-on-pageshow' && refreshed ? 'Овсянка' : 'Рис';
+      return json({ family_id: 'family-e2e', week_start: new URL(request.url()).searchParams.get('week'), items: [{ name: item, grams: 400, checked: false }] });
+    }
     if (path === '/api/shopping/check') {
       counts.checks += 1;
       if (mode === 'check-refusal') return route.fulfill({ status: 401, contentType: 'application/json', headers, body: '{"error":"STATE_SESSION_CHANGED"}' });
@@ -68,7 +74,7 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
   await openApp(page, '/#family');
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
-  return { errors, counts, release, changeCookie: () => { cookieSid = 'b'.repeat(64); } };
+  return { errors, counts, release, changeCookie: () => { cookieSid = 'b'.repeat(64); }, refresh: () => { refreshed = true; } };
 }
 async function healthy(page: Page, errors: string[]) {
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
@@ -130,6 +136,27 @@ test('a held family read cannot restore family UI after logout', async ({ page }
     await expect.poll(() => counts.released).toBe(1);
     await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toHaveCount(0); await healthy(page, errors);
   } finally { release(); }
+});
+test('BFCache return refreshes the family and shopping snapshots', async ({ page }) => {
+  const { errors, counts, refresh } = await setup(page, 'refresh-on-pageshow');
+  await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toBeVisible();
+  await expect.poll(() => counts.shopping).toBeGreaterThan(0);
+  await expect(page.getByRole('checkbox', { name: /Рис/ })).toBeVisible();
+  const initialContextRequests = counts.context;
+  const initialShoppingRequests = counts.shopping;
+  refresh();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+
+  await expect.poll(() => counts.context).toBeGreaterThan(initialContextRequests);
+  await expect.poll(() => counts.shopping).toBeGreaterThan(initialShoppingRequests);
+  await expect(page.getByText('Обновлённая семья', { exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /Овсянка/ })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /Рис/ })).toHaveCount(0);
+  await healthy(page, errors);
 });
 test('pagehide cancels the old invitation and pageshow permits a new attempt', async ({ page }) => {
   const { errors, counts, release } = await setup(page, 'held-invite');

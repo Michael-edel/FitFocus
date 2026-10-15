@@ -30,7 +30,11 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
   const scope = useMemo(() => new FamilyActionScope(() => Boolean(loginGuard && loginGuard.accountId === currentUser?.id && isCurrentSession())),
     [currentUser?.id, isCurrentSession, loginGuard]);
   const onShowRef = useRef(() => {});
+  const familyContextRequestedRef = useRef(false);
+  const familyShoppingRequestedRef = useRef(false);
   useLayoutEffect(() => {
+    familyContextRequestedRef.current = false;
+    familyShoppingRequestedRef.current = false;
     scope.activate();
     const hide = () => scope.invalidate();
     const show = (event: PageTransitionEvent) => { if (event.persisted) { scope.activate(); onShowRef.current(); } };
@@ -66,6 +70,7 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
 
   const loadCloudFamily = useCallback(async () => {
     const attempt = scope.begin('context'); if (!attempt) return;
+    familyContextRequestedRef.current = true;
     setCloudFamilyLoading(true); setCloudFamilyError(null);
     try {
       const week = weekStartISO();
@@ -94,6 +99,7 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
   const loadFamilyShopping = useCallback(async () => {
     const familyId = cloudFamily?.id; if (!familyId) return;
     const attempt = scope.begin('shopping'); if (!attempt) return;
+    familyShoppingRequestedRef.current = true;
     const current = () => attempt.isCurrent() && familyIdRef.current === familyId;
     setFamilyShoppingLoading(true);
     try {
@@ -169,6 +175,13 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
       return menu;
     });
   }, [cloudFamily, currentUser?.id, familyMenuRepository, runMutation, setCloudFamilyMenu, setFamilyShopping, weekStartISO]);
+
+  onShowRef.current = () => {
+    if (familyContextRequestedRef.current) void loadCloudFamily();
+    else setCloudFamilyLoading(false);
+    if (familyShoppingRequestedRef.current) void loadFamilyShopping();
+    else setFamilyShoppingLoading(false);
+  };
 
   return { cloudFamily, cloudFamilyMembers, cloudFamilyLoading, cloudFamilyMenu, cloudFamilyError,
     familyInviteCode, familyJoinCode, familyNameDraft, familyShopping, familyShoppingLoading,
