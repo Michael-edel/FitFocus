@@ -529,6 +529,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
+  `3abb374` вводит обязательный серверный proof для всех `/api/state` и
+  `/api/profile` handlers; остальные callback-контракты и staging остаются.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует
   обязательный парный scope на сервере и проверяет ответ перед очисткой. Чужой
   proof отклоняется до удаления, scoped logout не отзывает другую сессию и не
@@ -766,8 +768,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.
-- [ ] Завершить эти гарантии для profile и остальных API callbacks; runtime legacy
-  уже использует auth-derived owner и all-client Service Worker fence.
+- [ ] Завершить lifecycle-гарантии для profile и остальных API callbacks;
+  `3abb374` закрыл unscoped серверный доступ к state/profile, но нужны проверки
+  client lifecycle, старых writers и staging. Runtime legacy уже использует
+  auth-derived owner и all-client Service Worker fence.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:

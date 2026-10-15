@@ -38,6 +38,10 @@
   endpoints требуют парный account/session proof; старые bundles без него
   получают 401 до разбора тела и прикладных запросов. Проверить обновление
   клиента, создание/ответ пользователя и чтение/изменение тикетов на staging.
+- [ ] Для [`/api/state` и `/api/profile`](API_CONTRACTS.md) все GET/PUT/PATCH/
+  DELETE handlers требуют парный account/session proof и отвечают 401 старым
+  bundles без него. Проверить обновление клиента, pending/outbox writes,
+  profile refresh и CAS/state write на staging.
 - [ ] Очередь достижений сохраняет исходный login proof и завершается при
   logout/pagehide/истечении lifetime; поздний GET не отменяет подтверждённый unlock.
   Реальный BFCache проверен отдельно. Временная очередь и best-effort счётчики

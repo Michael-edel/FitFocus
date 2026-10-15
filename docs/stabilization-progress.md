@@ -3690,6 +3690,26 @@ API invariants, auth-scope, admin guards, schema parity, privacy coverage,
 production build и `git diff --check`. Точный CI follow-up ожидает push; старый
 Settings bundle, staging и настоящее устройство остаются открытыми.
 
+## P0.5/P0.6 — обязательный proof для state/profile APIs, `3abb374`, 15.10.2026
+
+`/api/state` GET/PUT/DELETE и `/api/profile` GET/PUT/PATCH используют
+`requireScopedStateUser`. Отсутствующий, неполный или устаревший
+account/session proof отклоняется до прикладного чтения/записи и, для writers,
+до разбора тела. `StateSync` уже передаёт proof при profile refresh и отправке
+outbox; сервер теперь отсекает старые unscoped bundles. Тесты покрывают каждый
+verb, смену cookie, malformed body и отказ без side effects. API-invariants
+фиксирует обязательный helper.
+
+На точном кодовом SHA
+[`3abb374`](https://github.com/Michael-edel/FitFocus/commit/3abb3740d8f550332b4d054e9d140de50999a6d0)
+прошли профильные тесты (104/104), полный unit suite (1255/1255 в 208 файлах),
+общий/domain-strict/storage-strict typecheck, API invariants, auth-scope,
+admin guards, schema parity, privacy coverage, production build и
+`git diff --check`. GitHub run [38699271370](https://github.com/Michael-edel/FitFocus/actions/runs/38699271370)
+проверяет предыдущий опубликованный SHA `2206120`; точный CI этого кандидата
+ожидает push. Старые/новые bundles на staging и общий callbacks lifecycle
+остаются открытыми.
+
 ## P0.5 — обязательный proof для Support feedback, `bc3e7c2`, 15.10.2026
 
 Пять user/admin handlers `/api/support/feedback` используют
@@ -3704,5 +3724,7 @@ Settings bundle, staging и настоящее устройство остают
 прошли профильные тесты (34/34), полный unit suite (1249/1249 в 208 файлах),
 общий/domain-strict/storage-strict typecheck, API invariants, auth-scope,
 admin guards, schema parity, privacy coverage, production build и
-`git diff --check`. Точный CI ожидает публикации кандидата; проверка старых
-bundles, staging и полный P0.5 lifecycle остаются открытыми.
+`git diff --check`. Проверка старых bundles, staging и полный P0.5 lifecycle
+остаются открытыми. PR CI
+[38699271370](https://github.com/Michael-edel/FitFocus/actions/runs/38699271370)
+на опубликованном tip прошёл guards, unit, typechecks и build; E2E выполняется.

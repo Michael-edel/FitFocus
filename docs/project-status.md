@@ -3,6 +3,18 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — обязательный proof для state/profile, `3abb374`
+
+`/api/state` GET/PUT/DELETE и `/api/profile` GET/PUT/PATCH требуют парный
+account/session proof через `requireScopedStateUser`. Старые запросы без proof
+получают 401 до body parsing и прикладных чтений/записей. Текущий `StateSync`
+уже передаёт proof в профильный refresh и sender; rollout старых bundles требует
+отдельной проверки. Полный unit suite прошёл 1255/1255 в 208 файлах;
+typechecks, API/auth/admin guards, schema/privacy и production build прошли.
+CI для `3abb374` ещё не запускался: текущий GitHub run проверяет предыдущий
+опубликованный SHA. Staging и полный профильный lifecycle остаются открытыми.
+[Контракт](../API_CONTRACTS.md).
+
 ## Локальный кандидат — обязательный proof для Support feedback, `bc3e7c2`
 
 Пользовательские и административные handlers `/api/support/feedback` теперь
@@ -11,8 +23,11 @@
 и `adminRequest` уже передают proof через свои transports. Профильные тесты
 прошли 34/34, полный unit suite — 1249/1249 в 208 файлах; общий/domain-strict/
 storage-strict typecheck, API invariants, auth-scope, admin guards, schema
-parity, privacy coverage и production build прошли. Точный CI ожидает push;
-обновление старых bundles и support CRUD на staging остаются открытыми.
+parity, privacy coverage и production build прошли. PR CI
+[38699271370](https://github.com/Michael-edel/FitFocus/actions/runs/38699271370)
+на опубликованном tip проверяет этот код: guards/unit/typechecks/build прошли,
+E2E выполняется.
+Обновление старых bundles и support CRUD на staging остаются открытыми.
 [Контракт](support-session.md).
 
 ## Локальный кандидат — обязательный proof для mobile token, `a1e79ac`

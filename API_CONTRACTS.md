@@ -1,6 +1,6 @@
 # Контракты API, критичные для синхронизации
 
-Обновлено: 14.10.2026. State описывает серверный компонент P0.7
+Обновлено: 15.10.2026. State описывает серверный компонент P0.7
 в `fix/state-generations` после миграции 0019; profile включает guard/capability
 интеграционной ветки `fix/durable-outbox`.
 Серверная ветка объединена с клиентской коммитом `93f90c0`;
@@ -33,10 +33,11 @@ State также возвращает `X-FitFocus-State-Protocol: 2`. Новый
 sessionId — SHA-256 с разделителем назначения от subject/sid; raw sid не выдаётся.
 Новый sender проверяет capability и точное совпадение подтверждённого accountId.
 
-State принимает парные `X-FitFocus-State-Account` и `X-FitFocus-State-Session`.
-Если передан хотя бы один, requireStateUser требует оба и сравнивает их
-с фактической сессией. Смена cookie/аккаунта → 401 до state-чтения или мутации.
-Прежние запросы без обоих заголовков пока поддерживаются. Ответ state содержит
+State GET/PUT/DELETE требуют парные `X-FitFocus-State-Account` и
+`X-FitFocus-State-Session` через `requireScopedStateUser` и сравнивают их с
+фактической сессией. Отсутствующая, неполная или устаревшая пара → 401 до
+прикладного state-чтения или мутации. Старые bundles без proof необходимо
+обновить до rollout. Ответ state содержит
 `X-FitFocus-State-Guard: 1` и переданную привязку; новый sender принимает ack
 только с проверенными scope, key, exists, ok и версией своей операции.
 [Порядок отправки и паузы](docs/state-sender.md).
@@ -134,12 +135,11 @@ baseVersion конфликтует; клиент не выдумывает ack �
 Проверенные accountId/sessionId берутся из stateSync того же ответа /me.
 Sender `4736ff5` требует state/profile capabilities и новый projection marker
 для отправки profile. Без него операция остаётся pending с protocol-паузой.
-Guarded GET чистого profile требует прежний read-контракт без нового marker.
-GET/PUT/PATCH поддерживают парные X-FitFocus-State-Account/Session с той же
-серверной проверкой, что state; изменение cookie возвращает 401 до работы
-с профилем. Ответ profile содержит X-FitFocus-Profile-Protocol: 1,
-X-FitFocus-Profile-Guard: 1 и переданную привязку. Запросы без обоих заголовков
-ещё поддерживаются; реальный барьер старых клиентов этим не реализован.
+GET/PUT/PATCH требуют парные X-FitFocus-State-Account/Session через
+`requireScopedStateUser`; отсутствие, неполная пара или изменение cookie
+возвращает 401 до чтения, разбора body или записи профиля. Ответ profile
+содержит X-FitFocus-Profile-Protocol: 1, X-FitFocus-Profile-Guard: 1 и
+переданную привязку. Старые bundles без proof необходимо обновить до rollout.
 
 GET возвращает 200 `{ "profile": … }`.
 PUT заменяет профиль через сценарий `replace`, PATCH применяет сценарий `patch`.
