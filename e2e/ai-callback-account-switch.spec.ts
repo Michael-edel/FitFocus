@@ -16,7 +16,7 @@ const weeklyReportsKey = (accountId: string) => `fitfocus_data_${accountId}_week
 const recipeUsageKey = (accountId: string) => `fitfocus_usage_counters_v1:${encodeURIComponent(accountId)}`;
 
 type Account = typeof accountA;
-type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'foodphoto' | 'foodphoto_enhanced' | 'recipe' | 'council_chairman';
+type Feature = 'coach_advice' | 'plateau' | 'personal_plan' | 'weekly_menu' | 'wis_text' | 'foodphoto' | 'foodphoto_enhanced' | 'recipe' | 'council_chairman';
 type StateWriteAttempt = { account?: string; session?: string; keys: string[] };
 type FixtureState = {
   current: Account;
@@ -214,6 +214,8 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
                     ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
                     steps: [{ n: 1, text: 'Старый ответ аккаунта A', timeMin: 5 }], tips: [],
                   })
+                  : feature === 'wis_text'
+                    ? 'Поздний отчёт недели из аккаунта A'
                   : 'Позднее объяснение плато из профиля A';
         await json({ text }, accountA);
         counts.releasedResponses += 1;
@@ -710,6 +712,62 @@ test('held personal weekly-menu response cannot write for account A after anothe
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
     await switched.page.screenshot({ path: info.outputPath('weekly-menu-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('held weekly report cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The weekly AI report account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'wis_text');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+
+  const reportKeyA = weeklyReportsKey(accountA.id);
+  const reportKeyB = weeklyReportsKey(accountB.id);
+  const beforeSwitch = await readDurableSnapshot(page);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  const reportABefore = rawValue(beforeSwitch, reportKeyA);
+  const reportOperationsABefore = beforeSwitch.operations.filter(operation => operation.accountId === accountA.id && operation.key === reportKeyA);
+  const reportWritesABefore = fixtureA.counts.stateWrites.filter(key => key === reportKeyA);
+
+  try {
+    const switched = await openAccountB(context, state);
+    await expect.poll(() => switched.fixture.counts.completedAiFeatures).toContain('wis_text');
+    await expect.poll(async () => (await readDurableSnapshot(switched.page)).operations
+      .filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB)).toEqual([]);
+    const beforeB = await readDurableSnapshot(switched.page);
+    expect(beforeB.activeSession?.accountId).toBe(accountB.id);
+    const reportBBefore = rawValue(beforeB, reportKeyB);
+    const reportOperationsBBefore = beforeB.operations.filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB);
+    expect(reportBBefore).not.toBeNull();
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const final = await readDurableSnapshot(switched.page);
+    expect(rawValue(final, reportKeyA)).toBe(reportABefore);
+    expect(final.operations.filter(operation => operation.accountId === accountA.id && operation.key === reportKeyA))
+      .toEqual(reportOperationsABefore);
+    expect(fixtureA.counts.stateWrites.filter(key => key === reportKeyA)).toEqual(reportWritesABefore);
+    expect(rawValue(final, reportKeyB)).toBe(reportBBefore);
+    expect(final.operations.filter(operation => operation.accountId === accountB.id && operation.key === reportKeyB))
+      .toEqual(reportOperationsBBefore);
+    await expect(page.getByText('Поздний отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Поздний отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
     fixtureA.release();
   }
