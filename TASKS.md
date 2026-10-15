@@ -1,8 +1,14 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Последний полный PR CI проверил source HEAD
+Обновлено: 15.10.2026. Последний полный PR CI проверил source SHA
+`9fb0cffe90d0a6b8f444b19e1f55eae67a68403d` в [run 38671885368](https://github.com/Michael-edel/FitFocus/actions/runs/38671885368)
+и завершился с ошибкой в E2E; unit, audit, guards, три typecheck и build прошли.
+Логи выявили сбои в push mock, навигационном mock для backup restore и
+нестабильном account-switch ожидании. Локальные исправления и повторы описаны в
+[журнале](docs/stabilization-progress.md); точный CI нового SHA ожидает push.
+Последний полный успешный CI до этого проверил source HEAD
 [`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
-и завершился success в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
+в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
 unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
 Предыдущий run [38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
 на `23c8be6` также завершился штатно примерно за 33 минуты.
@@ -516,6 +522,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   engines, без retries) прошли.
   Точный полный CI, native PWA/Service Worker recovery и scope guard старых
   открытых bundle отдельно не подтверждены.
+- [x] Привязать Stripe Checkout и административную смену тарифа к исходному
+  account/session proof, серверному `requireStateUser`, response markers и
+  no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
+  18 профильных unit в трёх файлах, typecheck и API/auth/admin guards прошли;
+  account-switch E2E — 3/3 на desktop Chromium, Firefox и WebKit без retries,
+  4 не-desktop проекта штатно пропущены. Код пока в незакоммиченном дереве;
+  точный полный CI ожидается. [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
   компонент не закрывает остальные writers и общий lifecycle P0.5.
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один

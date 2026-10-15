@@ -1632,6 +1632,8 @@ const logWeight = useCallback(() => {
           currentPlan={paywall.plan}
           currentUser={currentUser}
           isAdmin={isAdmin}
+          loginGuard={loginReadGuard}
+          isCurrentSession={isCurrentProfileSession}
           onPersistUser={persistUser}
           onClose={paywall.closePaywall}
         />

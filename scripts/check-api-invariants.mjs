@@ -985,6 +985,8 @@ const billingCheckout = [
   read('functions/api/billing/checkout.ts'),
   read('functions/api/_lib/billing_checkout.ts'),
 ].join('\n');
+const billingAdminSubscription = read('functions/api/admin/subscription.ts');
+const meRoute = read('functions/api/me.ts');
 assertIncludes(
   billingCheckout,
   'resolveCheckoutPlanPrice',
@@ -994,6 +996,31 @@ assertIncludes(
   billingCheckout,
   'PRICE_PRO_YEARLY',
   'billing checkout must support yearly pro pricing',
+);
+assertIncludes(
+  billingCheckout,
+  'requireStateUser(request, env)',
+  'billing checkout must bind its mutation to the initiating account and session',
+);
+assertIncludes(
+  billingCheckout,
+  "withSessionGuard(response, context.request, 'Billing')",
+  'billing mutations must return verifiable account/session response markers',
+);
+assertIncludes(
+  billingAdminSubscription,
+  'requireStateUser(request, env)',
+  'admin subscription mutation must bind to the initiating account and session',
+);
+assertIncludes(
+  billingAdminSubscription,
+  "withSessionGuard(response, context.request, 'Billing')",
+  'admin subscription response must expose verifiable account/session markers',
+);
+assertIncludes(
+  meRoute,
+  'billingSync: { protocol: 1, guard: 1 }',
+  'the session endpoint must advertise guarded billing support',
 );
 
 const familyMenu = [

@@ -17,6 +17,7 @@ test.describe('push settings across target platforms', () => {
 
     await mockApp(page, {
       session: 'app',
+      acknowledgeStateWrites: true,
       push: {
         supported: !isIphoneSafari,
         standalone: isStandalone,

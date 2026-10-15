@@ -21,7 +21,7 @@ type FixtureState = {
   current: Account;
   profile: ReturnType<typeof profileFor>;
   stateWriteLog?: StateWriteAttempt[];
-  holdStateWriteFailures?: { key: string; active: boolean };
+  holdStateWriteFailures?: { key: string; active: boolean; retryAfterSeconds?: number };
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -134,7 +134,7 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
       state.stateWriteLog?.push({ account: requestedAccount, session: requestedSession, keys });
       if (state.holdStateWriteFailures?.active && keys.includes(state.holdStateWriteFailures.key)) {
         return route.fulfill({ status: 503, contentType: 'application/json',
-          headers: { ...scopedHeaders(responseAccount), 'Retry-After': '1' },
+          headers: { ...scopedHeaders(responseAccount), 'Retry-After': String(state.holdStateWriteFailures.retryAfterSeconds ?? 1) },
           body: JSON.stringify({ error: 'SERVICE_UNAVAILABLE' }) });
       }
       return json({ ok: true, items: items.map(item => ({
@@ -1052,7 +1052,7 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
     current: accountA,
     profile: profileFor(accountA.id),
     stateWriteLog: stateWrites,
-    holdStateWriteFailures: { key: planKeyA, active: true },
+    holdStateWriteFailures: { key: planKeyA, active: true, retryAfterSeconds: 10 },
   };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1078,9 +1078,10 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
   const switched = await openAccountB(context, state);
   await expect.poll(async () => (await readDurableSnapshot(switched.page)).activeSession?.serverSessionId).toBe(accountB.sid);
   await expect.poll(async () => (await readDurableSnapshot(switched.page)).operations
-    .find(operation => operation.key === planKeyA)?.status).toBe('pending');
+    .find(operation => operation.key === planKeyA)?.status).toMatch(/^(pending|sending)$/);
   const pendingDuringB = (await readDurableSnapshot(switched.page)).operations.find(operation => operation.key === planKeyA);
-  expect(pendingDuringB).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
+  expect(pendingDuringB).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, value: pendingA.value });
+  expect(pendingDuringB?.status).toMatch(/^(pending|sending)$/);
   const aAttemptsWhileBActive = stateWrites.filter(write => write.keys.includes(planKeyA)).length;
   await switched.page.waitForTimeout(Math.max(0, pendingDuringB!.nextAttemptAtMs - Date.now()) + 1_100);
   expect(stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(aAttemptsWhileBActive);

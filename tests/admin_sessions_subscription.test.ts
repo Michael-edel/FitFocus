@@ -120,7 +120,7 @@ async function adminRequest(url: string, body: Record<string, unknown>) {
   return adminRequestRaw(url, JSON.stringify(body));
 }
 
-async function adminRequestRaw(url: string, body: string) {
+async function adminRequestRaw(url: string, body: string, extraHeaders: Record<string, string> = {}) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   return new Request(url, {
     method: 'POST',
@@ -128,6 +128,7 @@ async function adminRequestRaw(url: string, body: string) {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
       'X-Request-ID': 'admin-sessions-test-01',
+      ...extraHeaders,
     },
     body,
   });
@@ -238,6 +239,24 @@ describe('admin session and subscription mutations', () => {
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO subscriptions'))).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events') && String(run.binds[3]) === 'subscription_update')).toBe(true);
+    expect(res.headers.get('X-FitFocus-Billing-Protocol')).toBe('1');
+    expect(res.headers.get('X-FitFocus-Billing-Guard')).toBe('1');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('rejects an admin subscription callback bound to a replaced account before writing', async () => {
+    const db = makeDb();
+    const request = await adminRequestRaw(
+      'https://fitfocus.test/api/admin/subscription',
+      JSON.stringify({ user_id: 'user-1', plan: 'pro' }),
+      { 'X-FitFocus-State-Account': 'another-account', 'X-FitFocus-State-Session': 'b'.repeat(64) },
+    );
+
+    const res = await postSubscription(context(request, db));
+
+    expect(res.status).toBe(401);
+    expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
+    expect(db.auditEvents).toHaveLength(0);
   });
 
   it('upserts a canceled free subscription row instead of silently skipping missing rows', async () => {

@@ -13,6 +13,8 @@ type PushMockConfig = {
 type MockAppOptions = {
   session: MockSessionMode;
   push?: PushMockConfig;
+  /** Acknowledge incidental state writes when a test exercises another guarded API. */
+  acknowledgeStateWrites?: boolean;
   /** Update/precache tests must retain the browser's actual SW objects. */
   realServiceWorker?: boolean;
   /** Native SW flows serve API fixtures over HTTP, including worker-originated requests. */
@@ -108,6 +110,16 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
   }
 
   if (options.nativeApi) return;
+  // Capture the emulated browser before app navigation. Evaluating the page from
+  // a route handler can race reloads and destroy the navigation context.
+  const currentBrowserLabel = await page.evaluate(() => {
+    const ua = navigator.userAgent;
+    if (/Firefox/i.test(ua)) return 'Firefox';
+    if (/Edg/i.test(ua)) return 'Edge';
+    if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) return 'Chrome';
+    if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'Safari';
+    return 'Браузер';
+  });
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -136,6 +148,16 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Protocol' : 'X-FitFocus-State-Protocol']: path === '/api/bootstrap' ? '1' : '2',
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Guard' : 'X-FitFocus-State-Guard']: '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
+      } : path === '/api/state' && options.acknowledgeStateWrites && ['PUT', 'DELETE'].includes(method)
+        && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
+      } : path === '/api/profile' && method === 'PUT' && options.acknowledgeStateWrites
+        && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
       } : {},
       body: JSON.stringify(payload),
     });
@@ -161,6 +183,9 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         hasAccess: true,
         stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
         bootstrapSync: { protocol: 1, guard: 1 },
+        ...(options.acknowledgeStateWrites
+          ? { profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } }
+          : {}),
         aiSync: { protocol: 1, guard: 1 },
         weeklyMenuSync: { protocol: 1, guard: 1 },
         achievementSync: { protocol: 1, guard: 1 },
@@ -190,6 +215,8 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
 
     if (path === '/api/profile' && method === 'PUT') {
       const body = request.postDataJSON() as Record<string, unknown> | null;
+      const baseVersion = Number(body?.baseVersion);
+      const version = Number.isSafeInteger(baseVersion) && baseVersion >= 0 ? baseVersion + 1 : profile.version + 1;
       await json({
         profile: {
           ...profile,
@@ -197,8 +224,30 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
           googleSub: 'google-e2e-sub',
           email: 'e2e@example.com',
           aiPlan: defaultAiPlan,
+          ...(options.acknowledgeStateWrites ? { version } : {}),
         },
+        ...(options.acknowledgeStateWrites ? { version } : {}),
       });
+      return;
+    }
+
+    if (path === '/api/state' && options.acknowledgeStateWrites && (method === 'PUT' || method === 'DELETE')) {
+      const payload = request.postDataJSON() as { items?: Array<{ key?: unknown; baseVersion?: unknown }> } | null;
+      const items = Array.isArray(payload?.items) ? payload.items : [{
+        key: url.searchParams.get('key'),
+        baseVersion: Number(url.searchParams.get('baseVersion')),
+      }];
+      const item = items[0];
+      const version = Number(item?.baseVersion ?? 0) + 1;
+      if (method === 'DELETE') {
+        await json({ ok: true, key: String(item?.key ?? ''), version, exists: false });
+      } else {
+        await json({ ok: true, items: items.map((current) => ({
+          key: String(current.key ?? ''),
+          version: Number(current.baseVersion ?? 0) + 1,
+          exists: true,
+        })) });
+      }
       return;
     }
 
@@ -212,14 +261,6 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
 
     if (path === '/api/push/status' && method === 'GET') {
       const currentSubscriptionId = push.supported && push.preSubscribed ? 'sub-e2e-1' : null;
-      const currentBrowserLabel = await page.evaluate(() => {
-        const ua = navigator.userAgent;
-        if (/Firefox/i.test(ua)) return 'Firefox';
-        if (/Edg/i.test(ua)) return 'Edge';
-        if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) return 'Chrome';
-        if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'Safari';
-        return 'Браузер';
-      });
       await json({
         configured: push.configured,
         vapid_public_key: push.configured ? 'BEl6eA3k0t7K8U3d5j4LmE2E2mockPublicKeyForPlaywright12345' : '',

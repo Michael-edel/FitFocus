@@ -3,6 +3,21 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Рабочее дерево — billing session guard
+
+Незакоммиченный follow-up поверх `9fb0cff` привязывает Stripe Checkout и
+административную смену тарифа к account/session proof, проверяет server response
+markers и не открывает поздний Checkout URL после смены аккаунта. Транспорт,
+серверные guards и локальный account-switch E2E прошли; 18 профильных unit-тестов,
+typecheck и API/auth/admin guards зелёные. E2E прошёл 3/3 на desktop Chromium,
+Firefox и WebKit без retries; четыре не-desktop проекта пропущены по условию
+теста. Workflow [run 38671885368](https://github.com/Michael-edel/FitFocus/actions/runs/38671885368)
+завершился E2E failure на предыдущем SHA `9fb0cff`; найденные проблемы mock-
+ответа, route-навигации и короткого account-switch retry исправлены локально.
+Дополнительные push/backup E2E прошли 21/21 по полной браузерной матрице,
+account-switch suite — 45/45 применимых desktop сценариев. Точный CI этого
+рабочего дерева ожидает commit/push. [Контракт](billing-session.md).
+
 ## Кандидат — push session guard, `daec94d`
 
 В коммите `daec94d` ветки `fix/durable-outbox` добавлена привязка push-статуса,

@@ -1,5 +1,36 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — привязка Stripe Checkout к login-сессии, незакоммиченное дерево поверх `9fb0cff`, 15.10.2026
+
+Paywall теперь получает `billingSync` из свежего `/api/me`, передаёт исходные
+account/session headers в Checkout и административную смену тарифа, проверяет
+response markers и повторно сверяет IndexedDB session до возврата URL или
+локального обновления плана. Сервер использует `requireStateUser` до создания
+Stripe session и административной записи, отвечает с Billing markers и
+`Cache-Control: no-store`. Закрытие paywall и смена аккаунта инвалидируют поздний
+checkout callback; Checkout URL разрешается только по HTTPS с `checkout.stripe.com`.
+[Контракт](billing-session.md).
+
+Полный workflow [38671885368](https://github.com/Michael-edel/FitFocus/actions/runs/38671885368)
+завершился с ошибкой на предыдущем SHA `9fb0cff`: все проверки до E2E прошли.
+Логи выявили три независимые причины в проверках: push-сценарий получал
+протокольную паузу, потому что общий mock не подтверждал побочную запись
+`/api/state` обязательным `ok: true`; backup restore мог получить `Execution context
+was destroyed`, поскольку mock вычислял user-agent внутри route во время
+навигации; account-switch с 1-секундным `Retry-After` зависел от того, успеет ли
+Firefox завершить вход B до повторной отправки A.
+
+Моки теперь подтверждают state/profile записи только в тесте настроек push и
+снимают метку браузера до навигации. Account-switch acceptance оставляет
+предыдущую epoch запись в `pending` или `sending` lease, требует прежние `opId`
+и `accountId`, и использует 10-секундный `Retry-After`, чтобы не запускать
+повтор до входа B. Локальная проверка: профильные billing unit-тесты — 18/18;
+`typecheck`, API invariants, auth scope и admin guards прошли; delayed checkout
+URL — 3/3 desktop; account-switch файл — 45/45 применимых desktop-тестов, 60
+не-desktop конфигураций штатно пропущены; push и backup restore — 21/21 во всей
+Playwright-матрице. Новый точный CI ещё не запущен. Старые bundles, staging и
+реальный Stripe Checkout не проверены.
+
 ## P0.5 — session guard push-настроек и восстановления, код `daec94d`, 15.10.2026
 
 Settings запрашивает свежий `/api/me` proof и capability `pushSync`, затем

@@ -336,3 +336,18 @@ Callback сверяет user/session до обмена authorization code и п�
 через guarded outbox commit. Legacy-вызовы без scope сохраняют прежний путь, но
 не защищены session binding. Подробности и границы проверок:
 [Huawei session contract](docs/huawei-health-session.md).
+
+## Stripe Checkout и смена тарифа: session guard
+
+`POST /api/billing/checkout` и `POST /api/admin/subscription` в новом paywall
+получают capability `billingSync` из `/api/me` и передают исходный публичный
+account/session scope. Сервер сверяет scope с cookie через `requireStateUser`
+до создания Stripe Checkout session или записи тарифа. Ответы кроме 401 несут
+`X-FitFocus-Billing-Protocol: 1`, `X-FitFocus-Billing-Guard: 1` и echo scope;
+ответы используют `Cache-Control: no-store`.
+
+Клиент выполняет mutation один раз, затем проверяет маркеры, совпадение активной
+IDB-сессии и lifetime действия до открытия HTTPS Checkout URL или публикации
+нового тарифа. Старый клиент без state-заголовков временно сохраняет прежний
+серверный путь, но не имеет этой привязки. Полный CI, старые bundles, staging и
+реальный Stripe checkout проверяются отдельно. [Контракт](docs/billing-session.md).

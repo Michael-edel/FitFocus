@@ -42,9 +42,12 @@ type FixtureState = {
   releasedMobileTokens?: number;
   pushStatusAccounts?: string[];
   releasedPushStatuses?: number;
+  billingCheckoutAccounts?: string[];
+  releasedBillingCheckouts?: number;
+  plans?: Record<string, 'free' | 'pro' | 'family'>;
 };
 
-function profileFor(account: Account, includePersonalShopping = false) {
+function profileFor(account: Account, includePersonalShopping = false, plan: 'free' | 'pro' | 'family' = 'family') {
   const profile = buildMockProfile();
   return {
     ...profile,
@@ -52,7 +55,7 @@ function profileFor(account: Account, includePersonalShopping = false) {
     googleSub: account.id,
     name: account.name,
     email: `${account.id}@example.test`,
-    plan: 'family',
+    plan,
     ...(includePersonalShopping ? {
       aiPlan: {
         ...profile.aiPlan,
@@ -95,10 +98,12 @@ function scopedHeaders(account: Account) {
     'X-FitFocus-Mobile-Token-Guard': '1',
     'X-FitFocus-Push-Protocol': '1',
     'X-FitFocus-Push-Guard': '1',
+    'X-FitFocus-Billing-Protocol': '1',
+    'X-FitFocus-Billing-Guard': '1',
   };
 }
 
-function apiBody(account: Account, includePersonalShopping = false) {
+function apiBody(account: Account, includePersonalShopping = false, plan: 'free' | 'pro' | 'family' = 'family') {
   return {
     user: { sub: account.id, roles: ['user'] },
     hasAccess: true,
@@ -109,10 +114,11 @@ function apiBody(account: Account, includePersonalShopping = false) {
     weeklyMenuSync: { protocol: 1, guard: 1 },
     achievementSync: { protocol: 1, guard: 1 },
     huaweiSync: { protocol: 1, guard: 1 },
+    billingSync: { protocol: 1, guard: 1 },
     pushSync: { protocol: 1, guard: 1 },
     familySync: { protocol: 1, guard: 1, target: 1 },
     familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
-    profile: profileFor(account, includePersonalShopping),
+    profile: profileFor(account, includePersonalShopping, plan),
   };
 }
 
@@ -138,6 +144,7 @@ async function installAccountApi(
   holdSupportList = false,
   holdMobileToken = false,
   holdPushStatus = false,
+  holdBillingCheckout = false,
 ) {
   await mockApp(page, { session: 'app' });
   if (holdMobileToken) {
@@ -161,6 +168,7 @@ async function installAccountApi(
   const heldSupportListResponse = deferred();
   const heldMobileTokenResponse = deferred();
   const heldPushStatusResponse = deferred();
+  const heldBillingCheckoutResponse = deferred();
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -177,8 +185,10 @@ async function installAccountApi(
     });
 
     if (path === '/api/env') return json({ requireInvite: false }, state.current);
-    if (path === '/api/me') return json(apiBody(state.current, includePersonalShopping), state.current);
-    if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current, includePersonalShopping), items: [] }, state.current);
+    if (path === '/api/me') return json(apiBody(state.current, includePersonalShopping,
+      state.plans?.[state.current.id] ?? 'family'), state.current);
+    if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current,
+      includePersonalShopping, state.plans?.[state.current.id] ?? 'family'), items: [] }, state.current);
     if (path === '/api/profile') return json({ profile: profileFor(scopedAccount), version: 1 });
     if (path === '/api/state') {
       if (request.method() === 'GET') return json({ items: [] });
@@ -226,6 +236,15 @@ async function installAccountApi(
         return json(status, accountA);
       }
       return json(status);
+    }
+    if (path === '/api/billing/checkout' && request.method() === 'POST') {
+      (state.billingCheckoutAccounts ??= []).push(scopedAccount.id);
+      if (holdBillingCheckout && scopedAccount.id === accountA.id) {
+        await heldBillingCheckoutResponse.promise;
+        state.releasedBillingCheckouts = (state.releasedBillingCheckouts ?? 0) + 1;
+        return json({ url: 'https://checkout.stripe.com/c/pay/account-a' }, accountA);
+      }
+      return json({ url: `https://checkout.stripe.com/c/pay/${scopedAccount.id}` });
     }
     if (path === '/api/support/feedback/my') {
       expect(requestedAccount).toBe(scopedAccount.id);
@@ -399,6 +418,7 @@ async function installAccountApi(
     releaseSupportList: heldSupportListResponse.release,
     releaseMobileToken: heldMobileTokenResponse.release,
     releasePushStatus: heldPushStatusResponse.release,
+    releaseBillingCheckout: heldBillingCheckoutResponse.release,
   };
 }
 
@@ -943,6 +963,52 @@ test('a delayed push status from account A cannot update Settings after account 
     await accountBPage.screenshot({ path: info.outputPath('push-status-account-switch-b.png') });
   } finally {
     fixtureA.releasePushStatus();
+  }
+});
+
+test('a delayed checkout URL from account A is not opened after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab billing account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    billingCheckoutAccounts: [], releasedBillingCheckouts: 0, plans: { [accountA.id]: 'free' },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, false, true);
+  const popups: Page[] = [];
+  page.on('popup', popup => popups.push(popup));
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await page.getByRole('button', { name: 'Выбрать тарифный план' }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Оформить Pro', exact: true }).click();
+  await page.getByRole('button', { name: 'Открыть Stripe Checkout', exact: true }).click();
+  await expect.poll(() => state.billingCheckoutAccounts?.length).toBe(1);
+  expect(state.billingCheckoutAccounts).toEqual([accountA.id]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    fixtureA.releaseBillingCheckout();
+    await expect.poll(() => state.releasedBillingCheckouts).toBe(1);
+    await page.waitForTimeout(200);
+
+    expect(popups).toHaveLength(0);
+    expect(page.url()).toContain('/#pro');
+    await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+    expect(await activeAccount(page)).toBe(accountB.id);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('billing-account-switch-b.png') });
+  } finally {
+    fixtureA.releaseBillingCheckout();
   }
 });
 
