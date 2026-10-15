@@ -915,7 +915,7 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   }
 });
 
-test('an unsaved recipe draft from account A is cleared when the same tab adopts account B', async ({ page, context }, info) => {
+test('an unsaved recipe draft from account A is cleared when another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
@@ -968,6 +968,48 @@ test('an unsaved recipe draft from account A is cleared when the same tab adopts
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   await switched.page.screenshot({ path: info.outputPath('recipe-draft-cleared-on-account-switch.png') });
   expect(fixtureA.counts.profileWrites).toEqual([]);
+});
+
+test('an unsaved progress measurement draft is cleared when another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#progress');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Новый замер', exact: true })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const weightDraft = page.getByLabel('Вес');
+  await weightDraft.fill('98.765');
+  await expect(weightDraft).toHaveValue('98.765');
+  const beforeSwitch = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const operationsBefore = operationsFor(beforeSwitch, accountA);
+  expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('heading', { name: 'Новый замер', exact: true })).toBeVisible();
+  await expect(weightDraft).not.toHaveValue('98.765');
+
+  const afterSwitch = await readDurableSnapshot(page);
+  expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);
+  expect(rawValue(afterSwitch, profileKey(accountA.id))).toBe(profileBefore);
+  expect(operationsFor(afterSwitch, accountA)).toEqual(operationsBefore);
+  expect(await switched.page.getByText('98.765', { exact: true }).count()).toBe(0);
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('progress-draft-cleared-on-account-switch.png') });
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
