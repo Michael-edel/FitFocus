@@ -1593,6 +1593,52 @@ test('WIS share completion from a retired session cannot restore its notice afte
   }
 });
 
+test('health report PDF is not downloaded when the account changes during font loading', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The account-switch PDF download acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fontRequestStarted = deferred();
+  const releaseFontRequest = deferred();
+  await page.route('**/*NotoSans-Regular*', async route => {
+    fontRequestStarted.release();
+    await releaseFontRequest.promise;
+    await route.continue();
+  });
+
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect(page.getByRole('button', { name: 'Краткий PDF', exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  try {
+    await page.getByRole('button', { name: 'Краткий PDF', exact: true }).click();
+    await fontRequestStarted.promise;
+
+    const switched = await openAccountB(context, state);
+    await waitForAccountSwitch(page);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    releaseFontRequest.release();
+
+    expect(await downloadPromise).toBe(false);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFontRequest.release();
+  }
+});
+
 test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox reload acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
