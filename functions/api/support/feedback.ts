@@ -25,14 +25,28 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
 /** Keeps support administration responses traceable without logging tickets or attachments. */
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
-  const response = await handleSupportPatch(context);
+  let response: Response;
+  try {
+    response = await handleSupportPatch(context);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "STATE_SESSION_CHANGED") throw error;
+    response = json({ error: "UNAUTH" }, 401);
+  }
+  response = withSessionGuard(response, context.request, "Admin");
   const requestId = requestIdFor(context.request);
   logApiEvent("support.admin.patch.response", { requestId, status: response.status });
   return withRequestId(response, requestId);
 };
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const response = await handleSupportGet(context);
+  let response: Response;
+  try {
+    response = await handleSupportGet(context);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "STATE_SESSION_CHANGED") throw error;
+    response = json({ error: "UNAUTH" }, 401);
+  }
+  response = withSessionGuard(response, context.request, "Admin");
   const requestId = requestIdFor(context.request);
   logApiEvent("support.admin.get.response", { requestId, status: response.status });
   return withRequestId(response, requestId);

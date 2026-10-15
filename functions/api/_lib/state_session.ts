@@ -6,18 +6,23 @@ export async function stateSessionId(user: Pick<SessionUser, 'sub' | 'sid'>): Pr
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** Opt-in guard closes the cookie-change race between /me and the state mutation. */
-export async function requireStateUser(request: Request, env: Parameters<typeof requireUser>[1]): Promise<SessionUser> {
-  const user = await requireUser(request, env);
+/** Rejects a request whose optional public proof belongs to another login session. */
+export async function assertStateRequestScope(user: Pick<SessionUser, 'sub' | 'sid'>, request: Request): Promise<void> {
   const account = request.headers.get('X-FitFocus-State-Account');
   const session = request.headers.get('X-FitFocus-State-Session');
   if ((account !== null || session !== null)
     && (account !== user.sub || session !== await stateSessionId(user))) throw new Error('STATE_SESSION_CHANGED');
+}
+
+/** Opt-in guard closes the cookie-change race between /me and the state mutation. */
+export async function requireStateUser(request: Request, env: Parameters<typeof requireUser>[1]): Promise<SessionUser> {
+  const user = await requireUser(request, env);
+  await assertStateRequestScope(user, request);
   return user;
 }
 
 /** A capability marker plus public scope lets a new client verify the guarded response. */
-export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing'): Response {
+export function withSessionGuard(response: Response, request: Request, resource: 'AI' | 'Weekly-Menu' | 'Achievements' | 'Family' | 'Family-Menu' | 'Support' | 'Mobile-Token' | 'Huawei' | 'Push' | 'Billing' | 'Admin'): Response {
   response.headers.set(`X-FitFocus-${resource}-Protocol`, '1');
   response.headers.set(`X-FitFocus-${resource}-Guard`, '1');
   for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {

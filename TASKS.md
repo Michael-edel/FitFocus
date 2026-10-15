@@ -523,6 +523,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   при доказанной причинной зависимости; независимую правку другой вкладки
   автоматически не перебазировать.
 - [ ] Перевести и проверить оставшиеся сетевые writers и callbacks приложения.
+- [x] Привязать административную панель, CSV-аудит, admin support и `logout_all`
+  к исходному account/session proof; сервер проверяет его до D1 role lookup и
+  admin-session side effects. Локальные transport/server regression tests,
+  общий unit suite, typechecks и build прошли; точный CI нового HEAD ожидает push.
+  [Контракт](docs/admin-session.md). Остальные callbacks и общий lifecycle
+  остаются открытыми.
 - [x] Проверить выдачу мобильного bearer-токена из Settings: fresh
   account/session proof, server scope до mint, guarded no-store response,
   очистка токена/setup link при смене логина и delayed account-switch E2E.

@@ -1,13 +1,14 @@
 // Cloudflare Pages Function: /api/logout_all
 // Revokes ALL sessions for current user and clears ff_session cookie.
 
-import { requireUser, json } from "./_lib/auth";
+import { json } from "./_lib/auth";
+import { requireStateUser, withSessionGuard } from "./_lib/state_session";
 import { revokeAllUserSessions } from "./_lib/session_revocation";
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 const handleLogoutAllPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const u = await requireUser(request, env);
+    const u = await requireStateUser(request, env);
 
     await revokeAllUserSessions(env.DB, u.sub);
 
@@ -39,7 +40,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const response = await handleLogoutAllPost(context);
   const requestId = requestIdFor(context.request);
   logApiEvent('auth.logout-all.response', { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withRequestId(withSessionGuard(response, context.request, 'Admin'), requestId);
 };
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };

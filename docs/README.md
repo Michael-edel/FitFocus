@@ -29,6 +29,7 @@
 | Что проверяется в завершении mock API-тестов? | [Жизненный цикл mock API](mock-api-lifecycle.md) |
 | Как сессия AI Совета защищает серию запросов и её историю? | [Сессия и история AI Совета](ai-council-session.md) |
 | Как аккаунт и сессия ограничивают обращения поддержки? | [Сессия обращений](support-session.md) |
+| Как административная панель привязана к login-сессии? | [Сессия админ-панели](admin-session.md) |
 | Как настройки и Service Worker привязывают push к активной сессии? | [Сессия push-уведомлений](push-session.md) |
 | Как checkout и смена тарифа привязаны к login-сессии? | [Сессия оплаты](billing-session.md) |
 | Как Huawei OAuth, sync и профильные изменения привязаны к входу? | [Сессия Huawei Health](huawei-health-session.md), затем [wearable API](wearable-sync.md) |

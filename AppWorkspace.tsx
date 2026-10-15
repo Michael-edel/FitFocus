@@ -355,7 +355,13 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       )}
       {activeTab === 'admin' && isAdmin && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
-          <AdminScreen />
+          <AdminScreen
+            key={loginGuard
+              ? `${loginGuard.accountId}:${loginGuard.sessionEpoch}:${loginGuard.serverSessionId}:${loginGuard.authFence}`
+              : `no-session:${currentUser?.id || 'anonymous'}`}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+          />
         </React.Suspense>
       )}
       {activeTab === 'support' && (
