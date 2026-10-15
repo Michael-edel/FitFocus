@@ -621,11 +621,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     retries; root, domain-strict и storage-strict typecheck и production build
     прошли. P0.4 остаётся открытым для остальных callbacks, кэшей и staging.
   - [x] Ограничить результат WIS-share исходной UI/session scope: notice hook
-    теперь хранит поколение владельца, а после системного share повторно
-    подтверждается durable read guard до успеха, телеметрии и достижения. До
+    теперь хранит поколение владельца; durable read guard проверяется перед
+    внешней передачей PNG и снова после возврата системного share API, прежде
+    чем обновлять уведомление, телеметрию или достижение. До
     фикса поздний callback после перехода A → B → A показывал успех старой
     операции в активном экране. Account-switch E2E прошёл 3/3 на desktop
-    Chromium/Firefox/WebKit без retries; unit 1308/1308 в 210 файлах, общий и
+    Chromium/Firefox/WebKit без retries; unit 1309/1309 в 210 файлах, общий и
     оба strict typecheck, production build и `git diff --check` прошли. CI нового
     SHA ожидает push. Остальной P0.4 audit, staging и полный lifecycle открыты.
 

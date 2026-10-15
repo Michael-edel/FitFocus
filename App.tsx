@@ -771,7 +771,12 @@ const App: React.FC = () => {
     trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
 
     try {
-      const method = await shareWisCard({ card, wis: weekly.wis, waitForFonts: waitForDocumentFonts });
+      const method = await shareWisCard({
+        card,
+        wis: weekly.wis,
+        waitForFonts: waitForDocumentFonts,
+        isCurrentSession: isWisShareSessionCurrent,
+      });
       if (!await isWisShareSessionCurrent()) return;
       setWisShareNotice('success', method === 'share_sheet'
         ? 'Карточка готова и передана в системное меню отправки.'
