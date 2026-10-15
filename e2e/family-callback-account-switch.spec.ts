@@ -912,3 +912,48 @@ test('a delayed family member update stays bound to its captured family after th
     fixture.releaseMemberUpdate();
   }
 });
+
+test('a delayed family member update from account A cannot affect account B after sign-in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family member account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyLoadAccounts: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const accountAFamilyLoads = state.familyLoadAccounts.filter(id => id === accountA.id).length;
+
+  await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
+  await expect.poll(() => state.memberRequests).toBe(1);
+  expect(state.memberTargetIds).toEqual([`family-${accountA.id}`]);
+
+  try {
+    const accountBPage = await openAccountB(context, state, errorsB);
+    expect(await activeAccount(page)).toBe(accountB.id);
+    const accountBFamilyLoads = state.familyLoadAccounts.filter(id => id === accountB.id).length;
+
+    fixtureA.releaseMemberUpdate();
+    await expect.poll(() => state.releasedMembers).toBe(1);
+    await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
+    await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+    expect(state.memberRequests).toBe(1);
+    expect(state.memberTargetIds).toEqual([`family-${accountA.id}`]);
+    expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
+    expect(state.familyLoadAccounts.filter(id => id === accountB.id)).toHaveLength(accountBFamilyLoads);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+    await accountBPage.screenshot({ path: info.outputPath('family-member-account-b.png') });
+  } finally {
+    fixtureA.releaseMemberUpdate();
+  }
+});
