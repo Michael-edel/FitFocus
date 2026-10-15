@@ -389,6 +389,7 @@ test('held coach retry cannot write for account A after another tab signs in as 
 
   try {
     const switched = await openAccountB(context, state);
+    await expect(switched.page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
     const accountBBefore = await readDurableSnapshot(switched.page);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
     const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));

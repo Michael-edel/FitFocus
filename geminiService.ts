@@ -498,12 +498,19 @@ export const setAiStorageScope = (userId: string | null) => {
   aiStorageScope = userId && String(userId).trim() ? String(userId) : null;
 };
 
-const scopedKey = (base: string) => (aiStorageScope ? `fitfocus_data_${aiStorageScope}_${base}` : base);
+const normalizedAiScope = (userId: string | null | undefined): string | null => {
+  const scope = userId === undefined ? aiStorageScope : userId;
+  return scope && String(scope).trim() ? String(scope) : null;
+};
+const scopedKey = (base: string, userId?: string | null) => {
+  const scope = normalizedAiScope(userId);
+  return scope ? `fitfocus_data_${scope}_${base}` : base;
+};
 const LS_COOLDOWN_KEY = () => scopedKey("ai_gemini_cooldown_until");
-const LS_STATUS_KEY = () => scopedKey("ai_last_status_v1");
+const LS_STATUS_KEY = (userId?: string | null) => scopedKey("ai_last_status_v1", userId);
 const LS_CACHE_PREFIX = () => scopedKey("ai_cache_v1:");
 const LS_FEATURE_LASTCALL_PREFIX = () => scopedKey("ai_feature_lastcall_v1:");
-const LS_LAST_ACTION_KEY = () => scopedKey("ai_last_action_v1");
+const LS_LAST_ACTION_KEY = (userId?: string | null) => scopedKey("ai_last_action_v1", userId);
 
 const FEATURE_MIN_INTERVAL_MS: Record<string, number> = {
   coach_advice: 10 * 60 * 1000,
@@ -547,9 +554,10 @@ const recordAiStatus = (s: AiLastStatus) => {
   } catch {}
 };
 
-export const readAiStatus = (): AiLastStatus | null => {
+export const readAiStatus = (userId?: string | null): AiLastStatus | null => {
+  if (userId === null || (userId !== undefined && !userId.trim())) return null;
   try {
-    const raw = localStorage.getItem(LS_STATUS_KEY());
+    const raw = localStorage.getItem(LS_STATUS_KEY(userId));
     if (!raw) return null;
     const parsed = safeJsonObject(raw);
     if (typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts) || typeof parsed.feature !== 'string' || !isAiStatusSource(parsed.source)) {
@@ -649,27 +657,39 @@ export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) =>
  */
 export const setLastAiAction = (action: AiActionRecord | null) => {
   try {
-    if (!action) localStorage.removeItem(LS_LAST_ACTION_KEY());
-    else localStorage.setItem(LS_LAST_ACTION_KEY(), JSON.stringify(action));
+    if (!action) {
+      localStorage.removeItem(LS_LAST_ACTION_KEY());
+      return;
+    }
+    if (!action.userId.trim()) return;
+    localStorage.setItem(LS_LAST_ACTION_KEY(action.userId), JSON.stringify(action));
+    // Retire an older unscoped copy only when its embedded owner matches this action.
+    const legacy = localStorage.getItem(LS_LAST_ACTION_KEY(null));
+    const legacyAction = legacy ? safeJsonObject(legacy) : null;
+    if (legacyAction?.userId === action.userId) localStorage.removeItem(LS_LAST_ACTION_KEY(null));
   } catch {}
 };
 
 /**
  * Получить последнее действие AI
  */
-export const getLastAiAction = (): AiActionRecord | null => {
+export const getLastAiAction = (userId?: string | null): AiActionRecord | null => {
+  if (userId === null || (userId !== undefined && !userId.trim())) return null;
   try {
-    const raw = localStorage.getItem(LS_LAST_ACTION_KEY());
+    const expectedOwner = normalizedAiScope(userId);
+    const scopedRaw = localStorage.getItem(LS_LAST_ACTION_KEY(userId));
+    const legacyRaw = expectedOwner && !scopedRaw ? localStorage.getItem(LS_LAST_ACTION_KEY(null)) : null;
+    const raw = scopedRaw ?? legacyRaw ?? (!expectedOwner ? localStorage.getItem(LS_LAST_ACTION_KEY(null)) : null);
     if (!raw) return null;
     const parsed = safeJsonObject(raw);
-    return typeof parsed.feature === 'string' && typeof parsed.type === 'string' && typeof parsed.userId === 'string'
-      ? {
+    if (typeof parsed.feature !== 'string' || typeof parsed.type !== 'string' || typeof parsed.userId !== 'string'
+      || (expectedOwner && parsed.userId !== expectedOwner)) return null;
+    return {
         feature: parsed.feature,
         type: parsed.type,
         userId: parsed.userId,
         ...(typeof parsed.actionId === 'string' ? { actionId: parsed.actionId } : {}),
-      }
-      : null;
+      };
   } catch { return null; }
 };
 
