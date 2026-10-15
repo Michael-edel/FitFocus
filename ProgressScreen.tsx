@@ -36,6 +36,7 @@ type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 type ProgressScreenProps = {
   currentUser: UserProfile | null;
   allowCachedUiStateRestore?: boolean;
+  isCurrentSession: () => boolean | Promise<boolean>;
   weightHistory: UserProfile['weightHistory'];
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
@@ -209,6 +210,7 @@ const parseWearableImport = (text: string): WearableImportPayload | null => {
 export default function ProgressScreen({
   currentUser,
   allowCachedUiStateRestore = true,
+  isCurrentSession,
   weightHistory,
   measurementsHistory,
   progressPhotos,
@@ -590,8 +592,9 @@ export default function ProgressScreen({
     progressDynamicsLastPoint && progressDynamicsFirstPoint ? progressDynamicsLastPoint.measurements - progressDynamicsFirstPoint.measurements : null;
 
   const exportComparisonPdf = async () => {
-    if (!currentUser || !canExportComparison) return;
+    if (!currentUser || !canExportComparison || !allowCachedUiStateRestore || !await isCurrentSession()) return;
     const { downloadProgressComparisonPdf } = await import('./pdf');
+    if (!await isCurrentSession()) return;
     await downloadProgressComparisonPdf({
       userName: currentUser.name,
       fromKey: compareFromKey,
@@ -608,7 +611,7 @@ export default function ProgressScreen({
       toPhoto: Boolean(compareToPhoto),
       totalPhotos: progressPhotosSorted.length,
       totalMeasurements: recentMeasurements.length,
-    });
+    }, { isCurrentSession });
   };
 
   const wearableSummary = wearableProvider && wearableEnabled !== false ? providerLabel[wearableProvider] : 'Не подключено';

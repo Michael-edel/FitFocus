@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ensurePdfInterFont } from './font';
+import { isPdfExportSessionCurrent, type PdfExportOptions } from './exportSession';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle } from './theme';
 
 type ComparisonValue = number | null | undefined;
@@ -31,7 +32,7 @@ const formatDelta = (from?: ComparisonValue, to?: ComparisonValue, unit = '') =>
   return `${sign}${diff.toFixed(1)} ${unit}`.trim();
 };
 
-export async function downloadProgressComparisonPdf(input: ProgressComparisonPdfInput) {
+export async function downloadProgressComparisonPdf(input: ProgressComparisonPdfInput, options?: PdfExportOptions): Promise<boolean> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   await ensurePdfInterFont(doc);
   doc.setFont('Inter', 'normal');
@@ -124,5 +125,7 @@ export async function downloadProgressComparisonPdf(input: ProgressComparisonPdf
   doc.setTextColor(...PDF_COLORS.ink);
 
   pdfFooter(doc, generatedAt);
+  if (!await isPdfExportSessionCurrent(options)) return false;
   doc.save(`FitFocus_Progress_Comparison_${input.fromKey}_to_${input.toKey}.pdf`);
+  return true;
 }

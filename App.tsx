@@ -737,8 +737,6 @@ const App: React.FC = () => {
     gainSurplus: DEFAULT_SURPLUS,
   }), [weekly, currentUser]);
 
-  const exportWeeklyPDF = exportWeeklyReportPdf;
-
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
   const wisShareScope = accountSessionRenderKey(loginReadGuard, currentUser?.id);
   const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice(
@@ -746,7 +744,7 @@ const App: React.FC = () => {
     allowCachedUiStateRestore,
   );
 
-  const isWisShareSessionCurrent = useCallback(async () => {
+  const isCurrentAccountSession = useCallback(async () => {
     if (!allowCachedUiStateRestore || !isCurrentProfileSession()) return false;
     if (loginReadGuard) {
       try {
@@ -757,6 +755,12 @@ const App: React.FC = () => {
     }
     return allowCachedUiStateRestore && isCurrentProfileSession();
   }, [allowCachedUiStateRestore, isCurrentProfileSession, loginReadGuard]);
+
+  const exportWeeklyPDF = useCallback(async (report: WeeklyStoredReport) => {
+    if (!await isCurrentAccountSession()) return;
+    const saved = await exportWeeklyReportPdf(report, { isCurrentSession: isCurrentAccountSession });
+    if (!saved || !await isCurrentAccountSession()) return;
+  }, [isCurrentAccountSession]);
 
   const handleShareWisCard = useCallback(async () => {
     if (!currentUser || !weekly || !allowCachedUiStateRestore || !isCurrentProfileSession()) return;
@@ -775,9 +779,9 @@ const App: React.FC = () => {
         card,
         wis: weekly.wis,
         waitForFonts: waitForDocumentFonts,
-        isCurrentSession: isWisShareSessionCurrent,
+        isCurrentSession: isCurrentAccountSession,
       });
-      if (!await isWisShareSessionCurrent()) return;
+      if (!await isCurrentAccountSession()) return;
       setWisShareNotice('success', method === 'share_sheet'
         ? 'Карточка готова и передана в системное меню отправки.'
         : 'Системная отправка недоступна — PNG скачан на устройство.');
@@ -785,12 +789,12 @@ const App: React.FC = () => {
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
       return;
     } catch (error: unknown) {
-      if (!await isWisShareSessionCurrent()) return;
+      if (!await isCurrentAccountSession()) return;
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
       trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
-  }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isWisShareSessionCurrent,
+  }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isCurrentAccountSession,
     weekly, weeklyReports.length, setWisShareNotice]);
 
   const aiReportGenerationRef = useWeeklyAiReport({
@@ -1123,18 +1127,27 @@ const App: React.FC = () => {
   }, [currentUser, persistUser]);
 
   const exportShortPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadShortHealthReportPdf } = await import('./pdf');
-    await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadShortHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, isCurrentAccountSession]);
 
   const exportDetailedPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadDetailedHealthReportPdf } = await import('./pdf');
-    await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadDetailedHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog,
+      isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog, isCurrentAccountSession]);
 
   const bootstrapAuth = useCallback(async () => {
     const attempt = ++authBootstrapAttemptRef.current;
@@ -1509,6 +1522,7 @@ const logWeight = useCallback(() => {
       dismissAchievementToast: achievements.dismissAchievementToast,
     },
     progress: {
+      isCurrentSession: isCurrentAccountSession,
       weightHistory: currentUser?.weightHistory || [],
       measurementsHistory: currentUser?.measurementsHistory || [],
       progressPhotos: currentUser?.progressPhotos || [],

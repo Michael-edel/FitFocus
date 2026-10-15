@@ -17,6 +17,7 @@ import { isRecord, parseJson } from './safeJson';
 type ProgressArchiveScreenProps = {
   currentUser: UserProfile | null;
   allowCachedUiStateRestore?: boolean;
+  isCurrentSession: () => boolean | Promise<boolean>;
   weightHistory: UserProfile['weightHistory'];
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
@@ -62,6 +63,7 @@ const toDateKey = (iso?: string | null) => toLocalDayKey(iso);
 export default function ProgressArchiveScreen({
   currentUser,
   allowCachedUiStateRestore = true,
+  isCurrentSession,
   weightHistory,
   measurementsHistory,
   progressPhotos,
@@ -197,8 +199,9 @@ export default function ProgressArchiveScreen({
   }, [waistDiff, weightDiff]);
 
   const exportArchivePdf = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !allowCachedUiStateRestore || !await isCurrentSession()) return;
     const { downloadProgressArchivePdf } = await import('./pdf');
+    if (!await isCurrentSession()) return;
     await downloadProgressArchivePdf({
       userName: currentUser.name || 'Пользователь',
       generatedAt: new Date().toLocaleString('ru-RU'),
@@ -225,7 +228,7 @@ export default function ProgressArchiveScreen({
       wearableMetricsUpdatedAt,
       summary: progressSummary,
       timelineItems: archiveTimeline.slice(0, 8),
-    });
+    }, { isCurrentSession });
   };
 
   const providerLabel = (provider: WearableProvider) => {
