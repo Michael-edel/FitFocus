@@ -670,6 +670,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   передаёт accountId во все проверки последнего действия в Coach, Plateau и
   retry; 20 профильных unit, typecheck, production build и E2E 3/3 прошли
   локально. Полный CI точного HEAD запускается после push.
+  Follow-up [`e7d5a5c`](https://github.com/Michael-edel/FitFocus/commit/e7d5a5c)
+  привязывает все пять PDF download sites к действующей account/session и
+  повторно проверяет session непосредственно перед `doc.save()`. Новый тест
+  задерживает загрузку шрифта, меняет session и подтверждает отсутствие файла;
+  также проверяется успешный экспорт при неизменной session. Полный unit suite
+  прошёл 1311/1311 в 211 файлах, три typecheck и production build прошли.
+  Точный CI ожидается; остальные callback-контракты, staging и lifecycle
+  остаются открытыми.
   Остальные callback-контракты, точный CI, проверка внешних потребителей и
   staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует
