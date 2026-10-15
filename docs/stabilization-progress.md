@@ -3579,3 +3579,16 @@ subject, проверяет guard до запроса и перед отправ
 typecheck, production build, auth scope/API invariants/admin guards/privacy и
 diff check. Точный workflow SHA `956cf96` ещё ожидает публикации; полный P0.5,
 старые unscoped clients, OAuth/BFCache, staging и release gate не закрыты.
+
+## P0.5 — обязательный session proof для invite redeem, `55bc09e`, 15.10.2026
+
+`/api/invite/redeem` перешёл на `requireScopedStateUser`: отсутствие парных
+account/session headers, неполная привязка и proof прежней сессии отклоняются
+до чтения JSON и расходования invite. Тесты проверяют смену cookie/account,
+отсутствующий и неполный proof, успешный consume с текущим scope и oversized
+body. Старые сборки без proof получают 401 при регистрации с invite.
+
+На точном локальном SHA `55bc09e` прошли полный unit suite — 1216/1216 в 208
+файлах, `npm run typecheck`, `npm run check:api-invariants`, `npm run build`
+и `git diff --check`. CI этого SHA ожидает push; staging-регистрация,
+реальные OAuth/BFCache проверки и общий P0.5 lifecycle остаются открытыми.

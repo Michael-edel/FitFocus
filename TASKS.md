@@ -532,9 +532,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   push ещё не подтверждён. Старый unscoped logout и полный lifecycle остаются
   открытыми. [Контракт](docs/account-lifecycle-session.md).
 - [x] Требовать парный account/session proof для расходования invite при
-  регистрации; отсутствие и stale proof отклоняются до body/consume. Проверки
-  invite guard и oversized body проходят; старые клиенты без proof получают
-  401. Общая приёмка registration и staging остаются открытыми.
+  регистрации; отсутствие и устаревший proof отклоняются до body/consume. Проверки
+  invite guard и oversized body проходят. На `55bc09e`: полный unit suite
+  1216/1216 в 208 файлах, typecheck, API invariants, production build и
+  `git diff --check` прошли; точный CI ожидает push. Старые клиенты без proof
+  получают 401. Общая приёмка registration и staging остаются открытыми.
 - [x] Привязать административную панель, CSV-аудит, admin support и `logout_all`
   к исходному account/session proof; сервер проверяет его до D1 role lookup и
   admin-session side effects. Локальные transport/server regression tests,

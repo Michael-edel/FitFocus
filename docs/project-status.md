@@ -3,6 +3,16 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## Локальный кандидат — proof для invite redeem, `55bc09e`
+
+`/api/invite/redeem` теперь требует парные account/session headers через
+`requireScopedStateUser`; отсутствующие или неполные заголовки и proof от
+прежней сессии дают 401 до чтения body и расходования приглашения. Старые
+клиентские сборки без proof нужно обновить для регистрации с invite. Локально прошли 1216 unit-тестов в
+208 файлах, typecheck, API invariants и production build. Точный CI этого SHA
+ожидает push; staging-регистрация и остальной P0.5 lifecycle остаются открытыми.
+[Контракт регистрации](registration-persistence.md).
+
 ## Локальный кандидат — logout и удаление аккаунта, `956cf96`
 
 Удаление аккаунта требует совпадающий account/session proof на клиенте и
