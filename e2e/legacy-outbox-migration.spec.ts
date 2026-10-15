@@ -10,8 +10,6 @@ const targetKey = `fitfocus_data_${account}_plan_task_done`;
 const orphanKey = 'fitfocus_data_another-account_orphan';
 const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
-// Keep in sync with the production sender lease in storage/stateSync.ts.
-const SENDER_LEASE_MS = 30_000;
 
 type LegacyRecord = { type: string; key: string; value?: string; baseVersion?: number; retryCount?: number };
 type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; baseVersion: number;
@@ -106,7 +104,7 @@ function quarantinedRecordExists(records: MigrationUnknown[], key: string): bool
     && typeof rawRecord === 'object' && (rawRecord as { key?: unknown }).key === key);
 }
 
-test('imports a pending write produced by the legacy bundle and keeps unknown ownership quarantined', async ({ context }, info) => {
+test('preserves legacy intent without sending an operation whose server generation is unproven', async ({ context }, info) => {
   test.setTimeout(120_000);
   const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'), {
     stateUnavailable: true, currentStateUnavailable: true,
@@ -132,7 +130,6 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     expect(generatedRecord).toMatchObject({ type: 'put', key: targetKey });
     expect(generatedRecord?.value).toContain(taskEntry);
     expect(generatedRecord && 'baseVersion' in generatedRecord).toBe(false);
-    expect(generatedRecord && 'retryCount' in generatedRecord).toBe(false);
     server.recoverState();
     await expect.poll(() => server.counts.legacyStateScopeRejected).toBeGreaterThan(0);
     legacyWritesBeforeUpdate = server.counts.legacyStatePutAttempts;
@@ -153,7 +150,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     await openApp(currentPage, `${server.origin}/?release=next#plan`);
     await expect(currentPage).toHaveTitle(/FitFocus/);
     await expect.poll(() => currentPage.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state ?? null)).toBe('installed');
-    await expect(currentPage.getByText(/Сначала нужно проверить импорт прежних изменений/)).toBeVisible();
+    await expect(currentPage.getByRole('alert')).toContainText('Обнаружен конфликт данных');
 
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
@@ -168,13 +165,15 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         targetOperationOwner: operation?.accountId,
         targetOperationValue: operation?.value,
         targetOperationBaseVersion: operation?.baseVersion,
+        targetOperationStatus: operation?.status,
+        targetOperationReason: operation?.reason,
         foreignState: quarantined?.state,
         foreignReason: quarantined?.reason,
         foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
       };
-    }).toEqual({
+    }, { timeout: 30_000 }).toEqual({
       sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
       targetState: 'imported',
       targetOwner: account,
@@ -182,6 +181,8 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       targetOperationOwner: account,
       targetOperationValue: generatedRecord?.value,
       targetOperationBaseVersion: 0,
+      targetOperationStatus: 'conflicted',
+      targetOperationReason: 'legacy-server-generation-unproven',
       foreignState: 'unknown',
       foreignReason: 'unknown-owner',
       foreignRawRetained: true,
@@ -202,7 +203,9 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     await expect.poll(() => oldPage.evaluate((key) => localStorage.getItem(key), targetKey)).toBe(updatedOldValue);
     const updatedOldSource = await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey);
     expect(updatedOldSource).toBe(oldSource);
-    expect(await oldQueueRecord(oldPage, targetKey)).toEqual(previousOldRecord);
+    const oldRecordAfterClick = await oldQueueRecord(oldPage, targetKey);
+    expect(oldRecordAfterClick).toMatchObject({ type: 'put', key: targetKey, value: previousOldRecord.value });
+    expect(oldRecordAfterClick && 'baseVersion' in oldRecordAfterClick).toBe(false);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
       const original = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
@@ -217,7 +220,7 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         preservedOperationStatus: preserved?.status,
         preservedOperationValue: preserved?.value,
       };
-    }).toEqual({
+    }, { timeout: 20_000 }).toEqual({
       source: updatedOldSource,
       sourceMatches: true,
       sendAllowed: false,
@@ -255,21 +258,11 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
     const beforeRecovery = await migrationState(currentPage);
     const importedBeforeRecovery = itemForRecord(beforeRecovery.migrationItems, targetKey, previousOldRecord.value!);
     const targetBeforeRecovery = beforeRecovery.operations.find(operation => operation.opId === importedBeforeRecovery?.opId);
-    const eligibleAtMs = targetBeforeRecovery?.status === 'sending' && targetBeforeRecovery.attempt
-      ? targetBeforeRecovery.attempt.startedAtMs + SENDER_LEASE_MS
-      : targetBeforeRecovery?.nextAttemptAtMs ?? beforeRecovery.nowMs;
-    const recoveryTimeoutMs = Math.max(10_000, eligibleAtMs - beforeRecovery.nowMs + 10_000);
-    // A request aborted by navigation remains sending until its durable lease
-    // expires. Otherwise the explicit 503 response returns it to pending.
-    await expect.poll(async () => {
-      const state = await migrationState(currentPage);
-      const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
-      const operation = state.operations.find(entry => entry.opId === imported?.opId);
-      return operation?.status === 'pending' && operation.reason === 'http-503';
-    }, { timeout: recoveryTimeoutMs }).toBe(true);
+    expect(targetBeforeRecovery).toMatchObject({ status: 'conflicted', baseVersion: 0,
+      reason: 'legacy-server-generation-unproven' });
+    // The fresh all-client fence may open the sender gate for current work, but
+    // it cannot establish which server generation this old operation targeted.
     expect(server.stateWriteKeys).not.toContain(targetKey);
-    server.recoverCurrentState();
-    await expect.poll(() => server.stateWriteKeys.includes(targetKey)).toBe(true);
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
       const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
@@ -281,6 +274,8 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
         targetOwner: imported?.accountId,
         acknowledgedVersion: imported?.acknowledgedVersion,
         operationPresent,
+        targetOperationStatus: state.operations.find(entry => entry.opId === imported?.opId)?.status,
+        targetOperationReason: state.operations.find(entry => entry.opId === imported?.opId)?.reason,
         preservedOperationStatus: preserved?.status,
         preservedOperationReason: preserved?.reason,
         preservedOperationValue: preserved?.value,
@@ -294,8 +289,10 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
       targetState: 'imported',
       targetOwner: account,
-      acknowledgedVersion: 1,
-      operationPresent: false,
+      acknowledgedVersion: undefined,
+      operationPresent: true,
+      targetOperationStatus: 'conflicted',
+      targetOperationReason: 'legacy-server-generation-unproven',
       preservedOperationStatus: 'conflicted',
       preservedOperationReason: 'legacy-writer-local-only',
       preservedOperationValue: updatedOldValue,
@@ -305,7 +302,8 @@ test('imports a pending write produced by the legacy bundle and keeps unknown ow
       sendAllowed: true,
       writersStopped: true,
     });
-    expect(server.stateWriteKeys).toContain(targetKey);
+    expect(server.counts.currentStatePutAccepted).toBe(0);
+    expect(server.stateWriteKeys).not.toContain(targetKey);
     expect(server.stateWriteKeys).not.toContain(orphanKey);
     expect(server.counts.legacyStatePutAttempts).toBe(legacyWritesBeforeUpdate);
     // The pinned old profile writer has no current scope headers; its request is denied as expected.

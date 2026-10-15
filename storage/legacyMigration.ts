@@ -2,12 +2,14 @@ import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemI
   legacyDeletedAccountMetaId, legacyFingerprint, legacyFingerprintFields, normalizeLegacyRecord,
   type LegacyInvalidReason, type NormalizedLegacyQueueRecord } from './legacyQueue';
 import { isCurrentLegacyWriterFenceProof, type LegacyWriterFenceProof } from './legacyWriterFence';
-import { outboxKeyOwnerId, writeOutboxInTransaction, type OutboxOperation } from './durableOutbox';
+import { outboxKeyOwnerId, outboxKeyStateId, writeOutboxInTransaction, type OutboxOperation } from './durableOutbox';
 import { StateDatabase, StateStorageError, STATE_STORES, afterIndexedRequests, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 
 export type MigrationUnknownReason = LegacyInvalidReason | 'invalid-json' | 'invalid-container'
   | 'unknown-owner' | 'ambiguous-owner' | 'ownership-conflict' | 'forbidden-key'
   | 'ambiguous-duplicate' | 'ambiguous-key' | 'fingerprint-collision' | 'missing-imported-operation';
+
+const LEGACY_GENERATION_UNPROVEN = 'legacy-server-generation-unproven';
 
 /** Exact key ownership established by authentication/data provenance, not by the current UI selection. */
 export type VerifiedLegacyOwners = ReadonlyMap<string, readonly string[]>;
@@ -306,15 +308,19 @@ export class LegacyQueueMigration {
             const allMetaRequest = meta.getAll();
             const ledgerRequest = tx.objectStore(STATE_STORES.migrationItems).getAll();
             const unknownRequest = tx.objectStore(STATE_STORES.migrationUnknown).getAll();
+            const outboxRequest = tx.objectStore(STATE_STORES.outbox).getAll();
             return afterIndexedRequests(tx, [
               allMetaRequest as unknown as IDBRequest<unknown>,
               ledgerRequest as unknown as IDBRequest<unknown>,
               unknownRequest as unknown as IDBRequest<unknown>,
-            ], ([metaValue, ledgerValue, unknownValue]) => {
+              outboxRequest as unknown as IDBRequest<unknown>,
+            ], ([metaValue, ledgerValue, unknownValue, outboxValue]) => {
               const allMeta = metaValue as Snapshot[];
               const ledgers = ledgerValue as MigrationItem[];
               const unknown = (unknownValue as MigrationUnknown[])
                 .filter((entry) => entry.sourceKey === LEGACY_QUEUE_SOURCE_KEY && !entry.resolved);
+              const unresolvedLegacyOperations = (outboxValue as OutboxOperation[])
+                .filter((operation) => operation.migrationSourceKey === LEGACY_QUEUE_SOURCE_KEY).length;
               let imported = 0;
               for (const item of prepared.items) {
                 const ledger = ledgers.find((entry) => entry.id === legacyMigrationItemId(item.fingerprint));
@@ -327,10 +333,11 @@ export class LegacyQueueMigration {
               const sourceMatches = this.readSource() === raw;
               const sendAllowed = writersStopped && sourceMatches && processedRecords === prepared.total
                 && pendingSnapshotRecords === 0 && !unauditedSnapshot;
+              const unresolvedRecords = unknown.length + unresolvedLegacyOperations;
               const final: StoredProgress = { ...current, writersStopped,
-                status: sendAllowed && unknown.length === 0 ? 'completed' : 'partial',
+                status: sendAllowed && unresolvedRecords === 0 ? 'completed' : 'partial',
                 processedRecords, pendingSnapshotRecords, snapshotAuditComplete: !unauditedSnapshot,
-                importedRecords: imported, unresolvedRecords: unknown.length, sourceMatches, sendAllowed };
+                importedRecords: imported, unresolvedRecords, sourceMatches, sendAllowed };
               meta.put(final);
               const { id: _id, runId: _runId, ...publicProgress } = final;
               return publicProgress;
@@ -379,6 +386,7 @@ export class LegacyQueueMigration {
       if (item.record) {
         queue('owner', meta.get(outboxKeyOwnerId(item.record.key)));
         queue('value', values.get(item.record.key));
+        if (item.accountId) queue('keyState', meta.get(outboxKeyStateId(item.accountId, item.record.key)));
       }
       for (const [index, unknownId] of (prior?.unknownIds ?? []).entries()) queue(`priorUnknown:${index}`, unknownStore.get(unknownId));
 
@@ -412,7 +420,9 @@ export class LegacyQueueMigration {
           const matches = operation && record && operation.accountId === prior.accountId && operation.opId === prior.opId
             && operation.migrationSourceKey === LEGACY_QUEUE_SOURCE_KEY && operation.migrationCanonical === item.canonical
             && operation.migrationFingerprint === item.fingerprint && operation.writerId === `legacy:${item.fingerprint}`
-            && operation.key === record.key && operation.type === record.type && operation.baseVersion === record.baseVersion
+            && operation.key === record.key && operation.type === record.type
+            && (operation.baseVersion === record.baseVersion
+              || operation.status === 'conflicted' && operation.reason === LEGACY_GENERATION_UNPROVEN && operation.baseVersion === 0)
             && (record.type === 'put' ? operation.type === 'put' && operation.value === record.value : !('value' in operation));
           if (!validBinding || (!operation && !acknowledged) || (operation && (!matches
             || prior.acknowledgedVersion !== undefined || prior.acknowledgedAtMs !== undefined))) reason = 'missing-imported-operation';
@@ -430,6 +440,27 @@ export class LegacyQueueMigration {
 
         const commitImported = (created?: OutboxOperation): T => {
           if (created) { operation = created; ledger.opId = created.opId; }
+          if (operation && record && accountId && !acknowledged) {
+            // An old baseVersion does not prove that it names the current server generation.
+            // Keep the intent durable, but never let that number make the legacy operation sendable.
+            const normalizeGeneration = !!created || operation.status !== 'conflicted'
+              || operation.reason !== LEGACY_GENERATION_UNPROVEN || operation.baseVersion !== 0 || !!operation.attempt;
+            if (normalizeGeneration) {
+              const blocked: OutboxOperation = { ...operation, baseVersion: 0, status: 'conflicted',
+                reason: LEGACY_GENERATION_UNPROVEN, updatedAtMs: Date.now() };
+              delete blocked.attempt;
+              outbox.put(blocked);
+              operation = blocked;
+            }
+            if (normalizeGeneration) {
+              const keyState = read<{ id: string; accountId: string; key: string; lastRevision: number; valueRevision: number; confirmedVersion: number; headOpId?: string }>('keyState');
+              if (keyState) {
+                const reset = { ...keyState, confirmedVersion: 0 };
+                if (reset.headOpId === operation.opId) delete reset.headOpId;
+                meta.put(reset);
+              }
+            }
+          }
           ledger.accountId = accountId;
           for (const [index, unknownId] of ledger.unknownIds.entries()) {
             const unknown = read<MigrationUnknown>(`priorUnknown:${index}`);
@@ -480,16 +511,16 @@ export class LegacyQueueMigration {
           const nowMs = Date.now();
           let nextResult!: T;
           const write = writeOutboxInTransaction(tx, {
-            accountId: accountId!, writerId: `legacy:${item.fingerprint}`, baseVersion: legacyRecord.baseVersion,
+            accountId: accountId!, writerId: `legacy:${item.fingerprint}`, baseVersion: 0,
             intent: legacyRecord.type === 'put'
               ? { type: 'put', key: legacyRecord.key, value: legacyRecord.value }
               : { type: 'delete', key: legacyRecord.key },
           }, {
             opId: item.opId, nowMs,
-            conflictReason: Number.isSafeInteger(legacyRecord.baseVersion) && Number.isSafeInteger(legacyRecord.retryCount)
-              ? undefined : 'legacy-unsupported-metadata',
+            conflictReason: LEGACY_GENERATION_UNPROVEN,
             legacy: { sourceKey: LEGACY_QUEUE_SOURCE_KEY, fingerprint: item.fingerprint,
               canonical: item.canonical, retryCount: legacyRecord.retryCount },
+            preserveLegacyValueOnConflict: true,
             onOperationCreated: (created) => { nextResult = commitImported(created); },
           });
           return write.then(() => nextResult);

@@ -3,6 +3,21 @@
 Сверено: 15.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 
+## P0.7/P0.8 — legacy intent без доказанного поколения
+
+Рабочее дерево на базе `24aa070` сохраняет старую операцию как видимый конфликт
+`legacy-server-generation-unproven` с `baseVersion: 0`. Уже существующая
+pending/sending операция атомарно снимается с отправки; поздний ответ старого
+запроса не подтверждает новую версию. Исходный источник, payload и migration
+ledger сохраняются. Старое значение попадает в durable storage только когда
+это не перезаписывает другую текущую операцию; оно не становится sendable.
+
+Проверки текущего дерева: unit 1279/1279, общий и domain/storage strict
+typecheck, production build, old/new migration browser/PWA matrix 7/7 и
+`git diff --check`. Точный CI после публикации и staging ещё не проверены.
+Безопасное ручное разрешение legacy-конфликтов, остальные callbacks и полный
+lifecycle остаются открытыми; в [плане](../TASKS.md) открыты 34 пункта.
+
 ## Старая вкладка: сохранение local-only изменения
 
 После отказа старому unscoped API старая вкладка могла сохранить следующее
@@ -13,7 +28,7 @@
 реальный второй клик в старом bundle на том же origin и подтверждает, что legacy
 queue осталась прежней.
 
-Локально прошли полный unit-набор (1278/1278), `typecheck`, domain/storage strict
+Локально прошли полный unit-набор (1279/1279), `typecheck`, domain/storage strict
 typecheck, production build и old/new migration E2E (7/7 браузерных/PWA-проектов,
 без retries). Точный CI нового SHA и staging ещё требуют проверки. Profile
 callbacks и удаление localStorage ключа старой вкладкой остаются отдельными

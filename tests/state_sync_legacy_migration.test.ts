@@ -40,13 +40,14 @@ it('imports only records owned by the freshly authenticated account and preserve
   sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
     verifyLegacyWritersStopped: async () => writerFence() });
   expect(await sync.connect(accountId)).toBe(true);
-  expect(await migration.progress()).toMatchObject({ status: 'partial', writersStopped: true, sendAllowed: true, importedRecords: 1, unresolvedRecords: 1 });
-  expect(await outbox.list(accountId)).toMatchObject([{ key: ownKey, value: '{"theme":"dark"}', status: 'pending' }]);
+  expect(await migration.progress()).toMatchObject({ status: 'partial', writersStopped: true, sendAllowed: true, importedRecords: 1, unresolvedRecords: 2 });
+  expect(await outbox.list(accountId)).toMatchObject([{ key: ownKey, value: '{"theme":"dark"}', status: 'conflicted',
+    reason: 'legacy-server-generation-unproven', baseVersion: 0 }]);
   expect(await outbox.list('other-account')).toEqual([]);
   expect(await migration.unknown()).toMatchObject([{ rawRecord: { type: 'put', key: otherKey, value: '{"theme":"light"}' }, reason: 'unknown-owner' }]);
   const active = (await outbox.sessionState()).active!;
   expect(await outbox.claim({ accountId, sessionEpoch: active.sessionEpoch, owner: 'test-sender', nowMs: Date.now(), leaseMs: 30_000 }))
-    .toMatchObject({ key: ownKey, value: '{"theme":"dark"}' });
+    .toBeNull();
   expect(fetchImpl).toHaveBeenCalledTimes(1);
   expect(source.getItem(LEGACY_QUEUE_SOURCE_KEY)).toBe(legacySourceValue);
 });
@@ -149,7 +150,8 @@ it('holds the sender until runtime migration and the all-client fence finish', a
   releaseFence(writerFence());
   await connecting;
   await flush;
-  expect(writes).toContain('/api/state');
+  expect(writes).toEqual([]);
+  expect(await outbox.list(accountId)).toMatchObject([{ status: 'conflicted', reason: 'legacy-server-generation-unproven' }]);
   expect((await outbox.sessionState()).active?.pause).toBeUndefined();
   expect(await migration.progress()).toMatchObject({ status: 'partial', sendAllowed: true });
 });

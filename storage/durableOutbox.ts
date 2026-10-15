@@ -53,7 +53,8 @@ export type OutboxOutcome =
   | { kind: 'failed'; reason: string }
   | { kind: 'retry'; reason: string; nextAttemptAtMs: number; pause?: StateSyncPause };
 
-const keyStateId = (accountId: string, key: string) => `key:${JSON.stringify([accountId, key])}`;
+export const outboxKeyStateId = (accountId: string, key: string) => `key:${JSON.stringify([accountId, key])}`;
+const keyStateId = outboxKeyStateId;
 export const outboxKeyOwnerId = (key: string) => `owner:${JSON.stringify(key)}`;
 const finiteInteger = (value: number) => Number.isSafeInteger(value) && value >= 0;
 function requireText(value: string): void { if (typeof value !== 'string' || !value.length) throw new Error('OUTBOX_INVALID_IDENTITY'); }
@@ -86,6 +87,7 @@ export function writeOutboxInTransaction(
   context: {
     opId: string; nowMs: number; conflictReason?: string;
     legacy?: { sourceKey: string; fingerprint: string; canonical: string; retryCount: number };
+    preserveLegacyValueOnConflict?: boolean;
     onOperationCreated?: (operation: OutboxOperation) => void;
   },
 ): Promise<OutboxOperation> {
@@ -188,6 +190,12 @@ export function writeOutboxInTransaction(
       const values = tx.objectStore(STATE_STORES.values);
       if (operation.type === 'put') values.put({ key: operation.key, value: operation.value, accountId: operation.accountId, updatedAt: context.nowMs });
       else values.delete(operation.key);
+    } else if (context.preserveLegacyValueOnConflict && context.legacy && operation.type === 'put' && !existingValue
+      && (!meta.headOpId || meta.headOpId === operation.opId)
+      && keyOperations.every((existing) => existing.opId === operation.opId)) {
+      // Keep the legacy payload durable for backup/recovery, without making the
+      // conflicted operation the key's active head or replacing another intent.
+      tx.objectStore(STATE_STORES.values).put({ key: operation.key, value: operation.value, accountId: operation.accountId, updatedAt: context.nowMs });
     }
     outbox.add(operation);
     metaStore.put({ id: ownerId, key: input.intent.key, accountId: input.accountId });

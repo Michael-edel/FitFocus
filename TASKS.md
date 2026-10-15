@@ -1,15 +1,14 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 15.10.2026. Текущая ветка — `durable-outbox`, HEAD
-[`404b3da`](https://github.com/Michael-edel/FitFocus/commit/404b3da1a5cc19ff94ac2ecb4809d55125d62c94).
-Последняя правка сохраняет запись старой вкладки с auth-паузой в IndexedDB
-как конфликт `legacy-writer-local-only`; UI-регрессия проверяет реальный второй
-клик. Полная migration-матрица прошла 7/7. Safari profile durability повторно
-прошёл 24/24, а Firefox PWA update — 5/5 последовательных прогонов без retries;
-оба исторических сбоя не воспроизвелись, их первопричина не подтверждена.
-Push late-response и native Service Worker recovery прошли 2/2 без retries.
-Точный CI `38742243646` для HEAD `404b3da` ещё выполняет E2E; локальные
-проверки не заменяют его итог.
+Обновлено: 15.10.2026. Текущая локальная ветка — `durable-outbox`, основана на
+[`24aa070`](https://github.com/Michael-edel/FitFocus/commit/24aa070). Работа над
+безопасной миграцией старой очереди не завершена: операции без доказанного
+серверного поколения теперь остаются конфликтами, а payload сохраняется в
+durable storage. Локально прошли unit (1279/1279), общий и оба strict typecheck,
+production build и old/new migration E2E (7/7, без retries). В рабочем плане
+остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока не закрыт
+полностью. Точный CI этой локальной правки ожидает push; staging, выпуск и
+интеграция в защищённую `main` не подтверждены.
 
 Тестовые follow-up `ad89020` и `aa4073c` усиливают PWA update acceptance и
 устраняют две flaky-проверки, замеченные в CI на `96937ea`. Локально прошли
@@ -869,7 +868,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить SQLite: delete/recreate/stale update, гонки, миграцию,
   экспорт, перенос legacy-аккаунта и hard delete.
 - [ ] Подключить совместимый клиент и проверяемый барьер старых writers;
-  отдельно обработать старые операции без доказанного серверного поколения.
+- [x] Не повышать legacy `baseVersion` до доказанного серверного поколения:
+  импортировать старые операции как конфликт с `baseVersion=0`, закрыть claim,
+  атомарно снимать старую попытку и отклонять поздний ack. Unit и browser
+  acceptance зафиксированы в [контракте миграции](docs/legacy-migration.md).
 - [ ] Проверить delete → recreate → stale update, гонку пакетной записи,
   миграцию, экспорт и удаление аккаунта на staging.
 
@@ -949,8 +951,9 @@ all-client Service Worker fence, атомарные migration items и quarantin
 - [x] Подключить guarded bootstrap/state-hydration и auth-fence (`dac2de2`).
 - [x] Проверить runtime-импорт старого и нового bundle на одном origin с
   реальным pending intent: сохраняются владелец, ledger и исходный legacy-ключ;
-  неизвестный владелец помещён в карантин; старое окно не отправляет запись до
-  обновления, а новая очередь отправляет её после all-client fence.
+  неизвестный владелец помещён в карантин; old/new clients обновляются по
+  all-client fence, а operation без доказанного поколения остаётся конфликтом
+  и не отправляется автоматически.
   [Browser smoke](e2e/legacy-outbox-migration.spec.ts), 7/7; обновлённая
   migration E2E-проверка прошла в точном CI HEAD `08618e3`, run `38628487894`.
   Полный UI lifecycle второго действия проверяется реальным повторным кликом в

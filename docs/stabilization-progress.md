@@ -3987,3 +3987,31 @@ auth-scope, admin guards, schema parity, privacy coverage, production build и
 проверяет предыдущий опубликованный tip `2206120`; точный CI этого кандидата
 запустится после push. Старые bundles, login/OAuth на staging и полный callback
 lifecycle остаются открытыми.
+## Legacy intent без доказанного поколения — 15.10.2026
+
+На локальной ветке `durable-outbox`, основанной на `24aa070`, старая операция
+больше не становится автоматически отправляемой только из-за `baseVersion` из
+legacy localStorage. Импортированная операция остаётся в IndexedDB как конфликт
+`legacy-server-generation-unproven` с нормализованным `baseVersion: 0`.
+Если новая миграция встречает ранее созданную pending/sending operation, она
+атомарно снимает attempt, сбрасывает прежнее локальное подтверждение и отклоняет
+поздний ack. Payload сохраняется в durable value только если это не вытесняет
+активную операцию или другое значение; запись остаётся конфликтной и не может
+быть claim-нута. Backup/restore сохраняет локальное намерение и его unresolved
+статус. UI показывает причину по-русски.
+
+Проверки текущего дерева: полный unit suite — 1279/1279 в 208 файлах; общий,
+domain-strict и storage-strict typecheck; production build; настоящий old/new
+bundle migration smoke — 7/7 desktop, Android, iPhone Safari и PWA проектов,
+`workers=1`, `retries=0`; `git diff --check` прошёл. В первом полном прогоне
+WebKit нашёл устаревшее ожидание теста, будто legacy source не содержит
+изменяемый `retryCount`; проверка исправлена и повторная полная матрица прошла
+7/7. Ранее опубликованный run `38745011909` проверял прежнюю ревизию и падал на
+старом ожидании автоматической отправки legacy операции; точный CI текущей
+правки начнётся после push.
+
+Перед отправкой изменения добавлены в `docs/legacy-migration.md`,
+`docs/state-generations.md` и `TASKS.md`. На этой базе открыто ещё 34 пункта
+(20 P0, 7 P1, 7 прочих); этот follow-up закрывает только один критерий P0,
+не общий lifecycle. Требуются точный CI, staging, безопасный ручной путь
+разрешения конфликтов и интеграция в защищённую `main`.

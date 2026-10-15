@@ -63,6 +63,7 @@ function recoveryReason(operations: readonly StateQueueOperation[]): string {
     'invalid-family-menu-intent': 'Семейное меню не прошло проверку перед отправкой.',
     'retry-exhausted': 'Автоматические попытки исчерпаны.',
     'server-version-conflict': 'Версия на сервере отличается от локальной.',
+    'legacy-server-generation-unproven': 'Для прежней операции не подтверждено поколение данных на сервере, поэтому она сохранена на устройстве и не отправляется автоматически.',
   };
   return labels[reason] ?? `Причина: ${reason}`;
 }

@@ -1,6 +1,6 @@
 import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
+import { DurableOutbox, outboxKeyStateId, type OutboxClaim, type OutboxOperation } from '../storage/durableOutbox';
 import { LegacyQueueMigration, type MigrationItem } from '../storage/legacyMigration';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyDeletedAccountMetaId, legacyFingerprint, legacyMigrationItemId, normalizeLegacyRecord } from '../storage/legacyQueue';
 import { StateDatabase, STATE_STORES, indexedRequest, stateTransaction, type StateStore } from '../storage/stateDatabase';
@@ -40,17 +40,18 @@ async function claim() {
 }
 
 describe('atomic resumable legacy migration', () => {
-  it('normalizes missing metadata, commits value/operation/ledger and retains the source', async () => {
+  it('normalizes missing metadata but blocks an unproven legacy generation', async () => {
     const before = rawSource;
     const progress = await migration.migrate(options());
-    expect(progress).toMatchObject({ status: 'completed', totalRecords: 1, processedRecords: 1, importedRecords: 1, unresolvedRecords: 0, sendAllowed: true });
+    expect(progress).toMatchObject({ status: 'partial', totalRecords: 1, processedRecords: 1, importedRecords: 1, unresolvedRecords: 1, sendAllowed: true });
     const [operation] = await outbox.list(accountId);
-    expect(operation).toMatchObject({ type: 'put', value: put.value, baseVersion: 0, retryCount: 0, status: 'pending', accountId });
+    expect(operation).toMatchObject({ type: 'put', value: put.value, baseVersion: 0, retryCount: 0,
+      status: 'conflicted', reason: 'legacy-server-generation-unproven', accountId });
     const [ledger] = await rows<MigrationItem>(STATE_STORES.migrationItems);
     expect(ledger).toMatchObject({ state: 'imported', opId: operation.opId, accountId, fingerprint: operation.migrationFingerprint });
     expect((await outbox.snapshot(accountId, key)).value).toBe(put.value);
     expect(rawSource).toBe(before);
-    expect((await claim())?.opId).toBe(operation.opId);
+    expect(await claim()).toBeNull();
   });
 
   it('does not reimport a legacy operation after account deletion and reauthentication', async () => {
@@ -80,36 +81,62 @@ describe('atomic resumable legacy migration', () => {
     expect(rawSource).toBe(originalSource);
   });
 
-  it('blocks sending a restored legacy operation once its account tombstone exists', async () => {
+  it('keeps a blocked legacy operation unclaimable once its account tombstone exists', async () => {
     await migration.migrate(options());
-    const sending = await claim();
-    if (!sending) throw new Error('Expected a legacy claim before deletion');
     const markerId = await legacyDeletedAccountMetaId(accountId);
-    expect(sending.attempt.deletedAccountMarkerId).toBe(markerId);
     await stateTransaction(await connection.open(), [STATE_STORES.meta], 'readwrite', (tx) => {
       tx.objectStore(STATE_STORES.meta).put({ id: markerId, kind: 'legacy-deleted-account', version: 1, deletedAtMs: Date.now() });
     });
 
-    await expect(outbox.finish(sending, { kind: 'acknowledged', version: 1 })).resolves.toBe(false);
     await expect(claim()).resolves.toBeNull();
-    expect(await outbox.list(accountId)).toHaveLength(1);
+    expect(await outbox.list(accountId)).toMatchObject([{ status: 'conflicted', reason: 'legacy-server-generation-unproven' }]);
   });
 
   it('imports a delete with no value property and preserves its retry metadata', async () => {
     rawSource = JSON.stringify([{ type: 'delete', key, retryCount: 3 }]);
     await migration.migrate(options());
     const [operation] = await outbox.list(accountId);
-    expect(operation).toMatchObject({ type: 'delete', baseVersion: 0, retryCount: 3 });
+    expect(operation).toMatchObject({ type: 'delete', baseVersion: 0, retryCount: 3,
+      status: 'conflicted', reason: 'legacy-server-generation-unproven' });
     expect('value' in operation).toBe(false);
+    expect(await claim()).toBeNull();
+  });
+
+  it('downgrades an already imported sending operation and rejects its late acknowledgement', async () => {
+    rawSource = JSON.stringify([{ ...put, baseVersion: 7 }]);
+    await migration.migrate(options());
+    const [initial] = await outbox.list(accountId);
+    const attempt = { attemptId: 'old-attempt', owner: 'old-sender', sessionEpoch: 'session', startedAtMs: Date.now() };
+    const oldClaim: OutboxClaim = { ...initial, baseVersion: 7, status: 'sending', attempt };
+    await stateTransaction(await connection.open(), [STATE_STORES.outbox, STATE_STORES.meta, STATE_STORES.values], 'readwrite', (tx) => {
+      const oldPending: OutboxOperation = { ...initial, baseVersion: 7, status: 'sending', attempt };
+      delete oldPending.reason;
+      tx.objectStore(STATE_STORES.outbox).put(oldPending);
+      tx.objectStore(STATE_STORES.meta).put({ id: outboxKeyStateId(accountId, key), accountId, key,
+        lastRevision: oldPending.revision, valueRevision: oldPending.revision, confirmedVersion: 7, headOpId: oldPending.opId });
+      tx.objectStore(STATE_STORES.values).put({ key, accountId, value: put.value, updatedAt: Date.now() });
+    });
+
+    const progress = await migration.migrate(options());
+    const [blocked] = await outbox.list(accountId);
+    expect(blocked).toMatchObject({ opId: initial.opId, baseVersion: 0, status: 'conflicted', reason: 'legacy-server-generation-unproven' });
+    expect(blocked.attempt).toBeUndefined();
+    expect(await outbox.finish(oldClaim, { kind: 'acknowledged', version: 8 })).toBe(false);
+    expect(await claim()).toBeNull();
+    expect(await rows<{ id: string; confirmedVersion: number }>(STATE_STORES.meta))
+      .toContainEqual(expect.objectContaining({ id: outboxKeyStateId(accountId, key), confirmedVersion: 0 }));
+    expect(await rows<{ key: string; value: string }>(STATE_STORES.values))
+      .toContainEqual(expect.objectContaining({ key, value: put.value }));
+    expect(progress).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
   });
 
   it('does not authorize sending or completed migration without a verified writer fence', async () => {
     const progress = await migration.migrate({ verifiedOwners: verifiedOwners() });
     expect(progress).toMatchObject({ status: 'partial', writersStopped: false, sendAllowed: false, processedRecords: 1 });
     expect(await claim()).toBeNull();
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', sendAllowed: true });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', sendAllowed: true, unresolvedRecords: 1 });
     expect(await outbox.list(accountId)).toHaveLength(1);
-    expect(await claim()).not.toBeNull();
+    expect(await claim()).toBeNull();
   });
 
   it('keeps sending closed when the all-client writer proof is stale', async () => {
@@ -126,16 +153,18 @@ describe('atomic resumable legacy migration', () => {
     connection.close();
     rawSource = JSON.stringify([{ type: 'delete', key: otherKey, baseVersion: 0, retryCount: 19 }, { ...put, retryCount: 9, baseVersion: 0 }]);
     const restarted = new LegacyQueueMigration(source, otherConnection);
-    expect(await restarted.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 2 });
+    expect(await restarted.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 2, unresolvedRecords: 2 });
     expect((await outbox.list(accountId)).map((op) => op.opId).sort()).toEqual(initial.map((op) => op.opId).sort());
     expect(await rows(STATE_STORES.migrationItems)).toHaveLength(2);
   });
 
-  it('does not reimport an acknowledged operation after its outbox row was removed', async () => {
+  it('does not reimport an operation acknowledged by the previous sender before migration', async () => {
     await migration.migrate(options());
-    const sending = await claim();
-    if (!sending) throw new Error('Expected a claim');
-    expect(await outbox.finish(sending, { kind: 'acknowledged', version: 1 })).toBe(true);
+    const [ledger] = await rows<MigrationItem>(STATE_STORES.migrationItems);
+    await stateTransaction(await connection.open(), [STATE_STORES.outbox, STATE_STORES.migrationItems], 'readwrite', (tx) => {
+      tx.objectStore(STATE_STORES.outbox).clear();
+      tx.objectStore(STATE_STORES.migrationItems).put({ ...ledger, acknowledgedVersion: 1, acknowledgedAtMs: Date.now() });
+    });
     expect(await outbox.list(accountId)).toEqual([]);
     expect((await rows<MigrationItem>(STATE_STORES.migrationItems))[0]).toMatchObject({ state: 'imported', acknowledgedVersion: 1 });
     expect(await migration.migrate({ ...options(), verifiedOwners: new Map() })).toMatchObject({ status: 'completed', importedRecords: 1 });
@@ -154,7 +183,7 @@ describe('atomic resumable legacy migration', () => {
     expect((await outbox.snapshot(accountId, key)).value).toBeNull();
     expect(await migration.progress()).toMatchObject({ status: 'importing', processedRecords: 0, sendAllowed: false });
     vi.restoreAllMocks();
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 1 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
     expect(await outbox.list(accountId)).toHaveLength(1);
   });
 
@@ -171,7 +200,7 @@ describe('atomic resumable legacy migration', () => {
     expect(await rows(STATE_STORES.migrationItems)).toHaveLength(1);
     expect(await migration.progress()).toMatchObject({ status: 'importing', processedRecords: 1, sendAllowed: false });
     vi.restoreAllMocks();
-    expect(await new LegacyQueueMigration(source, otherConnection).migrate({ ...options(), batchSize: 1 })).toMatchObject({ status: 'completed', processedRecords: 2 });
+    expect(await new LegacyQueueMigration(source, otherConnection).migrate({ ...options(), batchSize: 1 })).toMatchObject({ status: 'partial', processedRecords: 2, unresolvedRecords: 2 });
     expect(await outbox.list(accountId)).toHaveLength(2);
   });
 
@@ -181,7 +210,7 @@ describe('atomic resumable legacy migration', () => {
     source.getItem.mockReturnValueOnce(first).mockReturnValue(changed);
     expect(await migration.migrate(options())).toMatchObject({ status: 'partial', sourceMatches: false, sendAllowed: false });
     expect(await claim()).toBeNull();
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 2 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 2, unresolvedRecords: 2 });
     expect(await outbox.list(accountId)).toHaveLength(2);
   });
 
@@ -190,7 +219,7 @@ describe('atomic resumable legacy migration', () => {
       tx.objectStore(STATE_STORES.values).put({ key, value: 'newer local value', updatedAt: 1 });
     });
     await migration.migrate(options());
-    expect((await outbox.list(accountId))[0]).toMatchObject({ status: 'conflicted', reason: 'legacy-local-value-conflict', value: put.value });
+    expect((await outbox.list(accountId))[0]).toMatchObject({ status: 'conflicted', reason: 'legacy-server-generation-unproven', value: put.value });
     expect((await outbox.snapshot(accountId, key)).value).toBe('newer local value');
   });
 
@@ -204,10 +233,10 @@ describe('atomic resumable legacy migration', () => {
     expect((await outbox.snapshot(accountId, key)).value).toBe('new queue');
   });
 
-  it('preserves valid but unsupported integer metadata as a conflicted operation, not a corrupt record', async () => {
+  it('preserves valid but unproven legacy metadata as a blocked operation, not a corrupt record', async () => {
     rawSource = JSON.stringify([{ ...put, baseVersion: 1e20 }]);
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 1, unresolvedRecords: 0 });
-    expect((await outbox.list(accountId))[0]).toMatchObject({ baseVersion: 1e20, status: 'conflicted', reason: 'legacy-unsupported-metadata' });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
+    expect((await outbox.list(accountId))[0]).toMatchObject({ baseVersion: 0, status: 'conflicted', reason: 'legacy-server-generation-unproven' });
     expect(await migration.unknown()).toEqual([]);
   });
 });
@@ -245,7 +274,7 @@ describe('quarantine and identity ambiguity', () => {
 
   it('can import after ownership is verified while retaining the resolved raw quarantine evidence', async () => {
     await migration.migrate({ ...options(), verifiedOwners: new Map() });
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 1, unresolvedRecords: 0 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
     expect((await migration.unknown())[0]).toMatchObject({ rawRecord: put, resolved: { accountId } });
     expect(await outbox.list(accountId)).toHaveLength(1);
   });
@@ -354,7 +383,7 @@ describe('migration completion and concurrent recovery', () => {
     vi.restoreAllMocks();
     const writerFenceVerified = !previousFence;
     expect(await migration.migrate({ verifiedOwners: verifiedOwners(), verifyWritersStopped: writerFenceVerified ? async () => currentWriterFence() : undefined })).toMatchObject({
-      status: writerFenceVerified ? 'completed' : 'partial', writersStopped: writerFenceVerified, sendAllowed: writerFenceVerified,
+      status: 'partial', writersStopped: writerFenceVerified, sendAllowed: writerFenceVerified,
     });
   });
 
@@ -369,7 +398,7 @@ describe('migration completion and concurrent recovery', () => {
     await expect(migration.migrate({ ...options(), batchSize: 1 })).rejects.toMatchObject({ kind: 'aborted' });
     vi.restoreAllMocks();
     rawSource = '[]';
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', totalRecords: 0, pendingSnapshotRecords: 0 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', totalRecords: 0, pendingSnapshotRecords: 0, unresolvedRecords: 2 });
     expect(await outbox.list(accountId)).toHaveLength(2);
     expect(await outbox.list(accountId)).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'delete', key: otherKey })]));
     expect(await rows(STATE_STORES.migrationItems)).toHaveLength(2);
@@ -386,7 +415,7 @@ describe('migration completion and concurrent recovery', () => {
     await expect(migration.migrate({ ...options(), batchSize: 1 })).rejects.toMatchObject({ kind: 'aborted' });
     vi.restoreAllMocks();
     rawSource = '[]';
-    expect(await migration.migrate({ ...options(), verifiedOwners: new Map([[key, [accountId]]]) })).toMatchObject({ status: 'partial', unresolvedRecords: 1 });
+    expect(await migration.migrate({ ...options(), verifiedOwners: new Map([[key, [accountId]]]) })).toMatchObject({ status: 'partial', unresolvedRecords: 2 });
     expect((await migration.unknown())[0]).toMatchObject({ rawRecord: { type: 'delete', key: otherKey }, reason: 'unknown-owner' });
     expect(await outbox.list(accountId)).toHaveLength(1);
   });
@@ -395,7 +424,7 @@ describe('migration completion and concurrent recovery', () => {
     const owners = verifiedOwners();
     const pending = migration.migrate({ ...options(), verifiedOwners: owners });
     owners.set(key, ['other']);
-    expect(await pending).toMatchObject({ status: 'completed', importedRecords: 1 });
+    expect(await pending).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
     expect(await outbox.list(accountId)).toHaveLength(1);
     expect(await outbox.list('other')).toEqual([]);
   });
@@ -403,7 +432,7 @@ describe('migration completion and concurrent recovery', () => {
   it('joins concurrent imports of the same source without duplicate operations or superseding the other tab', async () => {
     const other = new LegacyQueueMigration(source, otherConnection);
     const results = await Promise.all([migration.migrate(options()), other.migrate(options())]);
-    expect(results.every((result) => result.status === 'completed')).toBe(true);
+    expect(results.every((result) => result.status === 'partial' && result.unresolvedRecords === 1)).toBe(true);
     expect(await outbox.list(accountId)).toHaveLength(1);
     expect(await rows(STATE_STORES.migrationItems)).toHaveLength(1);
   });
@@ -418,7 +447,7 @@ describe('migration completion and concurrent recovery', () => {
 
   it('does not create another operation if its ledger disappears before final verification', async () => {
     const injected = await changeBeforeFinal((tx) => { tx.objectStore(STATE_STORES.migrationItems).clear(); });
-    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 0, unresolvedRecords: 1 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 0, unresolvedRecords: 2 });
     injected();
     expect(await outbox.list(accountId)).toHaveLength(1);
     expect(await claim()).toBeNull();
@@ -460,22 +489,32 @@ describe('migration completion and concurrent recovery', () => {
     expect(await claim()).toBeNull();
   });
 
-  it('rolls back acknowledgement and version changes if the migration receipt cannot commit', async () => {
+  it('rolls back a legacy-operation downgrade if its migration receipt cannot commit', async () => {
+    rawSource = JSON.stringify([{ ...put, baseVersion: 7 }]);
     await migration.migrate(options());
-    const sending = await claim();
-    if (!sending) throw new Error('Expected a claim');
+    const [initial] = await outbox.list(accountId);
+    if (!initial) throw new Error('Expected an imported operation');
+    const attempt = { attemptId: 'pre-migration-attempt', owner: 'old-sender', sessionEpoch: 'session', startedAtMs: Date.now() };
+    const oldClaim: OutboxClaim = { ...initial, baseVersion: 7, status: 'sending', attempt };
+    await stateTransaction(await connection.open(), [STATE_STORES.outbox, STATE_STORES.meta], 'readwrite', (tx) => {
+      const oldPending: OutboxOperation = { ...initial, baseVersion: 7, status: 'sending', attempt };
+      delete oldPending.reason;
+      tx.objectStore(STATE_STORES.outbox).put(oldPending);
+      tx.objectStore(STATE_STORES.meta).put({ id: outboxKeyStateId(accountId, key), accountId, key,
+        lastRevision: oldPending.revision, valueRevision: oldPending.revision, confirmedVersion: 7, headOpId: oldPending.opId });
+    });
     const originalPut = IDBObjectStore.prototype.put;
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
-      if (this.name === STATE_STORES.migrationItems) throw new DOMException('Receipt quota', 'QuotaExceededError');
+      if (this.name === STATE_STORES.migrationItems) throw new DOMException('Migration receipt quota', 'QuotaExceededError');
       return originalPut.apply(this, args);
     });
-    await expect(outbox.finish(sending, { kind: 'acknowledged', version: 1 })).rejects.toMatchObject({ kind: 'quota' });
-    expect((await outbox.list(accountId))[0]).toMatchObject({ opId: sending.opId, status: 'sending' });
-    expect((await outbox.snapshot(accountId, key)).confirmedVersion).toBe(0);
-    expect((await rows<MigrationItem>(STATE_STORES.migrationItems))[0].acknowledgedVersion).toBeUndefined();
+    await expect(migration.migrate(options())).rejects.toMatchObject({ kind: 'quota' });
+    expect((await outbox.list(accountId))[0]).toMatchObject({ opId: initial.opId, status: 'sending', baseVersion: 7 });
     vi.restoreAllMocks();
-    expect(await outbox.finish(sending, { kind: 'acknowledged', version: 1 })).toBe(true);
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed' });
+    await migration.migrate(options());
+    expect((await outbox.list(accountId))[0]).toMatchObject({ opId: initial.opId, status: 'conflicted', baseVersion: 0,
+      reason: 'legacy-server-generation-unproven' });
+    await expect(outbox.finish(oldClaim, { kind: 'acknowledged', version: 8 })).resolves.toBe(false);
   });
 
   it('closes an existing sender gate when the source cannot be read on a later attempt', async () => {
@@ -495,12 +534,18 @@ describe('migration completion and concurrent recovery', () => {
   });
 
   it('does not apply a late acknowledgement while a new migration has closed the gate', async () => {
+    rawSource = JSON.stringify([{ ...put, baseVersion: 7 }]);
     await migration.migrate(options());
-    const sending = await claim();
-    if (!sending) throw new Error('Expected a claim');
+    const [initial] = await outbox.list(accountId);
+    const attempt = { attemptId: 'late-attempt', owner: 'old-sender', sessionEpoch: 'session', startedAtMs: Date.now() };
+    const sending: OutboxClaim = { ...initial, baseVersion: 7, status: 'sending', attempt };
+    await stateTransaction(await connection.open(), [STATE_STORES.outbox], 'readwrite', (tx) => {
+      tx.objectStore(STATE_STORES.outbox).put(sending);
+    });
     await migration.migrate({ verifiedOwners: verifiedOwners() });
-    expect(await outbox.finish(sending, { kind: 'acknowledged', version: 1 })).toBe(false);
-    expect((await outbox.list(accountId))[0]).toMatchObject({ opId: sending.opId, status: 'sending' });
+    expect(await outbox.finish(sending, { kind: 'acknowledged', version: 8 })).toBe(false);
+    expect((await outbox.list(accountId))[0]).toMatchObject({ opId: sending.opId, status: 'conflicted', baseVersion: 0,
+      reason: 'legacy-server-generation-unproven' });
     expect((await outbox.snapshot(accountId, key)).confirmedVersion).toBe(0);
   });
 
@@ -516,7 +561,7 @@ describe('migration completion and concurrent recovery', () => {
       tx.objectStore(STATE_STORES.migrationItems).put({ ...ledger, ...changed });
     });
     expect(await claim()).toBeNull();
-    expect((await outbox.list(accountId))[0].status).toBe('pending');
+    expect((await outbox.list(accountId))[0]).toMatchObject({ status: 'conflicted', reason: 'legacy-server-generation-unproven' });
   });
 
   it('does not claim a changed payload even when its stored fingerprint and canonical fields were left intact', async () => {
@@ -530,8 +575,8 @@ describe('migration completion and concurrent recovery', () => {
 
   it('allows a verified known operation in a partial migration while keeping unrelated unknown records quarantined', async () => {
     rawSource = JSON.stringify([put, null]);
-    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1, sendAllowed: true });
-    expect(await claim()).toMatchObject({ type: 'put', value: put.value });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 2, sendAllowed: true });
+    expect(await claim()).toBeNull();
     expect((await migration.unknown())[0].rawRecord).toBeNull();
   });
 
@@ -546,7 +591,7 @@ describe('migration completion and concurrent recovery', () => {
     const [original] = await outbox.list(accountId);
     await migration.migrate({ ...options(), verifiedOwners: new Map([[key, [accountId, 'other']]]) });
     expect(await claim()).toBeNull();
-    expect(await migration.migrate(options())).toMatchObject({ status: 'completed', importedRecords: 1 });
+    expect(await migration.migrate(options())).toMatchObject({ status: 'partial', importedRecords: 1, unresolvedRecords: 1 });
     expect(await outbox.list(accountId)).toEqual([expect.objectContaining({ opId: original.opId, status: 'conflicted' })]);
     expect((await migration.unknown())[0].resolved?.opId).toBe(original.opId);
   });

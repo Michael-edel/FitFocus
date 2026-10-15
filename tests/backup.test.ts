@@ -147,7 +147,8 @@ describe('browser backup', () => {
 
     const restoredOperations = await new DurableOutbox().list(accountId);
     expect(restoredOperations).toHaveLength(1);
-    expect(restoredOperations[0]).toMatchObject({ accountId, key: `fitfocus_data_${accountId}_diary`, status: 'pending' });
+    expect(restoredOperations[0]).toMatchObject({ accountId, key: `fitfocus_data_${accountId}_diary`, status: 'conflicted',
+      baseVersion: 0, reason: 'legacy-server-generation-unproven' });
     expect(await readIndexedUserStateRaw(legacyKey)).toContain('meal-1');
     const restoredUnknown = await stateTransaction(await userStateDatabase.open(), [STATE_STORES.migrationUnknown], 'readonly',
       (tx) => indexedRequest(tx.objectStore(STATE_STORES.migrationUnknown).getAll()));
@@ -164,7 +165,7 @@ describe('browser backup', () => {
     await resumedMigration.migrate(migrationOptions);
     const resumedSession = await new DurableOutbox().sessionState();
     expect(await new DurableOutbox().claim({ accountId, sessionEpoch: resumedSession.active!.sessionEpoch,
-      owner: 'backup-test-sender', nowMs: Date.now(), leaseMs: 5_000 })).not.toBeNull();
+      owner: 'backup-test-sender', nowMs: Date.now(), leaseMs: 5_000 })).toBeNull();
   });
 
   it('does not restore deleted-account rows from a backup made before deletion', async () => {
