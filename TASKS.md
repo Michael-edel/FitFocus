@@ -613,6 +613,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     сохраняются. Account-switch E2E — desktop Chromium/Firefox/WebKit без
     retries; typecheck и production build прошли. Остальной P0.4 audit остаётся
     открытым.
+  - [x] Не восстанавливать настройки и другие root account-caches при
+    несовпадении UI- и IndexedDB-аккаунта. До фикса старая вкладка сохраняла
+    violet-тему A после входа B; теперь settings, plan marks, refeed/adaptation,
+    favorites и invite code используют account scope только после проверки
+    сессии. E2E с сохранённым отчётом и темой прошёл 3/3 desktop-браузера без
+    retries; root, domain-strict и storage-strict typecheck и production build
+    прошли. P0.4 остаётся открытым для остальных callbacks, кэшей и staging.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

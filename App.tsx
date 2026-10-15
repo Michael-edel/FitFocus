@@ -269,7 +269,8 @@ const App: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [allowCachedUiStateRestore, setAllowCachedUiStateRestore] = useState(false);
-  const { inviteCode, setInviteCode } = useInviteCodeState(currentUser?.id);
+  const uiAccountId = allowCachedUiStateRestore ? currentUser?.id ?? null : null;
+  const { inviteCode, setInviteCode } = useInviteCodeState(uiAccountId);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
@@ -477,14 +478,14 @@ const App: React.FC = () => {
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
   const [adaptNote, setAdaptNote] = useState<string>('');
-  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(currentUser?.id);
+  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
   const {
     adaptExpanded,
     setAdaptExpanded,
     adaptRead,
     setAdaptRead,
-  } = useAdaptationUiState(currentUser?.id);
+  } = useAdaptationUiState(uiAccountId);
 
   const resetUiState = useCallback(() => {
     clearAppUiStorage(currentUser?.id);
@@ -517,8 +518,8 @@ const App: React.FC = () => {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
   const { settings, setSettings } = useSettingsPersistence({
-    userId: currentUser?.id,
-    repository: userStateRepository,
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
   });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
@@ -534,8 +535,8 @@ const App: React.FC = () => {
     removeFavoriteRecipe,
     clearFavoriteRecipes,
   } = useFavoriteRecipes({
-    userId: currentUser?.id,
-    repository: userStateRepository,
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
   });
 
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
@@ -618,7 +619,7 @@ const App: React.FC = () => {
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
 
-  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(currentUser?.id);
+  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(uiAccountId);
   const {
     planIntroOpen,
     setPlanIntroOpen,

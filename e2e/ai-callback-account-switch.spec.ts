@@ -736,20 +736,24 @@ test('held weekly report cannot write for account A after another tab signs in a
     if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
   });
   const fixtureA = await installAccountApi(page, state, 'wis_text');
-  await page.addInitScript(({ key, report }) => {
-    localStorage.setItem(key, JSON.stringify([report]));
+  await page.addInitScript(({ reportKey, report, settingsKey, settings }) => {
+    localStorage.setItem(reportKey, JSON.stringify([report]));
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
   }, {
-    key: weeklyReportsKey(accountA.id),
+    reportKey: weeklyReportsKey(accountA.id),
     report: {
       weekKey: '1999-01',
       createdAt: '1999-01-01T00:00:00.000Z',
       data: { wis: 42, weightDelta7: 0, weightDelta30: 0, compliance: 50, adaptationIndex: 0, status: 'stable' },
       aiText: 'Сохранённый отчёт недели из аккаунта A',
     },
+    settingsKey: `fitfocus_data_${accountA.id}_settings`,
+    settings: { theme: 'violet', language: 'ru', soundEnabled: false, musicEnabled: false },
   });
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.ffTheme)).toBe('violet');
   await expect(page.getByText('Профиль A', { exact: true })).toBeVisible();
   await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toBeVisible();
 
@@ -764,6 +768,7 @@ test('held weekly report cannot write for account A after another tab signs in a
   try {
     const switched = await openAccountB(context, state);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.ffTheme)).toBe('dark');
     await expect(page.getByText('Профиль A', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
     await expect(switched.page.getByText('Сохранённый отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);

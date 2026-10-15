@@ -8,13 +8,17 @@ React state, пока другая вкладка уже активировал�
 экраны заменяются сообщением о проверке/смене сессии, а user-owned root overlays
 и storage notice скрыты, пока IndexedDB-аккаунт не совпадает с пользователем UI.
 Статические «Гид», «Политика» и «Обновления» остаются доступны; данные account A
-не удаляются.
+не удаляются. Оставшиеся root hooks для settings/theme, отметок плана,
+refeed/adaptation, избранного и invite code также получают account id только
+после этой проверки. До исправления violet-тема A оставалась применена в старой
+вкладке после входа B; теперь настройки возвращаются к безопасному default и
+повторно загружаются при подтверждении владельца.
 
 Account-switch сценарий прошёл на desktop Chromium, Firefox и WebKit,
-`workers=1,retries=0`; общий typecheck и production build прошли. CI предыдущего
-HEAD ещё выполняет E2E; точный CI этого исправления будет проверен после
-публикации. P0.4 остаётся открытым для остальных callbacks, staging и полного
-lifecycle.
+`workers=1,retries=0`; root, domain-strict и storage-strict typecheck и
+production build прошли. Точный CI проверяется для опубликованного HEAD; новый
+follow-up после push будет ждать отдельного CI. P0.4 остаётся открытым для
+остальных callbacks, staging и полного lifecycle.
 
 ## 16.10.2026 — скрывать открытые модалки еды вне активной сессии (`66a7362`)
 

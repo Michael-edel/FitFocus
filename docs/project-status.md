@@ -7,10 +7,11 @@
 аккаунтом UI.
 До фикса в старой вкладке оставались видны профильное приветствие и сохранённая
 история AI-отчётов аккаунта A после входа B; теперь содержимое скрыто, а данные A
-остаются сохранены. Account-switch E2E прошёл на Chromium/Firefox/WebKit без
-retries; общий typecheck и production build прошли. P0.4 остаётся открытым для
-остальных callbacks, staging и полного lifecycle. CI предыдущего HEAD ещё
-выполняет E2E; точный CI этого follow-up проверяется после публикации.
+остаются сохранены. Account-scoped hooks настроек и прочих root cache теперь не
+читают A при несовпадении сессии; E2E также подтверждает сброс violet-темы A.
+Account-switch E2E прошёл на Chromium/Firefox/WebKit без retries; три typecheck и
+production build прошли. P0.4 остаётся открытым для остальных callbacks, staging
+и полного lifecycle. CI точного опубликованного HEAD отслеживается.
 
 `a67ed17` исправляет production-сбой при создании ID рецепта и сбрасывает
 несохранённый черновик при смене активной IndexedDB-сессии из другой вкладки.
