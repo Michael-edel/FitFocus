@@ -681,11 +681,19 @@ test('keeps a retryable settings intent across reload and resumes after Retry-Af
 test('verified sender confirms settings and preserves them after reload', async ({ page }, testInfo) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await mockApp(page, { session: 'app' }); await verifiedServer(page, new Map());
+  const accountId = 'google-e2e-sub';
+  const weeklyReportsKey = `fitfocus_data_${accountId}_weekly_reports`;
+  const server = new Map<string, ServerStateItem>();
+  await mockApp(page, { session: 'app' }); await verifiedServer(page, server);
   await openApp(page, '/#settings'); await expect(page).toHaveTitle(/FitFocus/);
   await page.getByRole('button', { name: /^Светлая/ }).click();
   await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(1);
   expect((await storedSettings(page)).operations).toHaveLength(0);
+  // Startup also generates the weekly AI report. Let its own durable operation
+  // finish before this reload test tears down the request and reports Cloud: pending.
+  await expect.poll(() => server.has(weeklyReportsKey), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => storedPendingQueueOperations(page, accountId)).toEqual([]);
+  expect(server.get(`fitfocus_data_${accountId}_settings`)?.version).toBe(1);
   await page.reload(); await expect(page.getByRole('button', { name: /^Светлая/ })).toHaveClass(/border-indigo-500\/40/);
   expect((await storedSettings(page)).value).toContain('"theme":"light"');
   await expect(page.getByText('Cloud: pending', { exact: true })).toHaveCount(0);
