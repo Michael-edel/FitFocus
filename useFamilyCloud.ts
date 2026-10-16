@@ -72,49 +72,63 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     const attempt = scope.begin('context'); if (!attempt) return;
     familyContextRequestedRef.current = true;
     setCloudFamilyLoading(true); setCloudFamilyError(null);
+    const week = weekStartISO();
     try {
-      const week = weekStartISO();
+      const current = () => attempt.isCurrent() && weekStartISO() === week;
       let before: FamilyMenuObservation | undefined;
       const previousFamilyId = familyIdRef.current;
       if (previousFamilyId) before = await repositoryFor(previousFamilyId, week).observe();
-      const context = await loadFamilyContext(week, session(attempt));
-      if (!attempt.isCurrent()) return;
+      const context = await loadFamilyContext(week, session(attempt, current));
+      if (!current()) return;
       let menu = context.menu;
       if (context.snapshot && loginGuard) {
         const repository = repositoryFor(context.snapshot.familyId, week);
         menu = (await repository.refresh(context.snapshot, loginGuard,
           previousFamilyId === context.snapshot.familyId ? before : undefined)).menu;
       }
-      if (!attempt.isCurrent()) return;
+      if (!current()) return;
       setCloudFamily(context.family); setCloudFamilyMembers(context.members); setCloudFamilyMenu(menu);
       if (context.snapshot && previousFamilyId === context.snapshot.familyId) {
         setFamilyShopping(previous => menu ? familyShoppingProjection(week, menu, previous) : { week_start: week, items: [] });
       }
       if (context.family && planScope !== 'family') setPlanScope('family');
     } catch (error) {
-      if (attempt.isCurrent()) setCloudFamilyError(errorMessage(error, 'Не удалось загрузить семью.'));
-    } finally { if (attempt.isCurrent()) setCloudFamilyLoading(false); attempt.finish(); }
+      if (attempt.isCurrent() && weekStartISO() === week) setCloudFamilyError(errorMessage(error, 'Не удалось загрузить семью.'));
+    } finally {
+      const stillCurrent = attempt.isCurrent();
+      const weekChanged = stillCurrent && weekStartISO() !== week;
+      if (stillCurrent) setCloudFamilyLoading(false);
+      attempt.finish();
+      if (weekChanged) onShowRef.current();
+    }
   }, [loginGuard, repositoryFor, planScope, scope, session, setCloudFamily, setCloudFamilyError, setCloudFamilyLoading, setCloudFamilyMembers, setCloudFamilyMenu, setFamilyShopping, setPlanScope, weekStartISO]);
 
   const loadFamilyShopping = useCallback(async () => {
     const familyId = cloudFamily?.id; if (!familyId) return;
     const attempt = scope.begin('shopping'); if (!attempt) return;
     familyShoppingRequestedRef.current = true;
-    const current = () => attempt.isCurrent() && familyIdRef.current === familyId;
+    const week = weekStartISO();
+    const current = () => attempt.isCurrent() && familyIdRef.current === familyId && weekStartISO() === week;
     setFamilyShoppingLoading(true);
     try {
-      const result = await loadFamilyShoppingFromApi(weekStartISO(), familyId, session(attempt, current));
-      const local = await repositoryFor(familyId, weekStartISO()).observe();
-      if (current()) setFamilyShopping(local.menu ? familyShoppingProjection(weekStartISO(), local.menu, result) : result);
+      const result = await loadFamilyShoppingFromApi(week, familyId, session(attempt, current));
+      const local = await repositoryFor(familyId, week).observe();
+      if (current()) setFamilyShopping(local.menu ? familyShoppingProjection(week, local.menu, result) : result);
     } catch (error) { if (current()) setCloudFamilyError(errorMessage(error, 'Не удалось загрузить список покупок.')); }
-    finally { if (current()) setFamilyShoppingLoading(false); attempt.finish(); }
+    finally {
+      const stillCurrent = attempt.isCurrent();
+      const weekChanged = stillCurrent && familyIdRef.current === familyId && weekStartISO() !== week;
+      if (stillCurrent) setFamilyShoppingLoading(false);
+      attempt.finish();
+      if (weekChanged) onShowRef.current();
+    }
   }, [cloudFamily?.id, repositoryFor, scope, session, setCloudFamilyError, setFamilyShopping, setFamilyShoppingLoading, weekStartISO]);
 
   const toggleFamilyShoppingItem = useCallback(async (ingredientName: string, checked: boolean) => {
     const familyId = cloudFamily?.id; if (!familyId) return;
     const attempt = scope.begin(`check:${ingredientName}`); if (!attempt) throw new SessionReadError('session');
-    const current = () => attempt.isCurrent() && familyIdRef.current === familyId;
     const week = weekStartISO();
+    const current = () => attempt.isCurrent() && familyIdRef.current === familyId && weekStartISO() === week;
     const previous = familyShopping?.items.find(item => item.name === ingredientName)?.checked ?? false;
     setFamilyShopping(value => value ? { ...value, items: value.items.map(item => item.name === ingredientName ? { ...item, checked } : item) } : value);
     try { await setFamilyShoppingItem(week, familyId, ingredientName, checked, session(attempt, current)); }
@@ -131,7 +145,11 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
         }
       }
       throw new Error(familyErrorMessage(error));
-    } finally { attempt.finish(); }
+    } finally {
+      const weekChanged = attempt.isCurrent() && familyIdRef.current === familyId && weekStartISO() !== week;
+      attempt.finish();
+      if (weekChanged) onShowRef.current();
+    }
   }, [cloudFamily?.id, familyShopping, repositoryFor, scope, session, setFamilyShopping, weekStartISO]);
 
   const runMutation = useCallback(async <T,>(action: (binding: FamilySession, current: () => boolean) => Promise<T>) => {
@@ -175,7 +193,7 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     if (cloudFamily.owner_user_id !== currentUser?.id) throw new Error('Только владелец семьи может менять общее меню.');
     const observed = familyMenuRepository.capture(), week = weekStartISO();
     return runMutation(async (binding, current) => {
-      binding.isCurrentSession = () => current() && familyIdRef.current === familyId;
+      binding.isCurrentSession = () => current() && familyIdRef.current === familyId && weekStartISO() === week;
       const menu = await generateFamilyMenu(week, familyId, binding);
       if (!binding.isCurrentSession()) throw new SessionReadError('session');
       const operation = await familyMenuRepository.commit(menu, observed, { readGuard: binding.guard, canCommit: binding.isCurrentSession });

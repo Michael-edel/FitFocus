@@ -10,9 +10,11 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
   'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
   'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1' };
 
-async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-invite' | 'check-refusal' | 'refresh-on-pageshow' = 'normal') {
+async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-week-context' | 'held-week-shopping' | 'held-invite' | 'check-refusal' | 'refresh-on-pageshow' = 'normal') {
   await mockApp(page, { session: 'app' });
   const errors: string[] = [], counts = { context: 0, shopping: 0, invites: 0, members: 0, checks: 0, released: 0 };
+  const familyWeeks: string[] = [], shoppingWeeks: string[] = [];
+  let currentWeekForMock = '';
   let active = true, cookieSid = sid, profile = buildMockProfile();
   let refreshed = false;
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
@@ -42,12 +44,18 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
     }
     if (path === '/api/family') {
       counts.context += 1;
-      if (mode === 'held-context') { await held; counts.released += 1; }
-      const name = mode === 'refresh-on-pageshow' && refreshed ? 'Обновлённая семья' : 'Семья с проверенной сессией';
+      const name = mode === 'held-week-context'
+        ? currentWeekForMock ? 'Семья новой недели' : 'Семья старой недели'
+        : mode === 'refresh-on-pageshow' && refreshed ? 'Обновлённая семья' : 'Семья с проверенной сессией';
+      if (mode === 'held-context' || mode === 'held-week-context' && !currentWeekForMock) { await held; counts.released += 1; }
       return json({ family: { id: 'family-e2e', name, owner_user_id: account },
         members: [{ user_id: account, name: 'E2E User', role: 'owner', goal: 'MAINTAIN' }] });
     }
-    if (path === '/api/family/menu') return json({ weekStart: new URL(request.url()).searchParams.get('week'), shared: null, portions: null });
+    if (path === '/api/family/menu') {
+      const week = new URL(request.url()).searchParams.get('week') ?? '';
+      familyWeeks.push(week);
+      return json({ weekStart: week, shared: null, portions: null });
+    }
     if (path === '/api/family/invite') {
       expect(request.postDataJSON()).toMatchObject({ familyId: 'family-e2e' });
       counts.invites += 1;
@@ -61,8 +69,13 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
     }
     if (path === '/api/shopping/list') {
       counts.shopping += 1;
-      const item = mode === 'refresh-on-pageshow' && refreshed ? 'Овсянка' : 'Рис';
-      return json({ family_id: 'family-e2e', week_start: new URL(request.url()).searchParams.get('week'), items: [{ name: item, grams: 400, checked: false }] });
+      const week = new URL(request.url()).searchParams.get('week') ?? '';
+      shoppingWeeks.push(week);
+      const item = mode === 'held-week-shopping'
+        ? week === currentWeekForMock ? 'Овсянка новой недели' : 'Рис старой недели'
+        : mode === 'refresh-on-pageshow' && refreshed ? 'Овсянка' : 'Рис';
+      if (mode === 'held-week-shopping' && week !== currentWeekForMock) { await held; counts.released += 1; }
+      return json({ family_id: 'family-e2e', week_start: week, items: [{ name: item, grams: 400, checked: false }] });
     }
     if (path === '/api/shopping/check') {
       counts.checks += 1;
@@ -74,7 +87,9 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
   await openApp(page, '/#family');
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
-  return { errors, counts, release, changeCookie: () => { cookieSid = 'b'.repeat(64); }, refresh: () => { refreshed = true; } };
+  return { errors, counts, release, familyWeeks, shoppingWeeks,
+    setCurrentWeekForMock: (week: string) => { currentWeekForMock = week; },
+    changeCookie: () => { cookieSid = 'b'.repeat(64); }, refresh: () => { refreshed = true; } };
 }
 async function healthy(page: Page, errors: string[]) {
   await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
@@ -135,6 +150,60 @@ test('a held family read cannot restore family UI after logout', async ({ page }
     await expect(page.getByRole('heading', { name: 'FitFocus' })).toBeVisible(); release();
     await expect.poll(() => counts.released).toBe(1);
     await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toHaveCount(0); await healthy(page, errors);
+  } finally { release(); }
+});
+test('a family context response from the previous week is discarded and reloaded', async ({ page }) => {
+  const initialTime = new Date('2026-10-19T12:00:00.000Z');
+  await page.clock.setFixedTime(initialTime);
+  const { errors, counts, release, familyWeeks, setCurrentWeekForMock } = await setup(page, 'held-week-context');
+  try {
+    await expect.poll(() => counts.context).toBeGreaterThan(0);
+    const previousWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    expect(currentWeek).not.toBe(previousWeek);
+    setCurrentWeekForMock(currentWeek);
+    release();
+    await expect(page.getByText('Семья новой недели', { exact: true })).toBeVisible();
+    await expect(page.getByText('Семья старой недели', { exact: true })).toHaveCount(0);
+    expect(familyWeeks).toContain(previousWeek);
+    expect(familyWeeks).toContain(currentWeek);
+    await healthy(page, errors);
+  } finally { release(); }
+});
+test('a family shopping response from the previous week is discarded and reloaded', async ({ page }) => {
+  const initialTime = new Date('2026-10-19T12:00:00.000Z');
+  await page.clock.setFixedTime(initialTime);
+  const { errors, counts, release, shoppingWeeks, setCurrentWeekForMock } = await setup(page, 'held-week-shopping');
+  try {
+    await expect.poll(() => counts.shopping).toBeGreaterThan(0);
+    const previousWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    expect(currentWeek).not.toBe(previousWeek);
+    setCurrentWeekForMock(currentWeek);
+    release();
+    await expect(page.getByRole('checkbox', { name: /Овсянка новой недели/ })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /Рис старой недели/ })).toHaveCount(0);
+    expect(shoppingWeeks).toContain(previousWeek);
+    expect(shoppingWeeks).toContain(currentWeek);
+    await healthy(page, errors);
   } finally { release(); }
 });
 test('BFCache return refreshes the family and shopping snapshots', async ({ page }) => {
