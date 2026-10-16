@@ -1,5 +1,6 @@
 import { WeeklyIntelligenceResult } from "./weeklyIntelligence";
 import { isRecord, parseJson } from "./safeJson";
+import { UserStateRepository } from "./storage/userStateRepository";
 
 export interface WeeklyStoredReport {
   weekKey: string; // YYYY-WW
@@ -22,10 +23,6 @@ function getWeekKey(date = new Date()): string {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   return `${d.getUTCFullYear()}-${String(weekNo).padStart(2, '0')}`;
-}
-
-function storageKey(userId: string) {
-  return `fitfocus_data_${userId}_weekly_reports`;
 }
 
 const lastAttemptKey = (userId: string) => `ff_last_weekly_ai_attempt_${userId}`;
@@ -51,15 +48,12 @@ function clearInFlight(userId: string) {
   localStorage.removeItem(inFlightKey(userId));
 }
 
-export function loadWeeklyReports(userId: string): WeeklyStoredReport[] {
-  try {
-    const key = storageKey(userId);
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? safeJsonParse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(isWeeklyStoredReport) : [];
-  } catch {
-    return [];
-  }
+export async function loadWeeklyReports(userId: string): Promise<WeeklyStoredReport[]> {
+  return new UserStateRepository(userId).readJsonAsync(
+    'weekly_reports',
+    [],
+    (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyStoredReport),
+  );
 }
 
 function isWeeklyIntelligenceResult(value: unknown): value is WeeklyIntelligenceResult {
@@ -78,7 +72,7 @@ function isWeeklyStoredReport(value: unknown): value is WeeklyStoredReport {
 }
 
 function saveWeeklyReports(userId: string, reports: WeeklyStoredReport[]) {
-  localStorage.setItem(storageKey(userId), JSON.stringify(reports.slice(-4)));
+  new UserStateRepository(userId).writeJson('weekly_reports', reports.slice(-4));
 }
 
 /**
@@ -90,7 +84,7 @@ export async function ensureWeeklyReportWithAI(
   generateAI: () => Promise<string>
 ): Promise<{ report: WeeklyStoredReport; isNew: boolean }> {
   const currentWeek = getWeekKey();
-  const reports = loadWeeklyReports(userId);
+  const reports = await loadWeeklyReports(userId);
 
   const existingIdx = reports.findIndex(r => r.weekKey === currentWeek);
   

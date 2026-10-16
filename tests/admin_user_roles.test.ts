@@ -119,6 +119,7 @@ async function postRoleRaw(db: ReturnType<typeof makeDb>, body: string) {
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'admin-roles-test-01',
     },
     body,
   });
@@ -181,6 +182,7 @@ describe('admin user role management', () => {
     const res = await postRole(db, { user_id: 'user-1', role: 'support', action: 'add' });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-roles-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.binds[1] === 'support')).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);

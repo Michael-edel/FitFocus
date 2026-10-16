@@ -3,6 +3,7 @@ import { CheckCircle2, ImageUp, LifeBuoy, Loader2, Mic, Paperclip, Send, Square,
 import type { UserProfile } from './types';
 import { BUILD_SHORT_LABEL } from './versioning';
 import { isRecord } from './safeJson';
+import { fetchWithResilience } from './services/httpClient';
 
 type AttachmentDraft = {
   file: File;
@@ -273,7 +274,7 @@ export default function SupportScreen({ currentUser }: Props) {
   const loadMyTickets = React.useCallback(async (preserveSelection = true) => {
     setLoadingTickets(true);
     try {
-      const response = await fetch('/api/support/feedback/my', { credentials: 'include' });
+      const response = await fetchWithResilience('/api/support/feedback/my', { credentials: 'include' });
       if (!response.ok) return;
       const json: unknown = await response.json().catch(() => null);
       const nextTickets = isRecord(json) && Array.isArray(json.tickets)
@@ -289,7 +290,7 @@ export default function SupportScreen({ currentUser }: Props) {
 
   const loadMyTicketDetail = React.useCallback(async (ticketId: string) => {
     if (!ticketId) return;
-    const response = await fetch(`/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, { credentials: 'include' });
+    const response = await fetchWithResilience(`/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, { credentials: 'include' });
     if (!response.ok) return;
     const json: unknown = await response.json().catch(() => null);
     setSelectedTicket(isRecord(json) && isSupportTicket(json.ticket) ? json.ticket : null);
@@ -500,7 +501,7 @@ export default function SupportScreen({ currentUser }: Props) {
         form.append('attachments', item.file, item.file.name);
       });
 
-      const response = await fetch('/api/support/feedback', {
+      const response = await fetchWithResilience('/api/support/feedback', {
         method: 'POST',
         credentials: 'include',
         body: form,
@@ -545,7 +546,7 @@ export default function SupportScreen({ currentUser }: Props) {
       form.set('ticket_id', selectedTicketId);
       form.set('message', replyMessage.trim());
       replyAttachments.forEach((item) => form.append('attachments', item.file, item.file.name));
-      const response = await fetch('/api/support/feedback/my', {
+      const response = await fetchWithResilience('/api/support/feedback/my', {
         method: 'POST',
         credentials: 'include',
         body: form,

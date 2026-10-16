@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { onRequestPost } from '../functions/api/family/index';
+import { onRequestGet, onRequestPost } from '../functions/api/family/index';
 
 const SECRET = 'unit-test-secret';
 const NOW = Math.floor(Date.now() / 1000);
@@ -73,12 +73,12 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFa
   };
 }
 
-async function postFamily(db: ReturnType<typeof makeDb>) {
+async function postFamily(db: ReturnType<typeof makeDb>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyHandlerContext = {
     request: new Request('https://fitfocus.test/api/family', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify({ name: 'Моя семья' }),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -90,12 +90,28 @@ async function postFamily(db: ReturnType<typeof makeDb>) {
   return onRequestPost(context);
 }
 
+async function getFamily(db: ReturnType<typeof makeDb>, requestId: string) {
+  const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const context: FamilyHandlerContext = {
+    request: new Request('https://fitfocus.test/api/family', {
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
+    }),
+    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+    params: {},
+    data: {},
+    waitUntil: () => undefined,
+    next: () => Promise.resolve(new Response(null, { status: 404 })),
+  };
+  return onRequestGet(context);
+}
+
 describe('/api/family POST', () => {
   it('creates a family when the owner membership insert succeeds', async () => {
     const db = makeDb();
-    const response = await postFamily(db);
+    const response = await postFamily(db, 'family-create-request-1');
 
     expect(response.status).toBe(201);
+    expect(response.headers.get('X-Request-ID')).toBe('family-create-request-1');
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO families'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
@@ -113,6 +129,16 @@ describe('/api/family POST', () => {
       alreadyMember: true,
     });
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(true);
+  });
+});
+
+describe('/api/family GET', () => {
+  it('returns the caller request ID while reading an empty family context', async () => {
+    const response = await getFamily(makeDb(), 'family-read-request-1');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('family-read-request-1');
+    await expect(response.json()).resolves.toMatchObject({ family: null, members: [] });
   });
 });
 type FamilyHandlerContext = Parameters<typeof onRequestPost>[0];

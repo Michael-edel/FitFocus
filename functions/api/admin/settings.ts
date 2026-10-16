@@ -1,90 +1,25 @@
-// /api/admin/settings
-// Admin-only management of feature_settings (string/number settings stored in D1).
-import { requireUser, json } from "../_lib/auth";
-import { requireDB } from "../_lib/db";
-import { requireRole } from "../_lib/rbac";
-import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventStatement } from "../_lib/admin_audit";
-import { asString, isJsonObject } from "../_lib/json";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { requireUser, json } from '../_lib/auth';
+import { requireDB } from '../_lib/db';
+import { requireRole } from '../_lib/rbac';
+import { requireAdminRequest } from '../_lib/admin_guard';
+import { readAdminSettings, updateAdminSetting } from '../_lib/admin_config';
+import { asString, isJsonObject } from '../_lib/json';
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
-
-const SETTING_VALIDATORS: Record<string, (value: string) => string | null> = {
-  ai_cost_input_per_1m_usd: nonNegativeDecimal,
-  ai_cost_output_per_1m_usd: nonNegativeDecimal,
-  ai_max_calls_per_user_day: nonNegativeInteger,
-  ai_max_cost_per_user_day_usd: nonNegativeDecimal,
-  ai_max_cost_total_day_usd: nonNegativeDecimal,
-  ai_on_limit_action: limitAction,
+async function adminContext(request: Request, env: Env) { const user = await requireUser(request, env); requireRole(user, 'admin'); const db = requireDB(env); await requireAdminRequest(user, request, db); return { user, db }; }
+const handleSettingsGet: PagesFunction<Env> = async ({ request, env }) => { let admin; try { admin = await adminContext(request, env); } catch (error) { return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401); } return json(await readAdminSettings(admin.db)); };
+const handleSettingsPut: PagesFunction<Env> = async ({ request, env }) => {
+  let admin; try { admin = await adminContext(request, env); } catch (error) { return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401); }
+  let body: unknown = null; try { body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES); } catch (error) { if (error instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413); throw error; }
+  if (!isJsonObject(body)) return json({ error: 'BAD_JSON' }, 400);
+  const key = asString(body.key); const value = asString(body.value);
+  if (!key) return json({ error: 'BAD_REQUEST', message: 'key required' }, 400);
+  const result = await updateAdminSetting({ db: admin.db, key, value, adminUserId: admin.user.sub });
+  if (result.kind === 'bad_setting') return json({ error: 'BAD_SETTING', message: 'Unknown setting' }, 400);
+  if (result.kind === 'bad_value') return json({ error: 'BAD_VALUE', message: 'Invalid setting value' }, 400);
+  return json({ ok: true, key: result.key, value: result.value });
 };
-
-function nonNegativeDecimal(value: string): string | null {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return String(n);
-}
-
-function nonNegativeInteger(value: string): string | null {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return String(Math.floor(n));
-}
-
-function limitAction(value: string): string | null {
-  const normalized = value.trim().toLowerCase();
-  return normalized === "fallback" || normalized === "block" ? normalized : null;
-}
-
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
-  const { results } = await db.prepare("SELECT key, value FROM feature_settings ORDER BY key").all();
-  return json({ settings: results || [] });
-};
-
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
-  let body: unknown = null;
-  try {
-    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
-  } catch (err) {
-    if (err instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
-    throw err;
-  }
-  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
-  const key = asString(body.key);
-  const value = asString(body.value);
-  if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
-  const validator = SETTING_VALIDATORS[key];
-  if (!validator) return json({ error: "BAD_SETTING", message: "Unknown setting" }, 400);
-  const normalizedValue = validator(value);
-  if (normalizedValue == null) return json({ error: "BAD_VALUE", message: "Invalid setting value" }, 400);
-
-  const settingStatement = db.prepare(
-    "INSERT INTO feature_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-  ).bind(key, normalizedValue);
-
-  const auditStatement = buildAdminEventStatement(db, {
-    adminUserId: user.sub,
-    action: "setting_update",
-    targetUserId: null,
-    meta: { key, value: normalizedValue },
-  });
-  await db.batch([settingStatement, auditStatement]);
-
-  return json({ ok: true, key, value: normalizedValue });
-};
+export const onRequestGet: PagesFunction<Env> = async (context) => { const response = await handleSettingsGet(context); const requestId = requestIdFor(context.request); logApiEvent('admin.settings.get.response', { requestId, status: response.status }); return withRequestId(response, requestId); };
+export const onRequestPut: PagesFunction<Env> = async (context) => { const response = await handleSettingsPut(context); const requestId = requestIdFor(context.request); logApiEvent('admin.settings.put.response', { requestId, status: response.status }); return withRequestId(response, requestId); };

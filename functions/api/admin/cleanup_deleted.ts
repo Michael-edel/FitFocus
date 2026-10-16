@@ -8,10 +8,11 @@ import { requireAdminRequest } from "../_lib/admin_guard";
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from "../_lib/account_cleanup";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import type { SupportAttachmentBucket } from "../_lib/support_attachments";
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string; SUPPORT_ATTACHMENTS?: SupportAttachmentBucket };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handleAdminCleanupPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try { user = await requireUser(request, env); } catch { return json({ ok: false, error: "UNAUTH" }, 401); }
   try { requireRole(user, "admin"); } catch { return json({ ok: false, error: "FORBIDDEN" }, 403); }
@@ -37,4 +38,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     supportAttachments: env.SUPPORT_ATTACHMENTS,
   });
   return json(result, 200);
+};
+
+/** Logs the result only; cleanup targets and attachment failures remain private. */
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const response = await handleAdminCleanupPost(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('admin.cleanup_deleted.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

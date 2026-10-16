@@ -1,64 +1,38 @@
 // /api/shopping/export
-// GET: CSV export of aggregated shopping list for a week (per user)
-import { json, requireUser } from "../_lib/auth";
-import { requireDB, ensureUserRow, toApiError } from "../_lib/db";
-import { aggregateShoppingRows } from "../_lib/ingredients";
+// GET: CSV export of aggregated personal shopping list for a week.
+import { json, requireUser } from '../_lib/auth';
+import { ensureUserRow, requireDB, toApiError } from '../_lib/db';
+import { buildPersonalShoppingExport, isShoppingExportWeek } from '../_lib/shopping_export';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
-type ShoppingExportRow = { name?: string | null; grams?: number | null };
 
-function isIsoDay(s: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
-}
-
-function formatQty(grams: number) {
-  if (grams >= 1000) {
-    const kg = Math.round((grams / 1000) * 10) / 10;
-    return `${kg} кг`;
-  }
-  return `${grams} г`;
-}
-
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleShoppingExportGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const user = await requireUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
-
-    const url = new URL(request.url);
-    const week = String(url.searchParams.get("week") || "");
-    if (!isIsoDay(week)) {
-      return new Response("BAD_WEEK", { status: 400 });
-    }
-
-    const rows = await db.prepare(
-      `SELECT ingredient_name as name, grams
-       FROM weekly_menu_items
-       WHERE user_id = ? AND week_start = ? AND family_id IS NULL
-       ORDER BY ingredient_name`
-    ).bind(user.sub, week).all<ShoppingExportRow>();
-
-    const items = aggregateShoppingRows(rows?.results || []);
-
-    const lines = ["Продукт,Количество"];
-    for (const it of items) {
-      // Escape commas/quotes
-      const safeName = `"${it.name.replace(/"/g, '""')}"`;
-      const qty = `"${formatQty(it.grams)}"`;
-      lines.push(`${safeName},${qty}`);
-    }
-    const csv = lines.join("\n");
-
+    const week = String(new URL(request.url).searchParams.get('week') || '');
+    if (!isShoppingExportWeek(week)) return new Response('BAD_WEEK', { status: 400 });
+    const csv = await buildPersonalShoppingExport(db, user.sub, week);
     return new Response(csv, {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="shopping_${week}.csv"`,
-        "Cache-Control": "no-store",
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="shopping_${week}.csv"`,
+        'Cache-Control': 'no-store',
       },
     });
-  } catch (e: unknown) {
-    const apiErr = toApiError(e);
-    return json({ error: apiErr }, apiErr.code === "UNAUTH" ? 401 : apiErr.code === "FORBIDDEN" ? 403 : 400);
+  } catch (error: unknown) {
+    const apiError = toApiError(error);
+    return json({ error: apiError }, apiError.code === 'UNAUTH' ? 401 : apiError.code === 'FORBIDDEN' ? 403 : 400);
   }
+};
+
+/** Correlates CSV export outcomes without logging list rows or user identity. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleShoppingExportGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('shopping.export.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

@@ -98,12 +98,12 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
   };
 }
 
-async function generateMenu(db: ReturnType<typeof makeDb>, url = 'https://fitfocus.test/api/family/menu/generate?week=2026-06-22') {
+async function generateMenu(db: ReturnType<typeof makeDb>, url = 'https://fitfocus.test/api/family/menu/generate?week=2026-06-22', requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
@@ -117,9 +117,10 @@ async function generateMenu(db: ReturnType<typeof makeDb>, url = 'https://fitfoc
 describe('/api/family/menu/generate', () => {
   it('writes menu, portions, and shopping items through one batch and clears stale family rows', async () => {
     const db = makeDb({ existingMenuId: 'menu-1' });
-    const response = await generateMenu(db);
+    const response = await generateMenu(db, undefined, 'family-menu-generate-request-2');
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('family-menu-generate-request-2');
     expect(db.runs.some((run) => run.sql.includes('UPDATE weekly_menus SET menu_json='))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM weekly_menu_portions'))).toBe(false);
     expect(db.runs.some((run) => run.sql.includes('DELETE FROM weekly_menu_items'))).toBe(false);

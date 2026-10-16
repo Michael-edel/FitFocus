@@ -105,6 +105,7 @@ async function authedRequest(url: string, init: RequestInit = {}) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const headers = new Headers(init.headers);
   headers.set('Cookie', `ff_session=${token}`);
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', 'push-route-test-01');
   return new Request(url, { ...init, headers });
 }
 
@@ -135,6 +136,7 @@ describe('push runtime configuration routes', () => {
     }));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('push-route-test-01');
     await expect(response.json()).resolves.toMatchObject({
       configured: true,
       vapid_public_key: 'public-key',
@@ -295,7 +297,7 @@ describe('push runtime configuration routes', () => {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       },
       body: JSON.stringify({
-        endpoint: 'https://push.example',
+        endpoint: 'https://fcm.googleapis.com/fcm/send/test-subscription',
         keys: { p256dh: 'k', auth: 'a' },
         browserLabel: 'Comet',
       }),
@@ -306,6 +308,23 @@ describe('push runtime configuration routes', () => {
     expect(response.status).toBe(200);
     const insertRun = db.runs.find((run) => run.sql.includes('INSERT INTO push_subscriptions'));
     expect(insertRun?.binds).toContain('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 FitFocusBrowserHint/Comet');
+  });
+
+  it('rejects subscriptions that target a non-push host', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: 'https://127.0.0.1/internal',
+        keys: { p256dh: 'k', auth: 'a' },
+      }),
+    });
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(400);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO push_subscriptions'))).toBe(false);
   });
 
   it('rejects oversized unsubscribe JSON before deleting', async () => {

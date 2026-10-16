@@ -125,11 +125,15 @@ function makeDb(
   };
 }
 
-async function getMyTicket(db: ReturnType<typeof makeDb>, ticketId: string) {
+async function getMyTicket(
+  db: ReturnType<typeof makeDb>,
+  ticketId: string,
+  requestId = 'support-my-get-test-01',
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: SupportFeedbackMyGetContext = {
     request: new Request(`https://fitfocus.test/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, {
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},
@@ -146,6 +150,7 @@ describe('/api/support/feedback/my', () => {
     const response = await getMyTicket(makeDb(captured), 'ticket-1');
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('support-my-get-test-01');
     const payload = await response.json();
     expect(payload.ticket.message).toBe('Пользовательское описание');
     expect(payload.ticket).not.toHaveProperty('admin_note');
@@ -179,7 +184,7 @@ describe('/api/support/feedback/my', () => {
     const context: SupportFeedbackMyContext = {
       request: new Request('https://fitfocus.test/api/support/feedback/my', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}` },
+        headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-my-post-test-01' },
         body: form,
       }),
       env: {
@@ -195,6 +200,7 @@ describe('/api/support/feedback/my', () => {
     const response = await onRequestPost(context);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('support-my-post-test-01');
     expect(storedKey).toMatch(/^support\/ticket-1\/messages\/[^/]+\/00-reply\.bin$/);
     const records = JSON.parse(String(captured.messageAttachmentsJson));
     expect(records[0].storage_key).toBe(storedKey);

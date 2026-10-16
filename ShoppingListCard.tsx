@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import clsx from "clsx";
 import { groupShoppingItemsByDepartment } from "./shoppingDepartments";
 import { isRecord, parseJson } from "./safeJson";
+import { fetchWithResilience } from './services/httpClient';
 
 type ShoppingItem = {
   name: string;
@@ -98,7 +99,11 @@ export default function ShoppingListCard({
 
   const load = useCallback(async () => {
     if (!weekStart) return;
-    const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(weekStart)}`, { credentials: "include" });
+    const res = await fetchWithResilience(
+      `/api/shopping/list?week=${encodeURIComponent(weekStart)}`,
+      { credentials: 'include' },
+      { retries: 1 },
+    );
     if (!res.ok) throw new Error(`shopping_list_http_${res.status}`);
     const payload: unknown = await res.json().catch(() => null);
     const data = isRecord(payload) ? payload : {};
@@ -135,12 +140,13 @@ export default function ShoppingListCard({
         (prev || []).map((it) => (it.name === name ? { ...it, checked } : it))
       );
       try {
-        await fetch("/api/shopping/check", {
+        const response = await fetchWithResilience("/api/shopping/check", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({ week_start: weekStart, ingredient_name: name, checked }),
         });
+        if (!response.ok) throw new Error(`shopping_check_http_${response.status}`);
       } catch {
         // rollback on failure
         setItems((prev) =>

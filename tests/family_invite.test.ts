@@ -81,12 +81,12 @@ function makeDb(options: { insertChanges?: number[] } = {}) {
   };
 }
 
-async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { ttlHours: 24 }) {
+async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, unknown> = { ttlHours: 24 }, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyInviteContext = {
     request: new Request('https://fitfocus.test/api/family/invite', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -104,9 +104,10 @@ describe('/api/family/invite', () => {
     randomCode.mockReturnValueOnce('AAAA1111').mockReturnValueOnce('BBBB2222');
 
     const db = makeDb({ insertChanges: [0, 1] });
-    const response = await postInvite(db);
+    const response = await postInvite(db, { ttlHours: 24 }, 'family-invite-request-1');
 
     expect(response.status).toBe(201);
+    expect(response.headers.get('X-Request-ID')).toBe('family-invite-request-1');
     await expect(response.json()).resolves.toMatchObject({ code: 'BBBB2222' });
     expect(db.runs.filter((run) => run.sql.includes('INSERT OR IGNORE INTO family_invites'))).toHaveLength(2);
   });

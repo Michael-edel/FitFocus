@@ -30,6 +30,20 @@ export type SupportAttachmentRecord = {
   storage_key?: string;
 };
 
+/** Removes R2 objects that were uploaded for a support write which did not complete. */
+export async function deleteStoredSupportAttachments(
+  bucket: SupportAttachmentBucket | undefined,
+  attachments: SupportAttachmentRecord[],
+): Promise<void> {
+  const keys = attachments.map((attachment) => attachment.storage_key).filter((key): key is string => Boolean(key));
+  if (!keys.length || !bucket?.delete) return;
+  try {
+    await bucket.delete(keys);
+  } catch {
+    // Cleanup cannot change the public result of the original request.
+  }
+}
+
 const INLINE_ATTACHMENT_LIMIT = 2 * 1024 * 1024;
 
 const SAFE_INLINE_MIME_TYPES = new Set([

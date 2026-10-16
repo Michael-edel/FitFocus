@@ -4,6 +4,7 @@ import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodIt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
+import { fetchWithResilience } from './services/httpClient';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -384,7 +385,7 @@ async function callAiProxy(
 
   const doReq = async (m: string) => {
     const payload = { ...basePayload, model: m };
-    const res = await fetch("/api/ai", {
+    const res = await fetchWithResilience("/api/ai", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -753,7 +754,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 
   // Best-effort: store normalized items server-side for aggregated shopping list + CSV export
   try {
-    await fetch("/api/weekly_menu/items", {
+    await fetchWithResilience("/api/weekly_menu/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

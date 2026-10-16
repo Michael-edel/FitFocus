@@ -94,8 +94,8 @@ def ensure_tables_are_classified():
     return errors
 
 
-def ensure_source_mentions(label, path, required_tables):
-    text = path.read_text(encoding="utf-8")
+def ensure_source_mentions(label, paths, required_tables):
+    text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
     missing = sorted(table for table in required_tables if table not in text)
     if missing:
         return [f"{label} does not mention table(s): {missing}"]
@@ -108,14 +108,17 @@ def main():
     errors.extend(
         ensure_source_mentions(
             "account_delete.ts",
-            ROOT / "functions" / "api" / "_lib" / "account_delete.ts",
+            [ROOT / "functions" / "api" / "_lib" / "account_delete.ts"],
             EXPECTED_USER_RELATED_TABLES,
         )
     )
     errors.extend(
         ensure_source_mentions(
-            "export.ts",
-            ROOT / "functions" / "api" / "export.ts",
+            "export sources",
+            [
+                ROOT / "functions" / "api" / "export.ts",
+                ROOT / "functions" / "api" / "_lib" / "user_data_export.ts",
+            ],
             EXPECTED_USER_RELATED_TABLES - EXPORT_EXCLUDED_TABLES,
         )
     )

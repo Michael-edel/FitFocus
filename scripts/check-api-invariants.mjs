@@ -31,7 +31,40 @@ function assertOrder(text, before, after, label) {
   }
 }
 
-const familyJoin = read('functions/api/family/join.ts');
+function browserSourceFiles(directory = root) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('.') || entry.name === 'functions' || entry.name === 'tests' || entry.name === 'e2e' || entry.name === 'node_modules' || entry.name === 'dist') return [];
+      return browserSourceFiles(absolute);
+    }
+    if (!entry.isFile() || !/\.(ts|tsx)$/.test(entry.name) || entry.name === 'sw.ts') return [];
+    return [path.relative(root, absolute)];
+  });
+}
+
+// Browser application modules must use the shared transport for internal API
+// calls. The service worker is excluded because it runs outside window APIs.
+for (const file of browserSourceFiles()) {
+  const text = read(file);
+  if (/\bfetch\(\s*['"`]\/api\//.test(text)) {
+    console.error(`${file}: internal API calls must use fetchWithResilience`);
+    process.exitCode = 1;
+  }
+  if (/\b(?:eval|Function)\s*\(/.test(text)) {
+    console.error(`${file}: dynamic JavaScript execution is not allowed in browser modules`);
+    process.exitCode = 1;
+  }
+  if (/\b(?:dangerouslySetInnerHTML|innerHTML|outerHTML)\b/.test(text)) {
+    console.error(`${file}: direct HTML injection is not allowed in browser modules`);
+    process.exitCode = 1;
+  }
+}
+
+const familyJoin = [
+  read('functions/api/family/join.ts'),
+  read('functions/api/_lib/family_join_by_invite.ts'),
+].join('\n');
 assertIncludes(
   familyJoin,
   'WHERE code = ? AND used_by_user_id IS NULL',
@@ -75,21 +108,31 @@ for (const file of [
   'functions/api/auth/apple/callback.ts',
   'functions/api/auth/google.ts',
 ]) {
-  const oauth = read(file);
+  const oauth = file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/google.ts'
+? `${read(file)}
+${read('functions/api/_lib/google_identity_handler.ts')}
+${read('functions/api/_lib/google_login.ts')}
+${read('functions/api/_lib/google_oauth_callback.ts')}`
+    : file === 'functions/api/auth/apple/callback.ts'
+      ? `${read(file)}\n${read('functions/api/_lib/apple_oauth_callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`
+      : read(file);
   assertIncludes(oauth, 'consumeInviteCode(', `${file} must consume beta invites through the shared helper`);
   assertIncludes(oauth, 'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1', `${file} must restore soft-deleted accounts after re-auth`);
   assertOrder(
     oauth,
-    'const requireInvite = String(',
+    file === 'functions/api/auth/google/callback.ts' || file === 'functions/api/auth/apple/callback.ts' ? 'if (input.requireInvite' : 'const requireInvite = String(',
     'SET deleted_at = NULL, deletion_scheduled_at = NULL, is_active = 1',
     `${file} must restore only after invite access checks`,
   );
 }
 
-const googleOAuthCallback = read('functions/api/auth/google/callback.ts');
+const googleOAuthCallback = [
+  read('functions/api/auth/google/callback.ts'),
+  read('functions/api/_lib/google_oauth_callback.ts'),
+].join('\\n');
 assertIncludes(
   googleOAuthCallback,
-  'import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signSessionJwt, verifyState } from "../_oauth"',
+  'fetchOAuthProvider',
   'google OAuth callback must use shared OAuth session/state helpers',
 );
 assertIncludes(
@@ -99,22 +142,41 @@ assertIncludes(
 );
 assertIncludes(
   googleOAuthCallback,
+  'const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";',
+  'google OAuth callback must accept only a non-empty string id_token from the token endpoint',
+);
+assertIncludes(
+  googleOAuthCallback,
   'await safeResponseJson(infoRes)',
   'google OAuth callback must tolerate non-JSON tokeninfo failures',
 );
+assertIncludes(
+  googleOAuthCallback,
+  'if (!googleSub) return json({ error: "Invalid subject" }, 400);',
+  'google OAuth callback must reject a provider response without a stable subject',
+);assertIncludes(
+  googleOAuthCallback,
+  'if (info.iss !== "https://accounts.google.com" && info.iss !== "accounts.google.com")',
+  'google OAuth callback must validate the issuer returned by tokeninfo',
+);
 
-const googleOAuthStart = read('functions/api/auth/google/start.ts');
+const googleOAuthStart = [read('functions/api/auth/google/start.ts'), read('functions/api/auth/_oauth_start.ts')].join('\\n');
 assertIncludes(
   googleOAuthStart,
-  'import { base64UrlEncode, cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, signState } from "../_oauth"',
+  'startOAuthAuthorization',
   'google OAuth start must use shared OAuth state helpers',
 );
 
-const appleOAuthCallback = read('functions/api/auth/apple/callback.ts');
+const appleOAuthCallback = `${read('functions/api/auth/apple/callback.ts')}\n${read('functions/api/_lib/apple_oauth_callback.ts')}\n${read('functions/api/_lib/apple_login.ts')}`;
 assertIncludes(
   appleOAuthCallback,
   'await safeResponseJson(tokenRes)',
   'apple OAuth callback must tolerate non-JSON token endpoint failures',
+);
+assertIncludes(
+  appleOAuthCallback,
+  'const idToken = typeof tokenJson.id_token === "string" ? tokenJson.id_token.trim() : "";',
+  'apple OAuth callback must accept only a non-empty string id_token from the token endpoint',
 );
 assertIncludes(
   appleOAuthCallback,
@@ -128,30 +190,37 @@ assertIncludes(
 );
 assertIncludes(
   appleOAuthCallback,
-  'if (adminEmails.length && verifiedTokenEmail && adminEmails.includes(verifiedTokenEmail.toLowerCase()))',
+  'if (user.emailVerified && email && listed(input.adminEmails).includes(email))',
   'apple OAuth callback must only auto-promote admins with verified token email',
 );
 assertIncludes(
   appleOAuthCallback,
-  'if (bootstrapEmails.length && verifiedTokenEmail)',
+  'if (user.emailVerified && email && listed(input.bootstrapAdminEmails).includes(email))',
   'apple OAuth callback must only bootstrap admins with verified token email',
 );
 
-const legacyGoogleAuth = read('functions/api/auth/google.ts');
+const legacyGoogleAuth = `${read('functions/api/auth/google.ts')}
+${read('functions/api/_lib/google_identity_handler.ts')}
+${read('functions/api/_lib/google_login.ts')}`;
 assertIncludes(
   legacyGoogleAuth,
-  'import { cookieSerialize, signSessionJwt } from "./_oauth"',
+'import { cookieSerialize, fetchOAuthProvider, signSessionJwt } from "../auth/_oauth"',
   'legacy Google auth endpoint must use shared OAuth session helpers',
 );
 assertIncludes(
   legacyGoogleAuth,
-  'if (user.email_verified && adminEmails.length && user.email && adminEmails.includes(String(user.email).toLowerCase()))',
+  'if (user.email_verified && email && listed(input.adminEmails).includes(email))',
   'legacy Google auth endpoint must only auto-promote admins with verified emails',
 );
 assertIncludes(
   legacyGoogleAuth,
   'await safeResponseJson(r)',
   'legacy Google auth endpoint must tolerate non-JSON tokeninfo responses',
+);
+assertIncludes(
+  legacyGoogleAuth,
+  'const googleSub = typeof info.sub === "string" ? info.sub.trim() : "";',
+  'legacy Google auth endpoint must accept only a non-empty string Google subject',
 );
 assertNotIncludes(
   legacyGoogleAuth,
@@ -215,7 +284,7 @@ assertIncludes(
   'support attachment route builder must include messageId in URLs',
 );
 
-const supportAttachmentRoute = read('functions/api/support/attachment.ts');
+const supportAttachmentRoute = `${read('functions/api/support/attachment.ts')}\n${read('functions/api/_lib/support_attachment_read.ts')}`;
 assertIncludes(
   supportAttachmentRoute,
   'const messageId = String(url.searchParams.get("messageId") || "").trim();',
@@ -228,12 +297,21 @@ assertIncludes(
 );
 assertIncludes(
   supportAttachmentRoute,
-  'if (!isAdmin && row.user_id !== user.sub) return json({ error: "FORBIDDEN" }, 403);',
+  "if (!input.isAdmin && ticket.user_id !== input.userId) return { kind: 'forbidden' };",
   'support attachment route must enforce owner/admin access',
 );
 
-const userSupport = read('functions/api/support/feedback/my.ts');
-const adminSupport = read('functions/api/support/feedback.ts');
+const userSupport = [
+  read('functions/api/support/feedback/my.ts'),
+  read('functions/api/_lib/support_feedback_my_handler.ts'),
+  read('functions/api/_lib/support_ticket_user_read.ts'),
+  read('functions/api/_lib/support_ticket_user_reply.ts'),
+].join('\n');
+const adminSupport = [
+  read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_feedback_handler.ts'),
+  read('functions/api/_lib/support_ticket_admin_read.ts'),
+].join('\n');
 assertIncludes(
   userSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
@@ -241,12 +319,12 @@ assertIncludes(
 );
 assertIncludes(
   userSupport,
-  'const writeResults = await db.batch(statements);',
+  'writeResults = await db.batch(statements);',
   'user support reply must write message and ticket update through one batch',
 );
 assertIncludes(
   userSupport,
-  'deleteStoredAttachments(env.SUPPORT_ATTACHMENTS, attachments);',
+  'deleteStoredSupportAttachments(bucket, attachments);',
   'user support reply must remove stored R2 attachments when the guarded write fails',
 );
 assertIncludes(
@@ -331,7 +409,11 @@ assertOrder(
   'AI rate controls must check exhausted daily quota before burst mutation',
 );
 
-const aiEndpoint = read('functions/api/ai.ts');
+const aiEndpoint = [
+  read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_request_handler.ts'),
+  read('functions/api/_lib/ai_provider_request.ts'),
+].join('\n');
 assertIncludes(
   aiEndpoint,
   'const ALLOWED_GEMINI_MODELS = new Set',
@@ -503,130 +585,139 @@ assertIncludes(
   'soft account delete must batch family cleanup and session revocation',
 );
 
-const adminAiLogs = read('functions/api/admin/ai_logs.ts');
+const adminAiLogs = [
+  read('functions/api/admin/ai_logs.ts'),
+  read('functions/api/_lib/admin_ai_logs.ts'),
+].join('\n');
 assertIncludes(
   adminAiLogs,
-  'toInt(url.searchParams.get("limit"), 50)',
+  "boundedInt(searchParams.get('limit'), 50, 1, 200)",
   'admin ai logs must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
   adminAiLogs,
-  'return json({ error: "UNAUTH" }, 401);',
+  "return json({ error: 'UNAUTH' }, 401);",
   'admin ai logs must return 401 for unauthenticated requests',
 );
 
-const adminEventsRoute = read('functions/api/admin/admin_events.ts');
+const adminEvents = [
+  read('functions/api/admin/admin_events.ts'),
+  read('functions/api/_lib/admin_event_read.ts'),
+].join('\n');
 assertIncludes(
-  adminEventsRoute,
-  'toInt(url.searchParams.get("limit"), 50)',
+  adminEvents,
+  "boundedInt(searchParams.get('limit'), 50, 1, 500)",
   'admin events must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
-  adminEventsRoute,
-  'toInt(url.searchParams.get("offset"), 0)',
+  adminEvents,
+  "boundedInt(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)",
   'admin events must parse invalid offset values through a finite fallback',
 );
 
-const adminUserRoles = read('functions/api/admin/user_roles.ts');
+const adminUserRoles = [read('functions/api/admin/user_roles.ts'), read('functions/api/_lib/admin_user_roles.ts')].join('\n');
 assertIncludes(
   adminUserRoles,
   'ALLOWED_ROLE_VALUES',
-  'admin user role endpoint must validate known role values',
+  'admin user role use case must validate known role values',
 );
 assertIncludes(
   adminUserRoles,
   'ALLOWED_ACTION_VALUES',
-  'admin user role endpoint must validate known actions',
+  'admin user role use case must validate known actions',
 );
 assertIncludes(
   adminUserRoles,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin user role endpoint must verify target user exists and is active',
+  'admin user role use case must verify target user exists and is active',
 );
 assertIncludes(
   adminUserRoles,
   'SELECT COUNT(*)',
-  'admin user role endpoint must guard last-admin removal inside the delete statement',
+  'admin user role use case must guard last-admin removal inside the delete statement',
 );
 assertIncludes(
   adminUserRoles,
   'changedRows(roleResult) === 0',
-  'admin user role endpoint must reject guarded admin removals that change no rows',
+  'admin user role use case must reject guarded admin removals that change no rows',
 );
 assertIncludes(
   adminUserRoles,
   'buildAdminEventAfterChangeStatement',
-  'admin user role endpoint must audit guarded admin removals only after a changed row',
+  'admin user role use case must audit guarded admin removals only after a changed row',
 );
 assertIncludes(
   adminUserRoles,
   'await db.batch([roleStatement, auditStatement]);',
-  'admin user role endpoint must write role changes and audit events through one batch',
+  'admin user role use case must write role changes and audit events through one batch',
 );
 
-const adminSessions = read('functions/api/admin/sessions.ts');
+const adminSessions = [read('functions/api/admin/sessions.ts'), read('functions/api/_lib/admin_session_management.ts')].join('\n');
 assertIncludes(
   adminSessions,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin session endpoint must verify target user exists and is active',
+  'admin session use case must verify target user exists and is active',
 );
 assertIncludes(
   adminSessions,
   'changedRows(revokeResult) === 0',
-  'admin session revoke must reject missing session rows',
+  'admin session revoke use case must reject missing session rows',
 );
 assertIncludes(
   adminSessions,
   'action: "session_revoke"',
-  'admin session revoke must write an audit event',
+  'admin session revoke use case must write an audit event',
 );
 assertIncludes(
   adminSessions,
   'buildAdminEventAfterChangeStatement',
-  'admin session revoke must audit only after a changed row',
+  'admin session revoke use case must audit only after a changed row',
 );
 assertIncludes(
   adminSessions,
   'await db.batch([revokeStatement, auditStatement]);',
-  'admin session revoke must write revoke and audit through one batch',
+  'admin session revoke use case must write revoke and audit through one batch',
 );
 
-const adminSubscription = read('functions/api/admin/subscription.ts');
+const adminSubscription = [read('functions/api/admin/subscription.ts'), read('functions/api/_lib/admin_subscription.ts')].join('\n');
 assertIncludes(
   adminSubscription,
   'SELECT id FROM users WHERE id = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1',
-  'admin subscription endpoint must verify target user exists and is active',
+  'admin subscription use case must verify target user exists and is active',
 );
 assertIncludes(
   adminSubscription,
   'action: "subscription_update"',
-  'admin subscription endpoint must write an audit event',
+  'admin subscription use case must write an audit event',
 );
 assertIncludes(
   adminSubscription,
   "VALUES (?1, 'free', 'canceled', NULL, NULL, NULL, ?2)",
-  'admin subscription endpoint must upsert a free canceled row instead of relying on update-only behavior',
+  'admin subscription use case must upsert a free canceled row instead of relying on update-only behavior',
 );
 assertIncludes(
   adminSubscription,
   'buildAdminEventStatement',
-  'admin subscription endpoint must stage the audit event with the subscription write',
+  'admin subscription use case must stage the audit event with the subscription write',
 );
 assertIncludes(
   adminSubscription,
   'await db.batch([subscriptionStatement, auditStatement]);',
-  'admin subscription endpoint must write subscription and audit event through one batch',
+  'admin subscription use case must write subscription and audit event through one batch',
 );
 
-const adminInvites = read('functions/api/admin/invites.ts');
+const adminInvites = [
+  read('functions/api/admin/invites.ts'),
+  read('functions/api/_lib/admin_invites.ts'),
+].join('\n');
 assertIncludes(
   adminInvites,
-  'toInt(url.searchParams.get("limit"), 100)',
+  'boundedInt(rawLimit, 100, 1, 200)',
   'admin invite list must parse invalid limit values through a finite fallback',
 );
 assertIncludes(
   adminInvites,
-  'typeof body?.revoked !== "boolean"',
+  "typeof body.revoked !== 'boolean'",
   'admin invite update must require explicit boolean revoked values',
 );
 assertIncludes(
@@ -636,12 +727,12 @@ assertIncludes(
 );
 assertIncludes(
   adminInvites,
-  'action: "invite_update"',
+  "action: 'invite_update'",
   'admin invite update must write an audit event',
 );
 assertIncludes(
   adminInvites,
-  'action: "invite_create"',
+  "action: 'invite_create'",
   'admin invite creation must write an audit event',
 );
 assertIncludes(
@@ -665,61 +756,66 @@ assertIncludes(
   'admin invite update must write revoke changes and audit events through one batch',
 );
 
-const adminFeatureFlags = read('functions/api/admin/feature_flags.ts');
+const adminFeatureFlags = [read('functions/api/admin/feature_flags.ts'), read('functions/api/_lib/admin_config.ts')].join('\n');
 assertIncludes(
   adminFeatureFlags,
   'ALLOWED_FEATURE_FLAGS',
-  'admin feature flag endpoint must allow only known runtime flags',
+  'admin feature flag use case must allow only known runtime flags',
 );
 assertIncludes(
   adminFeatureFlags,
-  'typeof body?.enabled !== "boolean"',
-  'admin feature flag endpoint must require explicit boolean enabled values',
+  "typeof update.enabled !== 'boolean'",
+  'admin feature flag use case must require explicit boolean enabled values',
 );
 assertIncludes(
   adminFeatureFlags,
   'BAD_ROLLOUT',
-  'admin feature flag endpoint must reject invalid rollout values',
+  'admin feature flag use case must reject invalid rollout values',
 );
 assertIncludes(
   adminFeatureFlags,
   'buildAdminEventStatement',
-  'admin feature flag endpoint must stage audit writes with flag updates',
+  'admin feature flag use case must stage audit writes with flag updates',
 );
 assertIncludes(
   adminFeatureFlags,
   'await db.batch([flagStatement, auditStatement]);',
-  'admin feature flag endpoint must write flag updates and audit events through one batch',
+  'admin feature flag use case must write flag updates and audit events through one batch',
 );
 
-const adminSettings = read('functions/api/admin/settings.ts');
+const adminSettings = [read('functions/api/admin/settings.ts'), read('functions/api/_lib/admin_config.ts')].join('\n');
 assertIncludes(
   adminSettings,
   'SETTING_VALIDATORS',
-  'admin settings endpoint must allow only known runtime settings',
+  'admin settings use case must allow only known runtime settings',
 );
 assertIncludes(
   adminSettings,
   'nonNegativeInteger',
-  'admin settings endpoint must validate integer limits',
+  'admin settings use case must validate integer limits',
 );
 assertIncludes(
   adminSettings,
   'limitAction',
-  'admin settings endpoint must validate limit action values',
+  'admin settings use case must validate limit action values',
 );
 assertIncludes(
   adminSettings,
   'buildAdminEventStatement',
-  'admin settings endpoint must stage audit writes with setting updates',
+  'admin settings use case must stage audit writes with setting updates',
 );
 assertIncludes(
   adminSettings,
-  'await db.batch([settingStatement, auditStatement]);',
-  'admin settings endpoint must write setting updates and audit events through one batch',
+  'await input.db.batch([settingStatement, auditStatement]);',
+  'admin settings use case must write setting updates and audit events through one batch',
 );
 
-const supportFeedback = read('functions/api/support/feedback.ts');
+const supportFeedback = [
+  read('functions/api/support/feedback.ts'),
+  read('functions/api/_lib/support_feedback_handler.ts'),
+  read('functions/api/_lib/support_ticket_admin.ts'),
+  read('functions/api/_lib/support_ticket_admin_read.ts'),
+].join('\n');
 assertIncludes(
   supportFeedback,
   'BAD_STATUS',
@@ -792,7 +888,7 @@ for (const [file, text] of [
   );
 }
 
-const billingWebhook = read('functions/api/billing/webhook.ts');
+const billingWebhook = `${read('functions/api/billing/webhook.ts')}\n${read('functions/api/_lib/billing_subscription.ts')}`;
 assertIncludes(
   billingWebhook,
   'applyStripeSubscriptionUpdate',
@@ -829,7 +925,10 @@ assertNotIncludes(
   'billing webhook must not read unbounded request bodies',
 );
 
-const exportRoute = read('functions/api/export.ts');
+const exportRoute = [
+  read('functions/api/export.ts'),
+  read('functions/api/_lib/user_data_export.ts'),
+].join('\n');
 assertIncludes(
   exportRoute,
   'SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits',
@@ -861,7 +960,11 @@ for (const legacyNeedle of [
   }
 }
 
-const aiRoute = read('functions/api/ai.ts');
+const aiRoute = [
+  read('functions/api/ai.ts'),
+  read('functions/api/_lib/ai_request_handler.ts'),
+  read('functions/api/_lib/ai_fallback.ts'),
+].join('\n');
 assertIncludes(
   aiRoute,
   'profile?.weight ??',
@@ -878,7 +981,10 @@ assertIncludes(
   'AI fallback must prefer canonical activityLevel profile fields',
 );
 
-const billingCheckout = read('functions/api/billing/checkout.ts');
+const billingCheckout = [
+  read('functions/api/billing/checkout.ts'),
+  read('functions/api/_lib/billing_checkout.ts'),
+].join('\n');
 assertIncludes(
   billingCheckout,
   'resolveCheckoutPlanPrice',
@@ -890,7 +996,10 @@ assertIncludes(
   'billing checkout must support yearly pro pricing',
 );
 
-const familyMenu = read('functions/api/family/menu.ts');
+const familyMenu = [
+  read('functions/api/family/menu.ts'),
+  read('functions/api/_lib/family_menu.ts'),
+].join('\n');
 assertIncludes(
   familyMenu,
   'SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1',
@@ -903,7 +1012,7 @@ assertIncludes(
 );
 assertIncludes(
   familyMenu,
-  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  "familyResponse('family.menu.read', requestId, { error: 'BAD_WEEK' }, 400)",
   'family menu routes must reject malformed weekStart values',
 );
 if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_start = ?')) {
@@ -911,10 +1020,13 @@ if (familyMenu.includes('DELETE FROM weekly_menus WHERE family_id = ? AND week_s
   process.exitCode = 1;
 }
 
-const familyMenuGenerate = read('functions/api/family/menu/generate.ts');
+const familyMenuGenerate = [
+  read('functions/api/family/menu/generate.ts'),
+  read('functions/api/_lib/family_menu_generate.ts'),
+].join('\n');
 assertIncludes(
   familyMenuGenerate,
-  'if (!isIsoDay(weekStart)) return json({ error: "BAD_WEEK" }, 400);',
+  "familyResponse('family.menu.generate', requestId, { error: \"BAD_WEEK\" }, 400)",
   'family menu generator must reject malformed weekStart values',
 );
 assertIncludes(
@@ -932,7 +1044,10 @@ if (familyMenuGenerate.includes('UPDATE weekly_menus SET menu_json=?, created_by
   process.exitCode = 1;
 }
 
-const weeklyMenuItems = read('functions/api/weekly_menu/items.ts');
+const weeklyMenuItems = [
+  read('functions/api/weekly_menu/items.ts'),
+  read('functions/api/_lib/weekly_menu_items.ts'),
+].join('\n');
 assertIncludes(
   weeklyMenuItems,
   'await db.batch(statements);',
@@ -954,8 +1069,8 @@ for (const [file, text] of [
   ['functions/api/family/join.ts', read('functions/api/family/join.ts')],
   ['functions/api/family/member.ts', read('functions/api/family/member.ts')],
   ['functions/api/family/menu.ts', familyMenu],
-  ['functions/api/shopping/bulk.ts', read('functions/api/shopping/bulk.ts')],
-  ['functions/api/shopping/check.ts', read('functions/api/shopping/check.ts')],
+  ['functions/api/shopping/bulk.ts', [read('functions/api/shopping/bulk.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n')],
+  ['functions/api/shopping/check.ts', [read('functions/api/shopping/check.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n')],
   ['functions/api/weekly_menu/items.ts', weeklyMenuItems],
 ]) {
   assertIncludes(
@@ -985,7 +1100,11 @@ assertIncludes(
   'weekly menu items save must enforce an explicit JSON body size limit',
 );
 
-const shoppingBulk = read('functions/api/shopping/bulk.ts');
+const shoppingBulkRoute = [read('functions/api/shopping/bulk.ts'), read('functions/api/_lib/shopping_handlers.ts')].join('\\n');
+const shoppingBulk = [
+  shoppingBulkRoute,
+  read('functions/api/_lib/shopping_checks.ts'),
+].join('\n');
 assertIncludes(
   shoppingBulk,
   'await db.batch(statements);',
@@ -993,37 +1112,39 @@ assertIncludes(
 );
 assertIncludes(
   shoppingBulk,
-  'const scopeId = getShoppingScopeId(user.sub, family_id);',
+  'const scopeId = shoppingScopeId(userId, familyId);',
   'shopping bulk updates must compute a stable scope id once per request',
 );
-if (shoppingBulk.includes('INSERT INTO shopping_checked') && shoppingBulk.includes('.run();')) {
+if (shoppingBulkRoute.includes('INSERT INTO shopping_checked') && shoppingBulkRoute.includes('.run();')) {
   console.error('shopping bulk updates must not execute per-item writes separately.');
   process.exitCode = 1;
 }
 
 const stateRoute = read('functions/api/state.ts');
+const stateWrite = read('functions/api/_lib/state_write.ts');
+const stateStore = read('functions/api/_lib/state_store.ts');
 assertIncludes(
-  stateRoute,
+  stateStore,
   'WITH input(k, v, base_version) AS (VALUES ',
   'state put must stage all kv items in one atomic SQL write',
 );
 assertIncludes(
-  stateRoute,
+  stateStore,
   'WHERE NOT EXISTS (SELECT 1 FROM conflict)',
   'state put must reject the entire write when a concurrent version conflict exists',
 );
 assertIncludes(
-  stateRoute,
+  stateStore,
   'RETURNING k, version',
   'state put must return the database-assigned versions after an atomic write',
 );
 assertIncludes(
-  stateRoute,
+  stateWrite,
   'Number.isInteger(parsedBaseVersion)',
   'state put must reject non-integer baseVersion values',
 );
 assertIncludes(
-  stateRoute,
+  stateWrite,
   'BAD_BASE_VERSION',
   'state put must reject invalid baseVersion values instead of bypassing conflict checks',
 );
@@ -1053,8 +1174,9 @@ if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user
 }
 
 const profileRoute = read('functions/api/profile.ts');
+const profileWrite = read('functions/api/_lib/profile_write.ts');
 assertIncludes(
-  profileRoute,
+  profileWrite,
   'Number.isInteger(parsedBaseVersion)',
   'profile writes must reject non-integer baseVersion values',
 );
@@ -1085,9 +1207,10 @@ assertNotIncludes(
 );
 
 const wearableSyncRoute = read('functions/api/wearable/sync.ts');
+const wearableSyncUseCase = read('functions/api/_lib/wearable_profile_sync.ts');
 assertIncludes(
-  wearableSyncRoute,
-  'Number.isInteger(parsedBaseVersion)',
+  wearableSyncUseCase,
+  'Number.isInteger(parsed)',
   'wearable sync must reject non-integer baseVersion values',
 );
 assertIncludes(
@@ -1129,18 +1252,19 @@ assertNotIncludes(
 );
 
 const pushTestRoute = read('functions/api/push/test.ts');
-const pushStatusRoute = read('functions/api/push/status.ts');
+const pushTestDelivery = read('functions/api/_lib/push_test_delivery.ts');
+const pushStatusRoute = [read('functions/api/push/status.ts'), read('functions/api/_lib/push_subscriptions.ts')].join('\n');
 const pushSubscribeRoute = read('functions/api/push/subscribe.ts');
 const pushUnsubscribeRoute = read('functions/api/push/unsubscribe.ts');
 const settingsScreen = read('SettingsScreen.tsx');
 assertIncludes(
   pushStatusRoute,
-  'vapid_public_key: env.PUSH_VAPID_PUBLIC_KEY || null',
-  'push status route must expose the public VAPID key for browser subscription',
+  'vapid_public_key: input.env.PUSH_VAPID_PUBLIC_KEY || null',
+  'push status use case must expose the public VAPID key for browser subscription',
 );
 assertIncludes(
   settingsScreen,
-  "fetch('/api/push/status'",
+  "fetchWithResilience('/api/push/status'",
   'settings screen must load push runtime config from the server',
 );
 assertIncludes(
@@ -1180,21 +1304,24 @@ for (const [file, text] of [
   );
 }
 assertIncludes(
-  pushTestRoute,
+  pushTestDelivery,
   'const statements: D1PreparedStatement[] = [];',
   'push test route must stage subscription status writes',
 );
 assertIncludes(
-  pushTestRoute,
-  'await db.batch(statements);',
+  pushTestDelivery,
+  'await input.db.batch(statements);',
   'push test route must write subscription status changes through one batch',
 );
-if (pushTestRoute.includes('UPDATE push_subscriptions SET last_sent_at') && pushTestRoute.includes('.run();')) {
+if (pushTestDelivery.includes('UPDATE push_subscriptions SET last_sent_at') && pushTestDelivery.includes('.run();')) {
   console.error('push test route must not execute per-subscription status writes separately.');
   process.exitCode = 1;
 }
 
-const familyMember = read('functions/api/family/member.ts');
+const familyMember = [
+  read('functions/api/family/member.ts'),
+  read('functions/api/_lib/family_member_profile.ts'),
+].join('\n');
 assertIncludes(
   familyMember,
   'changedRows(result) === 0',
@@ -1211,7 +1338,10 @@ assertIncludes(
   'family member patch must only update active family member rows',
 );
 
-const familyInvite = read('functions/api/family/invite.ts');
+const familyInvite = [
+  read('functions/api/family/invite.ts'),
+  read('functions/api/_lib/family_invite_create.ts'),
+].join('\n');
 assertIncludes(
   familyInvite,
   'Number.isFinite(parsedTtlHours) ? parsedTtlHours : 72',
@@ -1228,7 +1358,10 @@ assertIncludes(
   'family invite creation must fail explicitly when unique code generation is exhausted',
 );
 
-const familyIndex = read('functions/api/family/index.ts');
+const familyIndex = [
+  read('functions/api/family/index.ts'),
+  read('functions/api/_lib/family_create.ts'),
+].join('\n');
 assertIncludes(
   familyIndex,
   'WHERE NOT EXISTS (',
@@ -1244,6 +1377,46 @@ assertIncludes(
   'FAMILY_CREATE_CONFLICT',
   'family creation must surface unresolved creation races explicitly',
 );
+
+
+const dashboardWeightLogging = read('features/dashboard/weightLogging.ts');
+assertIncludes(dashboardWeightLogging, 'const MIN_WEIGHT_KG = 20', 'dashboard weight logging must match the minimum profile contract weight');
+assertIncludes(dashboardWeightLogging, 'const MAX_WEIGHT_KG = 500', 'dashboard weight logging must match the maximum profile contract weight');
+assertIncludes(dashboardWeightLogging, 'Number.isFinite(weight)', 'dashboard weight logging must reject non-finite values before persistence');
+
+for (const oauthRoute of [
+  'functions/api/auth/google.ts',
+  'functions/api/auth/google/callback.ts',
+  'functions/api/auth/apple/callback.ts',
+]) {
+  const oauthSource = oauthRoute === 'functions/api/auth/google.ts'
+    ? `${read(oauthRoute)}
+${read('functions/api/_lib/google_identity_handler.ts')}`
+    : oauthRoute === 'functions/api/auth/google/callback.ts'
+      ? `${read(oauthRoute)}
+${read('functions/api/_lib/google_oauth_callback.ts')}`
+      : oauthRoute === 'functions/api/auth/apple/callback.ts'
+        ? `${read(oauthRoute)}
+${read('functions/api/_lib/apple_oauth_callback.ts')}`
+        : read(oauthRoute);
+  assertIncludes(oauthSource, 'fetchOAuthProvider(', `${oauthRoute} must use the bounded OAuth provider transport`);
+  assertNotIncludes(oauthSource, 'await fetch(', `${oauthRoute} must not bypass the bounded OAuth provider transport`);
+}
+
+const oauthTransport = read('functions/api/auth/_oauth.ts');
+assertIncludes(oauthTransport, 'fetchOAuthProvider', 'OAuth providers must use the bounded shared transport');
+assertIncludes(oauthTransport, 'OAUTH_PROVIDER_TIMEOUT_MS', 'OAuth provider requests must have a bounded timeout');
+
+const huaweiTransport = read('functions/api/_lib/huawei_health.ts');
+assertIncludes(huaweiTransport, 'requestHuawei(env, config.tokenUrl', 'Huawei token operations must use bounded provider requests');
+assertIncludes(huaweiTransport, 'requestHuawei(env, `${config.apiBaseUrl}/sampleSet:polymerize`', 'Huawei metric reads must use bounded provider requests');
+
+const pushTransport = read('functions/api/_lib/push.ts');
+assertIncludes(pushTransport, 'normalizePushDeliveryTimeoutMs', 'Web Push delivery must normalize its request timeout');
+assertIncludes(pushTransport, "import { fetchWithTimeout } from './external_fetch'", 'Web Push must use the shared bounded transport');
+assertIncludes(pushTransport, 'fetchWithTimeout(subscription.endpoint', 'Web Push must deliver through the bounded transport');
+assertIncludes(pushTransport, 'timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS)', 'Web Push must pass its delivery deadline to the transport');
+assertIncludes(pushTransport, 'timeoutError: "PUSH_REQUEST_TIMEOUT"', 'Web Push must preserve its timeout error code');
 
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

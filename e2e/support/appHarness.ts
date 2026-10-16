@@ -160,6 +160,14 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       return;
     }
 
+    if (path === '/api/ai' && method === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown> | null;
+      if (body?.feature === 'wis_text') {
+        await json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
+        return;
+      }
+    }
+
     if (path === '/api/push/status' && method === 'GET') {
       const currentSubscriptionId = push.supported && push.preSubscribed ? 'sub-e2e-1' : null;
       const currentBrowserLabel = await page.evaluate(() => {
@@ -318,17 +326,14 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
     });
 
     if (!options.supported) {
+      // Capability detection uses `in`, so assigning undefined still reports support.
+      Reflect.deleteProperty(window, 'PushManager');
+    } else {
       Object.defineProperty(window, 'PushManager', {
         configurable: true,
-        value: undefined,
+        value: function PushManager() {},
       });
-      return;
     }
-
-    Object.defineProperty(window, 'PushManager', {
-      configurable: true,
-      value: function PushManager() {},
-    });
 
     const pushManager = {
       async getSubscription() {
@@ -341,18 +346,19 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
       },
     };
 
-    const registration = {
+    // PWA registration and push recovery attach listeners to these browser objects.
+    const registration = Object.assign(new EventTarget(), {
       active: {
         scriptURL: '/sw.js',
         state: 'activated',
       },
-      pushManager,
+      ...(options.supported ? { pushManager } : {}),
       async update() {},
-    };
+    });
 
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,
-      value: {
+      value: Object.assign(new EventTarget(), {
         async getRegistration() {
           return registration;
         },
@@ -363,7 +369,7 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
           return registration;
         },
         ready: Promise.resolve(registration),
-      },
+      }),
     });
   }, { options: config });
 }

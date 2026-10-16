@@ -109,6 +109,7 @@ async function adminRequest(body: Record<string, unknown>) {
     headers: {
       Cookie: `ff_session=${token}`,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'admin-push-test-01',
     },
     body: JSON.stringify(body),
   });
@@ -223,6 +224,7 @@ describe('/api/admin/push/send', () => {
     const response = await postAdminPushSend(context(request, db));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('admin-push-test-01');
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       dry_run: true,

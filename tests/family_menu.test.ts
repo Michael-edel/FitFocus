@@ -70,12 +70,12 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
   };
 }
 
-async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuPostContext = {
     request: new Request('https://fitfocus.test/api/family/menu', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -87,12 +87,12 @@ async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unkn
   return onRequestPost(context);
 }
 
-async function getMenu(url: string) {
+async function getMenu(url: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGetContext = {
     request: new Request(url, {
       method: 'GET',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},
@@ -103,12 +103,12 @@ async function getMenu(url: string) {
   return onRequestGet(context);
 }
 
-async function generateMenu(url: string) {
+async function generateMenu(url: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},
@@ -125,9 +125,10 @@ describe('/api/family/menu', () => {
     const response = await postMenu(db, {
       weekStart: '2026-06-22',
       menu: { days: [{ day: 'Mon' }] },
-    });
+    }, 'family-menu-save-request-1');
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('family-menu-save-request-1');
     const body = await response.json() as FamilyMenuBody;
     expect(body.menuId).toBe('menu-1');
     expect(db.runs.some((run) => run.sql.includes('UPDATE weekly_menus SET menu_json=?'))).toBe(true);
@@ -146,16 +147,18 @@ describe('/api/family/menu', () => {
   });
 
   it('rejects malformed week query in GET requests', async () => {
-    const response = await getMenu('https://fitfocus.test/api/family/menu?week=bad-week');
+    const response = await getMenu('https://fitfocus.test/api/family/menu?week=bad-week', 'family-menu-read-request-1');
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('family-menu-read-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
   });
 
   it('rejects malformed week query in generate requests', async () => {
-    const response = await generateMenu('https://fitfocus.test/api/family/menu/generate?week=bad-week');
+    const response = await generateMenu('https://fitfocus.test/api/family/menu/generate?week=bad-week', 'family-menu-generate-request-1');
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('family-menu-generate-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
   });
 });

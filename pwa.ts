@@ -6,6 +6,7 @@
  * поэтому мы просто ничего не делаем.
  */
 import { isRecord } from './safeJson';
+import { fetchWithResilience } from './services/httpClient';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
@@ -31,7 +32,7 @@ async function recoverPushSubscription(): Promise<void> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const statusResponse = await fetch('/api/push/status', {
+  const statusResponse = await fetchWithResilience('/api/push/status', {
     credentials: 'include',
     cache: 'no-store',
     headers: { Accept: 'application/json' },
@@ -52,7 +53,7 @@ async function recoverPushSubscription(): Promise<void> {
     });
   }
 
-  await fetch('/api/push/subscribe', {
+  await fetchWithResilience('/api/push/subscribe', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

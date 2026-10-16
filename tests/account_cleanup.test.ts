@@ -146,7 +146,7 @@ describe('cleanupDeletedAccounts', () => {
     const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
-        headers: { Authorization: 'Bearer cron-secret' },
+        headers: { Authorization: 'Bearer cron-secret', 'X-Request-ID': 'scheduled-cleanup-test-01' },
         body: JSON.stringify({ limit: 10 }),
       }),
       env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
@@ -158,6 +158,7 @@ describe('cleanupDeletedAccounts', () => {
     const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
+    expect(response.headers.get('X-Request-ID')).toBe('scheduled-cleanup-test-01');
     const body = await response.json() as CleanupBody;
     expect(body.failed).toBe(1);
     expect(body.failures[0].error).toBe('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');

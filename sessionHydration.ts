@@ -2,10 +2,11 @@ import { createTask } from './coach';
 import { type FoodItem, type FavoriteRecipe, type UserHabit, type UserProfile } from './types';
 import type { WeeklyStoredReport } from './weeklyAutoEngine';
 import { rememberRemoteStateVersion } from './storage/hybrid';
+import { isIndexedUserStateStorageKey, readIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
 import { isRecord, parseJson } from './safeJson';
 import { isUserProfilePayload } from './profileValidation';
 
-type HydratedSession = {
+export type HydratedSession = {
   currentUser: UserProfile;
   allUsers: UserProfile[];
   weeklyReports: WeeklyStoredReport[];
@@ -16,7 +17,7 @@ type HydratedSession = {
   coachCard: unknown;
 };
 
-type HydrationDeps = {
+export type HydrationDeps = {
   resetUsageIfNewTime: (user: UserProfile) => UserProfile;
   initialHabits: UserHabit[];
   fetchImpl?: typeof fetch;
@@ -101,7 +102,11 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
         if (typeof it.key === 'string' && it.key.length > 0 && typeof it.value === 'string') {
           kv[it.key] = it.value;
           try {
-            localStorage.setItem(it.key, it.value);
+            if (isIndexedUserStateStorageKey(it.key) && await writeIndexedUserStateRaw(it.key, it.value)) {
+              localStorage.removeItem(it.key);
+            } else {
+              localStorage.setItem(it.key, it.value);
+            }
             if (typeof it.version === 'number') {
               rememberRemoteStateVersion(it.key, it.version);
             }
@@ -111,18 +116,27 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
     }
   } catch {}
 
-  const readKV = <T,>(suffix: string, fallback: T, validate: (value: unknown) => value is T): T => {
+  const readKV = async <T,>(suffix: string, fallback: T, validate: (value: unknown) => value is T): Promise<T> => {
     const fullKey = `fitfocus_data_${user.id}_${suffix}`;
-    const raw = kv[fullKey] ?? localStorage.getItem(fullKey);
+    const indexedRaw = await readIndexedUserStateRaw(fullKey);
+    const raw = kv[fullKey] ?? indexedRaw ?? localStorage.getItem(fullKey);
     if (!raw) return fallback;
     const parsed = parseJson(raw);
-    return validate(parsed) ? parsed : fallback;
+    if (!validate(parsed)) return fallback;
+    if (!indexedRaw && !kv[fullKey] && isIndexedUserStateStorageKey(fullKey)) {
+      void writeIndexedUserStateRaw(fullKey, raw).then((stored) => {
+        if (stored) {
+          try { localStorage.removeItem(fullKey); } catch {}
+        }
+      });
+    }
+    return parsed;
   };
 
-  const storedDiary = stripLargePhotoPayloads(readKV<FoodItem[]>('diary', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem)));
-  const storedHabits = readKV<UserHabit[]>('habits', deps.initialHabits, (value): value is UserHabit[] => Array.isArray(value) && value.every(isHabit));
-  const storedAllUsers = readKV<UserProfile[]>('all_users', [], (value): value is UserProfile[] => Array.isArray(value) && value.every(isUserProfilePayload));
-  const storedWeeklyReports = readKV<WeeklyStoredReport[]>('weekly_reports', [], (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyReport));
+  const storedDiary = stripLargePhotoPayloads(await readKV<FoodItem[]>('diary', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem)));
+  const storedHabits = await readKV<UserHabit[]>('habits', deps.initialHabits, (value): value is UserHabit[] => Array.isArray(value) && value.every(isHabit));
+  const storedAllUsers = await readKV<UserProfile[]>('all_users', [], (value): value is UserProfile[] => Array.isArray(value) && value.every(isUserProfilePayload));
+  const storedWeeklyReports = await readKV<WeeklyStoredReport[]>('weekly_reports', [], (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyReport));
   const userWithTask = await createTask(userWithResetUsage, storedDiary, storedHabits);
 
   return {
@@ -135,13 +149,8 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
     weeklyReports: storedWeeklyReports,
     foodDiary: storedDiary,
     habits: storedHabits,
-    foodHistory: readKV<FoodItem[]>('history', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem)),
-    foodFavorites: readKV<FavoriteRecipe[]>('favorites', [], (value): value is FavoriteRecipe[] => Array.isArray(value) && value.every(isFavoriteRecipe)),
-    coachCard: (() => {
-      const fullKey = `fitfocus_data_${user.id}_last_coach_card`;
-      const raw = kv[fullKey] ?? localStorage.getItem(fullKey);
-      const parsed = raw ? parseJson(raw) : null;
-      return isCoachCard(parsed) ? parsed : null;
-    })(),
+    foodHistory: await readKV<FoodItem[]>('history', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem)),
+    foodFavorites: await readKV<FavoriteRecipe[]>('favorites', [], (value): value is FavoriteRecipe[] => Array.isArray(value) && value.every(isFavoriteRecipe)),
+    coachCard: await readKV('last_coach_card', null, isCoachCard),
   };
 }

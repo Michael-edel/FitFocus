@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { isTestModeEnabled, setDevPlanOverride } from './money';
 import type { TariffPlan, UserProfile } from './types';
 import { isRecord } from './safeJson';
+import { fetchWithResilience } from './services/httpClient';
 
 const PlansScreen = React.lazy(() => import('./PlansScreen'));
 
@@ -25,12 +26,18 @@ export default function PaywallDialog({
     if (!currentUser) return;
 
     if (isAdmin && !isTestModeEnabled()) {
-      const response = await fetch('/api/admin/subscription', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUser.id, plan }),
-      });
+      let response: Response;
+      try {
+        response = await fetchWithResilience('/api/admin/subscription', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: currentUser.id, plan }),
+        });
+      } catch {
+        alert('Не удалось поменять тариф. Проверьте подключение и повторите попытку.');
+        return;
+      }
       const rawPayload: unknown = await response.json().catch(() => null);
       const payload = isRecord(rawPayload) ? rawPayload : {};
       if (!response.ok) {
@@ -52,12 +59,18 @@ export default function PaywallDialog({
   };
 
   const handleCheckout = async (plan: Exclude<TariffPlan, 'free'>) => {
-    const response = await fetch('/api/billing/checkout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan }),
-    });
+    let response: Response;
+    try {
+      response = await fetchWithResilience('/api/billing/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+    } catch {
+      alert('Не удалось открыть оплату. Проверьте подключение и повторите попытку.');
+      return null;
+    }
     const rawPayload: unknown = await response.json().catch(() => null);
     const payload = isRecord(rawPayload) ? rawPayload : {};
     if (!response.ok) {

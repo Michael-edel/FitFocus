@@ -4,24 +4,12 @@ import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { cookieSerialize, getBaseUrl, normalizeAppUrl, OAUTH_STATE_TTL_MS, verifyState } from "../../auth/_oauth";
 import { ensureHuaweiConnectionsSchema, encryptHuaweiTokenSet, exchangeHuaweiCode, huaweiProviderId, type HuaweiHealthEnv } from "../../_lib/huawei_health";
-import { safeJsonParseObject, type JsonObject } from "../../_lib/json";
-import { withProtectedFields } from "../../_lib/legacy_sync";
-import { loadActivePlan } from "../../_lib/plans";
+import { connectHuaweiProfile } from '../../_lib/huawei_connect';
+import { logApiEvent, requestIdFor, withRequestId } from "../../_lib/observability";
 
 type Env = HuaweiHealthEnv & { DB: D1Database; APP_URL?: string };
 
-async function loadProfile(db: D1Database, userId: string): Promise<{ profile: JsonObject; version: number }> {
-  const row = await db
-    .prepare("SELECT profile_json, version FROM user_profiles WHERE user_id = ?")
-    .bind(userId)
-    .first<{ profile_json?: string; version?: number }>();
-  return {
-    profile: row?.profile_json ? (safeJsonParseObject(String(row.profile_json)) || {}) : {},
-    version: Number(row?.version || 0),
-  };
-}
-
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleHuaweiOAuthCallback: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get("code") || "";
@@ -48,54 +36,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const tokenSet = await exchangeHuaweiCode(env, request, code);
     const encrypted = await encryptHuaweiTokenSet(env, request, tokenSet);
     const now = Math.floor(Date.now() / 1000);
-    const id = crypto.randomUUID();
-    const provider = huaweiProviderId();
-    await db
-      .prepare(
-        "INSERT INTO wearable_connections " +
-          "(id, user_id, provider, access_token_enc, refresh_token_enc, token_type, scope, expires_at, created_at, updated_at, status, metadata_json) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'connected', ?) " +
-          "ON CONFLICT(user_id, provider) DO UPDATE SET " +
-          "access_token_enc = excluded.access_token_enc, " +
-          "refresh_token_enc = COALESCE(excluded.refresh_token_enc, wearable_connections.refresh_token_enc), " +
-          "token_type = excluded.token_type, scope = excluded.scope, expires_at = excluded.expires_at, " +
-          "updated_at = excluded.updated_at, status = 'connected', metadata_json = excluded.metadata_json"
-      )
-      .bind(
-        id,
-        user.sub,
-        provider,
-        encrypted.accessTokenEnc,
-        encrypted.refreshTokenEnc,
-        tokenSet.tokenType,
-        tokenSet.scope,
-        tokenSet.expiresAt,
-        now,
-        now,
-        JSON.stringify({ connectedAt: new Date(now * 1000).toISOString() }),
-      )
-      .run();
-
-    const current = await loadProfile(db, user.sub);
-    const version = current.version + 1;
-    const timestamp = new Date(now * 1000).toISOString();
-    const plan = await loadActivePlan(db, user.sub);
-    const nextProfile = withProtectedFields(user, {
-      ...current.profile,
-      plan,
-      version,
-      wearableProvider: provider,
-      wearableEnabled: true,
-      wearableConnectedAt: typeof current.profile.wearableConnectedAt === "string" ? current.profile.wearableConnectedAt : timestamp,
-      wearableLastSyncAt: timestamp,
-    });
-    await db
-      .prepare(
-        "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at, version = excluded.version"
-      )
-      .bind(user.sub, JSON.stringify(nextProfile), Date.now(), version)
-      .run();
+    const connection = await connectHuaweiProfile({ db, user, tokenSet, encrypted, nowSeconds: now });
+    if (connection.kind === 'conflict') return json({ error: 'PROFILE_CONFLICT', profile: connection.profile, version: connection.version }, 409);
 
     const requestBase = normalizeAppUrl(env.APP_URL) || getBaseUrl(request);
     let redirectAfter = `${requestBase}/?wearable=huawei_health&connected=1`;
@@ -124,4 +66,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ error: "HUAWEI_CALLBACK_FAILED" }, 502);
   }
+};
+
+/** Records only the connection callback outcome; codes, state, tokens, and profile data stay private. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleHuaweiOAuthCallback(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent("wearable.huawei.callback.response", { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };

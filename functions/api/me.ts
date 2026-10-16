@@ -3,8 +3,9 @@
 
 import { requireUser, json } from "./_lib/auth";
 import { hasBetaAccess } from "./_lib/access";
+import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
     const hasAccess = await hasBetaAccess(env, u);
@@ -12,6 +13,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return json({ user: null }, 200);
   }
+};
+
+/** Correlates session restoration outcomes without logging identity or session details. */
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const response = await handleMeGet(context);
+  const requestId = requestIdFor(context.request);
+  logApiEvent('me.response', { requestId, status: response.status });
+  return withRequestId(response, requestId);
 };
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };

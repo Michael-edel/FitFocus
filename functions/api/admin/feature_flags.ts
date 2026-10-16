@@ -1,75 +1,25 @@
-// /api/admin/feature_flags
-// Admin-only management of feature flags stored in D1.
-import { requireUser, json } from "../_lib/auth";
-import { requireDB } from "../_lib/db";
-import { requireRole } from "../_lib/rbac";
-import { requireAdminRequest } from "../_lib/admin_guard";
-import { buildAdminEventStatement } from "../_lib/admin_audit";
-import { asBoolean, asFiniteNumber, asString, isJsonObject } from "../_lib/json";
-import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
+import { requireUser, json } from '../_lib/auth';
+import { requireDB } from '../_lib/db';
+import { requireRole } from '../_lib/rbac';
+import { requireAdminRequest } from '../_lib/admin_guard';
+import { readAdminFeatureFlags, updateAdminFeatureFlag } from '../_lib/admin_config';
+import { asString, isJsonObject } from '../_lib/json';
+import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from '../_lib/request_body';
+import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
 
 type Env = { DB: D1Database; AUTH_JWT_SECRET: string };
-
-const ALLOWED_FEATURE_FLAGS = new Set([
-  "achievements_enabled",
-  "ai_budget_guard_enabled",
-  "ai_emergency_fallback",
-  "ai_safe_mode",
-  "ai_fallback_mode",
-]);
-
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
-  const { results } = await db.prepare("SELECT key, enabled, rollout_percentage FROM feature_flags ORDER BY key").all();
-  return json({ flags: results || [] });
+async function adminContext(request: Request, env: Env) { const user = await requireUser(request, env); requireRole(user, 'admin'); const db = requireDB(env); await requireAdminRequest(user, request, db); return { user, db }; }
+const handleFeatureFlagsGet: PagesFunction<Env> = async ({ request, env }) => { let admin; try { admin = await adminContext(request, env); } catch (error) { return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401); } return json(await readAdminFeatureFlags(admin.db)); };
+const handleFeatureFlagsPut: PagesFunction<Env> = async ({ request, env }) => {
+  let admin; try { admin = await adminContext(request, env); } catch (error) { return json({ error: (error as { code?: string }).code === 'FORBIDDEN' ? 'FORBIDDEN' : 'UNAUTH' }, (error as { code?: string }).code === 'FORBIDDEN' ? 403 : 401); }
+  let body: unknown = null; try { body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES); } catch (error) { if (error instanceof RequestBodyTooLargeError) return json({ error: 'PAYLOAD_TOO_LARGE', message: 'Payload too large' }, 413); throw error; }
+  if (!isJsonObject(body)) return json({ error: 'BAD_JSON' }, 400);
+  const key = asString(body.key); if (!key) return json({ error: 'BAD_REQUEST', message: 'key required' }, 400);
+  const result = await updateAdminFeatureFlag({ db: admin.db, update: { key, enabled: body.enabled, rollout: body.rollout_percentage ?? 100, adminUserId: admin.user.sub } });
+  if (result.kind === 'bad_flag') return json({ error: 'BAD_FLAG', message: 'Unknown feature flag' }, 400);
+  if (result.kind === 'bad_enabled') return json({ error: 'BAD_ENABLED', message: 'enabled must be boolean' }, 400);
+  if (result.kind === 'bad_rollout') return json({ error: 'BAD_ROLLOUT', message: 'rollout_percentage must be a number' }, 400);
+  return json({ ok: true, key: result.key, enabled: result.enabled, rollout_percentage: result.rollout_percentage });
 };
-
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
-  let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: "UNAUTH" }, 401); }
-  try { requireRole(user, "admin"); } catch { return json({ error: "FORBIDDEN" }, 403); }
-
-  const db = requireDB(env);
-  await requireAdminRequest(user, request, db);
-
-  let body: unknown = null;
-  try {
-    body = await readJsonRequest(request, SMALL_JSON_BODY_LIMIT_BYTES);
-  } catch (err) {
-    if (err instanceof RequestBodyTooLargeError) {
-      return json({ error: "PAYLOAD_TOO_LARGE", message: "Payload too large" }, 413);
-    }
-    throw err;
-  }
-  if (!isJsonObject(body)) return json({ error: "BAD_JSON" }, 400);
-  const key = asString(body.key);
-  if (!key) return json({ error: "BAD_REQUEST", message: "key required" }, 400);
-  if (!ALLOWED_FEATURE_FLAGS.has(key)) return json({ error: "BAD_FLAG", message: "Unknown feature flag" }, 400);
-  if (typeof body?.enabled !== "boolean") return json({ error: "BAD_ENABLED", message: "enabled must be boolean" }, 400);
-
-  const enabled = asBoolean(body.enabled) ? 1 : 0;
-  const rawRollout = asFiniteNumber(body.rollout_percentage ?? 100);
-  if (rawRollout === null) return json({ error: "BAD_ROLLOUT", message: "rollout_percentage must be a number" }, 400);
-  const rollout = Math.max(0, Math.min(100, Math.floor(rawRollout)));
-
-  const flagStatement = db.prepare(
-    "INSERT INTO feature_flags (key, enabled, rollout_percentage) VALUES (?, ?, ?) " +
-      "ON CONFLICT(key) DO UPDATE SET enabled = excluded.enabled, rollout_percentage = excluded.rollout_percentage"
-  ).bind(key, enabled, rollout);
-
-  const auditStatement = buildAdminEventStatement(db, {
-    adminUserId: user.sub,
-    action: "flag_update",
-    targetUserId: null,
-    meta: { key, enabled, rollout },
-  });
-  await db.batch([flagStatement, auditStatement]);
-
-  return json({ ok: true, key, enabled: enabled === 1, rollout_percentage: rollout });
-};
+export const onRequestGet: PagesFunction<Env> = async (context) => { const response = await handleFeatureFlagsGet(context); const requestId = requestIdFor(context.request); logApiEvent('admin.feature-flags.get.response', { requestId, status: response.status }); return withRequestId(response, requestId); };
+export const onRequestPut: PagesFunction<Env> = async (context) => { const response = await handleFeatureFlagsPut(context); const requestId = requestIdFor(context.request); logApiEvent('admin.feature-flags.put.response', { requestId, status: response.status }); return withRequestId(response, requestId); };

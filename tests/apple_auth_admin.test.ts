@@ -47,9 +47,14 @@ function hasAdminPromotion(db: ReturnType<typeof makeDb>) {
   return db.runs.some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.sql.includes("'admin'"));
 }
 
-async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Record<string, unknown>, formEmail = 'admin@example.com') {
+async function postAppleCallback(
+  db: ReturnType<typeof makeDb>,
+  idPayload: Record<string, unknown>,
+  formEmail = 'admin@example.com',
+  tokenResponse: Record<string, unknown> = { id_token: 'apple-id-token' },
+) {
   verifyAppleIdToken.mockResolvedValue(idPayload);
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id_token: 'apple-id-token' }), {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(tokenResponse), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })));
@@ -65,7 +70,7 @@ async function postAppleCallback(db: ReturnType<typeof makeDb>, idPayload: Recor
   const context: AppleCallbackContext = {
     request: new Request('https://fitfocus.test/api/auth/apple/callback', {
       method: 'POST',
-      headers: { Cookie: 'ff_oauth_nonce=nonce', 'x-forwarded-proto': 'https' },
+      headers: { Cookie: 'ff_oauth_nonce=nonce', 'x-forwarded-proto': 'https', 'x-request-id': 'apple-oauth-callback-01' },
       body: form,
     }),
     env: {
@@ -94,11 +99,33 @@ describe('/api/auth/apple admin promotion', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a non-string token endpoint id_token before signature verification', async () => {
+    const db = makeDb();
+    const response = await postAppleCallback(db, { sub: 'apple-user-1' }, 'admin@example.com', {
+      id_token: { unexpected: true },
+    });
+
+    expect(response.status).toBe(502);
+    expect(verifyAppleIdToken).not.toHaveBeenCalled();
+    expect(db.runs).toEqual([]);
+  });
+  it('rejects a non-string Apple subject before database access', async () => {
+    const db = makeDb();
+    const response = await postAppleCallback(db, {
+      sub: { unexpected: true },
+      email: 'admin@example.com',
+      email_verified: true,
+    });
+
+    expect(response.status).toBe(400);
+    expect(db.runs).toEqual([]);
+  });
   it('does not auto-promote an admin email supplied only through the form user field', async () => {
     const db = makeDb();
     const response = await postAppleCallback(db, { sub: 'apple-user-1' });
 
     expect(response.status).toBe(302);
+    expect(response.headers.get('X-Request-ID')).toBe('apple-oauth-callback-01');
     expect(hasAdminPromotion(db)).toBe(false);
   });
 

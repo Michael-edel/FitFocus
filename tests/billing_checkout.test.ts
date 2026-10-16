@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveCheckoutPlanPrice } from '../functions/api/billing/checkout';
+import { resolveCheckoutPlanPrice } from '../functions/api/_lib/billing_checkout';
 
 describe('billing checkout plan resolution', () => {
   const env = {
