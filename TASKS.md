@@ -539,6 +539,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
+  - [x] Расширить account-switch acceptance дневника: после анализа еды в аккаунте A
+    запись A сохраняется в его IndexedDB, остаётся скрытой в старой вкладке, не
+    появляется в аккаунте B и не создаёт для B diary value. Сценарий прошёл 3/3
+    desktop Chromium/Firefox/WebKit без retries; четыре mobile/PWA проекта
+    штатно пропущены, так как проверка использует две вкладки. Typecheck и diff
+    check прошли в [`8279976`](https://github.com/Michael-edel/FitFocus/commit/8279976fb140cd58aa2c00853b4f5eea2b30e02b).
+    Это одна UI/cache acceptance; остальные callbacks и P0.4 остаются открыты.
   Delayed durable family-menu state GET проверяет account switch без
   гидратации старых данных; задержка теперь управляется тем же mock API handler,
   без дополнительного route/fallback. Полный `family-menu-durable.spec.ts` после

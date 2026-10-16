@@ -5055,3 +5055,18 @@ reload; до deadline повтор не уходит, после восстан�
 Это mock transport acceptance, а не проверка физического offline, настоящего
 устройства, Service Worker при реальном отсутствии сети или staging. Полная
 матрица P0.9 и точный CI нового HEAD остаются открытыми.
+
+## P0.4 — account-owned дневник при переключении вкладки, 16.10.2026
+
+Коммит [`8279976`](https://github.com/Michael-edel/FitFocus/commit/8279976fb140cd58aa2c00853b4f5eea2b30e02b)
+расширяет существующую browser acceptance: после анализа еды в account A вторая
+вкладка активирует B. Проверяется, что A diary value остаётся в A IndexedDB, не
+попадает в B value, запись и открытые food insight/correction surfaces исчезают
+из старой вкладки, а nutrition screen B не показывает блюдо A.
+
+Сценарий прошёл 3/3 desktop Chromium/Firefox/WebKit без retries; Android/iPhone
+mobile/PWA проекты штатно пропущены из-за двухвкладочной природы проверки.
+`npm run typecheck` и `git diff --check` прошли. Изменён только browser test;
+production-код не менялся. Это одна cache acceptance и не закрывает общий аудит
+P0.4, остальные callbacks, staging или полный P0.9. Точный CI нового HEAD нужно
+подтвердить отдельно.
