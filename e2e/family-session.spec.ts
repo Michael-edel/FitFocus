@@ -168,14 +168,20 @@ test('a family context response from the previous week is discarded and reloaded
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
-    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
     const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setDate(date.getDate() + 7); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    setCurrentWeekForMock(currentWeek);
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const observedCurrentWeek = await page.evaluate(() => {
       const date = new Date(); date.setHours(0, 0, 0, 0);
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
+    expect(observedCurrentWeek).toBe(currentWeek);
     expect(currentWeek).not.toBe(previousWeek);
-    setCurrentWeekForMock(currentWeek);
     release();
     await expect(page.getByText('Семья новой недели', { exact: true })).toBeVisible();
     await expect(page.getByText('Семья старой недели', { exact: true })).toHaveCount(0);
@@ -195,14 +201,20 @@ test('a family shopping response from the previous week is discarded and reloade
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
-    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
     const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setDate(date.getDate() + 7); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    setCurrentWeekForMock(currentWeek);
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const observedCurrentWeek = await page.evaluate(() => {
       const date = new Date(); date.setHours(0, 0, 0, 0);
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
+    expect(observedCurrentWeek).toBe(currentWeek);
     expect(currentWeek).not.toBe(previousWeek);
-    setCurrentWeekForMock(currentWeek);
     release();
     await expect(page.getByRole('checkbox', { name: /Овсянка новой недели/ })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: /Рис старой недели/ })).toHaveCount(0);
@@ -225,14 +237,20 @@ test('a family shopping check stays on its original week and refreshes the curre
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
-    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
     const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setDate(date.getDate() + 7); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    setCurrentWeekForMock(currentWeek);
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const observedCurrentWeek = await page.evaluate(() => {
       const date = new Date(); date.setHours(0, 0, 0, 0);
       const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
       return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     });
+    expect(observedCurrentWeek).toBe(currentWeek);
     expect(currentWeek).not.toBe(previousWeek);
-    setCurrentWeekForMock(currentWeek);
     release();
     await expect(page.getByRole('checkbox', { name: /Овсянка новой недели/ })).toBeVisible();
     await expect(oldItem).toHaveCount(0);

@@ -1306,9 +1306,17 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
+  const failedStateRequests: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
   page.on('console', message => {
-    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+    if (['error', 'warning'].includes(message.type())) {
+      errorsA.push(`${message.type()}: ${message.text()} @ ${JSON.stringify(message.location())}`);
+    }
+  });
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname === '/api/state') {
+      failedStateRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'unknown failure'}`);
+    }
   });
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#progress');
@@ -1336,6 +1344,7 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
   await expect(page.getByRole('button', { name: 'Сахар', exact: true })).toHaveClass(/border-indigo-500/);
+  await waitForAccountOutboxIdle(page, accountA);
 
   const weightDraft = page.getByLabel('Вес');
   await weightDraft.fill('98.765');
@@ -1368,6 +1377,7 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);
   expect(rawValue(afterSwitch, profileKey(accountA.id))).toBe(profileBefore);
   expect(operationsFor(afterSwitch, accountA)).toEqual(operationsBefore);
+  expect(errorsA, `Failed /api/state requests: ${JSON.stringify(failedStateRequests)}`).toEqual([]);
   expect(await switched.page.getByText('98.765', { exact: true }).count()).toBe(0);
   expect(fixtureA.counts.profileWrites).toEqual([]);
   // WebKit reports an access-control error when account activation aborts the

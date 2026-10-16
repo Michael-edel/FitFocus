@@ -5346,3 +5346,25 @@ CI follow-up ещё не запускался.
 `git diff --check` прошли. Production-код не менялся. Проверка использует mock
 API и не заменяет настоящий OAuth, устройство или staging. Точный полный CI
 этого HEAD подтверждается после отправки коммита `63d6a0b`.
+
+## P0.8/P0.9 — follow-up CI #1465: недельная семья и WebKit reload, 16.10.2026
+
+Опубликованный `f09b356` завершил CI run
+[`38924431808`](https://github.com/Michael-edel/FitFocus/actions/runs/38924431808)
+с ошибкой E2E; все проверки до браузерной матрицы прошли. Desktop WebKit упал
+на проверке ошибок после reload/account switch: консоль содержала
+`/api/state due to access control checks`. Трасса не содержит соответствующего
+завершённого `/api/state` запроса. До поправки тест повторился 5/5. После reload
+добавлено ожидание пустой durable outbox; console listener теперь сохраняет
+source location и failure diagnostics для запросов `/api/state`. Целевой тест
+прошёл 3/3 (`desktop-webkit`, один worker, без retries); причина сообщения
+остаётся непроверенной до точного CI.
+
+В iPhone Safari weekly-shopping trace API вернул 200 для `week=2026-10-26`, но
+тело содержало старую mock-запись. Тест выставлял целевую неделю для mock после
+смены browser clock, и автоматический запрос мог получить старый fixture до
+переключения. Три сценария rollover (family context, shopping response и
+shopping check) теперь заранее настраивают целевую неделю, затем сдвигают часы
+и сверяют вычисленную неделю. Они прошли 9/9 на `iphone-safari`, один worker,
+без retries. Исправлены только E2E-fixtures и ожидания; production-код не менялся.
+Полный CI исправленного HEAD ожидает отправки.

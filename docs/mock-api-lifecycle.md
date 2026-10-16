@@ -104,6 +104,23 @@ access-control и Firefox IDB timeout не воспроизведены и не 
 - Проверять функциональный итог и proxy-логи отдельно; native PWA,
   реальный OAuth, BFCache и staging требуют собственных доказательств.
 
+## Недельные семейные сценарии и reload-проба WebKit
+
+В CI #1465 weekly-shopping тест для iPhone Safari получил ответ HTTP 200 с
+`week_start=2026-10-26`, но тело содержало старую mock-запись. Тест менял
+переменную mock-недели уже после сдвига browser clock, поэтому автоматический
+запрос мог обработаться до обновления fixture. Теперь тесты заранее задают
+ответ для будущей недели, потом двигают часы; context, shopping response и
+shopping check прошли 9/9 на iPhone Safari без retries.
+
+В desktop WebKit account-switch тест зарегистрировал console error для
+`/api/state` после reload экрана прогресса. Trace CI не показывает завершённого
+запроса к этому пути. После reload тест теперь ждёт пустую durable outbox, а при
+повторном сбое прикладывает location console-сообщения и детали requestfailed.
+Локальный целевой тест прошёл 3/3 без retries; причину исходного сообщения
+проверит точный CI следующей ревизии. Это mock browser evidence и не заменяет
+staging или реальный OAuth.
+
 Общий план — в [TASKS](../TASKS.md), состояние — в
 [статусе проекта](project-status.md), порядок проверки — в
 [CONTRIBUTING](../CONTRIBUTING.md).

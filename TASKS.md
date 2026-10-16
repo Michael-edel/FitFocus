@@ -4,19 +4,19 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний опубликованный [CI run #1463](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
-для `8dfab60` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
-build; browser E2E завершился с 839 passed / 251 skipped / 2 failed. WebKit
-зафиксировал прерывание фонового `/api/ai` при смене аккаунта; iPhone PWA не
-отправил ожидаемую settings-запись после offline reopen. Диагностика показала,
-что сервер принял `weekly_reports`, но не получил `settings`.
+Последний опубликованный [CI run #1465](https://github.com/Michael-edel/FitFocus/actions/runs/38924431808)
+для `f09b356` прошёл проверки до браузерных E2E, но завершился двумя E2E-сбоями.
+В iPhone Safari mock новой недели отдал старую запись, потому что состояние
+фикстуры менялось после сдвига часов браузера; порядок теста исправлен и
+три недельных сценария прошли 9/9. В desktop WebKit ошибка `/api/state due to
+access control checks` возникла после reload и account switch; после ожидания
+пустой outbox и добавления диагностики тест прошёл 3/3. Причина WebKit-сообщения
+ещё ждёт подтверждения точным CI.
 
-В локальном follow-up тест PWA дожидается завершения стартовой AI-записи и
-проверяет восстановление settings отдельно; полная матрица прошла 7/7, iPhone
-PWA повторён 5/5 без retries. WebKit account-switch тест допускает только точное
-сообщение об abort `/api/ai` при смене аккаунта и прошёл 5/5; остальные ошибки
-остаются фатальными. Follow-up ещё требует точного полного CI после push.
-P0/P0.8/P0.9, staging, выпуск и интеграция в `main` остаются открыты.
+В локальную ветку также добавлен same-account reauthentication тест для weekly
+AI report: 6/6 на Chromium, Firefox и WebKit. Исправленный E2E-код и документация
+ещё не подтверждены полным CI. P0/P0.8/P0.9, staging, выпуск и интеграция в
+`main` остаются открыты.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
