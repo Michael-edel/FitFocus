@@ -1,6 +1,6 @@
 # Защита недельного AI-отчёта сессией
 
-Обновлено: 15.10.2026. Реализация недельного отчёта входит в commit `0b7062d`;
+Обновлено: 16.10.2026. Реализация недельного отчёта входит в commit `0b7062d`;
 его E2E fixture исправлен в `ec29f41`. Последний общий кодовый SHA [`2539c8c`](https://github.com/Michael-edel/FitFocus/commit/2539c8c8a5f30776c486b0b274903dc70d191dbc)
 прошёл [полный CI run 38398403703](https://github.com/Michael-edel/FitFocus/actions/runs/38398403703):
 1115 unit, 466 browser passed / 9 skipped; две затронутые Firefox race-проверки
@@ -16,6 +16,15 @@
 Firefox и WebKit с `workers=1,retries=0`; профильные auto-engine/retry unit-тесты
 прошли 11/11, общий typecheck прошёл. Полный CI следует сверять по точному SHA
 PR, а этот тест не закрывает остальные callback-контракты или lifecycle.
+
+В `63d6a0b` добавлен отдельный same-account reauthentication сценарий. Ответ
+старой сессии удерживается, пока вторая вкладка входит в тот же аккаунт с новым
+`serverSessionId`; новая сессия самостоятельно создаёт и сохраняет отчёт.
+После освобождения старый `wis_text` не меняет отчёт, outbox, UI или число
+сетевых записей. Проверка прошла 6/6 на desktop Chromium, Firefox и WebKit,
+`workers=1,retries=0`; общий typecheck, admin guards и `git diff --check` прошли.
+Это локальная mock API проверка; точный полный CI, настоящий OAuth, устройства и
+staging остаются открытыми.
 
 Проверка 13.10.2026 обнаружила отдельную проблему хранения: при параллельной
 правке профиля Firefox иногда завершал чтение weekly report ошибкой

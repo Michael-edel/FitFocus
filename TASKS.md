@@ -964,6 +964,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   прошла 6/6 на desktop Chromium/Firefox/WebKit без retries; общий typecheck и
   `git diff --check` прошли. Production-код не менялся; точный CI follow-up
   ожидает push.
+- [x] Удержать недельный AI-отчёт старой сессии, повторно войти в тот же аккаунт
+  и дождаться создания отчёта новой сессией. Поздний `wis_text` не меняет её
+  значение, outbox, UI или число сетевых записей. Новый E2E прошёл 6/6 на desktop
+  Chromium/Firefox/WebKit без retries; `npm run typecheck` и `git diff --check`
+  прошли. Commit `63d6a0b`; точный полный CI запускается после push.
 - [x] Проверить поздний ответ retry объяснения плато A после входа B во
   второй вкладке: профиль, values, outbox, active session и success-effects
   обоих аккаунтов не меняются. Целевой тест прошёл на Chromium, Firefox и
