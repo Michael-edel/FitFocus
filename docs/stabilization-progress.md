@@ -4636,3 +4636,18 @@ staging и реальный backend остаются отдельными про
 Поле добавлено в `b1c01ae`; production-код не менялся, подтверждённого runtime
 дефекта нет. Точный CI исправленного HEAD проверяется после push; общий P0.5 и
 остальные family/AI/state callbacks остаются открытыми.
+
+## P0.5 — поздний family-create ответ после same-account login, `3c49439`, 16.10.2026
+
+Новый acceptance удерживает создание семьи из account A до ответа, затем
+активирует новую server session того же account в соседней вкладке. После
+освобождения старого ответа активная вкладка остаётся в своей семье; прежняя
+сессия не запускает повторную загрузку family context и не выдаёт achievement.
+Фикстура проверяет старый proof запроса и новый proof чтения контекста.
+
+Три same-account acceptance (family context GET, invite, create) прошли 9/9 на
+desktop Chromium, Firefox и WebKit (`workers=1,retries=0`); общий typecheck и
+`git diff --check` прошли. Production-код не менялся, runtime-дефекта не выявлено.
+CI #1409 создан для предыдущего SHA `aeb68e0`, поэтому новый create-тест требует
+отдельного точного CI после push. Общий P0.5 и остальные callbacks остаются
+открытыми.

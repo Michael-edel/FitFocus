@@ -10,12 +10,13 @@
 прошли на Chromium; unit suite — 1318/1318, root/domain/storage typecheck и
 production build прошли. Проверка использует mock API; точный CI текущего HEAD,
 реальная среда и общий P0.4 остаются открытыми. Дополнительно
-поздний family-context GET и создание приглашения после повторной авторизации
-того же account прошли по 3/3 на desktop Chromium/Firefox/WebKit; четыре соседних
-family callback сценария прошли 12/12. Локальный typecheck также прошёл. CI
-`c1aef67` упал на пропущенном `releasedMembers` в E2E fixture; исправление есть
-в `b1c01ae`, точный CI нового HEAD ещё не запущен. Эти acceptance не закрывают
-общий P0.4/P0.5 audit. Предыдущий follow-up
+Поздний family-context GET, создание invite и создание семьи после повторной
+авторизации того же account прошли по 3/3 на desktop Chromium/Firefox/WebKit;
+четыре соседних family callback сценария прошли 12/12. Локальный typecheck
+также прошёл. CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
+исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
+новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.
+Эти acceptance не закрывают общий P0.4/P0.5 audit. Предыдущий follow-up
 [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
 исправил откат семейного списка после неуспешного toggle; его регрессия прошла
 3/3 desktop engines. `useCouncilChat` изолирует временное состояние по

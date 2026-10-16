@@ -990,6 +990,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     Chromium/Firefox/WebKit; typecheck и diff check прошли. Точный CI предыдущего
     SHA нашёл пропущенный `releasedMembers` в fixture; исправление включено в
     [`b1c01ae`](https://github.com/Michael-edel/FitFocus/commit/b1c01ae2338265b0aa925f269dc61140af3791dd), точный CI запускается после push.
+  - [x] Удержать создание семьи со старой server session, повторно войти в тот
+    же account и отпустить ответ. Новая сессия остаётся на своей семье; старая
+    вкладка не запускает повторный family GET или achievement. Сценарий и два
+    ранее добавленных same-account read/invite прошли 9/9 на desktop
+    Chromium/Firefox/WebKit; общий typecheck и diff check прошли. Кодовый commit
+    [`3c49439`](https://github.com/Michael-edel/FitFocus/commit/3c49439a6469e000591343538e2c212d52b16e3d); точный CI ожидает push.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;
