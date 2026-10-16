@@ -3,25 +3,24 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; последний опубликованный head — `f09b356`.
+`fix/state-generations`; опубликованный head — `c44027f`.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Последний опубликованный CI run #1465 для
-`f09b356` завершился [ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38924431808):
-audit, guards, unit, typecheck и build прошли; E2E упал в двух сценариях.
+подключён, но общий P0 ещё открыт. Последний завершённый CI run #1467 для
+`c44027f` завершился [одной ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38931381772):
+audit, guards, unit, typechecks и build прошли.
 iPhone Safari trace показал успешный запрос списка новой недели, но тестовый mock
 ответил старой записью: тест переключал mock после смены часов браузера. Порядок
 фикстуры исправлен, три недельных сценария прошли 9/9 на iPhone Safari без
-retries. Desktop WebKit сообщил `/api/state due to access control checks` после
-перезагрузки экрана прогресса и смены вкладки. Повтор до поправки прошёл 5/5;
-тест теперь ждёт пустую durable outbox после reload и прикладывает к ошибке
-консольную локацию и неуспешные `/api/state` запросы. После этого он прошёл 3/3
-на desktop WebKit. Причина сообщения WebKit требует подтверждения точным CI.
+retries. В desktop WebKit оставшийся account-switch сценарий зафиксировал
+отменённый фоновый `wis_text` `/api/ai` запрос во время reload. Локальная правка
+ждёт завершения запроса и появления weekly report в durable storage до reload.
+Типы и целевой WebKit-сценарий прошли 3/3 в отдельных запусках без retries.
 
-Локальная ветка также содержит сценарий повторной авторизации weekly AI report
-с новым `serverSessionId`: он прошёл 6/6 на Chromium, Firefox и WebKit. Все
-локальные результаты не заменяют точный CI нового SHA. Merge в `main`, staging и
-релиз не выполнены; следующий шаг — отправить изменения и проверить workflow.
+Локальная ветка также добавила
+same-account reauthentication сценарий для weekly AI report (6/6 на Chromium,
+Firefox и WebKit). Новый E2E-фикс и документация пока не запушены. Merge в
+`main`, staging и релиз не выполнены.
 
 Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA
 `8dfab604c97f90f6720e8185f0366bbe61b9383d`, ответ страницы 200 и анонимные API

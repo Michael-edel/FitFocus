@@ -1325,6 +1325,9 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
   await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).not.toBeNull();
   await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), weeklyReportsKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
 
   const progressUiKeyA = `fitfocus.progress.ui.v1:${accountA.id}`;
   const progressUiStateA = {

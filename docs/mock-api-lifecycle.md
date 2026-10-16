@@ -113,12 +113,11 @@ access-control и Firefox IDB timeout не воспроизведены и не 
 ответ для будущей недели, потом двигают часы; context, shopping response и
 shopping check прошли 9/9 на iPhone Safari без retries.
 
-В desktop WebKit account-switch тест зарегистрировал console error для
-`/api/state` после reload экрана прогресса. Trace CI не показывает завершённого
-запроса к этому пути. После reload тест теперь ждёт пустую durable outbox, а при
-повторном сбое прикладывает location console-сообщения и детали requestfailed.
-Локальный целевой тест прошёл 3/3 без retries; причину исходного сообщения
-проверит точный CI следующей ревизии. Это mock browser evidence и не заменяет
+В desktop WebKit account-switch тест run #1467 завершился ошибкой отменённого
+фонового weekly AI `wis_text` запроса при reload. Фикстура теперь ждёт, пока
+автоматический запрос завершится и weekly report сохранится в durable storage,
+прежде чем тест перезагрузит страницу. Типы и целевой WebKit-сценарий прошли
+3/3 в отдельных запусках без retries. Это mock browser evidence и не заменяет
 staging или реальный OAuth.
 
 Общий план — в [TASKS](../TASKS.md), состояние — в
