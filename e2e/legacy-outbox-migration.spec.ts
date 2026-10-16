@@ -9,6 +9,20 @@ const legacySourceKey = 'fitfocus.remote-kv-outbox.v1';
 const targetKey = `fitfocus_data_${account}_plan_task_done`;
 const orphanKey = 'fitfocus_data_another-account_orphan';
 const malformedKey = `fitfocus_data_${account}_malformed`;
+const malformedLegacyCases: Array<{ rawRecord: unknown; reason: string }> = [
+  { rawRecord: null, reason: 'not-an-object' },
+  { rawRecord: { type: 'other', key: `fitfocus_data_${account}_invalid_type` }, reason: 'invalid-type' },
+  { rawRecord: { type: 'delete', key: '' }, reason: 'invalid-key' },
+  { rawRecord: { type: 'put', key: malformedKey, value: { should: 'remain-raw' } }, reason: 'put-without-value' },
+  { rawRecord: { type: 'delete', key: `fitfocus_data_${account}_delete_with_value`, value: '' }, reason: 'delete-with-value' },
+  { rawRecord: { type: 'put', key: `fitfocus_data_${account}_invalid_base_version`, value: 'raw', baseVersion: -1 }, reason: 'invalid-baseVersion' },
+  { rawRecord: { type: 'put', key: `fitfocus_data_${account}_invalid_retry_count`, value: 'raw', retryCount: 0.5 }, reason: 'invalid-retryCount' },
+];
+const malformedLegacyKeys = malformedLegacyCases.flatMap(({ rawRecord }) => {
+  if (typeof rawRecord !== 'object' || rawRecord === null) return [];
+  const key = (rawRecord as { key?: unknown }).key;
+  return typeof key === 'string' ? [key] : [];
+});
 const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
 
@@ -106,9 +120,17 @@ function quarantinedRecordExists(records: MigrationUnknown[], key: string): bool
     && typeof rawRecord === 'object' && (rawRecord as { key?: unknown }).key === key);
 }
 
-function quarantinedRecordFor(records: MigrationUnknown[], key: string, reason: string): MigrationUnknown | undefined {
-  return records.find(({ rawRecord, reason: actualReason }) => actualReason === reason && rawRecord !== null
-    && typeof rawRecord === 'object' && (rawRecord as { key?: unknown }).key === key);
+function quarantinedRecordForRaw(records: MigrationUnknown[], expectedRawRecord: unknown, reason: string): MigrationUnknown | undefined {
+  const expected = JSON.stringify(expectedRawRecord);
+  return records.find(({ rawRecord, reason: actualReason }) => actualReason === reason
+    && JSON.stringify(rawRecord) === expected);
+}
+
+function malformedQuarantineSummary(records: MigrationUnknown[]) {
+  return malformedLegacyCases.map(({ rawRecord, reason }) => {
+    const retained = quarantinedRecordForRaw(records, rawRecord, reason);
+    return { reason: retained?.reason, rawRecord: retained?.rawRecord };
+  });
 }
 
 test('preserves legacy intent without sending an operation whose server generation is unproven', async ({ context }, info) => {
@@ -143,16 +165,16 @@ test('preserves legacy intent without sending an operation whose server generati
     expect(legacyWritesBeforeUpdate).toBeGreaterThan(0);
     expect(server.counts.currentStatePutAttempts).toBe(0);
 
-    // Exercise both owner quarantine and malformed-record quarantine alongside the real write.
-    const malformedRecord = { type: 'put', key: malformedKey, value: { should: 'remain-raw' } };
-    const oldSource = await oldPage.evaluate(({ sourceKey, foreignKey, invalidRecord }) => {
+    // Exercise owner quarantine and every legacy normalizer failure alongside the real write.
+    const oldSource = await oldPage.evaluate(({ sourceKey, foreignKey, invalidRecords }) => {
       const records = JSON.parse(localStorage.getItem(sourceKey) ?? '[]') as unknown[];
       records.push({ type: 'put', key: foreignKey, value: 'must-remain-quarantined' });
-      records.push(invalidRecord);
+      records.push(...invalidRecords);
       const raw = JSON.stringify(records);
       localStorage.setItem(sourceKey, raw);
       return raw;
-    }, { sourceKey: legacySourceKey, foreignKey: orphanKey, invalidRecord: malformedRecord });
+    }, { sourceKey: legacySourceKey, foreignKey: orphanKey,
+      invalidRecords: malformedLegacyCases.map(({ rawRecord }) => rawRecord) });
 
     server.release();
     await mockApp(currentPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
@@ -165,7 +187,6 @@ test('preserves legacy intent without sending an operation whose server generati
       const state = await migrationState(currentPage);
       const imported = itemForKey(state.migrationItems, targetKey);
       const quarantined = itemForKey(state.migrationItems, orphanKey);
-      const malformed = quarantinedRecordFor(state.migrationUnknown, malformedKey, 'put-without-value');
       const operation = state.operations.find((entry) => entry.opId === imported?.opId);
       return {
         sourceFingerprintFields: legacySourceFingerprintFields(state.source),
@@ -180,9 +201,8 @@ test('preserves legacy intent without sending an operation whose server generati
         foreignState: quarantined?.state,
         foreignReason: quarantined?.reason,
         foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
-        malformedReason: malformed?.reason,
-        malformedRawRecord: malformed?.rawRecord,
-        malformedOperationCreated: state.operations.some((entry) => entry.key === malformedKey),
+        malformedQuarantine: malformedQuarantineSummary(state.migrationUnknown),
+        malformedOperationCount: state.operations.filter((entry) => malformedLegacyKeys.includes(entry.key)).length,
         migrationStatus: state.progress?.status,
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
@@ -200,9 +220,8 @@ test('preserves legacy intent without sending an operation whose server generati
       foreignState: 'unknown',
       foreignReason: 'unknown-owner',
       foreignRawRetained: true,
-      malformedReason: 'put-without-value',
-      malformedRawRecord: malformedRecord,
-      malformedOperationCreated: false,
+      malformedQuarantine: malformedLegacyCases,
+      malformedOperationCount: 0,
       migrationStatus: 'partial',
       sendAllowed: false,
       writersStopped: false,
@@ -285,7 +304,6 @@ test('preserves legacy intent without sending an operation whose server generati
       const state = await migrationState(currentPage);
       const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
       const preserved = state.operations.find((entry) => entry.reason === 'legacy-writer-local-only');
-      const malformed = quarantinedRecordFor(state.migrationUnknown, malformedKey, 'put-without-value');
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
       return {
         sourceFingerprintFields: legacySourceFingerprintFields(state.source),
@@ -301,9 +319,8 @@ test('preserves legacy intent without sending an operation whose server generati
         foreignState: itemForKey(state.migrationItems, orphanKey)?.state,
         foreignReason: itemForKey(state.migrationItems, orphanKey)?.reason,
         foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
-        malformedReason: malformed?.reason,
-        malformedRawRecord: malformed?.rawRecord,
-        malformedOperationCreated: state.operations.some((entry) => entry.key === malformedKey),
+        malformedQuarantine: malformedQuarantineSummary(state.migrationUnknown),
+        malformedOperationCount: state.operations.filter((entry) => malformedLegacyKeys.includes(entry.key)).length,
         migrationStatus: state.progress?.status,
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
@@ -322,9 +339,8 @@ test('preserves legacy intent without sending an operation whose server generati
       foreignState: 'unknown',
       foreignReason: 'unknown-owner',
       foreignRawRetained: true,
-      malformedReason: 'put-without-value',
-      malformedRawRecord: malformedRecord,
-      malformedOperationCreated: false,
+      malformedQuarantine: malformedLegacyCases,
+      malformedOperationCount: 0,
       migrationStatus: 'partial',
       sendAllowed: true,
       writersStopped: true,
@@ -332,7 +348,9 @@ test('preserves legacy intent without sending an operation whose server generati
     expect(server.counts.currentStatePutAccepted).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
     expect(server.stateWriteKeys).not.toContain(orphanKey);
-    expect(server.stateWriteKeys).not.toContain(malformedKey);
+    for (const key of malformedLegacyKeys.filter((entry) => entry.length > 0)) {
+      expect(server.stateWriteKeys).not.toContain(key);
+    }
     expect(server.counts.legacyStatePutAttempts).toBe(legacyWritesBeforeUpdate);
     // The pinned old profile writer has no current scope headers; its request is denied as expected.
     expect(server.unexpectedApi).toContain('INVALID_SCOPE:/api/profile');
@@ -363,7 +381,9 @@ test('preserves legacy intent without sending an operation whose server generati
     expect(server.stateWriteKeys).toContain(targetKey);
     expect(server.counts.currentStatePutAccepted).toBeGreaterThan(acceptedBeforeResolution);
     expect(resolvedState.value).toBe(updatedOldValue);
-    expect(server.stateWriteKeys).not.toContain(malformedKey);
+    for (const key of malformedLegacyKeys.filter((entry) => entry.length > 0)) {
+      expect(server.stateWriteKeys).not.toContain(key);
+    }
     await info.attach('legacy-outbox-migration', { body: JSON.stringify({
       sourceRecord: generatedRecord, oldSource, databaseVersion: (await migrationState(currentPage)).databaseVersion,
       acceptedStateKeys: server.stateWriteKeys, counts: server.counts,
