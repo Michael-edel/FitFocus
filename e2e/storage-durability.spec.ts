@@ -88,6 +88,7 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   settingsSuccessGate?: { started: () => void; wait: Promise<void> };
   settingsPayloads?: Array<{ baseVersion: number; value: string }>;
   loseFirstSettingsResponse?: boolean;
+  unscopedStateWrites?: Array<{ method: string; url: string; body: string | null }>;
 } = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
@@ -96,7 +97,12 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   }) }));
   await page.route('**/api/state*', async (route) => {
     const request = route.request(); const headers = request.headers();
-    if (!headers['x-fitfocus-state-account']) { await route.fallback(); return; }
+    if (!headers['x-fitfocus-state-account']) {
+      if (request.method() === 'PUT' || request.method() === 'DELETE') {
+        options.unscopedStateWrites?.push({ method: request.method(), url: request.url(), body: request.postData() });
+      }
+      await route.fallback(); return;
+    }
     const scope = { 'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
       'X-FitFocus-State-Account': headers['x-fitfocus-state-account'], 'X-FitFocus-State-Session': headers['x-fitfocus-state-session'] };
     if (request.method() === 'GET') {
@@ -125,6 +131,10 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     if (options.settingsSuccessGate && items.some((item) => item.key.endsWith('_settings'))) {
       options.settingsSuccessGate.started();
       await options.settingsSuccessGate.wait;
+      if (page.isClosed() || page.url() === 'about:blank') {
+        await route.abort('failed').catch(() => {});
+        return;
+      }
     }
     if (options.loseFirstSettingsResponse && settingsItems.length === 1) {
       const item = settingsItems[0];
@@ -203,6 +213,77 @@ test('keeps an unacknowledged intent conflicted when the server committed but th
     expect(errors).toEqual([]);
   } finally {
     releaseFirstWrite();
+  }
+});
+
+test('reclaims a durable settings send after its tab closes and the lease expires', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  const server = new Map<string, ServerStateItem>();
+  const settingsRequests: number[] = [];
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  const unscopedStateWrites: Array<{ method: string; url: string; body: string | null }> = [];
+  let releaseFirstWrite!: () => void;
+  let markFirstWriteStarted!: () => void;
+  const firstWriteWait = new Promise<void>((resolve) => { releaseFirstWrite = resolve; });
+  const firstWriteStarted = new Promise<void>((resolve) => { markFirstWriteStarted = resolve; });
+  const options = {
+    settingsRequests,
+    settingsPayloads,
+    unscopedStateWrites,
+    settingsSuccessGate: { started: markFirstWriteStarted, wait: firstWriteWait },
+  };
+  let releaseRetry!: () => void;
+  let markRetryStarted!: () => void;
+  const retryWait = new Promise<void>((resolve) => { releaseRetry = resolve; });
+  const retryStarted = new Promise<void>((resolve) => { markRetryStarted = resolve; });
+  let retryTab: Page | undefined;
+
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+  await page.clock.setFixedTime(await page.evaluate(() => Date.now()));
+
+  try {
+    await page.getByRole('button', { name: /^Светлая/ }).click();
+    await firstWriteStarted;
+    const initial = await storedSettings(page);
+    expect(initial.operations).toHaveLength(1);
+    expect(initial.operations[0]).toMatchObject({ status: 'sending', type: 'put' });
+    const original = initial.operations[0];
+    expect(original.attempt?.attemptId).toBeTruthy();
+
+    await page.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
+    await page.close();
+    options.settingsSuccessGate = { started: markRetryStarted, wait: retryWait };
+
+    retryTab = await context.newPage();
+    await mockApp(retryTab, { session: 'app' });
+    await verifiedServer(retryTab, server, options);
+    await retryTab.clock.setFixedTime((original.attempt?.startedAtMs ?? 0) + 30_001);
+    await openApp(retryTab, '/#settings');
+    await retryStarted;
+
+    const reclaimed = await storedSettings(retryTab);
+    expect(reclaimed.operations).toHaveLength(1);
+    expect(reclaimed.operations[0]).toMatchObject({ opId: original.opId, status: 'sending', type: 'put' });
+    expect(reclaimed.operations[0].value).toBe(original.value);
+    expect(reclaimed.operations[0].attempt?.attemptId).not.toBe(original.attempt?.attemptId);
+    expect(reclaimed.operations[0].attempt?.owner).not.toBe(original.attempt?.owner);
+    expect(settingsRequests).toEqual([0, 0]);
+    expect(settingsPayloads).toEqual([
+      { baseVersion: original.baseVersion, value: original.value },
+      { baseVersion: original.baseVersion, value: original.value },
+    ]);
+    expect(unscopedStateWrites).toEqual([]);
+
+    releaseRetry();
+    await expect.poll(async () => (await storedSettings(retryTab!)).confirmedVersion).toBe(1);
+    expect((await storedSettings(retryTab)).operations).toHaveLength(0);
+    expect(server.get('fitfocus_data_google-e2e-sub_settings')).toEqual({ version: 1, value: original.value });
+  } finally {
+    releaseFirstWrite();
+    releaseRetry();
+    if (retryTab && !retryTab.isClosed()) await retryTab.close();
   }
 });
 

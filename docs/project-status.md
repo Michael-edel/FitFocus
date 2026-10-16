@@ -7,10 +7,16 @@ draft в `fix/state-generations`; работа в ветке `fix/durable-outbox
 Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
 old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
 глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:
-browser/PWA matrix 7/7 без retries, три targeted unit suite 132/132,
+browser/PWA matrix 7/7 без retries, четыре targeted unit suite 160/160,
 `npm run typecheck`, `git diff --check`. Полный CI для объединённого HEAD ещё
 должен завершиться; PR, staging, device/OAuth и release acceptance остаются
 открытыми.
+
+Дополнительный P0.9 browser-сценарий закрывает вкладку с отправкой, затем после
+истечения lease повторно захватывает ту же операцию в новой вкладке. Он прошёл
+7/7 desktop/mobile/PWA проектов без retries; outbox unit suite — 28/28. Для
+teardown используется переход на `about:blank`, и матрица прошла без proxy
+`ECONNREFUSED`. Полная приёмка P0.9 и staging остаются открытыми.
 
 Локальные follow-ups `d028bc4` и `2e7f024` проверили два P0.9 сценария на всех
 семи Playwright browser/PWA-проектах без retries. Потерянный ответ после commit

@@ -5,7 +5,9 @@
 Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
 на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
 legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
-browser/PWA-проектов, 132/132 targeted unit, typecheck и diff check.
+browser/PWA-проектов; сценарий остановки sender-вкладки и повторного lease claim
+также прошёл 7/7 проектов. Четыре targeted unit suite прошли 160/160; typecheck
+и diff check прошли.
 Для объединённого HEAD необходим полный точный CI; staging, выпуск и интеграция
 в защищённую `main` не подтверждены.
 В плане остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока
@@ -1350,6 +1352,12 @@ legacy-ключ не используется для новой очереди �
     Playwright-проектов без retries на коммите
     [d028bc4](https://github.com/Michael-edel/FitFocus/commit/d028bc4d5a14e0711b40a8b10e446cdc9e382511).
     Это mock API acceptance; staging и остальные строки матрицы остаются открыты.
+  - [x] Browser-acceptance закрытия отправляющей вкладки и повторного захвата
+    просроченной lease: та же операция сохраняет opId/payload, получает новый
+    attempt/owner и подтверждается после повторного входа в IndexedDB. Сценарий
+    прошёл 7/7 desktop/mobile/PWA проектов без retries; `durable_outbox.test.ts`
+    прошёл 28/28, включая игнорирование ответа старого attempt. Mock acceptance
+    не закрывает staging и остальные lifecycle строки.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

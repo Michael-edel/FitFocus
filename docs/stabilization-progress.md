@@ -4988,3 +4988,22 @@ Android Chrome/PWA, iPhone Safari/PWA, `retries=0`); `tests/state_sync.test.ts`
 CI #1421 проверяет предыдущий опубликованный SHA и пока выполняет E2E;
 он не подтверждает эту проверку. Mock не подтверждает staging, OAuth,
 реальный Service Worker или выпуск.
+
+## P0.9 — повторный захват после остановки отправляющей вкладки, 16.10.2026
+
+`e2e/storage-durability.spec.ts` проверяет живой сценарий с общей IndexedDB:
+первая вкладка сохраняет settings intent и claim в состоянии `sending`, затем
+выгружается и закрывается. Новая вкладка стартует со временем за пределом
+30-секундной lease, повторно захватывает ту же операцию с новым attempt ID и
+owner и подтверждает её через mock API. Проверяются неизменные opId/payload,
+baseVersion, версия сервера и пустая очередь после подтверждения. Существующий
+`tests/durable_outbox.test.ts` отдельно проверяет, что ответ старого attempt после
+reclaim не подтверждает и не удаляет операцию.
+
+Browser-сценарий прошёл 7/7 desktop Chromium/Firefox/WebKit, Android Chrome/PWA
+и iPhone Safari/PWA (`workers=1`, `retries=0`); outbox unit suite прошёл 28/28,
+`npm run typecheck` и `git diff --check` прошли. Переход через `about:blank` перед
+закрытием использует штатный lifecycle mock fixture и в финальном полном matrix
+прогоне не оставил proxy `ECONNREFUSED`. Изменены только E2E и документация;
+production-код не менялся. Полный CI нового HEAD, staging, реальные устройства,
+OAuth, BFCache и общая release acceptance остаются открытыми.
