@@ -4651,3 +4651,20 @@ desktop Chromium, Firefox и WebKit (`workers=1,retries=0`); общий typechec
 CI #1409 создан для предыдущего SHA `aeb68e0`, поэтому новый create-тест требует
 отдельного точного CI после push. Общий P0.5 и остальные callbacks остаются
 открытыми.
+
+## P0.5 — поздний family-join ответ после same-account login, 16.10.2026
+
+Добавлен E2E для удержанного `POST /api/family/join`: после повторного входа
+того же аккаунта с новым `serverSessionId` поздний ответ старой сессии не
+публикует результат, не перечитывает семейный контекст и не выдаёт achievement.
+Старая вкладка сохраняет session notice, а её форма скрыта. Фикстура проверяет,
+что запрос отправлен только с исходным session id. Это уточняет существовавший
+A → B тест: ожидание видимого поля после session guard заменено на проверку,
+что устаревшая форма отсутствует; production-код не менялся.
+
+Четыре same-account acceptance (family context GET, invite, create и join),
+вместе со смежным A → B family-join acceptance, прошли 15/15 на desktop
+Chromium, Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и
+`git diff --check` прошли; CI нового опубликованного HEAD запускается после
+push. Общий P0.5, оставшиеся callbacks, staging, полный lifecycle и выпуск
+остаются открытыми.

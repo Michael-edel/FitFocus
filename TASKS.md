@@ -996,6 +996,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     ранее добавленных same-account read/invite прошли 9/9 на desktop
     Chromium/Firefox/WebKit; общий typecheck и diff check прошли. Кодовый commit
     [`3c49439`](https://github.com/Michael-edel/FitFocus/commit/3c49439a6469e000591343538e2c212d52b16e3d); точный CI ожидает push.
+  - [x] Удержать `/api/family/join` старой server session, повторно войти в тот
+    же account и отпустить поздний ответ: старая вкладка остаётся под session
+    notice, форма старой сессии скрыта, повторного family GET и achievement нет.
+    Вместе с A → B join и тремя same-account проверками context/invite/create
+    выборка прошла 15/15 на desktop Chromium/Firefox/WebKit без retries.
+    Точный CI этого follow-up ожидает push; общий P0.5 остаётся открытым.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;

@@ -10,10 +10,14 @@
 прошли на Chromium; unit suite — 1318/1318, root/domain/storage typecheck и
 production build прошли. Проверка использует mock API; точный CI текущего HEAD,
 реальная среда и общий P0.4 остаются открытыми. Дополнительно
-Поздний family-context GET, создание invite и создание семьи после повторной
-авторизации того же account прошли по 3/3 на desktop Chromium/Firefox/WebKit;
-четыре соседних family callback сценария прошли 12/12. Локальный typecheck
-также прошёл. CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
+Поздний family-context GET, создание invite, создание семьи и вступление в семью
+после повторной авторизации того же account прошли по 3/3 на desktop
+Chromium/Firefox/WebKit. Вместе с прежним A → B family-join acceptance выборка
+из пяти сценариев прошла 15/15 без retries; session notice сохраняется, старый
+join response не меняет экран и не вызывает повторный family GET или achievement.
+Предыдущий typecheck прошёл; полный typecheck текущего follow-up и
+`git diff --check` тоже прошли. Точный CI текущего HEAD запускается после push.
+CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
 исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
 новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.
 Эти acceptance не закрывают общий P0.4/P0.5 audit. Предыдущий follow-up

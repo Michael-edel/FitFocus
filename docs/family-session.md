@@ -234,6 +234,11 @@ staging и реальные браузерные сессии остаются �
   Поздний ответ создания семьи после повторного входа также не вызывает
   повторный family GET или achievement; новый семейный экран остаётся
   неизменным (3/3 desktop engines).
+  Поздний ответ `/api/family/join` после повторного входа того же account тоже
+  не применяется: старая вкладка сохраняет session notice, форма скрыта,
+  повторного family GET и achievement нет (3/3 desktop engines). Четыре
+  same-account acceptance (context GET, invite, create, join) прошли 12/12;
+  вместе с A → B family-join acceptance выборка прошла 15/15 в тех же браузерах.
   Четыре смежных callback сценария прошли 12/12 в тех же браузерах.
   Последний проверяет, что смена аккаунта останавливает durable hydration до
   чтения устаревшего ответа. Suite `family-menu-durable.spec.ts` прошла 39/39
