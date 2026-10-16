@@ -1011,9 +1011,12 @@ const App: React.FC = () => {
       setProfileSyncNote,
       setLastProfileSyncAt,
       persistUser,
+      refreshProfileWithGuardImpl: id => stateSync.refreshProfileWithGuard(id),
+      assertReadGuardImpl: guard => assertReadSession(guard, { isCurrentSession: isCurrentProfileSession }),
+      setLoginReadGuard,
       applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setLoginReadGuard]);
 
   // Edits are already durable. A debounce wakes the current sender without obtaining fresh proof.
   useProfileAutoSync({

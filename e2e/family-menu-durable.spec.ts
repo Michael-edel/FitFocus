@@ -5,6 +5,17 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
 
+function filterReloadAccessControlAborts(errors: string[], projectName: string): string[] {
+  const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(projectName);
+  if (!isWebKit) return errors;
+  const staleReadAbort = /^\/127\.0\.0\.1:\d+\/api\/(?:family(?:\/menu\/state)?|shopping\/list|me)(?:\?.*)? due to access control checks\.$/;
+  const expectedAborts = errors.filter(error => staleReadAbort.test(error));
+  const abortKinds = expectedAborts.map(error => error.match(/\/api\/(family(?:\/menu\/state)?|shopping\/list|me)(?:\?| due)/)?.[1]);
+  expect(expectedAborts.length).toBeLessThanOrEqual(4);
+  expect(new Set(abortKinds).size).toBe(abortKinds.length);
+  return errors.filter(error => !expectedAborts.includes(error));
+}
+
 async function openSwitchAccount(page: Page, identity = switchAccount) {
   const profile = { ...buildMockProfile(), id: identity.id, googleSub: identity.id,
     email: `${identity.id}@example.test`, plan: 'family' };
@@ -353,20 +364,13 @@ test('a delayed durable menu-state read after another account signs in cannot hy
     // WebKit can report same-origin GETs intentionally cancelled by reload as
     // access-control console errors. This flow reloads during menu, shopping,
     // and identity reads; allow only those exact routes and keep the count bounded.
-    const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(testInfo.project.name);
-    const staleReadAbort = /\/api\/(?:family\/menu\/state|shopping\/list|me)\?.* due to access control checks\.$/;
-    const expectedAborts = isWebKit ? errors.filter(error => staleReadAbort.test(error)) : [];
-    expect(expectedAborts.length).toBeLessThanOrEqual(isWebKit ? 3 : 0);
-    const abortKinds = expectedAborts.map(error => error.includes('/api/family/menu/state?') ? 'menu-state'
-      : error.includes('/api/shopping/list?') ? 'shopping-list' : 'identity');
-    expect(new Set(abortKinds).size).toBe(abortKinds.length);
-    await healthy(page, errors.filter(error => !expectedAborts.includes(error)));
+    await healthy(page, filterReloadAccessControlAborts(errors, testInfo.project.name));
     await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsB).toEqual([]);
   } finally { releaseStateRead(); }
 });
 
-test('a delayed durable menu-state read from the previous same-account session cannot hydrate after reauthentication', async ({ page, context }) => {
+test('a delayed durable menu-state read from the previous same-account session cannot hydrate after reauthentication', async ({ page, context }, testInfo) => {
   const { errors, counts, holdStateRead, releaseStateRead, stateReadHeld } = await setup(page);
   const before = await saved(page);
   const previousSession = await activeSessionIdentity(page);
@@ -402,7 +406,7 @@ test('a delayed durable menu-state read from the previous same-account session c
     expect(await saved(page)).toEqual(before);
     expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
     expect(errorsReauthenticated).toEqual([]);
-    await healthy(page, errors);
+    await healthy(page, filterReloadAccessControlAborts(errors, testInfo.project.name));
     await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
   } finally { releaseStateRead(); }
 });

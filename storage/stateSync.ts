@@ -298,6 +298,11 @@ export class StateSync {
 
   /** A refresh cannot replace an intent, a newer local read, or another session. */
   async refreshProfile(accountId: string): Promise<string | null> {
+    return (await this.refreshProfileWithGuard(accountId))?.value ?? null;
+  }
+
+  /** Return the exact read guard whose proof and transaction accepted the profile snapshot. */
+  async refreshProfileWithGuard(accountId: string): Promise<{ value: string; readGuard: OutboxReadGuard } | null> {
     if (this.accountId !== accountId) return null;
     const generation = this.generation;
     if (!await this.verify(generation) || !this.profileProtocol || !this.session || !this.readGuard) return null;
@@ -316,7 +321,7 @@ export class StateSync {
         || typeof body.profile.version !== 'number' || !Number.isSafeInteger(body.profile.version) || body.profile.version < 1) return null;
       const raw = JSON.stringify(body.profile);
       const applied = await this.outbox.hydrate(accountId, key, { value: raw, version: body.profile.version, exists: true }, observed.revision, session.sessionEpoch, guard.authFence);
-      return generation === this.generation && applied ? raw : null;
+      return generation === this.generation && applied ? { value: raw, readGuard: { ...guard } } : null;
     } finally { this.requests.delete(controller); }
   }
 
