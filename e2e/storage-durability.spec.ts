@@ -738,6 +738,47 @@ test('quota fault rolls back settings and displays a visible storage error', asy
   await page.screenshot({ path: testInfo.outputPath('storage-error.png'), fullPage: false });
 });
 
+test('transaction abort rolls back settings and displays a visible storage error', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  const weeklyReportResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    return new URL(response.url()).pathname === '/api/ai'
+      && request.method() === 'POST'
+      && request.postDataJSON()?.feature === 'wis_text';
+  });
+  await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
+  await openApp(page, '/#settings');
+  const reportResponse = await weeklyReportResponse;
+  await reportResponse.finished();
+  await expect.poll(() => storedWeeklyReportCount(page)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"light"');
+  await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(1);
+  const previous = await storedSettings(page);
+  await page.evaluate(() => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (value, key) {
+      const request = add.call(this, value, key);
+      const record = value as { key?: unknown } | null;
+      if (this.name === 'outbox' && typeof record?.key === 'string' && record.key.endsWith('_settings')) {
+        const transaction = this.transaction;
+        request.addEventListener('success', () => transaction.abort(), { once: true });
+      }
+      return request;
+    };
+  });
+  await page.getByRole('button', { name: /^Violet AI/ }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'Не удалось сохранить изменения' });
+  await alert.scrollIntoViewIfNeeded();
+  await expect(alert).toBeVisible();
+  await expect(page.getByText('Cloud: error', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('Cloud: saved', { exact: true })).toHaveCount(0);
+  expect(await storedSettings(page)).toEqual(previous);
+  expect(errors).toEqual([]);
+});
+
 test('keeps an unacknowledged settings intent after a network disconnect and retries it after reload', async ({ page }) => {
   test.setTimeout(60_000);
   const server = new Map<string, ServerStateItem>();
