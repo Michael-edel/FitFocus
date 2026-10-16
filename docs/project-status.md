@@ -5,12 +5,14 @@
 HEAD [`568c559`](https://github.com/Michael-edel/FitFocus/commit/568c559ad4b1c9b87aa7780de49112f133dce38b)
 проверяется в [CI run #1417](https://github.com/Michael-edel/FitFocus/actions/runs/38845192574):
 guards, unit, три typecheck и production build прошли, E2E ещё выполняются.
-Локальный follow-up [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75)
-добавляет same-account reauthentication acceptance для задержанного
-`GET /api/family/menu`. Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и
-WebKit; `npm run typecheck` и `git diff --check` прошли. Для `c986b75` нужен exact
-CI после push; он не включён в run #1417. Общий P0.4/P0.5 остаётся открытым для
-остальных callbacks, полного lifecycle, staging и release-приёмки.
+Локальные follow-ups [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75)
+и [`2a64a4f`](https://github.com/Michael-edel/FitFocus/commit/2a64a4f) добавляют
+same-account reauthentication acceptance для задержанных `GET /api/family/menu`
+и `POST /api/family/menu/generate`. Новые сценарии прошли 3/3 на desktop
+Chromium, Firefox и WebKit; вместе с delayed preview/menu-state регрессиями —
+12/12. `npm run typecheck` и `git diff --check` прошли. Оба follow-up не входят
+в run #1417; exact CI для них запускается после push. Общий P0.4/P0.5 остаётся
+открытым для остальных callbacks, полного lifecycle, staging и release-приёмки.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное
