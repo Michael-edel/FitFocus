@@ -1032,6 +1032,20 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     вместе с тремя соседними family-shopping проверками прошёл 12/12 на desktop
     Chromium/Firefox/WebKit без retries; typecheck и diff check прошли.
     Остальные callbacks, точный CI и staging открыты.
+  - [x] Удержать GET `/api/shopping/list` семейной корзины, повторно войти в тот
+    же account с новой server session и отпустить ответ старой сессии. Новая
+    вкладка показывает только свой маркер списка; маркер старого ответа не
+    появляется после его освобождения. Новый сценарий прошёл 3/3, а вся выборка
+    same-account family callback acceptance — 21/21 на desktop Chromium,
+    Firefox и WebKit (`workers=1,retries=0`). Runtime-код не менялся; точный CI
+    нового теста и staging остаются открытыми.
+  - [x] Исправить пустой экран после logout: `useCouncilChat` создавал render key
+    при `currentUser=null` и `loginGuard=null`, затем читал `currentUser.id`.
+    Теперь временный state key создаётся только при подтверждённом непустом
+    accountId. Regression удерживает family AI-ответ, выполняет logout, затем
+    освобождает ответ и проверяет auth screen, отсутствие pageerror, outbox
+    mutation и achievement; прошла 3/3 на desktop Chromium/Firefox/WebKit.
+    Точный CI изменённого SHA, общая матрица и staging остаются открытыми.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;
@@ -1229,6 +1243,11 @@ all-client Service Worker fence, атомарные migration items и quarantin
   конфликт отменяет единую транзакцию всех пяти stores. Браузерный импорт и
   rollback прошли 4/4 на Firefox и Android Chrome в `38d169c`.
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
+  - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
+    войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
+    Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
+    Тест прошёл 3/3 на desktop Chromium, Firefox и WebKit; точный CI изменённого
+    SHA, другие callbacks, staging и общий lifecycle остаются открытыми.
 - [x] Реализовать локальную очистку точных account-owned ключей и записей в
   пяти IDB stores одной транзакцией; инвалидировать сессию удаляемого аккаунта,
   сохранить чужие записи и показывать предупреждение при неполной очистке.

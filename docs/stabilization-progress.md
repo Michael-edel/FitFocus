@@ -150,6 +150,20 @@ Chromium, Firefox и WebKit без retries. Полный unit suite — 1308/130
 после push. Остальные cloud callbacks/cache, staging и полный P0.4 lifecycle
 остаются открытыми.
 
+## P0.5 — blank screen при logout во время family AI, 16.10.2026
+
+Полная family-menu матрица обнаружила runtime `TypeError: Cannot read properties
+of null (reading 'id')` сразу после logout. Stack trace указал на `useCouncilChat`:
+render-key условие допускало сравнение двух отсутствующих account id, затем
+обращалось к `currentUser.id`. Хук теперь формирует account/session scope только
+при непустом `currentUser.id` и совпадающем `loginGuard.accountId`.
+
+Regression удерживает ответ family AI, выполняет настоящий logout через mock
+endpoint и только после появления auth screen освобождает старый ответ. Проверены
+отсутствие pageerror, операции family-menu и achievement. Chromium, Firefox и
+WebKit прошли 3/3; общий и строгие typecheck, admin guards и production build
+прошли локально. CI точного нового SHA ещё предстоит подтвердить.
+
 ## 15.10.2026 — account/session lifecycle для всех профильных экранов (`cdc872b`)
 
 Несколько account-aware экранов оставляли локальное React state между входами:
@@ -4686,6 +4700,27 @@ typecheck и `git diff --check` прошли. CI #1413 проверяет опу
 после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
 открытыми.
 
+## P0.5 — поздний GET семейного списка после same-account reauth, 16.10.2026
+
+Добавлен задержанный GET `/api/shopping/list`: после повторного входа того же
+аккаунта новая сессия получает отдельный маркер списка; освобождённый ответ
+старой сессии не появляется в её интерфейсе. Проверка прошла 3/3 на desktop
+Chromium, Firefox и WebKit. Совместный прогон семи same-account family callback
+acceptance прошёл 21/21 с `workers=1/retries=0`; typecheck и `git diff --check`
+прошли. Производственный код не менялся, ошибка не обнаружена.
+
+## P0.8 — позднее чтение family-menu snapshot после same-account reauth, 16.10.2026
+
+Добавлен E2E для удержанного GET `/api/family/menu/state`: та же учётная запись
+принимает новый `serverSessionId` и `sessionEpoch`, после чего освобождается
+ответ прежней сессии. Значения, family-menu snapshot и outbox остаются равны
+снимку до ответа. Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit.
+В `openSwitchAccount` добавлена поддержка тестовой identity с другим session id;
+runtime-код не менялся. CI #1415 завершился failure на опубликованном HEAD
+`64e46d6`: build/typecheck/unit прошли, E2E завершился с 72 failed и 651 passed;
+локальные follow-up в эту ревизию не входили. Точный CI после push, staging и
+old/new bundle lifecycle остаются открытыми проверками.
+
 ## P0.5 — поздний AI weekly-menu ответ после same-account login, 16.10.2026
 
 Добавлен acceptance для удержанного `/api/ai` `weekly_menu`: пока AI-ответ
@@ -4744,3 +4779,19 @@ Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и `git diff -
 содержит два последующих локальных family follow-up; их точный CI запускается
 после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
 открытыми.
+
+## Проверка текущих family callbacks и logout, 16.10.2026
+
+Account-switch acceptance уточнены по фактическому поведению старой вкладки:
+после смены сессии она показывает блокирующее session notice, поэтому ввод
+создания семьи и CSV-кнопка должны отсутствовать; CSV экспортируется только из
+активной вкладки и содержит список её аккаунта. Временное окно теста delayed
+shopping-check теперь начинается непосредственно перед освобождением отложенного
+ответа, чтобы не учитывать фоновые GET, начатые до него.
+
+Выборка из 36 family create/CSV/same-account reauth/logout сценариев прошла на
+Chromium, Firefox и WebKit последовательными прогонами: сначала 34/36, после
+уточнения границы ответа оставшаяся проверка прошла 3/3. Профильные unit-тесты —
+185/185; общий, domain-strict и storage-strict typecheck, admin guards, production
+build и `git diff --check` прошли. Новый SHA ещё не отправлен; точный CI и staging
+остаются открытыми.

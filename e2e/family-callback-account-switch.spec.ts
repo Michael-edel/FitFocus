@@ -45,6 +45,7 @@ type FixtureState = {
   familyShoppingListRequests?: number;
   familyShoppingListAccounts?: string[];
   familyShoppingListSessions?: string[];
+  familyShoppingListNamesBySession?: Record<string, string>;
   releasedFamilyShoppingLists?: number;
   supportListAccounts?: string[];
   releasedSupportLists?: number;
@@ -410,12 +411,17 @@ async function installAccountApi(
         await heldFamilyShoppingListResponse.promise;
         state.releasedFamilyShoppingLists = (state.releasedFamilyShoppingLists ?? 0) + 1;
         return json({ family_id: `family-${accountA.id}`, week_start: weekStart,
-          items: [{ name: 'Семейный список A', grams: 400, checked: false }] }, accountA);
+          items: [{ name: state.familyShoppingListNamesBySession?.[requestedSession ?? ''] ?? 'Семейный список A', grams: 400, checked: false }] }, accountA);
       }
       return json({
         family_id: state.familyId && scopedAccount.id === state.current.id ? state.familyId : `family-${scopedAccount.id}`,
         week_start: weekStart,
-        items: [{ name: `Семейный список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400, checked: false }],
+        items: [{
+          name: state.familyShoppingListNamesBySession?.[requestedSession ?? '']
+            ?? `Семейный список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`,
+          grams: 400,
+          checked: false,
+        }],
       });
     }
     if (path === '/api/shopping/check') {
@@ -676,7 +682,8 @@ test('a delayed family-create response from account A cannot publish success aft
     expect(await activeAccount(page)).toBe(accountB.id);
     fixtureA.releaseCreate();
     await expect.poll(() => state.releasedCreates).toBe(1);
-    await expect(familyName).toHaveValue('Семья A');
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect(page.getByRole('button', { name: 'Создать', exact: true })).toHaveCount(0);
     await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
     await page.waitForTimeout(100);
     expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
@@ -1002,6 +1009,85 @@ test('a delayed family shopping-list read from account A cannot appear after acc
   }
 });
 
+test('a delayed family shopping-list read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-shopping reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const oldListName = 'СПИСОК_СТАРОЙ_СЕССИИ';
+  const newListName = 'СПИСОК_НОВОЙ_СЕССИИ';
+  const state: FixtureState = {
+    current: accountA,
+    familyId: 'family-before-reauthentication',
+    inviteRequests: 0,
+    inviteTargetIds: [],
+    releasedInvites: 0,
+    shoppingCheckRequests: 0,
+    shoppingCheckAccounts: [],
+    releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0,
+    personalShoppingListAccounts: [],
+    releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0,
+    personalShoppingCheckRequests: 0,
+    personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0,
+    shoppingAchievements: [],
+    memberRequests: 0,
+    memberTargetIds: [],
+    releasedMembers: 0,
+    familyLoadSessions: [],
+    familyShoppingListAccounts: [],
+    familyShoppingListSessions: [],
+    familyShoppingListNamesBySession: { [accountA.sid]: oldListName },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, false, false, true);
+
+  try {
+    await openApp(page, '/#family');
+    await expect(page.getByRole('heading', { name: 'Семья family-before-reauthentication', exact: true })).toBeVisible();
+    await expect.poll(() => state.familyShoppingListSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
+    const previousSessionReads = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length ?? 0;
+
+    const reauthenticated = { ...accountA, sid: 'f'.repeat(64) };
+    state.current = reauthenticated;
+    state.familyId = 'family-after-reauthentication';
+    state.familyShoppingListNamesBySession![reauthenticated.sid] = newListName;
+    const reauthenticatedPage = await context.newPage();
+    const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+    try {
+      await openApp(reauthenticatedPage, '/#family');
+      await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-after-reauthentication', exact: true })).toBeVisible();
+      await expect(reauthenticatedPage.getByText(newListName, { exact: false })).toBeVisible();
+      await expect(reauthenticatedPage.getByText(oldListName, { exact: false })).toHaveCount(0);
+      await expect.poll(() => state.familyShoppingListSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+      await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+      fixtureA.releaseFamilyShoppingList();
+      await expect.poll(() => state.releasedFamilyShoppingLists ?? 0).toBeGreaterThanOrEqual(previousSessionReads);
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+      await expect(reauthenticatedPage.getByText(newListName, { exact: false })).toBeVisible();
+      await expect(reauthenticatedPage.getByText(oldListName, { exact: false })).toHaveCount(0);
+      expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionReads);
+      expect(errorsA).toEqual([]);
+      expect(errorsReauthenticated).toEqual([]);
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+      await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    } finally {
+      fixtureReauthenticated.releaseFamilyShoppingList();
+    }
+  } finally {
+    fixtureA.releaseFamilyShoppingList();
+  }
+});
+
 test('a delayed family shopping response cannot trigger an achievement after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family shopping callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
@@ -1063,7 +1149,6 @@ test('a delayed family shopping check from the previous same-account session is 
   await expect(page).toHaveTitle(/FitFocus/);
   await expect(page.getByRole('heading', { name: 'Семья family-before-reauthentication', exact: true })).toBeVisible();
   await expect.poll(() => state.familyShoppingListSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
-  const previousSessionFamilyListReads = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length;
   const oldCheckbox = page.getByRole('checkbox').first();
   await expect(oldCheckbox).toBeVisible();
   await oldCheckbox.check();
@@ -1095,6 +1180,7 @@ test('a delayed family shopping check from the previous same-account session is 
     });
     await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
 
+      const oldSessionListReadsBeforeLateResponse = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length ?? 0;
     fixtureA.releaseShoppingCheck();
     await expect.poll(() => state.releasedShoppingChecks).toBe(1);
     await page.waitForTimeout(700);
@@ -1102,7 +1188,7 @@ test('a delayed family shopping check from the previous same-account session is 
     await expect(newCheckbox).not.toBeChecked();
     expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
     expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication']);
-    expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionFamilyListReads);
+      expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(oldSessionListReadsBeforeLateResponse);
     expect(state.shoppingAchievements).toEqual([]);
     expect(errorsA).toEqual([]);
     expect(errorsReauthenticated).toEqual([]);
@@ -1218,9 +1304,8 @@ test('personal shopping CSV exports only the current account snapshot', async ({
   await expect(accountBPage.getByText('Список B', { exact: true })).toBeVisible();
   await expect.poll(() => activeAccount(page)).toBe(accountB.id);
 
-  const staleDownload = page.waitForEvent('download', { timeout: 1_000 }).then(() => true).catch(() => false);
-  await page.getByRole('button', { name: 'CSV', exact: true }).click();
-  expect(await staleDownload).toBe(false);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByRole('button', { name: 'CSV', exact: true })).toHaveCount(0);
 
   const currentDownloadPromise = accountBPage.waitForEvent('download');
   await accountBPage.getByRole('button', { name: 'CSV', exact: true }).click();

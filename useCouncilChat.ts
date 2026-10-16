@@ -50,8 +50,10 @@ type UseCouncilChatArgs = {
 };
 
 export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isCurrentSession, allowCachedUiStateRestore }: UseCouncilChatArgs) {
-  const sessionScopeKey = allowCachedUiStateRestore && loginGuard?.accountId === currentUser?.id
-    ? accountSessionRenderKey(loginGuard, currentUser.id)
+  const accountId = currentUser?.id;
+  const sessionScopeKey = allowCachedUiStateRestore && !!accountId
+    && loginGuard?.accountId === accountId
+    ? accountSessionRenderKey(loginGuard, accountId)
     : null;
   const { value: councilInput, setValue: setCouncilInput } = useAccountScopedUiState(sessionScopeKey, '');
   const { value: councilLoading, setValue: setCouncilLoading } = useAccountScopedUiState(sessionScopeKey, false);

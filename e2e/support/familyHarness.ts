@@ -56,7 +56,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
   let cloud = familyTestMenu(account), profile = buildMockProfile();
-  const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0, stateReads: 0 };
+  const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0, stateReads: 0, logout: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   let releasePreview!: () => void; const heldPreview = new Promise<void>(resolve => { releasePreview = resolve; });
   let holdStateRead = false, stateReadHeld = false;
@@ -84,7 +84,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
       if (request.method() !== 'GET') expect(request.postDataJSON().items.every((item: { key: string }) => !item.key.includes('_family_menu:'))).toBe(true);
       return json(request.method() === 'GET' ? { items: [] } : { ok: true, items: request.postDataJSON().items.map((item: { key: string; baseVersion: number }) => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
     }
-    if (path === '/api/logout') { active = false; return json({ ok: true }); }
+    if (path === '/api/logout') { counts.logout += 1; active = false; return json({ ok: true }); }
     if (path === '/api/wearable/huawei/status') return json({ configured: false, connected: false });
     if (path === '/api/achievements' && request.method() === 'POST') { counts.achievements += 1; return json({ ok: true, unlocked: [] }); }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },
@@ -140,7 +140,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
   return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview,
     holdStateRead: () => { holdStateRead = true; }, releaseStateRead: releaseHeldStateRead, stateReadHeld: () => stateReadHeld,
-    close: () => { active = false; } };
+  };
 }
 export async function navigate(page: Page, name: string) {
   const button = page.getByRole('button', { name, exact: true });

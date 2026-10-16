@@ -116,6 +116,15 @@ old/new migration smoke с legacy intent, UI конфликтов и backup/эк
 Точный CI этого follow-up ожидает push; остальные writers и общая lifecycle-
 приёмка остаются открытыми.
 
+Добавлена проверка границы повторного входа того же аккаунта: старый
+`GET /api/family/menu/state` удерживается во время reload, соседняя вкладка
+принимает новую `serverSessionId` и `sessionEpoch`, затем старый ответ
+освобождается. Значения, семейный снимок и outbox после этого остаются равны
+предварительному IndexedDB-снимку. Новый сценарий прошёл 3/3 на desktop
+Chromium, Firefox и WebKit; production-код не менялся. Текущий CI проверяет
+предыдущий опубликованный SHA и не включает тест; точный CI этой ревизии,
+staging и lifecycle со старым/новым bundle остаются открытыми.
+
 ## Настоящие bundles на одном origin
 
 Локальный Chromium smoke: 2/2, последовательно pending и conflicted.

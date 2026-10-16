@@ -5,12 +5,12 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
 
-async function openSwitchAccount(page: Page) {
-  const profile = { ...buildMockProfile(), id: switchAccount.id, googleSub: switchAccount.id,
-    email: `${switchAccount.id}@example.test`, plan: 'family' };
+async function openSwitchAccount(page: Page, identity = switchAccount) {
+  const profile = { ...buildMockProfile(), id: identity.id, googleSub: identity.id,
+    email: `${identity.id}@example.test`, plan: 'family' };
   const headers = {
-    'X-FitFocus-State-Account': switchAccount.id,
-    'X-FitFocus-State-Session': switchAccount.sid,
+    'X-FitFocus-State-Account': identity.id,
+    'X-FitFocus-State-Session': identity.sid,
     'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
     'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
     'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
@@ -26,13 +26,13 @@ async function openSwitchAccount(page: Page) {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(body) });
     if (path === '/api/env') return json({ requireInvite: false });
-    if (path === '/api/me') return json({ user: { sub: switchAccount.id, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: switchAccount.id, sessionId: switchAccount.sid },
+    if (path === '/api/me') return json({ user: { sub: identity.id, roles: ['user'] }, hasAccess: true,
+      stateSync: { protocol: 2, guard: 1, accountId: identity.id, sessionId: identity.sid },
       bootstrapSync: { protocol: 1, guard: 1 }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
       achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 }, pushSync: { protocol: 1, guard: 1 }, familySync: { protocol: 1, guard: 1, target: 1 },
       familyMenuSync: { protocol: 1, guard: 1, cas: 1 }, profile });
-    if (path === '/api/bootstrap') return json({ user: { sub: switchAccount.id }, profile, items: [] });
+    if (path === '/api/bootstrap') return json({ user: { sub: identity.id }, profile, items: [] });
     if (path === '/api/state') {
       if (request.method() === 'GET') return json({ items: [] });
       const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
@@ -70,6 +70,28 @@ async function activeAccountId(page: Page) {
         request.onerror = () => reject(request.error);
       });
       return active?.accountId ?? null;
+    } finally { db.close(); }
+  });
+}
+
+async function activeSessionIdentity(page: Page) {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    try {
+      const request = db.transaction('outbox_meta', 'readonly').objectStore('outbox_meta').get('active-session');
+      const active = await new Promise<{ accountId?: string; serverSessionId?: string; sessionEpoch?: string } | undefined>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return active ? {
+        accountId: active.accountId ?? null,
+        serverSessionId: active.serverSessionId ?? null,
+        sessionEpoch: active.sessionEpoch ?? null,
+      } : null;
     } finally { db.close(); }
   });
 }
@@ -153,12 +175,14 @@ test('AI family generation commits once through the family queue', async ({ page
   await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-menu-ai.png') });
 });
 test('AI family response after logout cannot create a menu or achievements', async ({ page }) => {
-  const { counts, errors, release, close } = await setup(page, 'held-ai');
+  const { counts, errors, release } = await setup(page, 'held-ai');
   try {
     await navigate(page, 'План'); const update = page.getByRole('button', { name: 'Обновить', exact: true }); await update.scrollIntoViewIfNeeded(); await update.click();
-    await expect.poll(() => counts.ai).toBe(1); await navigate(page, 'Настройки'); close();
-    await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click(); release();
+    await expect.poll(() => counts.ai).toBe(1); await navigate(page, 'Настройки');
+    await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
+    await expect.poll(() => counts.logout).toBe(1);
     await expect(page.getByRole('heading', { name: 'FitFocus', exact: true })).toBeVisible();
+    release();
     await expect.poll(() => counts.fulfilled).toBe(1);
     expect(counts.put).toBe(0); expect(counts.oldWriter).toBe(0); expect(counts.achievements).toBe(0);
     expect((await saved(page)).operations).toEqual([]); await healthy(page, errors);
@@ -242,6 +266,47 @@ test('a delayed durable menu-state read after another account signs in cannot hy
     await healthy(page, errors);
     await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsB).toEqual([]);
+  } finally { releaseStateRead(); }
+});
+
+test('a delayed durable menu-state read from the previous same-account session cannot hydrate after reauthentication', async ({ page, context }) => {
+  const { errors, counts, holdStateRead, releaseStateRead, stateReadHeld } = await setup(page);
+  const before = await saved(page);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.accountId).toBe('google-e2e-sub');
+  expect(previousSession?.serverSessionId).toBe('a'.repeat(64));
+
+  try {
+    const readsBefore = counts.stateReads;
+    holdStateRead();
+    const reload = page.reload();
+    await expect.poll(() => stateReadHeld()).toBe(true);
+    expect(counts.stateReads).toBeGreaterThan(readsBefore);
+
+    const reauthenticatedPage = await context.newPage();
+    const reauthenticatedSession = { id: 'google-e2e-sub', sid: 'f'.repeat(64) };
+    const errorsReauthenticated = await openSwitchAccount(reauthenticatedPage, reauthenticatedSession);
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+    expect(previousSession?.sessionEpoch).not.toBe((await activeSessionIdentity(reauthenticatedPage))?.sessionEpoch);
+
+    releaseStateRead();
+    await reload;
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+    expect(await saved(page)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
+    expect(errorsReauthenticated).toEqual([]);
+    await healthy(page, errors);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
   } finally { releaseStateRead(); }
 });
 
