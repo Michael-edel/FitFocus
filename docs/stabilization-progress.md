@@ -1,5 +1,37 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — четыре E2E сбоя CI #1473, 17.10.2026
+
+Опубликованный HEAD `244b9db5fe0804c17bef3a2d85306af3c6e4f6ca` завершил
+[run #1473](https://github.com/Michael-edel/FitFocus/actions/runs/38947315275)
+с 840 passed / 255 skipped / 4 failed. Audit, guards, unit, три typecheck и
+production build прошли. Четыре трассы указали на разные причины:
+
+- PWA после offline reopen не отправлял settings. Новый документ не мог
+  получить `/api/me` без сети и оставался на auth choice после online. В
+  [`f5f5ebd`](https://github.com/Michael-edel/FitFocus/commit/f5f5ebd1a2f6a9984b5dfe66c1e17607a7e2c3e9)
+  добавлен повтор обычного guarded bootstrap по online; точный real-SW сценарий
+  прошёл 7/7 browser/PWA профилей.
+- Android profile refresh вместо редактора показал защиту от смены активной
+  сессии. Локально сбой не воспроизвёлся: профиль прошёл 8/8 повторов до
+  доработки и ещё один после неё. Тест теперь явно поднимает вкладку на передний
+  план, проверяет видимую страницу и прикладывает active-session identity при
+  отказе; причина CI-снимка остаётся непроверенной до повторного CI.
+- iPhone Safari legacy recovery завис на раскрытии conflict panel: update banner
+  появился поверх summary уже после проверки его видимости. Тест теперь ждёт
+  асинхронный баннер и закрывает его до клика; целевой тест прошёл 1/1 локально.
+- iPhone Safari weekly-menu recovery функционально продолжился после reload,
+  но WebKit вывел два CORS/access-control сообщения для GET `/api/me`, отменённых
+  при перезагрузке. Функциональная проверка уже видит восстановленную profile
+  запись. В тесте принимается только точный WebKit URL-шаблон и максимум два
+  таких сообщения; остальные ошибки остаются фатальными. Целевой тест прошёл
+  1/1 локально.
+
+На code commit локально прошли 1320 unit tests, основной и два strict typecheck,
+admin guards, `git diff --check`; все изменённые браузерные сценарии прошли на
+целевых проектах. Статусная документация обновлена; точный полный CI
+опубликованного snapshot ещё ожидается. P0.8/P0.9 и общий P0 не закрыты.
+
 ## P0.8 — Android PWA reload ждёт завершения weekly report, 16.10.2026
 
 Точный CI опубликованного `72ac769` — [run #1469](https://github.com/Michael-edel/FitFocus/actions/runs/38937798139):

@@ -1,20 +1,21 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
+Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний опубликованный [CI run #1469](https://github.com/Michael-edel/FitFocus/actions/runs/38937798139)
-для `72ac769` прошёл audit, guards, unit, typechecks и build; E2E завершился
-843 успешными сценариями, 255 пропусками и одним сбоем в Android PWA:
-проверка настроек увидела `Cloud: pending` после reload. Trace показал, что
-сохранение настроек уже подтверждено; перезагрузка прервала отдельную запись
-автоматического weekly AI-отчёта. Локально тест теперь дожидается её сохранения
-и пустой durable outbox перед reload. Коммит исправления — `402f7ba`; полный
-`storage-durability.spec.ts` прошёл 19/19 на Android PWA, целевой тест — 1/1,
-typecheck и `git diff --check` прошли. Исправление опубликовано в `402f7ba`;
-статусная документация опубликована в `1e9dd69`, для которого создан полный CI
-run #1471. Его итог нужно сверить перед следующими изменениями кода.
+Последний опубликованный [CI run #1473](https://github.com/Michael-edel/FitFocus/actions/runs/38947315275)
+для `244b9db` прошёл audit, guards, unit, три typecheck и build, но E2E дал
+840 passed / 255 skipped / 4 failed. Code follow-up
+[`f5f5ebd`](https://github.com/Michael-edel/FitFocus/commit/f5f5ebd1a2f6a9984b5dfe66c1e17607a7e2c3e9)
+повторно подтверждает сессию при online после офлайн-переоткрытия PWA; real
+offline scenario прошёл 7/7 браузерных профилей. Целевые profile refresh,
+legacy recovery и weekly menu recovery прошли в соответствующих локальных
+Android/WebKit проектах. Локально прошли 1320 unit tests, три typecheck,
+admin guards и `git diff --check`. Полный CI с этим code commit ожидается на
+следующем опубликованном snapshot. Четыре сбоя и
+результаты локальной проверки записаны в
+[журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,
 но выявил отдельное прерывание weekly AI `wis_text` при reload в desktop WebKit.

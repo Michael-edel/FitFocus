@@ -1,22 +1,25 @@
 # Текущее состояние FitFocus
 
-Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
+Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; E2E follow-up опубликован в code commit `402f7ba`, а
-его статусная документация — в `1e9dd69`.
+`fix/state-generations`; последний локальный code commit —
+[`f5f5ebd`](https://github.com/Michael-edel/FitFocus/commit/f5f5ebd1a2f6a9984b5dfe66c1e17607a7e2c3e9).
+Статусная документация обновлена; точный полный CI опубликованного snapshot ещё ожидается.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Последний завершённый CI run #1469 для
-`72ac769` прошёл audit, guards, unit, typechecks и build, но завершился
-[одним E2E-сбоем](https://github.com/Michael-edel/FitFocus/actions/runs/38937798139):
-843 сценария прошли, 255 пропущены. В Android PWA после reload остался
-`Cloud: pending`. Trace показал, что настройки уже подтверждены; reload оборвал
-отдельную запись weekly AI-отчёта. Локальный коммит `402f7ba` заставляет тест
-дождаться сохранения отчёта и пустой durable outbox до reload. Полный файл
-`storage-durability.spec.ts` прошёл 19/19 на Android PWA, целевой сценарий — 1/1;
-typecheck и `git diff --check` прошли. Для опубликованного follow-up запущен
-полный CI #1471; его терминальный результат следует сверить отдельно.
+подключён, но общий P0 ещё открыт. Последний опубликованный полный
+[CI run #1473](https://github.com/Michael-edel/FitFocus/actions/runs/38947315275)
+для `244b9db` прошёл audit, guards, unit, три typecheck и build, но завершился
+840 успешными E2E, 255 пропусками и четырьмя сбоями. В локальном follow-up
+`f5f5ebd` исправлена синхронизация PWA после офлайн-повторного открытия:
+при восстановлении сети приложение повторяет обычную guarded-проверку сессии,
+а PWA сценарий прошёл на всех семи браузерных профилях. Также устранена гонка
+между баннером обновления и legacy recovery, тест профиля теперь явно
+возвращает страницу на передний план, а weekly WebKit тест учитывает только
+строго совпадающий ограниченный сигнал отмены GET `/api/me` при reload.
+Один оставшийся CI сбой профиля пока не воспроизведён локально; результат
+повторного полного CI ещё неизвестен.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.
