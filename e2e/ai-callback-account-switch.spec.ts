@@ -497,6 +497,73 @@ test('AI Council uses account A proof and discards its held answer after account
   }
 });
 
+test('AI Council discards its held answer after the same account starts a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account AI Council callback acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'council_chairman');
+  await openApp(page, '/#council');
+  await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+  const question = 'Ответ старой сессии не должен попасть в новый AI Совет';
+  await page.getByPlaceholder('Ваш вопрос экспертам...').fill(question);
+  await page.locator('form').getByRole('button').click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const councilBefore = rawValue(beforeReauthentication, councilKey(accountA.id));
+  const operationsBefore = operationsFor(beforeReauthentication, accountA);
+  expect(councilBefore).toContain(question);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const reauthenticated = { id: accountA.id, sid: 'e'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#council');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const councilAtNewSession = rawValue(beforeOldResponse, councilKey(accountA.id));
+    const newSessionOperations = operationsFor(beforeOldResponse, accountA);
+    expect(councilAtNewSession).toBe(councilBefore);
+
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, councilKey(accountA.id))).toBe(councilAtNewSession);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(newSessionOperations);
+    expect(fixtureA.counts.aiRequests.filter(call => call.feature === 'council_chairman')).toEqual([{
+      feature: 'council_chairman', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('AI Council hides its transient draft after the same account starts a new session in another tab', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The same-account new-session UI acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
