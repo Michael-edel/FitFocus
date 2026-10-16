@@ -1,5 +1,25 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — quarantine повреждённой legacy-записи в настоящем bundle migration
+
+Browser acceptance [`2e7f024`](https://github.com/Michael-edel/FitFocus/commit/2e7f024b0706d82155859e7f9955d033bf338972)
+добавляет объектный `value` в legacy-запись `put` при запуске старого и нового
+bundle на одном origin. Проверка подтверждает, что мигратор сохраняет исходный
+`rawRecord` в `outbox_migration_unknown` с причиной `put-without-value`, не
+создаёт outbox operation и не отправляет этот ключ; после открытия writer fence
+миграция остаётся `partial`. Это закрывает браузерную проверку одного из
+обязательных malformed legacy форматов, но не закрывает весь P0.8.
+
+В полной browser/PWA матрице первоначальное 10-секундное ожидание открытия
+writer fence оказалось коротким под параллельной нагрузкой WebKit. Изолированный
+WebKit сценарий подтвердил, что сам quarantine проходит; ожидание именно этого
+barrier увеличено до 30 секунд, сохранив обязательное условие и `retries=0`.
+Повторный прогон прошёл 7/7: desktop Chromium/Firefox/WebKit, Android
+Chrome/PWA, iPhone Safari/PWA. Дополнительно прошли 128/128 тестов
+`legacy_migration` и `legacy_queue`, `npm run typecheck` и `git diff --check`.
+Новый точный CI ожидает публикации follow-up; staging и остальные legacy
+lifecycle cases остаются открытыми.
+
 ## 16.10.2026 — повторный вход того же аккаунта из другой вкладки
 
 `AppWorkspace` разрешал восстановление account UI, проверяя только

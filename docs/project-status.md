@@ -4,21 +4,26 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 Последний опубликованный HEAD —
 [`706910f`](https://github.com/Michael-edel/FitFocus/commit/706910f045269b5dfedd2d1aacdc7f995213e3f3)
-в ветке `fix/durable-outbox`. Его [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
-выполняется: dependency audit, schema/privacy/auth/API guards, unit, три typecheck
-и production build прошли; E2E и последующие rollback/CAS checks ещё не завершены.
+в ветке `fix/durable-outbox`; PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
+остаётся открытым draft в `fix/state-generations`. Его [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
+всё ещё выполняется на `706910f`: audit, schema/privacy/auth/API guards, unit,
+три typecheck и production build прошли; E2E и последующие rollback/CAS checks
+ещё не завершены.
 Более ранний [run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
 для `e4ced68` отменён после старта более нового PR workflow, поэтому его нельзя
 считать завершённой проверкой.
 
-Локальный follow-up `d028bc4` добавил browser acceptance потери HTTP-ответа
-после серверного commit. Во всех семи Playwright browser/PWA-проектах сценарий
-подтвердил сохранение прежнего opId и payload в конфликте, без продвижения
-confirmedVersion до проверенного ack; 56 профильных unit-тестов,
-`npm run typecheck`, browser production build и `git diff --check` прошли.
-Этот коммит пока локальный; текущий remote CI #1421 его не содержит. P0.8/P0.9
-остаются открытыми для остальных lifecycle-сценариев, полного CI, staging/device
-и release-приёмки. Локальная mock-проверка не подтверждает staging или выпуск.
+Локальные follow-ups `d028bc4` и `2e7f024` проверяют два P0.9 сценария на всех
+семи Playwright browser/PWA-проектах без retries. Потерянный ответ после commit
+сохраняет прежние opId/payload конфликтными и не продвигает `confirmedVersion`
+без ack; malformed legacy `put` остаётся в quarantine с исходным `rawRecord` и
+причиной `put-without-value`, не создаёт операцию и не отправляется даже после
+открытия writer fence, поэтому migration status остаётся `partial`. Для нового
+legacy acceptance прошли 128 профильных unit, `npm run typecheck` и
+`git diff --check`. Оба code follow-up и документация пока локальны; текущий
+remote CI #1421 их не содержит. P0.8/P0.9 остаются открытыми для остальных
+lifecycle-сценариев, полного CI, staging/device и release-приёмки. Локальная
+mock-проверка не подтверждает staging или выпуск.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное

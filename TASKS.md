@@ -1,12 +1,12 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 16.10.2026. Текущая локальная ветка — `durable-outbox`.
-Работа над стабилизацией P0.8 продолжается: аудит нормализатора и владельца миграции
-завершён, но полный lifecycle ещё не принят. Последний завершённый CI #1417
-прошёл audit, guards, unit, typecheck и build, однако завершился 27 ошибками
-E2E. Их основные причины исправлены в локальных тестах и перепроверены на
-затронутых browser/PWA профилях; исправления опубликованы в [`e4ced68`](https://github.com/Michael-edel/FitFocus/commit/e4ced6861cfeb6038e9a8e28f0c8c3ff91b2b0d0),
-CI #1418 поставлен в очередь.
+Обновлено: 16.10.2026. Текущая локальная ветка — `durable-outbox`, на четыре
+локальных коммита впереди опубликованного `706910f`. Стабилизация P0.8 продолжается:
+последний [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
+прошёл audit, guards, unit, typecheck и production build; E2E всё ещё выполняется.
+Локальные acceptance потерянного HTTP-ответа и повреждённой legacy-записи прошли
+по 7/7 browser/PWA-проектам без retries; новый migration сценарий также прошёл
+128 профильных unit, `npm run typecheck` и `git diff --check`.
 В плане остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока
 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
 подтверждены.
@@ -1258,6 +1258,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
   прошли 69/69 targeted unit, `storage-strict` typecheck и desktop Chromium E2E
   и полная migration матрица 7/7 без retries. Точный CI этого расширения,
   profile и delete lifecycle остаются открытыми.
+  - [x] Проверить malformed `put` в реальном old/new bundle smoke: исходный
+    `rawRecord` сохранён в quarantine с причиной `put-without-value`, операция
+    не создана и не отправлена, статус миграции остаётся `partial` даже после
+    открытия writer fence. Матрица прошла 7/7 без retries на коммите
+    [`2e7f024`](https://github.com/Michael-edel/FitFocus/commit/2e7f024b0706d82155859e7f9955d033bf338972);
+    полный CI этого SHA ожидает push.
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
