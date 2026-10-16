@@ -5220,3 +5220,21 @@ pending/sending операциями аккаунта, оставляя стро
 Android PWA; `npm run typecheck` и `git diff --check` прошли. Исправление меняет
 только тест. Точный CI нового SHA запускается после push; staging и полный P0.9
 release acceptance остаются открытыми.
+
+## P0.9 — уточнить Firefox baseline и WebKit reload aborts, `0de4865`, 16.10.2026
+
+Полный CI run [`38888606723`](https://github.com/Michael-edel/FitFocus/actions/runs/38888606723)
+для `fe44643` завершился с 835 passed / 254 skipped / 3 failed; audit, guards,
+unit, typecheck и build прошли. Firefox-сбой ожидал точное количество старых
+shopping-list reads до того, как старая вкладка обработала подтверждённую смену
+сессии; baseline теперь снимается после сообщения о смене сессии, а held
+response по-прежнему проверяет, что старые данные не применяются.
+
+Два WebKit/PWA сбоя возникли из-за сообщений `due to access control checks` при
+навигации во время in-flight `/api/me` или `/api/shopping/list`, а также
+удержанного `/api/family/menu/state`. Эти прерывания допускаются только для трёх
+указанных GET путей в WebKit, не более одного каждого; все ошибки вне allowlist
+остаются фатальными. Локальный набор прошёл 10/10 на допустимых browser/PWA
+профилях с четырьмя штатными skips; три WebKit/PWA повтора — 3/3; Firefox
+reauth callback — 5/5. `npm run typecheck` и `git diff --check` прошли. Изменены
+только E2E ожидания; точный CI нового SHA запускается после push.

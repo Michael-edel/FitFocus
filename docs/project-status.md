@@ -4,24 +4,26 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; опубликованная ветка `fix/durable-outbox` заканчивается
-на `d3d8cbd`. Локальные follow-up коммиты `1543cc9`, `e4a078f` и `f066fde` ещё не
-отправлены; они связывают family callbacks с исходной неделей запроса,
-сохраняют корректное восстановление shopping list после её смены и исправляют
-слишком широкое ожидание Cloud badge в Android PWA E2E.
+на `fe44643`. Локальный follow-up `0de4865` ещё не отправлен; он уточняет
+Firefox baseline для family reauthentication и WebKit/PWA отмены GET-запросов
+при reload.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
 Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
 прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
 обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
-[`#38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
-для `d3d8cbd` завершился с 816 E2E passed / 254 skipped / 1 failed; остальные
-gates прошли. Единственный сбой — слишком широкое ожидание отсутствия
-account-wide `Cloud: pending` после принятия настроек; исправлено в локальном
-`f066fde`. Целевой сценарий прошёл 13/13 повторов на desktop Chromium, Firefox,
-WebKit и Android PWA; root typecheck прошёл. Для локального
+[`#38888606723`](https://github.com/Michael-edel/FitFocus/actions/runs/38888606723)
+для `fe44643` завершился с 835 E2E passed / 254 skipped / 3 failed; остальные
+gates прошли. Первый Android PWA сбой из-за слишком широкого ожидания
+account-wide `Cloud: pending` исправлен в `f066fde`. Два новых тестовых сбоя
+разобраны и исправлены в локальном `0de4865`: Firefox сравнивает число старых
+shopping GET только после подтверждения новой сессии; WebKit допускает только
+известные cancelled GET при reload. Целевая матрица прошла 10/10 на допустимых
+профилях (4 skips штатные), плюс 3 WebKit/PWA повтора; callback Firefox прошёл
+5/5. Root typecheck прошёл. Для локального
 `e4a078f` полный `family-session.spec.ts` прошёл 33/33, включая недельный
 rollover 9/9 на Chromium/Firefox/WebKit; два strict typecheck прошли. Точный CI
-исправленного стека начнётся после push. Полный
+нового follow-up начнётся после push. Полный
 `owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
 `/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
 Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff

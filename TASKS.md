@@ -2,14 +2,17 @@
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft. Опубликованная ветка `fix/durable-outbox` заканчивается на
-`d3d8cbd`; локальные follow-up `1543cc9`, `e4a078f` и `f066fde` ещё не отправлены. CI run
-[`38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
-на `d3d8cbd` завершился с 816 E2E passed / 254 skipped / 1 failed; все проверки
-до E2E прошли. Сбой — слишком широкая проверка `Cloud: pending` в Android PWA:
-она требовала пустую очередь аккаунта, хотя проверяла только settings operation.
-В `f066fde` проверка badge соотнесена со всей очередью аккаунта. Целевой тест
-прошёл 13/13 локальных повторов на четырёх browser-профилях, `npm run typecheck`
-прошёл; точный CI исправленного HEAD запускается после push. Полный
+`fe44643`; локальный follow-up `0de4865` ещё не отправлен. CI run
+[`38888606723`](https://github.com/Michael-edel/FitFocus/actions/runs/38888606723)
+на `fe44643` завершился с 835 E2E passed / 254 skipped / 3 failed; все проверки
+до E2E прошли. Первый сбой — слишком широкая проверка `Cloud: pending` в Android
+PWA, исправленная в `f066fde`. Два новых сбоя затронули слишком ранний baseline
+old-session shopping read в Firefox и ожидаемые WebKit access-control warnings
+для GET-запросов, отменённых reload. В `0de4865` baseline перенесён на момент
+подтверждённой смены сессии, а узкий набор WebKit abort допускается только для
+трёх известных GET routes. Targeted matrix — 10 passed / 4 skipped, ещё 3
+WebKit/PWA повтора прошли; Firefox callback — 5/5; `npm run typecheck` прошёл.
+Точный CI нового SHA ожидает push. Полный
 `family-session.spec.ts` на актуальном стеке прошёл 33/33 на трёх desktop engines.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
