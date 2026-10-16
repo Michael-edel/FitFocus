@@ -17,6 +17,18 @@ async function storedSettings(page: Page) {
   });
 }
 
+async function storedSenderPause(page: Page) {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
+    try {
+      const request = db.transaction('outbox_meta', 'readonly').objectStore('outbox_meta').get('active-session');
+      const active = await new Promise<{ pause?: string } | undefined>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      return active?.pause ?? null;
+    } finally { db.close(); }
+  });
+}
+
 async function storedWeeklyReportCount(page: Page) {
   return page.evaluate(async () => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
@@ -79,6 +91,132 @@ test('settings edit survives reload in IndexedDB with its outgoing intent', asyn
   await expect(page.getByRole('status').filter({ hasText: 'ожидают синхронизации' })).toBeVisible();
   await expect(page.getByText('Cloud: pending', { exact: true })).toHaveCount(1);
   await expect(page.getByText('Cloud: saved', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('401 auth pause keeps a new settings edit and resumes the same operations after verification', async ({ page }) => {
+  test.setTimeout(60_000);
+  const account = 'google-e2e-sub';
+  const firstSession = 'a'.repeat(64);
+  const nextSession = 'c'.repeat(64);
+  const errors: string[] = [];
+  const settingsRequests: Array<{ account: string | undefined; session: string | undefined; value: string; baseVersion: number }> = [];
+  let stateSession = firstSession;
+  let authRejected = false;
+  let reauthenticated = false;
+  let serverVersion = 0;
+  let releaseFirstAck!: () => void;
+  let releaseSecondAck!: () => void;
+  let firstRetryStarted!: () => void;
+  let secondRetryStarted!: () => void;
+  const firstRetry = new Promise<void>(resolve => { firstRetryStarted = resolve; });
+  const secondRetry = new Promise<void>(resolve => { secondRetryStarted = resolve; });
+  const firstAck = new Promise<void>(resolve => { releaseFirstAck = resolve; });
+  const secondAck = new Promise<void>(resolve => { releaseSecondAck = resolve; });
+  page.on('pageerror', error => errors.push(error.message));
+  await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
+  await page.route('**/api/me*', async route => {
+    if (authRejected && !reauthenticated) {
+      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'UNAUTH' }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user: { sub: account, email: 'e2e@example.com', name: 'E2E User', roles: ['user'] },
+        hasAccess: true,
+        stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: stateSession },
+        bootstrapSync: { protocol: 1, guard: 1 },
+        profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 },
+        aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+        achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 },
+        pushSync: { protocol: 1, guard: 1 },
+      }),
+    });
+  });
+  await page.route('**/api/state*', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; value?: unknown; baseVersion?: unknown }> } | null;
+    const item = body?.items?.[0];
+    if (typeof item?.key !== 'string' || !item.key.endsWith('_settings') || typeof item.value !== 'string') return route.fallback();
+    const requestHeaders = request.headers();
+    const accountId = requestHeaders['x-fitfocus-state-account'];
+    const sessionId = requestHeaders['x-fitfocus-state-session'];
+    settingsRequests.push({ account: accountId, session: sessionId, value: item.value, baseVersion: Number(item.baseVersion) });
+    const headers = {
+      'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': accountId ?? account,
+      'X-FitFocus-State-Session': sessionId ?? stateSession,
+    };
+    if (!reauthenticated) {
+      authRejected = true;
+      await route.fulfill({ status: 401, contentType: 'application/json', headers, body: JSON.stringify({ error: 'UNAUTH' }) });
+      return;
+    }
+    const successfulAttempt = settingsRequests.filter(attempt => attempt.session === nextSession).length;
+    if (successfulAttempt === 1) { firstRetryStarted(); await firstAck; }
+    else if (successfulAttempt === 2) { secondRetryStarted(); await secondAck; }
+    else throw new Error(`UNEXPECTED_SETTINGS_ATTEMPT_${successfulAttempt}`);
+    const version = ++serverVersion;
+    await route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({
+      ok: true, items: [{ key: item.key, exists: true, version }],
+    }) });
+  });
+
+  await openApp(page, '/#settings');
+  const firstResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/state'
+    && response.request().method() === 'PUT' && response.status() === 401);
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await firstResponse;
+  await expect.poll(() => storedSenderPause(page)).toBe('auth');
+  await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(1);
+  const beforePauseEdit = await storedSettings(page);
+  const firstOperationId = beforePauseEdit.operations[0].opId;
+  expect(beforePauseEdit.operations[0].status).toBe('pending');
+
+  // Let AppWorkspace observe the auth-fence update; the local editor must remain usable.
+  await page.waitForTimeout(2_200);
+  await expect(page.getByRole('button', { name: /^Violet AI/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Violet AI/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"violet"');
+  await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(2);
+  const paused = await storedSettings(page);
+  const secondOperationId = paused.operations.find(operation => operation.opId !== firstOperationId)?.opId;
+  expect(secondOperationId).toBeTruthy();
+  expect(paused.operations.find(operation => operation.opId === firstOperationId)?.value).toContain('"theme":"light"');
+  expect(paused.operations.find(operation => operation.opId === secondOperationId)?.value).toContain('"theme":"violet"');
+  await page.waitForTimeout(1_200);
+  expect(settingsRequests).toHaveLength(1);
+  expect(await storedSenderPause(page)).toBe('auth');
+
+  stateSession = nextSession;
+  reauthenticated = true;
+  const freshProof = page.waitForResponse(response => new URL(response.url()).pathname === '/api/me');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await freshProof;
+  await firstRetry;
+  expect(settingsRequests[1]).toMatchObject({ account, session: nextSession, baseVersion: 0 });
+  const firstSending = await storedSettings(page);
+  expect(firstSending.operations.find(operation => operation.opId === firstOperationId)).toMatchObject({ status: 'sending', value: expect.stringContaining('"theme":"light"') });
+  expect(firstSending.operations.find(operation => operation.opId === secondOperationId)).toMatchObject({ status: 'pending', value: expect.stringContaining('"theme":"violet"') });
+
+  releaseFirstAck();
+  await secondRetry;
+  // The dependent operation keeps its opId and advances against the confirmed parent version.
+  expect(settingsRequests[2]).toMatchObject({ account, session: nextSession, baseVersion: 1 });
+  const secondSending = await storedSettings(page);
+  expect(secondSending.operations).toHaveLength(1);
+  expect(secondSending.operations[0]).toMatchObject({ opId: secondOperationId, status: 'sending', value: expect.stringContaining('"theme":"violet"') });
+  releaseSecondAck();
+
+  await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(0);
+  const confirmed = await storedSettings(page);
+  expect(confirmed.value).toContain('"theme":"violet"');
+  expect(confirmed.confirmedVersion).toBe(2);
+  expect(await storedSenderPause(page)).toBeNull();
+  expect(settingsRequests).toHaveLength(3);
   expect(errors).toEqual([]);
 });
 

@@ -109,11 +109,11 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       if (checking) return;
       checking = true;
       void outbox.sessionState()
-        .then(({ fence, active }) => {
+        .then(({ active }) => {
           if (disposed) return;
           setDurableSessionAccountId(active?.accountId ?? null);
+          // A sender pause advances authFence; it does not change the owner of local UI state.
           const next = JSON.stringify([
-            fence,
             active?.accountId ?? null,
             active?.serverSessionId ?? null,
             active?.sessionEpoch ?? null,
@@ -151,9 +151,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   }, []);
   // A second tab can change IndexedDB's active session without changing this tab's React props.
   const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
-  const activeSessionMatchesLoginGuard = loginGuard
+  const activeSessionIdentityMatchesLoginGuard = loginGuard
     ? durableSessionKey === JSON.stringify([
-      loginGuard.authFence,
       loginGuard.accountId,
       loginGuard.serverSessionId,
       loginGuard.sessionEpoch,
@@ -164,7 +163,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const allowCachedAccountUiStateRestore = durableSessionKey !== 'checking'
     && durableSessionKey !== 'unavailable'
     && (!loginGuard || loginGuard.accountId === currentUser?.id)
-    && activeSessionMatchesLoginGuard;
+    && activeSessionIdentityMatchesLoginGuard;
   const canRenderActiveTab = allowCachedAccountUiStateRestore
     || activeTab === 'guide'
     || activeTab === 'privacy'

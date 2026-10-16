@@ -6,8 +6,10 @@ export function accountSessionRenderKey(
   guard: OutboxReadGuard | null,
   accountId: string | null | undefined,
 ): string {
+  // authFence guards commits, but advances during a sender pause without changing
+  // the account session that owns local screen state.
   return guard
-    ? `${guard.accountId}:${guard.sessionEpoch}:${guard.serverSessionId}:${guard.authFence}`
+    ? `${guard.accountId}:${guard.sessionEpoch}:${guard.serverSessionId}`
     : `no-session:${accountId || 'anonymous'}`;
 }
 

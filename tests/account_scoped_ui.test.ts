@@ -18,6 +18,13 @@ describe('account-scoped UI state visibility', () => {
     expect(accountSessionRenderKey(null, 'user-a')).not.toBe(accountSessionRenderKey(null, 'user-b'));
   });
 
+  it('keeps local screen identity across an auth fence change within the same session', () => {
+    const beforePause = { accountId: 'user-a', sessionEpoch: 'epoch-a', serverSessionId: 'a'.repeat(64), authFence: 1 };
+    const afterPause = { ...beforePause, authFence: 2 };
+
+    expect(accountSessionRenderKey(beforePause, 'user-a')).toBe(accountSessionRenderKey(afterPause, 'user-a'));
+  });
+
   it('does not expose a prior profile weight draft or search query before hydration', () => {
     const accountA = 'fitfocus.dashboard.new-weight.v1:user-a';
     const accountB = 'fitfocus.dashboard.new-weight.v1:user-b';
