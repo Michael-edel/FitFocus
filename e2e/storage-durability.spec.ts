@@ -11,8 +11,9 @@ async function storedSettings(page: Page) {
     const [values, operations, metadata] = await Promise.all([read(tx.objectStore('values').getAll()), read(tx.objectStore('outbox').getAll()), read(tx.objectStore('outbox_meta').getAll())]);
     db.close();
     const value = values.find((entry) => entry.key.endsWith('_settings'));
+    const keyState = metadata.find((entry) => entry.key?.endsWith('_settings') && entry.confirmedVersion !== undefined);
     return { value: value?.value ?? null, operations: operations.filter((entry) => entry.key.endsWith('_settings')),
-      confirmedVersion: metadata.find((entry) => entry.key?.endsWith('_settings') && entry.confirmedVersion !== undefined)?.confirmedVersion ?? 0 };
+      keyState: keyState ?? null, confirmedVersion: keyState?.confirmedVersion ?? 0 };
   });
 }
 
