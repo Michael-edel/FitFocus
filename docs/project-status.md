@@ -1,28 +1,22 @@
 # Текущее состояние FitFocus
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
-здесь, результаты проверок — в [журнале](stabilization-progress.md). В текущем
-follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
-исправлена гонка семейного списка: после неуспешного toggle список перечитывается
-с сервера для тех же account/session, family и week, вместо отката к прежнему
-optimistic значению. Регрессия и смежная account-switch проверка прошли 3/3 на
-desktop Chromium/Firefox/WebKit; unit suite — 1318/1318, root/domain/storage
-typecheck и production build прошли. Это mock-API проверка; точный CI нового HEAD
-и реальная среда остаются открытыми. До этого локальный follow-up привязал
-временное root состояние AI Council (черновик вопроса,
-ошибка, этап/загрузка и раскрытые мысли) привязано к подтверждённой
-`accountSessionRenderKey`; смена сессии того же userId скрывает старые данные и
-отбрасывает старые setters. Также `useFoodSelection` изолирует выбранные блюда
-и bulk callbacks между account/session. Полный unit suite — 1318/1318 в 212
-файлах; root/domain/storage strict typecheck и production build прошли. Поздний
-ответ AI Council после A → B прошёл 3/3 на desktop-браузерах. Эти проверки не
-подтверждают повторный вход того же аккаунта или staging; P0.4 остаётся открыт.
-Кодовый follow-up опубликован коммитом `2f6afdc`; PR-run #1397 для этого SHA
-pending, jobs ещё не созданы. Push-run #1396 отменён как дубликат PR-события по
-branch concurrency policy. Перед слиянием проверить CI для актуального exact
-HEAD. Перед этим WIS-share уведомление было привязано
-к поколению account/session и durable read guard проверяется до передачи PNG
-системному API и после возврата; старый callback больше не показывает успех.
+здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
+кодовый follow-up [`5042db8`](https://github.com/Michael-edel/FitFocus/commit/5042db8adca01a58bcaff9c044d516b3d15394fb)
+сверяет полный durable-session tuple (`authFence`, `accountId`, `serverSessionId`,
+`sessionEpoch`) с `loginGuard`. Это закрывает воспроизведённый случай, когда
+черновик AI Council оставался в старой вкладке после повторного входа того же
+аккаунта; E2E прошёл 3/3 desktop engines. Семь связанных account-switch E2E
+прошли на Chromium; unit suite — 1318/1318, root/domain/storage typecheck и
+production build прошли. Проверка использует mock API; точный CI текущего HEAD,
+реальная среда и общий P0.4 остаются открытыми. Ранее
+[`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
+исправил откат семейного списка после неуспешного toggle; его регрессия прошла
+3/3 desktop engines. `useCouncilChat` изолирует временное состояние по
+`accountSessionRenderKey`, а `useFoodSelection` изолирует выбранные блюда и bulk
+callbacks между аккаунтами и сессиями. Перед слиянием проверять CI exact HEAD.
+Перед этим WIS-share уведомление было привязано к поколению account/session, а
+durable read guard проверяется до передачи PNG системному API и после возврата.
 До фикса в старой вкладке оставались видны профильное приветствие и сохранённая
 история AI-отчётов аккаунта A после входа B; теперь содержимое скрыто, а данные A
 остаются сохранены. Account-scoped hooks настроек и прочих root cache теперь не

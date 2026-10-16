@@ -659,6 +659,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
     typecheck и `git diff --check` прошли. Это приёмка одного cache-пути;
     остальной P0.4 audit и staging остаются открытыми.
+  - [x] При повторном входе того же account сравнивать `authFence`, `accountId`,
+    `serverSessionId` и `sessionEpoch`, а не только id аккаунта. До фикса старая
+    вкладка сохраняла черновик AI Council и не показывала session notice;
+    теперь несовпадающая сессия блокирует account UI, черновик скрыт, история
+    не меняется. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit; 7 связанных
+    account-switch сценариев прошли на Chromium. Unit 1318/1318, три typecheck,
+    production build и `git diff --check` прошли. [`5042db8`](https://github.com/Michael-edel/FitFocus/commit/5042db8adca01a58bcaff9c044d516b3d15394fb).
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
