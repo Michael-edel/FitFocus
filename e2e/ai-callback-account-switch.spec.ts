@@ -797,6 +797,79 @@ test('held personal weekly-menu response cannot write for account A after anothe
   }
 });
 
+test('held personal weekly-menu response cannot write after same-account reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly-menu reauthentication acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'weekly_menu');
+  await openApp(page, '/#plan');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const generate = page.getByRole('button', { name: 'Обновить план', exact: true });
+  await expect(generate).toBeEnabled();
+  page.once('dialog', dialog => dialog.accept());
+  await generate.click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#plan');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const profileBefore = rawValue(beforeOldResponse, profileKey(accountA.id));
+    const valuesBefore = valuesFor(beforeOldResponse, accountA);
+    const operationsBefore = operationsFor(beforeOldResponse, accountA);
+    const profileWritesBefore = [...fixtureA.counts.profileWrites];
+    const stateWritesBefore = [...fixtureA.counts.stateWrites];
+    const achievementChecksBefore = fixtureA.counts.achievementChecks;
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, profileKey(accountA.id))).toBe(profileBefore);
+    expect(valuesFor(afterOldResponse, accountA)).toEqual(valuesBefore);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(operationsBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites.filter(key => key !== weeklyReportsKey(accountA.id)))
+      .toEqual(stateWritesBefore.filter(key => key !== weeklyReportsKey(accountA.id)));
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'weekly_menu')).toEqual([{
+      feature: 'weekly_menu', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Позднее меню A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('held weekly report cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The weekly AI report account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
