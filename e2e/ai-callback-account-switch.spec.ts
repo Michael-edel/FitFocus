@@ -1492,10 +1492,18 @@ test('an open food insight from account A is hidden after another tab activates 
   await page.getByRole('button', { name: 'Корректировать', exact: true }).click();
   await expect(page.getByText('Корректировать блюдо', { exact: true })).toBeVisible();
 
-  const switched = await openAccountB(context, state);
+  const switched = await openAccountB(context, state, true, '/#nutrition');
   await waitForAccountSwitch(page);
   await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Тестовый омлет', { exact: true })).toHaveCount(0);
+  const afterSwitch = await readDurableSnapshot(page);
+  expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);
+  expect(JSON.parse(rawValue(afterSwitch, diaryKey(accountA.id)) ?? '[]'))
+    .toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет' })]));
+  expect(rawValue(afterSwitch, diaryKey(accountB.id))).toBeNull();
+  await expect(switched.page).toHaveURL(/#nutrition$/);
+  await expect(switched.page.getByText('Тестовый омлет', { exact: true })).toHaveCount(0);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
