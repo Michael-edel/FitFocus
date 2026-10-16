@@ -30,6 +30,7 @@ type FixtureState = {
   releasedMembers: number;
   noFamilyForA?: boolean;
   joinRequests?: number;
+  joinSessionIds?: string[];
   releasedJoins?: number;
   createRequests?: number;
   createSessionIds?: string[];
@@ -355,6 +356,7 @@ async function installAccountApi(
     }
     if (path === '/api/family/join') {
       state.joinRequests = (state.joinRequests ?? 0) + 1;
+      (state.joinSessionIds ??= []).push(requestedSession ?? '');
       if (holdJoin && scopedAccount.id === accountA.id) {
         await heldJoinResponse.promise;
         state.releasedJoins = (state.releasedJoins ?? 0) + 1;
@@ -619,7 +621,7 @@ test('a delayed family-join response from account A cannot publish success after
     expect(await activeAccount(page)).toBe(accountB.id);
     fixtureA.releaseJoin();
     await expect.poll(() => state.releasedJoins).toBe(1);
-    await expect(joinCode).toHaveValue('JOIN-CODE-A');
+    await expect(joinCode).toHaveCount(0);
     await expect(accountBPage.getByRole('heading', { name: accountB.name, exact: true })).toBeVisible();
     await page.waitForTimeout(100);
     expect(state.familyLoadAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyLoads);
@@ -883,6 +885,68 @@ test('a delayed family create from the previous same-account session is discarde
   } finally {
     fixtureA.releaseCreate();
     fixtureReauthenticated.releaseCreate();
+  }
+});
+
+test('a delayed family join from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-join reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const state: FixtureState = {
+    current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    joinSessionIds: [], familyJoinAchievements: [], familyLoadAccounts: [], familyLoadSessions: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => state.familyLoadSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
+  const joinCode = page.getByPlaceholder('Код приглашения');
+  await expect(joinCode).toBeVisible();
+  await joinCode.fill('JOIN-CODE-A');
+  await page.getByRole('button', { name: 'Войти в семью', exact: true }).click();
+  await expect.poll(() => state.joinRequests).toBe(1);
+  expect(state.joinSessionIds).toEqual([accountA.sid]);
+  const previousSessionFamilyLoads = state.familyLoadSessions?.filter(session => session === accountA.sid).length;
+
+  const reauthenticated = { ...accountA, sid: 'f'.repeat(64) };
+  state.current = reauthenticated;
+  state.noFamilyForA = false;
+  state.familyId = 'family-reauthenticated';
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+  try {
+    await openApp(reauthenticatedPage, '/#family');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-reauthenticated', exact: true })).toBeVisible();
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect.poll(() => state.familyLoadSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseJoin();
+    await expect.poll(() => state.releasedJoins).toBe(1);
+    await expect(joinCode).toHaveCount(0);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-reauthenticated', exact: true })).toBeVisible();
+    expect(state.joinSessionIds).toEqual([accountA.sid]);
+    expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionFamilyLoads);
+    expect(state.familyJoinAchievements).toEqual([]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseJoin();
+    fixtureReauthenticated.releaseJoin();
   }
 });
 
