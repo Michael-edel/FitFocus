@@ -1,23 +1,27 @@
 # Текущее состояние FitFocus
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
-здесь, результаты проверок — в [журнале](stabilization-progress.md). Опубликованный
-HEAD [`568c559`](https://github.com/Michael-edel/FitFocus/commit/568c559ad4b1c9b87aa7780de49112f133dce38b)
-проверяется в [CI run #1417](https://github.com/Michael-edel/FitFocus/actions/runs/38845192574):
-guards, unit, три typecheck и production build прошли, E2E ещё выполняются.
-Локальные follow-ups [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75)
+здесь, результаты проверок — в [журнале](stabilization-progress.md).
+Опубликованный HEAD [`568c559`](https://github.com/Michael-edel/FitFocus/commit/568c559ad4b1c9b87aa7780de49112f133dce38b)
+в [CI run #1417](https://github.com/Michael-edel/FitFocus/actions/runs/38845192574)
+завершился failure: audit, guards, unit, три typecheck и production build
+прошли; E2E — 27 failed, 706 passed, 247 skipped.
+
+Локальные follow-ups [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75),
 [`2a64a4f`](https://github.com/Michael-edel/FitFocus/commit/2a64a4f) и
-[`a794400`](https://github.com/Michael-edel/FitFocus/commit/a794400) добавляют
-same-account reauthentication acceptance для задержанных `GET /api/family/menu`,
-`POST /api/family/menu/generate` и AI-ответа семейной генерации. Новые сценарии
-прошли каждый 3/3 на desktop Chromium, Firefox и WebKit; preview/menu-state
-выборка прошла 12/12. `npm run typecheck` и `git diff --check` прошли. Все три
-follow-up не входят в run #1417; exact CI для них запускается после push. Общий
-P0.4/P0.5 остаётся открытым для остальных callbacks, полного lifecycle, staging
-и release-приёмки. Отдельная сверка legacy-нормализатора на текущем кодовом SHA
-`b362cc8` подтвердила требования P0.8; профильные unit-тесты прошли 128/128.
-Это закрывает только сверку формата, не полный импорт, old/new bundle lifecycle
-или выпуск P0.8.
+[`a794400`](https://github.com/Michael-edel/FitFocus/commit/a794400) добавили
+same-account reauthentication acceptance для семейного меню и AI callbacks; эти
+сценарии проходят 3/3 на desktop Chromium, Firefox и WebKit. Разбор CI #1417
+выявил устаревшие ожидания UI после смены вкладки и тестовые API mocks без
+валидного writer scope. Локальный follow-up в рабочем дереве исправляет эти
+проверки; typecheck и `git diff --check` прошли, затронутые E2E прошли:
+account-switch 12/12, multi-tab 7/7 browser/PWA, settings/quota 6/6 на WebKit,
+iPhone Safari и iPhone PWA, preview-origin 3/3 WebKit. Новый кодовый SHA ещё не
+опубликован, поэтому точный CI этого follow-up ожидает push. Общий P0.4/P0.5
+остаётся открытым для остальных callbacks, полного lifecycle, staging и release-
+приёмки. Сверка legacy-нормализатора на `b362cc8` и профильные unit-тесты 128/128
+подтверждают только формат, не полный импорт, old/new bundle lifecycle или выпуск
+P0.8.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное

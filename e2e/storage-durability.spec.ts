@@ -40,8 +40,22 @@ async function storedWeeklyReportCount(page: Page) {
 test('settings edit survives reload in IndexedDB with its outgoing intent', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', (message) => { if (message.type() === 'error' && !/\b503\b/.test(message.text())) errors.push(message.text()); });
   await mockApp(page, { session: 'app' });
+  // Keep the intent pending with a valid scoped offline response. The generic
+  // mock intentionally omits writer headers, which pauses auth and obscures the
+  // reload-durability behavior this test is meant to cover.
+  await page.route('**/api/state*', async route => {
+    const request = route.request();
+    if (!['PUT', 'DELETE'].includes(request.method())) return route.fallback();
+    const headers = request.headers();
+    await route.fulfill({ status: 503, contentType: 'application/json', headers: {
+      'X-FitFocus-State-Protocol': '2',
+      'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': headers['x-fitfocus-state-account'] ?? 'google-e2e-sub',
+      'X-FitFocus-State-Session': headers['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+    }, body: JSON.stringify({ error: 'INJECTED_OFFLINE' }) });
+  });
   await openApp(page, '/#settings');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect(page).toHaveURL(/#settings$/);
@@ -418,13 +432,14 @@ test('quota fault rolls back settings and displays a visible storage error', asy
       && request.method() === 'POST'
       && request.postDataJSON()?.feature === 'wis_text';
   });
-  await mockApp(page, { session: 'app' });
+  await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
   await openApp(page, '/#settings');
   const reportResponse = await weeklyReportResponse;
   await reportResponse.finished();
   await expect.poll(() => storedWeeklyReportCount(page)).toBeGreaterThan(0);
   await page.getByRole('button', { name: /^Светлая/ }).click();
   await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"light"');
+  await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(1);
   const previous = await storedSettings(page);
   await page.evaluate(() => {
     const add = IDBObjectStore.prototype.add;

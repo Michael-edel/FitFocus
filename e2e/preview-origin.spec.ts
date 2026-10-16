@@ -35,7 +35,7 @@ for (const [name, host] of hosts) {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (['error', 'warning'].includes(message.type())) errors.push(message.text()); });
     // This is an origin-routing test; the existing app fixture mocks SW and API.
-    await mockApp(page, { session: 'app' });
+    await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
     await openApp(page, entry);
     const light = page.getByRole('button', { name: /^Светлая/ });
     await expect(light).toBeVisible();

@@ -4877,3 +4877,44 @@ lifecycle остаются открытыми.
 fence. Production-код не менялся. Локально проверены эти требования миграции;
 полный old/new-bundle lifecycle, точный CI локальных follow-up и staging
 остаются открытыми.
+
+## PWA — разбор WebKit pageerror при обновлении, 16.10.2026
+
+Разобран сохранённый browser trace CI run `38249434753` для SHA `5b90249`.
+Первый запрос `/api/family/menu/state` получил ожидаемый `503`; затем при
+`controllerchange` Playwright зафиксировал WebKit pageerror для fetch того же
+PUT в rollback-клиенте. Событие пришло во время навигации на новую страницу,
+а повторный серверный ответ последовал уже после него. Проверка точных файлов
+из rollback-архива `98d4910` показывает, что `requestJson` выполняется внутри
+`try/catch` метода `StateSync.drain`, который переводит сетевую ошибку в retry;
+это локализует эффект как отмену повторного fetch на границе reload, но не
+является свидетельством потери durable intent. Общий фильтр ошибок не добавлен.
+
+На текущем HEAD `e2e/pwa-rollback-install.spec.ts` детерминированно дожидается
+первого `503`, удерживает следующий PUT в `sending` во время активации и после
+reload проверяет неизменность opId/payload, отмену старого запроса и отсутствие
+`unhandledrejection`/`window.error`. Тест прошёл 4/4 повторов desktop WebKit;
+отдельная Chromium/Firefox/WebKit матрица прошла 3/3 без retries. Production
+код не менялся. Опубликованный CI run `38845192574` на SHA `568c559` завершился
+failure на E2E; исправления тестовых ожиданий ниже не входят в этот SHA.
+Staging/device acceptance остаются открытыми.
+
+## CI #1417 — разбор E2E failure и тестовые исправления, 16.10.2026
+
+Run `38845192574` проверял PR merge SHA `70cb44f` и завершился с 27 failed,
+706 passed и 247 skipped; audit, schema/privacy/auth/API guards, unit,
+typecheck и build были успешны. В 12 account-switch сценариях тесты ждали
+контент старой учётной записи во вкладке, которая уже показывала корректный
+stale-session status. Multi-tab acceptance сам переводил соседнюю вкладку в
+stale state: общий mock отвечал на state writes невалидным `200` без protocol/
+scope headers. Storage и preview тесты испытывали тот же mock-побочный эффект;
+в durable settings acceptance теперь используется scoped `503`, а там, где
+тест не проверяет outbox, mock подтверждает state writes.
+
+Локальные исправления проверены: callback account-switch 12/12 на desktop
+Chromium/Firefox/WebKit; concurrent multi-tab без Web Locks 7/7 browser/PWA
+проектов; settings reload и quota rollback 6/6 на desktop WebKit, iPhone Safari
+и iPhone PWA; preview-origin 3/3 на WebKit; задержанный family state read 1/1
+на iPhone Safari. Здесь менялись E2E фикстуры/ожидания, production-код не
+затронут. Следующий release gate — typecheck, публикация точного HEAD, полный
+CI и проверки staging/device; до них P0.8/P0.9 остаются открытыми.

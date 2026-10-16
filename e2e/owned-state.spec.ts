@@ -121,16 +121,50 @@ test('failed council deletion keeps the visible history and reports a storage er
 
 test('two same-origin tabs without Web Locks retain concurrent writes to different keys', async ({ page, context }) => {
   test.setTimeout(60_000);
+  const stateWrites: Array<{ keys: string[]; account: string | undefined; session: string | undefined }> = [];
+  let releaseStateWrites!: () => void;
+  const stateWritesHeld = new Promise<void>(resolve => { releaseStateWrites = resolve; });
+  // Keep scoped responses in flight until both tabs' durable writes are observed;
+  // the generic mock deliberately returns an unscoped 200 and pauses the sender.
+  const holdStateWrites = async (target: Page) => target.route('**/api/state', async route => {
+    const request = route.request();
+    if (!['PUT', 'DELETE'].includes(request.method())) return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; baseVersion?: unknown }> } | null;
+    const items = Array.isArray(body?.items) ? body.items : [];
+    stateWrites.push({
+      keys: items.map(item => String(item.key ?? '')),
+      account: request.headers()['x-fitfocus-state-account'],
+      session: request.headers()['x-fitfocus-state-session'],
+    });
+    await stateWritesHeld;
+    const headers = {
+      'X-FitFocus-State-Protocol': '2',
+      'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'] ?? account,
+      'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+    };
+    if (request.method() === 'DELETE') {
+      const item = items[0];
+      return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({
+        ok: true, key: String(item?.key ?? ''), version: Number(item?.baseVersion ?? 0) + 1, exists: false,
+      }) });
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({ ok: true, items: items.map(item => ({
+      key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true,
+    })) }) });
+  });
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
   });
 
   const errorsA = await setup(page);
+  await holdStateWrites(page);
   await openApp(page, '/#plan');
   await expect(page.getByRole('button', { name: 'Записать первый завтрак', exact: true })).toBeVisible();
 
   const second = await context.newPage();
   const errorsB = await setup(second);
+  await holdStateWrites(second);
   try {
     await openApp(second, '/#settings');
     const light = second.getByRole('button', { name: /^Светлая/ });
@@ -146,7 +180,6 @@ test('two same-origin tabs without Web Locks retain concurrent writes to differe
       ]);
       return [plan.operations.length, settings.operations.length];
     }).toEqual([1, 1]);
-
     const [planFromA, settingsFromA, planFromB, settingsFromB] = await Promise.all([
       state(page, 'plan_task_done'), state(page, 'settings'),
       state(second, 'plan_task_done'), state(second, 'settings'),
@@ -167,8 +200,16 @@ test('two same-origin tabs without Web Locks retain concurrent writes to differe
     expect(errorsB).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await expect(second.locator('vite-error-overlay')).toHaveCount(0);
+    expect(stateWrites.length).toBeGreaterThan(0);
+    expect(stateWrites.every(write => write.account === account && write.session === 'a'.repeat(64))).toBe(true);
+    releaseStateWrites();
+    await expect.poll(async () => (await state(page, 'plan_task_done')).operations).toEqual([]);
+    await expect.poll(async () => (await state(second, 'settings')).operations).toEqual([]);
   } finally {
-    await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
-    await second.close();
+    releaseStateWrites();
+    if (!second.isClosed()) {
+      await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 }).catch(() => undefined);
+      await second.close();
+    }
   }
 });

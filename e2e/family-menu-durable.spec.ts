@@ -350,7 +350,12 @@ test('a delayed durable menu-state read after another account signs in cannot hy
     await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
     expect(await saved(page)).toEqual(before);
     expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
-    await healthy(page, errors);
+    // WebKit can report its intentional cancellation of the held stale GET as
+    // an access-control console error when the page reloads during the request.
+    const staleReadAbort = /\/api\/family\/menu\/state\?.* due to access control checks\.$/;
+    const expectedAborts = errors.filter(error => staleReadAbort.test(error));
+    expect(expectedAborts.length).toBeLessThanOrEqual(1);
+    await healthy(page, errors.filter(error => !staleReadAbort.test(error)));
     await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsB).toEqual([]);
   } finally { releaseStateRead(); }

@@ -730,7 +730,7 @@ test('held plateau retry cannot appear after another tab signs in as account B',
     expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeResponse);
     expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
     await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Нажмите «Объяснить», чтобы AI интерпретировал вашу динамику веса и комплаенс режима.')).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
     expect(errorsA).toEqual([]);
     expect(switched.errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -791,7 +791,7 @@ test('held plateau explanation cannot appear after another tab signs in as accou
     expect(operationsFor(final, accountB)).toEqual(operationsBBefore);
     expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
     await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Нажмите «Объяснить», чтобы AI интерпретировал вашу динамику веса и комплаенс режима.')).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
     expect(errorsA).toEqual([]);
     expect(switched.errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -1827,6 +1827,7 @@ test('WIS share completion from a retired session cannot restore its notice afte
 
   try {
     const switched = await openAccountB(context, state);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
     await waitForAccountSwitch(page);
 
     state.current = accountA;
@@ -1841,7 +1842,7 @@ test('WIS share completion from a retired session cannot restore its notice afte
     await openApp(reactivatedPage, '/#dashboard');
     await expect(reactivatedPage).toHaveTitle(/FitFocus/);
     await expect.poll(async () => (await readDurableSnapshot(reactivatedPage)).activeSession?.accountId).toBe(accountA.id);
-    await expect(page.getByText('Профиль A', { exact: true })).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
     await waitForAccountOutboxIdle(reactivatedPage, accountA);
 
     await page.evaluate(async () => {
@@ -2229,12 +2230,13 @@ test('late Huawei sync after another tab signs in as account B cannot commit acc
   await page.getByRole('button', { name: 'Обновить Huawei', exact: true }).click();
   await expect.poll(() => fixtureA.counts.huaweiSyncRequests).toHaveLength(1);
   const switched = await openAccountB(context, state);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
   const beforeB = await readDurableSnapshot(switched.page);
   const profileBBefore = rawValue(beforeB, profileKey(accountB.id));
 
   fixtureA.releaseHuawei();
   await expect.poll(() => fixtureA.counts.huaweiSyncResponses).toBe(1);
-  await expect(page.getByRole('button', { name: 'Обновить Huawei', exact: true })).toHaveText('Обновить Huawei');
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
   await expect(page.getByText('Huawei Health синхронизирован: обновлено полей 1.', { exact: true })).toHaveCount(0);
 
   const afterA = await readDurableSnapshot(page);
