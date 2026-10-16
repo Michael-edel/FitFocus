@@ -86,6 +86,22 @@ it('applies a clean refresh without creating an outgoing operation', async () =>
   await sync.connect(account); expect(JSON.parse((await sync.refreshProfile(account))!).name).toBe('Обновлённый профиль');
   expect(await outbox.list(account)).toEqual([]);
 });
+it('returns the read guard whose transaction accepted a clean profile refresh', async () => {
+  client(async () => json({ profile: { ...profile, name: 'Обновлённый профиль', version: 9 } }));
+  await sync.connect(account);
+  const session = await outbox.sessionState();
+  const refreshed = await sync.refreshProfileWithGuard(account);
+  expect(refreshed).not.toBeNull();
+  expect(JSON.parse(refreshed!.value).name).toBe('Обновлённый профиль');
+  expect(refreshed!.readGuard).toMatchObject({
+    accountId: account,
+    serverSessionId: sid,
+    sessionEpoch: session.active?.sessionEpoch,
+    authFence: session.fence,
+  });
+  expect(await outbox.isReadSessionCurrent(refreshed!.readGuard)).toBe(true);
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(9);
+});
 it('keeps a pending profile without sending it when the projection capability is absent', async () => {
   await repo.writeJson('profile', { ...profile, name: 'Сохранено локально' });
   const fetchFn = client(async () => { throw new Error('Unexpected profile mutation'); }, true, {}, false);
