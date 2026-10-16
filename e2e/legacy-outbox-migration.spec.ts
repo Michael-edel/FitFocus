@@ -40,48 +40,98 @@ async function oldQueueRecord(page: Page, key: string): Promise<LegacyRecord | n
   }, { sourceKey: legacySourceKey, target: key });
 }
 
-async function migrationState(page: Page, valueKey = targetKey) {
-  return page.evaluate(async ({ sourceKey, valueKey }) => {
-    const opening = indexedDB.open('fitfocus-user-state-v1');
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      opening.onsuccess = () => resolve(opening.result);
-      opening.onerror = () => reject(opening.error);
-      opening.onblocked = () => reject(new Error('STATE_DATABASE_OPEN_BLOCKED'));
+async function migrationState(page: Page, valueKey = targetKey, traceIndexedDb = false) {
+  return page.evaluate(async ({ sourceKey, valueKey, traceIndexedDb }) => {
+    const trace = (phase: string, detail?: unknown) => {
+      if (traceIndexedDb) console.debug('FITFOCUS_IDB_PROBE', JSON.stringify({ phase, detail }));
+    };
+    const db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
+    if (!db) throw new Error('APP_DATABASE_CONNECTION_NOT_CAPTURED');
+    trace('connection:reused', { version: db.version, stores: [...db.objectStoreNames] });
+    const requested = ['values', 'outbox', 'outbox_meta', 'outbox_migration_items', 'outbox_migration_unknown'];
+    const stores = requested.filter((name) => db.objectStoreNames.contains(name));
+    const tx = db.transaction(stores, 'readonly');
+    trace('transaction:start', { stores });
+    const complete = new Promise<void>((resolve, reject) => {
+      tx.addEventListener('complete', () => { trace('transaction:complete'); resolve(); }, { once: true });
+      tx.addEventListener('abort', () => { trace('transaction:abort', tx.error?.name); reject(tx.error); }, { once: true });
     });
-    try {
-      const requested = ['values', 'outbox', 'outbox_meta', 'outbox_migration_items', 'outbox_migration_unknown'];
-      const stores = requested.filter((name) => db.objectStoreNames.contains(name));
-      const tx = db.transaction(stores, 'readonly');
-      const complete = new Promise<void>((resolve, reject) => {
-        tx.addEventListener('complete', () => resolve(), { once: true });
-        tx.addEventListener('abort', () => reject(tx.error), { once: true });
+    const read = <T,>(name: string, request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      request.onsuccess = () => { trace('request:success', name); resolve(request.result); };
+      request.onerror = () => { trace('request:error', { name, error: request.error?.name }); reject(request.error); };
+    });
+    const all = <T,>(name: string) => {
+      if (!stores.includes(name)) return Promise.resolve([] as T[]);
+      const store = tx.objectStore(name);
+      return read(name, store.getAll() as IDBRequest<T[]>);
+    };
+    const [values, operations, metadata, migrationItems, migrationUnknown] = await Promise.all([
+      all<{ key: string; value: string }>('values'), all<OutboxOperation>('outbox'),
+      all<{ id: string; [key: string]: unknown }>('outbox_meta'), all<MigrationItem>('outbox_migration_items'),
+      all<MigrationUnknown>('outbox_migration_unknown'),
+    ]);
+    trace('requests:complete');
+    await complete;
+    return {
+      databaseVersion: db.version,
+      source: localStorage.getItem(sourceKey),
+      value: values.find((entry) => entry.key === valueKey)?.value ?? null,
+      operations,
+      metadata,
+      progress: metadata.find((entry) => entry.id === 'legacy-migration:v1') ?? null,
+      migrationItems,
+      migrationUnknown,
+      nowMs: Date.now(),
+    };
+  }, { sourceKey: legacySourceKey, valueKey, traceIndexedDb });
+}
+
+async function captureAppDatabase(page: Page, label: string, diagnostics: string[]) {
+  page.on('console', (message) => {
+    if (!message.text().startsWith('FITFOCUS_IDB_LIFECYCLE ')) return;
+    diagnostics.push(`${label}: ${message.text().slice(0, 900)}`);
+    if (diagnostics.length > 200) diagnostics.splice(0, diagnostics.length - 200);
+  });
+  await page.addInitScript((pageLabel) => {
+    const report = (event: string, detail: Record<string, unknown> = {}) => {
+      console.debug('FITFOCUS_IDB_LIFECYCLE', JSON.stringify({ page: pageLabel, event, ...detail }));
+    };
+    const diagnosticWindow = window as Window & { __fitfocusE2eDatabase?: IDBDatabase };
+    const originalOpen = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function(name: string, version?: number) {
+      const request = version === undefined ? originalOpen.call(this, name) : originalOpen.call(this, name, version);
+      if (name !== 'fitfocus-user-state-v1') return request;
+      const detail = { name, requestedVersion: version ?? null };
+      report('open-requested', detail);
+      request.addEventListener('blocked', () => report('blocked', detail));
+      request.addEventListener('upgradeneeded', (event) => report('upgradeneeded', {
+        ...detail, oldVersion: (event as IDBVersionChangeEvent).oldVersion, newVersion: request.result.version,
+      }));
+      request.addEventListener('error', () => report('open-error', { ...detail, error: request.error?.name ?? null }));
+      request.addEventListener('success', () => {
+        const database = request.result;
+        report('open-success', { ...detail, version: database.version });
+        diagnosticWindow.__fitfocusE2eDatabase = database;
+        database.addEventListener('versionchange', (event) => {
+          report('versionchange', { version: database.version, newVersion: (event as IDBVersionChangeEvent).newVersion });
+          if (diagnosticWindow.__fitfocusE2eDatabase === database) delete diagnosticWindow.__fitfocusE2eDatabase;
+        });
+        const close = database.close.bind(database);
+        database.close = () => {
+          report('close', { version: database.version });
+          if (diagnosticWindow.__fitfocusE2eDatabase === database) delete diagnosticWindow.__fitfocusE2eDatabase;
+          close();
+        };
       });
-      const read = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const all = <T,>(name: string) => stores.includes(name)
-        ? read(tx.objectStore(name).getAll() as IDBRequest<T[]>)
-        : Promise.resolve([] as T[]);
-      const [values, operations, metadata, migrationItems, migrationUnknown] = await Promise.all([
-        all<{ key: string; value: string }>('values'), all<OutboxOperation>('outbox'),
-        all<{ id: string; [key: string]: unknown }>('outbox_meta'), all<MigrationItem>('outbox_migration_items'),
-        all<MigrationUnknown>('outbox_migration_unknown'),
-      ]);
-      await complete;
-      return {
-        databaseVersion: db.version,
-        source: localStorage.getItem(sourceKey),
-        value: values.find((entry) => entry.key === valueKey)?.value ?? null,
-        operations,
-        metadata,
-        progress: metadata.find((entry) => entry.id === 'legacy-migration:v1') ?? null,
-        migrationItems,
-        migrationUnknown,
-        nowMs: Date.now(),
-      };
-    } finally { db.close(); }
-  }, { sourceKey: legacySourceKey, valueKey });
+      return request;
+    };
+  }, label);
+}
+
+async function expectCapturedAppDatabase(page: Page) {
+  await expect.poll(() => page.evaluate(() => Boolean(
+    (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase,
+  ))).toBe(true);
 }
 
 function itemForKey(items: MigrationItem[], key: string): MigrationItem | undefined {
@@ -140,6 +190,14 @@ test('preserves legacy intent without sending an operation whose server generati
   });
   const oldPage = await context.newPage();
   const currentPage = await context.newPage();
+  const storageTrace: string[] = [];
+  await Promise.all([
+    captureAppDatabase(oldPage, 'old', storageTrace),
+    captureAppDatabase(currentPage, 'current', storageTrace),
+  ]);
+  currentPage.on('console', (message) => {
+    if (message.text().startsWith('FITFOCUS_IDB_PROBE ')) storageTrace.push(message.text().slice(0, 1000));
+  });
   let legacyWritesBeforeUpdate = 0;
   try {
     const standalone = info.project.name.includes('-pwa');
@@ -181,10 +239,11 @@ test('preserves legacy intent without sending an operation whose server generati
     await openApp(currentPage, `${server.origin}/?release=next#plan`);
     await expect(currentPage).toHaveTitle(/FitFocus/);
     await expect.poll(() => currentPage.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state ?? null)).toBe('installed');
+    await expectCapturedAppDatabase(currentPage);
     await expect(currentPage.getByRole('alert')).toContainText('Обнаружен конфликт данных');
 
     await expect.poll(async () => {
-      const state = await migrationState(currentPage);
+      const state = await migrationState(currentPage, targetKey, true);
       const imported = itemForKey(state.migrationItems, targetKey);
       const quarantined = itemForKey(state.migrationItems, orphanKey);
       const operation = state.operations.find((entry) => entry.opId === imported?.opId);
@@ -386,13 +445,13 @@ test('preserves legacy intent without sending an operation whose server generati
     }
     await info.attach('legacy-outbox-migration', { body: JSON.stringify({
       sourceRecord: generatedRecord, oldSource, databaseVersion: (await migrationState(currentPage)).databaseVersion,
-      acceptedStateKeys: server.stateWriteKeys, counts: server.counts,
+      acceptedStateKeys: server.stateWriteKeys, counts: server.counts, storageTrace: storageTrace.slice(-100),
     }), contentType: 'application/json' });
   } catch (error) {
     const diagnostic = {
       counts: server.counts, stateWriteKeys: server.stateWriteKeys, unexpectedApi: server.unexpectedApi,
       source: await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey).catch(() => null),
-      migration: await migrationState(currentPage).catch(cause => ({ error: String(cause) })),
+      storageTrace: storageTrace.slice(-100),
       currentBody: await currentPage.locator('body').innerText().catch(() => ''),
     };
     await info.attach('legacy-outbox-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
@@ -411,6 +470,8 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
   const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
   server.release();
   const page = await context.newPage();
+  const storageTrace: string[] = [];
+  await captureAppDatabase(page, 'profile', storageTrace);
   try {
     await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true });
     await page.addInitScript(({ sourceKey, record }) => localStorage.setItem(sourceKey, JSON.stringify([record])), {
@@ -419,6 +480,7 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
     await openApp(page, `${server.origin}/?legacy-profile=1#plan`);
     await expect(page).toHaveTitle(/FitFocus/);
     await expect(page.getByRole('alert')).toContainText('Обнаружен конфликт данных');
+    await expectCapturedAppDatabase(page);
     await expect.poll(async () => {
       const state = await migrationState(page, profileKey);
       return state.operations.some(operation => operation.key === profileKey && operation.status === 'conflicted');
@@ -454,11 +516,11 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
     expect(server.stateWriteKeys).not.toContain(profileKey);
     expect(server.unexpectedApi).toEqual([]);
     expect((await migrationState(page, profileKey)).value).toBe(profileValue);
-    await info.attach('legacy-profile-resolution', { body: JSON.stringify({ counts: server.counts, unexpectedApi: server.unexpectedApi }),
+    await info.attach('legacy-profile-resolution', { body: JSON.stringify({ counts: server.counts, unexpectedApi: server.unexpectedApi, storageTrace: storageTrace.slice(-100) }),
       contentType: 'application/json' });
   } catch (error) {
     const diagnostic = { counts: server.counts, unexpectedApi: server.unexpectedApi,
-      migration: await migrationState(page, profileKey).catch(cause => ({ error: String(cause) })),
+      storageTrace: storageTrace.slice(-100),
       body: await page.locator('body').innerText().catch(() => '') };
     await info.attach('legacy-profile-resolution-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
     console.error('LEGACY_PROFILE_RESOLUTION_FAILURE', JSON.stringify(diagnostic));
