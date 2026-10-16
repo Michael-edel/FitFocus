@@ -10,9 +10,9 @@ Firefox и Android используют browser offline; WebKit сохраняе
 но API отвечает 503, а запросы статики сбрасываются, чтобы проверить cold reopen
 из SW cache без ошибки Playwright на offline-навигации. Поэтому WebKit-ветка не
 утверждает `navigator.onLine === false` и не заменяет проверку на устройстве.
-`npm run typecheck` прошёл. Тест и фикстуры входят в локальный follow-up, который
-ожидает push. CI run #1455 проверяет предыдущий SHA `05da5c7`, поэтому не
-покрывает этот follow-up; точный CI запустится после push.
+`npm run typecheck` прошёл. Тест и фикстуры опубликованы в follow-up ветки
+`fix/durable-outbox`. Результат относится к локальному Playwright; полный CI,
+реальное устройство, staging и общий P0.9 проверяются отдельными release gates.
 
 ## P0.9 — DELETE-конфликт после reload, 16.10.2026
 

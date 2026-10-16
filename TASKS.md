@@ -1,17 +1,15 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`. Опубликованная ветка
-`fix/durable-outbox` заканчивается на `05da5c7`; локальный follow-up ожидает push.
-Точный CI run
-[`38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
-проверяет предыдущий SHA `05da5c7` и не включает `971416f`.
+остаётся draft с base `fix/state-generations`; WebKit cold-reopen follow-up
+опубликован в `fix/durable-outbox`.
 Локально PWA offline durability acceptance прошёл 7/7 browser/PWA профилей без
 retries, включая WebKit cold reopen через настоящий Service Worker; typecheck и
 diff check прошли. WebKit использует отказ API и сброс
 статических origin-запросов, потому что `context.setOffline(true)` ломает SW
 навигацию внутри Playwright WebKit; поэтому этот профиль не заявляется как
-проверка `navigator.onLine === false`.
+проверка `navigator.onLine === false`. Полный CI следует сверять по текущему
+head PR #93; эти локальные проверки его не заменяют.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload

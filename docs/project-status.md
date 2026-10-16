@@ -3,10 +3,8 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; опубликованная ветка `fix/durable-outbox` заканчивается
-на `05da5c7`; локальный follow-up ожидает push. Точный CI run
-[`38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
-проверяет предыдущий SHA `05da5c7` и не включает этот follow-up.
+`fix/state-generations`; WebKit cold-reopen follow-up уже опубликован в
+`fix/durable-outbox`.
 
 Текущий этап — закрытие стабилизационной приёмки P0.8/P0.9. IndexedDB durable
 outbox подключён; миграция и нормализатор проверяются вместе с runtime lifecycle.
@@ -17,12 +15,10 @@ Worker, возвращает 503 для state API и сбрасывает зап
 online. Это обход сбоя Playwright offline navigation, а не заявление о физическом
 offline.
 
-CI [`#38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
-для SHA `05da5c7` успешно прошёл audit, guards, unit, typechecks и build; E2E ещё
-выполняется и не покрывает локальный follow-up. В
-`TASKS.md` остаются 34 пункта (20 P0, 7 P1, 7 следующих задач); полный P0/P0.8/P0.9
-не закрыт. Staging, физические устройства/OAuth, выпуск и интеграция в `main` не
-подтверждены.
+Полный CI нужно сверять по текущему head PR #93; локальный browser прогон не
+заменяет эту проверку. В `TASKS.md` остаются 34 пункта (20 P0, 7 P1, 7 следующих
+задач); полный P0/P0.8/P0.9 не закрыт. Staging, физические устройства/OAuth,
+выпуск и интеграция в `main` не подтверждены.
 
 ## Предыдущие локальные результаты
 
