@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — Android PWA reload ждёт завершения weekly report, 16.10.2026
+
+Точный CI опубликованного `72ac769` — [run #1469](https://github.com/Michael-edel/FitFocus/actions/runs/38937798139):
+audit, guards, unit, typechecks и build прошли; E2E дал 843 passed, 255 skipped,
+1 failed. Единственный сбой — `storage-durability.spec.ts` на Android PWA:
+после reload интерфейс показал `Cloud: pending`. Trace подтверждает, что PUT
+настроек уже завершился и settings operation была очищена. Отдельный PUT
+автоматически созданного weekly AI-отчёта оставался активным и был отменён
+перезагрузкой; его durable операция объясняет pending badge.
+
+В `402f7ba` тест теперь ждёт появления weekly report на сервере, пустой очереди
+аккаунта и подтверждённой версии настроек перед reload. Изменён только E2E-тест;
+продуктовый код не менялся. Целевой Android PWA тест прошёл 1/1, весь
+`storage-durability.spec.ts` — 19/19 (`workers=1,retries=0`), typecheck вместе с
+admin guards и `git diff --check` прошли. Точный полный CI этого follow-up SHA
+ещё не запущен.
+
 ## P0.9 — Firefox legacy migration probe reuses app connection, 16.10.2026
 
 CI exact published head [`e34544d`](https://github.com/Michael-edel/FitFocus/commit/e34544da4f42cf545a9de26dac7e62eee8d42270)

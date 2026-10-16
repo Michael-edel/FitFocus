@@ -3,19 +3,22 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; опубликованный head — `c44027f`.
+`fix/state-generations`; последний опубликованный код — `72ac769`. Локальный
+E2E follow-up закоммичен как `402f7ba` и ожидает отправки.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Последний завершённый CI run #1467 для
-`c44027f` завершился [одной ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38931381772):
-audit, guards, unit, typechecks и build прошли.
-iPhone Safari trace показал успешный запрос списка новой недели, но тестовый mock
-ответил старой записью: тест переключал mock после смены часов браузера. Порядок
-фикстуры исправлен, три недельных сценария прошли 9/9 на iPhone Safari без
-retries. В desktop WebKit оставшийся account-switch сценарий зафиксировал
-отменённый фоновый `wis_text` `/api/ai` запрос во время reload. Локальная правка
-ждёт завершения запроса и появления weekly report в durable storage до reload.
-Типы и целевой WebKit-сценарий прошли 3/3 в отдельных запусках без retries.
+подключён, но общий P0 ещё открыт. Последний завершённый CI run #1469 для
+`72ac769` прошёл audit, guards, unit, typechecks и build, но завершился
+[одним E2E-сбоем](https://github.com/Michael-edel/FitFocus/actions/runs/38937798139):
+843 сценария прошли, 255 пропущены. В Android PWA после reload остался
+`Cloud: pending`. Trace показал, что настройки уже подтверждены; reload оборвал
+отдельную запись weekly AI-отчёта. Локальный коммит `402f7ba` заставляет тест
+дождаться сохранения отчёта и пустой durable outbox до reload. Полный файл
+`storage-durability.spec.ts` прошёл 19/19 на Android PWA, целевой сценарий — 1/1;
+typecheck и `git diff --check` прошли. Полный CI нового SHA ожидает отправки.
+
+Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
+его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.
 
 Локальная ветка также добавила
 same-account reauthentication сценарий для weekly AI report (6/6 на Chromium,

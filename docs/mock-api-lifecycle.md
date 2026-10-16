@@ -120,6 +120,13 @@ shopping check прошли 9/9 на iPhone Safari без retries.
 3/3 в отдельных запусках без retries. Это mock browser evidence и не заменяет
 staging или реальный OAuth.
 
+В следующем полном CI #1469 Android PWA settings reload завершился с
+`Cloud: pending`: trace показал отменённую reload-ом фоновую запись weekly AI
+отчёта, тогда как settings PUT был подтверждён. E2E теперь ждёт завершения
+записи отчёта и пустой account outbox до reload. Локально весь
+`storage-durability.spec.ts` прошёл 19/19 на Android PWA; полный CI нового SHA
+ожидает отправки.
+
 Общий план — в [TASKS](../TASKS.md), состояние — в
 [статусе проекта](project-status.md), порядок проверки — в
 [CONTRIBUTING](../CONTRIBUTING.md).
