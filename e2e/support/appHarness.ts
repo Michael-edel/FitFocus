@@ -15,6 +15,8 @@ type MockAppOptions = {
   push?: PushMockConfig;
   /** Acknowledge incidental state writes when a test exercises another guarded API. */
   acknowledgeStateWrites?: boolean;
+  /** Return a scoped conflict for DELETE /api/state while exercising durable recovery. */
+  stateDeleteConflict?: { version: number; exists: boolean; value: string };
   /** Update/precache tests must retain the browser's actual SW objects. */
   realServiceWorker?: boolean;
   /** Native SW flows serve API fixtures over HTTP, including worker-originated requests. */
@@ -148,7 +150,9 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Protocol' : 'X-FitFocus-State-Protocol']: path === '/api/bootstrap' ? '1' : '2',
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Guard' : 'X-FitFocus-State-Guard']: '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
-      } : path === '/api/state' && options.acknowledgeStateWrites && ['PUT', 'DELETE'].includes(method)
+      } : path === '/api/state'
+        && (options.acknowledgeStateWrites || (method === 'DELETE' && !!options.stateDeleteConflict))
+        && ['PUT', 'DELETE'].includes(method)
         && request.headers()['x-fitfocus-state-account'] ? {
         'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
         'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
@@ -211,6 +215,10 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       await json({ configured: false, connected: false, status: 'disconnected', scope: '', expiresAt: null, lastSyncAt: null }); return;
     }
     if (path === '/api/state' && method === 'GET') { await json({ items: [] }); return; }
+    if (path === '/api/state' && method === 'DELETE' && options.stateDeleteConflict) {
+      await json({ error: 'KV_CONFLICT', key: url.searchParams.get('key'), ...options.stateDeleteConflict }, 409);
+      return;
+    }
     // Default mocks retain outgoing intents via protocol pause; verified writer tests install their own acknowledgements.
 
     if (path === '/api/profile' && method === 'PUT') {

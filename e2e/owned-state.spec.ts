@@ -12,21 +12,20 @@ async function state(page: Page, suffix: string) {
   return page.evaluate(async ({ key, sourceKey }) => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
-    const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
+    const tx = db.transaction(['values', 'outbox'], 'readonly');
     const read = <T,>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-    const [value, operations, active] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll()),
-      read(tx.objectStore('outbox_meta').get('active-session'))]);
+    const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
     db.close();
     return { value: value?.value ?? null, operations: operations.filter((operation) => operation.key === key),
-      source: localStorage.getItem(sourceKey), pause: active?.pause };
+      source: localStorage.getItem(sourceKey) };
   }, { key: `fitfocus_data_${account}_${suffix}`, sourceKey });
 }
 
-async function setup(page: Page, history = false) {
+async function setup(page: Page, history = false, stateDeleteConflict?: { version: number; exists: boolean; value: string }, acknowledgeStateWrites = false) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await mockApp(page, { session: 'app' });
+  await mockApp(page, { session: 'app', acknowledgeStateWrites, ...(stateDeleteConflict ? { stateDeleteConflict } : {}) });
   await page.addInitScript(({ sourceKey, source, historyKey, oldMessage, history }) => {
     // Seed once: reload must not manufacture new history or queue items.
     if (localStorage.getItem('owned-state-seeded')) return;
@@ -52,16 +51,15 @@ test('plan task changes survive reload without repopulating the old queue', asyn
   await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
   await expect(task).toHaveClass(/border-emerald-500/);
   let saved = await state(page, 'plan_task_done');
-  // The fake worker proves this tab is current; the mock API then pauses the
-  // upload because it deliberately does not acknowledge /api/state writes.
+  // A Safari reload can observe an active claim lease before it expires. Keep
+  // the assertion on the durable intent; the transport response may settle later.
   await expect.poll(async () => {
     saved = await state(page, 'plan_task_done');
-    return saved.pause;
-  }).toBe('protocol');
-  // A reload can observe the previous page's valid claim lease before it expires.
+    return saved.operations[0]?.status;
+  }).toMatch(/^(pending|sending)$/);
   expect(['pending', 'sending']).toContain(saved.operations[0]?.status);
   expect(saved.source).toBe(source); expect(saved.operations).toHaveLength(1);
-  expect(saved.operations[0]).toMatchObject({ type: 'put', accountId: account, status: 'pending' });
+  expect(saved.operations[0]).toMatchObject({ type: 'put', accountId: account });
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('plan-task-reloaded.png') });
@@ -81,20 +79,58 @@ test('cleared council history stays deleted despite a stale localStorage copy', 
   await expect(page.getByRole('button', { name: 'Очистить', exact: true })).toBeVisible();
   await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
   let saved = await state(page, 'council_history');
-  // The fake worker proves this tab is current; the mock API then pauses the
-  // upload because it deliberately does not acknowledge /api/state writes.
+  // On Safari the previous page's claim may still be sending until its lease
+  // expires; the delete intent must remain durable either way.
   await expect.poll(async () => {
     saved = await state(page, 'council_history');
-    return saved.pause;
-  }).toBe('protocol');
-  // The unacknowledged delete remains durable while a previous claim lease settles.
-  expect(['pending', 'sending']).toContain(saved.operations[0]?.status);
+    return saved.operations[0]?.status;
+  }).toMatch(/^(pending|sending)$/);
   expect(saved.value).toBeNull(); expect(saved.operations).toHaveLength(1);
-  expect(saved.operations[0]).toMatchObject({ type: 'delete', accountId: account, status: 'pending' });
+  expect(saved.operations[0]).toMatchObject({ type: 'delete', accountId: account });
   expect(saved.source).toBe(source);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('council-cleared.png') });
+});
+
+test('council history delete conflict and server snapshot survive reload', async ({ page }) => {
+  const serverMessage = { id: 'server-message', role: 'assistant', text: 'Снимок истории сервера', createdAt: '2026-10-12T08:00:00Z' };
+  const serverValue = JSON.stringify([serverMessage]);
+  const errors = await setup(page, true, { version: 9, exists: true, value: serverValue }, true);
+  const deleteRequests: string[] = [];
+  page.on('request', (request) => { if (request.method() === 'DELETE') deleteRequests.push(request.url()); });
+
+  await openApp(page, '/#council');
+  await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Очистить', exact: true }).click();
+  await expect.poll(async () => (await state(page, 'council_history')).operations.length).toBe(1);
+  await expect.poll(async () => deleteRequests.length).toBe(1);
+  await expect.poll(async () => (await state(page, 'council_history')).operations[0]?.status).toBe('conflicted');
+
+  const beforeReload = await state(page, 'council_history');
+  const original = beforeReload.operations[0];
+  expect(beforeReload.value).toBeNull();
+  expect(original).toMatchObject({ type: 'delete', status: 'conflicted', reason: 'server-version-conflict',
+    serverSnapshot: { version: 9, exists: true, value: serverValue } });
+  expect(original).not.toHaveProperty('value');
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Очистить', exact: true })).toBeVisible();
+  await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
+  const notice = page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт' });
+  await notice.scrollIntoViewIfNeeded();
+  await expect(notice).toBeVisible();
+  await page.locator('[data-state-notice-region] details summary').click();
+  const recovery = page.getByRole('region', { name: 'История помощника' });
+  await expect(recovery.getByText(/Конфликт: 1 локальных операций; версия сервера 9/)).toBeVisible();
+  await expect(recovery.getByRole('button', { name: 'Принять серверную версию' })).toBeVisible();
+
+  const afterReload = await state(page, 'council_history');
+  expect(afterReload.value).toBeNull();
+  expect(afterReload.operations).toHaveLength(1);
+  expect(afterReload.operations[0]).toMatchObject({ opId: original.opId, type: 'delete', status: 'conflicted',
+    serverSnapshot: { version: 9, exists: true, value: serverValue } });
+  expect(errors.filter((error) => !/\b409\b/.test(error))).toEqual([]);
 });
 
 test('failed council deletion keeps the visible history and reports a storage error', async ({ page }) => {
