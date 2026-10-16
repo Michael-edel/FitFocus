@@ -102,6 +102,28 @@ it('returns the read guard whose transaction accepted a clean profile refresh', 
   expect(await outbox.isReadSessionCurrent(refreshed!.readGuard)).toBe(true);
   expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(9);
 });
+it('returns the refreshed guard after a fresh proof resumes the same account from an auth pause', async () => {
+  await repo.writeJson('settings', { theme: 'violet', language: 'ru', soundEnabled: true, musicEnabled: false });
+  const fetchFn = client(async (url, init) => {
+    if (String(url) === '/api/state' && init?.method === 'PUT') return json({ error: 'UNAUTH' }, 401);
+    return json({ profile: { ...profile, name: 'Профиль после повторной проверки', version: 9 } });
+  });
+  await sync.connect(account);
+  const previous = (await outbox.sessionState()).active!;
+  expect(await sync.syncNow(account)).toBe(false);
+  expect((await outbox.sessionState()).active?.pause).toBe('auth');
+  const proofsBeforeRefresh = fetchFn.mock.calls.filter(([url]) => String(url) === '/api/me').length;
+
+  const refreshed = await sync.refreshProfileWithGuard(account);
+  expect(refreshed).not.toBeNull();
+  expect(JSON.parse(refreshed!.value).name).toBe('Профиль после повторной проверки');
+  expect(refreshed!.readGuard.sessionEpoch).not.toBe(previous.sessionEpoch);
+  expect(refreshed!.readGuard.serverSessionId).toBe(sid);
+  expect(await outbox.isReadSessionCurrent(refreshed!.readGuard)).toBe(true);
+  expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(9);
+  expect((await outbox.sessionState()).active?.pause).toBeUndefined();
+  expect(fetchFn.mock.calls.filter(([url]) => String(url) === '/api/me')).toHaveLength(proofsBeforeRefresh + 1);
+});
 it('keeps a pending profile without sending it when the projection capability is absent', async () => {
   await repo.writeJson('profile', { ...profile, name: 'Сохранено локально' });
   const fetchFn = client(async () => { throw new Error('Unexpected profile mutation'); }, true, {}, false);
