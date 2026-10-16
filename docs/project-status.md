@@ -3,7 +3,8 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; опубликованный кодовый head был `e34544d`.
+`fix/state-generations`; текущий опубликованный head — `8dfab60`, с кодовым
+follow-up `0efec93`.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
 подключён, но общий P0 ещё открыт. CI точного опубликованного head `e34544d`
@@ -19,6 +20,18 @@ IndexedDB lifecycle/transaction в диагностический attachment. Л
 профилях без retries; целевой Firefox-сценарий прошёл 10/10, typecheck и admin
 guards прошли. Полный CI точного SHA follow-up ещё не подтверждён; локальные
 результаты его не заменяют.
+
+Точный [CI run #1463](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
+для `8dfab60` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
+build; E2E-матрица пока выполняется. Повтор `pwa-update.spec.ts` в desktop Firefox
+на текущем checkout прошёл 5/5 без retries.
+
+Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA
+`8dfab604c97f90f6720e8185f0366bbe61b9383d`, ответ страницы 200 и анонимные API
+ответы на выбранном origin: `/api/env` и `/api/me` — 200 (`user: null`), оба
+Google Client ID пусты и `requireInvite=false`; bootstrap, profile, state и
+push/status — 401 без redirect/cookie. D1, APP_URL, OAuth callback и полный
+staging этим не подтверждены.
 
 Последнее изменение Playwright до этого уже включало 1.64.1 и настоящий offline
 через `context.setOffline(true)` во всех семи PWA cold-reopen профилях. Оно

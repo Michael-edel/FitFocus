@@ -80,6 +80,12 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
+  - [x] Повторно проверить текущий branch preview: точный bundle SHA `8dfab60`
+    обслуживается на `fix-durable-outbox.fitfocus.pages.dev`; страница, `/api/env`
+    и анонимный `/api/me` отвечают на том же origin; оба Google Client ID пусты,
+    `requireInvite=false`. Анонимные GET для bootstrap,
+    profile, state и push/status дают 401 без redirect/cookie. OAuth start не
+    вызывался; D1, APP_URL, OAuth callback и остальные staging gates открыты.
   - [x] Проверить preview SHA `9c78726` только GET-запросами: bundle содержит
     полный SHA, публичная страница открывается на preview origin, анонимные API
     отказывают ожидаемо. Реальный OAuth start вернул `AUTH_UNAVAILABLE`;

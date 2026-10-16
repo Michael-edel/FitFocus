@@ -5281,3 +5281,21 @@ response по-прежнему проверяет, что старые данн�
 профилях с четырьмя штатными skips; три WebKit/PWA повтора — 3/3; Firefox
 reauth callback — 5/5. `npm run typecheck` и `git diff --check` прошли. Изменены
 только E2E ожидания; точный CI нового SHA запускается после push.
+
+## P0.8 — повторная проверка Firefox PWA и опубликованного preview, 16.10.2026
+
+На checkout `8dfab604c97f90f6720e8185f0366bbe61b9383d` тест
+`e2e/pwa-update.spec.ts` прошёл 5/5 на `desktop-firefox`, `workers=1,retries=0`.
+Это подтверждает текущую повторяемость, но не закрывает историческую причину
+таймаута: отдельный точный CI ещё выполняет E2E. В run
+[`38913791205`](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
+audit, schema/privacy/auth/API, unit, три typecheck и build прошли; E2E остаётся
+in progress.
+
+Read-only GET smoke branch preview `fix-durable-outbox.fitfocus.pages.dev`
+подтвердил точный JS SHA `8dfab604c97f90f6720e8185f0366bbe61b9383d`.
+`/api/env` и анонимный `/api/me` ответили 200, `user: null`; анонимные
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` ответили 401
+без redirect и `Set-Cookie`. `/api/env` показывает пустые Google Client ID и
+`requireInvite=false`. Запрос OAuth start не выполнялся. Это частичная
+проверка deployment/origin, не D1, APP_URL, callback или staging-приёмка.

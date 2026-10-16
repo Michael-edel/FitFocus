@@ -94,6 +94,22 @@ OAuth callback, безопасный тестовый аккаунт или ми
 `CLOUDFLARE_API_TOKEN`; конфигурацию Pages/D1 через dashboard не меняли.
 Поэтому staging acceptance ниже остаётся незавершённой.
 
+### Read-only preview smoke: `8dfab60`, 16.10.2026
+
+Текущий branch preview `https://fix-durable-outbox.fitfocus.pages.dev/`
+ответил 200. Страница загрузила `/assets/index-B8tzhvK0.js`; bundle содержит
+точный SHA `8dfab604c97f90f6720e8185f0366bbe61b9383d`. GET `/api/env` и
+анонимный GET `/api/me` ответили 200; `/api/me` вернул `user: null`. `/api/env`
+вернул пустые `googleClientIdLocal`/`googleClientIdProd` и `requireInvite: false`.
+Анонимные GET `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` ответили
+401 без `Location` и `Set-Cookie`. Проверка выполнялась без cookie/account proof;
+API-запросы остались на выбранном preview origin.
+
+Это подтверждает deployed bundle SHA, ответ страницы и перечисленные публичные
+GET-маршруты. OAuth start намеренно не вызывался. D1 binding, серверный `APP_URL`,
+OAuth callback, edge rules для всех путей, миграции и тестовые аккаунты не
+подтверждены; staging и выпуск остаются открытыми.
+
 ### Read-only API smoke: `9c78726`, 16.10.2026
 
 Проверен commit preview `https://2d2f058c.fitfocus.pages.dev/`: корень ответил
