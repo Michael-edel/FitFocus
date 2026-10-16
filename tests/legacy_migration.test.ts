@@ -106,29 +106,47 @@ describe('atomic resumable legacy migration', () => {
   });
 
   it('does not reimport a legacy operation after account deletion and reauthentication', async () => {
+    const globalRecord = { type: 'put', key: 'ff_ai_last_status_v1', value: 'unowned legacy evidence' };
+    rawSource = JSON.stringify([put, globalRecord]);
     const originalSource = rawSource;
     await migration.migrate(options());
     expect(await outbox.list(accountId)).toHaveLength(1);
+    expect(await migration.unknown()).toEqual([expect.objectContaining({
+      rawRecord: globalRecord,
+      reason: 'unknown-owner',
+    })]);
 
     expect(await clearIndexedUserStateForUser(accountId, connection)).toEqual({
       cleared: true,
       legacyEvidenceRetained: true,
     });
     expect(await outbox.list(accountId)).toEqual([]);
-    expect(await rows(STATE_STORES.migrationItems)).toEqual([]);
+    expect(await rows(STATE_STORES.migrationItems)).toEqual([
+      expect.objectContaining({ state: 'unknown', reason: 'unknown-owner', rawRecords: [globalRecord] }),
+    ]);
+    expect(await migration.unknown()).toEqual([expect.objectContaining({
+      rawRecord: globalRecord,
+      reason: 'unknown-owner',
+    })]);
 
     // A fresh authenticated owner proof must still respect the local deletion marker.
     const resumed = new LegacyQueueMigration(source, otherConnection);
     expect(await resumed.migrate(options())).toMatchObject({
-      status: 'completed',
-      totalRecords: 1,
-      processedRecords: 1,
+      status: 'partial',
+      totalRecords: 2,
+      processedRecords: 2,
       importedRecords: 0,
-      unresolvedRecords: 0,
+      unresolvedRecords: 1,
       sendAllowed: true,
     });
     expect(await outbox.list(accountId)).toEqual([]);
-    expect(await rows(STATE_STORES.migrationItems)).toEqual([]);
+    expect(await rows(STATE_STORES.migrationItems)).toEqual([
+      expect.objectContaining({ state: 'unknown', reason: 'unknown-owner', rawRecords: [globalRecord] }),
+    ]);
+    expect(await resumed.unknown()).toEqual([expect.objectContaining({
+      rawRecord: globalRecord,
+      reason: 'unknown-owner',
+    })]);
     expect(rawSource).toBe(originalSource);
   });
 
