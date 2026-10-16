@@ -1358,6 +1358,11 @@ legacy-ключ не используется для новой очереди �
     прошёл 7/7 desktop/mobile/PWA проектов без retries; `durable_outbox.test.ts`
     прошёл 28/28, включая игнорирование ответа старого attempt. Mock acceptance
     не закрывает staging и остальные lifecycle строки.
+  - [x] Проверить восстановление retryable intent после HTTP 503 с `Retry-After`:
+    opId, payload, baseVersion и время следующей попытки переживают reload;
+    до срока новая отправка не происходит, после него та же запись подтверждается.
+    Browser-сценарий прошёл 7/7 desktop/mobile/PWA проектов без retries; mock API
+    не заменяет настоящую offline/device/staging проверку.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

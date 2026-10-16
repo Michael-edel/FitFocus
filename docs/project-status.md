@@ -18,6 +18,10 @@ browser/PWA matrix 7/7 без retries, четыре targeted unit suite 160/160,
 teardown используется переход на `about:blank`, и матрица прошла без proxy
 `ECONNREFUSED`. Полная приёмка P0.9 и staging остаются открытыми.
 
+Также в 7/7 проектах прошёл сценарий 503/`Retry-After` через reload: очередь
+сохраняет тот же opId, payload, baseVersion и срок следующей попытки, не посылает
+повтор до срока и подтверждает запись после возобновления.
+
 Локальные follow-ups `d028bc4` и `2e7f024` проверили два P0.9 сценария на всех
 семи Playwright browser/PWA-проектах без retries. Потерянный ответ после commit
 сохраняет прежние opId/payload конфликтными и не продвигает `confirmedVersion`

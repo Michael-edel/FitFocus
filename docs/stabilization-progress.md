@@ -5007,3 +5007,20 @@ Browser-сценарий прошёл 7/7 desktop Chromium/Firefox/WebKit, Andro
 прогоне не оставил proxy `ECONNREFUSED`. Изменены только E2E и документация;
 production-код не менялся. Полный CI нового HEAD, staging, реальные устройства,
 OAuth, BFCache и общая release acceptance остаются открытыми.
+
+## P0.9 — retryable intent после reload, 16.10.2026
+
+Новая browser acceptance возвращает scoped HTTP 503 с `Retry-After: 60`, ждёт
+записи retry metadata в IndexedDB, выполняет reload и проверяет прежние opId,
+payload, baseVersion и `nextAttemptAtMs`. До срока повторного запроса нет; после
+сдвига тестового времени та же операция отправляется повторно и подтверждается
+сервером. Первая матрица выявила, что WebKit успевал прочитать начальное pending
+состояние до обработки 503; ожидание теперь синхронизировано по durable
+`retryCount`, а не по преждевременному status.
+
+Итоговая матрица прошла 7/7 desktop Chromium/Firefox/WebKit, Android Chrome/PWA
+и iPhone Safari/PWA (`workers=1`, `retries=0`); `npm run typecheck` и
+`git diff --check` прошли. Изменены только browser mock/E2E и документация;
+production-код не менялся. Это transient HTTP recovery, не доказательство
+физического отключения сети или staging. Полный CI текущей опубликованной ревизии
+проверяется отдельно.

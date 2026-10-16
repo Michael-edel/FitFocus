@@ -88,6 +88,8 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   settingsSuccessGate?: { started: () => void; wait: Promise<void> };
   settingsPayloads?: Array<{ baseVersion: number; value: string }>;
   loseFirstSettingsResponse?: boolean;
+  settingsTransientFailure?: boolean;
+  settingsRetryAfter?: string;
   unscopedStateWrites?: Array<{ method: string; url: string; body: string | null }>;
 } = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
@@ -127,6 +129,11 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     if (options.settingsFailure && items[0].key.endsWith('_settings')) {
       await route.fulfill({ status: 403, contentType: 'application/json', headers: scope,
         body: JSON.stringify({ error: 'FORBIDDEN_KEYSPACE' }) }); return;
+    }
+    if (options.settingsTransientFailure && settingsItems.length) {
+      await route.fulfill({ status: 503, contentType: 'application/json',
+        headers: { ...scope, 'Retry-After': options.settingsRetryAfter ?? '60' },
+        body: JSON.stringify({ error: 'INJECTED_TEMPORARY_FAILURE' }) }); return;
     }
     if (options.settingsSuccessGate && items.some((item) => item.key.endsWith('_settings'))) {
       options.settingsSuccessGate.started();
@@ -285,6 +292,54 @@ test('reclaims a durable settings send after its tab closes and the lease expire
     releaseRetry();
     if (retryTab && !retryTab.isClosed()) await retryTab.close();
   }
+});
+
+test('keeps a retryable settings intent across reload and resumes after Retry-After', async ({ page }) => {
+  test.setTimeout(60_000);
+  const server = new Map<string, ServerStateItem>();
+  const settingsRequests: number[] = [];
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  const options = { settingsRequests, settingsPayloads, settingsTransientFailure: true, settingsRetryAfter: '60' };
+
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+  const fixedNow = await page.evaluate(() => Date.now());
+  await page.clock.setFixedTime(fixedNow);
+
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('pending');
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.retryCount).toBe(1);
+  const beforeReload = await storedSettings(page);
+  expect(beforeReload.operations).toHaveLength(1);
+  const original = beforeReload.operations[0];
+  expect(original.value).toContain('"theme":"light"');
+  expect(original.nextAttemptAtMs).toBeGreaterThan(fixedNow);
+  expect(settingsRequests).toEqual([0]);
+  expect(server.get('fitfocus_data_google-e2e-sub_settings')).toBeUndefined();
+
+  await page.reload();
+  const afterReload = await storedSettings(page);
+  expect(afterReload.operations).toHaveLength(1);
+  expect(afterReload.operations[0]).toMatchObject({
+    opId: original.opId,
+    value: original.value,
+    baseVersion: original.baseVersion,
+    status: 'pending',
+    nextAttemptAtMs: original.nextAttemptAtMs,
+  });
+  expect(settingsRequests).toEqual([0]);
+
+  options.settingsTransientFailure = false;
+  await page.clock.setFixedTime(original.nextAttemptAtMs + 1);
+  await expect.poll(async () => (await storedSettings(page)).confirmedVersion, { timeout: 20_000 }).toBe(1);
+  expect((await storedSettings(page)).operations).toHaveLength(0);
+  expect(settingsRequests).toEqual([0, 0]);
+  expect(settingsPayloads).toEqual([
+    { baseVersion: original.baseVersion, value: original.value },
+    { baseVersion: original.baseVersion, value: original.value },
+  ]);
+  expect(server.get('fitfocus_data_google-e2e-sub_settings')).toEqual({ version: 1, value: original.value });
 });
 
 test('verified sender confirms settings and preserves them after reload', async ({ page }, testInfo) => {
