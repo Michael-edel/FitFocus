@@ -52,6 +52,8 @@ type FixtureState = {
   mobileTokenAccounts?: string[];
   releasedMobileTokens?: number;
   pushStatusAccounts?: string[];
+  pushStatusSessions?: string[];
+  pushStatusLastErrors?: Record<string, string>;
   releasedPushStatuses?: number;
   billingCheckoutAccounts?: string[];
   releasedBillingCheckouts?: number;
@@ -228,6 +230,7 @@ async function installAccountApi(
       expect(requestedAccount).toBe(scopedAccount.id);
       expect(requestedSession).toBe(scopedAccount.sid);
       (state.pushStatusAccounts ??= []).push(scopedAccount.id);
+      (state.pushStatusSessions ??= []).push(requestedSession ?? '');
       const status = {
         configured: true,
         vapid_public_key: 'mock-public-key',
@@ -238,7 +241,8 @@ async function installAccountApi(
           id: `push-${scopedAccount.id}`,
           device_label: 'Тестовое устройство',
           user_agent: 'Playwright',
-          last_error: scopedAccount.id === accountA.id ? 'ACCOUNT_A_PUSH_STATUS_ONLY' : 'ACCOUNT_B_PUSH_STATUS_ONLY',
+          last_error: state.pushStatusLastErrors?.[requestedSession ?? '']
+            ?? (scopedAccount.id === accountA.id ? 'ACCOUNT_A_PUSH_STATUS_ONLY' : 'ACCOUNT_B_PUSH_STATUS_ONLY'),
         }],
       };
       if (holdPushStatus && scopedAccount.id === accountA.id) {
@@ -1427,6 +1431,65 @@ test('a delayed push status from account A cannot update Settings after account 
     await accountBPage.screenshot({ path: info.outputPath('push-status-account-switch-b.png') });
   } finally {
     fixtureA.releasePushStatus();
+  }
+});
+
+test('a delayed push status from the previous same-account session cannot update Settings after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account push-status reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const reauthenticated = { ...accountA, sid: 'c'.repeat(64) };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    pushStatusAccounts: [], pushStatusSessions: [], releasedPushStatuses: 0,
+    pushStatusLastErrors: {
+      [accountA.sid]: 'OLD_SESSION_PUSH_STATUS_ONLY',
+      [reauthenticated.sid]: 'NEW_SESSION_PUSH_STATUS_ONLY',
+    },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+    accountId: accountA.id,
+    serverSessionId: accountA.sid,
+  });
+  await expect.poll(() => state.pushStatusSessions).toContain(accountA.sid);
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(reauthenticatedPage, '/#settings');
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect.poll(() => state.pushStatusSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+    const currentStatus = reauthenticatedPage.getByText(/NEW_SESSION_PUSH_STATUS_ONLY/);
+    await expect(currentStatus).toBeVisible();
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releasePushStatus();
+    await expect.poll(() => state.releasedPushStatuses).toBe(1);
+    await expect(currentStatus).toBeVisible();
+    await expect(reauthenticatedPage.getByText(/OLD_SESSION_PUSH_STATUS_ONLY/)).toHaveCount(0);
+    expect(state.pushStatusSessions).toEqual([accountA.sid, reauthenticated.sid]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releasePushStatus();
+    fixtureReauthenticated.releasePushStatus();
   }
 });
 
