@@ -14,6 +14,8 @@ type FixtureState = {
   releasedInvites: number;
   shoppingCheckRequests: number;
   shoppingCheckAccounts: string[];
+  shoppingCheckSessions?: string[];
+  shoppingCheckFamilyIds?: string[];
   releasedShoppingChecks: number;
   failShoppingCheckRequest?: number;
   failedShoppingCheckRequests?: number;
@@ -42,6 +44,7 @@ type FixtureState = {
   releasedFamilyContexts?: number;
   familyShoppingListRequests?: number;
   familyShoppingListAccounts?: string[];
+  familyShoppingListSessions?: string[];
   releasedFamilyShoppingLists?: number;
   supportListAccounts?: string[];
   releasedSupportLists?: number;
@@ -398,6 +401,7 @@ async function installAccountApi(
       }
       state.familyShoppingListRequests = (state.familyShoppingListRequests ?? 0) + 1;
       (state.familyShoppingListAccounts ??= []).push(scopedAccount.id);
+      (state.familyShoppingListSessions ??= []).push(requestedSession ?? '');
       if (holdFamilyShoppingList && scopedAccount.id === accountA.id) {
         await heldFamilyShoppingListResponse.promise;
         state.releasedFamilyShoppingLists = (state.releasedFamilyShoppingLists ?? 0) + 1;
@@ -414,6 +418,8 @@ async function installAccountApi(
       state.shoppingCheckRequests += 1;
       state.shoppingCheckAccounts.push(scopedAccount.id);
       const body = request.postDataJSON() as { family_id?: unknown } | null;
+      state.shoppingCheckSessions?.push(requestedSession ?? '');
+      state.shoppingCheckFamilyIds?.push(typeof body?.family_id === 'string' ? body.family_id : '');
       const personal = !body?.family_id;
       if (personal) {
         state.personalShoppingCheckRequests += 1;
@@ -1034,6 +1040,73 @@ test('a delayed family shopping response cannot trigger an achievement after ano
     await accountBPage.screenshot({ path: info.outputPath('family-shopping-account-b.png') });
   } finally {
     fixtureA.releaseShoppingCheck();
+  }
+});
+
+test('a delayed family shopping check from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family shopping reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const state: FixtureState = {
+    current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], shoppingCheckSessions: [], shoppingCheckFamilyIds: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyLoadSessions: [], familyShoppingListAccounts: [], familyShoppingListSessions: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Семья family-before-reauthentication', exact: true })).toBeVisible();
+  await expect.poll(() => state.familyShoppingListSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
+  const previousSessionFamilyListReads = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length;
+  const oldCheckbox = page.getByRole('checkbox').first();
+  await expect(oldCheckbox).toBeVisible();
+  await oldCheckbox.check();
+  await expect.poll(() => state.shoppingCheckRequests).toBe(1);
+  expect(state.shoppingCheckAccounts).toEqual([accountA.id]);
+  expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
+  expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication']);
+
+  const reauthenticated = { ...accountA, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  state.familyId = 'family-after-reauthentication';
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+  try {
+    await openApp(reauthenticatedPage, '/#family');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-after-reauthentication', exact: true })).toBeVisible();
+    const newCheckbox = reauthenticatedPage.getByRole('checkbox').first();
+    await expect(newCheckbox).toBeVisible();
+    await expect(newCheckbox).not.toBeChecked();
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect.poll(() => state.familyShoppingListSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseShoppingCheck();
+    await expect.poll(() => state.releasedShoppingChecks).toBe(1);
+    await page.waitForTimeout(700);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect(newCheckbox).not.toBeChecked();
+    expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
+    expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication']);
+    expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionFamilyListReads);
+    expect(state.shoppingAchievements).toEqual([]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseShoppingCheck();
+    fixtureReauthenticated.releaseShoppingCheck();
   }
 });
 
