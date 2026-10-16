@@ -4700,6 +4700,20 @@ Same-account и A → B acceptance прошли 6/6 на desktop Chromium, Firef
 локальных follow-up запускается после push. Остальные AI/family callbacks,
 staging и полный P0.5 lifecycle остаются открытыми.
 
+## P0.5 — поздний ответ AI Совета после same-account login, 16.10.2026
+
+Добавлен acceptance для удержанного ответа `council_chairman`: после того как
+тот же account входит с новым `serverSessionId` в соседней вкладке, история
+содержит исходный вопрос, но старый ответ не меняет history/outbox и не
+показывается в новой сессии. Фикстура проверяет, что AI-запрос использовал только
+исходный account/session proof. Production-код не менялся.
+
+Same-account и A → B AI Council acceptance прошли 6/6 на desktop Chromium,
+Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и `git diff --check`
+прошли. CI #1413 проверяет опубликованный `cb44a2b` и не включает этот сценарий;
+точный CI для накопленных локальных follow-up запускается после push. Другие AI
+и family callbacks, staging и полный P0.5 lifecycle остаются открытыми.
+
 ## P0.5 — поздний Push status после same-account login, 16.10.2026
 
 Добавлен acceptance для удержанного Settings `GET /api/push/status`: соседняя

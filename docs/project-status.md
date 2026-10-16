@@ -14,7 +14,8 @@ Same-account delayed Push status вместе с A → B вариантом пр
 engines. Поздний ответ AI `weekly_menu` после same-account reauthentication вместе
 с A → B проверкой также прошёл 6/6. Полный typecheck и `git diff --check` прошли.
 Production-код не менялся; четыре локальных follow-up требуют нового exact CI
-после отправки.
+после отправки. AI Council same-account late-answer вместе с A → B вариантом
+также прошёл 6/6; всего ожидают exact CI пять локальных acceptance follow-up.
 CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
 исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
 новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.

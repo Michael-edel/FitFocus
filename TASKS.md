@@ -857,6 +857,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Перевести AI Совет на общий AiSession: все 14 запросов используют один
   account/session proof; поздний ответ после входа другого аккаунта проверяется
   browser acceptance.
+- [x] Удержать ответ AI Совета при повторном входе того же account с новым
+  `serverSessionId`: старый ответ не добавляется в историю и не создаёт durable
+  write в новой сессии. Вместе с A → B delayed-answer acceptance прошёл 6/6 на
+  desktop Chromium/Firefox/WebKit без retries. Production-код не менялся;
+  точный CI follow-up ожидает push.
 - [x] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
   read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135

@@ -133,6 +133,10 @@ value и outbox operation фиксируются вместе. Recipe usage ув
   прошли 6/6 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`). Это
   mock-API проверка; OAuth, старые bundles, staging и общий lifecycle проверяются
   отдельно.
+- AI Совет сохраняет введённый вопрос, но отклоняет удержанный ответ старой
+  сессии после повторного входа того же account: history/outbox новой сессии не
+  меняются. Same-account и A → B ответ прошёл 6/6 на desktop engines без retries;
+  это не подтверждает реальный OAuth или весь AI lifecycle.
 - **Плато:** Dashboard и повтор используют общий hook; профиль, исходный action,
   pagehide, logout и новая попытка блокируют поздний ответ. Текст объяснения
   обновляет только UI.
