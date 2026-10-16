@@ -1,6 +1,6 @@
 # Матрица проверки стабилизации FitFocus
 
-Сверено: 15.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
+Сверено: 16.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
@@ -259,7 +259,7 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks; runtime проверяет владельца legacy и build id всех вкладок. Параллельная запись разных ключей двумя вкладками прошла CI HEAD `a8f3219` (run 38634080772). Same-key full-snapshot E2E: пока первый PUT в полёте, независимая правка из второй вкладки остаётся конфликтом; локально 3/3 desktop engines. Account-switch 503 → B → свежая A session прошёл локально 3/3 и точный PR CI source HEAD `943d4c0` (run 38641088114). Три account acceptance — смена аккаунта, reload и logout/login с сохранением opId — прошли совместно локально 9/9 в desktop Chromium, Firefox и WebKit без retries; эти account-switch сценарии вошли в полный CI `455cb01` и прошли (run `38656586334`). Обновлённый old/new same-key snapshot acceptance прошёл локально 3/3 без retries: источник повторно проверяется, изменённое намерение остаётся конфликтом | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [cross-tab E2E](../e2e/owned-state.spec.ts), [same-key E2E](../e2e/storage-durability.spec.ts), [account-switch E2E](../e2e/ai-callback-account-switch.spec.ts), [runtime migration](../tests/state_sync_legacy_migration.test.ts), [legacy browser smoke](../e2e/legacy-outbox-migration.spec.ts), [контракт](sync-model.md) | Полное old/new writer overlap, остальные callbacks и общая lifecycle-приёмка |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; атомарные import/ledger; свежий auth proof владельца; Service Worker all-client fence; old/new smoke прошёл локально 7/7 и в CI `00cd005`; JSON backup v3 экспортирует и атомарно восстанавливает все пять stores; обновлённая migration E2E прошла точный CI `08618e3` ([run 38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)). Дополнительный сценарий позднего изменения legacy-снимка старой вкладкой прошёл локально 3/3 desktop engines при `workers=1`; полный CI `455cb01` завершился success (run `38656586334`) | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [runtime integration](../tests/state_sync_legacy_migration.test.ts), [backup](backup-restore.md), [browser smoke](../e2e/legacy-outbox-migration.spec.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Staging и полный rollback/release acceptance; полный lifecycle, UI конфликтов и оставшиеся old/new writers |
-| P0.9 — приёмка | Есть unit/browser сценарии отдельных компонентов; commit-with-lost-ack, закрытие sender tab с повторным lease claim, 503/Retry-After recovery, transport-abort recovery после reload, `401 → новая правка → login` и `403 ACCESS_REQUIRED` recovery прошли локально 7/7 desktop/mobile/PWA проектов без retries; `FORBIDDEN_KEYSPACE` recovery повторно прошёл 7/7 после одного не воспроизведённого сбоя iPhone Safari; outbox lease/late-response unit suite прошёл 28/28; auth-pause screen-scope unit — 9/9; полный CI `fe44643` завершился 835 passed / 254 skipped / 3 failed: один Android PWA Cloud badge assertion исправлен в `f066fde`; Firefox family-session baseline и WebKit/PWA cancelled GET expectations уточнены в `0de4865`, targeted matrix — 10 passed / 4 intentional skips, плюс Firefox 5/5 и WebKit/PWA 3/3 reruns | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026), [storage E2E](../e2e/storage-durability.spec.ts), [outbox tests](../tests/durable_outbox.test.ts) | Точный полный CI исправленного HEAD, неизвестная первопричина единичного сбоя Safari, Firefox PWA timeout и исторический WebKit sender error с неизвестными причинами, реальные устройства/BFCache/OAuth/staging и проверка отката |
+| P0.9 — приёмка | Отдельные unit/browser критерии включают commit-with-lost-ack, закрытие sender с повторным lease claim, 503/Retry-After, transport abort/reload, 401/403 recovery, DELETE conflict resolution и IndexedDB abort. Upstream Playwright fix [`#42894`](https://github.com/microsoft/playwright/pull/42894) принят в 1.64; локальное обновление runner до 1.64.1 дало реальный offline cold-reopen 7/7, включая WebKit и `navigator.onLine === false`. Обновление пока не опубликовано. Текущий CI [`#1459`](https://github.com/Michael-edel/FitFocus/actions/runs/38899751854) проверяет предыдущий head `754b793` с Playwright 1.61.1; audit, guards, unit, три typecheck и build успешны, E2E выполняется | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026), [storage E2E](../e2e/storage-durability.spec.ts), [outbox tests](../tests/durable_outbox.test.ts) | Разделение unit/mock/staging gates, полный P0.9 и rollback acceptance; первопричины прежних Safari/Firefox/WebKit ошибок, реальные устройства/BFCache/OAuth/staging остаются открыты |
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
@@ -267,13 +267,13 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 ставит `confirmedVersion = 9`, удаляет операцию и не вызывает повторный DELETE.
 Проверка входит в коммит `2592492`; это mock API, не staging.
 
-Дополнительная локальная P0.9 browser acceptance прошла 7/7: PWA offline cold
-reopen сохраняет и отправляет тот же intent после возврата сети (4 supported
-Chromium/Firefox/Android profiles; три WebKit profiles не прошли offline
-navigation из-за Playwright internal error), а IndexedDB transaction abort
-полностью откатывает settings value/outbox/meta и показывает ошибку. Оба теста
-привязаны к своим SHA в [журнале](stabilization-progress.md); staging,
-device/BFCache и точный CI остаются открытыми.
+Дополнительная локальная P0.9 browser acceptance прошла 7/7: PWA cold reopen
+сохраняет и отправляет тот же intent после восстановления сети во всех
+desktop/mobile/PWA профилях. На Playwright 1.64.1 WebKit тоже работает с
+`context.setOffline(true)` и подтверждает `navigator.onLine === false`.
+IndexedDB transaction abort полностью откатывает settings value/outbox/meta и
+показывает ошибку. Обновлённый runner ожидает точного CI; staging, device/BFCache
+и полный P0.9 остаются открытыми.
 
 Ещё одна локальная P0.9 проверка в кодовом коммите
 [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)

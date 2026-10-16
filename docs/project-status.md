@@ -4,21 +4,24 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; WebKit cold-reopen follow-up уже опубликован в
-`fix/durable-outbox`.
+`fix/durable-outbox`. Локально проверяется обновление Playwright 1.61.1 → 1.64.1
+для upstream WebKit Service Worker offline fix; этот dependency follow-up ещё не
+опубликован.
 
 Текущий этап — закрытие стабилизационной приёмки P0.8/P0.9. IndexedDB durable
 outbox подключён; миграция и нормализатор проверяются вместе с runtime lifecycle.
-Последние локальные проверки: PWA offline/cold-reopen — 7/7 профилей,
-`pwa-update` — 7/7, `owned-state` — 35/35; `npm run typecheck` и
-`git diff --check` прошли. В WebKit cold-reopen тест сохраняет настоящий Service
-Worker, возвращает 503 для state API и сбрасывает запросы статики; браузер остаётся
-online. Это обход сбоя Playwright offline navigation, а не заявление о физическом
-offline.
+Локальные проверки на Playwright 1.64.1: PWA offline/cold-reopen — 7/7 профилей,
+`pwa-update` — 7/7, `owned-state` — 35/35; `npm run typecheck`, `npm audit`
+(0 уязвимостей) и `git diff --check` прошли. После upstream fix WebKit cold-reopen
+использует `context.setOffline(true)` и подтверждает `navigator.onLine === false`
+во всех движках. Результаты версии 1.64.1 пока локальные.
 
-Полный CI нужно сверять по текущему head PR #93; локальный browser прогон не
-заменяет эту проверку. В `TASKS.md` остаются 34 пункта (20 P0, 7 P1, 7 следующих
-задач); полный P0/P0.8/P0.9 не закрыт. Staging, физические устройства/OAuth,
-выпуск и интеграция в `main` не подтверждены.
+CI [`#38899751854`](https://github.com/Michael-edel/FitFocus/actions/runs/38899751854)
+проверяет опубликованный head `754b793` с Playwright 1.61.1: audit, guards, unit,
+typechecks и build прошли; E2E ещё выполняется. Локальное обновление 1.64.1
+нуждается в публикации и новом точном CI. В `TASKS.md` остаются 34 пункта
+(20 P0, 7 P1, 7 следующих задач); полный P0/P0.8/P0.9 не закрыт. Staging,
+физические устройства/OAuth, выпуск и интеграция в `main` не подтверждены.
 
 ## Предыдущие локальные результаты
 

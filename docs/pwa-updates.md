@@ -1,6 +1,6 @@
 # Обновление PWA без фоновой перезагрузки формы
 
-Обновлено: 12.10.2026. База изменения — `60c54219c98069099d7125225c4332a7a00f1b05`,
+Обновлено: 16.10.2026. База изменения — `60c54219c98069099d7125225c4332a7a00f1b05`,
 ветка `fix/durable-outbox`. Это следующий компонент после семейного CAS
 `405238b`, а не подтверждение выпуска. Опубликованный SHA, CI и оставшаяся
 работа фиксируются [в статусе проекта](project-status.md).
@@ -23,6 +23,24 @@ fixture, не проверка физического устройства ил�
 [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)
 завершился success: 1043 unit / 192 файла, 341 browser passed / 9 skips,
 16,6 мин browser; проверены статус и логи job 114730233874.
+
+## WebKit offline cold-reopen после upstream fix — 16.10.2026
+
+Playwright исправил offline Service Worker navigation в
+[`#42894`](https://github.com/microsoft/playwright/pull/42894), включив fix в
+ветку v1.64. FitFocus обновляет `@playwright/test` с 1.61.1 на 1.64.1; на этой
+версии `e2e/pwa-offline-durability.spec.ts` проверяет настоящий browser offline
+через `context.setOffline(true)` и контролируемый Service Worker. Все семь
+desktop/mobile/PWA профилей прошли без retries: `navigator.onLine` false,
+навигация отдается Service Worker cache, тот же `opId`/payload/baseVersion
+сохраняются в IndexedDB, а после возврата сети операция подтверждается.
+`e2e/pwa-update.spec.ts` тоже прошёл 7/7 без retries. Typecheck и `npm audit`
+(0 уязвимостей) прошли; `npm ci --dry-run --ignore-scripts` подтвердил lockfile.
+
+Обновление Playwright и тестов ещё локальное; CI #1459 проверяет предшествующий
+PR head `754b793` на Playwright 1.61.1. Новый runner требует точного CI после
+push. Browser emulation и synthetic API не заменяют физическое устройство,
+OAuth или staging.
 
 ## Проблема
 

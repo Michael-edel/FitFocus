@@ -3,13 +3,12 @@
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; WebKit cold-reopen follow-up
 опубликован в `fix/durable-outbox`.
-Локально PWA offline durability acceptance прошёл 7/7 browser/PWA профилей без
-retries, включая WebKit cold reopen через настоящий Service Worker; typecheck и
-diff check прошли. WebKit использует отказ API и сброс
-статических origin-запросов, потому что `context.setOffline(true)` ломает SW
-навигацию внутри Playwright WebKit; поэтому этот профиль не заявляется как
-проверка `navigator.onLine === false`. Полный CI следует сверять по текущему
-head PR #93; эти локальные проверки его не заменяют.
+Локальная приёмка с Playwright 1.64.1 прошла: offline cold-reopen 7/7 и PWA
+update 7/7 профилей без retries, typecheck и `npm audit` (0 уязвимостей).
+Playwright [`#42894`](https://github.com/microsoft/playwright/pull/42894) исправил
+WebKit Service Worker navigation при `context.setOffline(true)`. Теперь все
+профили, включая WebKit, проверяют реальный offline и `navigator.onLine === false`.
+Обновление Playwright ещё не опубликовано; полный CI текущего follow-up обязателен.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
@@ -1384,12 +1383,11 @@ legacy-ключ не используется для новой очереди �
   - [x] В коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a) добавлен PWA cold-reopen цикл: сохранить settings
     intent, закрыть вкладку, открыть управляемую Service Worker страницу, сверить
     прежние opId/payload/baseVersion в IndexedDB и подтвердить исходную операцию
-    после восстановления сети. Текущая локальная матрица прошла 7/7 профилей без
-    retries. WebKit использует API 503 и сброс статических origin-запросов, чтобы
-    обойти внутреннюю ошибку Playwright при offline-навигации; там
-    `navigator.onLine` остаётся true. Эти mock/browser проверки не заменяют
-    физическое устройство, staging или полный P0.9; новый вариант ещё не включён
-    в CI и не отправлен в commit.
+    после восстановления сети. Локальная матрица на Playwright 1.64.1 прошла
+    7/7 профилей без retries и использует `context.setOffline(true)` во всех
+    движках; upstream fix — [`Playwright #42894`](https://github.com/microsoft/playwright/pull/42894).
+    Новая версия runner пока не опубликована. Browser/mock acceptance не заменяет
+    физическое устройство, staging или полный P0.9; точный CI follow-up открыт.
   - [x] Проверить браузерный IndexedDB transaction abort после добавления
     settings outbox intent: value, operation и metadata целиком откатываются,
     видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий

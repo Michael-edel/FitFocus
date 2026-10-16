@@ -162,13 +162,16 @@ failed и доступен для ручного retry; существующий
 повторную матрицу 7/7 после одного не воспроизведённого сбоя iPhone Safari.
 Mock API результаты не заменяют полный CI и staging.
 
-Локальная проверка в коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a),
-`e2e/pwa-offline-durability.spec.ts`, покрывает первую строку
-для PWA: после offline записи новая контролируемая Service Worker страница
-открывается offline, сохраняет тот же intent в IndexedDB и подтверждает его
-после возврата сети. Прошли 4 профиля Chromium/Firefox/Android Chrome; три
-WebKit профиля пропущены из-за внутренней ошибки Playwright при offline
-навигации. Это не реальное устройство и не staging; полный P0.9 остаётся открытым.
+`e2e/pwa-offline-durability.spec.ts` покрывает первую строку для PWA: после
+offline записи новая контролируемая Service Worker страница сохраняет тот же
+intent в IndexedDB и подтверждает исходную операцию после восстановления сети.
+После исправления upstream WebKit Service Worker offline defect в
+[`Playwright #42894`](https://github.com/microsoft/playwright/pull/42894) и
+обновления тестового runner до 1.64.1 локальная матрица прошла 7/7
+desktop/mobile/PWA профилей без retries; `context.setOffline(true)` и
+`navigator.onLine === false` проверяются во всех движках. Это не реальное
+устройство и не staging; обновлённый runner ждёт точного CI, полный P0.9
+остаётся открытым.
 
 Строку abort/quota также расширяет коммит
 [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19):

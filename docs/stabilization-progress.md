@@ -1,18 +1,22 @@
 # Стабилизация: проверяемые изменения
 
-## P0.9 — PWA cold-reopen при сетевом отказе, 16.10.2026
+## P0.9 — реальный PWA offline во всех движках, 16.10.2026
 
-`e2e/pwa-offline-durability.spec.ts` теперь проверяет сохранение settings intent
-и исходного `opId` после закрытия вкладки и открытия новой управляемой Service
-Worker страницы, а затем подтверждает ту же операцию после восстановления сети.
-Полная матрица прошла 7/7 desktop/mobile/PWA профилей без retries. Chromium,
-Firefox и Android используют browser offline; WebKit сохраняет браузер online,
-но API отвечает 503, а запросы статики сбрасываются, чтобы проверить cold reopen
-из SW cache без ошибки Playwright на offline-навигации. Поэтому WebKit-ветка не
-утверждает `navigator.onLine === false` и не заменяет проверку на устройстве.
-`npm run typecheck` прошёл. Тест и фикстуры опубликованы в follow-up ветки
-`fix/durable-outbox`. Результат относится к локальному Playwright; полный CI,
-реальное устройство, staging и общий P0.9 проверяются отдельными release gates.
+`e2e/pwa-offline-durability.spec.ts` проверяет сохранение settings intent и
+исходного `opId` после закрытия вкладки и offline cold-reopen контролируемой
+Service Worker страницы, затем подтверждает ту же операцию после восстановления
+сети. Playwright 1.61.1 воспроизводил upstream WebKit defect; после обновления
+на 1.64.1 и исправления [`#42894`](https://github.com/microsoft/playwright/pull/42894)
+все семь desktop/mobile/PWA профилей прошли без retries, включая WebKit с
+`context.setOffline(true)` и `navigator.onLine === false`. PWA update matrix на
+1.64.1 также прошла 7/7; `npm run typecheck`, `npm audit` (0 уязвимостей) и
+`git diff --check` прошли.
+
+Обновление runner и тестовые правки локальные, ожидают commit/push; CI #1459 на
+предыдущей опубликованной ревизии `754b793` использует Playwright 1.61.1, все
+проверки до E2E успешны, E2E ещё выполняется. Версию 1.64.1 и настоящий offline
+нужно подтвердить точным CI после публикации. Это browser/mock acceptance, не
+физическое устройство, staging или полное закрытие P0.9.
 
 ## P0.9 — DELETE-конфликт после reload, 16.10.2026
 
