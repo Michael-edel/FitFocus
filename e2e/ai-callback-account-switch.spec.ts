@@ -1021,6 +1021,100 @@ test('held weekly report cannot write for account A after another tab signs in a
   }
 });
 
+test('held weekly report cannot write after the same account starts a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly AI report reauthentication acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'wis_text');
+  await page.addInitScript(({ reportKey, report, settingsKey, settings }) => {
+    localStorage.setItem(reportKey, JSON.stringify([report]));
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
+  }, {
+    reportKey: weeklyReportsKey(accountA.id),
+    report: {
+      weekKey: '1999-01',
+      createdAt: '1999-01-01T00:00:00.000Z',
+      data: { wis: 42, weightDelta7: 0, weightDelta30: 0, compliance: 50, adaptationIndex: 0, status: 'stable' },
+      aiText: 'Сохранённый отчёт недели из старой сессии',
+    },
+    settingsKey: `fitfocus_data_${accountA.id}_settings`,
+    settings: { theme: 'violet', language: 'ru', soundEnabled: false, musicEnabled: false },
+  });
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.ffTheme)).toBe('violet');
+  await expect(page.getByText('Профиль A', { exact: true })).toBeVisible();
+  await expect(page.getByText('Сохранённый отчёт недели из старой сессии', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const reportKey = weeklyReportsKey(accountA.id);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const oldReport = rawValue(beforeReauthentication, reportKey);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  const oldSessionReportWrites = fixtureA.counts.stateWrites.filter(key => key === reportKey);
+
+  const reauthenticated = { id: accountA.id, sid: 'f'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    // A new login must be able to replace the stale in-flight marker and create its own report.
+    await expect.poll(() => fixtureReauthenticated.counts.completedAiFeatures).toContain('wis_text');
+    await waitForAccountOutboxIdle(reauthenticatedPage, reauthenticated);
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const reportAtNewSession = rawValue(beforeOldResponse, reportKey);
+    expect(beforeOldResponse.activeSession?.accountId).toBe(accountA.id);
+    expect(beforeOldResponse.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+    expect(reportAtNewSession).not.toBeNull();
+    expect(reportAtNewSession).not.toBe(oldReport);
+    const operationsAtNewSession = operationsFor(beforeOldResponse, accountA);
+    const newSessionReportWrites = fixtureReauthenticated.counts.stateWrites.filter(key => key === reportKey);
+
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, reportKey)).toBe(reportAtNewSession);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(operationsAtNewSession);
+    expect(fixtureA.counts.stateWrites.filter(key => key === reportKey)).toEqual(oldSessionReportWrites);
+    expect(fixtureReauthenticated.counts.stateWrites.filter(key => key === reportKey)).toEqual(newSessionReportWrites);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'wis_text')).toEqual([{
+      feature: 'wis_text', account: accountA.id, session: accountA.sid,
+    }]);
+    expect(fixtureReauthenticated.counts.aiRequests.filter(request => request.feature === 'wis_text')).toEqual([{
+      feature: 'wis_text', account: accountA.id, session: reauthenticated.sid,
+    }]);
+    await expect(page.getByText('Поздний отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Поздний отчёт недели из аккаунта A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
