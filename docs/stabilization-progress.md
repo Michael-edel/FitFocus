@@ -4686,6 +4686,20 @@ typecheck и `git diff --check` прошли. CI #1413 проверяет опу
 после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
 открытыми.
 
+## P0.5 — поздний Push status после same-account login, 16.10.2026
+
+Добавлен acceptance для удержанного Settings `GET /api/push/status`: соседняя
+вкладка повторно входит в тот же account с новым `serverSessionId`, получает
+отличающийся delivery-status marker, затем освобождается ответ старой сессии.
+Старый marker не появляется и не заменяет состояние новой сессии. Фикстура
+проверяет session id обоих запросов; production-код не менялся.
+
+Same-account и A → B delayed-status сценарии прошли 6/6 на desktop Chromium,
+Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и `git diff --check`
+прошли. CI #1413 проверяет опубликованный HEAD `cb44a2b` и не содержит этот
+follow-up. Реальный push provider, устройство, staging и общий P0.5 lifecycle
+остаются открытыми.
+
 ## P0.5 — семейный shopping-check после same-account login, 16.10.2026
 
 Добавлен acceptance для удержанного family `PATCH /api/shopping/check`: соседняя

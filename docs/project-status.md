@@ -10,8 +10,9 @@ join; выборка этих сценариев вместе со смежны�
 PATCH после same-account reauthentication: новый сценарий и две соседние проверки
 прошли 9/9 на тех же engines. Ещё один family shopping-check после same-account
 reauthentication вместе с тремя соседними shopping проверками прошёл 12/12.
-Полный typecheck и `git diff --check` прошли. Production-код не менялся; оба
-локальных follow-up требуют нового exact CI после отправки.
+Same-account delayed Push status вместе с A → B вариантом прошёл 6/6 на тех же
+engines. Полный typecheck и `git diff --check` прошли. Production-код не менялся;
+три локальных follow-up требуют нового exact CI после отправки.
 CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
 исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
 новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.

@@ -826,6 +826,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   устройство остаются обязательными. CI `04b61dd` ожидает push. На HEAD
   `404b3da` delayed-status account switch и native-SW recovery прошли 2/2 без
   retries на Chromium; полный CI этого HEAD ещё выполняет E2E.
+  - [x] Удержать `/api/push/status` старой server session, повторно войти в тот
+    же account с новым `serverSessionId` и проверить ответ новой сессии до и после
+    освобождения старого. В Settings остаётся только новый delivery-status marker;
+    проверены исходные account/session заголовки. Same-account и A → B сценарии
+    прошли 6/6 на desktop Chromium/Firefox/WebKit без retries; typecheck и diff
+    check прошли. Реальные provider/device/staging и точный CI остаются открытыми.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному guard, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
