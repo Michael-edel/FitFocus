@@ -4619,3 +4619,20 @@ staging и реальный backend остаются отдельными про
 браузерах; `git diff --check` прошёл. Production-код не менялся, воспроизводимого
 дефекта не выявлено. Общий P0.4 audit, оставшиеся callbacks/cache, staging и
 полный lifecycle остаются открытыми; точный CI проверяется после push.
+
+## P0.5 — поздний invite-ответ после same-account login, `b1c01ae`, 16.10.2026
+
+Новый acceptance удерживает `POST /api/family/invite` старой server session,
+затем в соседней вкладке принимает новый `serverSessionId` того же account.
+После освобождения старый invite-код не отображается ни в прежней, ни в новой
+вкладке; старая вкладка сохраняет session notice и не запускает новый GET семьи.
+Фикстура дополнительно проверяет, что mutation ушла только с исходным session id,
+а новая семья читается с новым proof.
+
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit
+(`workers=1,retries=0`); полный локальный typecheck и `git diff --check` прошли.
+Точный CI предыдущего SHA `c1aef67` завершился failure только на typecheck:
+в новой family-context fixture отсутствовал обязательный `releasedMembers`.
+Поле добавлено в `b1c01ae`; production-код не менялся, подтверждённого runtime
+дефекта нет. Точный CI исправленного HEAD проверяется после push; общий P0.5 и
+остальные family/AI/state callbacks остаются открытыми.

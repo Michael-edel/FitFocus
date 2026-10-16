@@ -983,6 +983,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   что более ранний baseline включал незавершённую стартовую загрузку A; после
   переноса baseline за вход B сценарий прошёл. Точный CI follow-up ещё ожидается;
   остальные callbacks и staging остаются открытыми.
+  - [x] Удержать создание family invite от прежней server session и повторно
+    войти в тот же account с новым `serverSessionId`: после освобождения ответа
+    старый invite-код не появляется, старая вкладка остаётся под session notice
+    и не запускает повторную загрузку семьи. E2E прошёл 3/3 на desktop
+    Chromium/Firefox/WebKit; typecheck и diff check прошли. Точный CI предыдущего
+    SHA нашёл пропущенный `releasedMembers` в fixture; исправление включено в
+    [`b1c01ae`](https://github.com/Michael-edel/FitFocus/commit/b1c01ae2338265b0aa925f269dc61140af3791dd), точный CI запускается после push.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;
