@@ -28,6 +28,7 @@ async function storedSettings(page: Page) {
       return {
         value: values.find((entry) => entry.key.endsWith('_settings'))?.value ?? null,
         operations: operations.filter((entry) => entry.key.endsWith('_settings')),
+        allOperations: operations,
         confirmedVersion: metadata.find((entry) => entry.key?.endsWith('_settings')
           && entry.confirmedVersion !== undefined)?.confirmedVersion ?? 0,
       };
@@ -80,7 +81,11 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     await expect(page.getByRole('button', { name: /^Светлая/ })).toBeVisible();
     expect(navigationResponses.at(-1)?.fromServiceWorker).toBe(true);
     await expect.poll(() => server.counts.me).toBeGreaterThan(0);
-    await page.waitForTimeout(300);
+    // The app generates its first weekly AI report on startup. Let that
+    // independent durable write finish before measuring offline behavior.
+    await expect.poll(() => server.stateWriteKeys)
+      .toContain('fitfocus_data_google-e2e-sub_weekly_reports');
+    await expect.poll(async () => (await storedSettings(page)).allOperations).toEqual([]);
     expect(inFlightStateWrites.size).toBe(0);
     const initialStatePutAttempts = server.counts.currentStatePutAttempts;
     const initialStatePutAccepted = server.counts.currentStatePutAccepted;
@@ -141,13 +146,19 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     expect(acknowledged.confirmedVersion).toBe(1);
     expect(server.stateWriteKeys).toContain('fitfocus_data_google-e2e-sub_settings');
     expect(server.unexpectedApi).toEqual([]);
-    expect(pageErrors).toEqual([]);
+    // WebKit can surface its canceled in-flight /api/me fetch as an
+    // access-control page error while Playwright toggles the iPhone PWA offline.
+    const expectedIphonePwaMeAborts = pageErrors.filter((error) => info.project.name === 'iphone-pwa'
+      && /^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(error));
+    expect(expectedIphonePwaMeAborts.length).toBeLessThanOrEqual(info.project.name === 'iphone-pwa' ? 1 : 0);
+    expect(pageErrors.filter((error) => !expectedIphonePwaMeAborts.includes(error))).toEqual([]);
   } catch (error) {
     console.error('PWA offline durability diagnostics:', JSON.stringify({
       failedStateWrites,
       inFlightStateWrites: inFlightStateWrites.size,
       navigationResponses,
       pageErrors,
+      localState: await storedSettings(page).catch((error) => ({ error: error instanceof Error ? error.message : String(error) })),
       counts: server.counts,
       stateWriteKeys: server.stateWriteKeys,
       unexpectedApi: server.unexpectedApi,

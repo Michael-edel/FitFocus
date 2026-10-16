@@ -1252,6 +1252,7 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   const profileBefore = rawValue(beforeSwitch, profileKey(accountA.id));
   const operationsBefore = operationsFor(beforeSwitch, accountA);
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
+  expect(errorsA).toEqual([]);
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
@@ -1275,7 +1276,14 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   expect(operationsFor(afterSwitch, accountA)).toEqual(operationsBefore);
   expect(await switched.page.getByText('98.765', { exact: true }).count()).toBe(0);
   expect(fixtureA.counts.profileWrites).toEqual([]);
-  expect(errorsA).toEqual([]);
+  // WebKit reports an access-control error when account activation aborts the
+  // old page's in-flight automatic AI request. Keep this allowlist exact and
+  // limited to that transition; all other errors remain fatal.
+  const expectedWebKitAiAbort = (error: string) => info.project.name === 'desktop-webkit'
+    && /^error: \/127\.0\.0\.1:\d+\/api\/ai due to access control checks\.$/.test(error);
+  const expectedWebKitAiAborts = errorsA.filter(expectedWebKitAiAbort);
+  expect(expectedWebKitAiAborts.length).toBeLessThanOrEqual(info.project.name === 'desktop-webkit' ? 1 : 0);
+  expect(errorsA.filter(error => !expectedWebKitAiAborts.includes(error))).toEqual([]);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);

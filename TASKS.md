@@ -1,24 +1,22 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; WebKit cold-reopen follow-up
-опубликован в `fix/durable-outbox`.
-Локальная приёмка с Playwright 1.64.1 прошла: offline cold-reopen 7/7 и PWA
-update 7/7 профилей без retries, typecheck и `npm audit` (0 уязвимостей).
-Playwright [`#42894`](https://github.com/microsoft/playwright/pull/42894) исправил
-WebKit Service Worker navigation при `context.setOffline(true)`. Теперь все
-профили, включая WebKit, проверяют реальный offline и `navigator.onLine === false`.
-CI точного опубликованного HEAD `e34544d` завершился ошибкой в [run
-38903745625](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625):
-все gates до E2E прошли, browser matrix — 840 passed / 251 skipped / 1 failed.
-Сбой был в desktop Firefox при независимом IndexedDB open из migration E2E probe.
-Коммит [`0efec93`](https://github.com/Michael-edel/FitFocus/commit/0efec93ffaf905ace3c020ad1b70c398da89a571)
-переиспользует соединение, уже открытое приложением, и фиксирует события
-open/blocked/versionchange/close и стадии чтения. После исправления migration spec
-прошёл 14/14 на семи Playwright-профилях без retries; проблемный Firefox-сценарий
-прошёл 10/10, typecheck и admin guards прошли. Полный CI точного SHA follow-up
-нужно подтвердить; P0/P0.8/P0.9, staging, выпуск и интеграция в main остаются
-открыты.
+остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
+подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
+
+Последний опубликованный [CI run #1463](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
+для `8dfab60` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
+build; browser E2E завершился с 839 passed / 251 skipped / 2 failed. WebKit
+зафиксировал прерывание фонового `/api/ai` при смене аккаунта; iPhone PWA не
+отправил ожидаемую settings-запись после offline reopen. Диагностика показала,
+что сервер принял `weekly_reports`, но не получил `settings`.
+
+В локальном follow-up тест PWA дожидается завершения стартовой AI-записи и
+проверяет восстановление settings отдельно; полная матрица прошла 7/7, iPhone
+PWA повторён 5/5 без retries. WebKit account-switch тест допускает только точное
+сообщение об abort `/api/ai` при смене аккаунта и прошёл 5/5; остальные ошибки
+остаются фатальными. Follow-up ещё требует точного полного CI после push.
+P0/P0.8/P0.9, staging, выпуск и интеграция в `main` остаются открыты.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload

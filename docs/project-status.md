@@ -7,24 +7,30 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 follow-up `0efec93`.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. CI точного опубликованного head `e34544d`
-завершился [ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625):
-все gates до браузеров прошли, затем 840 тестов прошли, 251 были skipped и один
-Firefox migration test завис при чтении состояния через отдельный
-`indexedDB.open()`.
+подключён, но общий P0 ещё открыт. Последний опубликованный CI run #1463 для
+`8dfab60` завершился [ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205):
+все gates до браузеров прошли; browser matrix — 839 passed / 251 skipped / 2
+failed. Desktop WebKit зарегистрировал `due to access control checks` для
+фонового `/api/ai` во время смены аккаунта. iPhone PWA после offline reopen
+сохранил settings operation, но за 20 секунд не отправил её; сервер видел
+`weekly_reports`, не `settings`, без page errors или failed state writes.
 
 Кодовый follow-up [`0efec93`](https://github.com/Michael-edel/FitFocus/commit/0efec93ffaf905ace3c020ad1b70c398da89a571)
 переводит этот E2E probe на уже открытое соединение приложения и пишет события
 IndexedDB lifecycle/transaction в диагностический attachment. Локально
 `legacy-outbox-migration.spec.ts` прошёл 14/14 на семи desktop/mobile/PWA
 профилях без retries; целевой Firefox-сценарий прошёл 10/10, typecheck и admin
-guards прошли. Полный CI точного SHA follow-up ещё не подтверждён; локальные
-результаты его не заменяют.
+guards прошли. Полный CI последующего опубликованного head `8dfab60` прошёл все
+gates до E2E, но браузерная матрица упала в двух других сценариях, описанных
+ниже. Локальные результаты не заменяют успешный точный CI.
 
-Точный [CI run #1463](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
-для `8dfab60` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
-build; E2E-матрица пока выполняется. Повтор `pwa-update.spec.ts` в desktop Firefox
-на текущем checkout прошёл 5/5 без retries.
+Локальный E2E follow-up устраняет неустойчивую синхронизацию стартовой AI-записи
+в PWA-тесте и добавляет outbox snapshot к failure diagnostics. Полная offline
+матрица прошла 7/7, iPhone PWA повторён 5/5 без retries. WebKit account-switch
+принимает только один точный `/api/ai due to access control checks` abort внутри
+смены аккаунта и прошёл 5/5; остальные ошибки фатальны. Это локальная проверка;
+полный CI точного SHA ещё не запускался. `pwa-update.spec.ts` в desktop Firefox
+до этого прошёл 5/5 без retries.
 
 Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA
 `8dfab604c97f90f6720e8185f0366bbe61b9383d`, ответ страницы 200 и анонимные API

@@ -5289,8 +5289,12 @@ reauth callback — 5/5. `npm run typecheck` и `git diff --check` прошли.
 Это подтверждает текущую повторяемость, но не закрывает историческую причину
 таймаута: отдельный точный CI ещё выполняет E2E. В run
 [`38913791205`](https://github.com/Michael-edel/FitFocus/actions/runs/38913791205)
-audit, schema/privacy/auth/API, unit, три typecheck и build прошли; E2E остаётся
-in progress.
+audit, schema/privacy/auth/API, unit, три typecheck и build прошли; E2E завершился
+839 passed / 251 skipped / 2 failed. Desktop WebKit зарегистрировал
+`/api/ai due to access control checks` во время account switch. iPhone PWA после
+offline reopen не отправил settings: сервер принял только `weekly_reports`, без
+failed state writes, pending HTTP requests или page errors. Это оставляет причину
+сбоя PWA-синхронизации неустановленной.
 
 Read-only GET smoke branch preview `fix-durable-outbox.fitfocus.pages.dev`
 подтвердил точный JS SHA `8dfab604c97f90f6720e8185f0366bbe61b9383d`.
@@ -5307,3 +5311,23 @@ Wrangler file является source of truth только если deployment 
 режим. Без текущей Pages dashboard/API конфигурации фактический D1 preview и
 его изоляция неизвестны. Живые D1-запросы не выполнялись; staging остаётся
 открытым.
+
+## P0.8/P0.9 — follow-up двух E2E-сбоев CI #1463, 16.10.2026
+
+Трасса WebKit показывает `due to access control checks` для автоматического
+`/api/ai` старой вкладки во время подтверждённой смены аккаунта; запрос старой
+вкладки не был зафиксирован тестовым сервером. Account-switch acceptance теперь
+допускает не более одного точного такого сообщения только в `desktop-webkit`, а
+все остальные ошибки остаются фатальными.
+
+Трасса PWA показала стартовую автоматическую генерацию и запись `weekly_reports`.
+Offline acceptance теперь ждёт завершения этой независимой стартовой операции и
+пустой outbox до сохранения settings offline; failure attachment включает
+содержимое очереди и подтверждённую версию. Полная offline матрица прошла 7/7,
+`iphone-pwa` повторён 5/5 без retries. В одном промежуточном повторе settings успешно
+синхронизировался, но WebKit сообщил прерванный GET `/api/me` при переключении
+offline; этот единичный точный abort теперь допускается только в `iphone-pwa`.
+Desktop WebKit account-switch прошёл 5/5 без retries.
+Остальные page errors, неотправленные settings и лишние запросы остаются
+фатальными. Причина первоначального CI timeout пока не доказана; точный полный
+CI follow-up ещё не запускался.
