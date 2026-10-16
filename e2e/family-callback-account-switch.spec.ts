@@ -14,6 +14,8 @@ type FixtureState = {
   shoppingCheckRequests: number;
   shoppingCheckAccounts: string[];
   releasedShoppingChecks: number;
+  failShoppingCheckRequest?: number;
+  failedShoppingCheckRequests?: number;
   personalShoppingListRequests: number;
   personalShoppingListAccounts: string[];
   releasedPersonalShoppingLists: number;
@@ -407,6 +409,10 @@ async function installAccountApi(
         state.personalShoppingCheckRequests += 1;
         state.personalShoppingCheckAccounts.push(scopedAccount.id);
       }
+      if (state.failShoppingCheckRequest === state.shoppingCheckRequests) {
+        state.failedShoppingCheckRequests = (state.failedShoppingCheckRequests ?? 0) + 1;
+        return json({ error: 'SHOPPING_UPDATE_FAILED' }, scopedAccount, 503);
+      }
       if (holdShoppingCheck && scopedAccount.id === accountA.id) {
         await heldShoppingCheckResponse.promise;
         state.releasedShoppingChecks += 1;
@@ -776,6 +782,47 @@ test('a delayed family shopping response cannot trigger an achievement after ano
     await accountBPage.screenshot({ path: info.outputPath('family-shopping-account-b.png') });
   } finally {
     fixtureA.releaseShoppingCheck();
+  }
+});
+
+test('a failed family shopping retry reconciles the optimistic checkbox with the server snapshot', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The family shopping mutation race runs in desktop browser profiles.');
+  const errors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    failShoppingCheckRequest: 2,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixture = await installAccountApi(page, state, false, errors, true);
+  const checkbox = page.getByRole('checkbox').first();
+
+  try {
+    await openApp(page, '/#family');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+    await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+    await expect(checkbox).toBeVisible();
+    await expect(checkbox).not.toBeChecked();
+    const listReadsBeforeFailure = state.familyShoppingListRequests ?? 0;
+
+    await checkbox.check();
+    await expect.poll(() => state.shoppingCheckRequests).toBe(1);
+    await expect(checkbox).toBeChecked();
+
+    // The first request is still pending and the mock server has not committed it.
+    // The user's newer intent fails; the list read is the authoritative state.
+    await checkbox.uncheck();
+    await expect.poll(() => state.failedShoppingCheckRequests).toBe(1);
+    await expect.poll(() => state.familyShoppingListRequests).toBeGreaterThan(listReadsBeforeFailure);
+    await expect(checkbox).not.toBeChecked();
+    expect(errors.filter(message => !/503 \(Service Unavailable\)/.test(message))).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixture.releaseShoppingCheck();
   }
 });
 

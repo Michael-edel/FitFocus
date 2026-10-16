@@ -114,14 +114,25 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     const familyId = cloudFamily?.id; if (!familyId) return;
     const attempt = scope.begin(`check:${ingredientName}`); if (!attempt) throw new SessionReadError('session');
     const current = () => attempt.isCurrent() && familyIdRef.current === familyId;
+    const week = weekStartISO();
     const previous = familyShopping?.items.find(item => item.name === ingredientName)?.checked ?? false;
     setFamilyShopping(value => value ? { ...value, items: value.items.map(item => item.name === ingredientName ? { ...item, checked } : item) } : value);
-    try { await setFamilyShoppingItem(weekStartISO(), familyId, ingredientName, checked, session(attempt, current)); }
+    try { await setFamilyShoppingItem(week, familyId, ingredientName, checked, session(attempt, current)); }
     catch (error) {
-      if (current()) setFamilyShopping(value => value ? { ...value, items: value.items.map(item => item.name === ingredientName ? { ...item, checked: previous } : item) } : value);
+      if (current()) {
+        try {
+          const authoritative = await loadFamilyShoppingFromApi(week, familyId, session(attempt, current));
+          const local = await repositoryFor(familyId, week).observe();
+          if (current()) setFamilyShopping(local.menu ? familyShoppingProjection(week, local.menu, authoritative) : authoritative);
+        } catch {
+          if (current()) setFamilyShopping(value => value
+            ? { ...value, items: value.items.map(item => item.name === ingredientName ? { ...item, checked: previous } : item) }
+            : value);
+        }
+      }
       throw new Error(familyErrorMessage(error));
     } finally { attempt.finish(); }
-  }, [cloudFamily?.id, familyShopping, scope, session, setFamilyShopping, weekStartISO]);
+  }, [cloudFamily?.id, familyShopping, repositoryFor, scope, session, setFamilyShopping, weekStartISO]);
 
   const runMutation = useCallback(async <T,>(action: (binding: FamilySession, current: () => boolean) => Promise<T>) => {
     const attempt = scope.begin('mutation'); if (!attempt) throw new Error(familyErrorMessage(new SessionReadError('session')));
