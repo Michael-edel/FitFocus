@@ -1,5 +1,18 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — atomic rollback при IndexedDB transaction abort
+
+Коммит [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19)
+добавляет browser acceptance в `e2e/storage-durability.spec.ts`: после сохранения
+подтверждённой settings версии тест abort-ит настоящую readwrite-транзакцию на
+success-событии добавления outbox operation. Проверка подтверждает полный
+rollback value, operation и metadata; остаются предыдущие settings, UI показывает
+storage error, необработанных browser errors нет. Прошло 7/7 desktop/mobile/PWA
+проектов (`workers=1,retries=0`). `npm run typecheck` и `git diff --check`
+прошли. Это локальная browser acceptance без staging и физического устройства;
+предыдущий run #1439 на `c8280e6` не содержит этот тест, нужен точный CI нового
+HEAD.
+
 ## 16.10.2026 — PWA сохраняет outbox после offline холодного открытия
 
 Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)

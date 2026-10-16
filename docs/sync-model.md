@@ -145,6 +145,13 @@ Legacy-ключ — только источник импорта. Нормали
 WebKit профиля пропущены из-за внутренней ошибки Playwright при offline
 навигации. Это не реальное устройство и не staging; полный P0.9 остаётся открытым.
 
+Строку abort/quota также расширяет коммит
+[`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19):
+browser тест abort-ит settings readwrite transaction после добавления outbox
+intent и подтверждает atomic rollback value, operation и metadata, видимую ошибку
+и прежний подтверждённый снимок. Он прошёл 7/7 Playwright-проектов без retries;
+staging и точный CI нового HEAD остаются отдельными проверками.
+
 Unit и fake IndexedDB проверяют логику и отказные пути. Два реальных
 browser page нужны для вкладок; старый и новый bundle — для совместимости.
 Mock API не заменяет staging D1/OAuth/push. Результаты связываются с SHA

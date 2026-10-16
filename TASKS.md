@@ -6,10 +6,14 @@
 добавляет сценарий P0.9 «offline → холодное повторное открытие PWA → online»:
 локально он прошёл Chromium, Firefox и Android Chrome/PWA (4/4); три профиля
 WebKit пропущены из-за внутренней ошибки Playwright при навигации offline.
+Коммит [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19)
+добавляет браузерную проверку настоящего IndexedDB transaction abort: 7/7
+профилей прошли; typecheck и diff check прошли.
 Коммит опубликован в `fix/durable-outbox`. Старый run #1435 на `1d7fc1c`
 отменён после обновления PR; run #1437 проверял SHA `f4d170b` и был в работе
-при обновлении этого статуса. После следующего документационного коммита нужен
-CI для нового HEAD; staging и выпуск не подтверждены.
+при обновлении статуса; run #1439 на `c8280e6` прошёл pre-E2E gates и выполнял
+E2E до добавления `bf6b142`. Для нового HEAD нужен точный CI; staging и выпуск
+не подтверждены.
 Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
 на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
 legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
@@ -1395,6 +1399,11 @@ legacy-ключ не используется для новой очереди �
     операции после возврата сети. Прошло 4/4 Chromium/Firefox/Android Chrome
     профилей; 3 WebKit профиля пропущены из-за внутренней ошибки Playwright на
     offline navigation. Коммит опубликован; этот mock/browser тест не заменяет device/staging.
+  - [x] Проверить браузерный IndexedDB transaction abort после добавления
+    settings outbox intent: value, operation и metadata целиком откатываются,
+    видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий
+    прошёл 7/7 Playwright-проектов без retries в коммите
+    [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19).
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

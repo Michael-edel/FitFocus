@@ -261,6 +261,14 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 | P0.8 — постоянная очередь | Одна IDB-outbox; атомарные import/ledger; свежий auth proof владельца; Service Worker all-client fence; old/new smoke прошёл локально 7/7 и в CI `00cd005`; JSON backup v3 экспортирует и атомарно восстанавливает все пять stores; обновлённая migration E2E прошла точный CI `08618e3` ([run 38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)). Дополнительный сценарий позднего изменения legacy-снимка старой вкладкой прошёл локально 3/3 desktop engines при `workers=1`; полный CI `455cb01` завершился success (run `38656586334`) | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [runtime integration](../tests/state_sync_legacy_migration.test.ts), [backup](backup-restore.md), [browser smoke](../e2e/legacy-outbox-migration.spec.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Staging и полный rollback/release acceptance; полный lifecycle, UI конфликтов и оставшиеся old/new writers |
 | P0.9 — приёмка | Есть unit/browser сценарии отдельных компонентов; commit-with-lost-ack, закрытие sender tab с повторным lease claim, 503/Retry-After recovery и transport-abort recovery после reload прошли локально 7/7 desktop/mobile/PWA проектов без retries; outbox lease/late-response unit suite прошёл 28/28; teardown закрытой вкладки не дал proxy ECONNREFUSED | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026), [storage E2E](../e2e/storage-durability.spec.ts), [outbox tests](../tests/durable_outbox.test.ts) | Полный CI нового HEAD, Firefox PWA timeout и исторический WebKit sender error с неизвестными причинами, реальные устройства/BFCache/OAuth/staging и проверка отката |
 
+Дополнительная локальная P0.9 browser acceptance прошла 7/7: PWA offline cold
+reopen сохраняет и отправляет тот же intent после возврата сети (4 supported
+Chromium/Firefox/Android profiles; три WebKit profiles не прошли offline
+navigation из-за Playwright internal error), а IndexedDB transaction abort
+полностью откатывает settings value/outbox/meta и показывает ошибку. Оба теста
+привязаны к своим SHA в [журнале](stabilization-progress.md); staging,
+device/BFCache и точный CI остаются открытыми.
+
 Предыдущий полный CI на проверенном HEAD `e96025d` завершился success
 ([run `38440675173`](https://github.com/Michael-edel/FitFocus/actions/runs/38440675173))
 с тремя flaky E2E, прошедшими retry. Его симптомы и повторы сохранены в

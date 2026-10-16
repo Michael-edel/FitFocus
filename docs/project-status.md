@@ -11,6 +11,10 @@ draft с base `fix/state-generations`; работа в ветке `fix/durable-o
 профиля пропущены из-за внутренней ошибки Playwright при offline навигации.
 Коммит опубликован в `fix/durable-outbox`; полный E2E для актуального HEAD
 ожидает подтверждения.
+В локальном коммите [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19)
+добавлена browser проверка atomic rollback при IndexedDB abort; целевой тест
+прошёл 7/7 Playwright-проектов, typecheck и diff check прошли. Run #1439 на
+предыдущем SHA `c8280e6` не содержит его; требуется полный CI нового HEAD.
 Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
 old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
 глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:
