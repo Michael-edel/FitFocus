@@ -10,6 +10,7 @@ type FixtureState = {
   familyId?: string;
   inviteRequests: number;
   inviteTargetIds: string[];
+  inviteSessionIds?: string[];
   releasedInvites: number;
   shoppingCheckRequests: number;
   shoppingCheckAccounts: string[];
@@ -340,6 +341,7 @@ async function installAccountApi(
     if (path === '/api/family/menu') return json({ weekStart: url.searchParams.get('week'), shared: null, portions: null });
     if (path === '/api/family/invite') {
       state.inviteRequests += 1;
+      (state.inviteSessionIds ??= []).push(requestedSession ?? '');
       const body = request.postDataJSON() as { familyId?: unknown } | null;
       state.inviteTargetIds.push(typeof body?.familyId === 'string' ? body.familyId : '');
       if (holdInvite && scopedAccount.id === accountA.id) {
@@ -718,7 +720,7 @@ test('a delayed family-context read from the previous same-account session is di
     shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
     personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
     rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
-    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
     familyLoadAccounts: [], familyLoadSessions: [],
   };
   const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, false, true);
@@ -739,6 +741,7 @@ test('a delayed family-context read from the previous same-account session is di
       accountId: accountA.id,
       serverSessionId: reauthenticated.sid,
     });
+    await expect.poll(() => state.familyLoadSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
     await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
       accountId: accountA.id,
       serverSessionId: reauthenticated.sid,
@@ -758,6 +761,65 @@ test('a delayed family-context read from the previous same-account session is di
   } finally {
     fixtureA.releaseFamilyContext();
     fixtureReauthenticated.releaseFamilyContext();
+  }
+});
+
+test('a delayed family invite from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family invite reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], inviteSessionIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    familyLoadAccounts: [], familyLoadSessions: [],
+  };
+  const fixtureA = await installAccountApi(page, state, true, errorsA);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
+  await expect.poll(() => state.familyLoadSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
+  await expect.poll(() => state.inviteRequests).toBe(1);
+  expect(state.inviteTargetIds).toEqual([`family-${accountA.id}`]);
+  expect(state.inviteSessionIds).toEqual([accountA.sid]);
+  const previousSessionFamilyLoads = state.familyLoadSessions?.filter(session => session === accountA.sid).length;
+
+  const reauthenticated = { ...accountA, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+  try {
+    await openApp(reauthenticatedPage, '/#family');
+    await expect(reauthenticatedPage.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect.poll(() => state.familyLoadSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseInvite();
+    await expect.poll(() => state.releasedInvites).toBe(1);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect(page.getByText('OBSOLETE-CODE-FROM-A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('OBSOLETE-CODE-FROM-A', { exact: true })).toHaveCount(0);
+    expect(state.inviteSessionIds).toEqual([accountA.sid]);
+    expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionFamilyLoads);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseInvite();
+    fixtureReauthenticated.releaseInvite();
   }
 });
 
