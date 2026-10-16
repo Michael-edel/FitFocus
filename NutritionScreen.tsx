@@ -24,7 +24,7 @@ type NutritionScreenProps = {
   searchResults: SearchResult[];
   addFoodToDiary: (item: FastLogItem) => void;
   foodDiary: FoodItem[];
-  selectedFoodIds: Set<string>;
+  selectedFoodIds: ReadonlySet<string>;
   toggleFoodSelected: (id: string) => void;
   bulkUpdateMealType: (mealType: MealType) => void;
   bulkRemoveSelectedFoods: () => void;

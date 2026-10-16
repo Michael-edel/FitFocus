@@ -1102,7 +1102,14 @@ const App: React.FC = () => {
     clearFoodSelection,
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
-  } = useFoodSelection(setFoodDiary, deleteFoodEntry, persistFoodDiary);
+  } = useFoodSelection(
+    setFoodDiary,
+    deleteFoodEntry,
+    persistFoodDiary,
+    allowCachedUiStateRestore && currentUser?.id
+      ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+      : null,
+  );
 
   const handleDiaryDayChange = useCallback((dayKey: string) => {
     clearFoodSelection();

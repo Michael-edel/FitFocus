@@ -14,7 +14,7 @@ import { toLocalDayKey as localDayKey } from './dateUtils';
 
 export type FoodDiaryGroupedProps = {
   items: FoodEntry[];
-  selectedIds: Set<string>;
+  selectedIds: ReadonlySet<string>;
   toggleSelected: (id: string) => void;
   bulkMoveTo: (mealType: MealType) => void;
   bulkDelete: () => void;

@@ -1,5 +1,25 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — изоляция выбора блюд по account/session
+
+`useFoodSelection` хранил выбранные id в корневом состоянии приложения, вне
+ключа экрана питания. При смене account/session старый выбор мог остаться
+доступен новому экрану, а сохранённый bulk callback мог попытаться изменить
+дневник после перехода. Теперь selection state маркируется актуальным
+`accountSessionRenderKey` только после разрешения account cache; другой или
+неподтверждённый scope не видит старые id. Отложенные setters используют общий
+account-scoped guard, bulk update повторно проверяет владельца внутри React
+updater, а bulk delete отклоняет callback прежней сессии. Props выбора еды
+теперь имеют read-only тип `ReadonlySet`.
+
+Добавлены пять regression unit-тестов на изоляцию аккаунтов и сессий, сброс,
+неподтверждённый scope и отказ старому bulk callback. Полный unit suite прошёл
+1316/1316 в 212 файлах; root, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли. Это локальная проверка; P0.4
+остаётся открытым для других callbacks/cache, browser acceptance и staging.
+Предыдущий GitHub CI `38826274663` проверяет SHA `3bfa84b`, не содержит это
+изменение и остаётся in progress; точный CI нового SHA проверяется после push.
+
 ## 16.10.2026 — WIS-share результат не пересекает границу сессии
 
 Завершение системного share API происходило после `await`; при последовательном

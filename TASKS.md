@@ -593,6 +593,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   15/15 на desktop Chromium/Firefox/WebKit без retries; unit 1308/1308, три
   typecheck, production build и diff check прошли. Остальные callbacks/cache,
   staging и полный P0.4 lifecycle остаются открытыми.
+  Последующий локально проверенный follow-up привязывает root state
+  множественного выбора блюд к `accountSessionRenderKey`: старые выбранные id
+  скрываются, setters/bulk callbacks прежнего scope не меняют новый дневник.
+  Пять новых unit-тестов; полный unit 1316/1316 в 212 файлах, три typecheck и
+  production build прошли. Точный CI нового SHA ожидает push; общий аудит и
+  приёмка P0.4 остаются открытыми.
   - [x] Защитить выбранный день личного недельного меню: restore, отображение,
     сохранение и setter теперь требуют разрешённого account cache и гидратации
     точного ключа аккаунта. Регрессия до исправления оставляла вторник A выбранным

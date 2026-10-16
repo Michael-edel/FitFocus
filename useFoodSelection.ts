@@ -1,39 +1,102 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useAccountScopedUiSetter } from './features/state/accountScopedUi';
 import { FoodItem, MealType } from './types';
+
+export type ScopedFoodSelection = {
+  scopeKey: string | null;
+  ids: Set<string>;
+};
+
+const EMPTY_FOOD_IDS: ReadonlySet<string> = new Set<string>();
+
+export function isFoodSelectionScopeActive(
+  ownerScopeKey: string | null,
+  activeScopeKey: string | null,
+): boolean {
+  return ownerScopeKey !== null && ownerScopeKey === activeScopeKey;
+}
+
+export function getScopedFoodSelectionIds(
+  state: ScopedFoodSelection,
+  scopeKey: string | null,
+): ReadonlySet<string> {
+  return scopeKey !== null && state.scopeKey === scopeKey ? state.ids : EMPTY_FOOD_IDS;
+}
+
+export function toggleScopedFoodSelection(
+  state: ScopedFoodSelection,
+  scopeKey: string | null,
+  id: string,
+): ScopedFoodSelection {
+  if (scopeKey === null) return state;
+
+  const ids = new Set(state.scopeKey === scopeKey ? state.ids : EMPTY_FOOD_IDS);
+  if (ids.has(id)) ids.delete(id);
+  else ids.add(id);
+
+  return { scopeKey, ids };
+}
+
+export function clearScopedFoodSelection(
+  state: ScopedFoodSelection,
+  scopeKey: string | null,
+): ScopedFoodSelection {
+  return scopeKey === null ? state : { scopeKey, ids: new Set<string>() };
+}
 
 export function useFoodSelection(
   setFoodDiary: Dispatch<SetStateAction<FoodItem[]>>,
   deleteFoodEntry: (id: string) => void,
   persistFoodDiary?: (nextDiary: FoodItem[]) => void,
+  scopeKey: string | null = null,
 ) {
-  const [selectedFoodIds, setSelectedFoodIds] = useState<Set<string>>(new Set<string>());
+  const [selectionState, setSelectionState] = useState<ScopedFoodSelection>(() => ({
+    scopeKey,
+    ids: new Set<string>(),
+  }));
+  const currentScopeKeyRef = useRef(scopeKey);
+  currentScopeKeyRef.current = scopeKey;
+  const setScopedSelectionState = useAccountScopedUiSetter(
+    scopeKey,
+    setSelectionState,
+    scopeKey !== null,
+  );
+  const selectedFoodIds = getScopedFoodSelectionIds(selectionState, scopeKey);
 
   const toggleFoodSelected = useCallback((id: string) => {
-    setSelectedFoodIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+    if (scopeKey === null) return;
+    setScopedSelectionState(prev => toggleScopedFoodSelection(prev, scopeKey, id));
+  }, [scopeKey, setScopedSelectionState]);
 
-  const clearFoodSelection = useCallback(() => setSelectedFoodIds(new Set()), []);
+  const clearFoodSelection = useCallback(() => {
+    if (scopeKey === null) return;
+    setScopedSelectionState(prev => clearScopedFoodSelection(prev, scopeKey));
+  }, [scopeKey, setScopedSelectionState]);
 
   const bulkUpdateMealType = useCallback((mealType: MealType) => {
-    if (!selectedFoodIds.size) return;
+    if (
+      !isFoodSelectionScopeActive(scopeKey, currentScopeKeyRef.current) ||
+      selectedFoodIds.size === 0
+    ) return;
+
+    const idsToUpdate = new Set(selectedFoodIds);
     setFoodDiary(prev => {
-      const next = prev.map(x => (selectedFoodIds.has(x.id) ? { ...x, mealType } : x));
+      if (!isFoodSelectionScopeActive(scopeKey, currentScopeKeyRef.current)) return prev;
+      const next = prev.map(x => (idsToUpdate.has(x.id) ? { ...x, mealType } : x));
       persistFoodDiary?.(next);
       return next;
     });
     clearFoodSelection();
-  }, [clearFoodSelection, persistFoodDiary, selectedFoodIds, setFoodDiary]);
+  }, [clearFoodSelection, persistFoodDiary, scopeKey, selectedFoodIds, setFoodDiary]);
 
   const bulkRemoveSelectedFoods = useCallback(() => {
-    if (!selectedFoodIds.size) return;
+    if (
+      !isFoodSelectionScopeActive(scopeKey, currentScopeKeyRef.current) ||
+      selectedFoodIds.size === 0
+    ) return;
     selectedFoodIds.forEach((id: string) => deleteFoodEntry(id));
     clearFoodSelection();
-  }, [clearFoodSelection, deleteFoodEntry, selectedFoodIds]);
+  }, [clearFoodSelection, deleteFoodEntry, scopeKey, selectedFoodIds]);
 
   return {
     selectedFoodIds,
