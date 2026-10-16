@@ -2,39 +2,15 @@
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). Опубликованный
-HEAD [`cb44a2b`](https://github.com/Michael-edel/FitFocus/commit/cb44a2b2c5802297f36d23d2dbc3326a9c87f316)
-содержит same-account acceptance для семейного context GET, invite, create и
-join; выборка этих сценариев вместе со смежным A → B family-join прошла 15/15
-на desktop Chromium/Firefox/WebKit. Точный CI #1413 для этого HEAD сейчас
-выполняет E2E. Следующий локальный follow-up добавляет поздний family-member
-PATCH после same-account reauthentication: новый сценарий и две соседние проверки
-прошли 9/9 на тех же engines. Ещё один family shopping-check после same-account
-reauthentication вместе с тремя соседними shopping проверками прошёл 12/12.
-Same-account delayed Push status вместе с A → B вариантом прошёл 6/6 на тех же
-engines. Поздний ответ AI `weekly_menu` после same-account reauthentication вместе
-с A → B проверкой также прошёл 6/6. Полный typecheck и `git diff --check` прошли.
-Production-код не менялся; четыре локальных follow-up требуют нового exact CI
-после отправки. AI Council same-account late-answer вместе с A → B вариантом
-также прошёл 6/6; всего ожидают exact CI пять локальных acceptance follow-up.
-CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
-исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
-новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.
-Эти acceptance не закрывают общий P0.4/P0.5 audit. Предыдущий follow-up
-[`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
-исправил откат семейного списка после неуспешного toggle; его регрессия прошла
-3/3 desktop engines. `useCouncilChat` изолирует временное состояние по
-`accountSessionRenderKey`, а `useFoodSelection` изолирует выбранные блюда и bulk
-callbacks между аккаунтами и сессиями. Перед слиянием проверять CI exact HEAD.
-Перед этим WIS-share уведомление было привязано к поколению account/session, а
-durable read guard проверяется до передачи PNG системному API и после возврата.
-До фикса в старой вкладке оставались видны профильное приветствие и сохранённая
-история AI-отчётов аккаунта A после входа B; теперь содержимое скрыто, а данные A
-остаются сохранены. Account-scoped hooks настроек и прочих root cache теперь не
-читают A при несовпадении сессии; E2E также подтверждает сброс violet-темы A.
-Account-switch E2E прошёл на Chromium/Firefox/WebKit без retries; три typecheck и
-production build прошли; unit suite — 1309/1309. P0.4 остаётся открытым для
-остальных callbacks, staging и полного lifecycle. CI для отправленного HEAD
-проверяется отдельно.
+HEAD [`568c559`](https://github.com/Michael-edel/FitFocus/commit/568c559ad4b1c9b87aa7780de49112f133dce38b)
+проверяется в [CI run #1417](https://github.com/Michael-edel/FitFocus/actions/runs/38845192574):
+guards, unit, три typecheck и production build прошли, E2E ещё выполняются.
+Локальный follow-up [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75)
+добавляет same-account reauthentication acceptance для задержанного
+`GET /api/family/menu`. Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и
+WebKit; `npm run typecheck` и `git diff --check` прошли. Для `c986b75` нужен exact
+CI после push; он не включён в run #1417. Общий P0.4/P0.5 остаётся открытым для
+остальных callbacks, полного lifecycle, staging и release-приёмки.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное
