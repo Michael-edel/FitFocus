@@ -666,6 +666,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     не меняется. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit; 7 связанных
     account-switch сценариев прошли на Chromium. Unit 1318/1318, три typecheck,
     production build и `git diff --check` прошли. [`5042db8`](https://github.com/Michael-edel/FitFocus/commit/5042db8adca01a58bcaff9c044d516b3d15394fb).
+  - [x] Проверить поздний GET семейного контекста при повторном входе того же
+    account с новой server session: старая вкладка показывает session notice,
+    удержанный ответ предыдущей сессии не возвращает старый экран семьи. Новый
+    E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit; четыре соседних callback
+    сценария — 12/12 в тех же браузерах. Production-дефекта не выявлено; общий
+    P0.4 audit, остальные callbacks/cache и staging остаются открытыми.
+    [`88ca7e3`](https://github.com/Michael-edel/FitFocus/commit/88ca7e3d4e5c88383b1a9e88db2c2afca2f6964a).
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

@@ -4604,3 +4604,18 @@ iPhone PWA. Полная profile matrix прошла 63/63 на семи Playwri
 suite — 1318/1318 в 212 файлах; общий, domain-strict и storage-strict typecheck,
 production build и `git diff --check` прошли. CI точного опубликованного HEAD,
 staging и реальный backend остаются отдельными проверками; общий P0.5 не закрыт.
+
+## P0.4 — поздняя загрузка семьи после same-account login, `88ca7e3`, 16.10.2026
+
+Новый acceptance удерживает GET семейного контекста первой server session,
+затем в соседней вкладке принимает новый `serverSessionId` того же account и
+открывает другой семейный контекст. Старая вкладка показывает session notice;
+после освобождения старый ответ не восстанавливает прежний экран. Счётчик
+запросов допускает повторные GET новой сессии, но проверяет ровно один запрос
+старой сессии.
+
+Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit
+(`workers=1,retries=0`). Четыре соседних callback сценария прошли 12/12 в тех же
+браузерах; `git diff --check` прошёл. Production-код не менялся, воспроизводимого
+дефекта не выявлено. Общий P0.4 audit, оставшиеся callbacks/cache, staging и
+полный lifecycle остаются открытыми; точный CI проверяется после push.

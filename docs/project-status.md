@@ -9,7 +9,11 @@
 аккаунта; E2E прошёл 3/3 desktop engines. Семь связанных account-switch E2E
 прошли на Chromium; unit suite — 1318/1318, root/domain/storage typecheck и
 production build прошли. Проверка использует mock API; точный CI текущего HEAD,
-реальная среда и общий P0.4 остаются открытыми. Ранее
+реальная среда и общий P0.4 остаются открытыми. Дополнительно
+поздний family-context GET после повторной авторизации того же account прошёл
+3/3 на desktop Chromium/Firefox/WebKit; ещё четыре соседних family callback
+сценария прошли 12/12. Это добавляет acceptance одного lifecycle-пути, не закрывая
+общий P0.4 audit. Предыдущий follow-up
 [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
 исправил откат семейного списка после неуспешного toggle; его регрессия прошла
 3/3 desktop engines. `useCouncilChat` изолирует временное состояние по

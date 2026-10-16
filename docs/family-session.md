@@ -225,6 +225,10 @@ staging и реальные браузерные сессии остаются �
   family shopping GET, family join/create responses, AI family-menu commit,
   shopping-check achievement, смена target для member update и отложенный
   ответ `/api/family/menu/generate` и отложенный GET `/api/family/menu/state`.
+  Поздний family-context GET при повторном входе того же account с новой
+  server session также проверен: старая вкладка сохраняет session notice и не
+  восстанавливает семейный контекст из старого ответа (3/3 desktop engines).
+  Четыре смежных callback сценария прошли 12/12 в тех же браузерах.
   Последний проверяет, что смена аккаунта останавливает durable hydration до
   чтения устаревшего ответа. Suite `family-menu-durable.spec.ts` прошла 39/39
   на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`); два новых
