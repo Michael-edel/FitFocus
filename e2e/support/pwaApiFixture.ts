@@ -11,6 +11,7 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
   retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
   let sessionId = initialSessionId;
+  let disconnectStateWrites = false;
   let profile: Record<string, unknown> = buildMockProfile();
   let week = familyTestMenu(account).weekStart;
   let available = options.conflictFirstFamilyPut === true, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
@@ -19,9 +20,10 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   const stateWriteKeys: string[] = [];
   const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null,
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
-    currentStatePutAttempts: 0, currentStatePutAccepted: 0 };
+    currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
   return { unexpectedApi, counts, stateWriteKeys, pushRequests,
+    setStateWriteDisconnected: (disconnected: boolean) => { disconnectStateWrites = disconnected; },
     setActiveSessionId: (nextSessionId: string) => { sessionId = nextSessionId; },
     recoverState: () => { stateAvailable = true; },
     recoverCurrentState: () => { currentStateAvailable = true; }, recover: (conflict = false) => {
@@ -73,6 +75,11 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       }
       const items = body.items as Array<{ key: string; baseVersion: number }>;
       counts.currentStatePutAttempts += 1;
+      if (disconnectStateWrites) {
+        counts.currentStatePutTransportAborted += 1;
+        response.destroy();
+        return;
+      }
       if (!currentStateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
       if (items.some(item => item.key.includes('_family_menu:'))) {
         unexpectedApi.push('WRONG_FAMILY_RESOURCE'); return json({ error: 'WRONG_RESOURCE' }, 403);
