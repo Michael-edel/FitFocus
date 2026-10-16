@@ -2,7 +2,14 @@
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md). В текущем
-локальном follow-up временное root состояние AI Council (черновик вопроса,
+follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
+исправлена гонка семейного списка: после неуспешного toggle список перечитывается
+с сервера для тех же account/session, family и week, вместо отката к прежнему
+optimistic значению. Регрессия и смежная account-switch проверка прошли 3/3 на
+desktop Chromium/Firefox/WebKit; unit suite — 1318/1318, root/domain/storage
+typecheck и production build прошли. Это mock-API проверка; точный CI нового HEAD
+и реальная среда остаются открытыми. До этого локальный follow-up привязал
+временное root состояние AI Council (черновик вопроса,
 ошибка, этап/загрузка и раскрытые мысли) привязано к подтверждённой
 `accountSessionRenderKey`; смена сессии того же userId скрывает старые данные и
 отбрасывает старые setters. Также `useFoodSelection` изолирует выбранные блюда

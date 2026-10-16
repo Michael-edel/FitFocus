@@ -969,6 +969,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   что более ранний baseline включал незавершённую стартовую загрузку A; после
   переноса baseline за вход B сценарий прошёл. Точный CI follow-up ещё ожидается;
   остальные callbacks и staging остаются открытыми.
+  Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
+  закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
+  подтверждённый серверный список с теми же account/session, family и week;
+  устаревшая попытка не меняет UI. Новый тест до исправления оставлял checkbox
+  в неподтверждённом состоянии, после исправления прошёл 3/3 на desktop
+  Chromium/Firefox/WebKit. Полный unit suite 1318/1318, три typecheck и build
+  прошли локально. Точный CI опубликованного HEAD ещё нужно проверить; общий
+  P0.5 и остальные callbacks остаются открытыми.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

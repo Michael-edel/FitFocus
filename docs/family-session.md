@@ -202,6 +202,22 @@ AI account-switch сценария `bca2eda` ещё ожидается.
 общий typecheck прошёл. Это локальная проверка; актуальный CI отслеживается на
 [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks).
 
+## Ошибка обновления списка покупок и optimistic state
+
+При отказе `PATCH /api/shopping/check` предыдущее значение в React может быть
+результатом ещё не подтверждённого клика. Поэтому callback не считает его
+серверным состоянием: пока исходные account/session и `familyId` актуальны,
+он перечитывает `/api/shopping/list` для того же зафиксированного `week` и только
+затем отображает подтверждённый снимок. Если чтение тоже завершилось ошибкой,
+применяется локальный fallback; устаревший callback после смены аккаунта или
+семьи состояние не меняет.
+
+В follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
+регрессионный E2E воспроизводит отказ позднего toggle при незавершённой
+предыдущей попытке. Проверка и смежный account-switch сценарий прошли 3/3 на
+desktop Chromium, Firefox и WebKit. Полный CI нового опубликованного HEAD,
+staging и реальные браузерные сессии остаются отдельными приёмками.
+
 ## Следующие обязательные этапы
 
 - Расширить поздний-response account-switch acceptance на остальные family
