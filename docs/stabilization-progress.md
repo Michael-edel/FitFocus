@@ -1,5 +1,34 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — DELETE-конфликт после reload, 16.10.2026
+
+`e2e/owned-state.spec.ts` теперь проверяет реальное удаление истории Council из
+UI: scoped DELETE получает `409 KV_CONFLICT` с серверным snapshot версии 9.
+Локальное значение остаётся удалённым, outbox сохраняет ту же tombstone-операцию
+с прежним `opId`, `status: conflicted` и `serverSnapshot`; поле `value` отсутствует.
+После reload виден блок конфликта и действие «Принять серверную версию», повторный
+DELETE не отправляется. Матрица прошла 7/7 desktop/mobile/PWA проектов без retries.
+`npm run typecheck` и `git diff --check` прошли. Это mock API acceptance для одного
+ключа; полный P0.9, точный CI, staging и реальные устройства остаются открытыми.
+Кодовый test commit — `ed4a1e8`.
+
+Полный локальный `owned-state.spec.ts` прогон завершился 34/35: iPhone Safari один
+раз записал console warning `/api/ai due to access control checks` во время reload
+сценария изменения задачи плана. Изолированный повтор этого сценария прошёл 3/3
+без retries; источник предупреждения не установлен, проверка ошибок не ослаблена.
+
+## P0.9 — account-switch проверяет устойчивые настройки, 16.10.2026
+
+CI run [#38874079703](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
+для опубликованного SHA `7fbd324` завершился `809 passed / 254 skipped / 1 failed`.
+Единственный сбой сравнивал `activeSection` до и после смены аккаунта; раздел
+прогресса следует за прокруткой через `IntersectionObserver`, поэтому точное
+сравнение зависело от момента открытия второй вкладки. E2E сохраняет проверки
+остальных account-scoped UI-параметров и очистки черновика, но не фиксирует
+viewport-зависимый раздел. Обновлённый целевой тест прошёл 3/3 на Chromium без
+retries; commit `9594638`. Все gates CI до E2E на прежнем SHA были успешны.
+Полный CI новых commits ещё не запущен.
+
 ## 16.10.2026 — различение 403 access pause и keyspace failure
 
 Локальный коммит [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c)

@@ -2,16 +2,28 @@
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
-draft с base `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
-Текущий локальный HEAD — [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c),
-на один коммит впереди удалённого `b6e3be5`; он добавляет 403 access recovery
-E2E (7/7 browser/PWA профилей). Уже опубликованный CI run
-[#38870748569](https://github.com/Michael-edel/FitFocus/actions/runs/38870748569)
-проверяет только `b6e3be5` и ещё выполняется. Повторный полный прогон существующего
-`FORBIDDEN_KEYSPACE` recovery прошёл 7/7 после одного не воспроизведённого сбоя
-iPhone Safari; первопричина неизвестна. P0.8/P0.9, точный CI нового HEAD, staging,
-OAuth, выпуск и интеграция в `main` остаются открыты.
+PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
+`fix/state-generations`; рабочая ветка `fix/durable-outbox`. Опубликованный HEAD
+до последних тестовых исправлений — `7fbd324`; новые кодовые коммиты —
+`9594638` и `ed4a1e8`.
+
+Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
+Новая проверка DELETE-конфликта после reload прошла 7/7 browser/PWA профилей;
+обновлённый account-switch тест прошёл 3/3 Chromium. Предыдущий точный CI
+[`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
+на `7fbd324` выявил один flaky assertion `activeSection`; локальная правка
+прошла 3/3; точный CI этих коммитов пока не опубликован. Полный `owned-state` локально
+прошёл 34/35; единственный WebKit `/api/ai` console warning при reload не
+воспроизвёлся в 3 повторных тестах, причина неизвестна. Typecheck и diff check
+прошли.
+
+В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1, 7 остальных); все P0
+считаются открытыми до оставшихся writers/callbacks и общей lifecycle/release
+приёмки. Staging, реальные устройства/OAuth, выпуск и интеграция в `main` не
+подтверждены.
+
+## Предыдущие локальные результаты
+
 Локальный follow-up [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
 исправляет скрытие UI во время auth-паузы: смена `authFence` не сбрасывает
 локальный экран той же сессии. Сценарий `401 → новая правка → login` прошёл

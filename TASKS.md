@@ -1,93 +1,30 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 16.10.2026. PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft; ветка `fix/durable-outbox` проходит стабилизацию P0.8/P0.9.
-Локальный HEAD [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c)
-добавляет P0.9 E2E `403 ACCESS_REQUIRED` recovery: та же settings operation
-сохраняет opId/payload в паузе и подтверждается после нового session proof;
-матрица прошла 7/7 без retries. Существующая проверка восстановления после
-`FORBIDDEN_KEYSPACE` сначала дала единичный сбой на iPhone Safari (operation
-не была создана), затем targeted повтор и полный прогон прошли 7/7 без retries;
-причина первого сбоя не установлена. Это локальные mock API результаты.
-Удалённая ветка пока на `b6e3be5`; CI run
-[#38870748569](https://github.com/Michael-edel/FitFocus/actions/runs/38870748569)
-для этого SHA ещё выполняется и не включает `1d54049`. Staging и выпуск не
-подтверждены.
-Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
-добавляет сценарий P0.9 «offline → холодное повторное открытие PWA → online»:
-локально он прошёл Chromium, Firefox и Android Chrome/PWA (4/4); три профиля
-WebKit пропущены из-за внутренней ошибки Playwright при навигации offline.
-Коммит [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19)
-добавляет браузерную проверку настоящего IndexedDB transaction abort: 7/7
-профилей прошли; typecheck и diff check прошли.
-Коммит опубликован в `fix/durable-outbox`. Старый run #1435 на `1d7fc1c`
-отменён после обновления PR; run #1437 проверял SHA `f4d170b` и был в работе
-при обновлении статуса; run #1439 на `c8280e6` прошёл pre-E2E gates и выполнял
-E2E до добавления `bf6b142`. Для нового HEAD нужен точный CI; staging и выпуск
-не подтверждены.
-Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
-на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
-legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
-browser/PWA-проектов; сценарий остановки sender-вкладки и повторного lease claim
-также прошёл 7/7 проектов. Четыре targeted unit suite прошли 160/160; typecheck
-и diff check прошли.
-Локальный кодовый коммит [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
-исправляет UI gate во время auth-паузы: изменение `authFence` больше не скрывает
-настройки той же account/session identity. E2E проверяет новую локальную правку,
-сохранение обоих opId без повторной отправки в паузе и последовательное
-подтверждение после свежего proof; 7/7 browser/PWA проектов прошли без retries.
-Targeted unit — 9/9, `npm run typecheck`, production build и `git diff --check`
-прошли. Это mock API acceptance; точный CI этого SHA, OAuth, staging и выпуск
-не подтверждены.
-Для объединённого HEAD необходим полный точный CI; staging, выпуск и интеграция
-в защищённую `main` не подтверждены.
-В плане остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока
-не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
-подтверждены.
+Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
+остаётся draft. Ветка `fix/durable-outbox` продолжает P0.8/P0.9; кодовые коммиты
+`9594638` и `ed4a1e8` добавляют два E2E-изменения поверх опубликованного `7fbd324`.
 
-Тестовые follow-up `ad89020` и `aa4073c` усиливают PWA update acceptance и
-устраняют две flaky-проверки, замеченные в CI на `96937ea`. Локально прошли
-rollback lifecycle 6/6 на desktop engines, `family-menu-durable.spec.ts` 39/39
-на Chromium/Firefox/WebKit, `owned-state.spec.ts` 4/4 на Firefox и typecheck.
-Точный CI `96937ea` завершился success, но отметил эти 2 flaky; CI нового HEAD
-после push ещё ожидается.
+Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
+tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB, после reload
+показывается действие разрешения конфликта, тот же `opId` остаётся на месте и
+запрос не отправляется повторно. Все 7 browser/PWA профилей прошли без retries.
+Тест account-switch больше не сравнивает viewport-зависимый `activeSection`;
+остальные UI-настройки аккаунта и очистка черновика проверены 3/3 Chromium.
 
-В `TASKS.md` остаются 34 незакрытых checkbox: 20 P0, 7 P1 и 7 пунктов вне этих
-приоритетных разделов, которые нужно сверить на дубли. Все P0 остаются открытыми
-до остальных writers/callbacks, staging и полной приёмки lifecycle/release.
-Подробности — в [журнале](docs/stabilization-progress.md) и
-[матрице](docs/verification-matrix.md).
+CI run [`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
+проверял прежний SHA `7fbd324`: все gates до E2E прошли, E2E завершился
+`809 passed / 254 skipped / 1 failed`. Единственный сбой — сравнение
+`activeSection` (`dynamics`/`timeline`) в account-switch тесте; после уточнения
+проверки локальный целевой тест прошёл 3/3. Новый полный CI для этих коммитов
+ещё не подтверждён; последним результатом остаётся run `38874079703` на `7fbd324`.
+Локальный полный `owned-state` прогон дал 34/35: единичная ошибка iPhone Safari
+`/api/ai due to access control checks` на reload не повторилась в 3/3 целевых
+повторов; её первопричина не установлена. Typecheck и `git diff --check` прошли.
 
-Последний полный CI без flaky ранее проверил source HEAD
-[`455cb01`](https://github.com/Michael-edel/FitFocus/commit/455cb0160ee3c5fa3d8bb2b455f1aae385f7c5ae)
-в [run 38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334):
-unit, audit, guards, три typecheck, build, E2E и rollback/CAS прошли.
-Предыдущий run [38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
-на `23c8be6` также завершился штатно примерно за 33 минуты.
-Кодовый follow-up [`37dc4b0`](https://github.com/Michael-edel/FitFocus/commit/37dc4b0c26326cb6f862ab7baa945a802a03990b)
-переводит legacy migration readwrite callbacks на активные IDB request events.
-В [`2c09825`](https://github.com/Michael-edel/FitFocus/commit/2c09825406d8f43c3cdaeaa1a02096a2573c7295)
-добавлена проверка позднего family-menu preview, а follow-up
-[`13e336d`](https://github.com/Michael-edel/FitFocus/commit/13e336d9e3c67025f166a0ffce37ff776c46cdfa)
-проверяет отложенное чтение durable menu-state после смены аккаунта. Вся suite
-прошла 39/39 на Chromium, Firefox и WebKit без retries; follow-up включён в
-полный CI `455cb01` и завершился success.
-Все P0 остаются открытыми до остальных writers/callbacks, staging и полной
-приёмки lifecycle/release.
-
-Кодовый commit [`eae1ce1`](https://github.com/Michael-edel/FitFocus/commit/eae1ce18567a967acf9c6e0a2812b48c2a9ef979)
-добавляет account-switch acceptance для personal-plan retry: Chromium, Firefox
-и WebKit прошли 3/3, `npm run typecheck` прошёл. Точный CI `c48ce1b` прошёл;
-следующий commit `d5341a0` исправил flaky migration assertion: она сравнивает
-стабильные fingerprint-поля без изменяемого `retryCount`. В CI `7c50f08` этот
-тест больше не flaky; локально он прошёл 5/5 серийно, 3/3 параллельно и 7/7 в
-browser/PWA-матрице. В CI `38435173387` остались 3 других flaky (weekly-menu
-Firefox и Android PWA); следующий CI `38440675173` сообщил иной набор из 3
-flaky. Их точечные локальные повторы прошли 5/5, 5/5 и 3/3, но первопричины
-пока не установлены. P0.5 и P0.8 остаются открытыми до остальных
-callbacks, общей lifecycle-приёмки и staging.
-Подробные критерии — в разделах P0 ниже.
-
+В плане остаются 34 незакрытых пункта: 20 P0, 7 P1 и 7 следующих задач; ни один
+P0 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
+подтверждены. Подробные результаты — в [журнале](docs/stabilization-progress.md),
+[матрице](docs/verification-matrix.md) и [статусе проекта](docs/project-status.md).
 ## Предыдущие результаты
 
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
@@ -1416,6 +1353,12 @@ legacy-ключ не используется для новой очереди �
     полном запуске после единичного не воспроизведённого сбоя iPhone Safari.
     Причина сбоя неизвестна; это mock API acceptance, полный lifecycle и staging
     остаются открытыми.
+  - [x] Проверить DELETE-конфликт `council_history` после reload: та же
+    tombstone-операция остаётся `conflicted` с исходным opId и проверенным
+    `serverSnapshot`; UI предлагает принять серверную версию, локальное значение
+    не возвращается и повторного DELETE нет. Локальная mock API матрица прошла
+    7/7 browser/PWA проектов без retries в коммите `ed4a1e8`. Общий P0.9 и
+    staging остаются открытыми.
   - [x] В двух вкладках без Web Locks доставить ответ старого sender после
     истечения lease и ack новой попытки. Поздний 409 не возвращает операцию в
     очередь и не меняет подтверждённые value/version; browser-сценарий прошёл
