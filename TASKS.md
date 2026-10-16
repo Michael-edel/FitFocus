@@ -1039,6 +1039,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     same-account family callback acceptance — 21/21 на desktop Chromium,
     Firefox и WebKit (`workers=1,retries=0`). Runtime-код не менялся; точный CI
     нового теста и staging остаются открытыми.
+  - [x] Удержать GET `/api/family/menu` от прежней server session, повторно войти
+    в ту же учётную запись с новой сессией и освободить старый ответ после того,
+    как новое меню отображено. Маркер новой сессии остаётся виден, маркер старого
+    ответа не появляется. Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit;
+    подтверждённого runtime-дефекта не обнаружено, exact CI follow-up ожидает push.
   - [x] Исправить пустой экран после logout: `useCouncilChat` создавал render key
     при `currentUser=null` и `loginGuard=null`, затем читал `currentUser.id`.
     Теперь временный state key создаётся только при подтверждённом непустом

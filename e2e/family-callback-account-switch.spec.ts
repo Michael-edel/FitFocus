@@ -1,6 +1,7 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
+import { familyTestMenu } from '../tests/_helpers/familyMenu';
 
 const accountA = { id: 'family-callback-account-a', sid: 'a'.repeat(64), name: 'Семья A' };
 const accountB = { id: 'family-callback-account-b', sid: 'b'.repeat(64), name: 'Семья B' };
@@ -47,6 +48,9 @@ type FixtureState = {
   familyShoppingListSessions?: string[];
   familyShoppingListNamesBySession?: Record<string, string>;
   releasedFamilyShoppingLists?: number;
+  familyMenuSessions?: string[];
+  familyMenuNamesBySession?: Record<string, string>;
+  releasedFamilyMenus?: number;
   supportListAccounts?: string[];
   releasedSupportLists?: number;
   supportAttachmentRequests?: Array<{ account: string | undefined; session: string | undefined }>;
@@ -159,6 +163,7 @@ async function installAccountApi(
   holdMobileToken = false,
   holdPushStatus = false,
   holdBillingCheckout = false,
+  holdFamilyMenu = false,
 ) {
   await mockApp(page, { session: 'app' });
   if (holdMobileToken) {
@@ -179,6 +184,7 @@ async function installAccountApi(
   const heldCreateResponse = deferred();
   const heldFamilyContextResponse = deferred();
   const heldFamilyShoppingListResponse = deferred();
+  const heldFamilyMenuResponse = deferred();
   const heldSupportListResponse = deferred();
   const heldMobileTokenResponse = deferred();
   const heldPushStatusResponse = deferred();
@@ -350,7 +356,29 @@ async function installAccountApi(
       members: [{ user_id: scopedAccount.id, name: scopedAccount.name, role: 'owner', goal: 'MAINTAIN' }],
     });
     }
-    if (path === '/api/family/menu') return json({ weekStart: url.searchParams.get('week'), shared: null, portions: null });
+    if (path === '/api/family/menu') {
+      const weekStart = url.searchParams.get('week') ?? '';
+      const sessionId = requestedSession ?? '';
+      (state.familyMenuSessions ??= []).push(sessionId);
+      const familyId = state.familyId && scopedAccount.id === state.current.id
+        ? state.familyId
+        : `family-${scopedAccount.id}`;
+      const menuName = state.familyMenuNamesBySession?.[sessionId];
+      const response = (owner: Account, targetFamilyId: string, name: string | undefined) => ({
+        weekStart,
+        shared: name ? {
+          familyId: targetFamilyId,
+          menu: { ...familyTestMenu(owner.id, 400, weekStart), shoppingList: [name], shoppingListItems: [{ name, grams: 400 }] },
+        } : null,
+        portions: null,
+      });
+      if (holdFamilyMenu && requestedSession === accountA.sid && scopedAccount.id === accountA.id) {
+        await heldFamilyMenuResponse.promise;
+        state.releasedFamilyMenus = (state.releasedFamilyMenus ?? 0) + 1;
+        return json(response(accountA, familyId, menuName), accountA);
+      }
+      return json(response(scopedAccount, familyId, menuName));
+    }
     if (path === '/api/family/invite') {
       state.inviteRequests += 1;
       (state.inviteSessionIds ??= []).push(requestedSession ?? '');
@@ -472,6 +500,7 @@ async function installAccountApi(
     releaseCreate: heldCreateResponse.release,
     releaseFamilyContext: heldFamilyContextResponse.release,
     releaseFamilyShoppingList: heldFamilyShoppingListResponse.release,
+    releaseFamilyMenu: heldFamilyMenuResponse.release,
     releaseSupportList: heldSupportListResponse.release,
     releaseMobileToken: heldMobileTokenResponse.release,
     releasePushStatus: heldPushStatusResponse.release,
@@ -784,6 +813,88 @@ test('a delayed family-context read from the previous same-account session is di
   } finally {
     fixtureA.releaseFamilyContext();
     fixtureReauthenticated.releaseFamilyContext();
+  }
+});
+
+test('a delayed shared family-menu read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account shared family-menu reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const oldMenuName = 'MENU_OLD_SERVER_SESSION';
+  const newMenuName = 'MENU_NEW_SERVER_SESSION';
+  const state: FixtureState = {
+    current: accountA,
+    familyId: 'family-before-menu-reauthentication',
+    inviteRequests: 0,
+    inviteTargetIds: [],
+    releasedInvites: 0,
+    shoppingCheckRequests: 0,
+    shoppingCheckAccounts: [],
+    releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0,
+    personalShoppingListAccounts: [],
+    releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0,
+    personalShoppingCheckRequests: 0,
+    personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0,
+    shoppingAchievements: [],
+    memberRequests: 0,
+    memberTargetIds: [],
+    releasedMembers: 0,
+    familyLoadAccounts: [],
+    familyLoadSessions: [],
+    familyMenuSessions: [],
+    familyMenuNamesBySession: { [accountA.sid]: oldMenuName },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, false, false, true);
+
+  try {
+    await openApp(page, '/#family');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(() => state.familyMenuSessions?.filter(session => session === accountA.sid).length).toBe(1);
+
+    const reauthenticated = { ...accountA, sid: 'e'.repeat(64) };
+    state.current = reauthenticated;
+    state.familyId = 'family-after-menu-reauthentication';
+    state.familyMenuNamesBySession![reauthenticated.sid] = newMenuName;
+    const reauthenticatedPage = await context.newPage();
+    const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+    try {
+      await openApp(reauthenticatedPage, '/#family');
+      await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-after-menu-reauthentication', exact: true })).toBeVisible();
+      await expect.poll(() => state.familyMenuSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+      await reauthenticatedPage.getByRole('button', { name: 'План', exact: true }).click();
+      await expect(reauthenticatedPage.getByText(newMenuName)).toBeVisible();
+      await expect(reauthenticatedPage.getByText(oldMenuName)).toHaveCount(0);
+      await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+      const oldFamilyReadsBeforeRelease = state.familyLoadSessions?.filter(session => session === accountA.sid).length ?? 0;
+
+      fixtureA.releaseFamilyMenu();
+      await expect.poll(() => state.releasedFamilyMenus).toBe(1);
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+      await expect(reauthenticatedPage.getByText(newMenuName)).toBeVisible();
+      await expect(reauthenticatedPage.getByText(oldMenuName)).toHaveCount(0);
+      expect(state.familyMenuSessions?.filter(session => session === accountA.sid)).toHaveLength(1);
+      expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(oldFamilyReadsBeforeRelease);
+      expect(errorsA).toEqual([]);
+      expect(errorsReauthenticated).toEqual([]);
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+      await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    } finally {
+      fixtureReauthenticated.releaseFamilyMenu();
+    }
+  } finally {
+    fixtureA.releaseFamilyMenu();
   }
 });
 

@@ -4795,3 +4795,20 @@ Chromium, Firefox и WebKit последовательными прогонам�
 185/185; общий, domain-strict и storage-strict typecheck, admin guards, production
 build и `git diff --check` прошли. Новый SHA ещё не отправлен; точный CI и staging
 остаются открытыми.
+
+## P0.5 — поздний GET семейного меню после same-account reauth, 16.10.2026
+
+Добавлен acceptance для удержанного `GET /api/family/menu`: та же учётная запись
+входит с новым `serverSessionId`, новая вкладка отображает меню своей сессии, затем
+освобождается ответ старой. После него меню новой сессии остаётся видимым, а
+старый маркер не появляется. Первоначальный тестовый сбой был только в локаторе:
+он требовал точного совпадения, хотя маркер отображается вместе с пунктом списка
+и граммовкой. Уточнённый локатор прошёл сценарий 3/3 на desktop
+Chromium/Firefox/WebKit (`workers=1`, `retries=0`); общий `npm run typecheck`
+прошёл. Производственный код не менялся, runtime-дефект не обнаружен.
+
+Проверка выполнена командой:
+`npm run test:e2e -- --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 e2e/family-callback-account-switch.spec.ts --grep "shared family-menu read from the previous same-account session"`.
+Локальная проверка не включает полный E2E и staging. CI run #1417 на базовом SHA
+`568c559` ещё выполняет E2E и не содержит этот follow-up; точный CI нового SHA
+нужно проверить после push.
