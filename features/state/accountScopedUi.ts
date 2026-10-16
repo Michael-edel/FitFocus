@@ -1,4 +1,4 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { OutboxReadGuard } from '../../storage/durableOutbox';
 
 /** Stable React key for stateful screens whose drafts belong to one login scope. */
@@ -22,6 +22,35 @@ export function getAccountScopedUiValue<T>(
   return enabled && activeStorageKey !== null && activeStorageKey === hydratedStorageKey
     ? currentValue
     : fallbackValue;
+}
+
+export type AccountScopedUiState<T> = {
+  scopeKey: string | null;
+  value: T;
+};
+
+export function getAccountScopedUiStateValue<T>(
+  state: AccountScopedUiState<T>,
+  activeScopeKey: string | null,
+  fallbackValue: T,
+): T {
+  return activeScopeKey !== null && state.scopeKey === activeScopeKey
+    ? state.value
+    : fallbackValue;
+}
+
+export function updateAccountScopedUiState<T>(
+  state: AccountScopedUiState<T>,
+  scopeKey: string | null,
+  update: SetStateAction<T>,
+  fallbackValue: T,
+): AccountScopedUiState<T> {
+  if (scopeKey === null) return state;
+  const previousValue = state.scopeKey === scopeKey ? state.value : fallbackValue;
+  const value = typeof update === 'function'
+    ? (update as (previous: T) => T)(previousValue)
+    : update;
+  return { scopeKey, value };
 }
 
 export function createAccountScopedUiUpdater<T>(
@@ -59,4 +88,30 @@ export function useAccountScopedUiSetter<T>(
       () => enabledRef.current,
     ));
   }, [activeStorageKey, enabled, setValue]);
+}
+
+/** Hide transient UI state outside its owner session and reject stale setters. */
+export function useAccountScopedUiState<T>(
+  scopeKey: string | null,
+  fallbackValue: T,
+): { value: T; setValue: Dispatch<SetStateAction<T>> } {
+  const [state, setState] = useState<AccountScopedUiState<T>>(() => ({
+    scopeKey,
+    value: fallbackValue,
+  }));
+  const currentScopeKeyRef = useRef(scopeKey);
+  currentScopeKeyRef.current = scopeKey;
+  const setScopedState = useAccountScopedUiSetter(scopeKey, setState, scopeKey !== null);
+
+  useLayoutEffect(() => {
+    setState({ scopeKey, value: fallbackValue });
+  }, [fallbackValue, scopeKey]);
+
+  const value = getAccountScopedUiStateValue(state, scopeKey, fallbackValue);
+  const setValue = useCallback<Dispatch<SetStateAction<T>>>((update) => {
+    if (scopeKey === null) return;
+    setScopedState(previous => updateAccountScopedUiState(previous, scopeKey, update, fallbackValue));
+  }, [fallbackValue, scopeKey, setScopedState]);
+
+  return { value, setValue };
 }

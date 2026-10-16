@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — временное состояние AI Council изолировано по сессии
+
+В `useCouncilChat` корневые черновик вопроса, ошибка, этап/индикатор загрузки и
+раскрытые мысли сбрасывались только по `currentUser.id`. Повторный вход того же
+аккаунта меняет `sessionEpoch`/server session, но сохраняет id; поэтому root
+состояние могло пережить старую login session. Теперь эти поля хранятся в
+`useAccountScopedUiState` под `accountSessionRenderKey` и доступны только после
+разрешения `allowCachedUiStateRestore`. Старые setters не применяются в новом
+scope; смена session scope инвалидирует ожидающее поколение запроса. История
+сообщений остаётся долговечной account-owned записью и не очищается при новом
+входе.
+
+Добавлены проверки изоляции и обновления scope в `account_scoped_ui.test.ts`.
+Полный unit suite прошёл 1318/1318 в 212 файлах; root, domain-strict и
+storage-strict typecheck, production build и `git diff --check` прошли.
+Существующий поздний ответ AI Council при переходе A → B прошёл 3/3 на desktop
+Chromium, Firefox и WebKit (`workers=1,retries=0`). Это не моделирует повторный
+вход в том же браузере; lifecycle-приёмка и остальной P0.4 audit открыты.
+Опубликованный SHA `bd94f60` проверяется PR-run #1395, пока queued; текущая
+правка ещё не опубликована.
+
 ## 16.10.2026 — изоляция выбора блюд по account/session
 
 `useFoodSelection` хранил выбранные id в корневом состоянии приложения, вне

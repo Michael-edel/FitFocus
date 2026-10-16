@@ -570,6 +570,7 @@ const App: React.FC = () => {
     currentUser, foodDiary, habits,
     loginGuard: loginReadGuard,
     isCurrentSession: isCurrentProfileSession,
+    allowCachedUiStateRestore,
   });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { callAiCouncil } from './geminiService';
 import { FoodEntry, UserHabit, UserProfile } from './types';
 import type { CouncilChatMsg } from './storage/stateTypes';
 export type { CouncilChatMsg } from './storage/stateTypes';
 import { useOwnedState } from './features/state/useOwnedState';
 import { AiActionScope } from './features/ai/actionScope';
+import { accountSessionRenderKey, useAccountScopedUiState } from './features/state/accountScopedUi';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
 import type { OutboxLocalCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
@@ -26,6 +27,8 @@ const councilCodec: StateCodec<CouncilChatMsg[]> = {
   encode: (value) => JSON.stringify(value.slice(-50)),
 };
 
+const EMPTY_EXPANDED_THOUGHTS: Record<string, boolean> = {};
+
 function localCommitGuard(readGuard: OutboxReadGuard, canCommit: () => boolean): OutboxLocalCommitGuard {
   return {
     localCommitGuard: {
@@ -43,20 +46,24 @@ type UseCouncilChatArgs = {
   habits: UserHabit[];
   loginGuard: OutboxReadGuard | null;
   isCurrentSession: () => boolean;
+  allowCachedUiStateRestore: boolean;
 };
 
-export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isCurrentSession }: UseCouncilChatArgs) {
-  const [councilInput, setCouncilInput] = useState('');
-  const [councilLoading, setCouncilLoading] = useState(false);
-  const [councilStage, setCouncilStage] = useState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>('idle');
-  const [councilError, setCouncilError] = useState<string | null>(null);
+export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isCurrentSession, allowCachedUiStateRestore }: UseCouncilChatArgs) {
+  const sessionScopeKey = allowCachedUiStateRestore && loginGuard?.accountId === currentUser?.id
+    ? accountSessionRenderKey(loginGuard, currentUser.id)
+    : null;
+  const { value: councilInput, setValue: setCouncilInput } = useAccountScopedUiState(sessionScopeKey, '');
+  const { value: councilLoading, setValue: setCouncilLoading } = useAccountScopedUiState(sessionScopeKey, false);
+  const { value: councilStage, setValue: setCouncilStage } = useAccountScopedUiState<'idle' | 'router' | 'experts' | 'review' | 'chairman'>(sessionScopeKey, 'idle');
+  const { value: councilError, setValue: setCouncilError } = useAccountScopedUiState<string | null>(sessionScopeKey, null);
   const history = useOwnedState(currentUser?.id, 'council_history', [], councilCodec);
   const councilMessages = history.value;
   const requestGeneration = useRef(0);
-  const scope = useMemo(() => new AiActionScope(() => Boolean(loginGuard
+  const scope = useMemo(() => new AiActionScope(() => Boolean(sessionScopeKey && loginGuard
     && loginGuard.accountId === currentUser?.id && isCurrentSession())),
-  [currentUser?.id, isCurrentSession, loginGuard]);
-  const [expandedCouncilThoughtIds, setExpandedCouncilThoughtIds] = useState<Record<string, boolean>>({});
+  [currentUser?.id, isCurrentSession, loginGuard, sessionScopeKey]);
+  const { value: expandedCouncilThoughtIds, setValue: setExpandedCouncilThoughtIds } = useAccountScopedUiState<Record<string, boolean>>(sessionScopeKey, EMPTY_EXPANDED_THOUGHTS);
   const councilScrollRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -80,10 +87,12 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
 
   useEffect(() => {
     requestGeneration.current += 1;
-    setCouncilInput(''); setCouncilLoading(false); setCouncilError(null);
-    setExpandedCouncilThoughtIds({}); setCouncilStage('idle');
+    setCouncilLoading(false);
+    setCouncilError(null);
+    setExpandedCouncilThoughtIds({});
+    setCouncilStage('idle');
     return () => { requestGeneration.current += 1; };
-  }, [currentUser?.id]);
+  }, [sessionScopeKey, setCouncilError, setCouncilLoading, setCouncilStage, setExpandedCouncilThoughtIds]);
 
   useEffect(() => {
     if (!councilScrollRef.current) return;
@@ -91,7 +100,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
   }, [councilMessages.length, councilLoading]);
 
   const clearCouncilHistory = useCallback(() => {
-    if (!currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
+    if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
     const attempt = scope.begin();
     if (!attempt) return;
     const generation = ++requestGeneration.current;
@@ -107,10 +116,10 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
     }).catch((error: unknown) => {
       showErrorIfActionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
     }).finally(() => attempt.finish());
-  }, [currentUser, history.remove, loginGuard, scope]);
+  }, [currentUser, history.remove, loginGuard, scope, sessionScopeKey]);
 
   const handleCouncilSubmit = useCallback(async () => {
-    if (!currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
+    if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
     const q = councilInput.trim();
     if (!q) return;
     if (!history.ready) {
@@ -206,7 +215,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
       attempt.finish();
       if (isCurrent()) { setCouncilLoading(false); setCouncilStage('idle'); }
     }
-  }, [councilInput, currentUser, foodDiary, habits, history, isCurrentSession, loginGuard, scope]);
+  }, [councilInput, currentUser, foodDiary, habits, history, isCurrentSession, loginGuard, scope, sessionScopeKey]);
 
   return {
     councilInput,
