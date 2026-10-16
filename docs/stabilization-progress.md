@@ -1,5 +1,25 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — ожидание durable weekly report после same-account reauth, 17.10.2026
+
+Опубликованный `0592ffe4dfa8a2004f1634608c4449d8aede33ad` завершил полный
+[CI run #1481](https://github.com/Michael-edel/FitFocus/actions/runs/38971572116):
+audit, guards, unit, три typecheck и production build прошли; E2E завершился
+843 passed / 255 skipped / 1 failed. Единственный сбой был в сценарии
+`held weekly report cannot write after the same account starts a new server
+session`. Trace показал отложенный `/api/ai` старой сессии `aaaa…` и отдельную
+запись `weekly_reports` новой сессии `ffff…`; поздняя запись старой сессии не
+произошла. Тест снимал baseline до подтверждения фоновой записи новой сессии.
+
+Follow-up E2E ждёт завершения AI-ответа нового входа, подтверждённую запись
+отчёта и удаление его операции из outbox отдельной проверкой ключа. Проверки
+остальных account-switch сценариев не включают независимый weekly report в
+сравнение их baseline. Целевой weekly-report сценарий, recipe-photo сценарий и
+profile-refresh сценарий прошли по пять повторов каждый на desktop Chromium,
+Firefox и WebKit: 45/45, без retries. `npm run typecheck` (включая admin guards)
+и `git diff --check` прошли. Production-код не менялся; полный CI нового
+опубликованного HEAD ожидается. P0.8/P0.9 и общий P0 остаются открытыми.
+
 ## P0.8/P0.9 — guard профильного refresh и отменённые WebKit GET, 17.10.2026
 
 Полный [CI run #1477](https://github.com/Michael-edel/FitFocus/actions/runs/38960924367)

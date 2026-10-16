@@ -3,32 +3,28 @@
 Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; последний локальный code commit —
-[`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871). Последний
-полный опубликованный CI — [run #1477](https://github.com/Michael-edel/FitFocus/actions/runs/38960924367)
-на `87739e7`: dependency audit, schema/privacy/auth/API guards, 1320 unit,
-три typecheck и production build прошли; E2E завершился тремя сбоями.
+`fix/state-generations`. Последний полный опубликованный CI —
+[run #1481](https://github.com/Michael-edel/FitFocus/actions/runs/38971572116)
+на `0592ffe`: dependency audit, schema/privacy/auth/API guards, unit, три
+typecheck и production build прошли; E2E завершился 843 passed / 255 skipped /
+1 failed.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Run #1477 выявил профильный refresh, который
-записывал серверный снимок, но оставлял UI на старом session guard, и два
-WebKit-сценария с отменёнными при reload GET-запросами `/api/family` и
-`/api/shopping/list`. В [`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871)
-refresh передаёт и повторно проверяет точный guard принятого снимка, затем
-обновляет UI; браузерные тесты допускают только точные WebKit access-control
-сообщения для ограниченного списка GET-маршрутов. Локально прошли 1322 unit,
-полный и два строгих typecheck, admin guards, production build, оба семейных
-сценария 6/6 на трёх WebKit-профилях и профильный сценарий на всех семи проектах;
-дополнительно Firefox — 5/5 повторов. Полный CI нового опубликованного snapshot
-ещё ожидается.
+подключён, но общий P0 ещё открыт. Run #1481 упал в тесте
+`held weekly report cannot write after the same account starts a new server
+session`. Trace подтвердил, что единственную запись `weekly_reports` отправила
+новая сессия; отложенный AI-ответ старой сессии не отправлял эту запись. Тест не
+дожидался записи и подтверждения нового отчёта до фиксации baseline. Follow-up
+изолирует ожидание по ключу отчёта и проверяет, что поздний ответ не меняет
+значение, outbox и число записей. Все 45 повторов трёх затронутых сценариев
+прошли на desktop Chromium, Firefox и WebKit без retries; typecheck и
+`git diff --check` прошли. Полный CI этого follow-up ещё ожидается.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.
 
-Локальная ветка также добавила
-same-account reauthentication сценарий для weekly AI report (6/6 на Chromium,
-Firefox и WebKit). Merge в
-`main`, staging и релиз не выполнены.
+Локальная ветка также добавила same-account reauthentication сценарий для weekly
+AI report. Merge в `main`, staging и релиз не выполнены.
 
 Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA
 `8dfab604c97f90f6720e8185f0366bbe61b9383d`, ответ страницы 200 и анонимные API
@@ -40,9 +36,8 @@ staging этим не подтверждены. `wrangler.toml` содержит
 Pages deployment и отделена ли его база от production. Cloudflare dashboard/API
 доступа в текущем окружении нет.
 
-Последнее изменение Playwright до этого уже включало 1.64.1 и настоящий offline
-через `context.setOffline(true)` во всех семи PWA cold-reopen профилях. Оно
-входило в head `e34544d`, CI которого описан выше. В `TASKS.md` остаются 34
+Изменение Playwright включает 1.64.1 и настоящий offline через
+`context.setOffline(true)` во всех семи PWA cold-reopen профилях. В `TASKS.md` остаются 34
 незакрытых пункта (20 P0, 7 P1, 7 следующих задач); staging, физические
 устройства/OAuth, выпуск и интеграция в `main` не подтверждены.
 

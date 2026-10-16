@@ -357,6 +357,11 @@ async function waitForAccountOutboxIdle(page: Page, account: Account) {
   await expect.poll(async () => operationsFor(await readDurableSnapshot(page), account), { timeout: 15_000 }).toEqual([]);
 }
 
+async function waitForOutboxKeyIdle(page: Page, account: Account, key: string) {
+  await expect.poll(async () => (await readDurableSnapshot(page)).operations
+    .filter(operation => operation.accountId === account.id && operation.key === key), { timeout: 15_000 }).toEqual([]);
+}
+
 async function waitForAccountSwitch(page: Page) {
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
   const snapshot = await readDurableSnapshot(page);
@@ -1078,13 +1083,16 @@ test('held weekly report cannot write after the same account starts a new server
 
     // A new login must be able to replace the stale in-flight marker and create its own report.
     await expect.poll(() => fixtureReauthenticated.counts.completedAiFeatures).toContain('wis_text');
-    await waitForAccountOutboxIdle(reauthenticatedPage, reauthenticated);
+    await expect.poll(() => fixtureReauthenticated.counts.stateWrites.filter(key => key === reportKey)).toHaveLength(1);
+    await waitForOutboxKeyIdle(reauthenticatedPage, reauthenticated, reportKey);
     const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
     const reportAtNewSession = rawValue(beforeOldResponse, reportKey);
     expect(beforeOldResponse.activeSession?.accountId).toBe(accountA.id);
     expect(beforeOldResponse.activeSession?.serverSessionId).toBe(reauthenticated.sid);
     expect(reportAtNewSession).not.toBeNull();
     expect(reportAtNewSession).not.toBe(oldReport);
+    const reportOperationsAtNewSession = beforeOldResponse.operations
+      .filter(operation => operation.accountId === accountA.id && operation.key === reportKey);
     const operationsAtNewSession = operationsFor(beforeOldResponse, accountA);
     const newSessionReportWrites = fixtureReauthenticated.counts.stateWrites.filter(key => key === reportKey);
 
@@ -1094,6 +1102,8 @@ test('held weekly report cannot write after the same account starts a new server
 
     const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
     expect(rawValue(afterOldResponse, reportKey)).toBe(reportAtNewSession);
+    expect(afterOldResponse.operations.filter(operation => operation.accountId === accountA.id && operation.key === reportKey))
+      .toEqual(reportOperationsAtNewSession);
     expect(operationsFor(afterOldResponse, accountA)).toEqual(operationsAtNewSession);
     expect(fixtureA.counts.stateWrites.filter(key => key === reportKey)).toEqual(oldSessionReportWrites);
     expect(fixtureReauthenticated.counts.stateWrites.filter(key => key === reportKey)).toEqual(newSessionReportWrites);
