@@ -220,6 +220,112 @@ test('401 auth pause keeps a new settings edit and resumes the same operations a
   expect(errors).toEqual([]);
 });
 
+test('403 access pause explains the block and resumes the same settings operation after access returns', async ({ page }) => {
+  test.setTimeout(60_000);
+  const account = 'google-e2e-sub';
+  const firstSession = 'a'.repeat(64);
+  const nextSession = 'c'.repeat(64);
+  const errors: string[] = [];
+  const settingsRequests: Array<{ account: string | undefined; session: string | undefined; value: string; baseVersion: number }> = [];
+  let stateSession = firstSession;
+  let accessAvailable = true;
+  let rejectedOnce = false;
+  let serverVersion = 0;
+  let releaseReplay!: () => void;
+  let replayStarted!: () => void;
+  const replayGate = new Promise<void>(resolve => { releaseReplay = resolve; });
+  const replay = new Promise<void>(resolve => { replayStarted = resolve; });
+  page.on('pageerror', error => errors.push(error.message));
+  await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
+  await page.route('**/api/me*', async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      user: { sub: account, email: 'e2e@example.com', name: 'E2E User', roles: ['user'] },
+      hasAccess: accessAvailable,
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: stateSession },
+      bootstrapSync: { protocol: 1, guard: 1 },
+      profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 },
+      aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+      achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 },
+      pushSync: { protocol: 1, guard: 1 },
+    }) });
+  });
+  await page.route('**/api/state*', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; value?: unknown; baseVersion?: unknown }> } | null;
+    const item = body?.items?.[0];
+    if (typeof item?.key !== 'string' || !item.key.endsWith('_settings') || typeof item.value !== 'string') return route.fallback();
+    const requestHeaders = request.headers();
+    const accountId = requestHeaders['x-fitfocus-state-account'];
+    const sessionId = requestHeaders['x-fitfocus-state-session'];
+    settingsRequests.push({ account: accountId, session: sessionId, value: item.value, baseVersion: Number(item.baseVersion) });
+    const headers = {
+      'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': accountId ?? account,
+      'X-FitFocus-State-Session': sessionId ?? stateSession,
+    };
+    if (!rejectedOnce) {
+      rejectedOnce = true;
+      accessAvailable = false;
+      await route.fulfill({ status: 403, contentType: 'application/json', headers, body: JSON.stringify({ error: 'ACCESS_REQUIRED' }) });
+      return;
+    }
+    if (!accessAvailable) {
+      await route.fulfill({ status: 403, contentType: 'application/json', headers, body: JSON.stringify({ error: 'ACCESS_REQUIRED' }) });
+      return;
+    }
+    replayStarted();
+    await replayGate;
+    const version = ++serverVersion;
+    await route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({
+      ok: true, items: [{ key: item.key, exists: true, version }],
+    }) });
+  });
+
+  await openApp(page, '/#settings');
+  const firstResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/state'
+    && response.request().method() === 'PUT' && response.status() === 403);
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await firstResponse;
+  await expect.poll(() => storedSenderPause(page)).toBe('access');
+  const pending = await storedSettings(page);
+  expect(pending.operations).toHaveLength(1);
+  const operationId = pending.operations[0].opId;
+  expect(pending.operations[0]).toMatchObject({ status: 'pending', value: expect.stringContaining('"theme":"light"') });
+  await expect(page.locator('[data-state-notice-region]').getByRole('alert'))
+    .toContainText('Для синхронизации требуется доступ к FitFocus.');
+
+  // Allow the active-session poll to observe the access fence before checking local UI availability.
+  await page.waitForTimeout(2_200);
+  await expect(page.getByRole('button', { name: /^Violet AI/ })).toBeVisible();
+  await page.waitForTimeout(1_200);
+  expect(settingsRequests).toHaveLength(1);
+  expect(await storedSenderPause(page)).toBe('access');
+
+  stateSession = nextSession;
+  accessAvailable = true;
+  const freshProof = page.waitForResponse(response => new URL(response.url()).pathname === '/api/me' && response.status() === 200);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await freshProof;
+  await replay;
+  try {
+    expect(settingsRequests[1]).toMatchObject({ account, session: nextSession, value: pending.operations[0].value, baseVersion: 0 });
+    const sending = await storedSettings(page);
+    expect(sending.operations).toHaveLength(1);
+    expect(sending.operations[0]).toMatchObject({ opId: operationId, status: 'sending', value: pending.operations[0].value });
+  } finally {
+    releaseReplay();
+  }
+
+  await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(0);
+  const confirmed = await storedSettings(page);
+  expect(confirmed.value).toContain('"theme":"light"');
+  expect(confirmed.confirmedVersion).toBe(1);
+  expect(await storedSenderPause(page)).toBeNull();
+  expect(settingsRequests).toHaveLength(2);
+  expect(errors).toEqual([]);
+});
+
 type ServerStateItem = { version: number; value: string };
 async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, options: {
   conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[];
