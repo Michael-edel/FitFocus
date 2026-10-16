@@ -3,8 +3,8 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; последний опубликованный код — `72ac769`. Локальный
-E2E follow-up закоммичен как `402f7ba` и ожидает отправки.
+`fix/state-generations`; E2E follow-up опубликован в code commit `402f7ba`, а
+его статусная документация — в `1e9dd69`.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
 подключён, но общий P0 ещё открыт. Последний завершённый CI run #1469 для
@@ -15,14 +15,15 @@ E2E follow-up закоммичен как `402f7ba` и ожидает отпра
 отдельную запись weekly AI-отчёта. Локальный коммит `402f7ba` заставляет тест
 дождаться сохранения отчёта и пустой durable outbox до reload. Полный файл
 `storage-durability.spec.ts` прошёл 19/19 на Android PWA, целевой сценарий — 1/1;
-typecheck и `git diff --check` прошли. Полный CI нового SHA ожидает отправки.
+typecheck и `git diff --check` прошли. Для опубликованного follow-up запущен
+полный CI #1471; его терминальный результат следует сверить отдельно.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.
 
 Локальная ветка также добавила
 same-account reauthentication сценарий для weekly AI report (6/6 на Chromium,
-Firefox и WebKit). Новый E2E-фикс и документация пока не запушены. Merge в
+Firefox и WebKit). Merge в
 `main`, staging и релиз не выполнены.
 
 Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA

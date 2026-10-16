@@ -15,7 +15,8 @@ audit, guards, unit, typechecks и build прошли; E2E дал 843 passed, 25
 продуктовый код не менялся. Целевой Android PWA тест прошёл 1/1, весь
 `storage-durability.spec.ts` — 19/19 (`workers=1,retries=0`), typecheck вместе с
 admin guards и `git diff --check` прошли. Точный полный CI этого follow-up SHA
-ещё не запущен.
+был запущен после публикации кода (`402f7ba`) и статуса (`1e9dd69`) как run
+#1471. Его результат необходимо сверить на GitHub перед дальнейшей приёмкой.
 
 ## P0.9 — Firefox legacy migration probe reuses app connection, 16.10.2026
 

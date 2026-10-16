@@ -123,9 +123,10 @@ staging или реальный OAuth.
 В следующем полном CI #1469 Android PWA settings reload завершился с
 `Cloud: pending`: trace показал отменённую reload-ом фоновую запись weekly AI
 отчёта, тогда как settings PUT был подтверждён. E2E теперь ждёт завершения
-записи отчёта и пустой account outbox до reload. Локально весь
-`storage-durability.spec.ts` прошёл 19/19 на Android PWA; полный CI нового SHA
-ожидает отправки.
+записи отчёта и пустой account outbox до reload. Опубликованный code commit
+`402f7ba` прошёл локальный полный `storage-durability.spec.ts` (19/19 на Android
+PWA); после публикации follow-up был запущен полный CI #1471. Результат CI —
+отдельный критерий приёмки.
 
 Общий план — в [TASKS](../TASKS.md), состояние — в
 [статусе проекта](project-status.md), порядок проверки — в
