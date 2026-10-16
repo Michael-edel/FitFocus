@@ -18,8 +18,10 @@ storage-strict typecheck, production build и `git diff --check` прошли.
 Существующий поздний ответ AI Council при переходе A → B прошёл 3/3 на desktop
 Chromium, Firefox и WebKit (`workers=1,retries=0`). Это не моделирует повторный
 вход в том же браузере; lifecycle-приёмка и остальной P0.4 audit открыты.
-Опубликованный SHA `bd94f60` проверяется PR-run #1395, пока queued; текущая
-правка ещё не опубликована.
+Кодовый follow-up опубликован коммитом `2f6afdc`; PR-run #1397 для этого SHA
+pending без созданных jobs на момент проверки. Push-run #1396 был отменён,
+когда concurrency policy оставила PR-событие как один текущий запуск ветки.
+Перед слиянием необходимо проверить статус уже актуального exact HEAD.
 
 ## 16.10.2026 — изоляция выбора блюд по account/session
 
