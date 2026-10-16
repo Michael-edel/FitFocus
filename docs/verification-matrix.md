@@ -263,8 +263,9 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
-`serverSnapshot` после 409/reload, UI показывает разрешение конфликта и повторной
-отправки нет. Проверка входит в коммит `ed4a1e8`; это mock API, не staging.
+`serverSnapshot` после 409/reload; явное принятие записывает серверный снимок,
+ставит `confirmedVersion = 9`, удаляет операцию и не вызывает повторный DELETE.
+Проверка входит в коммит `2592492`; это mock API, не staging.
 
 Дополнительная локальная P0.9 browser acceptance прошла 7/7: PWA offline cold
 reopen сохраняет и отправляет тот же intent после возврата сети (4 supported

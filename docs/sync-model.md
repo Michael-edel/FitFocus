@@ -140,9 +140,11 @@ Legacy-ключ — только источник импорта. Нормали
 DELETE-ветка строки `409 update/delete → reload` теперь отдельно проверена для
 `council_history`: после scoped 409 IndexedDB сохраняет tombstone, исходный
 `opId`, `serverSnapshot` и состояние `conflicted`; после reload видна команда
-разрешения конфликта, а клиент не посылает DELETE повторно. Browser/PWA mock
-матрица прошла 7/7 без retries в локальном коммите `ed4a1e8`. Это покрывает один
-ключ и не закрывает общую lifecycle-матрицу, реальный API или staging.
+разрешения конфликта. Явное принятие записывает проверенное серверное значение,
+устанавливает `confirmedVersion`, удаляет outbox operation и не посылает DELETE
+повторно. Browser/PWA mock матрица прошла 7/7 без retries в коммите `2592492`.
+Это покрывает один ключ и не закрывает общую lifecycle-матрицу, реальный API или
+staging.
 
 Строка `401 → новая правка → login` проверена локальным кодовым коммитом
 [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c):

@@ -6,11 +6,12 @@
 UI: scoped DELETE получает `409 KV_CONFLICT` с серверным snapshot версии 9.
 Локальное значение остаётся удалённым, outbox сохраняет ту же tombstone-операцию
 с прежним `opId`, `status: conflicted` и `serverSnapshot`; поле `value` отсутствует.
-После reload виден блок конфликта и действие «Принять серверную версию», повторный
-DELETE не отправляется. Матрица прошла 7/7 desktop/mobile/PWA проектов без retries.
+После reload тест явно принимает серверную версию: IDB получает серверное значение,
+`confirmedVersion` становится 9, operation удаляется, повторный DELETE не
+отправляется. Матрица прошла 7/7 desktop/mobile/PWA проектов без retries;
 `npm run typecheck` и `git diff --check` прошли. Это mock API acceptance для одного
 ключа; полный P0.9, точный CI, staging и реальные устройства остаются открытыми.
-Кодовый test commit — `ed4a1e8`.
+Первый тест-коммит — `ed4a1e8`, расширенная проверка resolution — `2592492`.
 
 Полный локальный `owned-state.spec.ts` прогон завершился 34/35: iPhone Safari один
 раз записал console warning `/api/ai due to access control checks` во время reload

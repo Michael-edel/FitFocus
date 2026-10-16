@@ -5,10 +5,11 @@
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; рабочая ветка `fix/durable-outbox`. Опубликованный HEAD
 до последних тестовых исправлений — `7fbd324`; новые кодовые коммиты —
-`9594638` и `ed4a1e8`.
+`9594638`, `ed4a1e8` и `2592492`.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
-Новая проверка DELETE-конфликта после reload прошла 7/7 browser/PWA профилей;
+Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
+прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
 обновлённый account-switch тест прошёл 3/3 Chromium. Предыдущий точный CI
 [`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
 на `7fbd324` выявил один flaky assertion `activeSection`; локальная правка
