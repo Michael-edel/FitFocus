@@ -9,16 +9,20 @@ const historyKey = `fitfocus_data_${account}_council_history`;
 const oldMessage = { id: 'old-message', role: 'user', text: 'Сохранённый вопрос', createdAt: '2026-10-11T08:00:00Z' };
 
 async function state(page: Page, suffix: string) {
-  return page.evaluate(async ({ key, sourceKey }) => {
+  return page.evaluate(async ({ account, key, sourceKey }) => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
-    const tx = db.transaction(['values', 'outbox'], 'readonly');
+    const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
     const read = <T,>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-    const [value, operations] = await Promise.all([read(tx.objectStore('values').get(key)), read(tx.objectStore('outbox').getAll())]);
+    const [value, operations, keyState] = await Promise.all([
+      read(tx.objectStore('values').get(key)),
+      read(tx.objectStore('outbox').getAll()),
+      read(tx.objectStore('outbox_meta').get(`key:${JSON.stringify([account, key])}`)),
+    ]);
     db.close();
     return { value: value?.value ?? null, operations: operations.filter((operation) => operation.key === key),
-      source: localStorage.getItem(sourceKey) };
-  }, { key: `fitfocus_data_${account}_${suffix}`, sourceKey });
+      confirmedVersion: keyState?.confirmedVersion, source: localStorage.getItem(sourceKey) };
+  }, { account, key: `fitfocus_data_${account}_${suffix}`, sourceKey });
 }
 
 async function setup(page: Page, history = false, stateDeleteConflict?: { version: number; exists: boolean; value: string }, acknowledgeStateWrites = false) {
@@ -123,13 +127,32 @@ test('council history delete conflict and server snapshot survive reload', async
   await page.locator('[data-state-notice-region] details summary').click();
   const recovery = page.getByRole('region', { name: 'История помощника' });
   await expect(recovery.getByText(/Конфликт: 1 локальных операций; версия сервера 9/)).toBeVisible();
-  await expect(recovery.getByRole('button', { name: 'Принять серверную версию' })).toBeVisible();
+  const acceptServer = recovery.getByRole('button', { name: 'Принять серверную версию' });
+  await expect(acceptServer).toBeVisible();
 
   const afterReload = await state(page, 'council_history');
   expect(afterReload.value).toBeNull();
   expect(afterReload.operations).toHaveLength(1);
   expect(afterReload.operations[0]).toMatchObject({ opId: original.opId, type: 'delete', status: 'conflicted',
     serverSnapshot: { version: 9, exists: true, value: serverValue } });
+
+  const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
+    const message = dialog.message();
+    await dialog.accept();
+    return message;
+  });
+  const reload = page.waitForNavigation({ waitUntil: 'load' });
+  await acceptServer.click();
+  expect(await dialogHandled).toContain('Локальные изменения этого раздела будут удалены');
+  await reload;
+
+  await expect.poll(async () => (await state(page, 'council_history')).value).toBe(serverValue);
+  const accepted = await state(page, 'council_history');
+  expect(accepted.operations).toHaveLength(0);
+  expect(accepted.confirmedVersion).toBe(9);
+  expect(deleteRequests).toHaveLength(1);
+  await expect(page.getByText(serverMessage.text, { exact: true })).toBeVisible();
+  await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
   expect(errors.filter((error) => !/\b409\b/.test(error))).toEqual([]);
 });
 
