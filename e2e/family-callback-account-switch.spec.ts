@@ -34,6 +34,7 @@ type FixtureState = {
   releasedCreates?: number;
   familyJoinAchievements?: string[];
   familyLoadAccounts?: string[];
+  familyLoadSessions?: string[];
   releasedFamilyContexts?: number;
   familyShoppingListRequests?: number;
   familyShoppingListAccounts?: string[];
@@ -320,6 +321,7 @@ async function installAccountApi(
       }
       if (request.method() === 'GET') {
         (state.familyLoadAccounts ??= []).push(scopedAccount.id);
+        (state.familyLoadSessions ??= []).push(requestedSession ?? '');
         if (holdFamilyContext && scopedAccount.id === accountA.id) {
           await heldFamilyContextResponse.promise;
           state.releasedFamilyContexts = (state.releasedFamilyContexts ?? 0) + 1;
@@ -453,7 +455,7 @@ async function installAccountApi(
   };
 }
 
-async function activeAccount(page: Page): Promise<string | null> {
+async function activeSessionIdentity(page: Page): Promise<{ accountId?: string; serverSessionId?: string; sessionEpoch?: string } | null> {
   return page.evaluate(async () => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -463,15 +465,23 @@ async function activeAccount(page: Page): Promise<string | null> {
     try {
       const tx = db.transaction('outbox_meta', 'readonly');
       const request = tx.objectStore('outbox_meta').get('active-session');
-      const value = await new Promise<{ accountId?: string } | undefined>((resolve, reject) => {
+      const value = await new Promise<{ accountId?: string; serverSessionId?: string; sessionEpoch?: string } | undefined>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      return value?.accountId ?? null;
+      return value ? {
+        accountId: value.accountId,
+        serverSessionId: value.serverSessionId,
+        sessionEpoch: value.sessionEpoch,
+      } : null;
     } finally {
       db.close();
     }
   });
+}
+
+async function activeAccount(page: Page): Promise<string | null> {
+  return (await activeSessionIdentity(page))?.accountId ?? null;
 }
 
 async function openAccountB(context: BrowserContext, state: FixtureState, errors: string[], includePersonalShopping = false,
@@ -697,6 +707,57 @@ test('a delayed family-context read from account A cannot appear after account B
     await accountBPage.screenshot({ path: info.outputPath('family-context-account-b.png') });
   } finally {
     fixtureA.releaseFamilyContext();
+  }
+});
+
+test('a delayed family-context read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    familyLoadAccounts: [], familyLoadSessions: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, false, false, false, false, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => state.familyLoadSessions?.filter(session => session === accountA.sid).length).toBe(1);
+
+  const reauthenticated = { ...accountA, sid: 'c'.repeat(64) };
+  state.current = reauthenticated;
+  state.familyId = 'family-reauthenticated';
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+  try {
+    await openApp(reauthenticatedPage, '/#family');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-reauthenticated', exact: true })).toBeVisible();
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseFamilyContext();
+    await expect.poll(() => state.releasedFamilyContexts).toBe(1);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-reauthenticated', exact: true })).toBeVisible();
+    expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(1);
+    expect(state.familyLoadSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseFamilyContext();
+    fixtureReauthenticated.releaseFamilyContext();
   }
 });
 
