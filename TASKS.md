@@ -940,6 +940,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   полный `ai-callback-account-switch.spec.ts` — 15/15 без retries, typecheck
   прошёл. Полный CI для этого SHA прошёл: [run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756).
   Другие AI/family callbacks и общий lifecycle остаются открыты.
+- [x] Удержать ответ `weekly_menu`, повторно войти в тот же account с новым
+  `serverSessionId` и отпустить ответ старой сессии: profile, durable outbox и
+  achievement state новой сессии не меняются. Вместе с A → B acceptance проверка
+  прошла 6/6 на desktop Chromium/Firefox/WebKit без retries; общий typecheck и
+  `git diff --check` прошли. Production-код не менялся; точный CI follow-up
+  ожидает push.
 - [x] Проверить поздний ответ retry объяснения плато A после входа B во
   второй вкладке: профиль, values, outbox, active session и success-effects
   обоих аккаунтов не меняются. Целевой тест прошёл на Chromium, Firefox и

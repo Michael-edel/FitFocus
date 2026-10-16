@@ -127,6 +127,12 @@ value и outbox operation фиксируются вместе. Recipe usage ув
   активную попытку и версию профиля до/после AI, затем сохраняет меню одной
   guarded profile-операцией. Смена аккаунта не должна применить поздний ответ
   к профилю A или B и не должна запускать достижение.
+- Browser acceptance также удерживает ответ `weekly_menu` во время повторного
+  входа того же account с новым `serverSessionId`; поздний ответ старой сессии
+  не меняет profile/outbox и success effects. Same-account и A → B сценарии
+  прошли 6/6 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`). Это
+  mock-API проверка; OAuth, старые bundles, staging и общий lifecycle проверяются
+  отдельно.
 - **Плато:** Dashboard и повтор используют общий hook; профиль, исходный action,
   pagehide, logout и новая попытка блокируют поздний ответ. Текст объяснения
   обновляет только UI.

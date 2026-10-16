@@ -4686,6 +4686,20 @@ typecheck и `git diff --check` прошли. CI #1413 проверяет опу
 после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
 открытыми.
 
+## P0.5 — поздний AI weekly-menu ответ после same-account login, 16.10.2026
+
+Добавлен acceptance для удержанного `/api/ai` `weekly_menu`: пока AI-ответ
+старой server session ожидает, тот же account входит с новым `serverSessionId`
+в соседней вкладке. После освобождения ответа не меняются профиль, durable outbox,
+achievement state или экран новой сессии. Фикстура проверяет, что вызов AI ушёл
+с исходным account/session proof. Production-код не менялся.
+
+Same-account и A → B acceptance прошли 6/6 на desktop Chromium, Firefox и WebKit
+(`workers=1,retries=0`). Полный typecheck и `git diff --check` прошли. CI #1413
+проверяет опубликованный `cb44a2b` и не включает этот тест; точный CI для всех
+локальных follow-up запускается после push. Остальные AI/family callbacks,
+staging и полный P0.5 lifecycle остаются открытыми.
+
 ## P0.5 — поздний Push status после same-account login, 16.10.2026
 
 Добавлен acceptance для удержанного Settings `GET /api/push/status`: соседняя
