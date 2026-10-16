@@ -4827,3 +4827,17 @@ achievement. Сценарий прошёл 3/3 на desktop Chromium/Firefox/Web
 `npm run test:e2e -- --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 e2e/family-menu-durable.spec.ts --grep "delayed family server preview after same-account reauthentication"`.
 Точный CI этого follow-up запускается после push; staging и полный lifecycle
 остаются открытыми.
+
+## P0.5 — поздний AI-ответ семейного меню после same-account reauth, 16.10.2026
+
+Добавлен acceptance для удержанного ответа `/api/ai` `family_menu`: та же
+учётная запись входит с новым `serverSessionId` и `sessionEpoch`, затем
+освобождается старый ответ. Outbox и сохранённое семейное меню остаются равны
+снимку до ответа; старый callback не создаёт запись и не запускает achievement.
+Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit; общий
+`npm run typecheck` прошёл. Production-код не менялся, runtime-дефект не выявлен.
+
+Проверка выполнена командой:
+`npm run test:e2e -- --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 e2e/family-menu-durable.spec.ts --grep "delayed family AI response after same-account reauthentication"`.
+Точный CI follow-up запускается после push; общий P0.5, staging и полный
+lifecycle остаются открытыми.

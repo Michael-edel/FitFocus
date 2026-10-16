@@ -217,6 +217,51 @@ test('a delayed family AI response after another account signs in cannot write i
   } finally { release(); }
 });
 
+test('a delayed family AI response after same-account reauthentication cannot create a menu or achievements', async ({ page, context }) => {
+  const { counts, errors, release } = await setup(page, 'held-ai');
+  const before = await saved(page);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession).toMatchObject({ accountId: 'google-e2e-sub', serverSessionId: 'a'.repeat(64) });
+
+  try {
+    await navigate(page, 'План');
+    const update = page.getByRole('button', { name: 'Обновить', exact: true });
+    await update.scrollIntoViewIfNeeded();
+    await update.click();
+    await expect.poll(() => counts.ai).toBe(1);
+
+    const reauthenticatedPage = await context.newPage();
+    const reauthenticatedSession = { id: 'google-e2e-sub', sid: 'c'.repeat(64) };
+    const errorsReauthenticated = await openSwitchAccount(reauthenticatedPage, reauthenticatedSession);
+    const currentSession = await activeSessionIdentity(reauthenticatedPage);
+    expect(currentSession).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+    expect(previousSession?.sessionEpoch).not.toBe(currentSession?.sessionEpoch);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+
+    release();
+    await expect.poll(() => counts.fulfilled).toBe(1);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
+    expect(await saved(page)).toEqual(before);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
+    expect(counts.put).toBe(0);
+    expect(counts.accepted).toBe(0);
+    expect(counts.oldWriter).toBe(0);
+    expect(counts.achievements).toBe(0);
+    await healthy(page, errors);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    expect(errorsReauthenticated).toEqual([]);
+  } finally { release(); }
+});
+
 test('a delayed family server preview after another account signs in cannot write its menu', async ({ page, context }) => {
   const { counts, errors, releasePreview } = await setup(page, 'held-preview');
   try {

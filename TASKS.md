@@ -1048,6 +1048,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     аккаунт с новой server session и освободить старый ответ. Outbox, семейное меню
     и число отправленных операций остаются без изменений; epoch новой сессии
     отличается. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit; typecheck прошёл.
+  - [x] Удержать AI-ответ семейной генерации, повторно войти в тот же аккаунт с
+    новой server session и освободить ответ. Снимок меню и outbox не меняются;
+    старый ответ не запускает запись или achievement. E2E прошёл 3/3 на desktop
+    Chromium/Firefox/WebKit; typecheck прошёл.
   - [x] Исправить пустой экран после logout: `useCouncilChat` создавал render key
     при `currentUser=null` и `loginGuard=null`, затем читал `currentUser.id`.
     Теперь временный state key создаётся только при подтверждённом непустом
