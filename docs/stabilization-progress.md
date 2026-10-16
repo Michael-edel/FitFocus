@@ -5161,6 +5161,20 @@ reload; до deadline повтор не уходит, после восстан�
 устройства, Service Worker при реальном отсутствии сети или staging. Полная
 матрица P0.9 и точный CI нового HEAD остаются открытыми.
 
+## P0.4 — повторная проверка сессии после чтения weekly report, 16.10.2026
+
+Аудит обнаружил ранний возврат существующего отчёта без повторной проверки
+captured login-session после чтения IndexedDB. Если session менялась во время
+чтения, устаревший callback мог вернуть старый отчёт вызывающему экрану, хотя
+запись отчёта уже оставалась защищена commit guard. `ensureWeeklyReportWithAI`
+теперь повторно вызывает session guard сразу после чтения и до любого возврата.
+
+Новый регрессионный unit-тест моделирует истечение captured login во время
+чтения существующего отчёта и подтверждает `WEEKLY_REPORT_SESSION_CHANGED`;
+AI generation не запускается. Целевой unit suite прошёл 4/4, root typecheck и
+`git diff --check` прошли локально. Полный CI нового commit и browser acceptance
+остаются необходимыми; общий аудит cloud callbacks/cache и P0.4 открыты.
+
 ## P0.4 — account-owned дневник при переключении вкладки, 16.10.2026
 
 Коммит [`8279976`](https://github.com/Michael-edel/FitFocus/commit/8279976fb140cd58aa2c00853b4f5eea2b30e02b)

@@ -1,9 +1,11 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft. Ветка `fix/durable-outbox` продолжает P0.8/P0.9; кодовые коммиты
-`9594638`, `ed4a1e8` и `2592492` добавляют E2E-исправление и приёмку поверх
-опубликованного `7fbd324`.
+остаётся draft. Ветка `fix/durable-outbox`, опубликованный HEAD `958f543`.
+Последние коммиты `9594638`, `ed4a1e8`, `24fe933`, `2592492` и `958f543`
+содержат исправление account-switch E2E, приёмку durable DELETE-конфликта и
+документацию. Полный CI run [`38881940761`](https://github.com/Michael-edel/FitFocus/actions/runs/38881940761)
+прошёл unit/typecheck/build и выполняет E2E.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
@@ -17,11 +19,12 @@ CI run [`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38
 проверял прежний SHA `7fbd324`: все gates до E2E прошли, E2E завершился
 `809 passed / 254 skipped / 1 failed`. Единственный сбой — сравнение
 `activeSection` (`dynamics`/`timeline`) в account-switch тесте; после уточнения
-проверки локальный целевой тест прошёл 3/3. Новый полный CI для этих коммитов
-ещё не подтверждён; последним результатом остаётся run `38874079703` на `7fbd324`.
-Локальный полный `owned-state` прогон дал 34/35: единичная ошибка iPhone Safari
-`/api/ai due to access control checks` на reload не повторилась в 3/3 целевых
-повторов; её первопричина не установлена. Typecheck и `git diff --check` прошли.
+проверки локальный целевой тест прошёл 3/3. Актуальный CI для `958f543`
+прошёл все gates до E2E и выполняет browser acceptance.
+Полный `owned-state` прогон локально прошёл 35/35 на семи проектах. Ранее
+замеченная единичная ошибка iPhone Safari `/api/ai due to access control checks`
+на reload не повторилась в трёх изолированных повторах и полном прогоне.
+Typecheck и `git diff --check` прошли.
 
 В плане остаются 34 незакрытых пункта: 20 P0, 7 P1 и 7 следующих задач; ни один
 P0 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
@@ -664,6 +667,10 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     сценария — 12/12 в тех же браузерах. Production-дефекта не выявлено; общий
     P0.4 audit, остальные callbacks/cache и staging остаются открытыми.
     [`88ca7e3`](https://github.com/Michael-edel/FitFocus/commit/88ca7e3d4e5c88383b1a9e88db2c2afca2f6964a).
+  - [x] После чтения weekly report повторно проверить login-session перед
+    возвратом существующего отчёта: если сессия истекла во время IndexedDB-read,
+    callback завершится `WEEKLY_REPORT_SESSION_CHANGED`. Регрессионный unit-тест
+    и общий typecheck прошли локально; полный CI этого follow-up ожидает push.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.

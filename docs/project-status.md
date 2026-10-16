@@ -3,20 +3,22 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; рабочая ветка `fix/durable-outbox`. Опубликованный HEAD
-до последних тестовых исправлений — `7fbd324`; новые кодовые коммиты —
-`9594638`, `ed4a1e8` и `2592492`.
+`fix/state-generations`; рабочая ветка `fix/durable-outbox`, опубликованный HEAD
+`958f543`. Последние коммиты `9594638`, `ed4a1e8`, `24fe933`, `2592492` и
+`958f543` содержат account-switch E2E-исправление, durable DELETE-конфликт и
+его приёмку после reload.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
 Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
 прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
-обновлённый account-switch тест прошёл 3/3 Chromium. Предыдущий точный CI
-[`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
-на `7fbd324` выявил один flaky assertion `activeSection`; локальная правка
-прошла 3/3; точный CI этих коммитов пока не опубликован. Полный `owned-state` локально
-прошёл 34/35; единственный WebKit `/api/ai` console warning при reload не
-воспроизвёлся в 3 повторных тестах, причина неизвестна. Typecheck и diff check
-прошли.
+обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
+[`#38881940761`](https://github.com/Michael-edel/FitFocus/actions/runs/38881940761)
+для `958f543` успешно прошёл dependency audit, schema/privacy/auth/API gates,
+unit, все typecheck и production build; E2E сейчас выполняются. Полный
+`owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
+`/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
+Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff
+check прошли; этот follow-up ещё не опубликован.
 
 В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1, 7 остальных); все P0
 считаются открытыми до оставшихся writers/callbacks и общей lifecycle/release

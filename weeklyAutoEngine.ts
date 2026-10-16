@@ -111,6 +111,7 @@ export async function ensureWeeklyReportWithAI(
   };
   await assertCurrent();
   const reports = await loadWeeklyReports(userId, repository);
+  await assertCurrent();
 
   const existingIdx = reports.findIndex(r => r.weekKey === currentWeek);
   

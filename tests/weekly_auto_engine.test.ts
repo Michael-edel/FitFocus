@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { userStateDatabase } from '../storage/stateDatabase';
 import { DurableOutbox } from '../storage/durableOutbox';
+import { UserStateRepository } from '../storage/userStateRepository';
 import { ensureWeeklyReportWithAI, loadWeeklyReports } from '../weeklyAutoEngine';
 import type { WeeklyIntelligenceResult } from '../weeklyIntelligence';
 
@@ -94,5 +95,33 @@ describe('weekly AI reports', () => {
     expect(await outbox.snapshot('user-1', 'fitfocus_data_user-1_weekly_reports')).toMatchObject({ value: null });
     expect(localStorage.getItem('ff_weekly_ai_inflight_user-1')).toBeNull();
     expect(localStorage.getItem('ff_last_weekly_ai_attempt_user-1')).toBeNull();
+  });
+
+  it('does not return an existing report after its captured login expires during the read', async () => {
+    const repository = new UserStateRepository('user-1');
+    const now = new Date();
+    const weekDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const weekday = weekDate.getUTCDay() || 7;
+    weekDate.setUTCDate(weekDate.getUTCDate() + 4 - weekday);
+    const yearStart = new Date(Date.UTC(weekDate.getUTCFullYear(), 0, 1));
+    const currentWeek = `${weekDate.getUTCFullYear()}-${String(Math.ceil((((weekDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)).padStart(2, '0')}`;
+    await repository.writeJson('weekly_reports', [{
+      weekKey: currentWeek,
+      createdAt: now.toISOString(),
+      data: weeklyData,
+      aiText: 'Отчёт текущей недели.',
+    }]);
+
+    const outbox = new DurableOutbox();
+    const readGuard = (await outbox.acceptReadSession('user-1', 'c'.repeat(64), 0))!;
+    let guardChecks = 0;
+    const generateAI = vi.fn().mockResolvedValue('Не должно быть вызвано');
+
+    await expect(ensureWeeklyReportWithAI('user-1', weeklyData, generateAI, {
+      readGuard,
+      canCommit: () => ++guardChecks < 3,
+    })).rejects.toThrow('WEEKLY_REPORT_SESSION_CHANGED');
+
+    expect(generateAI).not.toHaveBeenCalled();
   });
 });
