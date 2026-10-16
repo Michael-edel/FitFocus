@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — guard профильного refresh и отменённые WebKit GET, 17.10.2026
+
+Полный [CI run #1477](https://github.com/Michael-edel/FitFocus/actions/runs/38960924367)
+на `87739e7` прошёл dependency audit, schema/privacy/auth/API guards, 1320 unit,
+три typecheck и production build; E2E завершился тремя сбоями. Firefox не
+применил профиль, хотя серверный снимок уже был принят в IndexedDB: `StateSync`
+прошёл session re-verification, а React editor сохранил старый login read guard.
+Два WebKit-теста завершили проверки данных, но сочли ошибками точные сообщения
+об отмене GET `/api/family` и `/api/shopping/list` во время reload.
+
+Code commit [`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871)
+возвращает вместе с профилем guard принятого IndexedDB snapshot. Перед применением
+UI guard повторно проверяется на актуальность, затем React принимает его вместе с
+обновлённым профилем. Добавлены проверки порядка принятия и отказа от устаревшего
+guard. Для двух WebKit-переходов добавлены только точные bounded исключения для
+отменённых GET; неожиданные ошибки и повторы маршрутов остаются фатальными.
+Локально: unit — 1322/1322, основной и два строгих typecheck, admin guards,
+production build; profile refresh — 7/7 проектов и ещё 5/5 повторов Firefox;
+два семейных сценария — 6/6 на desktop WebKit, iPhone Safari и iPhone PWA.
+Точный полный CI опубликованного follow-up ожидается; P0.8/P0.9 и общий P0
+остаются открытыми.
+
 ## P0.8/P0.9 — необязательный PWA update banner при восстановлении профиля, 17.10.2026
 
 Полный CI опубликованного snapshot `ba3ee9421c686f80b8547ab46c2b1cbb11e41d3c`

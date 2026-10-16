@@ -4,19 +4,22 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; последний локальный code commit —
-[`2d30fdc`](https://github.com/Michael-edel/FitFocus/commit/2d30fdc2ddc4c460ed95165e9c2ae2710bb10c29).
-Последний полный опубликованный CI — [run #1475](https://github.com/Michael-edel/FitFocus/actions/runs/38954705906)
-на `ba3ee94`: 838 E2E прошли, 255 пропущены, шесть упали в одном сценарии
-legacy profile recovery. Audit, guards, unit, три typecheck и build прошли.
+[`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871). Последний
+полный опубликованный CI — [run #1477](https://github.com/Michael-edel/FitFocus/actions/runs/38960924367)
+на `87739e7`: dependency audit, schema/privacy/auth/API guards, 1320 unit,
+три typecheck и production build прошли; E2E завершился тремя сбоями.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. В run #1475 все шесть ошибок возникли,
-потому что legacy migration тест требовал необязательный update banner,
-который отсутствовал в этих browser profiles. В `2d30fdc` тест закрывает
-баннер, если он уже появился, и прокручивает recovery control в центр, чтобы
-поздний баннер не перекрывал клик. Сценарий прошёл 21/21 на семи профилях
-(три повтора, без retries); прошли также 1,320 unit tests, typecheck,
-admin guards и `git diff --check`. Полный CI точного опубликованного follow-up
+подключён, но общий P0 ещё открыт. Run #1477 выявил профильный refresh, который
+записывал серверный снимок, но оставлял UI на старом session guard, и два
+WebKit-сценария с отменёнными при reload GET-запросами `/api/family` и
+`/api/shopping/list`. В [`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871)
+refresh передаёт и повторно проверяет точный guard принятого снимка, затем
+обновляет UI; браузерные тесты допускают только точные WebKit access-control
+сообщения для ограниченного списка GET-маршрутов. Локально прошли 1322 unit,
+полный и два строгих typecheck, admin guards, production build, оба семейных
+сценария 6/6 на трёх WebKit-профилях и профильный сценарий на всех семи проектах;
+дополнительно Firefox — 5/5 повторов. Полный CI нового опубликованного snapshot
 ещё ожидается.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
