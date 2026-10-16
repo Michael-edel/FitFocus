@@ -86,6 +86,8 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
   conflict?: boolean; settingsFailure?: boolean; settingsRequests?: number[];
   settingsConflictGate?: { started: () => void; wait: Promise<void> };
   settingsSuccessGate?: { started: () => void; wait: Promise<void> };
+  settingsPayloads?: Array<{ baseVersion: number; value: string }>;
+  loseFirstSettingsResponse?: boolean;
 } = {}) {
   await page.route('**/api/me*', async (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
     user: { sub: 'google-e2e-sub', name: 'E2E User', email: 'e2e@example.com', roles: ['user'] }, hasAccess: true,
@@ -105,7 +107,11 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
     }
     if (request.method() !== 'PUT') { await route.fallback(); return; }
     const items = request.postDataJSON().items as { key: string; value: string; baseVersion: number }[];
-    for (const item of items) if (item.key.endsWith('_settings')) options.settingsRequests?.push(item.baseVersion);
+    const settingsItems = items.filter((item) => item.key.endsWith('_settings'));
+    for (const item of settingsItems) {
+      options.settingsRequests?.push(item.baseVersion);
+      options.settingsPayloads?.push({ baseVersion: item.baseVersion, value: item.value });
+    }
     if (options.conflict && items[0].key.endsWith('_settings')) {
       options.settingsConflictGate?.started();
       if (options.settingsConflictGate) await options.settingsConflictGate.wait;
@@ -120,6 +126,16 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
       options.settingsSuccessGate.started();
       await options.settingsSuccessGate.wait;
     }
+    if (options.loseFirstSettingsResponse && settingsItems.length === 1) {
+      const item = settingsItems[0];
+      const current = server.get(item.key);
+      if (item.baseVersion === (current?.version ?? 0)) {
+        options.loseFirstSettingsResponse = false;
+        server.set(item.key, { version: item.baseVersion + 1, value: item.value });
+        await route.abort('failed');
+        return;
+      }
+    }
     // A lost response or competing writer can legitimately resend an old base: the real API returns 409.
     const stale = items.find((item) => item.baseVersion !== (server.get(item.key)?.version ?? 0));
     if (stale) {
@@ -132,6 +148,63 @@ async function verifiedServer(page: Page, server: Map<string, ServerStateItem>, 
       body: JSON.stringify({ ok: true, items: items.map((item) => ({ key: item.key, version: server.get(item.key)!.version, exists: true })) }) });
   });
 }
+
+test('keeps an unacknowledged intent conflicted when the server committed but the response was lost', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !/409|net::ERR_FAILED/.test(message.text())) errors.push(message.text());
+  });
+  const key = 'fitfocus_data_google-e2e-sub_settings';
+  const server = new Map<string, ServerStateItem>();
+  let releaseFirstWrite: () => void = () => {};
+  let markFirstWriteStarted: () => void = () => {};
+  const firstWriteResponse = new Promise<void>((resolve) => { releaseFirstWrite = resolve; });
+  const firstWriteStarted = new Promise<void>((resolve) => { markFirstWriteStarted = resolve; });
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  const options = {
+    settingsRequests: [] as number[],
+    settingsPayloads,
+    loseFirstSettingsResponse: true,
+    settingsSuccessGate: { started: markFirstWriteStarted, wait: firstWriteResponse },
+  };
+
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+  try {
+    await page.getByRole('button', { name: /^Светлая/ }).click();
+    await firstWriteStarted;
+    const sending = await storedSettings(page);
+    expect(sending.operations).toHaveLength(1);
+    expect(sending.operations[0].status).toBe('sending');
+    const originalOpId = sending.operations[0].opId;
+    const originalPayload = sending.operations[0].value;
+    expect(originalPayload).toContain('"theme":"light"');
+
+    releaseFirstWrite();
+    await expect.poll(async () => (await storedSettings(page)).operations[0]?.status, { timeout: 15_000 })
+      .toBe('conflicted');
+
+    const saved = await storedSettings(page);
+    const operation = saved.operations[0];
+    expect(saved.operations).toHaveLength(1);
+    expect(operation).toMatchObject({ opId: originalOpId, type: 'put', status: 'conflicted', reason: 'server-version-conflict' });
+    expect(operation.value).toBe(originalPayload);
+    expect(saved.value).toBe(originalPayload);
+    expect(saved.confirmedVersion).toBe(0);
+    expect(operation.serverSnapshot).toEqual({ value: originalPayload, version: 1, exists: true });
+    expect(settingsPayloads).toHaveLength(2);
+    expect(settingsPayloads[0]).toEqual({ baseVersion: 0, value: originalPayload });
+    expect(settingsPayloads[1]).toEqual(settingsPayloads[0]);
+    expect(server.get(key)).toEqual({ version: 1, value: originalPayload });
+    await expect(page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт' })).toBeVisible();
+    await expect(page.getByText('Cloud: saved', { exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  } finally {
+    releaseFirstWrite();
+  }
+});
 
 test('verified sender confirms settings and preserves them after reload', async ({ page }, testInfo) => {
   const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
