@@ -4916,5 +4916,8 @@ Chromium/Firefox/WebKit; concurrent multi-tab без Web Locks 7/7 browser/PWA
 проектов; settings reload и quota rollback 6/6 на desktop WebKit, iPhone Safari
 и iPhone PWA; preview-origin 3/3 на WebKit; задержанный family state read 1/1
 на iPhone Safari. Здесь менялись E2E фикстуры/ожидания, production-код не
-затронут. Следующий release gate — typecheck, публикация точного HEAD, полный
-CI и проверки staging/device; до них P0.8/P0.9 остаются открытыми.
+затронут. Изменения закоммичены и отправлены в `fix/durable-outbox` как
+[`e4ced68`](https://github.com/Michael-edel/FitFocus/commit/e4ced6861cfeb6038e9a8e28f0c8c3ff91b2b0d0).
+Точный [CI run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
+поставлен в очередь для этого SHA. Следующие gates — полный CI,
+staging/device; до них P0.8/P0.9 остаются открытыми.
