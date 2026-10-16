@@ -4668,3 +4668,20 @@ Chromium, Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и
 `git diff --check` прошли; CI нового опубликованного HEAD запускается после
 push. Общий P0.5, оставшиеся callbacks, staging, полный lifecycle и выпуск
 остаются открытыми.
+
+## P0.5 — поздний family-member PATCH после same-account login, 16.10.2026
+
+Добавлен acceptance для удержанного `PATCH /api/family/member`: пока запрос
+старой server session ожидает ответа, в соседней вкладке тот же account входит
+с новым `serverSessionId` и загружает новую семью. После освобождения старого
+ответа прежняя вкладка сохраняет session notice и не запускает новый family GET;
+семейный экран новой сессии остаётся неизменным. Фикстура проверяет исходные
+`familyId` и session proof. Production-код не менялся, подтверждённого runtime
+дефекта не обнаружено.
+
+Новый same-account acceptance вместе с проверками captured family target и A → B
+прошёл 9/9 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`). Полный
+typecheck и `git diff --check` прошли. CI #1413 проверяет опубликованный HEAD
+`cb44a2b` и не включает этот локальный тест; точный CI follow-up запускается
+после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
+открытыми.

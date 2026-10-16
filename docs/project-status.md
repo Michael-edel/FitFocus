@@ -1,22 +1,15 @@
 # Текущее состояние FitFocus
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
-здесь, результаты проверок — в [журнале](stabilization-progress.md). Последний
-кодовый follow-up [`5042db8`](https://github.com/Michael-edel/FitFocus/commit/5042db8adca01a58bcaff9c044d516b3d15394fb)
-сверяет полный durable-session tuple (`authFence`, `accountId`, `serverSessionId`,
-`sessionEpoch`) с `loginGuard`. Это закрывает воспроизведённый случай, когда
-черновик AI Council оставался в старой вкладке после повторного входа того же
-аккаунта; E2E прошёл 3/3 desktop engines. Семь связанных account-switch E2E
-прошли на Chromium; unit suite — 1318/1318, root/domain/storage typecheck и
-production build прошли. Проверка использует mock API; точный CI текущего HEAD,
-реальная среда и общий P0.4 остаются открытыми. Дополнительно
-Поздний family-context GET, создание invite, создание семьи и вступление в семью
-после повторной авторизации того же account прошли по 3/3 на desktop
-Chromium/Firefox/WebKit. Вместе с прежним A → B family-join acceptance выборка
-из пяти сценариев прошла 15/15 без retries; session notice сохраняется, старый
-join response не меняет экран и не вызывает повторный family GET или achievement.
-Предыдущий typecheck прошёл; полный typecheck текущего follow-up и
-`git diff --check` тоже прошли. Точный CI текущего HEAD запускается после push.
+здесь, результаты проверок — в [журнале](stabilization-progress.md). Опубликованный
+HEAD [`cb44a2b`](https://github.com/Michael-edel/FitFocus/commit/cb44a2b2c5802297f36d23d2dbc3326a9c87f316)
+содержит same-account acceptance для семейного context GET, invite, create и
+join; выборка этих сценариев вместе со смежным A → B family-join прошла 15/15
+на desktop Chromium/Firefox/WebKit. Точный CI #1413 для этого HEAD сейчас
+выполняет E2E. Следующий локальный follow-up добавляет поздний family-member
+PATCH после same-account reauthentication: новый сценарий и две соседние проверки
+прошли 9/9 на тех же engines; полный typecheck и `git diff --check` прошли.
+Production-код не менялся; новый exact CI нужен после отправки follow-up.
 CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
 исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
 новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.

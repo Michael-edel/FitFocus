@@ -249,7 +249,10 @@ staging и реальные браузерные сессии остаются �
   проверяет задержанный member `PATCH` после входа B: 3/3 на desktop Chromium,
   Firefox и WebKit без retries; после позднего ответа не запускается новая
   загрузка семьи A. Trace первого полного прогона выявил ошибочную стартовую
-  точку baseline, исправленную в этом follow-up. Полный CI ещё не подтверждён.
+  точку baseline, исправленную в этом follow-up. Дополнительно поздний PATCH
+  member после same-account login с новым `serverSessionId` не перечитывает
+  прежнюю семью и не меняет новую; тот сценарий вместе с проверками captured
+  family target и A → B прошёл 9/9 на тех же engines. Полный CI ещё не подтверждён.
   Покрытие остальных callbacks всё ещё неполное.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.

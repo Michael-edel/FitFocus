@@ -1002,6 +1002,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     Вместе с A → B join и тремя same-account проверками context/invite/create
     выборка прошла 15/15 на desktop Chromium/Firefox/WebKit без retries.
     Точный CI этого follow-up ожидает push; общий P0.5 остаётся открытым.
+  - [x] Удержать PATCH цели участника, повторно войти в тот же account с новой
+    server session и отпустить старый ответ: старая вкладка остаётся под session
+    notice, не перечитывает семью и не изменяет новый семейный экран. Проверены
+    исходные familyId и session id; три member-update acceptance прошли 9/9 на
+    desktop Chromium/Firefox/WebKit без retries. Typecheck и diff check прошли;
+    точный CI follow-up ожидает push. Остальные callbacks/staging открыты.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;
