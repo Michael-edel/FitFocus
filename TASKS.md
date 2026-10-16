@@ -20,6 +20,14 @@ legacy evidence — отдельным unit lifecycle тестом. Локаль
 browser/PWA-проектов; сценарий остановки sender-вкладки и повторного lease claim
 также прошёл 7/7 проектов. Четыре targeted unit suite прошли 160/160; typecheck
 и diff check прошли.
+Локальный кодовый коммит [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
+исправляет UI gate во время auth-паузы: изменение `authFence` больше не скрывает
+настройки той же account/session identity. E2E проверяет новую локальную правку,
+сохранение обоих opId без повторной отправки в паузе и последовательное
+подтверждение после свежего proof; 7/7 browser/PWA проектов прошли без retries.
+Targeted unit — 9/9, `npm run typecheck`, production build и `git diff --check`
+прошли. Это mock API acceptance; точный CI этого SHA, OAuth, staging и выпуск
+не подтверждены.
 Для объединённого HEAD необходим полный точный CI; staging, выпуск и интеграция
 в защищённую `main` не подтверждены.
 В плане остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока
@@ -1404,6 +1412,13 @@ legacy-ключ не используется для новой очереди �
     видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий
     прошёл 7/7 Playwright-проектов без retries в коммите
     [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19).
+  - [x] Проверить `401 → новая правка → login`: локальный follow-up
+    [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
+    сохраняет доступ к локальным настройкам в auth-паузе после обновления
+    `authFence`, сохраняет новую операцию под прежним аккаунтом и отправляет
+    обе операции с исходными opId последовательно после свежего proof.
+    7/7 desktop/mobile/PWA E2E, unit 9/9, typecheck и production build прошли;
+    это mock API, точный CI и staging остаются открыты.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

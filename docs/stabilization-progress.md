@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — локальные правки остаются доступны во время auth-паузы
+
+После фактического 401 тест `401 → новая правка → login` падал только на
+iPhone Safari: приложение повышало `authFence`, а `AppWorkspace` принимал
+изменение fence за смену account session и скрывал экран настроек. Fence
+по-прежнему проверяет свежесть guarded reads/commits; scope экрана и черновиков
+теперь использует account, server session и session epoch. Это сохраняет локальный
+экран при паузе, пока sender не получает свежий proof.
+
+Коммит [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
+добавляет регрессионный unit и браузерный acceptance: после 401 новая Violet
+settings правка остаётся в IndexedDB, отправка стоит на паузе, затем исходные
+две операции с теми же opId подтверждаются последовательно под тем же аккаунтом
+и новой server session (baseVersion 0, затем 1; confirmedVersion 2). Все 7
+Playwright browser/PWA проектов прошли без retries; account-scoped UI unit — 9/9,
+`npm run typecheck`, production build и `git diff --check` прошли. Проверка
+использует mock API и browser emulation, не реальный OAuth, устройство или staging.
+Точный CI этого SHA ещё не подтверждён и должен быть проверен после push.
+
 ## 16.10.2026 — atomic rollback при IndexedDB transaction abort
 
 Коммит [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19)

@@ -137,6 +137,14 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Строка `401 → новая правка → login` проверена локальным кодовым коммитом
+[`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c):
+UI той же account/session identity остаётся доступен после auth-паузы и изменения
+`authFence`; новая операция хранится с исходным opId и не отправляется до свежего
+proof. После proof обе операции последовательно подтверждаются под тем же
+аккаунтом. Локальная mock API матрица прошла 7/7 без retries; точный CI и staging
+не подтверждены.
+
 Локальная проверка в коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a),
 `e2e/pwa-offline-durability.spec.ts`, покрывает первую строку
 для PWA: после offline записи новая контролируемая Service Worker страница

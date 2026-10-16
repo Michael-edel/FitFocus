@@ -4,6 +4,12 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
 draft с base `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
+Локальный follow-up [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
+исправляет скрытие UI во время auth-паузы: смена `authFence` не сбрасывает
+локальный экран той же сессии. Сценарий `401 → новая правка → login` прошёл
+7/7 browser/PWA проектов без retries; targeted unit — 9/9, typecheck и
+production build прошли. Это локальный mock API результат; точный CI ещё не
+подтверждён, staging, OAuth, выпуск и `main` остаются открыты.
 Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
 добавляет offline cold-reopen тест PWA: настоящий Service Worker
 сохраняет ту же settings operation в IndexedDB и отправляет её после возврата
