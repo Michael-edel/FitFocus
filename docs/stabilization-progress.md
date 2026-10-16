@@ -17,7 +17,10 @@ barrier увеличено до 30 секунд, сохранив обязате
 Повторный прогон прошёл 7/7: desktop Chromium/Firefox/WebKit, Android
 Chrome/PWA, iPhone Safari/PWA. Дополнительно прошли 128/128 тестов
 `legacy_migration` и `legacy_queue`, `npm run typecheck` и `git diff --check`.
-Новый точный CI ожидает публикации follow-up; staging и остальные legacy
+Follow-up опубликован в [`d11e8f9`](https://github.com/Michael-edel/FitFocus/commit/d11e8f92aea4aac4a64db4701da22bac39967900).
+Точный [CI run #1423](https://github.com/Michael-edel/FitFocus/actions/runs/38855720907)
+ожидает в очереди; старый run #1421 продолжает выполняться на `706910f`, а
+дублирующий push-run #1422 отменён concurrency. Staging и остальные legacy
 lifecycle cases остаются открытыми.
 
 ## 16.10.2026 — повторный вход того же аккаунта из другой вкладки

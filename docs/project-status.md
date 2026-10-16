@@ -3,12 +3,14 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 Последний опубликованный HEAD —
-[`706910f`](https://github.com/Michael-edel/FitFocus/commit/706910f045269b5dfedd2d1aacdc7f995213e3f3)
+[`d11e8f9`](https://github.com/Michael-edel/FitFocus/commit/d11e8f92aea4aac4a64db4701da22bac39967900)
 в ветке `fix/durable-outbox`; PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся открытым draft в `fix/state-generations`. Его [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
-всё ещё выполняется на `706910f`: audit, schema/privacy/auth/API guards, unit,
-три typecheck и production build прошли; E2E и последующие rollback/CAS checks
-ещё не завершены.
+остаётся открытым draft в `fix/state-generations`. Точный [CI run #1423](https://github.com/Michael-edel/FitFocus/actions/runs/38855720907)
+создан для этого HEAD и ожидает в очереди. Старый [run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
+остаётся `in_progress` на `706910f`; на нём прошли audit, schema/privacy/auth/API
+guards, unit, три typecheck и production build, но E2E и последующие rollback/CAS
+checks ещё не завершены. Дублирующий run #1422 для push event был отменён политикой
+concurrency.
 Более ранний [run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
 для `e4ced68` отменён после старта более нового PR workflow, поэтому его нельзя
 считать завершённой проверкой.
@@ -20,8 +22,8 @@
 причиной `put-without-value`, не создаёт операцию и не отправляется даже после
 открытия writer fence, поэтому migration status остаётся `partial`. Для нового
 legacy acceptance прошли 128 профильных unit, `npm run typecheck` и
-`git diff --check`. Оба code follow-up и документация пока локальны; текущий
-remote CI #1421 их не содержит. P0.8/P0.9 остаются открытыми для остальных
+`git diff --check`. Оба code follow-up и документация опубликованы в `d11e8f9`;
+точный CI этого HEAD ожидает в очереди. P0.8/P0.9 остаются открытыми для остальных
 lifecycle-сценариев, полного CI, staging/device и release-приёмки. Локальная
 mock-проверка не подтверждает staging или выпуск.
 

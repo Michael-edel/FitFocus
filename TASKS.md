@@ -1,9 +1,10 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 16.10.2026. Текущая локальная ветка — `durable-outbox`, на четыре
-локальных коммита впереди опубликованного `706910f`. Стабилизация P0.8 продолжается:
-последний [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
-прошёл audit, guards, unit, typecheck и production build; E2E всё ещё выполняется.
+Обновлено: 16.10.2026. Ветка `fix/durable-outbox` опубликована на
+[`d11e8f9`](https://github.com/Michael-edel/FitFocus/commit/d11e8f92aea4aac4a64db4701da22bac39967900).
+Точный [CI run #1423](https://github.com/Michael-edel/FitFocus/actions/runs/38855720907)
+поставлен в очередь; старый run #1421 всё ещё выполняется на `706910f`.
+Стабилизация P0.8 продолжается:
 Локальные acceptance потерянного HTTP-ответа и повреждённой legacy-записи прошли
 по 7/7 browser/PWA-проектам без retries; новый migration сценарий также прошёл
 128 профильных unit, `npm run typecheck` и `git diff --check`.
@@ -1263,7 +1264,7 @@ all-client Service Worker fence, атомарные migration items и quarantin
     не создана и не отправлена, статус миграции остаётся `partial` даже после
     открытия writer fence. Матрица прошла 7/7 без retries на коммите
     [`2e7f024`](https://github.com/Michael-edel/FitFocus/commit/2e7f024b0706d82155859e7f9955d033bf338972);
-    полный CI этого SHA ожидает push.
+    полный CI `d11e8f9` ожидает начала run #1423.
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
