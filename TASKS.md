@@ -2,9 +2,14 @@
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft. Опубликованная ветка `fix/durable-outbox` заканчивается на
-`d3d8cbd`; локальные follow-up `1543cc9` и `e4a078f` ещё не отправлены. CI run
+`d3d8cbd`; локальные follow-up `1543cc9`, `e4a078f` и `f066fde` ещё не отправлены. CI run
 [`38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
-на `d3d8cbd` прошёл unit/typecheck/build и продолжает E2E. Локальный полный
+на `d3d8cbd` завершился с 816 E2E passed / 254 skipped / 1 failed; все проверки
+до E2E прошли. Сбой — слишком широкая проверка `Cloud: pending` в Android PWA:
+она требовала пустую очередь аккаунта, хотя проверяла только settings operation.
+В `f066fde` проверка badge соотнесена со всей очередью аккаунта. Целевой тест
+прошёл 13/13 локальных повторов на четырёх browser-профилях, `npm run typecheck`
+прошёл; точный CI исправленного HEAD запускается после push. Полный
 `family-session.spec.ts` на актуальном стеке прошёл 33/33 на трёх desktop engines.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный

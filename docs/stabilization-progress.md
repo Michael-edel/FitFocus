@@ -5205,3 +5205,18 @@ Chromium, Firefox и WebKit без retries. Root, domain-strict и storage-stric
 typecheck, `git diff --check` прошли. Проверка локальна на mock API; staging и
 общий P0.4/P0.5 аудит остаются открытыми. Точный CI локального стека ожидает
 push.
+
+## P0.9 — сузить Android PWA Cloud badge acceptance, `f066fde`, 16.10.2026
+
+Полный CI run [`38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
+для опубликованного `d3d8cbd` завершился: audit, guards, unit, typecheck и build
+успешны; E2E — 816 passed / 254 skipped / 1 failed. Сбой возник в Android PWA
+тесте принятия серверного settings-конфликта: проверка подтверждала, что
+операция `_settings` удалена и серверное значение применено, но дополнительно
+требовала отсутствия любых account-wide pending операций. Cloud badge
+агрегирует очередь всего аккаунта. Проверка теперь сравнивает badge с
+pending/sending операциями аккаунта, оставляя строгие assertions для settings.
+Целевой тест прошёл 13/13 без retries на desktop Chromium, Firefox, WebKit и
+Android PWA; `npm run typecheck` и `git diff --check` прошли. Исправление меняет
+только тест. Точный CI нового SHA запускается после push; staging и полный P0.9
+release acceptance остаются открытыми.

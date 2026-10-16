@@ -4,20 +4,24 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; опубликованная ветка `fix/durable-outbox` заканчивается
-на `d3d8cbd`. Локальные follow-up коммиты `1543cc9` и `e4a078f` ещё не
-отправлены; они связывают family callbacks с исходной неделей запроса и
-сохраняют корректное восстановление shopping list после её смены.
+на `d3d8cbd`. Локальные follow-up коммиты `1543cc9`, `e4a078f` и `f066fde` ещё не
+отправлены; они связывают family callbacks с исходной неделей запроса,
+сохраняют корректное восстановление shopping list после её смены и исправляют
+слишком широкое ожидание Cloud badge в Android PWA E2E.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
 Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
 прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
 обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
 [`#38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
-для `d3d8cbd` успешно прошёл dependency audit, schema/privacy/auth/API gates,
-unit, все typecheck и production build; E2E выполняются. Для локального
+для `d3d8cbd` завершился с 816 E2E passed / 254 skipped / 1 failed; остальные
+gates прошли. Единственный сбой — слишком широкое ожидание отсутствия
+account-wide `Cloud: pending` после принятия настроек; исправлено в локальном
+`f066fde`. Целевой сценарий прошёл 13/13 повторов на desktop Chromium, Firefox,
+WebKit и Android PWA; root typecheck прошёл. Для локального
 `e4a078f` полный `family-session.spec.ts` прошёл 33/33, включая недельный
-rollover 9/9 на Chromium/Firefox/WebKit; root и два strict typecheck прошли.
-Точный CI этого локального стека начнётся после push. Полный
+rollover 9/9 на Chromium/Firefox/WebKit; два strict typecheck прошли. Точный CI
+исправленного стека начнётся после push. Полный
 `owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
 `/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
 Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff
