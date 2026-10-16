@@ -13,9 +13,10 @@ Chromium, Firefox, Android Chrome и Android Chrome PWA (`workers=1,retries=0`).
 Три WebKit профиля пропущены: Playwright завершает и offline reload, и cold
 offline navigation внутренней ошибкой WebKit; ошибки продукта по этим
 профилям результат не устанавливает. `npm run typecheck` и `git diff --check`
-прошли. Коммит пока локальный и не опубликован; полный CI предыдущего SHA
-`1d7fc1c` ещё выполняется и не содержит этот тест. Реальное устройство, staging
-и полный P0.9 остаются открытыми.
+прошли. Коммит опубликован в `fix/durable-outbox`. Полный run #1435 на
+`1d7fc1c` отменён после обновления PR; run #1437 на `f4d170b` был в работе
+при обновлении журнала. Последующий документационный коммит потребует CI на
+новом HEAD. Реальное устройство, staging и полный P0.9 остаются открытыми.
 
 ## 16.10.2026 — полный quarantine normalizer и global legacy evidence после удаления
 

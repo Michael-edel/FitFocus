@@ -9,8 +9,8 @@ draft с base `fix/state-generations`; работа в ветке `fix/durable-o
 сохраняет ту же settings operation в IndexedDB и отправляет её после возврата
 сети. Прошли 4/4 Chromium, Firefox и Android Chrome/PWA профиля; три WebKit
 профиля пропущены из-за внутренней ошибки Playwright при offline навигации.
-Коммит пока не опубликован. Полный CI на SHA `1d7fc1c` ещё выполняется,
-включая E2E; он не содержит эти локальные изменения.
+Коммит опубликован в `fix/durable-outbox`; полный E2E для актуального HEAD
+ожидает подтверждения.
 Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
 old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
 глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:
@@ -1445,3 +1445,7 @@ production build и целевые Push E2E: 4 passed / 2 штатно skipped. 
 При следующей сверке обновлять дату, SHA и рабочую версию; прошлые результаты
 сохранять с их ревизиями. Правила разработки — в [CONTRIBUTING](../CONTRIBUTING.md),
 правила помощника — в [AGENTS](../AGENTS.md).
+Проверка опубликованного коммита [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+прошла локально; полный run #1435 для родительского SHA `1d7fc1c` отменён после
+обновления PR. Run #1437 на `f4d170b` был в работе на момент этой записи;
+документационное обновление ниже потребует CI на новом HEAD.

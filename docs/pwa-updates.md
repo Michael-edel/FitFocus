@@ -16,8 +16,8 @@ baseVersion; после восстановления сети сервер пр�
 outbox очищается. Локально прошло 4/4 профиля Chromium, Firefox и Android
 Chrome/PWA. Три WebKit профиля пропущены из-за внутренней ошибки Playwright при
 offline reload/cold navigation. Это browser offline emulation с локальным HTTP
-fixture, не проверка физического устройства или staging; коммит пока не включён
-в опубликованную ветку.
+fixture, не проверка физического устройства или staging. Коммит опубликован
+в `fix/durable-outbox`; full CI для точного PR SHA остаётся обязательной проверкой.
 
 Код опубликован в `8d32f12279039e5d549c6e3534f741b601084812`.
 [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)

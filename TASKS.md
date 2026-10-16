@@ -6,8 +6,10 @@
 добавляет сценарий P0.9 «offline → холодное повторное открытие PWA → online»:
 локально он прошёл Chromium, Firefox и Android Chrome/PWA (4/4); три профиля
 WebKit пропущены из-за внутренней ошибки Playwright при навигации offline.
-Коммит пока не опубликован. Полный CI SHA `1d7fc1c` выполняется, его E2E ещё не
-завершён; staging и выпуск не подтверждены.
+Коммит опубликован в `fix/durable-outbox`. Старый run #1435 на `1d7fc1c`
+отменён после обновления PR; run #1437 проверял SHA `f4d170b` и был в работе
+при обновлении этого статуса. После следующего документационного коммита нужен
+CI для нового HEAD; staging и выпуск не подтверждены.
 Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
 на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
 legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
@@ -1392,7 +1394,7 @@ legacy-ключ не используется для новой очереди �
     подтвердить прежние opId/payload/baseVersion в IndexedDB и ack той же
     операции после возврата сети. Прошло 4/4 Chromium/Firefox/Android Chrome
     профилей; 3 WebKit профиля пропущены из-за внутренней ошибки Playwright на
-    offline navigation. Коммит пока не опубликован и не заменяет device/staging.
+    offline navigation. Коммит опубликован; этот mock/browser тест не заменяет device/staging.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 
