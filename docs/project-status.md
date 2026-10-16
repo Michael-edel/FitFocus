@@ -4,22 +4,20 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; последний локальный code commit —
-[`f5f5ebd`](https://github.com/Michael-edel/FitFocus/commit/f5f5ebd1a2f6a9984b5dfe66c1e17607a7e2c3e9).
-Статусная документация обновлена; точный полный CI опубликованного snapshot ещё ожидается.
+[`2d30fdc`](https://github.com/Michael-edel/FitFocus/commit/2d30fdc2ddc4c460ed95165e9c2ae2710bb10c29).
+Последний полный опубликованный CI — [run #1475](https://github.com/Michael-edel/FitFocus/actions/runs/38954705906)
+на `ba3ee94`: 838 E2E прошли, 255 пропущены, шесть упали в одном сценарии
+legacy profile recovery. Audit, guards, unit, три typecheck и build прошли.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Последний опубликованный полный
-[CI run #1473](https://github.com/Michael-edel/FitFocus/actions/runs/38947315275)
-для `244b9db` прошёл audit, guards, unit, три typecheck и build, но завершился
-840 успешными E2E, 255 пропусками и четырьмя сбоями. В локальном follow-up
-`f5f5ebd` исправлена синхронизация PWA после офлайн-повторного открытия:
-при восстановлении сети приложение повторяет обычную guarded-проверку сессии,
-а PWA сценарий прошёл на всех семи браузерных профилях. Также устранена гонка
-между баннером обновления и legacy recovery, тест профиля теперь явно
-возвращает страницу на передний план, а weekly WebKit тест учитывает только
-строго совпадающий ограниченный сигнал отмены GET `/api/me` при reload.
-Один оставшийся CI сбой профиля пока не воспроизведён локально; результат
-повторного полного CI ещё неизвестен.
+подключён, но общий P0 ещё открыт. В run #1475 все шесть ошибок возникли,
+потому что legacy migration тест требовал необязательный update banner,
+который отсутствовал в этих browser profiles. В `2d30fdc` тест закрывает
+баннер, если он уже появился, и прокручивает recovery control в центр, чтобы
+поздний баннер не перекрывал клик. Сценарий прошёл 21/21 на семи профилях
+(три повтора, без retries); прошли также 1,320 unit tests, typecheck,
+admin guards и `git diff --check`. Полный CI точного опубликованного follow-up
+ещё ожидается.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.

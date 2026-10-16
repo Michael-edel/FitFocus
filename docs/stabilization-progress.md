@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — необязательный PWA update banner при восстановлении профиля, 17.10.2026
+
+Полный CI опубликованного snapshot `ba3ee9421c686f80b8547ab46c2b1cbb11e41d3c`
+завершился в [run #1475](https://github.com/Michael-edel/FitFocus/actions/runs/38954705906)
+с 838 passed / 255 skipped / 6 failed. Audit, schema/privacy/auth/API guards,
+1320 unit tests, три typecheck и production build прошли. Все шесть ошибок были
+в одном тесте `resolves a legacy profile through its guarded profile CAS endpoint`:
+он ожидал update banner, который необязателен и не показывался в desktop Chromium,
+desktop Firefox, Android Chrome, Android PWA, iPhone Safari и iPhone PWA.
+
+В [`2d30fdc`](https://github.com/Michael-edel/FitFocus/commit/2d30fdc2ddc4c460ed95165e9c2ae2710bb10c29)
+проверка закрывает баннер, если он уже появился, и прокручивает recovery summary
+в центр страницы. Так сценарий работает как при отсутствии уведомления, так и при
+его позднем появлении над страницей. Изменён только E2E-тест. Он прошёл 21/21
+(`--workers=1 --retries=0 --repeat-each=3`) на семи desktop/mobile/PWA профилях;
+также прошли 1320 unit tests, `npm run typecheck` (включая admin guards) и
+`git diff --check`. Точный полный CI опубликованного follow-up ещё ожидается;
+P0.8/P0.9 и общий P0 остаются открытыми.
+
 ## P0.8/P0.9 — четыре E2E сбоя CI #1473, 17.10.2026
 
 Опубликованный HEAD `244b9db5fe0804c17bef3a2d85306af3c6e4f6ca` завершил
