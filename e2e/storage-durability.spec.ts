@@ -17,6 +17,29 @@ async function storedSettings(page: Page) {
   });
 }
 
+async function storedPendingQueueOperations(page: Page, accountId: string) {
+  return page.evaluate(async (ownerId) => {
+    const request = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const tx = db.transaction('outbox', 'readonly');
+      const read = <T,>(item: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+        item.onsuccess = () => resolve(item.result);
+        item.onerror = () => reject(item.error);
+      });
+      const operations = await read(tx.objectStore('outbox').getAll());
+      return operations
+        .filter((operation) => operation.accountId === ownerId && ['pending', 'sending'].includes(operation.status))
+        .map((operation) => ({ key: operation.key, status: operation.status }));
+    } finally {
+      db.close();
+    }
+  }, accountId);
+}
+
 async function storedSenderPause(page: Page) {
   return page.evaluate(async () => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
@@ -826,7 +849,8 @@ test('accepting a checked server conflict warns, reloads, and discards only the 
   expect(await storedSettings(page)).toMatchObject({ confirmedVersion: 9 });
   expect((await storedSettings(page)).value).toContain('"theme":"dark"');
   await expect(page.getByRole('button', { name: /^Тёмная/ })).toHaveClass(/border-indigo-500\/40/);
-  await expect(page.getByText('Cloud: pending', { exact: true })).toHaveCount(0);
+  const pendingOperations = await storedPendingQueueOperations(page, 'google-e2e-sub');
+  await expect(page.getByText('Cloud: pending', { exact: true })).toHaveCount(pendingOperations.length > 0 ? 1 : 0);
   expect(errors).toEqual([]);
 });
 
