@@ -19,6 +19,8 @@ async function saved(page: Page) {
         read(tx.objectStore('outbox_meta').get('active-session'))]);
       return { value: value?.value as string | undefined,
         pause: active?.pause as string | undefined,
+        activeSession: active ? { accountId: active.accountId as string | undefined,
+          serverSessionId: active.serverSessionId as string | undefined, sessionEpoch: active.sessionEpoch as string | undefined } : null,
         stateOperationCount: operations.filter(op => op.resource !== 'profile').length,
       operations: operations.filter(op => op.key === key) as Array<{ opId: string; status: string; resource: string; baseVersion: number; value: string; attempt?: { sessionEpoch: string; attemptId: string; startedAtMs: number }; serverSnapshot?: { version: number } }> };
     } finally { db.close(); }
@@ -323,8 +325,18 @@ test('a clean refresh replaces the profile editor and subsequent edits use its o
   const { errors, mutations } = await setup(page, 'refresh');
   await openApp(page, '/#settings'); const name = page.getByPlaceholder('Как к вам обращаться');
   await expect(name).toHaveValue(profile.name);
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(name).toHaveValue('Cloud refreshed');
+  const activeSession = (await saved(page)).activeSession;
+  expect(activeSession).toMatchObject({ accountId: account, serverSessionId: sid });
+  await page.bringToFront();
+  await page.evaluate(() => {
+    if (document.visibilityState !== 'visible') throw new Error(`Expected a visible page, got ${document.visibilityState}`);
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  try {
+    await expect(name).toHaveValue('Cloud refreshed');
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\nactiveSession=${JSON.stringify((await saved(page)).activeSession)}`);
+  }
   expect((await saved(page)).operations).toEqual([]);
   await name.fill('После обновления'); await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
   await expect.poll(async () => (await saved(page)).value).toContain('После обновления');

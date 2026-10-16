@@ -138,6 +138,7 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
 
     server.setStateWriteDisconnected(false);
     await context.setOffline(false);
+    await expect(page.getByRole('button', { name: /^Светлая/ })).toBeVisible({ timeout: 20_000 });
     await expect.poll(() => server.stateWriteKeys, { timeout: 20_000 })
       .toContain('fitfocus_data_google-e2e-sub_settings');
     await expect.poll(async () => (await storedSettings(page)).operations.length, { timeout: 20_000 }).toBe(0);

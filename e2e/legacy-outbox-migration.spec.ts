@@ -488,10 +488,11 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
 
     const updateNotice = page.getByRole('status', { name: 'Обновление FitFocus' });
     const postponeUpdate = updateNotice.getByRole('button', { name: 'Позже' });
-    if (await postponeUpdate.isVisible().catch(() => false)) {
-      await postponeUpdate.click();
-      await expect(updateNotice).toBeHidden();
-    }
+    // The old PWA bundle reports its update asynchronously. Waiting for this
+    // notice prevents it from appearing over the recovery control mid-click.
+    await expect(updateNotice).toBeVisible();
+    await postponeUpdate.click();
+    await expect(updateNotice).toBeHidden();
     await page.locator('[data-state-notice-region] details summary').click();
     const group = page.getByRole('region', { name: 'Профиль' });
     const keepLocal = group.getByRole('button', { name: 'Оставить последнюю локальную версию' });

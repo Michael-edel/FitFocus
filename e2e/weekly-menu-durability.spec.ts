@@ -38,11 +38,22 @@ function gate() { let release!: () => void;
   const wait = new Promise<void>(resolve => { release = resolve; }); return { wait, release: () => release() }; }
 async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-offline' | 'old-profile-server' = 'normal') {
   const errors: string[] = []; const counts = { ai: 0, items: 0, fulfilled: 0, profileAttempts: 0, profileFailures: 0, profileSuccesses: 0, recovered: 0 };
+  const expectedWebKitApiMeWarnings: string[] = [];
+  const isWebKit = await page.evaluate(() => /AppleWebKit/i.test(navigator.userAgent) && !/(Chrome|Chromium|Edg)/i.test(navigator.userAgent));
+  const isExpectedWebKitApiMeWarning = (text: string) => mode === 'profile-offline' && isWebKit
+    && /^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(text);
   const held = gate(), recoveredProfile = gate(); let active = true, cloudAvailable = mode !== 'profile-offline';
   let profile: ReturnType<typeof buildMockProfile> & { version: number; aiPlan: { weeklyMenu?: WeeklyMenu } } = { ...buildMockProfile(), version: 2 };
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => {
+    if (isExpectedWebKitApiMeWarning(error.message)) expectedWebKitApiMeWarnings.push(error.message);
+    else errors.push(error.message);
+  });
   page.on('console', async message => {
     if (message.type() !== 'error' && message.type() !== 'warning') return;
+    if (isExpectedWebKitApiMeWarning(message.text())) {
+      expectedWebKitApiMeWarnings.push(message.text());
+      return;
+    }
     if (mode === 'profile-offline' && counts.profileFailures > 0 && new URL(message.location().url, 'http://127.0.0.1').pathname === '/api/profile'
       && message.text().startsWith('Failed to load resource:') && message.text().includes('503')) return;
     if (message.text().startsWith('Weekly AI reporting failed')) {
@@ -113,7 +124,7 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   });
   await openApp(page, '/#plan'); await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#plan$/);
   await expect(page.getByRole('button', { name: 'Обновить план', exact: true })).toBeEnabled();
-  return { errors, counts, release: held.release, close: () => { active = false; },
+  return { errors, expectedWebKitApiMeWarnings, counts, release: held.release, close: () => { active = false; },
     restoreCloud: () => { cloudAvailable = true; }, releaseProfile: recoveredProfile.release, cloudProfile: () => profile };
 }
 async function generate(page: Page) {
@@ -127,8 +138,10 @@ async function settings(page: Page) {
   await button.click();
   await expect(page.getByPlaceholder('Как к вам обращаться')).toBeVisible();
 }
-async function healthy(page: Page, errors: string[]) {
-  await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]);
+async function healthy(page: Page, errors: string[], expectedWebKitApiMeWarnings: string[] = []) {
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(2);
 }
 
 test('weekly menu and shopping intent are delivered by one durable scoped profile operation', async ({ page }, info) => {
@@ -183,7 +196,7 @@ test('weekly menu preserves an independent profile edit made while AI is pending
   } finally { release(); }
 });
 test('weekly menu resumes the same durable profile operation after a cloud failure and reload', async ({ page }, info) => {
-  const { errors, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
+  const { errors, expectedWebKitApiMeWarnings, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
   const failedProfileResponse = page.waitForResponse(response => {
     const request = response.request();
     return new URL(response.url()).pathname === '/api/profile'
@@ -207,7 +220,7 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     await expect.poll(async () => (await saved(page)).generated).toBe(0);
     expect(cloudProfile().aiPlan?.weeklyMenu?.days).toHaveLength(7); expect(counts.items).toBe(0);
     const breakfast = page.getByText(/Проверенная овсянка/).first();
-    await breakfast.scrollIntoViewIfNeeded(); await expect(breakfast).toBeInViewport(); await healthy(page, errors);
+    await breakfast.scrollIntoViewIfNeeded(); await expect(breakfast).toBeInViewport(); await healthy(page, errors, expectedWebKitApiMeWarnings);
     await page.screenshot({ path: info.outputPath('weekly-menu-recovered.png') });
   } finally { releaseProfile(); }
 });

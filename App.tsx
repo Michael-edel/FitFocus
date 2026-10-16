@@ -1180,6 +1180,18 @@ const App: React.FC = () => {
     return () => { authBootstrapAttemptRef.current += 1; };
   }, [bootstrapAuth]);
 
+  // A PWA reopened while offline cannot confirm its cloud session. Retry the
+  // normal guarded bootstrap when connectivity returns so its durable outbox
+  // can resume without treating the cached account identity as proof.
+  useEffect(() => {
+    if (authState !== 'auth_choice' || googleMe?.sub) return;
+    const retryBootstrapWhenOnline = () => {
+      if (navigator.onLine) void bootstrapAuth();
+    };
+    window.addEventListener('online', retryBootstrapWhenOnline);
+    return () => window.removeEventListener('online', retryBootstrapWhenOnline);
+  }, [authState, bootstrapAuth, googleMe?.sub]);
+
   useEffect(() => {
     if (authState !== 'register') return;
     if (googleMe?.sub) return;
