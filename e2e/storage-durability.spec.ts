@@ -294,6 +294,74 @@ test('reclaims a durable settings send after its tab closes and the lease expire
   }
 });
 
+test('ignores a late response from an expired sender after another tab acknowledged the attempt', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  const server = new Map<string, ServerStateItem>();
+  const settingsRequests: number[] = [];
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  let releaseFirst!: () => void;
+  let markFirstStarted!: () => void;
+  const firstWait = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+  const options = { settingsRequests, settingsPayloads, settingsSuccessGate: { started: markFirstStarted, wait: firstWait } };
+  let releaseRetry!: () => void;
+  let markRetryStarted!: () => void;
+  const retryWait = new Promise<void>((resolve) => { releaseRetry = resolve; });
+  const retryStarted = new Promise<void>((resolve) => { markRetryStarted = resolve; });
+  let retryTab: Page | undefined;
+
+  await context.addInitScript(() => { Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true }); });
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+  await page.clock.setFixedTime(await page.evaluate(() => Date.now()));
+
+  try {
+    await page.getByRole('button', { name: /^Светлая/ }).click();
+    await firstStarted;
+    const initial = await storedSettings(page);
+    expect(initial.operations).toHaveLength(1);
+    const original = initial.operations[0];
+    expect(original).toMatchObject({ status: 'sending', type: 'put' });
+
+    options.settingsSuccessGate = { started: markRetryStarted, wait: retryWait };
+    retryTab = await context.newPage();
+    await mockApp(retryTab, { session: 'app' });
+    await verifiedServer(retryTab, server, options);
+    await retryTab.clock.setFixedTime((original.attempt?.startedAtMs ?? 0) + 30_001);
+    await openApp(retryTab, '/#settings');
+    await retryStarted;
+
+    const reclaimed = await storedSettings(retryTab);
+    expect(reclaimed.operations).toHaveLength(1);
+    expect(reclaimed.operations[0]).toMatchObject({ opId: original.opId, status: 'sending', value: original.value });
+    expect(reclaimed.operations[0].attempt?.attemptId).not.toBe(original.attempt?.attemptId);
+    expect(reclaimed.operations[0].attempt?.owner).not.toBe(original.attempt?.owner);
+    expect(settingsRequests).toEqual([0, 0]);
+
+    releaseRetry();
+    await expect.poll(async () => (await storedSettings(retryTab!)).confirmedVersion).toBe(1);
+    expect((await storedSettings(retryTab)).operations).toHaveLength(0);
+    expect(server.get('fitfocus_data_google-e2e-sub_settings')).toEqual({ version: 1, value: original.value });
+
+    const lateConflict = page.waitForResponse((response) => {
+      const request = response.request();
+      if (new URL(response.url()).pathname !== '/api/state' || request.method() !== 'PUT' || response.status() !== 409) return false;
+      const body = request.postDataJSON() as { items?: Array<{ key?: string }> };
+      return body.items?.some((item) => item.key?.endsWith('_settings')) === true;
+    });
+    releaseFirst();
+    expect((await lateConflict).status()).toBe(409);
+    await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(1);
+    expect((await storedSettings(page)).operations).toHaveLength(0);
+    expect((await storedSettings(page)).value).toBe(original.value);
+    expect(server.get('fitfocus_data_google-e2e-sub_settings')).toEqual({ version: 1, value: original.value });
+  } finally {
+    releaseFirst();
+    releaseRetry();
+  }
+});
+
 test('keeps a retryable settings intent across reload and resumes after Retry-After', async ({ page }) => {
   test.setTimeout(60_000);
   const server = new Map<string, ServerStateItem>();

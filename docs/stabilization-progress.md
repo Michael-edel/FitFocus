@@ -5024,3 +5024,19 @@ payload, baseVersion и `nextAttemptAtMs`. До срока повторного 
 production-код не менялся. Это transient HTTP recovery, не доказательство
 физического отключения сети или staging. Полный CI текущей опубликованной ревизии
 проверяется отдельно.
+
+## P0.9 — поздний ответ истёкшего sender после cross-tab ack, 16.10.2026
+
+Browser acceptance удерживает первый PUT после claim, затем во второй вкладке
+без Web Locks сдвигает время за lease и повторно захватывает тот же opId с новым
+attempt/owner. Вторая попытка получает серверный ack; после этого освобождается
+старый запрос, который получает 409 на прежнюю baseVersion. Проверяется, что
+поздний ответ не воскрешает операцию и не меняет confirmedVersion или durable
+value. Browser test подтверждает фактическую доставку старого ответа;
+`durable_outbox.test.ts` отдельно проверяет транзакционный guard старого attempt.
+
+Сценарий прошёл 7/7 desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone
+Safari/PWA (`workers=1`, `retries=0`); root typecheck прошёл. Изменены только E2E
+и документация, production-код не менялся. Mock API не заменяет staging D1 и
+реальные browser/device lifecycle. Точный CI последующих локальных commits ещё
+не запущен; текущий опубликованный CI проверяет предыдущий SHA.
