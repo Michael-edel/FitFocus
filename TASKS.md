@@ -1008,6 +1008,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     исходные familyId и session id; три member-update acceptance прошли 9/9 на
     desktop Chromium/Firefox/WebKit без retries. Typecheck и diff check прошли;
     точный CI follow-up ожидает push. Остальные callbacks/staging открыты.
+  - [x] Удержать семейный `PATCH /api/shopping/check`, повторно войти в тот же
+    account с новой server session и отпустить прежний ответ. Старая отметка не
+    переносится в новую семью и не запускает achievement; проверены исходные
+    `familyId`/session и отсутствие повторного GET старой сессии. Новый сценарий
+    вместе с тремя соседними family-shopping проверками прошёл 12/12 на desktop
+    Chromium/Firefox/WebKit без retries; typecheck и diff check прошли.
+    Остальные callbacks, точный CI и staging открыты.
   Follow-up [`9e7f67d`](https://github.com/Michael-edel/FitFocus/commit/9e7f67d8da22de48bb0f0c49e257bd35fdb6de79)
   закрывает retry-гонку списка покупок: после отказа toggle клиент перечитывает
   подтверждённый серверный список с теми же account/session, family и week;

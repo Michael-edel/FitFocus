@@ -8,8 +8,10 @@ join; выборка этих сценариев вместе со смежны�
 на desktop Chromium/Firefox/WebKit. Точный CI #1413 для этого HEAD сейчас
 выполняет E2E. Следующий локальный follow-up добавляет поздний family-member
 PATCH после same-account reauthentication: новый сценарий и две соседние проверки
-прошли 9/9 на тех же engines; полный typecheck и `git diff --check` прошли.
-Production-код не менялся; новый exact CI нужен после отправки follow-up.
+прошли 9/9 на тех же engines. Ещё один family shopping-check после same-account
+reauthentication вместе с тремя соседними shopping проверками прошёл 12/12.
+Полный typecheck и `git diff --check` прошли. Production-код не менялся; оба
+локальных follow-up требуют нового exact CI после отправки.
 CI `c1aef67` упал на пропущенном `releasedMembers` в E2E fixture;
 исправление включено в `b1c01ae`; run #1409 проверяет этот fix и не включает
 новый create-тест из `3c49439`. Точный CI последнего HEAD ожидается после push.

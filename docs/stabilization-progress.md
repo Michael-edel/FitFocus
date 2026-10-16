@@ -4685,3 +4685,20 @@ typecheck и `git diff --check` прошли. CI #1413 проверяет опу
 `cb44a2b` и не включает этот локальный тест; точный CI follow-up запускается
 после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
 открытыми.
+
+## P0.5 — семейный shopping-check после same-account login, 16.10.2026
+
+Добавлен acceptance для удержанного family `PATCH /api/shopping/check`: соседняя
+вкладка повторно входит в тот же account с новым `serverSessionId` и загружает
+другую семью до ответа старой операции. Поздний ответ не переносит оптимистичную
+отметку в новую семью, не вызывает `shopping_item_checked` achievement и не
+запускает новый GET старой сессии. Проверены исходные `familyId` и session proof;
+production-код не менялся, runtime-дефект не выявлен.
+
+Новый сценарий вместе с family shopping-list account-switch, shopping achievement
+account-switch и отказным retry acceptance прошёл 12/12 на desktop Chromium,
+Firefox и WebKit (`workers=1,retries=0`). Полный typecheck и `git diff --check`
+прошли. CI #1413 для опубликованного HEAD `cb44a2b` всё ещё выполняет E2E и не
+содержит два последующих локальных family follow-up; их точный CI запускается
+после push. Остальные callbacks, staging и полный P0.5 lifecycle остаются
+открытыми.

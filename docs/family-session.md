@@ -252,7 +252,11 @@ staging и реальные браузерные сессии остаются �
   точку baseline, исправленную в этом follow-up. Дополнительно поздний PATCH
   member после same-account login с новым `serverSessionId` не перечитывает
   прежнюю семью и не меняет новую; тот сценарий вместе с проверками captured
-  family target и A → B прошёл 9/9 на тех же engines. Полный CI ещё не подтверждён.
+  family target и A → B прошёл 9/9 на тех же engines. Семейный shopping-check,
+  задержанный при той же смене server session, не отмечает покупку в новой семье,
+  не запускает achievement и не перечитывает старую семью; с тремя смежными
+  shopping сценариями он прошёл 12/12 на desktop engines. Полный CI для новых
+  тестов ещё не подтверждён.
   Покрытие остальных callbacks всё ещё неполное.
 - Проверить invite/member family target `2bbec11` в точном CI и затем staging;
   локальные проверки не подтверждают deployment или реальные bundle.
