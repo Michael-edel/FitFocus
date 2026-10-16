@@ -1044,6 +1044,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     как новое меню отображено. Маркер новой сессии остаётся виден, маркер старого
     ответа не появляется. Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit;
     подтверждённого runtime-дефекта не обнаружено, exact CI follow-up ожидает push.
+  - [x] Удержать preview `POST /api/family/menu/generate`, повторно войти в тот же
+    аккаунт с новой server session и освободить старый ответ. Outbox, семейное меню
+    и число отправленных операций остаются без изменений; epoch новой сессии
+    отличается. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit; typecheck прошёл.
   - [x] Исправить пустой экран после logout: `useCouncilChat` создавал render key
     при `currentUser=null` и `loginGuard=null`, затем читал `currentUser.id`.
     Теперь временный state key создаётся только при подтверждённом непустом

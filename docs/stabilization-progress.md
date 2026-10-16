@@ -4812,3 +4812,18 @@ Chromium/Firefox/WebKit (`workers=1`, `retries=0`); общий `npm run typechec
 Локальная проверка не включает полный E2E и staging. CI run #1417 на базовом SHA
 `568c559` ещё выполняет E2E и не содержит этот follow-up; точный CI нового SHA
 нужно проверить после push.
+
+## P0.5 — поздний preview семейного меню после same-account reauth, 16.10.2026
+
+Добавлен acceptance для задержанного `POST /api/family/menu/generate`: тот же
+аккаунт получает новый `serverSessionId` и `sessionEpoch`, затем освобождается
+preview старого входа. Outbox и сохранённый family-menu snapshot остаются равны
+снимку до ответа, старая попытка не вызывает commit, server mutation или
+achievement. Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit; общий
+`npm run typecheck` прошёл. Production-код не менялся, подтверждённого runtime-
+дефекта не выявлено.
+
+Проверка выполнена командой:
+`npm run test:e2e -- --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 e2e/family-menu-durable.spec.ts --grep "delayed family server preview after same-account reauthentication"`.
+Точный CI этого follow-up запускается после push; staging и полный lifecycle
+остаются открытыми.
