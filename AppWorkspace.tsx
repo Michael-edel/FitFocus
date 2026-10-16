@@ -151,12 +151,20 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   }, []);
   // A second tab can change IndexedDB's active session without changing this tab's React props.
   const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
+  const activeSessionMatchesLoginGuard = loginGuard
+    ? durableSessionKey === JSON.stringify([
+      loginGuard.authFence,
+      loginGuard.accountId,
+      loginGuard.serverSessionId,
+      loginGuard.sessionEpoch,
+    ])
+    : durableSessionAccountId === null
+      ? !currentUser?.id
+      : durableSessionAccountId === currentUser?.id;
   const allowCachedAccountUiStateRestore = durableSessionKey !== 'checking'
     && durableSessionKey !== 'unavailable'
     && (!loginGuard || loginGuard.accountId === currentUser?.id)
-    && (durableSessionAccountId === null
-      ? !loginGuard && !currentUser?.id
-      : durableSessionAccountId === currentUser?.id);
+    && activeSessionMatchesLoginGuard;
   const canRenderActiveTab = allowCachedAccountUiStateRestore
     || activeTab === 'guide'
     || activeTab === 'privacy'

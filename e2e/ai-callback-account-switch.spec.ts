@@ -497,6 +497,54 @@ test('AI Council uses account A proof and discards its held answer after account
   }
 });
 
+test('AI Council hides its transient draft after the same account starts a new session in another tab', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account new-session UI acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#council');
+  await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  const before = await readDurableSnapshot(page);
+  const oldSessionEpoch = before.activeSession?.sessionEpoch;
+  const question = 'Черновик не должен пережить новую сессию';
+  const oldInput = page.getByPlaceholder('Ваш вопрос экспертам...');
+  await oldInput.fill(question);
+
+  const reauthenticated = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#council');
+  await expect(reauthenticatedPage.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(reauthenticated.sid);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+    .toBe(reauthenticated.sid);
+
+  const after = await readDurableSnapshot(reauthenticatedPage);
+  expect(after.activeSession?.accountId).toBe(accountA.id);
+  expect(after.activeSession?.sessionEpoch).not.toBe(oldSessionEpoch);
+  await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+  await expect(oldInput).toHaveCount(0);
+  await expect(reauthenticatedPage.getByPlaceholder('Ваш вопрос экспертам...')).toHaveValue('');
+  const persistedCouncilHistory = rawValue(after, councilKey(accountA.id));
+  expect(persistedCouncilHistory === null || !persistedCouncilHistory.includes(question)).toBe(true);
+  expect(errorsA).toEqual([]);
+  expect(errorsReauthenticated).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+});
+
 test('held personal-plan retry cannot update either profile after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
@@ -1067,10 +1115,8 @@ test('an unsaved progress measurement draft is cleared when another tab activate
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect(page.getByRole('heading', { name: 'Новый замер', exact: true })).toBeVisible();
-  await expect(weightDraft).not.toHaveValue('98.765');
-  await expect(page.getByRole('button', { name: 'Вес', exact: true })).toHaveClass(/border-indigo-500/);
-  await expect(page.getByRole('button', { name: 'Сахар', exact: true })).not.toHaveClass(/border-indigo-500/);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(weightDraft).toHaveCount(0);
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), progressUiKeyA))
     .toEqual(progressUiCacheBeforeSwitch);
 
@@ -1109,8 +1155,8 @@ test('a profile draft cached for account A is not restored after another tab act
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect.poll(() => page.getByPlaceholder('Как к вам обращаться').inputValue())
-    .not.toBe('Черновик настроек аккаунта A');
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveCount(0);
 
   const cachedDraft = await page.evaluate(key => localStorage.getItem(key), settingsKeyA);
   expect(cachedDraft).toContain('"profileDirty":true');
@@ -1140,8 +1186,10 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect(page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(weightDraft).toHaveCount(0);
   expect(await page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+  await expect(switched.page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
   expect(fixtureA.counts.profileWrites).toEqual([]);
   expect(switched.errors).toEqual([]);
 });
@@ -1187,8 +1235,9 @@ test('a selected weekly-menu day cached for account A is hidden after another ta
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect(monday).toHaveClass(/bg-indigo-500\/20/);
-  await expect(tuesday).not.toHaveClass(/bg-indigo-500\/20/);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(monday).toHaveCount(0);
+  await expect(tuesday).toHaveCount(0);
   expect(await page.evaluate(key => localStorage.getItem(key), activeDayKeyA)).toBe('Вторник');
   expect(fixtureA.counts.profileWrites).toEqual([]);
   expect(switched.errors).toEqual([]);
