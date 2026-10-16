@@ -3,9 +3,10 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; рабочая ветка `fix/durable-outbox`, опубликованный HEAD
-`d3d8cbd`. Локальный follow-up `1543cc9` ещё не опубликован; он связывает
-family callbacks с неделей запроса и добавляет rollover acceptance.
+`fix/state-generations`; опубликованная ветка `fix/durable-outbox` заканчивается
+на `d3d8cbd`. Локальные follow-up коммиты `1543cc9` и `e4a078f` ещё не
+отправлены; они связывают family callbacks с исходной неделей запроса и
+сохраняют корректное восстановление shopping list после её смены.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
 Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
@@ -13,9 +14,10 @@ family callbacks с неделей запроса и добавляет rollover
 обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
 [`#38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
 для `d3d8cbd` успешно прошёл dependency audit, schema/privacy/auth/API gates,
-unit, все typecheck и production build; E2E сейчас выполняются. Для `1543cc9`
-локальные family acceptance прошли 30/30 на Chromium/Firefox/WebKit, root и два
-strict typecheck прошли; точный CI начнётся после push. Полный
+unit, все typecheck и production build; E2E выполняются. Для локального
+`e4a078f` полный `family-session.spec.ts` прошёл 33/33, включая недельный
+rollover 9/9 на Chromium/Firefox/WebKit; root и два strict typecheck прошли.
+Точный CI этого локального стека начнётся после push. Полный
 `owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
 `/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
 Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff

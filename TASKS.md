@@ -1,10 +1,11 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft. Ветка `fix/durable-outbox`; опубликованный HEAD `d3d8cbd`,
-локальный следующий commit `1543cc9` ещё не отправлен. CI run
+остаётся draft. Опубликованная ветка `fix/durable-outbox` заканчивается на
+`d3d8cbd`; локальные follow-up `1543cc9` и `e4a078f` ещё не отправлены. CI run
 [`38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
-на `d3d8cbd` прошёл unit/typecheck/build и продолжает E2E.
+на `d3d8cbd` прошёл unit/typecheck/build и продолжает E2E. Локальный полный
+`family-session.spec.ts` на актуальном стеке прошёл 33/33 на трёх desktop engines.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload

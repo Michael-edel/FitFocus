@@ -5190,17 +5190,18 @@ production-код не менялся. Это одна cache acceptance и не 
 P0.4, остальные callbacks, staging или полный P0.9. Точный CI нового HEAD нужно
 подтвердить отдельно.
 
-## P0.4 — family callbacks привязаны к неделе запроса, `1543cc9`, 16.10.2026
+## P0.4 — family callbacks привязаны к неделе запроса, `1543cc9`/`e4a078f`, 16.10.2026
 
 `useFamilyCloud` теперь сохраняет неделю начала для family-context и shopping
 чтений, отметки покупки и генерации меню. Если неделя меняется до применения
 результата, устаревший снимок не меняет UI; запрашивается снимок актуальной
 недели. Это закрывает rollover-гонку при долгом запросе через границу недели.
 
-Два новых E2E удерживают старый context/list response, переводят browser clock
-на следующую неделю и проверяют отображение только свежих данных. Они прошли
-6/6 на desktop Chromium, Firefox и WebKit без retries; полный
-`family-session.spec.ts` — 30/30 на тех же трёх проектах. Root, domain-strict и
-storage-strict typecheck, `git diff --check` прошли; production build выполнен
-Playwright webServer. Проверка локальна на mock API; staging и общий P0.4/P0.5
-аудит остаются открытыми. Точный CI нового SHA ожидает push.
+Три E2E удерживают старые context/list ответы и shopping PATCH, переводят
+browser clock на следующую неделю и проверяют актуальное отображение и
+восстановление списка без ложной ошибки смены сессии. Полный
+`family-session.spec.ts` прошёл 33/33; недельные сценарии — 9/9 на desktop
+Chromium, Firefox и WebKit без retries. Root, domain-strict и storage-strict
+typecheck, `git diff --check` прошли. Проверка локальна на mock API; staging и
+общий P0.4/P0.5 аудит остаются открытыми. Точный CI локального стека ожидает
+push.
