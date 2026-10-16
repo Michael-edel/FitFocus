@@ -4,6 +4,14 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
 draft с base `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
+Текущий локальный HEAD — [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c),
+на один коммит впереди удалённого `b6e3be5`; он добавляет 403 access recovery
+E2E (7/7 browser/PWA профилей). Уже опубликованный CI run
+[#38870748569](https://github.com/Michael-edel/FitFocus/actions/runs/38870748569)
+проверяет только `b6e3be5` и ещё выполняется. Повторный полный прогон существующего
+`FORBIDDEN_KEYSPACE` recovery прошёл 7/7 после одного не воспроизведённого сбоя
+iPhone Safari; первопричина неизвестна. P0.8/P0.9, точный CI нового HEAD, staging,
+OAuth, выпуск и интеграция в `main` остаются открыты.
 Локальный follow-up [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
 исправляет скрытие UI во время auth-паузы: смена `authFence` не сбрасывает
 локальный экран той же сессии. Сценарий `401 → новая правка → login` прошёл

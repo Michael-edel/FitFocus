@@ -2,6 +2,17 @@
 
 Обновлено: 16.10.2026. PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft; ветка `fix/durable-outbox` проходит стабилизацию P0.8/P0.9.
+Локальный HEAD [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c)
+добавляет P0.9 E2E `403 ACCESS_REQUIRED` recovery: та же settings operation
+сохраняет opId/payload в паузе и подтверждается после нового session proof;
+матрица прошла 7/7 без retries. Существующая проверка восстановления после
+`FORBIDDEN_KEYSPACE` сначала дала единичный сбой на iPhone Safari (operation
+не была создана), затем targeted повтор и полный прогон прошли 7/7 без retries;
+причина первого сбоя не установлена. Это локальные mock API результаты.
+Удалённая ветка пока на `b6e3be5`; CI run
+[#38870748569](https://github.com/Michael-edel/FitFocus/actions/runs/38870748569)
+для этого SHA ещё выполняется и не включает `1d54049`. Staging и выпуск не
+подтверждены.
 Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
 добавляет сценарий P0.9 «offline → холодное повторное открытие PWA → online»:
 локально он прошёл Chromium, Firefox и Android Chrome/PWA (4/4); три профиля
@@ -1397,6 +1408,14 @@ legacy-ключ не используется для новой очереди �
     восстановления связи. Прошло 7/7 desktop/mobile/PWA проектов без retries
     в коммите [`e3f0312`](https://github.com/Michael-edel/FitFocus/commit/e3f0312ec84adce4c71a2e554c73fa8284df7c9c).
     Это mock transport, не проверка физического offline или staging.
+  - [x] Проверить 403 access recovery: `ACCESS_REQUIRED` сохраняет ту же
+    settings operation и ставит отправку на паузу; после свежего proof operation
+    с теми же opId/payload подтверждается. Матрица прошла 7/7 без retries на
+    локальном коммите [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c).
+    Существующий `FORBIDDEN_KEYSPACE` recovery также прошёл 7/7 при повторном
+    полном запуске после единичного не воспроизведённого сбоя iPhone Safari.
+    Причина сбоя неизвестна; это mock API acceptance, полный lifecycle и staging
+    остаются открытыми.
   - [x] В двух вкладках без Web Locks доставить ответ старого sender после
     истечения lease и ack новой попытки. Поздний 409 не возвращает операцию в
     очередь и не меняет подтверждённые value/version; browser-сценарий прошёл

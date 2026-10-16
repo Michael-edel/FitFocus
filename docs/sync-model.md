@@ -145,6 +145,14 @@ proof. После proof обе операции последовательно �
 аккаунтом. Локальная mock API матрица прошла 7/7 без retries; точный CI и staging
 не подтверждены.
 
+Отдельная проверка 403 различает `ACCESS_REQUIRED` и `FORBIDDEN_KEYSPACE`.
+При `ACCESS_REQUIRED` sender ставит очередь на access pause, локальная операция
+сохраняет opId/payload и подтверждается после свежего session proof. Этот browser
+сценарий прошёл 7/7 desktop/mobile/PWA проектов. `FORBIDDEN_KEYSPACE` остаётся
+failed и доступен для ручного retry; существующий recovery сценарий прошёл
+повторную матрицу 7/7 после одного не воспроизведённого сбоя iPhone Safari.
+Mock API результаты не заменяют полный CI и staging.
+
 Локальная проверка в коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a),
 `e2e/pwa-offline-durability.spec.ts`, покрывает первую строку
 для PWA: после offline записи новая контролируемая Service Worker страница

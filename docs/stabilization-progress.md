@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — различение 403 access pause и keyspace failure
+
+Локальный коммит [`1d54049`](https://github.com/Michael-edel/FitFocus/commit/1d540498a6fa05db348b6fd870d695ccde38a00c)
+добавляет browser acceptance для `403 ACCESS_REQUIRED`: локальная settings
+operation остаётся в IndexedDB с прежним opId/payload, sender не повторяет её,
+пока доступ закрыт, а после свежего proof той же account и новой server session
+operation отправляется и подтверждается. Полная browser/PWA матрица прошла 7/7
+без retries; targeted `state_sync` и account-scoped UI unit прошли 65/65,
+`npm run typecheck` прошёл.
+
+Существующий E2E `FORBIDDEN_KEYSPACE` проверяет сохранение неповторяемой
+operation как failed и ручное восстановление с тем же payload. Первый отдельный
+прогон всей матрицы прошёл 6/7: на iPhone Safari operation не появилась в IDB.
+Немедленный targeted повтор на iPhone Safari и следующий полный прогон без
+retries оба прошли; последний результат — 7/7. Первопричина первого отказа не
+воспроизведена и не установлена, поэтому это остаётся наблюдением о стабильности
+теста, а не подтверждённым дефектом приложения. Оба сценария используют mock
+API и browser emulation; реальные устройства, D1/OAuth и staging ими не
+подтверждены.
+
+Удалённая ветка PR #93 остаётся на `b6e3be5`; CI run
+[#38870748569](https://github.com/Michael-edel/FitFocus/actions/runs/38870748569)
+для этого SHA выполняется и не включает `1d54049`. После публикации нового HEAD
+нужен точный полный CI.
+
 ## 16.10.2026 — локальные правки остаются доступны во время auth-паузы
 
 После фактического 401 тест `401 → новая правка → login` падал только на
