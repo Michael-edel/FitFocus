@@ -9,7 +9,8 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
-  retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
+  retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+  currentStateRetryAfterSeconds?: number } = {}) {
   let sessionId = initialSessionId;
   let disconnectStateWrites = false;
   let profile: Record<string, unknown> = buildMockProfile();
@@ -24,6 +25,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
   return { unexpectedApi, counts, stateWriteKeys, pushRequests,
     setStateWriteDisconnected: (disconnected: boolean) => { disconnectStateWrites = disconnected; },
+    setCurrentStateUnavailable: (unavailable: boolean) => { currentStateAvailable = !unavailable; },
     setActiveSessionId: (nextSessionId: string) => { sessionId = nextSessionId; },
     recoverState: () => { stateAvailable = true; },
     recoverCurrentState: () => { currentStateAvailable = true; }, recover: (conflict = false) => {
@@ -80,7 +82,8 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
         response.destroy();
         return;
       }
-      if (!currentStateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503);
+      if (!currentStateAvailable) return json({ error: 'INJECTED_STATE_UNAVAILABLE' }, 503,
+        options.currentStateRetryAfterSeconds === undefined ? {} : { 'Retry-After': String(options.currentStateRetryAfterSeconds) });
       if (items.some(item => item.key.includes('_family_menu:'))) {
         unexpectedApi.push('WRONG_FAMILY_RESOURCE'); return json({ error: 'WRONG_RESOURCE' }, 403);
       }

@@ -4,34 +4,24 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; опубликованная ветка `fix/durable-outbox` заканчивается
-на `fe44643`. Локальный follow-up `0de4865` ещё не отправлен; он уточняет
-Firefox baseline для family reauthentication и WebKit/PWA отмены GET-запросов
-при reload.
+на `05da5c7`; локальный follow-up ожидает push. Точный CI run
+[`38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
+проверяет предыдущий SHA `05da5c7` и не включает этот follow-up.
 
-Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
-Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
-прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
-обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
-[`#38888606723`](https://github.com/Michael-edel/FitFocus/actions/runs/38888606723)
-для `fe44643` завершился с 835 E2E passed / 254 skipped / 3 failed; остальные
-gates прошли. Первый Android PWA сбой из-за слишком широкого ожидания
-account-wide `Cloud: pending` исправлен в `f066fde`. Два новых тестовых сбоя
-разобраны и исправлены в локальном `0de4865`: Firefox сравнивает число старых
-shopping GET только после подтверждения новой сессии; WebKit допускает только
-известные cancelled GET при reload. Целевая матрица прошла 10/10 на допустимых
-профилях (4 skips штатные), плюс 3 WebKit/PWA повтора; callback Firefox прошёл
-5/5. Root typecheck прошёл. Для локального
-`e4a078f` полный `family-session.spec.ts` прошёл 33/33, включая недельный
-rollover 9/9 на Chromium/Firefox/WebKit; два strict typecheck прошли. Точный CI
-нового follow-up начнётся после push. Полный
-`owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
-`/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
-Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff
-check прошли; этот follow-up опубликован в `d3d8cbd`.
+Текущий этап — закрытие стабилизационной приёмки P0.8/P0.9. IndexedDB durable
+outbox подключён; миграция и нормализатор проверяются вместе с runtime lifecycle.
+Последние локальные проверки: PWA offline/cold-reopen — 7/7 профилей,
+`pwa-update` — 7/7, `owned-state` — 35/35; `npm run typecheck` и
+`git diff --check` прошли. В WebKit cold-reopen тест сохраняет настоящий Service
+Worker, возвращает 503 для state API и сбрасывает запросы статики; браузер остаётся
+online. Это обход сбоя Playwright offline navigation, а не заявление о физическом
+offline.
 
-В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1, 7 остальных); все P0
-считаются открытыми до оставшихся writers/callbacks и общей lifecycle/release
-приёмки. Staging, реальные устройства/OAuth, выпуск и интеграция в `main` не
+CI [`#38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
+для SHA `05da5c7` успешно прошёл audit, guards, unit, typechecks и build; E2E ещё
+выполняется и не покрывает локальный follow-up. В
+`TASKS.md` остаются 34 пункта (20 P0, 7 P1, 7 следующих задач); полный P0/P0.8/P0.9
+не закрыт. Staging, физические устройства/OAuth, выпуск и интеграция в `main` не
 подтверждены.
 
 ## Предыдущие локальные результаты

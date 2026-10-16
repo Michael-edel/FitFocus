@@ -7,8 +7,9 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
-export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
+export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean; currentStateRetryAfterSeconds?: number } = {}) {
   let directory = resolve(previous);
+  let staticUnavailable = false;
   const api = createPwaApiFixture(options);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
@@ -21,6 +22,7 @@ export async function startPwaReleaseServer(previous: string, current: string, o
       }
       return;
     }
+    if (staticUnavailable) { request.socket.destroy(); return; }
     const path = resolve(directory, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!path.startsWith(directory + sep)) { response.writeHead(403); response.end(); return; }
     try {
@@ -35,7 +37,8 @@ export async function startPwaReleaseServer(previous: string, current: string, o
   if (!address || typeof address === 'string') throw new Error('No PWA fixture address');
   return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts, stateWriteKeys: api.stateWriteKeys,
     pushRequests: api.pushRequests, setActiveSessionId: api.setActiveSessionId,
-    setStateWriteDisconnected: api.setStateWriteDisconnected,
+    setStateWriteDisconnected: api.setStateWriteDisconnected, setCurrentStateUnavailable: api.setCurrentStateUnavailable,
+    setStaticUnavailable: (unavailable: boolean) => { staticUnavailable = unavailable; },
     release: () => { directory = resolve(current); },
     rollback: () => { directory = resolve(previous); },
     recoverState: api.recoverState,

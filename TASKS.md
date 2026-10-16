@@ -1,19 +1,17 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft. Опубликованная ветка `fix/durable-outbox` заканчивается на
-`fe44643`; локальный follow-up `0de4865` ещё не отправлен. CI run
-[`38888606723`](https://github.com/Michael-edel/FitFocus/actions/runs/38888606723)
-на `fe44643` завершился с 835 E2E passed / 254 skipped / 3 failed; все проверки
-до E2E прошли. Первый сбой — слишком широкая проверка `Cloud: pending` в Android
-PWA, исправленная в `f066fde`. Два новых сбоя затронули слишком ранний baseline
-old-session shopping read в Firefox и ожидаемые WebKit access-control warnings
-для GET-запросов, отменённых reload. В `0de4865` baseline перенесён на момент
-подтверждённой смены сессии, а узкий набор WebKit abort допускается только для
-трёх известных GET routes. Targeted matrix — 10 passed / 4 skipped, ещё 3
-WebKit/PWA повтора прошли; Firefox callback — 5/5; `npm run typecheck` прошёл.
-Точный CI нового SHA ожидает push. Полный
-`family-session.spec.ts` на актуальном стеке прошёл 33/33 на трёх desktop engines.
+остаётся draft с base `fix/state-generations`. Опубликованная ветка
+`fix/durable-outbox` заканчивается на `05da5c7`; локальный follow-up ожидает push.
+Точный CI run
+[`38895242409`](https://github.com/Michael-edel/FitFocus/actions/runs/38895242409)
+проверяет предыдущий SHA `05da5c7` и не включает `971416f`.
+Локально PWA offline durability acceptance прошёл 7/7 browser/PWA профилей без
+retries, включая WebKit cold reopen через настоящий Service Worker; typecheck и
+diff check прошли. WebKit использует отказ API и сброс
+статических origin-запросов, потому что `context.setOffline(true)` ломает SW
+навигацию внутри Playwright WebKit; поэтому этот профиль не заявляется как
+проверка `navigator.onLine === false`.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
@@ -1385,12 +1383,15 @@ legacy-ключ не используется для новой очереди �
     истечения lease и ack новой попытки. Поздний 409 не возвращает операцию в
     очередь и не меняет подтверждённые value/version; browser-сценарий прошёл
     7/7 desktop/mobile/PWA проектов без retries.
-  - [x] В коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a) локально проверить полный browser-offline цикл PWA: сохранить settings
-    intent, закрыть вкладку, открыть управляемую Service Worker страницу offline,
-    подтвердить прежние opId/payload/baseVersion в IndexedDB и ack той же
-    операции после возврата сети. Прошло 4/4 Chromium/Firefox/Android Chrome
-    профилей; 3 WebKit профиля пропущены из-за внутренней ошибки Playwright на
-    offline navigation. Коммит опубликован; этот mock/browser тест не заменяет device/staging.
+  - [x] В коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a) добавлен PWA cold-reopen цикл: сохранить settings
+    intent, закрыть вкладку, открыть управляемую Service Worker страницу, сверить
+    прежние opId/payload/baseVersion в IndexedDB и подтвердить исходную операцию
+    после восстановления сети. Текущая локальная матрица прошла 7/7 профилей без
+    retries. WebKit использует API 503 и сброс статических origin-запросов, чтобы
+    обойти внутреннюю ошибку Playwright при offline-навигации; там
+    `navigator.onLine` остаётся true. Эти mock/browser проверки не заменяют
+    физическое устройство, staging или полный P0.9; новый вариант ещё не включён
+    в CI и не отправлен в commit.
   - [x] Проверить браузерный IndexedDB transaction abort после добавления
     settings outbox intent: value, operation и metadata целиком откатываются,
     видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий

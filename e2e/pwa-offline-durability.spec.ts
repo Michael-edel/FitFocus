@@ -37,11 +37,11 @@ async function storedSettings(page: Page) {
   });
 }
 
-test('real PWA preserves settings through offline reopen and syncs after reconnection', async ({ context }, info) => {
-  test.skip(['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name),
-    'Playwright WebKit raises an internal error for offline reload and cold navigation; WebKit transport-disconnect coverage remains in storage-durability.spec.ts.');
+test('real PWA preserves settings through network failure and syncs after recovery', async ({ context }, info) => {
   test.setTimeout(90_000);
-  const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'));
+  const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
+  const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'),
+    isWebKit ? { currentStateRetryAfterSeconds: 1 } : {});
   let page = await context.newPage();
   const inFlightStateWrites = new Set<Request>();
   const failedStateWrites: Array<{ method: string; error: string | null }> = [];
@@ -89,13 +89,24 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     const initialStateWriteKeys = [...server.stateWriteKeys];
     expect(initialStateWriteKeys).not.toContain('fitfocus_data_google-e2e-sub_settings');
 
-    server.setStateWriteDisconnected(true);
-    await context.setOffline(true);
-    await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
+    if (isWebKit) {
+      // Playwright WebKit cannot reliably fulfill Service Worker navigations
+      // after context.setOffline(true). Keep the browser online and make the
+      // API unavailable, then reset static-origin requests for cold reopen.
+      server.setCurrentStateUnavailable(true);
+    } else {
+      server.setStateWriteDisconnected(true);
+      await context.setOffline(true);
+      await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
+    }
     await page.getByRole('button', { name: /^Светлая/ }).click();
     await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(1);
+    if (isWebKit) {
+      await expect.poll(() => server.counts.currentStatePutAttempts, { timeout: 10_000 })
+        .toBeGreaterThan(initialStatePutAttempts);
+    }
     await page.waitForTimeout(500);
-    expect(server.counts.currentStatePutAttempts).toBe(initialStatePutAttempts);
+    if (!isWebKit) expect(server.counts.currentStatePutAttempts).toBe(initialStatePutAttempts);
     expect(server.counts.currentStatePutAccepted).toBe(initialStatePutAccepted);
     expect(server.stateWriteKeys).toEqual(initialStateWriteKeys);
 
@@ -106,19 +117,21 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     expect(pending.value).toContain('"theme":"light"');
     expect(beforeReload.value).toContain('"theme":"light"');
 
-    // Reopen the installed origin in a fresh tab while offline. This also
-    // closes the original sender tab without losing its durable intent.
+    // Reopen the installed origin in a fresh tab during the network failure.
+    // This also closes the original sender tab without losing its durable intent.
+    if (isWebKit) server.setStaticUnavailable(true);
     await page.close();
     page = await context.newPage();
     attachDiagnostics(page);
     await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true,
       push: { standalone: info.project.name.includes('-pwa') } });
-    await openApp(page, server.origin + '/#settings');
+    await page.goto(server.origin + '/#settings', { waitUntil: 'commit' });
+    await expect(page.locator('#root')).toBeVisible();
     await expect(page).toHaveTitle(/FitFocus/);
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
     await expect(page.locator('#root')).toBeVisible();
     expect(navigationResponses.at(-1)?.fromServiceWorker).toBe(true);
-    expect(await page.evaluate(() => navigator.onLine)).toBe(false);
+    if (!isWebKit) expect(await page.evaluate(() => navigator.onLine)).toBe(false);
     const afterReload = await storedSettings(page);
     expect(afterReload.value).toBe(beforeReload.value);
     expect(afterReload.operations).toHaveLength(1);
@@ -128,14 +141,19 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
       baseVersion: pending.baseVersion,
       status: 'pending',
     });
-    expect(server.counts.currentStatePutAttempts).toBe(initialStatePutAttempts);
+    if (!isWebKit) expect(server.counts.currentStatePutAttempts).toBe(initialStatePutAttempts);
     expect(server.counts.currentStatePutAccepted).toBe(initialStatePutAccepted);
     expect(server.stateWriteKeys).toEqual(initialStateWriteKeys);
 
-    server.setStateWriteDisconnected(false);
-    await context.setOffline(false);
-    await expect.poll(() => server.counts.currentStatePutAccepted, { timeout: 20_000 })
-      .toBe(initialStatePutAccepted + 1);
+    if (isWebKit) {
+      server.setStaticUnavailable(false);
+      server.setCurrentStateUnavailable(false);
+    } else {
+      server.setStateWriteDisconnected(false);
+      await context.setOffline(false);
+    }
+    await expect.poll(() => server.stateWriteKeys, { timeout: 20_000 })
+      .toContain('fitfocus_data_google-e2e-sub_settings');
     await expect.poll(async () => (await storedSettings(page)).operations.length, { timeout: 20_000 }).toBe(0);
     const acknowledged = await storedSettings(page);
     expect(acknowledged.value).toBe(beforeReload.value);
