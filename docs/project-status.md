@@ -2,30 +2,27 @@
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Последний опубликованный HEAD —
-[`d11e8f9`](https://github.com/Michael-edel/FitFocus/commit/d11e8f92aea4aac4a64db4701da22bac39967900)
-в ветке `fix/durable-outbox`; PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся открытым draft в `fix/state-generations`. Точный [CI run #1423](https://github.com/Michael-edel/FitFocus/actions/runs/38855720907)
-создан для этого HEAD и ожидает в очереди. Старый [run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
-остаётся `in_progress` на `706910f`; на нём прошли audit, schema/privacy/auth/API
-guards, unit, три typecheck и production build, но E2E и последующие rollback/CAS
-checks ещё не завершены. Дублирующий run #1422 для push event был отменён политикой
-concurrency.
-Более ранний [run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
-для `e4ced68` отменён после старта более нового PR workflow, поэтому его нельзя
-считать завершённой проверкой.
+PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
+draft в `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
+Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
+old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
+глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:
+browser/PWA matrix 7/7 без retries, три targeted unit suite 132/132,
+`npm run typecheck`, `git diff --check`. Полный CI для объединённого HEAD ещё
+должен завершиться; PR, staging, device/OAuth и release acceptance остаются
+открытыми.
 
-Локальные follow-ups `d028bc4` и `2e7f024` проверяют два P0.9 сценария на всех
+Локальные follow-ups `d028bc4` и `2e7f024` проверили два P0.9 сценария на всех
 семи Playwright browser/PWA-проектах без retries. Потерянный ответ после commit
 сохраняет прежние opId/payload конфликтными и не продвигает `confirmedVersion`
-без ack; malformed legacy `put` остаётся в quarantine с исходным `rawRecord` и
-причиной `put-without-value`, не создаёт операцию и не отправляется даже после
-открытия writer fence, поэтому migration status остаётся `partial`. Для нового
-legacy acceptance прошли 128 профильных unit, `npm run typecheck` и
-`git diff --check`. Оба code follow-up и документация опубликованы в `d11e8f9`;
-точный CI этого HEAD ожидает в очереди. P0.8/P0.9 остаются открытыми для остальных
-lifecycle-сценариев, полного CI, staging/device и release-приёмки. Локальная
-mock-проверка не подтверждает staging или выпуск.
+без ack. Расширение `7504a2c` проверяет все семь причин malformed legacy records:
+исходные записи и причины остаются в quarantine, outbox/send не создаются,
+migration status остаётся `partial`. Коммит `82d5f27` проверяет удаление аккаунта
+при глобальной legacy-записи: после повторного входа удалённая операция не
+восстанавливается, global raw record остаётся `unknown-owner`. Новые browser
+проверки прошли 7/7, migration/cleanup unit — 70/70, typecheck и diff check
+прошли. Полный CI объединённого HEAD, оставшийся lifecycle, staging/device и
+release acceptance ещё не подтверждены.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное

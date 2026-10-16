@@ -1,13 +1,13 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 16.10.2026. Ветка `fix/durable-outbox` опубликована на
-[`d11e8f9`](https://github.com/Michael-edel/FitFocus/commit/d11e8f92aea4aac4a64db4701da22bac39967900).
-Точный [CI run #1423](https://github.com/Michael-edel/FitFocus/actions/runs/38855720907)
-поставлен в очередь; старый run #1421 всё ещё выполняется на `706910f`.
-Стабилизация P0.8 продолжается:
-Локальные acceptance потерянного HTTP-ответа и повреждённой legacy-записи прошли
-по 7/7 browser/PWA-проектам без retries; новый migration сценарий также прошёл
-128 профильных unit, `npm run typecheck` и `git diff --check`.
+Обновлено: 16.10.2026. PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
+остаётся draft; ветка `fix/durable-outbox` проходит стабилизацию P0.8/P0.9.
+Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
+на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
+legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
+browser/PWA-проектов, 132/132 targeted unit, typecheck и diff check.
+Для объединённого HEAD необходим полный точный CI; staging, выпуск и интеграция
+в защищённую `main` не подтверждены.
 В плане остаются 34 пункта: 20 P0, 7 P1 и 7 следующих задач; ни один P0 пока
 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
 подтверждены.
@@ -1259,12 +1259,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
   прошли 69/69 targeted unit, `storage-strict` typecheck и desktop Chromium E2E
   и полная migration матрица 7/7 без retries. Точный CI этого расширения,
   profile и delete lifecycle остаются открытыми.
-  - [x] Проверить malformed `put` в реальном old/new bundle smoke: исходный
-    `rawRecord` сохранён в quarantine с причиной `put-without-value`, операция
-    не создана и не отправлена, статус миграции остаётся `partial` даже после
-    открытия writer fence. Матрица прошла 7/7 без retries на коммите
-    [`2e7f024`](https://github.com/Michael-edel/FitFocus/commit/2e7f024b0706d82155859e7f9955d033bf338972);
-    полный CI `d11e8f9` ожидает начала run #1423.
+  - [x] Проверить в реальном old/new bundle smoke все семь причин нормализатора:
+    `not-an-object`, `invalid-type`, `invalid-key`, `put-without-value`,
+    `delete-with-value`, `invalid-baseVersion`, `invalid-retryCount`. Каждый raw
+    record и reason сохранён в quarantine; операций и отправок для повреждённых
+    ключей нет, migration status остаётся `partial` после writer fence. Матрица
+    прошла 7/7 без retries в коммите
+    [`7504a2c`](https://github.com/Michael-edel/FitFocus/commit/7504a2ceb10e36c80cee1d9d17c35fc0579f9033).
 - [x] Экспортировать все долговечные IDB stores в JSON backup; атомарно
   восстанавливать values/outbox/ledger/quarantine/meta, отклонять конфликт без
   частичного импорта и заново требовать legacy writer fence. Форматы v1/v2
@@ -1290,6 +1291,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
   source/snapshot сохранены; физическое удаление их payload и синхронизация
   tombstone с сервером остаются отдельными ограничениями.
   [Контракт](docs/account-data-cleanup.md).
+  - [x] Вместе с удалением аккаунта сохранить неизвестную глобальную legacy-
+    запись как `unknown-owner`; после повторной аутентификации не восстанавливать
+    удалённую операцию и не превращать глобальную запись в account-owned. Снимок
+    остаётся `partial`, raw evidence сохранена. Migration/cleanup unit suite
+    прошла 70/70 в коммите
+    [`82d5f27`](https://github.com/Michael-edel/FitFocus/commit/82d5f27dddb47ef374c0c1dd24835e5d2dfd26df).
 - [ ] Завершить UI повтора/разрешения конфликтов и общий lifecycle.
   - [x] Добавить безопасные действия для обычных записей: повтор `failed`,
     оставить последнюю локальную версию или принять проверенный серверный снимок.

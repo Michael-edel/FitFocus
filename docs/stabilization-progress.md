@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — полный quarantine normalizer и global legacy evidence после удаления
+
+В [`7504a2c`](https://github.com/Michael-edel/FitFocus/commit/7504a2ceb10e36c80cee1d9d17c35fc0579f9033)
+реальный old/new bundle migration принимает семь повреждённых legacy-записей
+одновременно: `not-an-object`, `invalid-type`, `invalid-key`,
+`put-without-value`, `delete-with-value`, `invalid-baseVersion` и
+`invalid-retryCount`. Для каждой исходный `rawRecord` остаётся в quarantine с
+точной причиной; ни одна запись не становится outbox operation или сетевой
+отправкой. Даже после writer fence статус остаётся `partial`. Матрица прошла
+7/7 desktop/mobile/PWA конфигураций без retries.
+
+В [`82d5f27`](https://github.com/Michael-edel/FitFocus/commit/82d5f27dddb47ef374c0c1dd24835e5d2dfd26df)
+добавлена совместная проверка удаления аккаунта и миграции глобального ключа
+`ff_ai_last_status_v1`. Очистка удаляет account-owned operation, но сохраняет
+неразделимую глобальную запись как `unknown-owner`; после повторной аутентификации
+операция удалённого аккаунта не восстанавливается, исходный источник сохраняется,
+а migration status остаётся `partial`. Три целевые unit suite
+(`legacy_migration`, `legacy_queue`, `account_state_cleanup`) прошли 132/132;
+общий typecheck и `git diff --check` также прошли.
+
+Эти acceptance уточняют quarantine и удаление, но не закрывают P0.8: физическое
+удаление общего payload не выполняется, старые clients, остальные callbacks,
+staging и полная lifecycle/release-приёмка остаются отдельными gates. Полный CI
+для объединённой ревизии следует подтвердить на точном PR SHA.
+
 ## 16.10.2026 — quarantine повреждённой legacy-записи в настоящем bundle migration
 
 Browser acceptance [`2e7f024`](https://github.com/Michael-edel/FitFocus/commit/2e7f024b0706d82155859e7f9955d033bf338972)
