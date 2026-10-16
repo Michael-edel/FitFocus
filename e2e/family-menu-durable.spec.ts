@@ -330,7 +330,7 @@ test('a delayed family server preview after same-account reauthentication cannot
   } finally { releasePreview(); }
 });
 
-test('a delayed durable menu-state read after another account signs in cannot hydrate its menu', async ({ page, context }) => {
+test('a delayed durable menu-state read after another account signs in cannot hydrate its menu', async ({ page, context }, testInfo) => {
   const { errors, counts, holdStateRead, releaseStateRead, stateReadHeld } = await setup(page);
   const before = await saved(page);
 
@@ -350,12 +350,17 @@ test('a delayed durable menu-state read after another account signs in cannot hy
     await expect.poll(() => activeAccountId(page)).toBe(switchAccount.id);
     expect(await saved(page)).toEqual(before);
     expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
-    // WebKit can report its intentional cancellation of the held stale GET as
-    // an access-control console error when the page reloads during the request.
-    const staleReadAbort = /\/api\/family\/menu\/state\?.* due to access control checks\.$/;
-    const expectedAborts = errors.filter(error => staleReadAbort.test(error));
-    expect(expectedAborts.length).toBeLessThanOrEqual(1);
-    await healthy(page, errors.filter(error => !staleReadAbort.test(error)));
+    // WebKit can report same-origin GETs intentionally cancelled by reload as
+    // access-control console errors. This flow reloads during menu, shopping,
+    // and identity reads; allow only those exact routes and keep the count bounded.
+    const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(testInfo.project.name);
+    const staleReadAbort = /\/api\/(?:family\/menu\/state|shopping\/list|me)\?.* due to access control checks\.$/;
+    const expectedAborts = isWebKit ? errors.filter(error => staleReadAbort.test(error)) : [];
+    expect(expectedAborts.length).toBeLessThanOrEqual(isWebKit ? 3 : 0);
+    const abortKinds = expectedAborts.map(error => error.includes('/api/family/menu/state?') ? 'menu-state'
+      : error.includes('/api/shopping/list?') ? 'shopping-list' : 'identity');
+    expect(new Set(abortKinds).size).toBe(abortKinds.length);
+    await healthy(page, errors.filter(error => !expectedAborts.includes(error)));
     await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsB).toEqual([]);
   } finally { releaseStateRead(); }

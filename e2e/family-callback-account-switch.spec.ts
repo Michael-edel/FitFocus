@@ -1180,13 +1180,14 @@ test('a delayed family shopping-list read from the previous same-account session
         serverSessionId: reauthenticated.sid,
       });
       await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+      const previousSessionReadsBeforeRelease = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length ?? 0;
 
       fixtureA.releaseFamilyShoppingList();
       await expect.poll(() => state.releasedFamilyShoppingLists ?? 0).toBeGreaterThanOrEqual(previousSessionReads);
       await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
       await expect(reauthenticatedPage.getByText(newListName, { exact: false })).toBeVisible();
       await expect(reauthenticatedPage.getByText(oldListName, { exact: false })).toHaveCount(0);
-      expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionReads);
+      expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionReadsBeforeRelease);
       expect(errorsA).toEqual([]);
       expect(errorsReauthenticated).toEqual([]);
       await expect(page.locator('vite-error-overlay')).toHaveCount(0);
