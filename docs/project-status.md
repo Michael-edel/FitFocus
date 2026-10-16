@@ -2,25 +2,23 @@
 
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Опубликованный HEAD [`568c559`](https://github.com/Michael-edel/FitFocus/commit/568c559ad4b1c9b87aa7780de49112f133dce38b)
-в [CI run #1417](https://github.com/Michael-edel/FitFocus/actions/runs/38845192574)
-завершился failure: audit, guards, unit, три typecheck и production build
-прошли; E2E — 27 failed, 706 passed, 247 skipped.
+Последний опубликованный HEAD —
+[`706910f`](https://github.com/Michael-edel/FitFocus/commit/706910f045269b5dfedd2d1aacdc7f995213e3f3)
+в ветке `fix/durable-outbox`. Его [CI run #1421](https://github.com/Michael-edel/FitFocus/actions/runs/38852393814)
+выполняется: dependency audit, schema/privacy/auth/API guards, unit, три typecheck
+и production build прошли; E2E и последующие rollback/CAS checks ещё не завершены.
+Более ранний [run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
+для `e4ced68` отменён после старта более нового PR workflow, поэтому его нельзя
+считать завершённой проверкой.
 
-Локальные follow-ups [`c986b75`](https://github.com/Michael-edel/FitFocus/commit/c986b75),
-[`2a64a4f`](https://github.com/Michael-edel/FitFocus/commit/2a64a4f) и
-[`a794400`](https://github.com/Michael-edel/FitFocus/commit/a794400) добавили
-same-account reauthentication acceptance для семейного меню и AI callbacks; эти
-сценарии проходят 3/3 на desktop Chromium, Firefox и WebKit. Разбор CI #1417
-выявил устаревшие ожидания UI после смены вкладки и тестовые API mocks без
-валидного writer scope. Follow-up опубликован в [`e4ced68`](https://github.com/Michael-edel/FitFocus/commit/e4ced6861cfeb6038e9a8e28f0c8c3ff91b2b0d0)
-в ветку `fix/durable-outbox`; typecheck и `git diff --check` прошли, затронутые
-E2E прошли: account-switch 12/12, multi-tab 7/7 browser/PWA, settings/quota 6/6
-на WebKit, iPhone Safari и iPhone PWA, preview-origin 3/3 WebKit. [CI run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
-поставлен в очередь для этого SHA. Общий P0.4/P0.5 остаётся открытым для остальных
-callbacks, полного lifecycle, staging и release-приёмки. Сверка legacy-нормализатора
-на `b362cc8` и профильные unit-тесты 128/128 подтверждают только формат, не полный
-импорт, old/new bundle lifecycle или выпуск P0.8.
+Локальный follow-up `d028bc4` добавил browser acceptance потери HTTP-ответа
+после серверного commit. Во всех семи Playwright browser/PWA-проектах сценарий
+подтвердил сохранение прежнего opId и payload в конфликте, без продвижения
+confirmedVersion до проверенного ack; 56 профильных unit-тестов,
+`npm run typecheck`, browser production build и `git diff --check` прошли.
+Этот коммит пока локальный; текущий remote CI #1421 его не содержит. P0.8/P0.9
+остаются открытыми для остальных lifecycle-сценариев, полного CI, staging/device
+и release-приёмки. Локальная mock-проверка не подтверждает staging или выпуск.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное

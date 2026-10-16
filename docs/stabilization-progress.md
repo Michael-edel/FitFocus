@@ -4921,3 +4921,22 @@ Chromium/Firefox/WebKit; concurrent multi-tab без Web Locks 7/7 browser/PWA
 Точный [CI run #1418](https://github.com/Michael-edel/FitFocus/actions/runs/38852235508)
 поставлен в очередь для этого SHA. Следующие gates — полный CI,
 staging/device; до них P0.8/P0.9 остаются открытыми.
+
+## P0.9 — commit на сервере с потерянным HTTP-ответом, 16.10.2026
+
+Browser-acceptance в `e2e/storage-durability.spec.ts` фиксирует settings PUT
+в mock-сервере, обрывает первый HTTP-ответ и возвращает 409 на повторной
+отправке той же baseVersion. Тест проверяет, что исходные opId и payload
+сохраняются как конфликт, серверный snapshot версии 1 остаётся видимым, а
+confirmedVersion не продвигается без проверенного ack. Это не подменяет
+потерянный ответ успешным локальным совпадением значений.
+
+Сценарий прошёл 7/7 проектов Playwright (desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA, iPhone Safari/PWA, `retries=0`); `tests/state_sync.test.ts`
+прошёл 56/56, `npm run typecheck`, E2E production build и `git diff --check`
+прошли. Изменение тестовое, production-код не менялся. Коммит
+[`d028bc4`](https://github.com/Michael-edel/FitFocus/commit/d028bc4d5a14e0711b40a8b10e446cdc9e382511)
+создан локально поверх опубликованного `706910f`, но ещё не отправлен.
+CI #1421 проверяет предыдущий опубликованный SHA и пока выполняет E2E;
+он не подтверждает эту проверку. Mock не подтверждает staging, OAuth,
+реальный Service Worker или выпуск.

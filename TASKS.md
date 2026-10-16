@@ -1329,6 +1329,13 @@ legacy-ключ не используется для новой очереди �
 ### P0.9 — приёмка жизненного цикла
 
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
+  - [x] Browser-acceptance для server commit с потерянным HTTP-ответом:
+    первая запись фиксируется сервером, ответ обрывается, повтор той же операции
+    получает 409. Тот же opId/payload остаётся конфликтным, confirmedVersion не
+    продвигается без проверенного ack. Сценарий прошёл 7/7 desktop/mobile/PWA
+    Playwright-проектов без retries на коммите
+    [d028bc4](https://github.com/Michael-edel/FitFocus/commit/d028bc4d5a14e0711b40a8b10e446cdc9e382511).
+    Это mock API acceptance; staging и остальные строки матрицы остаются открыты.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 
