@@ -5,6 +5,20 @@
 `405238b`, а не подтверждение выпуска. Опубликованный SHA, CI и оставшаяся
 работа фиксируются [в статусе проекта](project-status.md).
 
+## Durable outbox после offline холодного открытия — 16.10.2026
+
+Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+добавляет E2E [`pwa-offline-durability.spec.ts`](../e2e/pwa-offline-durability.spec.ts),
+который проверяет production bundle с настоящим Service Worker: после записи settings
+браузер отключается от сети, исходная вкладка закрывается, а новая открывается
+offline под тем же worker. IndexedDB сохраняет исходные opId, payload и
+baseVersion; после восстановления сети сервер принимает ту же операцию, а
+outbox очищается. Локально прошло 4/4 профиля Chromium, Firefox и Android
+Chrome/PWA. Три WebKit профиля пропущены из-за внутренней ошибки Playwright при
+offline reload/cold navigation. Это browser offline emulation с локальным HTTP
+fixture, не проверка физического устройства или staging; коммит пока не включён
+в опубликованную ветку.
+
 Код опубликован в `8d32f12279039e5d549c6e3534f741b601084812`.
 [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)
 завершился success: 1043 unit / 192 файла, 341 browser passed / 9 skips,

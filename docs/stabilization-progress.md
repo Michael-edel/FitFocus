@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## 16.10.2026 — PWA сохраняет outbox после offline холодного открытия
+
+Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+добавляет `e2e/pwa-offline-durability.spec.ts`, который запускает production bundle с
+настоящим Service Worker и HTTP fixture. После сохранения settings operation
+браузер переводится в offline, исходная вкладка закрывается, а новая страница
+того же PWA открывается из управляемого Service Worker. Проверка подтверждает,
+что IndexedDB сохраняет те же opId, payload и baseVersion, а после возврата сети
+подтверждается именно исходная операция и outbox очищается. Прошло 4/4 профиля:
+Chromium, Firefox, Android Chrome и Android Chrome PWA (`workers=1,retries=0`).
+Три WebKit профиля пропущены: Playwright завершает и offline reload, и cold
+offline navigation внутренней ошибкой WebKit; ошибки продукта по этим
+профилям результат не устанавливает. `npm run typecheck` и `git diff --check`
+прошли. Коммит пока локальный и не опубликован; полный CI предыдущего SHA
+`1d7fc1c` ещё выполняется и не содержит этот тест. Реальное устройство, staging
+и полный P0.9 остаются открытыми.
+
 ## 16.10.2026 — полный quarantine normalizer и global legacy evidence после удаления
 
 В [`7504a2c`](https://github.com/Michael-edel/FitFocus/commit/7504a2ceb10e36c80cee1d9d17c35fc0579f9033)

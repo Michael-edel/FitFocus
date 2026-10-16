@@ -4,6 +4,13 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
 draft с base `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
+Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+добавляет offline cold-reopen тест PWA: настоящий Service Worker
+сохраняет ту же settings operation в IndexedDB и отправляет её после возврата
+сети. Прошли 4/4 Chromium, Firefox и Android Chrome/PWA профиля; три WebKit
+профиля пропущены из-за внутренней ошибки Playwright при offline навигации.
+Коммит пока не опубликован. Полный CI на SHA `1d7fc1c` ещё выполняется,
+включая E2E; он не содержит эти локальные изменения.
 Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
 old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
 глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:

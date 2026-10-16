@@ -2,6 +2,12 @@
 
 Обновлено: 16.10.2026. PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft; ветка `fix/durable-outbox` проходит стабилизацию P0.8/P0.9.
+Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+добавляет сценарий P0.9 «offline → холодное повторное открытие PWA → online»:
+локально он прошёл Chromium, Firefox и Android Chrome/PWA (4/4); три профиля
+WebKit пропущены из-за внутренней ошибки Playwright при навигации offline.
+Коммит пока не опубликован. Полный CI SHA `1d7fc1c` выполняется, его E2E ещё не
+завершён; staging и выпуск не подтверждены.
 Browser acceptance теперь проверяет все семь причин повреждения legacy-записей
 на реальном old/new bundle migration, а удаление аккаунта вместе с глобальной
 legacy evidence — отдельным unit lifecycle тестом. Локально прошли 7/7
@@ -1381,6 +1387,12 @@ legacy-ключ не используется для новой очереди �
     истечения lease и ack новой попытки. Поздний 409 не возвращает операцию в
     очередь и не меняет подтверждённые value/version; browser-сценарий прошёл
     7/7 desktop/mobile/PWA проектов без retries.
+  - [x] В коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a) локально проверить полный browser-offline цикл PWA: сохранить settings
+    intent, закрыть вкладку, открыть управляемую Service Worker страницу offline,
+    подтвердить прежние opId/payload/baseVersion в IndexedDB и ack той же
+    операции после возврата сети. Прошло 4/4 Chromium/Firefox/Android Chrome
+    профилей; 3 WebKit профиля пропущены из-за внутренней ошибки Playwright на
+    offline navigation. Коммит пока не опубликован и не заменяет device/staging.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

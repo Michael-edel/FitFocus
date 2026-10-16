@@ -137,6 +137,14 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Локальная проверка в коммите [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a),
+`e2e/pwa-offline-durability.spec.ts`, покрывает первую строку
+для PWA: после offline записи новая контролируемая Service Worker страница
+открывается offline, сохраняет тот же intent в IndexedDB и подтверждает его
+после возврата сети. Прошли 4 профиля Chromium/Firefox/Android Chrome; три
+WebKit профиля пропущены из-за внутренней ошибки Playwright при offline
+навигации. Это не реальное устройство и не staging; полный P0.9 остаётся открытым.
+
 Unit и fake IndexedDB проверяют логику и отказные пути. Два реальных
 browser page нужны для вкладок; старый и новый bundle — для совместимости.
 Mock API не заменяет staging D1/OAuth/push. Результаты связываются с SHA
