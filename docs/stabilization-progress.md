@@ -4841,3 +4841,17 @@ achievement. Сценарий прошёл 3/3 на desktop Chromium/Firefox/Web
 `npm run test:e2e -- --project=desktop-chromium --project=desktop-firefox --project=desktop-webkit --workers=1 e2e/family-menu-durable.spec.ts --grep "delayed family AI response after same-account reauthentication"`.
 Точный CI follow-up запускается после push; общий P0.5, staging и полный
 lifecycle остаются открытыми.
+
+## P0.8 — повторная проверка legacy-нормализатора, 16.10.2026
+
+На кодовом SHA `b362cc8` сверены финальное описание legacy-записи, реализация
+`storage/legacyQueue.ts`, unit-покрытие и контракт в `docs/legacy-migration.md`.
+Подтверждены непустой ключ, строка для put, отсутствие `value` у delete,
+нормализация отсутствующих числовых полей в `0`, отклонение присутствующих
+невалидных значений и все семь причин карантина. Fingerprint вычисляется по
+`[type, key, valueOrNull, baseVersion]` и не включает `retryCount`.
+
+`npm run test:unit -- tests/legacy_queue.test.ts tests/legacy_migration.test.ts`
+прошёл: 128/128 тестов в двух файлах. Код не менялся. Результат подтверждает
+контракт нормализации; импорт с владельцем из подтверждённого `/api/me`, fencing
+старых writers, полный PWA lifecycle, staging и P0.8 выпуск остаются открытыми.

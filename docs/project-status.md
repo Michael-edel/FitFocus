@@ -14,7 +14,10 @@ same-account reauthentication acceptance для задержанных `GET /api
 выборка прошла 12/12. `npm run typecheck` и `git diff --check` прошли. Все три
 follow-up не входят в run #1417; exact CI для них запускается после push. Общий
 P0.4/P0.5 остаётся открытым для остальных callbacks, полного lifecycle, staging
-и release-приёмки.
+и release-приёмки. Отдельная сверка legacy-нормализатора на текущем кодовом SHA
+`b362cc8` подтвердила требования P0.8; профильные unit-тесты прошли 128/128.
+Это закрывает только сверку формата, не полный импорт, old/new bundle lifecycle
+или выпуск P0.8.
 
 На `d6946af` обновлена только browser-проверка profile reload: мобильная форма
 размещает поле ниже первого viewport, поэтому тест проверяет восстановленное
