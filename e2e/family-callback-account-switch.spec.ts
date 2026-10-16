@@ -27,6 +27,7 @@ type FixtureState = {
   shoppingAchievements: string[];
   memberRequests: number;
   memberTargetIds: string[];
+  memberSessionIds?: string[];
   releasedMembers: number;
   noFamilyForA?: boolean;
   joinRequests?: number;
@@ -368,6 +369,7 @@ async function installAccountApi(
       const body = request.postDataJSON() as { familyId?: unknown } | null;
       state.memberRequests += 1;
       state.memberTargetIds.push(typeof body?.familyId === 'string' ? body.familyId : '');
+      state.memberSessionIds?.push(requestedSession ?? '');
       if (holdMemberUpdate && scopedAccount.id === accountA.id) {
         await heldMemberResponse.promise;
         await json({ ok: true }, accountA);
@@ -1435,6 +1437,72 @@ test('a delayed family member update stays bound to its captured family after th
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
     fixture.releaseMemberUpdate();
+  }
+});
+
+test('a delayed family member update from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-member reauthentication acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const state: FixtureState = {
+    current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    memberSessionIds: [], releasedMembers: 0, familyLoadSessions: [],
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA, false, true);
+  await openApp(page, '/#family');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Семья family-before-reauthentication', exact: true })).toBeVisible();
+  await expect.poll(() => state.familyLoadSessions?.filter(session => session === accountA.sid).length).toBeGreaterThan(0);
+
+  try {
+    await page.getByRole('button', { name: 'Я: похудение', exact: true }).click();
+    await expect.poll(() => state.memberRequests).toBe(1);
+    expect(state.memberTargetIds).toEqual(['family-before-reauthentication']);
+    expect(state.memberSessionIds).toEqual([accountA.sid]);
+    const previousSessionFamilyLoads = state.familyLoadSessions?.filter(session => session === accountA.sid).length;
+
+    const reauthenticated = { ...accountA, sid: 'e'.repeat(64) };
+    state.current = reauthenticated;
+    state.familyId = 'family-after-reauthentication';
+    const reauthenticatedPage = await context.newPage();
+    const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+
+    try {
+      await openApp(reauthenticatedPage, '/#family');
+      await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-after-reauthentication', exact: true })).toBeVisible();
+      await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect.poll(() => state.familyLoadSessions?.filter(session => session === reauthenticated.sid).length).toBeGreaterThan(0);
+      await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+        accountId: accountA.id,
+        serverSessionId: reauthenticated.sid,
+      });
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+      fixtureA.releaseMemberUpdate();
+      await expect.poll(() => state.releasedMembers).toBe(1);
+      await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+      await expect(page.getByRole('heading', { name: 'Семья family-after-reauthentication', exact: true })).toHaveCount(0);
+      await expect(reauthenticatedPage.getByRole('heading', { name: 'Семья family-after-reauthentication', exact: true })).toBeVisible();
+      expect(state.memberRequests).toBe(1);
+      expect(state.memberTargetIds).toEqual(['family-before-reauthentication']);
+      expect(state.memberSessionIds).toEqual([accountA.sid]);
+      expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(previousSessionFamilyLoads);
+      expect(state.shoppingAchievements).toEqual([]);
+      expect(errorsA).toEqual([]);
+      expect(errorsReauthenticated).toEqual([]);
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+      await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    } finally {
+      fixtureReauthenticated.releaseMemberUpdate();
+    }
+  } finally {
+    fixtureA.releaseMemberUpdate();
   }
 });
 
