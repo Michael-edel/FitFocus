@@ -133,6 +133,7 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     setFamilyShopping(value => value ? { ...value, items: value.items.map(item => item.name === ingredientName ? { ...item, checked } : item) } : value);
     try { await setFamilyShoppingItem(week, familyId, ingredientName, checked, session(attempt, current)); }
     catch (error) {
+      if (attempt.isCurrent() && familyIdRef.current === familyId && weekStartISO() !== week) return;
       if (current()) {
         try {
           const authoritative = await loadFamilyShoppingFromApi(week, familyId, session(attempt, current));

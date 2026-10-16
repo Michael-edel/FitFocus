@@ -10,10 +10,10 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
   'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
   'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1' };
 
-async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-week-context' | 'held-week-shopping' | 'held-invite' | 'check-refusal' | 'refresh-on-pageshow' = 'normal') {
+async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-capability' | 'held-context' | 'held-week-context' | 'held-week-shopping' | 'held-week-check' | 'held-invite' | 'check-refusal' | 'refresh-on-pageshow' = 'normal') {
   await mockApp(page, { session: 'app' });
   const errors: string[] = [], counts = { context: 0, shopping: 0, invites: 0, members: 0, checks: 0, released: 0 };
-  const familyWeeks: string[] = [], shoppingWeeks: string[] = [];
+  const familyWeeks: string[] = [], shoppingWeeks: string[] = [], shoppingCheckWeeks: string[] = [];
   let currentWeekForMock = '';
   let active = true, cookieSid = sid, profile = buildMockProfile();
   let refreshed = false;
@@ -73,12 +73,17 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
       shoppingWeeks.push(week);
       const item = mode === 'held-week-shopping'
         ? week === currentWeekForMock ? 'Овсянка новой недели' : 'Рис старой недели'
+        : mode === 'held-week-check'
+          ? week === currentWeekForMock ? 'Овсянка новой недели' : 'Рис старой недели'
         : mode === 'refresh-on-pageshow' && refreshed ? 'Овсянка' : 'Рис';
       if (mode === 'held-week-shopping' && week !== currentWeekForMock) { await held; counts.released += 1; }
       return json({ family_id: 'family-e2e', week_start: week, items: [{ name: item, grams: 400, checked: false }] });
     }
     if (path === '/api/shopping/check') {
       counts.checks += 1;
+      const body = request.postDataJSON() as { week_start?: string };
+      shoppingCheckWeeks.push(body.week_start ?? '');
+      if (mode === 'held-week-check') { await held; counts.released += 1; }
       if (mode === 'check-refusal') return route.fulfill({ status: 401, contentType: 'application/json', headers, body: '{"error":"STATE_SESSION_CHANGED"}' });
       return json({ ok: true });
     }
@@ -87,7 +92,7 @@ async function setup(page: Page, mode: 'normal' | 'no-capability' | 'no-target-c
   await openApp(page, '/#family');
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
   await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
-  return { errors, counts, release, familyWeeks, shoppingWeeks,
+  return { errors, counts, release, familyWeeks, shoppingWeeks, shoppingCheckWeeks,
     setCurrentWeekForMock: (week: string) => { currentWeekForMock = week; },
     changeCookie: () => { cookieSid = 'b'.repeat(64); }, refresh: () => { refreshed = true; } };
 }
@@ -203,6 +208,37 @@ test('a family shopping response from the previous week is discarded and reloade
     await expect(page.getByRole('checkbox', { name: /Рис старой недели/ })).toHaveCount(0);
     expect(shoppingWeeks).toContain(previousWeek);
     expect(shoppingWeeks).toContain(currentWeek);
+    await healthy(page, errors);
+  } finally { release(); }
+});
+test('a family shopping check stays on its original week and refreshes the current list', async ({ page }) => {
+  const initialTime = new Date('2026-10-19T12:00:00.000Z');
+  await page.clock.setFixedTime(initialTime);
+  const { errors, counts, release, shoppingWeeks, shoppingCheckWeeks, setCurrentWeekForMock } = await setup(page, 'held-week-check');
+  try {
+    const oldItem = page.getByRole('checkbox', { name: /Рис старой недели/ });
+    await expect(oldItem).toBeVisible();
+    await oldItem.check();
+    await expect.poll(() => counts.checks).toBe(1);
+    const previousWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    await page.clock.setFixedTime(new Date(initialTime.getTime() + 7 * 24 * 60 * 60 * 1000));
+    const currentWeek = await page.evaluate(() => {
+      const date = new Date(); date.setHours(0, 0, 0, 0);
+      const day = date.getDay(); date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    });
+    expect(currentWeek).not.toBe(previousWeek);
+    setCurrentWeekForMock(currentWeek);
+    release();
+    await expect(page.getByRole('checkbox', { name: /Овсянка новой недели/ })).toBeVisible();
+    await expect(oldItem).toHaveCount(0);
+    expect(shoppingCheckWeeks).toEqual([previousWeek]);
+    expect(shoppingWeeks).toContain(currentWeek);
+    await expect(page.getByText('Сессия изменилась. Войдите снова и повторите действие.', { exact: true })).toHaveCount(0);
     await healthy(page, errors);
   } finally { release(); }
 });
