@@ -1363,6 +1363,13 @@ legacy-ключ не используется для новой очереди �
     до срока новая отправка не происходит, после него та же запись подтверждается.
     Browser-сценарий прошёл 7/7 desktop/mobile/PWA проектов без retries; mock API
     не заменяет настоящую offline/device/staging проверку.
+  - [x] Проверить transport disconnect для state PUT: первый запрос settings
+    получает сетевой abort без HTTP-ответа, следующая попытка — scoped 503 с
+    `Retry-After`. Та же операция с прежними opId/payload/baseVersion и сроком
+    повтора переживает reload, не отправляется до срока и подтверждается после
+    восстановления связи. Прошло 7/7 desktop/mobile/PWA проектов без retries
+    в коммите [`e3f0312`](https://github.com/Michael-edel/FitFocus/commit/e3f0312ec84adce4c71a2e554c73fa8284df7c9c).
+    Это mock transport, не проверка физического offline или staging.
   - [x] В двух вкладках без Web Locks доставить ответ старого sender после
     истечения lease и ack новой попытки. Поздний 409 не возвращает операцию в
     очередь и не меняет подтверждённые value/version; browser-сценарий прошёл

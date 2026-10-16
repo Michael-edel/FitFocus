@@ -5040,3 +5040,18 @@ Safari/PWA (`workers=1`, `retries=0`); root typecheck прошёл. Измене
 и документация, production-код не менялся. Mock API не заменяет staging D1 и
 реальные browser/device lifecycle. Точный CI последующих локальных commits ещё
 не запущен; текущий опубликованный CI проверяет предыдущий SHA.
+
+## P0.9 — транспортный обрыв и восстановление intent после reload, 16.10.2026
+
+Коммит [`e3f0312`](https://github.com/Michael-edel/FitFocus/commit/e3f0312ec84adce4c71a2e554c73fa8284df7c9c)
+добавляет browser acceptance, где settings PUT сначала завершается транспортным
+abort без HTTP-ответа, а повтор получает корректно scoped `503 Retry-After`.
+Тест проверяет durable `opId`, payload, baseVersion и retry deadline до и после
+reload; до deadline повтор не уходит, после восстановления связи сервер
+подтверждает ту же операцию. Все семь desktop/mobile/PWA Playwright-проектов
+прошли без retries (`workers=1`, `retries=0`); `npm run typecheck` и
+`git diff --check` прошли. Production-код не менялся.
+
+Это mock transport acceptance, а не проверка физического offline, настоящего
+устройства, Service Worker при реальном отсутствии сети или staging. Полная
+матрица P0.9 и точный CI нового HEAD остаются открытыми.

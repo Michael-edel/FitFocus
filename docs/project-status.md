@@ -3,7 +3,7 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся открытым
-draft в `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
+draft с base `fix/state-generations`; работа в ветке `fix/durable-outbox` продолжается.
 Новая локальная приёмка проверяет все семь invalid-reason вариантов на реальном
 old/new bundle migration, а unit lifecycle удаляет account-owned данные, сохраняя
 глобальную запись как `unknown-owner` после повторного входа. Локальные результаты:
@@ -21,6 +21,13 @@ teardown используется переход на `about:blank`, и матр
 Также в 7/7 проектах прошёл сценарий 503/`Retry-After` через reload: очередь
 сохраняет тот же opId, payload, baseVersion и срок следующей попытки, не посылает
 повтор до срока и подтверждает запись после возобновления.
+
+Коммит [`e3f0312`](https://github.com/Michael-edel/FitFocus/commit/e3f0312ec84adce4c71a2e554c73fa8284df7c9c)
+добавляет mock transport acceptance: первая отправка settings обрывается без
+HTTP-ответа, следующая получает scoped 503; после reload подтверждается та же
+операция с прежним payload и сроком повтора. Проверка прошла 7/7 browser/PWA
+проектов без retries. Это не имитация физического отключения всего устройства и
+не staging-проверка.
 
 Отдельно две вкладки без Web Locks проверили поздний 409 старой отправки после
 того, как новая попытка уже получила ack. Во всех 7 проектах старая попытка не
