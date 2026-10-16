@@ -85,7 +85,10 @@ bundle проверена на семи Playwright-проектах и прош�
     и анонимный `/api/me` отвечают на том же origin; оба Google Client ID пусты,
     `requireInvite=false`. Анонимные GET для bootstrap,
     profile, state и push/status дают 401 без redirect/cookie. OAuth start не
-    вызывался; D1, APP_URL, OAuth callback и остальные staging gates открыты.
+    вызывался; оба Client ID пусты. `wrangler.toml` задаёт один глобальный D1
+    binding без preview override, но фактическую Pages-конфигурацию без Cloudflare
+    доступа проверить нельзя; D1, APP_URL, OAuth callback и остальные staging
+    gates открыты.
   - [x] Проверить preview SHA `9c78726` только GET-запросами: bundle содержит
     полный SHA, публичная страница открывается на preview origin, анонимные API
     отказывают ожидаемо. Реальный OAuth start вернул `AUTH_UNAVAILABLE`;

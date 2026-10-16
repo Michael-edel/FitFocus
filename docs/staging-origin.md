@@ -110,6 +110,18 @@ GET-маршруты. OAuth start намеренно не вызывался. D1
 OAuth callback, edge rules для всех путей, миграции и тестовые аккаунты не
 подтверждены; staging и выпуск остаются открытыми.
 
+Проверка конфигурации репозитория показывает один верхнеуровневый D1 binding
+`DB` (`database_name = "fitfocus"`, ID `061ae786-9341-4bd7-8efe-025dd1bac6d5`);
+`env.preview`/`env.production` overrides в `wrangler.toml` отсутствуют.
+[Документация Cloudflare Pages](https://developers.cloudflare.com/pages/functions/wrangler-configuration/)
+говорит, что Wrangler file становится источником конфигурации Pages после
+включения этого режима; preview overrides задаются через `env.preview`, а
+branch-specific config Pages не поддерживает. Без чтения текущей конфигурации
+Cloudflare аккаунта нельзя утверждать, применён ли этот файл к deployment и
+разделена ли preview D1 с production. До подтверждения dashboard/API preview
+нельзя считать изолированной серверной средой. D1-запросы к живой базе не
+выполнялись.
+
 ### Read-only API smoke: `9c78726`, 16.10.2026
 
 Проверен commit preview `https://2d2f058c.fitfocus.pages.dev/`: корень ответил

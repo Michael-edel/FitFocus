@@ -5299,3 +5299,11 @@ Read-only GET smoke branch preview `fix-durable-outbox.fitfocus.pages.dev`
 без redirect и `Set-Cookie`. `/api/env` показывает пустые Google Client ID и
 `requireInvite=false`. Запрос OAuth start не выполнялся. Это частичная
 проверка deployment/origin, не D1, APP_URL, callback или staging-приёмка.
+
+`wrangler.toml` объявляет один top-level D1 binding `DB` (`fitfocus`, ID
+`061ae786-9341-4bd7-8efe-025dd1bac6d5`) без environment-specific overrides.
+Cloudflare Pages поддерживает `env.preview`, но не branch-based configuration;
+Wrangler file является source of truth только если deployment перешёл на этот
+режим. Без текущей Pages dashboard/API конфигурации фактический D1 preview и
+его изоляция неизвестны. Живые D1-запросы не выполнялись; staging остаётся
+открытым.

@@ -31,7 +31,10 @@ Read-only smoke текущего публичного branch preview подтв�
 ответы на выбранном origin: `/api/env` и `/api/me` — 200 (`user: null`), оба
 Google Client ID пусты и `requireInvite=false`; bootstrap, profile, state и
 push/status — 401 без redirect/cookie. D1, APP_URL, OAuth callback и полный
-staging этим не подтверждены.
+staging этим не подтверждены. `wrangler.toml` содержит один глобальный D1 binding
+без `env.preview` override; не проверено, применяется ли этот файл к текущему
+Pages deployment и отделена ли его база от production. Cloudflare dashboard/API
+доступа в текущем окружении нет.
 
 Последнее изменение Playwright до этого уже включало 1.64.1 и настоящий offline
 через `context.setOffline(true)` во всех семи PWA cold-reopen профилях. Оно
