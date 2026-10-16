@@ -4,21 +4,22 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`; рабочая ветка `fix/durable-outbox`, опубликованный HEAD
-`958f543`. Последние коммиты `9594638`, `ed4a1e8`, `24fe933`, `2592492` и
-`958f543` содержат account-switch E2E-исправление, durable DELETE-конфликт и
-его приёмку после reload.
+`d3d8cbd`. Локальный follow-up `1543cc9` ещё не опубликован; он связывает
+family callbacks с неделей запроса и добавляет rollover acceptance.
 
 Текущий этап — стабилизация durable outbox и полной приёмки lifecycle (P0.8/P0.9).
 Новая проверка DELETE-конфликта после reload и явного принятия серверного снимка
 прошла 7/7 browser/PWA профилей: очередь очищена и confirmedVersion равна 9;
 обновлённый account-switch тест прошёл 3/3 Chromium. Точный CI
-[`#38881940761`](https://github.com/Michael-edel/FitFocus/actions/runs/38881940761)
-для `958f543` успешно прошёл dependency audit, schema/privacy/auth/API gates,
-unit, все typecheck и production build; E2E сейчас выполняются. Полный
+[`#38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
+для `d3d8cbd` успешно прошёл dependency audit, schema/privacy/auth/API gates,
+unit, все typecheck и production build; E2E сейчас выполняются. Для `1543cc9`
+локальные family acceptance прошли 30/30 на Chromium/Firefox/WebKit, root и два
+strict typecheck прошли; точный CI начнётся после push. Полный
 `owned-state` локально прошёл 35/35 на семи проектах; прежний единичный WebKit
 `/api/ai` warning не повторился в трёх isolated reruns или полном прогоне.
 Локальная проверка P0.4 weekly-report session guard: unit 4/4, typecheck и diff
-check прошли; этот follow-up ещё не опубликован.
+check прошли; этот follow-up опубликован в `d3d8cbd`.
 
 В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1, 7 остальных); все P0
 считаются открытыми до оставшихся writers/callbacks и общей lifecycle/release

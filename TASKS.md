@@ -1,11 +1,10 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 16.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft. Ветка `fix/durable-outbox`, опубликованный HEAD `958f543`.
-Последние коммиты `9594638`, `ed4a1e8`, `24fe933`, `2592492` и `958f543`
-содержат исправление account-switch E2E, приёмку durable DELETE-конфликта и
-документацию. Полный CI run [`38881940761`](https://github.com/Michael-edel/FitFocus/actions/runs/38881940761)
-прошёл unit/typecheck/build и выполняет E2E.
+остаётся draft. Ветка `fix/durable-outbox`; опубликованный HEAD `d3d8cbd`,
+локальный следующий commit `1543cc9` ещё не отправлен. CI run
+[`38883305792`](https://github.com/Michael-edel/FitFocus/actions/runs/38883305792)
+на `d3d8cbd` прошёл unit/typecheck/build и продолжает E2E.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
@@ -670,7 +669,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   - [x] После чтения weekly report повторно проверить login-session перед
     возвратом существующего отчёта: если сессия истекла во время IndexedDB-read,
     callback завершится `WEEKLY_REPORT_SESSION_CHANGED`. Регрессионный unit-тест
-    и общий typecheck прошли локально; полный CI этого follow-up ожидает push.
+    и общий typecheck прошли локально; follow-up включён в `d3d8cbd`.
+  - [x] Привязать delayed family context, shopping-list и shopping-check
+    callbacks к неделе, для которой они начались. После смены недели старый
+    результат не применяется, а запрашивается актуальная неделя. Полный
+    `family-session.spec.ts` прошёл 30/30 на Chromium, Firefox и WebKit без
+    retries; root, domain-strict, storage-strict typecheck и diff check прошли.
+    Локальный commit `1543cc9`; exact CI запускается после push.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
