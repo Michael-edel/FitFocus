@@ -1257,8 +1257,17 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await waitForAccountSwitch(page);
   await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
   await expect(weightDraft).toHaveCount(0);
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), progressUiKeyA))
-    .toEqual(progressUiCacheBeforeSwitch);
+  const progressUiCacheAfterSwitch = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), progressUiKeyA);
+  // activeSection follows the viewport through IntersectionObserver; opening
+  // the second tab can move it without changing the account-scoped preferences.
+  expect(progressUiCacheAfterSwitch).toMatchObject({
+    selectedMetric: progressUiCacheBeforeSwitch.selectedMetric,
+    mobileDetailsOpen: progressUiCacheBeforeSwitch.mobileDetailsOpen,
+    timelineFilter: progressUiCacheBeforeSwitch.timelineFilter,
+    compareFromKey: progressUiCacheBeforeSwitch.compareFromKey,
+    compareToKey: progressUiCacheBeforeSwitch.compareToKey,
+    compareMode: progressUiCacheBeforeSwitch.compareMode,
+  });
 
   const afterSwitch = await readDurableSnapshot(page);
   expect(afterSwitch.activeSession?.accountId).toBe(accountB.id);
