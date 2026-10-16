@@ -3,25 +3,28 @@
 Сверено: 16.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`; WebKit cold-reopen follow-up уже опубликован в
-`fix/durable-outbox`. Локально проверяется обновление Playwright 1.61.1 → 1.64.1
-для upstream WebKit Service Worker offline fix; этот dependency follow-up ещё не
-опубликован.
+`fix/state-generations`; опубликованный кодовый head был `e34544d`.
 
-Текущий этап — закрытие стабилизационной приёмки P0.8/P0.9. IndexedDB durable
-outbox подключён; миграция и нормализатор проверяются вместе с runtime lifecycle.
-Локальные проверки на Playwright 1.64.1: PWA offline/cold-reopen — 7/7 профилей,
-`pwa-update` — 7/7, `owned-state` — 35/35; `npm run typecheck`, `npm audit`
-(0 уязвимостей) и `git diff --check` прошли. После upstream fix WebKit cold-reopen
-использует `context.setOffline(true)` и подтверждает `navigator.onLine === false`
-во всех движках. Результаты версии 1.64.1 пока локальные.
+Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
+подключён, но общий P0 ещё открыт. CI точного опубликованного head `e34544d`
+завершился [ошибкой в E2E](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625):
+все gates до браузеров прошли, затем 840 тестов прошли, 251 были skipped и один
+Firefox migration test завис при чтении состояния через отдельный
+`indexedDB.open()`.
 
-CI [`#38899751854`](https://github.com/Michael-edel/FitFocus/actions/runs/38899751854)
-проверяет опубликованный head `754b793` с Playwright 1.61.1: audit, guards, unit,
-typechecks и build прошли; E2E ещё выполняется. Локальное обновление 1.64.1
-нуждается в публикации и новом точном CI. В `TASKS.md` остаются 34 пункта
-(20 P0, 7 P1, 7 следующих задач); полный P0/P0.8/P0.9 не закрыт. Staging,
-физические устройства/OAuth, выпуск и интеграция в `main` не подтверждены.
+Кодовый follow-up [`0efec93`](https://github.com/Michael-edel/FitFocus/commit/0efec93ffaf905ace3c020ad1b70c398da89a571)
+переводит этот E2E probe на уже открытое соединение приложения и пишет события
+IndexedDB lifecycle/transaction в диагностический attachment. Локально
+`legacy-outbox-migration.spec.ts` прошёл 14/14 на семи desktop/mobile/PWA
+профилях без retries; целевой Firefox-сценарий прошёл 10/10, typecheck и admin
+guards прошли. Полный CI точного SHA follow-up ещё не подтверждён; локальные
+результаты его не заменяют.
+
+Последнее изменение Playwright до этого уже включало 1.64.1 и настоящий offline
+через `context.setOffline(true)` во всех семи PWA cold-reopen профилях. Оно
+входило в head `e34544d`, CI которого описан выше. В `TASKS.md` остаются 34
+незакрытых пункта (20 P0, 7 P1, 7 следующих задач); staging, физические
+устройства/OAuth, выпуск и интеграция в `main` не подтверждены.
 
 ## Предыдущие локальные результаты
 

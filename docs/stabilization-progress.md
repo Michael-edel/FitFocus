@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — Firefox legacy migration probe reuses app connection, 16.10.2026
+
+CI exact published head [`e34544d`](https://github.com/Michael-edel/FitFocus/commit/e34544da4f42cf545a9de26dac7e62eee8d42270)
+failed only in desktop Firefox `legacy-outbox-migration.spec.ts`: 840 browser
+passed / 251 skipped / 1 failed; dependency audit, schema/privacy/auth/API guards,
+unit tests, typechecks and build passed in [run 38903745625](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625).
+The failing inspector started a separate `indexedDB.open()` while old and current
+clients shared the origin. A local stress run of the old probe produced 18/20
+passes; one failure reproduced the same migration timeout and its trace stopped
+after `open:start`. A second test-level timeout occurred during a later storage
+read in that stress run; its cause is not established.
+
+Code commit [`0efec93`](https://github.com/Michael-edel/FitFocus/commit/0efec93ffaf905ace3c020ad1b70c398da89a571)
+captures the database connection opened by the application, reads migration
+state through that connection, and records open/blocked/upgrade/versionchange/
+close plus request/transaction stages. This follows the existing PWA update
+diagnostic, which avoids additional opens behind an old same-origin client.
+After the change, the complete migration spec passed 14/14 across seven
+desktop/mobile/PWA profiles with `workers=1,retries=0`; the desktop Firefox
+pending-intent case passed 10/10 repeats. Typecheck, admin guards and
+`git diff --check` passed. No production storage or migration code changed.
+The full CI for the exact follow-up SHA is not yet confirmed; the local result
+does not establish that the workflow failure is closed. Staging and full P0.9
+remain open.
+
 ## P0.9 — реальный PWA offline во всех движках, 16.10.2026
 
 `e2e/pwa-offline-durability.spec.ts` проверяет сохранение settings intent и

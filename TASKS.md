@@ -8,7 +8,17 @@ update 7/7 профилей без retries, typecheck и `npm audit` (0 уязв
 Playwright [`#42894`](https://github.com/microsoft/playwright/pull/42894) исправил
 WebKit Service Worker navigation при `context.setOffline(true)`. Теперь все
 профили, включая WebKit, проверяют реальный offline и `navigator.onLine === false`.
-Обновление Playwright ещё не опубликовано; полный CI текущего follow-up обязателен.
+CI точного опубликованного HEAD `e34544d` завершился ошибкой в [run
+38903745625](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625):
+все gates до E2E прошли, browser matrix — 840 passed / 251 skipped / 1 failed.
+Сбой был в desktop Firefox при независимом IndexedDB open из migration E2E probe.
+Коммит [`0efec93`](https://github.com/Michael-edel/FitFocus/commit/0efec93ffaf905ace3c020ad1b70c398da89a571)
+переиспользует соединение, уже открытое приложением, и фиксирует события
+open/blocked/versionchange/close и стадии чтения. После исправления migration spec
+прошёл 14/14 на семи Playwright-профилях без retries; проблемный Firefox-сценарий
+прошёл 10/10, typecheck и admin guards прошли. Полный CI точного SHA follow-up
+нужно подтвердить; P0/P0.8/P0.9, staging, выпуск и интеграция в main остаются
+открыты.
 
 Добавлена проверка P0.9 для DELETE-конфликта `council_history`: локальный
 tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB; после reload
@@ -17,17 +27,6 @@ tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB
 Все 7 browser/PWA профилей прошли без retries.
 Тест account-switch больше не сравнивает viewport-зависимый `activeSection`;
 остальные UI-настройки аккаунта и очистка черновика проверены 3/3 Chromium.
-
-CI run [`#38874079703`](https://github.com/Michael-edel/FitFocus/actions/runs/38874079703)
-проверял прежний SHA `7fbd324`: все gates до E2E прошли, E2E завершился
-`809 passed / 254 skipped / 1 failed`. Единственный сбой — сравнение
-`activeSection` (`dynamics`/`timeline`) в account-switch тесте; после уточнения
-проверки локальный целевой тест прошёл 3/3. Актуальный CI для `958f543`
-прошёл все gates до E2E и выполняет browser acceptance.
-Полный `owned-state` прогон локально прошёл 35/35 на семи проектах. Ранее
-замеченная единичная ошибка iPhone Safari `/api/ai due to access control checks`
-на reload не повторилась в трёх изолированных повторах и полном прогоне.
-Typecheck и `git diff --check` прошли.
 
 В плане остаются 34 незакрытых пункта: 20 P0, 7 P1 и 7 следующих задач; ни один
 P0 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
