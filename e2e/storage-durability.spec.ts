@@ -737,3 +737,87 @@ test('quota fault rolls back settings and displays a visible storage error', asy
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('storage-error.png'), fullPage: false });
 });
+
+test('keeps an unacknowledged settings intent after a network disconnect and retries it after reload', async ({ page }) => {
+  test.setTimeout(60_000);
+  const server = new Map<string, ServerStateItem>();
+  const settingsRequests: number[] = [];
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  const options = { settingsRequests, settingsPayloads };
+  let networkAvailable = false;
+  let disconnectedAttempts = 0;
+  let transientAttempts = 0;
+
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await page.route('**/api/state*', async (route) => {
+    const request = route.request();
+    if (!['PUT', 'DELETE'].includes(request.method())) {
+      await route.fallback();
+      return;
+    }
+    const items = request.method() === 'PUT' ? request.postDataJSON()?.items : null;
+    if (!Array.isArray(items) || !items.some((item: { key?: unknown }) => typeof item.key === 'string' && item.key.endsWith('_settings'))) {
+      await route.fallback();
+      return;
+    }
+    if (networkAvailable) {
+      await route.fallback();
+      return;
+    }
+    if (disconnectedAttempts === 0) {
+      disconnectedAttempts += 1;
+      await route.abort('internetdisconnected');
+      return;
+    }
+    transientAttempts += 1;
+    const headers = request.headers();
+    await route.fulfill({ status: 503, contentType: 'application/json', headers: {
+      'X-FitFocus-State-Protocol': '2',
+      'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': headers['x-fitfocus-state-account'] ?? 'google-e2e-sub',
+      'X-FitFocus-State-Session': headers['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+      'Retry-After': '60',
+    }, body: JSON.stringify({ error: 'INJECTED_TEMPORARY_FAILURE' }) });
+  });
+  await openApp(page, '/#settings');
+  const fixedNow = await page.evaluate(() => Date.now());
+  await page.clock.setFixedTime(fixedNow);
+
+  await page.getByRole('button', { name: /^Светлая/ }).click();
+  await expect.poll(() => transientAttempts).toBe(1);
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.retryCount).toBe(2);
+  const beforeReload = await storedSettings(page);
+  expect(beforeReload.operations).toHaveLength(1);
+  const original = beforeReload.operations[0];
+  expect(original.value).toContain('"theme":"light"');
+  expect(original.status).toBe('pending');
+  expect(original.nextAttemptAtMs).toBeGreaterThan(fixedNow);
+  expect(disconnectedAttempts).toBe(1);
+  expect(settingsRequests).toEqual([]);
+  expect(server.get('fitfocus_data_google-e2e-sub_settings')).toBeUndefined();
+
+  await page.reload();
+  const afterReload = await storedSettings(page);
+  expect(afterReload.operations).toHaveLength(1);
+  expect(afterReload.operations[0]).toMatchObject({
+    opId: original.opId,
+    value: original.value,
+    baseVersion: original.baseVersion,
+    status: 'pending',
+    nextAttemptAtMs: original.nextAttemptAtMs,
+  });
+  expect(disconnectedAttempts).toBe(1);
+  expect(transientAttempts).toBe(1);
+  expect(settingsRequests).toEqual([]);
+
+  networkAvailable = true;
+  await page.clock.setFixedTime(original.nextAttemptAtMs + 1);
+  await expect.poll(async () => (await storedSettings(page)).confirmedVersion, { timeout: 20_000 }).toBe(1);
+  expect((await storedSettings(page)).operations).toHaveLength(0);
+  expect(disconnectedAttempts).toBe(1);
+  expect(transientAttempts).toBe(1);
+  expect(settingsRequests).toEqual([0]);
+  expect(settingsPayloads).toEqual([{ baseVersion: original.baseVersion, value: original.value }]);
+  expect(server.get('fitfocus_data_google-e2e-sub_settings')).toEqual({ version: 1, value: original.value });
+});
