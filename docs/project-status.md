@@ -8,6 +8,14 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
+Опубликованный HEAD [`dfe9b42`](https://github.com/Michael-edel/FitFocus/commit/dfe9b42c97600e606ad5758672e9cc707f86ac16)
+проверяется точным PR CI #1541: audit, unit, guards, три typecheck и build
+прошли, E2E ещё выполняется. Локальный follow-up [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
+подавляет запись ожидаемых session/auth-отказов scoped фотоанализа в журнал;
+добавлен тест на отказ `access`, чтобы не скрывать реальное ограничение. Полный
+unit (1346/1346), typechecks и production build прошли локально; точный CI
+этого follow-up ожидает push.
+
 P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
 требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;
 старый writer получает 426 до body parsing и мутации, а текущий sender сохраняет

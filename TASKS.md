@@ -4,6 +4,11 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
+Опубликованный HEAD `dfe9b42` проверяется точным PR CI #1541: audit, unit,
+typechecks и build завершились успешно; E2E ещё выполняется. Следующий локальный
+коммит `3bc6581` исправляет диагностику ожидаемых session/auth-отказов фотоанализа;
+полный CI этого follow-up ожидает push.
+
 Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
 для опубликованного `7ff579d` завершился success: 1326 unit tests / 212 файлов,
 850 browser passed / 263 skipped за 38,1 минуты; audit, guards, три typecheck и
@@ -110,6 +115,11 @@ bundle проверена на семи Playwright-проектах и прош�
     остаются непроверенными. Дополнительный Chromium browser smoke подтвердил
     отрисовку landing page без pageerror, app console errors и записывающих запросов;
     зафиксировано одно предупреждение о `ambient-light-sensor` policy feature.
+  - [x] После `dfe9b42` повторить branch preview smoke без cookies и redirect-follow:
+    bundle содержит точный SHA, root и выбранные API остаются на preview origin;
+    `/api/env` и `/api/me` дают 200, защищённые GET — 401 без `Location` и
+    `Set-Cookie`. Проверялись только GET. Браузерный smoke текущего SHA, D1,
+    `APP_URL`, OAuth, edge rules для остальных путей и staging остаются открытыми.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.
@@ -1201,6 +1211,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     видимыми. Тест прошёл 6/6 на desktop Chromium/Firefox/WebKit без retries;
     полный unit suite — 1343/1343, три typecheck-профиля и production build
     прошли. Общий P0.5, остальные callbacks и staging остаются открытыми.
+  - [x] Подавлять ожидаемые `session`/`auth` отказы scoped AI-фото-запроса в
+    диагностическом журнале; отказ `access` остаётся видимым. Новый тест
+    воспроизвёл логирование `SESSION_READ_AUTH` до исправления. Целевой набор —
+    12/12, полный unit — 1346/1346, три typecheck-профиля и production build
+    прошли локально в `3bc6581`; точный CI follow-up ожидает push.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

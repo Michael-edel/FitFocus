@@ -5886,3 +5886,21 @@ same-account reauthentication сценарии `ai-callback-account-switch.spec.
 Chromium/Firefox/WebKit без retries. Полный unit suite — 1343/1343; общий,
 domain-strict и storage-strict typecheck, production build и `git diff --check`
 прошли. P0.5, другие callbacks, staging и общий lifecycle остаются открытыми.
+
+## P0.5 — не логировать ожидаемый auth-отказ анализа фото еды, `3bc6581`, 17.10.2026
+
+Scoped AI transport переводит HTTP 401 в `SessionReadError('auth')`. Фотоанализ
+не записывал такую ошибку в дневник или профиль, но отправлял её в общий
+`logError`, из-за чего ожидаемый отказ выглядел как ошибка приложения. Новый
+тест сначала воспроизвёл вызов `logError` до исправления. Теперь `session` и
+`auth` завершают текущую обработку без диагностического сообщения; `access`,
+ошибки изображения и другие реальные сбои продолжают логироваться. Loading
+сбрасывается, diary, usage и insight не записываются.
+
+Профильный unit-набор прошёл 12/12; полный unit suite — 1346/1346. Общий,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли. Точный CI опубликованного родителя `dfe9b42` (run #1541) на момент
+фиксации ещё выполнялся: статические шаги, unit и build прошли, E2E был в работе.
+Полный CI коммита `3bc6581` ожидает публикации. Фотоанализ проверен unit-тестом;
+реальный OAuth и staging от этого локального результата не подтверждаются.
+P0.5, остальные callbacks, staging и общий lifecycle остаются открытыми.

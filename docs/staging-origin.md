@@ -134,6 +134,23 @@ POST/PUT/PATCH/DELETE не отправлялись. Браузер вывел �
 реальные edge rules, миграции или корректность аутентифицированных операций;
 staging acceptance и выпуск остаются открытыми.
 
+### Read-only preview API smoke: `dfe9b42`, 17.10.2026
+
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200;
+статический bundle `/assets/index-i0UhY7Pn.js` содержит полный SHA
+`dfe9b42c97600e606ad5758672e9cc707f86ac16`. Проверка выполнена `HttpClient` с
+отключёнными auto-redirect и cookie и только GET-запросами:
+
+- `/api/env` и `/api/me` — 200;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401;
+- все запросы остались на `fix-durable-outbox.fitfocus.pages.dev`, без `Location`
+  и `Set-Cookie`.
+
+Это подтверждает доставку точного bundle и выбранные read-only API-маршруты.
+Браузерный smoke текущего SHA, все edge-маршруты, D1 binding/изоляция,
+`APP_URL`, OAuth, миграции и аутентифицированные операции не проверены;
+staging acceptance и выпуск остаются открытыми.
+
 Проверка конфигурации репозитория показывает один верхнеуровневый D1 binding
 `DB` (`database_name = "fitfocus"`, ID `061ae786-9341-4bd7-8efe-025dd1bac6d5`);
 `env.preview`/`env.production` overrides в `wrangler.toml` отсутствуют.
