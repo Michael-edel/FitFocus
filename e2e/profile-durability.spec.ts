@@ -57,6 +57,13 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200, headers?: Record<string, string>) => {
       const responseHeaders = { ...scope, 'X-FitFocus-State-Session': currentSid, ...headers };
+      if (path === '/api/ai' && request.method() === 'POST' && request.headers()['x-fitfocus-state-account']) {
+        Object.assign(responseHeaders, {
+          'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
+          'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+          'X-FitFocus-State-Session': currentSid,
+        });
+      }
       if (path.startsWith('/api/wearable/huawei/')) Object.assign(responseHeaders, {
         'X-FitFocus-Huawei-Protocol': '1', 'X-FitFocus-Huawei-Guard': '1',
         'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': currentSid,
@@ -68,6 +75,9 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: currentSid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
       ...(profileSnapshot.wearableProvider === 'huawei_health' ? { huaweiSync: { protocol: 1, guard: 1 } } : {}) });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile: profileSnapshot, items: [] });
+    if (path === '/api/ai' && request.method() === 'POST' && request.postDataJSON()?.feature === 'wis_text') {
+      return json({ text: 'E2E: недельный отчёт обработан тестовой фикстурой.' });
+    }
     if (path === '/api/wearable/huawei/status' && request.method() === 'GET') return json({
       configured: true, connected: huaweiConnected, status: huaweiConnected ? 'connected' : 'disconnected', scope: 'health.read', expiresAt: null, lastSyncAt: null,
     });

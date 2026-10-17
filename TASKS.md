@@ -1,14 +1,15 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
+Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Кодовый commit `a0721b0` переводит действия
-настроек профиля на durable commit: UI подтверждает правку только после записи
-в IndexedDB, а account/session guard действует и во время auth-паузы. Полная
-профильная Chromium-проверка прошла 19/19; две регрессии Huawei/интенсивности —
-14/14 по семи desktop/mobile/PWA проектам. PR CI #1573 проверяет head `bb94957`:
-audit, guards, unit, typechecks и build прошли, E2E ещё выполняется. Branch preview
-для `bb94957` развернут; ограниченный GET/Chromium smoke прошёл. В плане остаются
+защищённую `main` не подтверждены. Последний опубликованный HEAD `a9d2e33` прошёл
+audit, schema/privacy/auth/API checks, unit, три typecheck и build; его точный
+[PR CI #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
+завершился с 988 E2E passed, 299 skipped и одним iPhone Safari failure в profile
+durability сценарии из-за фонового `wis_text` запроса при reload. Тестовая
+фикстура исправлена локально явным scoped ответом; точный сценарий прошёл 10/10
+без retries, root typecheck и diff check прошли. Полный CI follow-up ожидает push.
+Branch preview `bb94957` прошёл ограниченный GET/Chromium smoke. В плане остаются
 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
@@ -18,8 +19,8 @@ GitHub annotations показывают отказы account-switch сценар
 пустого outbox. В тестовой фикстуре не было активного состояния Service Worker;
 она исправлена в `a0721b0`, десять аннотированных сценариев прошли локально
 10/10 на Chromium. CI нового PR head `bb94957` — [run #1573](https://github.com/Michael-edel/FitFocus/actions/runs/39056823576) —
-выполняет полный E2E и rollback/CAS после успешных audit, guards, unit,
-typechecks и production build.
+позднее завершился двумя E2E сбоями после успешных audit, guards, unit,
+typechecks и production build; оба сценария локально прошли 5/5.
 
 Исправление обнаруженной паузы sender: когда первый fence handshake не давал
 подтверждение, `StateSync` сохранял безопасный запрет отправки, но секундный
@@ -1574,10 +1575,15 @@ all-client Service Worker fence, атомарные migration items и quarantin
     Firefox и WebKit; unit 1360/1360, root/domain/storage typecheck, production
     build и `git diff --check` прошли. Chromium и Firefox прошли profile E2E
     20/20; первый WebKit-прогон дал 18/20, оба сценария прошли точечный повтор
-    2/2 и полный WebKit повтор 20/20 без retries. Код `6bcbdd2`; exact CI этого
-    SHA ожидает push. Предыдущий CI #1573 на родительском SHA завершился двумя
-    E2E сбоями; локальные повторные проверки обоих сценариев прошли по 5/5.
-    Полный P0.8/lifecycle остаётся открыт.
+    2/2 и полный WebKit повтор 20/20 без retries. Exact CI #1575 для `a9d2e33`
+    завершился с 988 E2E passed, 299 skipped и одним падением iPhone Safari:
+    побочный weekly `wis_text` request дал access-control console error во время
+    reload сценария fallback-плана. Поведение fallback и остальные CI gates
+    прошли; до правки фикстуры этот сценарий локально прошёл 10/10. Теперь ответ
+    `wis_text` задан напрямую и с AI scope в profile E2E fixture; точный iPhone
+    Safari сценарий после изменения прошёл 10/10 без retries. Root typecheck и
+    `git diff --check` прошли. Exact CI follow-up SHA ожидает push. Полный
+    P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

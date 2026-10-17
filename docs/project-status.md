@@ -20,22 +20,23 @@ guard в локальной записи. Профильный набор про
 branch preview `bb94957`; read-only GET и Chromium smoke подтвердили тот же
 preview origin.
 
-Точный родительский [CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632)
-для `dbca5e3` завершился ошибкой E2E (summary: 341 failed). В доступных
-annotations ошибки ожидали пустую очередь после account switch, потому что mock
-Service Worker не имитировал `activated` и EventTarget. Фикстура исправлена в
-`a0721b0`; десять аннотированных account-switch сценариев прошли 10/10 на
-Chromium. Полный [PR CI #1573](https://github.com/Michael-edel/FitFocus/actions/runs/39056823576)
-для `bb94957` выполняет E2E; audit, guards, unit, три typecheck и build прошли,
-CI #1573 на `bb94957` завершился с ошибкой: 980 E2E passed, 299 skipped и два
-failed. В Firefox семейный сценарий увидел два запроса списка аккаунта A вместо
-одного ожидаемого; в Android PWA сценарии 403-паузы появилось сообщение о quota
-локального хранилища вместо access pause. На текущем локальном HEAD первый
-сценарий прошёл 5/5 в Firefox, второй — 5/5 в Android PWA; оба сбоя не
-воспроизвелись. Новый коммит `6bcbdd2` не входил в CI #1573; точный CI нового
-HEAD запускается после push. В плане остаются 33 незакрытых
-пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
-Staging, выпуск и интеграция в защищённую `main` остаются открытыми.
+Точный [PR CI #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
+для `a9d2e33` завершился ошибкой в одном E2E: 988 browser passed, 299 skipped,
+1 failed. Audit, schema/privacy/auth/API checks, unit, три typecheck и build
+успешны. Единственный отказ — fallback AI-plan сценарий на iPhone Safari:
+побочный недельный `wis_text` request зарегистрировал access-control ошибку
+во время reload, после чего появилось сообщение `WEEKLY_AI_REPORT_FAILED`.
+Локальный follow-up задаёт `wis_text` ответ прямо в profile fixture с AI
+scope-заголовками; точный сценарий прошёл 10/10 на iPhone Safari, retries=0.
+Полный новый CI ещё не запущен.
+
+Более ранний CI #1573 на `bb94957` завершился двумя E2E сбоями; Firefox
+shopping-list и Android PWA access-pause сценарии прошли локальные повторы 5/5.
+Предыдущая правка `6bcbdd2` сохраняет fallback AI-план только после guarded
+durable commit; её desktop Chromium/Firefox и WebKit проверки прошли локально.
+В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
+P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main`
+остаются открытыми.
 
 Read-only smoke deployed preview: landing и `/api/env`/`/api/me` ответили 200;
 анонимные `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status`

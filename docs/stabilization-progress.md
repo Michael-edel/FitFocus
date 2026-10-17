@@ -6276,7 +6276,8 @@ pageerror/console errors, off-origin requests или non-GET запросов. �
 подтверждает только публичную страницу и указанные unauthenticated маршруты.
 D1 binding/изоляция, серверный `APP_URL`, OAuth callback, миграции и
 аутентифицированные сценарии не проверены; staging и выпуск остаются открыты.
-Точный PR CI #1573 для `bb94957` ещё выполняет полный E2E и rollback/CAS.
+Точный PR CI #1573 для `bb94957` позднее завершился с двумя E2E сбоями
+(980 passed / 299 skipped); оба сценария прошли локальные повторы 5/5.
 
 ## Recheck Safari reload cancellation: 17.10.2026
 
@@ -6293,4 +6294,26 @@ iPhone PWA прошли **3/3**, workers=1, retries=0. Это подтвержд
 family intent` на коде `bb94957` прошёл **1/1** в `desktop-firefox`,
 `workers=1,retries=0`. Timeout на ожидании сохранённого состояния не возник;
 один успешный повтор не устанавливает причину исторического timeout и не
-закрывает диагностический пункт. Точный полный CI #1573 ещё выполняется.
+закрывает диагностический пункт. CI #1573 позднее завершился двумя другими E2E
+сбоями; этот локальный Firefox recheck их не проверял.
+
+## P0.8 — follow-up точного CI #1575 для fallback AI-plan E2E, 18.10.2026
+
+Точный [PR CI run #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
+проверял commit `a9d2e33686cb9219ccd88eff66f2dd7b0a845629`: audit, schema/privacy/
+auth/API checks, unit tests, три typecheck и production build прошли. E2E
+завершился **988 passed / 299 skipped / 1 failed**. Единственный отказ —
+`fallback AI plan stays hidden when its durable profile commit fails, then recovers
+after reload` на iPhone Safari. В этой ветке браузер начинал фоновый недельный
+`wis_text` запрос; при reload WebKit выдал access-control console error и
+`WEEKLY_AI_REPORT_FAILED`, из-за чего проверка общего console health упала после
+успешных проверок fallback и durable profile commit.
+
+Локально тот же сценарий прошёл **10/10** на iPhone Safari до изменения, что
+подтвердило неповторяемость сбоя. Profile fixture теперь явно отвечает на
+`wis_text` запрос тестовым результатом с AI protocol/guard и account/session
+headers; общая проверка консоли не ослаблена. После изменения точный сценарий
+прошёл ещё **10/10**, `workers=1,retries=0`; root typecheck и `git diff --check`
+прошли. Это устраняет нестабильную зависимость этого profile E2E от общего
+fallback mock. Следующий CI должен подтвердить новый SHA целиком; P0.8/P0.9,
+staging, release acceptance и интеграция в `main` остаются открытыми.
