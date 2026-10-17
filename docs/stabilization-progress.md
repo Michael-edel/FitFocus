@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — не показывать незафиксированную настройку после локального отказа, `5204b41`, 17.10.2026
+
+`useSettingsPersistence` раньше сразу отмечал новое значение как уже записанное,
+а запись IndexedDB запускал без ожидания результата. При quota fault state notice
+показывал ошибку, но экран оставлял новую тему выбранной; повтор выбора того же
+значения не создавал новую запись. Теперь hook хранит последний успешно
+зафиксированный локальный снимок, возвращает к нему UI после отказа и допускает
+повтор. Scope guard исключает обновление настроек после смены account/repository
+или login attempt. При валидном `loginGuard` commit привязан к read-session; если
+сессия ушла в auth-паузу, новая локальная операция сохраняется для отправки после
+повторной проверки.
+
+Расширен E2E quota сценарий: экран возвращается к сохранённой теме, а после
+восстановления storage пользователь успешно повторяет выбор. Проверки включают
+401 auth-паузу, durable reload, server confirmation, multi-edit, quota failure и
+transaction abort: 18/18 на desktop Chromium/Firefox/WebKit, workers=1,
+retries=0. Полный unit suite — 1347/1347; root, domain-strict и storage-strict
+typecheck, production build и `git diff --check` прошли. Точный CI для нового SHA
+ожидает push; остальные callbacks/lifecycle, staging и release gates остаются
+открыты.
+
 ## P0.8 — durable writes дневника питания, `2c94596`, 17.10.2026
 
 `useFoodDiary` менял React state до подтверждения записи и запускал persistence

@@ -8,6 +8,18 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
+## P0.8 — настройки возвращаются к последнему durable значению при отказе, `5204b41`, 17.10.2026
+
+При quota/transaction отказе settings outbox откатывает запись, а hook теперь
+возвращает выбранную тему к последнему локально сохранённому значению; повторное
+действие снова ставит запись. Запись использует актуальный account/session guard,
+но не теряет owner-scoped локальные изменения в auth-паузе 401. Проверены обычное
+сохранение/reload, multi-edit, quota/retry, transaction abort и 401 recovery:
+18/18 на desktop Chromium, Firefox и WebKit без retries. Unit 1347/1347, root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Точный workflow ожидает push; общий P0.8/lifecycle, staging,
+выпуск и интеграция в защищённый `main` остаются открыты.
+
 ## P0.8 — дневник питания подтверждает изменения после durable commit, `2c94596`, 17.10.2026
 
 Ручное добавление, редактирование, удаление и массовые действия дневника теперь

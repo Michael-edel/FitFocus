@@ -3,12 +3,17 @@
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Последний кодовый follow-up
+[`5204b41`](https://github.com/Michael-edel/FitFocus/commit/5204b41) возвращает
+настройки к последнему локально сохранённому варианту после quota/transaction
+ошибки и сохраняет owner-scoped правку во время 401 auth-паузы. Browser
+acceptance прошла 18/18 на desktop Chromium/Firefox/WebKit; unit 1347/1347,
+три typecheck-профиля, production build и `git diff --check` прошли. Точный CI
+ожидает публикации. Предыдущий follow-up
 [`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596) исправляет
 durable writes дневника: add/edit/delete и bulk actions обновляют UI только после
 commit IndexedDB, а ошибка сохраняет форму и выбор для повтора. Регрессии отказа
-и повтора прошли 3 сценария в desktop Chromium/Firefox/WebKit (9/9); unit
-1347/1347, три typecheck-профиля, production build и `git diff --check` прошли.
-Точный CI ожидает публикации. Предыдущий follow-up
+и повтора прошли 3 сценария в desktop Chromium/Firefox/WebKit (9/9).
+Предыдущий follow-up
 [`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496) исправил
 такое же ложное сообщение об успехе для избранных рецептов; регрессии формы и
 фоторазбора прошли локально. P0.8/P0.9 и release gates остаются открыты.
@@ -1494,6 +1499,14 @@ all-client Service Worker fence, атомарные migration items и quarantin
     domain-strict и storage-strict typecheck, production build и `git diff --check`
     прошли. Код [`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596);
     точный CI ожидает push.
+  - [x] После quota/transaction ошибки настроек экран возвращается к последней
+    локально записанной теме; пользователь может повторить сохранение. Действующая
+    read-session guard защищает запись, а при 401 auth-паузе новая owner-scoped
+    правка остаётся в outbox для отправки после повторной проверки входа.
+    Регрессии quota/retry, transaction abort, multi-edit и 401 прошли 18/18 на
+    desktop Chromium/Firefox/WebKit; код [`5204b41`](https://github.com/Michael-edel/FitFocus/commit/5204b41),
+    unit 1347/1347, три typecheck-профиля и production build прошли. Точный CI
+    запускается после push.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
