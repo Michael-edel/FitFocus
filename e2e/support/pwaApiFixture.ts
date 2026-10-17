@@ -21,6 +21,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   const stateWriteKeys: string[] = [];
   const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, profileGet: 0, accepted: 0, acceptedAtMs: null as number | null,
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
+    legacyStateProtocolRejected: 0,
     currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
   return { unexpectedApi, counts, stateWriteKeys, pushRequests,
@@ -49,6 +50,10 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sessionId)) {
       if (legacySingleStateWrite) { counts.legacyStateScopeRejected += 1; return json({ error: 'INVALID_SCOPE' }, 403); }
       unexpectedApi.push(`INVALID_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
+    }
+    if (path === '/api/state' && method !== 'GET' && request.headers['x-fitfocus-state-protocol'] !== '2') {
+      if (legacySingleStateWrite) counts.legacyStateProtocolRejected += 1;
+      return json({ error: 'STATE_PROTOCOL_REQUIRED' }, 426);
     }
     if (path === '/api/env') return json({ requireInvite: false });
     if (path === '/api/me') counts.me += 1;

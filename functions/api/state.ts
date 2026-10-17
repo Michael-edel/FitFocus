@@ -15,11 +15,12 @@ import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database };
 const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
+const STATE_WRITE_PROTOCOL = '2';
 
 function respond(request: Request, requestId: string, body: unknown, status: number): Response {
   logApiEvent('state.response', { requestId, status });
   const response = withRequestId(json(body, status), requestId);
-  response.headers.set('X-FitFocus-State-Protocol', '2');
+  response.headers.set('X-FitFocus-State-Protocol', STATE_WRITE_PROTOCOL);
   response.headers.set('X-FitFocus-State-Guard', '1');
   for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {
     const value = request.headers.get(header);
@@ -27,6 +28,12 @@ function respond(request: Request, requestId: string, body: unknown, status: num
   }
   return response;
 }
+
+function requireStateWriteProtocol(request: Request, requestId: string): Response | null {
+  if (request.headers.get('X-FitFocus-State-Protocol') === STATE_WRITE_PROTOCOL) return null;
+  return respond(request, requestId, { error: 'STATE_PROTOCOL_REQUIRED' }, 426);
+}
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
@@ -65,6 +72,9 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return respond(request, requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
+
+  const protocolFailure = requireStateWriteProtocol(request, requestId);
+  if (protocolFailure) return protocolFailure;
 
   const db = requireDB(env);
   let body: unknown = null;
@@ -108,6 +118,9 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   } catch {
     return respond(request, requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
+
+  const protocolFailure = requireStateWriteProtocol(request, requestId);
+  if (protocolFailure) return protocolFailure;
 
   const url = new URL(request.url);
   const key = url.searchParams.get("key");

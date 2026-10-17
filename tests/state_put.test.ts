@@ -108,13 +108,18 @@ function makeDb(options: { atomicWriteChanges?: number } = {}) {
   };
 }
 
-async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, protocol: string | null = '2') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StatePutContext['env'];
   const context: StatePutContext = {
     request: new Request('https://fitfocus.test/api/state', {
       method: 'PUT',
-      headers: { Cookie: `ff_session=${token}`, ...await validStateScope(), 'Content-Type': 'application/json' },
+      headers: {
+        Cookie: `ff_session=${token}`,
+        ...await validStateScope(),
+        ...(protocol ? { 'X-FitFocus-State-Protocol': protocol } : {}),
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
     env,
@@ -143,13 +148,17 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string, includeDe
   return onRequestGet(context);
 }
 
-async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersion?: number) {
+async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersion?: number, protocol: string | null = '2') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateDeleteContext['env'];
   const context: StateDeleteContext = {
     request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}${baseVersion === undefined ? '' : `&baseVersion=${baseVersion}`}`, {
       method: 'DELETE',
-      headers: { Cookie: `ff_session=${token}`, ...await validStateScope() },
+      headers: {
+        Cookie: `ff_session=${token}`,
+        ...await validStateScope(),
+        ...(protocol ? { 'X-FitFocus-State-Protocol': protocol } : {}),
+      },
     }),
     env,
     params: {},
@@ -161,6 +170,30 @@ async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersi
 }
 
 describe('/api/state PUT', () => {
+  it.each([null, '1'])('rejects a legacy PUT without state protocol %s before database access', async (protocol) => {
+    const db = makeDb();
+    const response = await putState(db, {
+      key: 'fitfocus_data_user-1_food:3',
+      value: '{"legacy":true}',
+      baseVersion: 0,
+    }, protocol);
+
+    expect(response.status).toBe(426);
+    await expect(response.json()).resolves.toMatchObject({ error: 'STATE_PROTOCOL_REQUIRED' });
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([null, '1'])('rejects a legacy DELETE without state protocol %s before database access', async (protocol) => {
+    const db = makeDb();
+    const response = await deleteState(db, 'fitfocus_data_user-1_food:1', 1, protocol);
+
+    expect(response.status).toBe(426);
+    await expect(response.json()).resolves.toMatchObject({ error: 'STATE_PROTOCOL_REQUIRED' });
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('returns the committed deletion version and advertises the state protocol', async () => {
     const response = await deleteState(makeDb(), 'fitfocus_data_user-1_food:1', 1);
     expect(response.status).toBe(200);
@@ -350,7 +383,12 @@ describe('/api/state PUT', () => {
     const context: StatePutContext = {
       request: new Request('https://fitfocus.test/api/state', {
         method: 'PUT',
-        headers: { Cookie: `ff_session=${token}`, ...await validStateScope(), 'Content-Type': 'application/json' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          ...await validStateScope(),
+          'X-FitFocus-State-Protocol': '2',
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ items: [{ key: 'fitfocus_data_user-1_food:1', value: 'x'.repeat(600 * 1024) }] }),
       }),
       env,

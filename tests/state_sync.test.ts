@@ -57,6 +57,7 @@ describe('durable HTTP sender', () => {
     await instance.connect(account);
     expect(await instance.flushPending(account)).toBe(true);
     expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me', '/api/state']);
+    expect(new Headers(fetchFn.mock.calls[1]?.[1]?.headers).get('X-FitFocus-State-Protocol')).toBe('2');
     expect(await outbox.list(account)).toEqual([]);
   });
 
@@ -139,6 +140,7 @@ describe('durable HTTP sender', () => {
     const { instance } = client(async (url, init) => {
       expect((await new DurableOutbox(secondDb).list(account))[0].status).toBe('sending');
       expect(url).toBe('/api/state'); expect(init?.method).toBe('PUT');
+      expect(new Headers(init?.headers).get('X-FitFocus-State-Protocol')).toBe('2');
       expect(new Headers(init?.headers).get('X-FitFocus-State-Session')).toBe(sessionId);
       expect(JSON.parse(String(init?.body)).items[0]).toMatchObject({ key, baseVersion: 0 });
       return ack(7);
@@ -152,6 +154,7 @@ describe('durable HTTP sender', () => {
     await write('delete');
     const { instance } = client(async (url, init) => {
       expect(init?.method).toBe('DELETE'); expect(String(url)).toContain(`key=${encodeURIComponent(key)}&baseVersion=0`);
+      expect(new Headers(init?.headers).get('X-FitFocus-State-Protocol')).toBe('2');
       expect(init?.body).toBeUndefined(); return json({ ok: true, key, version: 4, exists: false }, 200, scope);
     });
     await instance.connect(account); await instance.flush();
@@ -163,6 +166,7 @@ describe('durable HTTP sender', () => {
     [401, 'UNAUTH', 'pending', 'auth'], [403, 'ACCESS_REQUIRED', 'pending', 'access'],
     [403, 'FORBIDDEN_KEYSPACE', 'failed', undefined], [403, 'OTHER', 'failed', undefined],
     [400, 'BAD_JSON', 'failed', undefined], [404, 'NOT_FOUND', 'failed', undefined],
+    [426, 'STATE_PROTOCOL_REQUIRED', 'pending', 'protocol'],
     [408, '', 'pending', undefined], [429, '', 'pending', undefined], [500, '', 'pending', undefined],
   ])('retains status %s with the appropriate pause or failure', async (status, error, expected, pause) => {
     await write(); const { instance } = client(async () => json({ error }, status));

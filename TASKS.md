@@ -1251,6 +1251,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить SQLite: delete/recreate/stale update, гонки, миграцию,
   экспорт, перенос legacy-аккаунта и hard delete.
 - [ ] Подключить совместимый клиент и проверяемый барьер старых writers;
+  - [x] Требовать request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;
+    несовместимый writer получает 426 до чтения тела и D1. Текущий sender передаёт
+    protocol и сохраняет intent на protocol-паузе; route/sender unit regressions
+    прошли, exact CI этого изменения ожидает push.
+  - [ ] Проверить настоящую пару старого/нового bundle через HTTP barrier на одном
+    origin и подтвердить остановку старой вкладки без потери локального intent.
 - [x] Не повышать legacy `baseVersion` до доказанного серверного поколения:
   импортировать старые операции как конфликт с `baseVersion=0`, закрыть claim,
   атомарно снимать старую попытку и отклонять поздний ack. Unit и browser

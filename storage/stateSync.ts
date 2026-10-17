@@ -515,8 +515,9 @@ export class StateSync {
         const controller = new AbortController(); this.requests.add(controller);
         let outcome: OutboxOutcome;
         try {
-          const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': accountId,
+          const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': accountId,
             'X-FitFocus-State-Session': session.serverSessionId! };
+          if (claim.resource !== 'profile' && claim.resource !== 'familyMenu') headers['X-FitFocus-State-Protocol'] = '2';
           const profile = profileIntent(claim);
           let family: unknown;
           if (claim.resource === 'familyMenu' && claim.type === 'put') { try { family = JSON.parse(claim.value); } catch {} }
@@ -569,6 +570,7 @@ export class StateSync {
     const pause = (reason: 'auth' | 'access' | 'protocol'): OutboxOutcome => ({ kind: 'retry', reason, pause: reason, nextAttemptAtMs: this.now() });
     if (response.status === 401) return pause('auth');
     if (response.status === 403 && body?.error === 'ACCESS_REQUIRED') return pause('access');
+    if (response.status === 426 && body?.error === 'STATE_PROTOCOL_REQUIRED') return pause('protocol');
     if (claim.resource === 'familyMenu') {
       let intent: unknown;
       try { intent = claim.type === 'put' ? JSON.parse(claim.value) : null; } catch {}

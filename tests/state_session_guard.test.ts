@@ -15,7 +15,12 @@ beforeEach(() => {
   mocks.deleted.mockResolvedValue({ ok: true, item: { key, version: 1, exists: false } }); mocks.read.mockResolvedValue([]);
 });
 const invoke = (handler: typeof onRequestPut, request: Request) => handler({ request, env } as unknown as Parameters<typeof handler>[0]) as Promise<Response>;
-const headers = async () => ({ 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'account-a', 'X-FitFocus-State-Session': await stateSessionId(mocks.user) });
+const headers = async () => ({
+  'Content-Type': 'application/json',
+  'X-FitFocus-State-Account': 'account-a',
+  'X-FitFocus-State-Session': await stateSessionId(mocks.user),
+  'X-FitFocus-State-Protocol': '2',
+});
 it('exposes a stable public session binding but never the raw sid', async () => {
   const result = await invoke(me, new Request('https://example.test/api/me'));
   const text = await result.text(); const body = JSON.parse(text);
@@ -48,6 +53,20 @@ it('acknowledges the validated request scope', async () => {
   const response = await invoke(onRequestPut, new Request('https://example.test/api/state', { method: 'PUT', headers: expected, body: JSON.stringify({ key, value: 'local', baseVersion: 0 }) }));
   expect(response.status).toBe(200); expect(response.headers.get('X-FitFocus-State-Guard')).toBe('1');
   expect(response.headers.get('X-FitFocus-State-Session')).toBe(expected['X-FitFocus-State-Session']);
+});
+it.each(['PUT', 'DELETE'])('rejects a correctly scoped but legacy %s before application writes', async method => {
+  const expected = await headers();
+  delete expected['X-FitFocus-State-Protocol'];
+  const handler = method === 'PUT' ? onRequestPut : onRequestDelete;
+  const response = await invoke(handler, new Request(`https://example.test/api/state?key=${key}&baseVersion=0`, {
+    method,
+    headers: expected,
+    ...(method === 'PUT' ? { body: '{' } : {}),
+  }));
+  expect(response.status).toBe(426);
+  await expect(response.json()).resolves.toMatchObject({ error: 'STATE_PROTOCOL_REQUIRED' });
+  expect(mocks.write).not.toHaveBeenCalled();
+  expect(mocks.deleted).not.toHaveBeenCalled();
 });
 it.each(['GET', 'PUT', 'DELETE'])('rejects an unscoped legacy %s before application reads or writes', async method => {
   const handler = method === 'GET' ? onRequestGet : method === 'PUT' ? onRequestPut : onRequestDelete;
