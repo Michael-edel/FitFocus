@@ -1341,7 +1341,11 @@ all-client Service Worker fence, атомарные migration items и quarantin
     122 целевой unit; полный набор — 1291/1291 в 208 файлах. Общий, domain и
     storage typecheck, auth/API guards и production build прошли; legacy migration
     E2E — 14/14 на семи desktop/mobile/PWA проектах, workers=2/retries=0.
-    Точный CI актуальной ревизии ожидается.
+    Точный CI актуальной ревизии ожидается. В run #1487 единственный E2E сбой
+    возник потому, что profile-recovery тест вводил имя до завершения начальной
+    гидратации формы. Добавлено ожидание исходного profile name перед правкой
+    в [`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496); локальный тест прошёл 9/9 на desktop Chromium,
+    Firefox и WebKit, точный CI нового HEAD ожидается.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

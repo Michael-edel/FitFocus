@@ -4,9 +4,9 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Последний полный опубликованный CI —
-[run #1485](https://github.com/Michael-edel/FitFocus/actions/runs/38984560848)
-на `2e6d854`: audit, schema/privacy/auth/API guards, unit, три typecheck и
-production build прошли; E2E завершился 843 passed / 255 skipped / 1 failed.
+[run #1487](https://github.com/Michael-edel/FitFocus/actions/runs/38988720215)
+на `61c461b`: audit, schema/privacy/auth/API guards, unit, три typecheck и
+production build прошли; E2E завершился с одной ошибкой.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9; IndexedDB durable outbox
 подключён, общий P0 открыт. E2E follow-up
@@ -31,6 +31,14 @@ bootstrap при восстановлении сети, пока подтвер�
 desktop WebKit и iPhone PWA (`--repeat-each=3`, `--retries=0`); `npm run build`,
 `npm run typecheck` и `git diff --check` прошли. Новый точный CI ожидается после
 push. Staging, выпуск и интеграция в `main` не выполнены.
+
+В #1487 PWA-сценарий уже прошёл; единственный E2E сбой был в проверке profile
+recovery. Trace показал, что тест вводил имя до завершения начальной гидратации
+формы: `openApp()` ждал только `#root`, и WebKit дописывал введённый текст к
+`E2E User`. Тест теперь ждёт исходное значение профиля перед редактированием;
+изменение [`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496) прошло 9/9 повторов на desktop Chromium,
+Firefox и WebKit (`--repeat-each=3`, без retries). Точный CI этой поправки
+ожидается после push.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.

@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — дождаться гидратации формы в profile recovery acceptance, 17.10.2026
+
+Полный [CI run #1487](https://github.com/Michael-edel/FitFocus/actions/runs/38988720215)
+для опубликованного `61c461b` прошёл dependency audit, schema/privacy/auth/API
+guards, unit, три typecheck и production build. Исправленный offline reopen PWA
+прошёл в E2E; единственная ошибка осталась в
+`profile-durability.spec.ts`: после recovery поле содержало
+`E2E UserПрофиль после разрешения конфликта`.
+
+Trace показал, что `openApp()` ожидал только видимости `#root`, а тест начинал
+`fill()` до того, как SettingsScreen выставил исходное имя профиля. Во время
+ввода WebKit применил значение `E2E User` из начальной гидратации и дописал к
+нему текст теста. Соседний conflict-тест уже ожидал `profile.name`; та же
+предпосылка добавлена в recovery-сценарий. Исправлен только тест:
+[`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496).
+Он прошёл 9/9 на desktop Chromium, Firefox и WebKit (`--repeat-each=3`, один
+worker, без retries). Trace не показал ошибку в самой rebase-операции: outbox
+опустел, сервер получил baseVersion `[2, 8]`, а локальное значение сохранилось.
+
+Точный CI нового HEAD запускается после push; до этого profile recovery
+остаётся локально проверенным, но не подтверждённым полным CI.
+
 ## P0.8/P0.9 — повтор auth bootstrap при возврате сети после offline reopen, 17.10.2026
 
 Полный [CI run #1485](https://github.com/Michael-edel/FitFocus/actions/runs/38984560848)
