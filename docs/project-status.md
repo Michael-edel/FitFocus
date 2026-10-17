@@ -4,41 +4,32 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Последний полный опубликованный CI —
-[run #1487](https://github.com/Michael-edel/FitFocus/actions/runs/38988720215)
-на `61c461b`: audit, schema/privacy/auth/API guards, unit, три typecheck и
-production build прошли; E2E завершился с одной ошибкой.
+[run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)
+на `584b257`: проверки до E2E прошли, E2E завершился одной ошибкой на desktop
+WebKit в тесте same-account reauthentication семейного меню.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9; IndexedDB durable outbox
-подключён, общий P0 открыт. E2E follow-up
+подключён, общий P0 открыт. Trace #1489 поместил три сообщения об отказе
+same-origin fetch непосредственно после начала `page.reload()` старой вкладки;
+спорный GET `/api/family/menu?week=2026-10-12` возник через ~45 мс после reload,
+а reload завершился штатно. Проверки прежнего сохранённого меню и новой session
+identity прошли. В WebKit-only фильтр E2E добавлен только этот точный маршрут
+в существующее bounded-разрешение reload aborts. Локально проблемный сценарий
+прошёл 5/5 повторов, полная `family-menu-durable.spec.ts` на desktop WebKit —
+16/16 без retries. Это тестовое исправление ещё ожидает полного CI.
+
+E2E follow-up
 [`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
-исправляет три сбоя #1483 только в тестах. Trace поместил WebKit предупреждения
-по `/api/me` и `/api/achievements/check` в интервал `page.reload()`; семейный
-тест допускает только точные loopback-маршруты с общим пределом четыре, а weekly
-тест учитывает точные сообщения лишь во время reload и с отдельными пределами.
-Для восстановления legacy-профиля Playwright теперь нажимает «Позже» на PWA
-update banner, когда тот появляется перед действием, устраняя гонку разовой
-проверки видимости.
+исправил три сбоя #1483 только в тестах. Run #1485 подтвердил, что три прежних
+сбоя устранены, и выявил гонку восстановления auth после offline reopen; она
+исправлена в [`4b041f1`](https://github.com/Michael-edel/FitFocus/commit/4b041f194504068775d661b63a24f047e0e07bb1).
+В #1487 PWA-сценарий прошёл; profile recovery тест теперь ждёт гидратацию формы
+перед вводом и прошёл 9/9 локальных повторов на desktop Chromium, Firefox и
+WebKit. Полный CI этой поправки завершился run #1489 с описанной выше отдельной
+ошибкой family-menu E2E.
 
-Run #1485 подтвердил, что три прежних сбоя устранены, и нашёл один новый:
-после offline reopen desktop WebKit не восстановил cloud-сессию. Outbox сохранил
-settings intent, но событие `online` пришло во время первичного auth bootstrap,
-пока обработчик повторной проверки ещё не был установлен. Исправление
-[`4b041f1`](https://github.com/Michael-edel/FitFocus/commit/4b041f194504068775d661b63a24f047e0e07bb1)
-держит обработчик активным с начальной загрузки и повторяет обычный guarded
-bootstrap при восстановлении сети, пока подтверждённой сессии нет.
-
-Локальная проверка fix: сценарий PWA offline reopen прошёл 6/6 повторов на
-desktop WebKit и iPhone PWA (`--repeat-each=3`, `--retries=0`); `npm run build`,
-`npm run typecheck` и `git diff --check` прошли. Новый точный CI ожидается после
-push. Staging, выпуск и интеграция в `main` не выполнены.
-
-В #1487 PWA-сценарий уже прошёл; единственный E2E сбой был в проверке profile
-recovery. Trace показал, что тест вводил имя до завершения начальной гидратации
-формы: `openApp()` ждал только `#root`, и WebKit дописывал введённый текст к
-`E2E User`. Тест теперь ждёт исходное значение профиля перед редактированием;
-изменение [`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496) прошло 9/9 повторов на desktop Chromium,
-Firefox и WebKit (`--repeat-each=3`, без retries). Точный CI этой поправки
-ожидается после push.
+В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1 и 7 последующих задач);
+ни один P0 не закрыт целиком. Staging, выпуск и интеграция в `main` не выполнены.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.

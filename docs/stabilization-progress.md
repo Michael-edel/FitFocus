@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — WebKit отменяет family-menu GET во время reload, 17.10.2026
+
+Полный [CI run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)
+для опубликованного `584b257` прошёл проверки до E2E, но завершился одной ошибкой
+в сценарии `a delayed durable menu-state read from the previous same-account
+session cannot hydrate after reauthentication` на desktop WebKit. Trace показал
+три сообщения об отказе same-origin fetch через ~45 мс после начала `page.reload()`;
+спорным было сообщение `/api/family/menu?week=2026-10-12`. Reload завершился
+штатно примерно через 440 мс, сохранённое меню совпало с исходным, а session
+identity перешла на повторно авторизованную. Сетевой trace содержит успешные
+ответы этого GET до reload, но не содержит неуспешного HAR-запроса; браузерное
+сообщение WebKit возникло только в интервале reload.
+
+В helper добавлен только этот loopback GET в уже существующий WebKit-фильтр
+ожидаемых same-origin отмен при reload. Фильтр по-прежнему ограничивает маршруты
+регулярным выражением, применяется только к трём WebKit-проектам и ограничивает
+суммарное число сообщений четырьмя; остальные ошибки остаются фатальными.
+Проблемный сценарий прошёл 5/5 повторов на desktop WebKit, полная
+`family-menu-durable.spec.ts` — 16/16 (`workers=1`, `retries=0`). Это E2E-only
+изменение; полный CI нового HEAD ещё не запускался.
+
 ## P0.8/P0.9 — дождаться гидратации формы в profile recovery acceptance, 17.10.2026
 
 Полный [CI run #1487](https://github.com/Michael-edel/FitFocus/actions/runs/38988720215)

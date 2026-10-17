@@ -242,9 +242,15 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   исправлена только проверка viewport: поле настроек расположено ниже первого
   экрана на iPhone. Целевая матрица прошла 3/3, полная `profile-durability.spec.ts`
   — 63/63 на семи проектах при `workers=1,retries=0`. Это не закрывает полный
-  E2E набора; точный CI `d6946af` ожидает push. В `playwright.config.ts` CI
-  retries отключены, чтобы первый нестабильный запуск завершался ошибкой.
-  [Подробные свидетельства](docs/stabilization-progress.md).
+  E2E набора. Следующая поправка profile recovery в `6b38bb3` прошла 9/9
+  повторов на Chromium/Firefox/WebKit. Полный CI #1489 для `584b257` прошёл
+  проверки до E2E, но упал на одном WebKit same-account family-menu reload:
+  trace поместил точный GET `/api/family/menu` через ~45 мс после начала reload.
+  В E2E helper добавлен только этот маршрут в bounded WebKit-исключение;
+  проблемный сценарий прошёл 5/5, вся family-menu спека desktop WebKit — 16/16
+  при `workers=1,retries=0`. Новый полный CI после локального исправления открыт.
+  В `playwright.config.ts` CI retries отключены, чтобы первый нестабильный
+  запуск завершался ошибкой. [Подробные свидетельства](docs/stabilization-progress.md).
 
 ## Персональное недельное меню — реализация и открытая приёмка
 
