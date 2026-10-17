@@ -7,17 +7,17 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 durable outbox уже подключён, но общий P0 остаётся открыт, как и Safari/PWA
 lifecycle, интеграция в staging, выпуск и защищённую `main`.
 
-Локальный HEAD — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c).
-Удалены неиспользуемые onboarding/WIS/food-streak event
-logs, которые сохраняли чувствительные показатели в общих localStorage-ключах;
-новая сборка очищает оставшиеся старые ключи и маркеры, сохраняя профиль и
-настройки аккаунтов. Локально privacy suite прошёл 4/4, все три typecheck,
-production build и `git diff --check` прошли.
+Локальный HEAD — [`8df9270`](https://github.com/Michael-edel/FitFocus/commit/8df9270).
+Удалены неиспользуемые onboarding/WIS/food-streak event logs, которые сохраняли
+чувствительные показатели в общих localStorage-ключах; новая сборка очищает
+старые ключи. Owner-scoped food-streak markers остаются в перечне ключей очистки
+аккаунта, поэтому удаляются без перезапуска и не затрагивают похожие ID.
+Локально privacy suite прошёл 4/4, все три typecheck, production build и
+`git diff --check` прошли.
 
-Предыдущий опубликованный HEAD `f317d53` проверяется в точном [PR CI #1559](https://github.com/Michael-edel/FitFocus/actions/runs/39034972927):
-audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли; полный
-E2E на момент последней проверки выполнялся. Этот run предшествует `43c3b8c` и не
-подтверждает новое изменение; точный CI текущей ревизии ещё не завершён.
+Последний [PR CI #1561](https://github.com/Michael-edel/FitFocus/actions/runs/39036161293)
+проверяет предыдущую ревизию `fd4d949`, а не marker-cleanup follow-up `8df9270`;
+точный CI текущей ревизии ещё не завершён.
 Предыдущий опубликованный HEAD `5b90b31` завершил [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
 с ошибкой E2E: 913 passed, 31 failed, 295 skipped за 41 минуту; статические
 проверки прошли.

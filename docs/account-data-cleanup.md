@@ -33,7 +33,9 @@ passed / 9 skipped, audit (0 уязвимостей), guards, typecheck, build �
 Сбор локальных onboarding, WIS-share и food-streak event logs удалён: они не
 читались приложением и записывали чувствительные показатели в общие ключи без
 владельца. При старте новая сборка очищает старые global telemetry keys и
-milestone markers; account-scoped профиль и настройки остаются на месте.
+milestone markers. Owner-scoped прежние food-streak markers также остаются в
+перечне ключей аккаунта и удаляются сразу при удалении владельца, без ожидания
+перезапуска; маркеры аккаунтов с похожим ID сохраняются.
 
 В IndexedDB одна readwrite-транзакция проходит по всем пяти долговечным
 stores: `values`, `outbox`, `outbox_migration_items`,

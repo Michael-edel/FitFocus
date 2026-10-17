@@ -5,15 +5,16 @@
 защищённую `main` не подтверждены. В плане остаются 33 незакрытых пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
-Последний локальный code commit — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c),
-он удаляет неиспользуемую локальную аналитику с чувствительными показателями и
-очищает её старые ключи при запуске. Его локальные проверки: privacy suite 4/4,
-три typecheck, production build и `git diff --check`. Точный CI для этой
-ревизии ещё не завершён. Предыдущий опубликованный HEAD `f317d53` проверяется в
-[PR CI #1559](https://github.com/Michael-edel/FitFocus/actions/runs/39034972927):
-audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли, а E2E
-на момент последней проверки выполнялся. Этот run не включает `43c3b8c`. Более
-ранний опубликованный HEAD `5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
+Последние локальные code commits — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c)
+и [`8df9270`](https://github.com/Michael-edel/FitFocus/commit/8df9270). Первый
+удаляет неиспользуемую локальную аналитику с чувствительными показателями и
+чистит её остатки при запуске; второй восстанавливает немедленную очистку
+owner-scoped food-streak markers при удалении аккаунта. Privacy suite прошёл
+4/4, root/domain/storage typecheck, production build и `git diff --check` прошли.
+Последний [PR CI #1561](https://github.com/Michael-edel/FitFocus/actions/runs/39036161293)
+проверяет предшествующий SHA `fd4d949`, поэтому не подтверждает `8df9270`.
+Точный CI текущей ревизии ещё не завершён. Более ранний опубликованный HEAD
+`5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
 статические проверки прошли, E2E завершился с 913 passed, 31 failed и 295 skipped
 за 41 минуту.
 
