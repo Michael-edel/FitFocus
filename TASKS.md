@@ -4,13 +4,14 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний завершённый [CI run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)
-для `584b257` прошёл проверки до E2E и завершился одной ошибкой desktop WebKit
-в family-menu reauthentication/reload тесте. Трасса отнесла сообщение к GET
-`/api/family/menu` сразу после `page.reload()`; точечная E2E-поправка
-[`4afb66a`](https://github.com/Michael-edel/FitFocus/commit/4afb66a) прошла
-5/5 повторов и полную family-menu WebKit спеку 16/16 (`retries=0`). CI #1491
-для `0af2c30` выполняет E2E; итог ещё не получен.
+Последний завершённый [CI run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+для `0af2c30` прошёл проверки до E2E, включая точечное устранение WebKit
+reload-сообщения из #1489, но завершился ошибкой PWA update acceptance:
+тест вводил имя до гидратации профиля и получил `E2E UserЧерновик перед
+обновлением`. В `pwa-update.spec.ts` добавлено ожидание исходного имени из
+общей фикстуры. Исправленный сценарий прошёл 5/5 на desktop WebKit
+(`workers=1`, `retries=0`), `npm run typecheck` успешен; полный CI нового SHA
+ещё не запускался.
 История и ограничения — в [журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,

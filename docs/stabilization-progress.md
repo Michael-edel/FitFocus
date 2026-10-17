@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — гидратация профиля перед вводом в PWA update acceptance, 17.10.2026
+
+Полный [CI run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+для `0af2c30` прошёл предварительные проверки, включая audit, guards, unit,
+typecheck и build, но завершился одной E2E-ошибкой в
+`pwa-update.spec.ts`: после перехода в настройки поле ещё содержало начальное
+значение `E2E User`, когда тест начал вводить `Черновик перед обновлением`; итогом
+стало склеенное значение `E2E UserЧерновик перед обновлением`.
+
+Это та же гонка начальной гидратации профиля, ранее найденная в profile recovery.
+Production-поведение не менялось: PWA-сценарий теперь ожидает исходное имя из
+`buildMockProfile()` перед `fill()`. Исправленный сценарий прошёл 5/5 на desktop
+WebKit (`workers=1`, `retries=0`), `npm run typecheck` и `git diff --check`
+прошли. Полный CI нового SHA запускается после push.
+
 ## P0.8/P0.9 — WebKit отменяет family-menu GET во время reload, 17.10.2026
 
 Полный [CI run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)

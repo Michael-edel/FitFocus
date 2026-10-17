@@ -3,21 +3,22 @@
 Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Последний полный опубликованный CI —
-[run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)
-на `584b257`: проверки до E2E прошли, E2E завершился одной ошибкой на desktop
-WebKit в тесте same-account reauthentication семейного меню.
+`fix/state-generations`. Текущий этап — стабилизационная приёмка P0.8/P0.9;
+IndexedDB durable outbox подключён, общий P0 открыт.
 
-Текущий этап — стабилизационная приёмка P0.8/P0.9; IndexedDB durable outbox
-подключён, общий P0 открыт. Trace #1489 поместил три сообщения об отказе
-same-origin fetch непосредственно после начала `page.reload()` старой вкладки;
-спорный GET `/api/family/menu?week=2026-10-12` возник через ~45 мс после reload,
-а reload завершился штатно. Проверки прежнего сохранённого меню и новой session
-identity прошли. В WebKit-only фильтр E2E добавлен только этот точный маршрут
-в существующее bounded-разрешение reload aborts. Локально проблемный сценарий
-прошёл 5/5 повторов, полная `family-menu-durable.spec.ts` на desktop WebKit —
-16/16 без retries. Точный [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
-для `0af2c30` запущен; предварительные проверки прошли, сейчас выполняется E2E.
+Последний полный опубликованный CI —
+[run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+на `0af2c30`: предварительные проверки прошли, E2E обнаружил гонку в PWA update
+acceptance. После перехода в настройки тест вводил черновик до гидратации исходного
+профиля, отчего поле получило `E2E UserЧерновик перед обновлением`. E2E-тест теперь
+ждёт исходное имя из общей фикстуры до ввода. Сценарий прошёл 5/5 на desktop
+WebKit (`workers=1`, `retries=0`), `npm run typecheck` прошёл. Новый полный CI
+для этого исправления ещё не запущен.
+
+Исправление #1489 добавило в WebKit-only E2E фильтр только точный loopback GET
+`/api/family/menu` среди ограниченных reload aborts. Тот сценарий прошёл 5/5,
+полная `family-menu-durable.spec.ts` на desktop WebKit — 16/16 без retries; в CI
+#1491 эта ошибка больше не возникла.
 
 Read-only smoke branch preview подтвердил страницу и точный bundle SHA `0af2c30`
 на `fix-durable-outbox.fitfocus.pages.dev`: `/api/env` и анонимный `/api/me`
