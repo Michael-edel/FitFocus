@@ -3,9 +3,10 @@ import type { UserProfile } from '../../types';
 import { normalizeUserProfiles } from '../../storage/hybrid';
 import { StateEditor } from '../../storage/stateEditor';
 import { UserStateRepository } from '../../storage/userStateRepository';
-import type { OutboxCommitGuard, OutboxReadGuard } from '../../storage/durableOutbox';
+import type { OutboxReadGuard, OutboxWriteGuard } from '../../storage/durableOutbox';
 
 export type ProfileUpdate = UserProfile | ((profile: UserProfile) => UserProfile);
+export type ProfilePersistOptions = { durable?: boolean };
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 const codec = {
@@ -15,11 +16,16 @@ const codec = {
   decode: (_raw: string | null, fallback: UserProfile): UserProfile => fallback,
 };
 
-export async function isProfileCommitErrorCurrent(repository: UserStateRepository, guard: OutboxReadGuard,
+export async function isProfileCommitErrorCurrent(repository: UserStateRepository, guard: OutboxReadGuard | OutboxWriteGuard,
   canCommit: () => boolean): Promise<boolean> {
   if (!canCommit()) return false;
   try {
-    return await repository.isReadSessionCurrent(guard) && canCommit();
+    const current = 'readGuard' in guard
+      ? await repository.isReadSessionCurrent(guard.readGuard)
+      : 'localCommitGuard' in guard
+        ? await repository.isLocalCommitSessionCurrent(guard.localCommitGuard)
+        : await repository.isReadSessionCurrent(guard);
+    return current && canCommit();
   } catch { return false; }
 }
 
@@ -38,17 +44,22 @@ export function useProfilePersistence({ repository, currentUser, isCurrentSessio
   // The initial profile belongs to this repository/login, not to subsequent React renders.
   const editor = useMemo(() => repository && currentUser ? new StateEditor(repository, 'profile', currentUser, codec) : null, [repository]);
   useEffect(() => { void editor?.load(); }, [editor]);
-  return useCallback((action: ProfileUpdate, guard?: OutboxCommitGuard) => {
+  return useCallback((action: ProfileUpdate, guard?: OutboxWriteGuard, options?: ProfilePersistOptions) => {
     if (!editor || !repository || !isCurrentSession()) return Promise.resolve(null);
-    if (guard) {
+    if (guard || options?.durable) {
       const editRevision = profileEditRevisionRef.current;
-      const current = guard.canCommit;
+      const current = guard?.canCommit ?? (() => true);
       const canCommit = () => isCurrentSession() && current() && editRevision === profileEditRevisionRef.current;
+      const capturedGuard: OutboxWriteGuard | undefined = guard
+        ? 'readGuard' in guard
+          ? { readGuard: { ...guard.readGuard }, canCommit }
+          : { localCommitGuard: { ...guard.localCommitGuard }, canCommit }
+        : undefined;
       const committed = editor.commitGenerated(previous => {
         const update = typeof action === 'function' ? action(previous) : action;
         if (update.id !== repository.accountId) throw new Error('OUTBOX_KEY_OWNERSHIP');
         return update;
-      }, { readGuard: { ...guard.readGuard }, canCommit }).then(operation => {
+      }, capturedGuard).then(operation => {
         if (!canCommit()) return null;
         if (operation?.status !== 'pending') return operation;
         const update = editor.getSnapshot().value;
@@ -62,7 +73,10 @@ export function useProfilePersistence({ repository, currentUser, isCurrentSessio
         return operation;
       });
       void committed.catch(async () => {
-        if (await isProfileCommitErrorCurrent(repository, guard.readGuard, canCommit)) setProfileSyncState('error');
+        const currentError = guard
+          ? await isProfileCommitErrorCurrent(repository, guard, canCommit)
+          : canCommit();
+        if (currentError) setProfileSyncState('error');
       });
       return committed;
     }

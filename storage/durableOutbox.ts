@@ -443,6 +443,12 @@ export class DurableOutbox {
       && active.sessionEpoch === guard.sessionEpoch && active.serverSessionId === guard.serverSessionId && !active.pause;
   }
 
+  async isLocalCommitSessionCurrent(guard: Pick<OutboxReadGuard, 'accountId' | 'serverSessionId' | 'sessionEpoch'>): Promise<boolean> {
+    const { active } = await this.sessionState();
+    return active?.accountId === guard.accountId && active.sessionEpoch === guard.sessionEpoch
+      && active.serverSessionId === guard.serverSessionId;
+  }
+
   /** Session/fence, local revision and pending intents are checked in the same apply transaction. */
   async hydrate(accountId: string, key: string, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string, expectedAuthFence?: number): Promise<boolean> {
     requireOwnedKey(accountId, key);

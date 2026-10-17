@@ -72,6 +72,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
         if (mode === 'refresh') return json({ profile: { ...body, id: account, version: 10 }, version: 10 }, 200, responseScope);
         if (mode === 'auth') { expired = true; return json({ error: 'UNAUTH' }, 401, responseScope); }
         if (conflict) return json({ error: 'PROFILE_CONFLICT', profile: { ...profile, name: 'Cloud name', version: 8 }, version: 8 }, 409, responseScope);
+        expectedProfileBaseVersion = body.baseVersion + 1;
         return json({ profile: { ...body, id: account, version: body.baseVersion + 1 }, version: body.baseVersion + 1 }, 200, responseScope);
       };
       if (gate) {
@@ -522,5 +523,65 @@ test('a failed wearable provider commit is visible and leaves the profile unchan
   expect((await saved(page)).value).toBe(before.value);
   expect((await saved(page)).operations).toEqual([]);
   expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('course completion and quiz stay open on a failed durable profile commit and can be retried', async ({ page }) => {
+  const { errors } = await setup(page, 'normal');
+  await openApp(page, '/#course');
+  await expect(page.getByRole('heading', { name: 'Обучение', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Голод vs Аппетит: как не путать\?/ }).click();
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    let fail = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const record = args[0] as { key?: string; resource?: string };
+      if (fail && this.name === 'outbox' && record?.key === key && record.resource === 'profile') {
+        throw new DOMException('Injected course profile quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+    (window as Window & { __setCourseProfileWriteFailure?: (value: boolean) => void })
+      .__setCourseProfileWriteFailure = value => { fail = value; };
+  }, key);
+
+  const initial = await saved(page);
+  const readButton = page.getByRole('button', { name: 'Прочитано', exact: true });
+  await readButton.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить прогресс урока.' })).toBeVisible();
+  await expect(readButton).toBeVisible();
+  expect((await saved(page)).value).toBe(initial.value);
+  expect((await saved(page)).operations).toEqual([]);
+
+  await page.evaluate(() => (window as Window & { __setCourseProfileWriteFailure?: (value: boolean) => void })
+    .__setCourseProfileWriteFailure?.(false));
+  await readButton.click();
+  await expect(readButton).toHaveCount(0);
+  await expect.poll(async () => JSON.parse((await saved(page)).value ?? '{}').courseProgress?.completedLessonIds)
+    .toContain('l2_hunger');
+
+  await page.getByRole('button', { name: /Голод vs Аппетит: как не путать\?/ }).click();
+  await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
+  const answer = page.getByRole('button', { name: 'Сфокусируюсь на воде и шагах', exact: true });
+  await answer.click();
+  const beforeQuiz = await saved(page);
+  await page.evaluate(() => (window as Window & { __setCourseProfileWriteFailure?: (value: boolean) => void })
+    .__setCourseProfileWriteFailure?.(true));
+  const submit = page.getByRole('button', { name: 'Завершить урок', exact: true });
+  await submit.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить прогресс урока.' })).toBeVisible();
+  await expect(submit).toBeVisible();
+  await expect(answer).toHaveClass(/border-indigo-500/);
+  expect((await saved(page)).value).toBe(beforeQuiz.value);
+  expect((await saved(page)).operations).toEqual([]);
+
+  await page.evaluate(() => (window as Window & { __setCourseProfileWriteFailure?: (value: boolean) => void })
+    .__setCourseProfileWriteFailure?.(false));
+  await submit.click();
+  await expect(submit).toHaveCount(0);
+  await expect.poll(async () => JSON.parse((await saved(page)).value ?? '{}').lessonQuizAnswers)
+    .toContainEqual(expect.objectContaining({ lessonId: 'l2_hunger', optionId: 'opt_habits' }));
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

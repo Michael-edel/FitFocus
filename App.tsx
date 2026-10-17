@@ -141,7 +141,7 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
-import type { OutboxCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -1424,11 +1424,21 @@ const logWeight = useCallback(() => {
     persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
   }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
 
-  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit } = useCourseActions({
+  const courseWriteGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+    localCommitGuard: {
+      accountId: loginReadGuard.accountId,
+      serverSessionId: loginReadGuard.serverSessionId,
+      sessionEpoch: loginReadGuard.sessionEpoch,
+    },
+    canCommit: isCurrentProfileSession,
+  } : undefined;
+  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit, isSavingLesson, lessonSaveError } = useCourseActions({
     currentUser,
     currentLesson,
     selectedQuizOption,
     persistUser,
+    writeGuard: courseWriteGuard,
+    isCurrentSession: isCurrentProfileSession,
     setIsLessonViewOpen,
     setIsQuizActive,
     setSelectedQuizOption,
@@ -1872,6 +1882,8 @@ const logWeight = useCallback(() => {
             currentLesson={currentLesson}
             isQuizActive={isQuizActive}
             selectedQuizOption={selectedQuizOption}
+            isSaving={isSavingLesson}
+            saveError={lessonSaveError}
             onClose={closeLessonView}
             setSelectedQuizOption={setSelectedQuizOption}
             handleMarkLessonRead={handleMarkLessonRead}

@@ -99,6 +99,10 @@ export class UserStateRepository {
     return guard.accountId === this.accountId ? this.outbox.isReadSessionCurrent(guard) : Promise.resolve(false);
   }
 
+  isLocalCommitSessionCurrent(guard: Pick<OutboxReadGuard, 'accountId' | 'serverSessionId' | 'sessionEpoch'>): Promise<boolean> {
+    return guard.accountId === this.accountId ? this.outbox.isLocalCommitSessionCurrent(guard) : Promise.resolve(false);
+  }
+
   hydrate(stateKey: UserStateKey, observation: { value: string; version: number; exists: boolean }, expectedRevision: number, expectedSessionEpoch?: string, expectedAuthFence?: number): Promise<boolean> {
     const key = this.key(stateKey);
     return this.track(key, this.serialize(key, () => this.outbox.hydrate(this.accountId, key, observation, expectedRevision, expectedSessionEpoch, expectedAuthFence)));

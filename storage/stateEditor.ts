@@ -45,22 +45,24 @@ export class StateEditor<T> {
     return this.repository ? this.repository.writeRaw(this.key, raw, this.unobservedEdit) : Promise.resolve(null);
   }
   /** Guarded commits become visible only after their scoped commit and never replace a newer edit. */
-  async commitGenerated(action: T | ((value: T) => T), guard: OutboxWriteGuard) {
-    const captured: OutboxWriteGuard = 'readGuard' in guard
-      ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit }
-      : { localCommitGuard: { ...guard.localCommitGuard }, canCommit: guard.canCommit };
+  async commitGenerated(action: T | ((value: T) => T), guard?: OutboxWriteGuard) {
+    const captured: OutboxWriteGuard | undefined = guard
+      ? 'readGuard' in guard
+        ? { readGuard: { ...guard.readGuard }, canCommit: guard.canCommit }
+        : { localCommitGuard: { ...guard.localCommitGuard }, canCommit: guard.canCommit }
+      : undefined;
     await this.load();
-    if (!this.repository || this.snapshot.phase !== 'ready' || !captured.canCommit()) throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
+    if (!this.repository || this.snapshot.phase !== 'ready' || (captured && !captured.canCommit())) throw new Error('OUTBOX_WRITE_SESSION_CHANGED');
     const editRevision = this.editRevision;
-    const canCommit = () => captured.canCommit() && editRevision === this.editRevision;
+    const canCommit = () => (!captured || captured.canCommit()) && editRevision === this.editRevision;
     const value = typeof action === 'function' ? (action as (value: T) => T)(this.snapshot.value) : action;
-    const writeGuard: OutboxWriteGuard = 'readGuard' in captured
-      ? { readGuard: captured.readGuard, canCommit }
-      : { localCommitGuard: captured.localCommitGuard, canCommit };
     const encoded = this.codec.encode(value);
-    const operation = 'readGuard' in writeGuard
-      ? await this.repository.writeRaw(this.key, encoded, this.unobservedEdit, writeGuard)
-      : await this.repository.writeLocalRaw(this.key, encoded, this.unobservedEdit, writeGuard);
+    const operation = !captured
+      ? await this.repository.writeRaw(this.key, encoded, this.unobservedEdit)
+      : 'readGuard' in captured
+        ? await this.repository.writeRaw(this.key, encoded, this.unobservedEdit, { readGuard: captured.readGuard, canCommit })
+        : await this.repository.writeLocalRaw(this.key, encoded, this.unobservedEdit,
+          { localCommitGuard: captured.localCommitGuard, canCommit });
     if (!canCommit()) return null;
     if (operation.status === 'pending') { this.editRevision += 1; this.publish({ value, phase: 'ready' }); }
     return operation;

@@ -34,4 +34,24 @@ describe('guarded profile error reporting', () => {
     current = false;
     expect(await isProfileCommitErrorCurrent(repository, guard, canCommit)).toBe(false);
   });
+
+  it('recognizes local writes during an auth pause but rejects a later session switch', async () => {
+    const localGuard = {
+      accountId: guard.accountId,
+      serverSessionId: guard.serverSessionId,
+      sessionEpoch: guard.sessionEpoch,
+    };
+    await repository.writeRaw('settings', '{}');
+    const now = Date.now() + 1_000;
+    const sending = await outbox.claim({ accountId, owner: 'test-tab', sessionEpoch: guard.sessionEpoch, nowMs: now, leaseMs: 1_000 });
+    expect(sending).not.toBeNull();
+    await outbox.finish(sending!, { kind: 'retry', reason: 'AUTH', nextAttemptAtMs: now + 1_000, pause: 'auth' }, now);
+
+    expect(await repository.isLocalCommitSessionCurrent(localGuard)).toBe(true);
+    expect(await repository.isReadSessionCurrent(guard)).toBe(false);
+
+    const { fence } = await outbox.sessionState();
+    await outbox.acceptReadSession('another-owner', 'b'.repeat(64), fence);
+    expect(await repository.isLocalCommitSessionCurrent(localGuard)).toBe(false);
+  });
 });
