@@ -173,6 +173,30 @@ describe('food photo feature', () => {
     expect(input.logError).not.toHaveBeenCalled();
   });
 
+  it.each(['session', 'auth'] as const)('does not log an expected %s refusal from a scoped AI request', async kind => {
+    const { input } = setup();
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new SessionReadError(kind));
+
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+
+    expect(input.logError).not.toHaveBeenCalled();
+    expect(input.addFoodToDiary).not.toHaveBeenCalled();
+    expect(input.incrementUsage).not.toHaveBeenCalled();
+    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.setScanning).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps access-denied AI failures visible in diagnostics', async () => {
+    const { input } = setup();
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new SessionReadError('access'));
+
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+
+    expect(input.logError).toHaveBeenCalledWith(expect.objectContaining({ kind: 'access' }));
+    expect(input.addFoodToDiary).not.toHaveBeenCalled();
+    expect(input.incrementUsage).not.toHaveBeenCalled();
+  });
+
   it('opens the paywall before reading a file when no scans remain', async () => {
     const { input, calls } = setup();
     input.remainingScans = 0;

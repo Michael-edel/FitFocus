@@ -96,6 +96,10 @@ async function stillCurrent(session: AiSession, isCurrent: () => boolean,
   }
 }
 
+function isExpectedSessionFailure(error: unknown): boolean {
+  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth');
+}
+
 /** Processes only the remaining allowance; every result and write stays with its login attempt. */
 export async function processFoodPhotoFiles({
   userId,
@@ -162,12 +166,12 @@ export async function processFoodPhotoFiles({
         processed += 1;
       } catch (error) {
         if (current() && (!session || await stillCurrent(session, current, assertSession))) {
-          if (!(error instanceof SessionReadError && error.kind === 'session')) logError(error);
+          if (!isExpectedSessionFailure(error)) logError(error);
         }
       }
     }
   } catch (error) {
-    if (current() && !(error instanceof SessionReadError && error.kind === 'session')) logError(error);
+    if (current() && !isExpectedSessionFailure(error)) logError(error);
   } finally {
     if (current()) setScanning(false);
   }
