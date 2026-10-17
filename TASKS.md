@@ -4,14 +4,14 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний завершённый [CI run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
-для `0af2c30` прошёл проверки до E2E, включая точечное устранение WebKit
-reload-сообщения из #1489, но завершился ошибкой PWA update acceptance:
-тест вводил имя до гидратации профиля и получил `E2E UserЧерновик перед
-обновлением`. В `pwa-update.spec.ts` добавлено ожидание исходного имени из
-общей фикстуры. Исправленный сценарий прошёл 5/5 на desktop WebKit
-(`workers=1`, `retries=0`), `npm run typecheck` успешен; полный CI нового SHA
-ещё не запускался.
+Последний завершённый [CI run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586)
+для `b67beee` прошёл полностью: 1324 unit tests / 212 файлов, E2E — 844 passed /
+255 skipped за 37,5 минуты, dependency audit, guards, все typecheck и build
+успешны. Rollback-проверка прошла 23 HTTP/D1-запроса, артефакты браузера и
+rollback сохранены. CI #1491 обнаружил гонку гидратации профиля в PWA update
+acceptance; тест теперь ждёт исходное имя из общей фикстуры перед вводом.
+Исправленный сценарий также прошёл 5/5 на desktop WebKit (`workers=1`,
+`retries=0`), `npm run typecheck` успешен.
 История и ограничения — в [журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,

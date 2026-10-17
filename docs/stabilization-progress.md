@@ -13,7 +13,12 @@ typecheck и build, но завершился одной E2E-ошибкой в
 Production-поведение не менялось: PWA-сценарий теперь ожидает исходное имя из
 `buildMockProfile()` перед `fill()`. Исправленный сценарий прошёл 5/5 на desktop
 WebKit (`workers=1`, `retries=0`), `npm run typecheck` и `git diff --check`
-прошли. Полный CI нового SHA запускается после push.
+прошли. Исправленный SHA `b67beee` прошёл полный
+[CI run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586):
+1324 unit tests / 212 файлов, 844 browser tests passed / 255 skipped (37,5 мин),
+все guards, typecheck и build успешны. Rollback-check прошёл 23 HTTP/D1-запроса;
+browser diagnostics и tested rollback artifact сохранены. Дублирующий push-run
+#1492 отменён concurrency-защитой после старта PR-run #1493.
 
 ## P0.8/P0.9 — WebKit отменяет family-menu GET во время reload, 17.10.2026
 

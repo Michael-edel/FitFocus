@@ -7,13 +7,18 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 IndexedDB durable outbox подключён, общий P0 открыт.
 
 Последний полный опубликованный CI —
-[run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
-на `0af2c30`: предварительные проверки прошли, E2E обнаружил гонку в PWA update
-acceptance. После перехода в настройки тест вводил черновик до гидратации исходного
-профиля, отчего поле получило `E2E UserЧерновик перед обновлением`. E2E-тест теперь
-ждёт исходное имя из общей фикстуры до ввода. Сценарий прошёл 5/5 на desktop
-WebKit (`workers=1`, `retries=0`), `npm run typecheck` прошёл. Новый полный CI
-для этого исправления ещё не запущен.
+[run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586)
+на `b67beee`, завершился success: 1324 unit tests / 212 файлов; E2E — 844 passed /
+255 skipped за 37,5 минуты; dependency audit, schema/privacy/auth/API guards,
+три typecheck, build и rollback-check прошли. Rollback-check выполнил 23 HTTP/D1
+запроса на локальном Pages worker/workerd/D1, браузерный trace и tested rollback
+artifact сохранены. Исправление PWA-теста в этом SHA подтверждено полным CI.
+
+Причина предыдущего сбоя [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+на `0af2c30` — форма настроек принимала ввод до загрузки исходного профиля,
+создавая значение `E2E UserЧерновик перед обновлением`. Тест теперь ждёт имя из
+общей фикстуры. Сценарий прошёл 5/5 на desktop WebKit (`workers=1`, `retries=0`),
+`npm run typecheck` прошёл. Полный CI #1493 подтвердил исправление.
 
 Исправление #1489 добавило в WebKit-only E2E фильтр только точный loopback GET
 `/api/family/menu` среди ограниченных reload aborts. Тот сценарий прошёл 5/5,
