@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo } from 'react';
 import type { AiSession } from '../../services/aiSession';
 import { assertAiSession, prepareAiSession } from '../../services/aiSession';
-import { SessionReadError } from '../../storage/sessionRead';
+import { isExpectedAiSessionFailure } from '../../services/frontendErrors';
 import type { OutboxCommitGuard, OutboxReadGuard, OutboxOperation } from '../../storage/durableOutbox';
 import type { FoodPhotoAnalysisResult } from '../../geminiService';
 import type { FastLogItem } from '../../storage/foodDiary';
@@ -96,10 +96,6 @@ async function stillCurrent(session: AiSession, isCurrent: () => boolean,
   }
 }
 
-function isExpectedSessionFailure(error: unknown): boolean {
-  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth');
-}
-
 /** Processes only the remaining allowance; every result and write stays with its login attempt. */
 export async function processFoodPhotoFiles({
   userId,
@@ -166,12 +162,12 @@ export async function processFoodPhotoFiles({
         processed += 1;
       } catch (error) {
         if (current() && (!session || await stillCurrent(session, current, assertSession))) {
-          if (!isExpectedSessionFailure(error)) logError(error);
+          if (!isExpectedAiSessionFailure(error)) logError(error);
         }
       }
     }
   } catch (error) {
-    if (current() && !isExpectedSessionFailure(error)) logError(error);
+    if (current() && !isExpectedAiSessionFailure(error)) logError(error);
   } finally {
     if (current()) setScanning(false);
   }

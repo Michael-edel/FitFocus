@@ -26,6 +26,7 @@ type FixtureState = {
   holdStateWriteFailures?: { key: string; active: boolean; retryAfterSeconds?: number };
   holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
   holdProfileWrite?: { active: boolean; started: () => void; wait: Promise<void> };
+  unauthorizedAiFeature?: string;
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -198,6 +199,14 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/ai' && method === 'POST') {
       const feature = request.postDataJSON()?.feature;
       if (typeof feature === 'string') counts.aiRequests.push({ feature, account: requestedAccount, session: requestedSession });
+      if (feature === state.unauthorizedAiFeature) {
+        return route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          headers: scopedHeaders(responseAccount),
+          body: JSON.stringify({ error: 'UNAUTHENTICATED' }),
+        });
+      }
       if (feature === heldFeature) {
         expect(requestedAccount).toBe(accountA.id);
         expect(requestedSession).toBe(accountA.sid);
@@ -1794,6 +1803,39 @@ test('held recipe photo analysis cannot create a draft after the same account st
     fixtureA.release();
     fixtureReauthenticated.release();
   }
+});
+
+test('a scoped auth refusal during recipe photo analysis does not show an ordinary recipe error', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo auth-refusal acceptance runs in desktop browser profiles.');
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    unauthorizedAiFeature: 'foodphoto_enhanced',
+  };
+  const pageErrors: string[] = [];
+  const dialogs: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
+
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#recipes');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const photoInput = page.locator('input[type="file"]').nth(1);
+  await expect(photoInput).toHaveCount(1);
+  await photoInput.setInputFiles({
+    name: 'unauthorized-recipe.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="green"/></svg>'),
+  });
+
+  await expect.poll(() => fixture.counts.aiRequests.filter(request => request.feature === 'foodphoto_enhanced'))
+    .toEqual([{ feature: 'foodphoto_enhanced', account: accountA.id, session: accountA.sid }]);
+  await expect(page.getByText('Новое блюдо', { exact: true })).toHaveCount(0);
+  expect(fixture.counts.completedAiFeatures).not.toContain('foodphoto_enhanced');
+  expect(dialogs).toEqual([]);
+  expect(pageErrors).toEqual([]);
 });
 
 test('an unsaved recipe draft from account A is cleared when another tab activates account B', async ({ page, context }, info) => {

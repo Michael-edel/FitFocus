@@ -6,8 +6,8 @@ import type { EnhancedFoodPhotoAnalysisResult } from './geminiService';
 import { Heart, Search, Trash2, Clock3, Users, Camera, Upload, Loader2, X, CheckCircle2 } from 'lucide-react';
 import type { Recipe } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
-import { SessionReadError } from './storage/sessionRead';
 import { assertAiSession, prepareAiSession } from './services/aiSession';
+import { isExpectedAiSessionFailure } from './services/frontendErrors';
 import { AiActionScope } from './features/ai/actionScope';
 
 type Props = {
@@ -442,7 +442,7 @@ const handlePick = async (file?: File) => {
     if (!attempt.isCurrent()) return;
     setDraft(buildDraftRecipeFromAi(ai, photo));
   } catch (e: unknown) {
-    if (attempt.isCurrent() && !(e instanceof SessionReadError && e.kind === 'session')) {
+    if (attempt.isCurrent() && !isExpectedAiSessionFailure(e)) {
       if (session) {
         try { await assertAiSession(session); } catch { return; }
       }

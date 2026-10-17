@@ -1,3 +1,5 @@
+import { SessionReadError } from '../storage/sessionRead';
+
 type ErrorLike = {
   name?: unknown;
   message?: unknown;
@@ -11,6 +13,10 @@ export function getErrorMessage(error: unknown): string {
   const message = errorRecord(error).message;
   if (typeof message === 'string') return message;
   return typeof error === 'string' ? error : '';
+}
+
+export function isExpectedAiSessionFailure(error: unknown): boolean {
+  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth');
 }
 
 export function classifyWisShareFailure(error: unknown): string {
