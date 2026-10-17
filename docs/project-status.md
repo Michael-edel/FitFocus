@@ -1,10 +1,17 @@
 # Текущее состояние FitFocus
 
-Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
+Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
 outbox подключён; продолжается P0.8-перенос пользовательских действий. Кодовый
+коммит `6bcbdd2` устраняет преждевременный показ локального fallback AI-плана:
+при отсутствии `aiPlan` он показывается только после guarded durable commit.
+Новая регрессия прошла 3/3 desktop браузера; unit suite — 1360/1360, root,
+domain-strict и storage-strict typecheck и production build прошли локально.
+Chromium и Firefox прошли полный profile E2E по 20/20. Первый WebKit проход дал
+18/20; оба сценария прошли точечный повтор 2/2 и полный WebKit повтор 20/20 без
+retries. Это локальная проверка, не GitHub CI.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые
@@ -20,7 +27,8 @@ Service Worker не имитировал `activated` и EventTarget. Фикст�
 `a0721b0`; десять аннотированных account-switch сценариев прошли 10/10 на
 Chromium. Полный [PR CI #1573](https://github.com/Michael-edel/FitFocus/actions/runs/39056823576)
 для `bb94957` выполняет E2E; audit, guards, unit, три typecheck и build прошли,
-rollback/CAS ещё ожидается. В плане остаются 33 незакрытых
+rollback/CAS ещё ожидается. CI #1573 проверяет предыдущий SHA `bb94957`; новый
+коммит `6bcbdd2` ещё не опубликован и этим прогоном не проверяется. В плане остаются 33 незакрытых
 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 Staging, выпуск и интеграция в защищённую `main` остаются открытыми.
 

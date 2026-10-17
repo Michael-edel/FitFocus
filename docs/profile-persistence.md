@@ -47,6 +47,15 @@ Generated value публикуется после durable commit. Quota/abort н
 Обычный `persistUser(update)` сохраняет прежнее поведение локального редактора,
 включая offline/auth-паузу; для него HTTP proof не требуется.
 
+Локальный запасной AI-план подчиняется тому же правилу: если профиль после
+входа или чистого refresh не содержит `aiPlan`, экран остаётся в состоянии
+подготовки. `App.tsx` создаёт план функциональным profile patch с account/session
+guard и показывает его только после durable commit. При quota/abort план не
+появляется в интерфейсе и не создаёт запись outbox или облачную мутацию; после
+reload действие может повториться. Регрессия проверяет отказ и восстановление
+на desktop Chromium, Firefox и WebKit в
+[profile-durability.spec.ts](../e2e/profile-durability.spec.ts).
+
 Персональное меню ждёт pending commit до отдельного items writer.
 [Сценарий и границы](ai-session-guard.md#клиентское-подключение-в-работе),
 [транзакционные регрессии](../tests/generated_result_commit.test.ts).

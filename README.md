@@ -73,6 +73,8 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
+Последний локальный кодовый коммит `6bcbdd2` удерживает fallback AI-план скрытым,
+пока профиль не сохранён в IndexedDB outbox; точный CI этого SHA ещё ожидает push.
 
 Кодовый SHA [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3)
 привязывает logout и удаление аккаунта в текущем клиенте к исходному login

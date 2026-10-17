@@ -1567,6 +1567,16 @@ all-client Service Worker fence, атомарные migration items и quarantin
     root/domain/storage typecheck, production build и `git diff --check` прошли.
     Код [`a0721b0`](https://github.com/Michael-edel/FitFocus/commit/a0721b0);
     точный CI нового SHA ожидает push. Полный P0.8/lifecycle остаётся открыт.
+  - [x] Не показывать локальный fallback AI-план при входе/refresh до durable
+    profile commit. Functional patch использует актуальный account/session guard;
+    quota/abort оставляют экран в состоянии подготовки и не создают outbox/cloud
+    запись. Регрессия отказа и восстановления прошла 3/3 на desktop Chromium,
+    Firefox и WebKit; unit 1360/1360, root/domain/storage typecheck, production
+    build и `git diff --check` прошли. Chromium и Firefox прошли profile E2E
+    20/20; первый WebKit-прогон дал 18/20, оба сценария прошли точечный повтор
+    2/2 и полный WebKit повтор 20/20 без retries. Код `6bcbdd2`; exact CI этого
+    SHA ожидает push.
+    Полный P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
