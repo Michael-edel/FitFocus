@@ -8,9 +8,9 @@ const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) 
 function filterReloadAccessControlAborts(errors: string[], projectName: string): string[] {
   const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(projectName);
   if (!isWebKit) return errors;
-  const staleReadAbort = /^\/127\.0\.0\.1:\d+\/api\/(?:family(?:\/menu\/state)?|shopping\/list|me)(?:\?.*)? due to access control checks\.$/;
+  const staleReadAbort = /^\/127\.0\.0\.1:\d+\/api\/(?:family(?:\/menu(?:\/state)?)?|shopping\/list|me)(?:\?.*)? due to access control checks\.$/;
   const expectedAborts = errors.filter(error => staleReadAbort.test(error));
-  const abortKinds = expectedAborts.map(error => error.match(/\/api\/(family(?:\/menu\/state)?|shopping\/list|me)(?:\?| due)/)?.[1]);
+  const abortKinds = expectedAborts.map(error => error.match(/\/api\/(family(?:\/menu(?:\/state)?)?|shopping\/list|me)(?:\?| due)/)?.[1]);
   expect(expectedAborts.length).toBeLessThanOrEqual(4);
   expect(abortKinds.every(kind => kind !== undefined)).toBe(true);
   return errors.filter(error => !expectedAborts.includes(error));
