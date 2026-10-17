@@ -40,6 +40,7 @@ const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.progress-archive.sections.v1:',
   'fitfocus.settings.ui.v1:',
   'fitfocus.nutrition.search.v1:',
+  'fitfocus.analytics.sent.v1:',
   'fitfocus.achievements.counters.v1:',
 ];
 

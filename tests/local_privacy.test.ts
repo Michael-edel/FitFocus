@@ -44,6 +44,8 @@ describe('clearLocalUserData', () => {
     storage.setItem('fitfocus.nutrition.selected-day.v1:user-1', '2026-08-29');
     storage.setItem('fitfocus.nutrition.selected-day.v1:user-1__ffv', '2');
     storage.setItem('fitfocus.achievements.counters.v1:user-1', '{"x":1}');
+    storage.setItem('fitfocus.analytics.sent.v1:user-1', '["started"]');
+    storage.setItem('fitfocus.analytics.sent.v1:user-10', '["7_days"]');
     storage.setItem('ff_last_weekly_ai_attempt_user-1', '123');
     storage.setItem('ff_last_weekly_ai_attempt_user-10', 'keep prefix-collision sibling');
     storage.setItem('ff_weekly_ai_inflight_user-10', 'keep sibling');
@@ -56,7 +58,7 @@ describe('clearLocalUserData', () => {
     const result = await clearLocalUserData('user-1');
     expect(result).toMatchObject({
       complete: true,
-      localStorageKeysRemoved: 6,
+      localStorageKeysRemoved: 7,
       localStorageCleared: true,
       indexedDbCleared: true,
       legacyEvidenceRetained: false,
@@ -66,9 +68,11 @@ describe('clearLocalUserData', () => {
     expect(storage.getItem('fitfocus.nutrition.selected-day.v1:user-1')).toBeNull();
     expect(storage.getItem('fitfocus.nutrition.selected-day.v1:user-1__ffv')).toBeNull();
     expect(storage.getItem('fitfocus.achievements.counters.v1:user-1')).toBeNull();
+    expect(storage.getItem('fitfocus.analytics.sent.v1:user-1')).toBeNull();
     expect(storage.getItem('ff_last_weekly_ai_attempt_user-1')).toBeNull();
     expect(storage.getItem('fitfocus_data_user-2_diary')).toBe('keep this');
     expect(storage.getItem('fitfocus.nutrition.selected-day.v1:user-2')).toBe('keep this too');
+    expect(storage.getItem('fitfocus.analytics.sent.v1:user-10')).toBe('["7_days"]');
     expect(storage.getItem('ff_last_weekly_ai_attempt_user-10')).toBe('keep prefix-collision sibling');
     expect(storage.getItem('ff_weekly_ai_inflight_user-10')).toBe('keep sibling');
     expect(storage.getItem('ff_dev_plan_override_scope_user-10')).toBe('keep sibling');
