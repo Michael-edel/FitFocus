@@ -4,16 +4,17 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний опубликованный [CI run #1477](https://github.com/Michael-edel/FitFocus/actions/runs/38960924367)
-для `87739e7` прошёл audit, guards, 1320 unit, три typecheck и build, но E2E
-завершился тремя сбоями: один Firefox profile refresh и два WebKit reload
-предупреждения об отменённых GET. Code follow-up
-[`67fd871`](https://github.com/Michael-edel/FitFocus/commit/67fd871)
-передаёт проверенный guard вместе с обновлённым профилем и принимает только
-ограниченные точные WebKit сообщения для отменённых GET. Локально прошли 1322
-unit tests, три typecheck, admin guards, build, profile refresh на 7/7 проектах
-плюс пять повторов Firefox, и 6/6 WebKit семейных сценариев. Полный CI точного
-опубликованного follow-up ещё ожидается. Результаты записаны в
+Последний опубликованный [CI run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
+для `e370f61` прошёл audit, schema/privacy/auth/API guards, unit, три typecheck
+и production build; E2E завершился 841 passed / 255 skipped / 3 failed. Trace
+связал два WebKit предупреждения с reload и прерываемыми запросами; третий тест
+потерял клик по восстановлению профиля из-за появившегося PWA update banner.
+E2E follow-up [`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
+ограничивает допустимые WebKit сообщения точным окном reload, сохраняет общий
+предел отменённых маршрутов и откладывает баннер при попытке взаимодействия.
+Локально: 18/18 запусков трёх затронутых сценариев на desktop WebKit и iPhone
+Safari (`--repeat-each=3`, retries=0), typecheck и `git diff --check` прошли.
+Точный полный CI follow-up пока не подтверждён; результаты — в
 [журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,

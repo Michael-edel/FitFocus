@@ -1,5 +1,33 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — три E2E сбоя WebKit CI #1483, 17.10.2026
+
+Полный [CI run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
+для опубликованного `e370f61a8b10ee4de3d869905435bfc42ca4608a` прошёл dependency
+audit, schema/privacy/auth/API guards, unit tests, три typecheck и production
+build. E2E завершился 841 passed / 255 skipped / 3 failed. Сохранённые trace
+показали три конкретных причины:
+
+- Desktop WebKit weekly-menu: предупреждение `/api/achievements/check` появилось
+  во время `page.reload()`. Клиентский achievement transport привязывает запрос
+  к `pagehide` и прерывает его при смене документа; тест теперь учитывает только
+  точное сообщение WebKit в интервале reload, не более одного такого сообщения.
+- iPhone Safari family-menu: во время reload пришли три одинаковых сообщения
+  для `/api/me?t=…`. Перекрывающиеся session refreshes могут отмениться на одном
+  маршруте, поэтому тест убрал неверное требование уникальности маршрутов, но
+  сохранил точное множество loopback URL и общий предел в четыре отмены.
+- iPhone Safari legacy recovery: асинхронный PWA update banner появился после
+  разовой проверки `isVisible()` и перехватил клик по раскрытию recovery panel.
+  Тест устанавливает `addLocatorHandler` и нажимает штатное «Позже», когда баннер
+  появляется перед действием.
+
+Follow-up [`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
+изменяет только E2E. Все три сценария прошли 18/18 суммарных запусков на desktop
+WebKit и iPhone Safari (`--repeat-each=3`, `--workers=1`, `--retries=0`).
+`npm run typecheck` (включая admin guards) и `git diff --check` прошли. Полный
+CI exact follow-up пока не подтверждён; предыдущий #1483 остаётся неуспешным.
+Merge, staging и выпуск не выполнены; общий P0 остаётся открытым.
+
 ## P0.8 — ожидание durable weekly report после same-account reauth, 17.10.2026
 
 Опубликованный `0592ffe4dfa8a2004f1634608c4449d8aede33ad` завершил полный

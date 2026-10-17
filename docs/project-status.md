@@ -4,27 +4,31 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Последний полный опубликованный CI —
-[run #1481](https://github.com/Michael-edel/FitFocus/actions/runs/38971572116)
-на `0592ffe`: dependency audit, schema/privacy/auth/API guards, unit, три
-typecheck и production build прошли; E2E завершился 843 passed / 255 skipped /
-1 failed.
+[run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
+на `e370f61`: audit, schema/privacy/auth/API guards, unit, три typecheck и
+production build прошли; E2E завершился 841 passed / 255 skipped / 3 failed.
 
-Текущий этап — стабилизационная приёмка P0.8/P0.9. IndexedDB durable outbox
-подключён, но общий P0 ещё открыт. Run #1481 упал в тесте
-`held weekly report cannot write after the same account starts a new server
-session`. Trace подтвердил, что единственную запись `weekly_reports` отправила
-новая сессия; отложенный AI-ответ старой сессии не отправлял эту запись. Тест не
-дожидался записи и подтверждения нового отчёта до фиксации baseline. Follow-up
-изолирует ожидание по ключу отчёта и проверяет, что поздний ответ не меняет
-значение, outbox и число записей. Все 45 повторов трёх затронутых сценариев
-прошли на desktop Chromium, Firefox и WebKit без retries; typecheck и
-`git diff --check` прошли. Полный CI этого follow-up ещё ожидается.
+Текущий этап — стабилизационная приёмка P0.8/P0.9; IndexedDB durable outbox
+подключён, общий P0 открыт. E2E follow-up
+[`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
+исправляет три сбоя #1483 только в тестах. Trace поместил WebKit предупреждения
+по `/api/me` и `/api/achievements/check` в интервал `page.reload()`; семейный
+тест допускает только точные loopback-маршруты с общим пределом четыре, а weekly
+тест учитывает точные сообщения лишь во время reload и с отдельными пределами.
+Для восстановления legacy-профиля Playwright теперь нажимает «Позже» на PWA
+update banner, когда тот появляется перед действием, устраняя гонку разовой
+проверки видимости.
+
+Локальная проверка точного кода follow-up: 18/18 целевых запусков на desktop
+WebKit и iPhone Safari (`--repeat-each=3`, `--retries=0`), `npm run typecheck`
+и `git diff --check` прошли. Полный CI для `96c21c3` пока не подтверждён.
+Production-код не менялся; staging, выпуск и интеграция в `main` не выполнены.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.
 
 Локальная ветка также добавила same-account reauthentication сценарий для weekly
-AI report. Merge в `main`, staging и релиз не выполнены.
+AI report.
 
 Read-only smoke текущего публичного branch preview подтвердил точный bundle SHA
 `8dfab604c97f90f6720e8185f0366bbe61b9383d`, ответ страницы 200 и анонимные API
