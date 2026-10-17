@@ -8,6 +8,14 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
+P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
+требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;
+старый writer получает 426 до body parsing и мутации, а текущий sender сохраняет
+операцию на protocol-паузе. На этой ревизии локально прошли 1333 unit-теста,
+typechecks, production build, API/auth-scope guards и native-SW migration E2E
+2/2 на desktop Chromium. Полный CI точной опубликованной ревизии ожидает push;
+staging и проверка отдельной старой сборки остаются открытыми.
+
 Последний полный PR CI на опубликованном кодовом HEAD
 [`7ff579d`](https://github.com/Michael-edel/FitFocus/commit/7ff579d051f7431cd0ba23cb1599863a467b0cc3) —
 [run #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443) —

@@ -1253,8 +1253,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [ ] Подключить совместимый клиент и проверяемый барьер старых writers;
   - [x] Требовать request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;
     несовместимый writer получает 426 до чтения тела и D1. Текущий sender передаёт
-    protocol и сохраняет intent на protocol-паузе; route/sender unit regressions
-    прошли, exact CI этого изменения ожидает push.
+    protocol и сохраняет intent на protocol-паузе; route/sender regressions
+    и локальные проверки описаны в [журнале стабилизации](docs/stabilization-progress.md).
   - [ ] Проверить настоящую пару старого/нового bundle через HTTP barrier на одном
     origin и подтвердить остановку старой вкладки без потери локального intent.
 - [x] Не повышать legacy `baseVersion` до доказанного серверного поколения:

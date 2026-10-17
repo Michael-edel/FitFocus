@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.7 — request-level barrier для state writers, 17.10.2026
+
+Коммит [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
+требует `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state` после
+проверки исходной сессии и доступа, но до чтения тела и D1. Отсутствующий или
+несовместимый протокол возвращает `426 STATE_PROTOCOL_REQUIRED`. Текущий sender
+передаёт заголовок; при 426 сохраняет intent и ставит protocol-паузу. State GET
+остаётся доступен. Контракт обновлён в `API_CONTRACTS.md` и
+[`state-generations.md`](state-generations.md).
+
+Проверки на code SHA `b105510a94a6a05cfc630ccd085380b3098ff6ab`: полный unit suite
+1333/1333 (212 файлов), три typecheck, production build, API invariants и
+auth-scope guards; route/sender набор 86/86. Native-SW legacy migration E2E
+прошёл 2/2 на desktop Chromium, workers=1, retries=0; фикстура также отклоняет
+state writes без request protocol. В route-тестах подтверждён 426 для старого
+PUT и DELETE до обращения к write/delete persistence.
+
+Это локальная приёмка кода и synthetic API; она не подтверждает реальную D1,
+staging, device/OAuth lifecycle или отдельную установку старого bundle через
+production server. Точный PR CI для опубликованного code SHA и old/new bundle
+barrier остаются открытыми; merge/deploy не выполнялись.
+
 ## P0.5 — late enhanced recipe-photo analysis after same-account login, 17.10.2026
 
 Добавлен E2E для `foodphoto_enhanced` в Recipes: пока ответ удержан, аккаунт A
