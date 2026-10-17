@@ -4,16 +4,15 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний завершённый полный CI — [run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
-на `11e6583`; все jobs завершились success. Текущий кодовый HEAD `7ff579d`
-добавляет запись bulk diary move/delete одним snapshot и уже опубликован в PR #93.
-Локально прошли 1326 unit tests / 212 файлов, три typecheck, preview build,
-`git diff --check` и targeted E2E 3/3 на desktop Chromium/Firefox/WebKit
-(`workers=1,retries=0`; четыре мобильных профиля штатно пропущены).
 Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
-на `7ff579d` прошёл audit, guards, все typecheck и build; E2E ещё выполняется.
-Дублирующий push-run #1500 отменён concurrency после старта PR-run. PR остаётся
-draft, P0 не закрыт; staging и интеграция в `main` открыты.
+для опубликованного `7ff579d` завершился success: 1326 unit tests / 212 файлов,
+850 browser passed / 263 skipped за 38,1 минуты; audit, guards, три typecheck и
+build прошли. Rollback/CAS-проверка выполнила 23 HTTP/D1-запроса, diagnostics и
+rollback artifact сохранены ([browser](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443/artifacts/12091992214),
+[rollback](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443/artifacts/12091852535)).
+Локально также прошли targeted bulk/account E2E 3/3 desktop engines без retries
+и legacy migration tests 128/128. Дублирующий push-run #1500 отменён concurrency
+после старта PR-run. PR остаётся draft; staging и интеграция в `main` открыты.
 
 CI #1491 обнаружил гонку гидратации профиля в PWA update acceptance; тест теперь
 ждёт исходное имя из общей фикстуры перед вводом. Исправленный сценарий прошёл
@@ -38,7 +37,7 @@ tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB
 Тест account-switch больше не сравнивает viewport-зависимый `activeSection`;
 остальные UI-настройки аккаунта и очистка черновика проверены 3/3 Chromium.
 
-В плане остаются 34 незакрытых пункта: 20 P0, 7 P1 и 7 следующих задач; ни один
+В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
 P0 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
 подтверждены. Подробные результаты — в [журнале](docs/stabilization-progress.md),
 [матрице](docs/verification-matrix.md) и [статусе проекта](docs/project-status.md).
@@ -643,10 +642,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   `workers=1,retries=0`. Первый WebKit запуск превысил 45-секундный лимит на
   завершающих действиях; после упрощения необязательных ожиданий контрольный
   прогон прошёл без изменения timeout.
-  Изменение опубликовано в `7ff579d`; точный [CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
-  прошёл предварительные проверки и выполняет E2E. CI #1499 проверял только базовый
-  `11e6583`, поэтому результат полного браузерного прогона для этого изменения ещё
-  не подтверждён.
+  Изменение опубликовано в `7ff579d`; точный CI #1501 завершился success:
+  1326 unit / 212 файлов, 850 browser passed / 263 skipped за 38,1 минуты.
+  Полный E2E прошёл без retries; rollback/CAS выполнил 23 HTTP/D1-запроса.
   Последующий аудит `useCouncilChat` обнаружил, что временное состояние root
   сбрасывалось только по `userId`, поэтому повторный вход того же аккаунта с
   новым `sessionEpoch` мог сохранить старый черновик/этап/expanded state.
@@ -859,7 +857,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Подтвердить полный PR CI на точном SHA `455cb01`: run
   [38656586334](https://github.com/Michael-edel/FitFocus/actions/runs/38656586334)
   завершился success; E2E, unit, guards, typecheck, build и rollback/CAS прошли.
-- [ ] Привязать операции Push в Settings и Service Worker к свежему `/api/me`
+- [x] Привязать операции Push в Settings и Service Worker к свежему `/api/me`
   proof, активной IDB-сессии и проверяемым server response markers. Проверить
   поздний status-ответ аккаунта A после входа B и восстановление подписки при
   смене сессии; сервер требует парный scope на status/subscribe/unsubscribe/test
@@ -868,10 +866,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   и закоммичен в `daec94d`: 1180 unit-тестов / 202 файла, общий и строгие
   typecheck, build/guards и весь account-switch spec (42/42 на трёх desktop
   engines, без retries) прошли.
-  На рабочем дереве добавлен native HTTP E2E для настоящего собранного SW:
+  Native HTTP E2E для настоящего собранного SW:
   `pushsubscriptionchange` отправил подписку со scope текущего аккаунта/сессии;
   после logout повторное событие не запросило `/api/me` и не отправило подписку.
   Сценарий прошёл 1/1 в Chromium; связанная PWA-регрессия — 6/6, typecheck прошёл.
+  Точный [CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
+  на `7ff579d` завершился success: 1326 unit / 212 файлов, 850 browser passed /
+  263 skipped, 23 HTTP/D1 rollback/CAS-запроса; browser diagnostics и rollback
+  artifact сохранены.
   CI run `38679312640` для опубликованного SHA `45575d2` завершился с двумя
   flaky E2E после retry; локальный push test и assertion follow-up в commits
   `ba973c1`/`636d2c7` ожидают точного CI. На следующем follow-up обязательная
@@ -889,7 +891,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     освобождения старого. В Settings остаётся только новый delivery-status marker;
     проверены исходные account/session заголовки. Same-account и A → B сценарии
     прошли 6/6 на desktop Chromium/Firefox/WebKit без retries; typecheck и diff
-    check прошли. Реальные provider/device/staging и точный CI остаются открытыми.
+    check прошли. Реальные provider/device/staging остаются открытыми.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному guard, response markers и
   no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:

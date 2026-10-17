@@ -8,14 +8,15 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
-Последний завершённый полный CI —
-[run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
-на `11e6583`; все jobs завершились success. Текущий опубликованный кодовый HEAD
-`7ff579d` записывает bulk diary move/delete одним snapshot. PR #93 остаётся draft.
-Точный [CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
-для `7ff579d` прошёл audit, schema/privacy/auth/API guards, 1326 unit tests,
-три typecheck и production build; E2E ещё выполняется. Дублирующий push-run
-#1500 отменён concurrency после старта PR-run. Предыдущий полный
+Последний полный PR CI на опубликованном кодовом HEAD
+[`7ff579d`](https://github.com/Michael-edel/FitFocus/commit/7ff579d051f7431cd0ba23cb1599863a467b0cc3) —
+[run #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443) —
+завершился success: 1326 unit tests / 212 файлов, 850 browser passed / 263 skipped
+за 38,1 минуты; audit, schema/privacy/auth/API guards, три typecheck и production
+build прошли. Rollback/CAS выполнил 23 HTTP/D1-запроса; browser diagnostics и
+rollback artifact сохранены ([browser](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443/artifacts/12091992214),
+[rollback](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443/artifacts/12091852535)).
+PR #93 остаётся draft. Дублирующий push-run #1500 отменён concurrency. Предыдущий полный
 [run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586)
 на `b67beee` также завершился success: 1324 unit tests / 212 файлов, 844 browser
 passed / 255 skipped, 23 HTTP/D1 rollback-запроса; diagnostics и rollback artifact
@@ -32,9 +33,8 @@ targeted Safari/WebKit acceptance прошли; коммит опубликов�
 move/delete одним snapshot, чтобы React StrictMode не дублировал outbox writes.
 Двухзаписный account-isolation E2E прошёл 3/3 desktop engines без retries;
 четыре мобильных профиля штатно skipped. Unit 1326/1326, три typecheck, preview
-build и diff check прошли. Изменение опубликовано в PR #93; точный CI #1501 на
-этом SHA уже прошёл предварительные jobs и выполняет E2E. CI #1499 относится к
-базовому `11e6583` и не проверяет данный коммит.
+build и diff check прошли. Полный CI #1501 для этого SHA завершился success,
+включая 850 browser tests и rollback/CAS.
 
 Причина предыдущего сбоя [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
 на `0af2c30` — форма настроек принимала ввод до загрузки исходного профиля,
@@ -67,7 +67,7 @@ E2E follow-up
 WebKit. Полный CI этой поправки завершился run #1489 с описанной выше отдельной
 ошибкой family-menu E2E.
 
-В `TASKS.md` остаются 34 незакрытых пункта (20 P0, 7 P1 и 7 последующих задач);
+В `TASKS.md` остаются 33 незакрытых пункта (19 P0, 7 P1 и 7 последующих задач);
 ни один P0 не закрыт целиком. Staging, выпуск и интеграция в `main` не выполнены.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
@@ -87,8 +87,8 @@ Pages deployment и отделена ли его база от production. Cloud
 доступа в текущем окружении нет.
 
 Изменение Playwright включает 1.64.1 и настоящий offline через
-`context.setOffline(true)` во всех семи PWA cold-reopen профилях. В `TASKS.md` остаются 34
-незакрытых пункта (20 P0, 7 P1, 7 следующих задач); staging, физические
+`context.setOffline(true)` во всех семи PWA cold-reopen профилях. В `TASKS.md` остаются 33
+незакрытых пункта (19 P0, 7 P1, 7 следующих задач); staging, физические
 устройства/OAuth, выпуск и интеграция в `main` не подтверждены.
 
 ## Предыдущие локальные результаты

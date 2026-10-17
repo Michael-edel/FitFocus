@@ -26,9 +26,11 @@ domain-strict и storage-strict typecheck прошли; Playwright preview сб�
 
 Изменение закоммичено и опубликовано как [`7ff579d`](https://github.com/Michael-edel/FitFocus/commit/7ff579d051f7431cd0ba23cb1599863a467b0cc3)
 в PR #93. Точный [CI run #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
-на этом SHA прошёл dependency audit, guards, unit, typechecks и build; E2E ещё
-выполняется. Предыдущий CI #1499 проверял только базовый `11e6583`. Общий аудит
-P0.4/P0.8, остальные callbacks, staging и release acceptance остаются открытыми.
+завершился success: 1326 unit / 212 файлов, 850 browser passed / 263 skipped
+за 38,1 минуты; audit, guards, typechecks и build прошли. Rollback/CAS прошёл
+23 HTTP/D1-запроса. Browser diagnostics и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443/artifacts/12091852535)
+сохранены. Общий аудит P0.4/P0.8, остальные callbacks, staging и release
+acceptance остаются открытыми.
 
 ## P0.8/P0.9 — отмена profile refresh при Safari reload, 17.10.2026
 
