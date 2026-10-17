@@ -27,6 +27,17 @@ owner-scoped `fitfocus.analytics.sent.v1:<userId>` до перезапуска, 
 typecheck, production build и `git diff --check` прошли. Точный CI для этого
 follow-up ещё не завершён.
 
+### P0.4 follow-up — удалить global telemetry при account deletion, `df26714`
+
+Удаление только owner-scoped ключей оставляло три прежних global event logs в
+открытой вкладке до следующего старта приложения. Так как новые сборки их уже не
+читают, `clearLocalUserData` теперь удаляет эти известные unscoped ключи вместе с
+аккаунтными данными, сохраняя при этом маркеры и данные других пользователей.
+Privacy suite прошёл 4/4; root, domain-strict, storage-strict typecheck,
+production build и `git diff --check` прошли. [CI #1563](https://github.com/Michael-edel/FitFocus/actions/runs/39036677274)
+относится к предыдущему SHA `48f62bb`; его static gates прошли, E2E на момент
+проверки выполнялся и не включает `df26714`.
+
 ## P0.8 — не показывать незафиксированную настройку после локального отказа, `5204b41`, 17.10.2026
 
 `useSettingsPersistence` раньше сразу отмечал новое значение как уже записанное,
