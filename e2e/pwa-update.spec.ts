@@ -20,6 +20,64 @@ async function openNative(page: Page, url: string, standalone: boolean) {
   return errors;
 }
 
+test('a native profile refresh cancelled by reload stays handled in Safari', async ({ page }, info) => {
+  test.skip(!['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name), 'Safari/WebKit reload acceptance');
+  let release!: () => void;
+  let requestStarted!: () => void;
+  let shouldHoldProfileRead = false;
+  const profileReadStarted = new Promise<void>(resolve => { requestStarted = resolve; });
+  const profileReadWait = new Promise<void>(resolve => { release = resolve; });
+  const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'), {
+    profileGetGate: {
+      shouldHold: () => shouldHoldProfileRead,
+      started: () => requestStarted(),
+      wait: profileReadWait,
+    },
+  });
+  const errors: string[] = [];
+  const cancelledProfileReads: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname === '/api/profile' && request.method() === 'GET') {
+      cancelledProfileReads.push(request.failure()?.errorText ?? 'unknown failure');
+    }
+  });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true,
+      push: { standalone: info.project.name.endsWith('-pwa') } });
+    await openApp(page, server.origin + '/#settings');
+    const name = page.getByPlaceholder('Как к вам обращаться');
+    await expect(name).toHaveValue(buildMockProfile().name);
+
+    shouldHoldProfileRead = true;
+    await page.bringToFront();
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await profileReadStarted;
+
+    const reload = page.reload();
+    await reload;
+    shouldHoldProfileRead = false;
+    release();
+
+    await expect(name).toHaveValue(buildMockProfile().name);
+    expect(server.counts.profileGet).toBeGreaterThan(0);
+    expect(cancelledProfileReads).toHaveLength(1);
+    expect(cancelledProfileReads[0]).toMatch(/cancel|abort/i);
+    expect(server.counts.profile).toBe(0);
+    expect(server.unexpectedApi).toEqual([]);
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    shouldHoldProfileRead = false;
+    release();
+    await server.close();
+  }
+});
+
 async function requestLegacyWriterFence(page: Page, timeoutMs = 750) {
   return page.evaluate((timeout) => new Promise<unknown>((resolve) => {
     const worker = navigator.serviceWorker.controller;

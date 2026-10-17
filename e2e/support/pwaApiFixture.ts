@@ -9,7 +9,8 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
-  retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean } = {}) {
+  retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+  profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let sessionId = initialSessionId;
   let disconnectStateWrites = false;
   let profile: Record<string, unknown> = buildMockProfile();
@@ -18,7 +19,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   let firstFamilyConflictInjected = false, stateAvailable = options.stateUnavailable !== true;
   let currentStateAvailable = options.currentStateUnavailable !== true;
   const stateWriteKeys: string[] = [];
-  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, accepted: 0, acceptedAtMs: null as number | null,
+  const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, profileGet: 0, accepted: 0, acceptedAtMs: null as number | null,
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
     currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
@@ -66,6 +67,14 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {
       if (method === 'PUT') { counts.profile += 1; profile = { ...body, version: Number(body.baseVersion) + 1 }; }
+      if (method === 'GET') {
+        counts.profileGet += 1;
+        if (options.profileGetGate?.shouldHold()) {
+          options.profileGetGate.started();
+          await options.profileGetGate.wait;
+          if (response.destroyed) return;
+        }
+      }
       return json({ profile, version: profile.version });
     }
     if (path === '/api/state') {
