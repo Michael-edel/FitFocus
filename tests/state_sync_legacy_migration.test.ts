@@ -88,6 +88,22 @@ it('imports durably but cannot claim or send when the service-worker writer fenc
   expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
 
+it('retries a missed writer fence during polling without waiting for another browser event', async () => {
+  vi.stubGlobal('window', new EventTarget());
+  vi.stubGlobal('navigator', { onLine: true });
+  const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
+  const verifyLegacyWritersStopped = vi.fn<() => Promise<LegacyWriterFenceProof | null>>()
+    .mockResolvedValueOnce(null)
+    .mockResolvedValue(writerFence());
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await migration.progress())?.sendAllowed, { timeout: 5_000 }).toBe(true);
+  expect(verifyLegacyWritersStopped).toHaveBeenCalledTimes(2);
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+});
+
 it('rechecks the read guard when another tab changes the session during migration', async () => {
   const fetchImpl = vi.fn<typeof fetch>()
     .mockResolvedValueOnce(json(proof()))

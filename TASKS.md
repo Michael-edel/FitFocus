@@ -5,27 +5,24 @@
 защищённую `main` не подтверждены. В плане остаются 33 незакрытых пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
-Последние локальные code commits — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c),
-[`8df9270`](https://github.com/Michael-edel/FitFocus/commit/8df9270) и
-[`df26714`](https://github.com/Michael-edel/FitFocus/commit/df26714). Они удаляют
-неиспользуемую локальную аналитику с чувствительными показателями, сохраняют
-немедленную очистку owner-scoped маркеров и удаляют старые глобальные логи при
-удалении аккаунта. Privacy suite прошёл 4/4, все три typecheck, production build
-и `git diff --check` прошли. Последний [PR CI #1563](https://github.com/Michael-edel/FitFocus/actions/runs/39036677274)
-проверяет предшествующий SHA `48f62bb`: static gates прошли, E2E на момент
-последней проверки выполнялся; он не содержит `df26714`. Точный CI последней
-ревизии ещё не завершён. Более ранний опубликованный HEAD
-`5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
-статические проверки прошли, E2E завершился с 913 passed, 31 failed и 295 skipped
-за 41 минуту.
+Опубликованный HEAD [`cf62df0`](https://github.com/Michael-edel/FitFocus/commit/cf62df0)
+прошёл точный [PR CI #1565](https://github.com/Michael-edel/FitFocus/actions/runs/39037015105)
+со всеми статическими проверками, unit, build, E2E и rollback jobs. После него
+локально исправлена повторная проверка PWA legacy-writer fence. Точная CI
+проверка этого исправления выполняется отдельно на опубликованном SHA.
 
-На `10dbcab` локально прошли unit **1348/1348**, root/domain/storage typecheck,
-production build и целевые E2E: PWA update **7/7**, rollback install **7/7**,
-мобильная правка дневника **4/4**, профильные мобильные retry сценарии **12/12**
-(набор собран из успешных повторов после исправления iPhone PWA file reset),
-weekly menu Firefox **1/1**. PWA offline прошёл 6/7; единственный iPhone Safari
-сбой затем прошёл в изолированном повторе, поэтому матрица требует точной CI
-перепроверки. Эти локальные результаты не заменяют full CI.
+Исправление обнаруженной паузы sender: когда первый fence handshake не давал
+подтверждение, `StateSync` сохранял безопасный запрет отправки, но секундный
+polling не начинал новую верификацию. Теперь проверка ждёт `activated` у текущего
+Service Worker, а после пропуска автоматически повторяется с ограниченным
+backoff; отправка по-прежнему разрешена только после валидного all-client proof.
+Регрессионные unit-тесты и миграционный набор прошли **18/18**, полный unit suite
+— **1352/1352**, три typecheck и production build прошли. Android Chrome stress
+прошёл **20/20** без retries; полная PWA offline-матрица — **7/7** без retries.
+Все локальные проверки успешны, однако они ещё не заменяют точный CI нового SHA.
+
+Более ранние мобильные результаты на `10dbcab` и предыдущая история CI приведены
+ниже; они не заменяют текущую матрицу 7/7 и точный CI.
 
 В кодовом коммите [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
 обработан отказ durable profile write в Progress/Settings: ошибки видны,

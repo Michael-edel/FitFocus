@@ -38,6 +38,38 @@ async function storedSettings(page: Page) {
   });
 }
 
+async function failureStateDebug(page: Page) {
+  return page.evaluate(async () => {
+    const request = indexedDB.open('fitfocus-user-state-v1');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const transaction = database.transaction(['outbox_meta'], 'readonly');
+      const rows = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+        const query = transaction.objectStore('outbox_meta').getAll();
+        query.onsuccess = () => resolve(query.result);
+        query.onerror = () => reject(query.error);
+      });
+      await new Promise<void>((resolve, reject) => {
+        transaction.addEventListener('complete', () => resolve(), { once: true });
+        transaction.addEventListener('abort', () => reject(transaction.error), { once: true });
+      });
+      return {
+        activeSession: rows.find((row) => row.id === 'active-session') ?? null,
+        migration: rows.find((row) => row.id === 'legacy-migration:v1') ?? null,
+        buildId: localStorage.getItem('fitfocus.build.id'),
+        legacyQueue: localStorage.getItem('fitfocus.remote-kv-outbox.v1'),
+        controller: navigator.serviceWorker.controller?.scriptURL ?? null,
+        controllerState: navigator.serviceWorker.controller?.state ?? null,
+      };
+    } finally {
+      database.close();
+    }
+  });
+}
+
 test('real PWA preserves settings through offline reopen and syncs after reconnection', async ({ context }, info) => {
   test.setTimeout(90_000);
   const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'));
@@ -167,6 +199,7 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
       navigationResponses,
       pageErrors,
       localState: await storedSettings(page).catch((error) => ({ error: error instanceof Error ? error.message : String(error) })),
+      stateSync: await failureStateDebug(page).catch((error) => ({ error: error instanceof Error ? error.message : String(error) })),
       counts: server.counts,
       stateWriteKeys: server.stateWriteKeys,
       unexpectedApi: server.unexpectedApi,

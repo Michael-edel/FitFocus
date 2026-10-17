@@ -68,38 +68,50 @@ export async function checkLegacyWriterFence(
 ): Promise<LegacyWriterFenceProof | null> {
   const controller = container.controller;
   if (!controller || !buildId || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
-  let channel: MessageChannel;
   let challengeId: string;
   try {
     if (typeof MessageChannel === 'undefined' || typeof crypto.randomUUID !== 'function') return null;
-    channel = new MessageChannel();
     challengeId = crypto.randomUUID();
   } catch { return null; }
   return new Promise((resolve) => {
     let settled = false;
+    let channel: MessageChannel | undefined;
     const finish = (proof: LegacyWriterFenceProof | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      channel.port1.close();
-      channel.port2.close();
+      controller.removeEventListener('statechange', onStateChange);
+      channel?.port1.close();
+      channel?.port2.close();
       resolve(proof);
     };
     const timer = setTimeout(() => finish(null), timeoutMs);
-    channel.port1.onmessage = (event: MessageEvent<unknown>) => {
-      if (!isFenceReply(event.data)) return finish(null);
-      const reply = event.data;
-      const ids = reply.clients.map((client) => client.id);
-      // The worker must identify its own build and return a nonempty, duplicate-free client inventory.
-      if (reply.challengeId !== challengeId || !reply.complete || !ids.length || new Set(ids).size !== ids.length
-        || reply.workerBuildId !== buildId || reply.clients.some((client) => client.buildId !== buildId)) return finish(null);
-      finish(Object.freeze({ buildId, checkedAtMs: now(), challengeId, clientIds: Object.freeze(ids) }));
+    const onStateChange = () => {
+      if (controller.state === 'redundant') return finish(null);
+      if (controller.state === 'activated') postCheck();
     };
-    try {
-      controller.postMessage({ type: LEGACY_WRITER_FENCE_CHECK, challengeId, buildId }, [channel.port2]);
-    } catch {
-      finish(null);
-    }
+    const postCheck = () => {
+      if (settled || controller.state !== 'activated') return;
+      try {
+        channel = new MessageChannel();
+      } catch { return finish(null); }
+      channel.port1.onmessage = (event: MessageEvent<unknown>) => {
+        if (!isFenceReply(event.data)) return finish(null);
+        const reply = event.data;
+        const ids = reply.clients.map((client) => client.id);
+        // The worker must identify its own build and return a nonempty, duplicate-free client inventory.
+        if (reply.challengeId !== challengeId || !reply.complete || !ids.length || new Set(ids).size !== ids.length
+          || reply.workerBuildId !== buildId || reply.clients.some((client) => client.buildId !== buildId)) return finish(null);
+        finish(Object.freeze({ buildId, checkedAtMs: now(), challengeId, clientIds: Object.freeze(ids) }));
+      };
+      try {
+        controller.postMessage({ type: LEGACY_WRITER_FENCE_CHECK, challengeId, buildId }, [channel.port2]);
+      } catch {
+        finish(null);
+      }
+    };
+    controller.addEventListener('statechange', onStateChange);
+    onStateChange();
   });
 }
 

@@ -74,6 +74,8 @@ export class StateSync {
   private readonly verifyLegacyWritersStopped: () => Promise<LegacyWriterFenceProof | null>;
   private legacySourceSnapshot: string | null | undefined;
   private legacyFenceReady = false;
+  private legacyFenceRetryAtMs = 0;
+  private legacyFenceRetryDelayMs = 1_000;
   private readonly owner = crypto.randomUUID();
   private generation = 0;
   private accountId?: string;
@@ -148,6 +150,8 @@ export class StateSync {
     this.accountId = undefined; this.session = undefined;
     this.readGuard = undefined;
     this.legacyFenceReady = false;
+    this.legacyFenceRetryAtMs = 0;
+    this.legacyFenceRetryDelayMs = 1_000;
     this.legacySourceSnapshot = undefined;
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
@@ -401,6 +405,15 @@ export class StateSync {
   private verify(generation: number): Promise<boolean> {
     if (this.verification?.generation === generation) return this.verification.promise;
     const promise = this.verifySession(generation).finally(() => {
+      if (this.legacyRuntime && generation === this.generation) {
+        if (this.legacyFenceReady) {
+          this.legacyFenceRetryAtMs = 0;
+          this.legacyFenceRetryDelayMs = 1_000;
+        } else {
+          this.legacyFenceRetryAtMs = this.now() + this.legacyFenceRetryDelayMs;
+          this.legacyFenceRetryDelayMs = Math.min(this.legacyFenceRetryDelayMs * 2, 15_000);
+        }
+      }
       if (this.verification?.promise === promise) this.verification = undefined;
     });
     this.verification = { generation, promise };
@@ -476,8 +489,12 @@ export class StateSync {
     if (!accountId) return;
     if (this.legacyRuntime && !this.legacyFenceReady) {
       const verification = this.verification;
-      if (!verification || verification.generation !== generation || !await verification.promise
-        || generation !== this.generation || !this.legacyFenceReady) return;
+      if (verification?.generation === generation) {
+        if (!await verification.promise) return;
+      } else {
+        if (this.now() < this.legacyFenceRetryAtMs || !await this.verify(generation)) return;
+      }
+      if (generation !== this.generation || !this.legacyFenceReady) return;
     }
     try {
       for (let count = 0; count < 20 && generation === this.generation; count += 1) {

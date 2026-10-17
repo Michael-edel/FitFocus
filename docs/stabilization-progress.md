@@ -6124,3 +6124,34 @@ production build, PWA update **7/7**, rollback install **7/7** и мобильн
 295 skipped; его E2E падения включали эти PWA/mobile классы. Точный CI для
 локального `10dbcab` ещё не запускался. PR #93 остаётся draft; staging, выпуск и
 интеграция в защищённую `main` открыты.
+
+## P0.8/P0.9 — повтор writer fence после пропущенного handshake, 17.10.2026
+
+Android Chrome offline-reopen сценарий оставлял weekly-report операцию в
+IndexedDB `pending`, потому что legacy migration фиксировала
+`writersStopped=false` и `sendAllowed=false`. Это корректно удерживало отправку,
+но `StateSync.drain()` после завершения неудачной первоначальной проверки ждал
+только уже выполняющуюся верификацию; обычный polling не запускал новую проверку.
+Следовательно, разовый пропуск all-client fence мог оставить sender на паузе до
+focus/online/controllerchange.
+
+`checkLegacyWriterFence` теперь ждёт состояния `activated` у текущего Service
+Worker и прекращает попытку при переходе в `redundant`. Когда proof отсутствует,
+StateSync повторно проверяет session и миграцию при polling с ограниченным
+экспоненциальным backoff до 15 секунд. Fail-closed правило сохраняется:
+outbox не отправляется, пока не получено актуальное подтверждение всех клиентов
+того же build id.
+
+Новый unit-регресс воспроизводит пропущенный fence и подтверждает повтор без
+дополнительного события браузера. Legacy writer fence и migration наборы прошли
+**18/18**, полный unit suite — **1352/1352**; root, domain-strict и storage-strict
+typecheck, production build и `git diff --check` прошли. Android Chrome стресс-
+прогон прошёл **20/20** без retries; offline-сценарий прошёл **7/7** на полной
+браузерной матрице без retries. Перед исправлением Android стресс дал 19/20.
+
+Опубликованный parent SHA [`cf62df0`](https://github.com/Michael-edel/FitFocus/commit/cf62df0)
+прошёл точный [PR CI #1565](https://github.com/Michael-edel/FitFocus/actions/runs/39037015105)
+успешно, включая E2E и rollback jobs; этот run не содержит текущий fix.
+Точная проверка исправления проводится отдельно на опубликованном SHA. PR #93 остаётся draft;
+полный P0.8/P0.9, разделение staging-проверок, выпуск и интеграция в защищённую
+`main` остаются открытыми.

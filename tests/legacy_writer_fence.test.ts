@@ -9,12 +9,13 @@ import {
 } from '../storage/legacyWriterFence';
 
 function controller(reply: (message: { challengeId: string; buildId: string }) => unknown) {
-  const serviceWorker = {
+  const serviceWorker = Object.assign(new EventTarget(), {
+    state: 'activated' as ServiceWorkerState,
     postMessage(message: { challengeId: string; buildId: string }, ports: Transferable[]) {
       const port = ports[0] as MessagePort;
       port.postMessage(reply(message));
     },
-  } as unknown as ServiceWorker;
+  }) as unknown as ServiceWorker;
   return { controller: serviceWorker } as Pick<ServiceWorkerContainer, 'controller'>;
 }
 
@@ -64,9 +65,48 @@ it.each([
 it('does not claim a fence when the active worker or its reply is missing', async () => {
   await expect(checkLegacyWriterFence({ controller: null }, 'build-123')).resolves.toBeNull();
   vi.useFakeTimers();
-  const pending = checkLegacyWriterFence({ controller: { postMessage: vi.fn() } as unknown as ServiceWorker }, 'build-123', 100);
+  const serviceWorker = Object.assign(new EventTarget(), {
+    state: 'activated' as ServiceWorkerState,
+    postMessage: vi.fn(),
+  }) as unknown as ServiceWorker;
+  const pending = checkLegacyWriterFence({ controller: serviceWorker }, 'build-123', 100);
   await vi.advanceTimersByTimeAsync(101);
   await expect(pending).resolves.toBeNull();
+});
+
+it('waits for a controlled worker to finish activation before sending the fence check', async () => {
+  const serviceWorker = Object.assign(new EventTarget(), { state: 'activating' as ServiceWorkerState }) as unknown as ServiceWorker;
+  const nativePostMessage = vi.fn((message: { challengeId: string; buildId: string }, ports: Transferable[]) => {
+    (ports[0] as MessagePort).postMessage({
+      type: LEGACY_WRITER_FENCE_REPLY,
+      challengeId: message.challengeId,
+      workerBuildId: message.buildId,
+      complete: true,
+      clients: [{ id: 'tab-a', buildId: message.buildId }],
+    });
+  });
+  Object.defineProperty(serviceWorker, 'postMessage', { value: nativePostMessage });
+
+  const pending = checkLegacyWriterFence({ controller: serviceWorker }, 'build-123', 500);
+  expect(nativePostMessage).not.toHaveBeenCalled();
+  Object.defineProperty(serviceWorker, 'state', { value: 'activated' });
+  serviceWorker.dispatchEvent(new Event('statechange'));
+
+  await expect(pending).resolves.toMatchObject({ buildId: 'build-123', clientIds: ['tab-a'] });
+  expect(nativePostMessage).toHaveBeenCalledTimes(1);
+});
+
+it('abandons the fence when the controlled worker becomes redundant before activation', async () => {
+  const serviceWorker = Object.assign(new EventTarget(), { state: 'activating' as ServiceWorkerState }) as unknown as ServiceWorker;
+  const nativePostMessage = vi.fn();
+  Object.defineProperty(serviceWorker, 'postMessage', { value: nativePostMessage });
+
+  const pending = checkLegacyWriterFence({ controller: serviceWorker }, 'build-123', 500);
+  Object.defineProperty(serviceWorker, 'state', { value: 'redundant' });
+  serviceWorker.dispatchEvent(new Event('statechange'));
+
+  await expect(pending).resolves.toBeNull();
+  expect(nativePostMessage).not.toHaveBeenCalled();
 });
 
 it('answers a worker probe with this page’s compiled build id', async () => {

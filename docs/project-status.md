@@ -3,30 +3,24 @@
 Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Текущий этап — стабилизация и приёмка P0; IndexedDB
-durable outbox уже подключён, но общий P0 остаётся открыт, как и Safari/PWA
-lifecycle, интеграция в staging, выпуск и защищённую `main`.
+`fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
+outbox подключён, найденная повторная проверка PWA writer fence исправлена локально.
+В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
+P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main` остаются
+открытыми.
 
-Локальный HEAD — [`df26714`](https://github.com/Michael-edel/FitFocus/commit/df26714).
-Удалены неиспользуемые onboarding/WIS/food-streak event logs с чувствительными
-показателями; старые ключи очищаются при старте, а при удалении аккаунта также
-удаляются unscoped логи и только его owner-scoped маркеры. Privacy suite прошёл
-4/4, все три typecheck, production build и `git diff --check` прошли.
+Опубликованный HEAD [`cf62df0`](https://github.com/Michael-edel/FitFocus/commit/cf62df0)
+прошёл точный [PR CI #1565](https://github.com/Michael-edel/FitFocus/actions/runs/39037015105)
+успешно, включая E2E и rollback jobs; он относится только к этому parent SHA.
+Отдельная CI-проверка writer-fence исправления выполняется на его SHA после
+публикации.
 
-Последний [PR CI #1563](https://github.com/Michael-edel/FitFocus/actions/runs/39036677274)
-проверяет предыдущую ревизию `48f62bb`: static gates прошли, E2E на момент
-последней проверки выполнялся. Этот run не содержит `df26714`; точный CI
-последней ревизии ещё не завершён.
-Предыдущий опубликованный HEAD `5b90b31` завершил [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
-с ошибкой E2E: 913 passed, 31 failed, 295 skipped за 41 минуту; статические
-проверки прошли.
-
-Локально на `10dbcab` прошли unit 1348/1348, все три typecheck и production
-build; целевые E2E: PWA update 7/7, rollback install 7/7, мобильная правка
-дневника 4/4, профильные retry сценарии 12 успешных запусков, weekly menu
-Firefox 1/1. PWA offline прошёл 6/7; сбой iPhone Safari прошёл в одиночном
-повторе, поэтому вся матрица пока не считается устойчивой. Локальные прогоны не
-заменяют точный полный CI.
+Если fence handshake не отвечал с первого раза, sender оставлял outbox на
+безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт
+активации текущего Service Worker и повторяется с ограниченным backoff. Unit suite
+1352/1352, все три typecheck и production build прошли; offline E2E: Android
+Chrome 20/20 повторов и полная матрица 7/7, везде без retries. Подробности и
+ограничения — в [журнале стабилизации](stabilization-progress.md).
 
 ## P0.8 — действия урока подтверждаются после durable commit, `77ca05f`, 17.10.2026
 
