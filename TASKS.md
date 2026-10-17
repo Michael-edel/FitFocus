@@ -1259,8 +1259,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     несовместимый writer получает 426 до чтения тела и D1. Текущий sender передаёт
     protocol и сохраняет intent на protocol-паузе; route/sender regressions
     и локальные проверки описаны в [журнале стабилизации](docs/stabilization-progress.md).
-  - [ ] Проверить настоящую пару старого/нового bundle через HTTP barrier на одном
-    origin и подтвердить остановку старой вкладки без потери локального intent.
+  - [x] Проверить настоящую пару старого/нового bundle через HTTP barrier на одном
+    origin: старая сборка получает 426, сохраняет durable intent в IndexedDB,
+    а текущая после Service Worker update повторяет ту же операцию с protocol v2.
+    Native HTTP E2E прошёл 7/7 Playwright-проектов без retries; synthetic API
+    не заменяет staging-проверку ниже.
 - [x] Не повышать legacy `baseVersion` до доказанного серверного поколения:
   импортировать старые операции как конфликт с `baseVersion=0`, закрыть claim,
   атомарно снимать старую попытку и отклонять поздний ack. Unit и browser
