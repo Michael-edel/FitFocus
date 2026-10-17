@@ -6258,3 +6258,12 @@ pageerror/console errors, off-origin requests или non-GET запросов. �
 D1 binding/изоляция, серверный `APP_URL`, OAuth callback, миграции и
 аутентифицированные сценарии не проверены; staging и выпуск остаются открыты.
 Точный PR CI #1573 для `bb94957` ещё выполняет полный E2E и rollback/CAS.
+
+## Recheck Safari reload cancellation: 17.10.2026
+
+Повторно запущен сценарий `a native profile refresh cancelled by reload stays
+handled in Safari` на текущем локальном коде: desktop WebKit, iPhone Safari и
+iPhone PWA прошли **3/3**, workers=1, retries=0. Это подтверждает обработку
+нынешней отмены GET `/api/profile` при reload, но не устанавливает источник
+старого исторического сообщения; соответствующий диагностический пункт в
+`TASKS.md` остаётся открытым. Этот прогон локальный и не заменяет точный CI.
