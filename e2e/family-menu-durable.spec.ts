@@ -12,7 +12,7 @@ function filterReloadAccessControlAborts(errors: string[], projectName: string):
   const expectedAborts = errors.filter(error => staleReadAbort.test(error));
   const abortKinds = expectedAborts.map(error => error.match(/\/api\/(family(?:\/menu\/state)?|shopping\/list|me)(?:\?| due)/)?.[1]);
   expect(expectedAborts.length).toBeLessThanOrEqual(4);
-  expect(new Set(abortKinds).size).toBe(abortKinds.length);
+  expect(abortKinds.every(kind => kind !== undefined)).toBe(true);
   return errors.filter(error => !expectedAborts.includes(error));
 }
 
@@ -362,8 +362,9 @@ test('a delayed durable menu-state read after another account signs in cannot hy
     expect(await saved(page)).toEqual(before);
     expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(400);
     // WebKit can report same-origin GETs intentionally cancelled by reload as
-    // access-control console errors. This flow reloads during menu, shopping,
-    // and identity reads; allow only those exact routes and keep the count bounded.
+    // access-control console errors. Overlapping identity refreshes can cancel
+    // more than one request to the same route; allow only these exact routes and
+    // keep the total bounded.
     await healthy(page, filterReloadAccessControlAborts(errors, testInfo.project.name));
     await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsB).toEqual([]);

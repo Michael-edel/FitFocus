@@ -478,6 +478,13 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
       sourceKey: legacySourceKey, record: { type: 'put', key: profileKey, value: profileValue },
     });
     await openApp(page, `${server.origin}/?legacy-profile=1#plan`);
+    const updateNotice = page.getByRole('status', { name: 'Обновление FitFocus' });
+    // The old bundle can discover a waiting worker after the recovery UI is ready.
+    // Defer it through the normal "Позже" action whenever it would block an interaction.
+    await page.addLocatorHandler(updateNotice, async notice => {
+      await notice.getByRole('button', { name: 'Позже' }).click();
+      await expect(notice).toBeHidden();
+    });
     await expect(page).toHaveTitle(/FitFocus/);
     await expect(page.getByRole('alert')).toContainText('Обнаружен конфликт данных');
     await expectCapturedAppDatabase(page);
@@ -486,15 +493,6 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
       return state.operations.some(operation => operation.key === profileKey && operation.status === 'conflicted');
     }, { timeout: 30_000 }).toBe(true);
 
-    const updateNotice = page.getByRole('status', { name: 'Обновление FitFocus' });
-    const postponeUpdate = updateNotice.getByRole('button', { name: 'Позже' });
-    // The old PWA bundle may report its update asynchronously. Dismiss it if
-    // already present, and keep the recovery control below the fixed notice if
-    // it appears after this check.
-    if (await updateNotice.isVisible()) {
-      await postponeUpdate.click();
-      await expect(updateNotice).toBeHidden();
-    }
     const recoverySummary = page.locator('[data-state-notice-region] details summary');
     await recoverySummary.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
     await recoverySummary.click();
