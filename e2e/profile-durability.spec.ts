@@ -368,3 +368,35 @@ test('a failed profile commit keeps the form dirty and never reports a cloud sav
   expect((await saved(page)).operations).toEqual([]); expect(mutations).toEqual([]); expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('profile-quota-draft.png') });
 });
+
+test('a failed progress photo commit keeps the selected image and reports the storage error', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#settings');
+  await expect(page.getByText('История визуальных замеров')).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected progress photo quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  const photoInput = page.locator('input[type="file"][accept="image/*"]');
+  await photoInput.setInputFiles({
+    name: 'progress.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить фото прогресса.' }))
+    .toBeVisible();
+  await expect(photoInput).toHaveValue(/progress\.svg$/);
+  expect((await saved(page)).value).toBe(before.value);
+  expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});

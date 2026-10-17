@@ -385,6 +385,13 @@ export default function SettingsScreen({
   const pushScopeKey = loginGuard
     ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
     : null;
+  const progressPhotoScopeKey = JSON.stringify([
+    user?.id ?? null,
+    loginGuard?.accountId ?? null,
+    loginGuard?.sessionEpoch ?? null,
+    loginGuard?.serverSessionId ?? null,
+    loginGuard?.authFence ?? null,
+  ]);
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
   const gainSur = user?.gainSurplus ?? DEFAULT_SURPLUS;
@@ -462,6 +469,7 @@ export default function SettingsScreen({
   const pushControllerRef = useRef<AbortController | null>(null);
   const pushAttemptRef = useRef(0);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
+  const progressPhotoAttemptRef = React.useRef(0);
 
   const latestMeasurement = useMemo(() => {
     const list = user?.measurementsHistory || [];
@@ -1460,6 +1468,13 @@ export default function SettingsScreen({
   }, [user?.id]);
 
   useEffect(() => {
+    progressPhotoAttemptRef.current += 1;
+    setProgressPhotoBusy(false);
+    setProgressPhotoError(null);
+    if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
+  }, [progressPhotoScopeKey]);
+
+  useEffect(() => {
     if (settingsUiSkipSaveRef.current) {
       settingsUiSkipSaveRef.current = false;
       return;
@@ -1681,22 +1696,32 @@ export default function SettingsScreen({
     setProfileDirty(false);
   };
 
-  const saveProgressPhotos = async (nextPhotos: ProgressPhoto[]) => {
-    if (!user) return;
+  const saveProgressPhotos = async (
+    nextPhotos: ProgressPhoto[],
+    isCurrentAttempt: () => boolean,
+  ): Promise<boolean | null> => {
+    if (!user || !isCurrentAttempt()) return null;
     const patch: Partial<UserProfile> = { progressPhotos: nextPhotos.slice(0, 12) };
     if (serverSession && onPatchUser) {
-      await onPatchUser(patch);
+      const saved = await onPatchUser(patch);
+      return isCurrentAttempt() ? saved !== false : null;
     } else if (onChangeUser) {
-      onChangeUser({ ...user, ...patch });
+      await onChangeUser({ ...user, ...patch });
+      return isCurrentAttempt();
     }
+    return false;
   };
 
   const addProgressPhoto = async (file: File) => {
     if (!user) return;
+    const attempt = ++progressPhotoAttemptRef.current;
+    const isCurrentAttempt = () => attempt === progressPhotoAttemptRef.current
+      && isCurrentSession?.() !== false;
     setProgressPhotoBusy(true);
     setProgressPhotoError(null);
     try {
       const { photo, thumb } = await compressProgressPhoto(file);
+      if (!isCurrentAttempt()) return;
       const next: ProgressPhoto[] = [
         {
           date: new Date().toISOString(),
@@ -1706,20 +1731,38 @@ export default function SettingsScreen({
         },
         ...(user.progressPhotos || []),
       ].slice(0, 12);
-      await saveProgressPhotos(next);
+      const saved = await saveProgressPhotos(next, isCurrentAttempt);
+      if (saved === null || !isCurrentAttempt()) return;
+      if (!saved) {
+        setProgressPhotoError('Не удалось сохранить фото прогресса. Повторите попытку.');
+        return;
+      }
       setProgressPhotoNote('');
       if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
     } catch {
-      setProgressPhotoError('Не удалось добавить фото прогресса.');
+      if (isCurrentAttempt()) setProgressPhotoError('Не удалось добавить фото прогресса.');
     } finally {
-      setProgressPhotoBusy(false);
+      if (attempt === progressPhotoAttemptRef.current) setProgressPhotoBusy(false);
     }
   };
 
   const removeProgressPhoto = async (index: number) => {
     if (!user) return;
+    const attempt = ++progressPhotoAttemptRef.current;
+    const isCurrentAttempt = () => attempt === progressPhotoAttemptRef.current
+      && isCurrentSession?.() !== false;
     const next = (user.progressPhotos || []).filter((_, i) => i !== index);
-    await saveProgressPhotos(next);
+    setProgressPhotoBusy(true);
+    setProgressPhotoError(null);
+    try {
+      const saved = await saveProgressPhotos(next, isCurrentAttempt);
+      if (saved === null || !isCurrentAttempt()) return;
+      if (!saved) setProgressPhotoError('Не удалось сохранить изменения фото. Повторите попытку.');
+    } catch {
+      if (isCurrentAttempt()) setProgressPhotoError('Не удалось сохранить изменения фото. Повторите попытку.');
+    } finally {
+      if (attempt === progressPhotoAttemptRef.current) setProgressPhotoBusy(false);
+    }
   };
 
   const syncDescription = syncStateLabel(syncState);
@@ -1914,7 +1957,7 @@ export default function SettingsScreen({
                 </div>
 
                 {progressPhotoError && (
-                  <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
+                  <div role="alert" className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
                     {progressPhotoError}
                   </div>
                 )}
@@ -1945,6 +1988,7 @@ export default function SettingsScreen({
                           <button
                             type="button"
                             onClick={() => void removeProgressPhoto(index)}
+                            disabled={progressPhotoBusy}
                             className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all w-8 h-8 rounded-full bg-black/70 border border-white/10 text-white flex items-center justify-center"
                             aria-label="Удалить фото"
                           >

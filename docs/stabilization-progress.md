@@ -1,5 +1,25 @@
 # Стабилизация: проверяемые изменения
 
+## P0.6 — сохранять фото прогресса после отказа локальной записи, 17.10.2026
+
+`saveProgressPhotos` раньше не возвращал результат `onPatchUser`. Если запись
+profile operation в IndexedDB отклонялась, `addProgressPhoto` продолжал как после
+успеха: очищал выбранный файл и подпись, не показывая ошибку этого действия.
+Теперь handler различает сохранённое, неуспешное и устаревшее выполнение. При
+отказе файл и подпись остаются доступны для повтора; удаление фото также показывает
+ошибку и блокируется во время другой записи. Смена account/session scope
+инвалидирует попытку и очищает выбранный файл, поэтому поздний callback не меняет
+новый экран.
+
+Новый browser regression внедряет quota failure при записи profile outbox и
+проверяет видимую ошибку, сохранность исходного profile snapshot и выбранного
+файла, отсутствие сетевой мутации. Целевой сценарий прошёл 3/3 на desktop
+Chromium/Firefox/WebKit без retries. Полная `profile-durability.spec.ts` прошла
+30/30 на этих движках без retries; root typecheck и `git diff --check` прошли.
+Это mock-IDB/client acceptance, не staging и не реальное исчерпание диска.
+Точный CI нового SHA запускается после push; общий P0.6 и остальные callbacks
+остаются открытыми.
+
 ## P0.7 — request-level barrier для state writers, 17.10.2026
 
 Коммит [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)

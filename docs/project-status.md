@@ -8,16 +8,21 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
-Опубликованный HEAD [`55b3484`](https://github.com/Michael-edel/FitFocus/commit/55b3484e7056ed5078bbab18ea66d567aeac2c00)
-проходит точный PR CI [#1543](https://github.com/Michael-edel/FitFocus/actions/runs/39020797264):
-audit, guards, unit, три typecheck и build прошли; E2E выполняется. В кодовом
-follow-up [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
-ожидаемые session/auth-отказы scoped фотоанализа убраны из журнала, при этом
-`access` отказ остаётся диагностируемым. Следующий локальный commit `d774018`
-убирает alert `SESSION_READ_AUTH` в enhanced-анализе рецепта по фото. Новый E2E
-с реальным scoped 401 прошёл 3/3 на Chromium, Firefox и WebKit; полный unit
-(1347/1347), typechecks и сборка прошли локально. Точный CI `d774018` ожидает
-push.
+Опубликованный HEAD [`feaf74c`](https://github.com/Michael-edel/FitFocus/commit/feaf74c07c2a6daf0ff7a2fb35fff6b9136fd011)
+проверяется точным PR CI [#1545](https://github.com/Michael-edel/FitFocus/actions/runs/39021316539):
+audit, guards, unit, три typecheck и build прошли; E2E выполняется. В последних
+опубликованных исправлениях [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
+и [`d774018`](https://github.com/Michael-edel/FitFocus/commit/d774018)
+ожидаемые session/auth-отказы scoped фотоанализа не попадают в диагностику и не
+показываются как alert; access/protocol ошибки остаются заметны. Scoped-401
+регрессия прошла 3/3 на Chromium, Firefox и WebKit.
+
+Локальный P0.6 follow-up исправляет ошибочную обработку отказа durable-записи
+фото прогресса: неуспешный commit теперь не очищает выбранный файл и подпись,
+ошибка показывается пользователю, а попытка отбрасывается при смене account/session
+scope. Полная `profile-durability.spec.ts` прошла 30/30 на desktop Chromium,
+Firefox и WebKit без retries; root typecheck прошёл. Точный CI этого локального
+изменения ожидает push.
 
 P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
 требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;

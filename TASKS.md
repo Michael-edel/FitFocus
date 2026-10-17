@@ -4,11 +4,14 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Опубликованный HEAD `55b3484` проходит точный PR CI
-[#1543](https://github.com/Michael-edel/FitFocus/actions/runs/39020797264):
-audit, guards, unit, typechecks и build прошли; E2E выполняется. Локальный
-коммит `d774018` исправляет stale-auth alert при анализе рецепта по фото;
-его E2E прошёл на трёх desktop-браузерах, точный CI ожидает push.
+Опубликованный HEAD `feaf74c` проверяется точным PR CI
+[#1545](https://github.com/Michael-edel/FitFocus/actions/runs/39021316539):
+audit, guards, unit, три typecheck и build прошли; E2E выполняется. Локальный
+P0.6 follow-up исправляет потерю выбранного фото прогресса при отказе durable
+profile write: теперь отказ виден, файл и подпись сохраняются для повтора, а
+устаревший callback не меняет новую сессию. Полная `profile-durability.spec.ts`
+прошла 30/30 на desktop Chromium/Firefox/WebKit без retries; root typecheck и
+`git diff --check` прошли. Точный CI нового SHA запускается после push.
 
 Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
 для опубликованного `7ff579d` завершился success: 1326 unit tests / 212 файлов,
@@ -1250,6 +1253,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` закрыл unscoped серверный доступ к state/profile, но нужны проверки
   client lifecycle, старых writers и staging. Runtime legacy уже использует
   auth-derived owner и all-client Service Worker fence.
+  - [x] Не терять выбранное фото прогресса, если durable profile write отклонён:
+    передавать результат commit в UI, показывать ошибку и сохранять файл/подпись
+    для повтора; инвалидировать фото-attempt при смене account/session scope.
+    Регрессия прошла 3/3 desktop browsers, полная `profile-durability.spec.ts` —
+    30/30 без retries; root typecheck прошёл локально. Точный CI нового SHA
+    ожидает push.
   - [x] Удержать GET `/api/profile` аккаунта A, активировать B в соседней вкладке
     и отпустить ответ A после переключения. Старый экран закрыт session notice;
     профиль B и обе durable-записи не изменились, новых B-операций нет. E2E
