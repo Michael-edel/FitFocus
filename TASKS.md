@@ -1214,6 +1214,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     проверенной сессией: та же durable-операция получает новый attempt и
     завершается только после нового scoped PUT. E2E — 3/3 desktop engines,
     `workers=1,retries=0`; synthetic lifecycle не заменяет реальный BFCache.
+  - [x] Ограничить online/visibility cloud recovery совпадающими `cloudUserId`
+    и `currentUserId`; cooldown теперь относится к аккаунту и проверенной
+    серверной сессии и не подавляет восстановление после переключения или
+    повторного входа. Профильные unit-проверки — 3/3, полный unit suite —
+    1334/1334, общий и два strict typecheck, production build прошли локально.
+    Точный CI новой ревизии ожидает push; общий P0.6, реальные BFCache и
+    staging остаются открытыми.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:

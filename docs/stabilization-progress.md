@@ -5731,6 +5731,22 @@ CI follow-up ещё не запускался.
 API и не заменяет настоящий OAuth, устройство или staging. Точный полный CI
 этого HEAD подтверждается после отправки коммита `63d6a0b`.
 
+## P0.6 — область online/visibility profile recovery, 17.10.2026
+
+Проверка callback-гарантий нашла, что cloud recovery запускался при наличии
+обоих ID, не сверяя, что текущий профиль и облачная сессия принадлежат одному
+аккаунту. Его 60-секундный cooldown также был общим для всего времени жизни
+приложения, поэтому мог подавить восстановление после смены аккаунта или
+повторного входа. Теперь событие игнорируется при несовпадении `cloudUserId` и
+`currentUserId`, а cooldown привязан к account/profile и ключу активной сессии
+(`accountId`, `serverSessionId`, `sessionEpoch`).
+
+Профильные unit-тесты прошли 3/3; полный unit suite — 1334/1334 в 212 файлах.
+Общий typecheck с admin guards, domain-strict и storage-strict typecheck,
+production build и `git diff --check` прошли локально. Изменений API или D1 нет.
+Проверка локальная; точный CI новой ревизии ожидается после push, общий P0.6,
+реальный BFCache и staging остаются открытыми.
+
 ## P0.8/P0.9 — follow-up CI #1465: недельная семья и WebKit reload, 16.10.2026
 
 Опубликованный `f09b356` завершил CI run

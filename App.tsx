@@ -1235,6 +1235,9 @@ const App: React.FC = () => {
   useCloudSyncRecovery({
     cloudUserId: googleMe?.sub,
     currentUserId: currentUser?.id,
+    sessionKey: loginReadGuard
+      ? JSON.stringify([loginReadGuard.accountId, loginReadGuard.serverSessionId, loginReadGuard.sessionEpoch])
+      : null,
     profileSyncState,
     hasPendingProfileChangesRef,
     syncAllLocalDataNow,
