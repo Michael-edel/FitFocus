@@ -8,21 +8,22 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
-Опубликованный HEAD [`feaf74c`](https://github.com/Michael-edel/FitFocus/commit/feaf74c07c2a6daf0ff7a2fb35fff6b9136fd011)
-проверяется точным PR CI [#1545](https://github.com/Michael-edel/FitFocus/actions/runs/39021316539):
-audit, guards, unit, три typecheck и build прошли; E2E выполняется. В последних
-опубликованных исправлениях [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
+Кодовый коммит [`980aaa1`](https://github.com/Michael-edel/FitFocus/commit/980aaa16f4278b1d1526d6a263ca017297e975ee)
+опубликован в PR #93; его точный CI [#1547](https://github.com/Michael-edel/FitFocus/actions/runs/39022819941)
+ожидает запуска. Предыдущий CI [#1545](https://github.com/Michael-edel/FitFocus/actions/runs/39021316539)
+относится к `feaf74c`, поэтому не считается проверкой нового коммита. В предыдущих
+исправлениях [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
 и [`d774018`](https://github.com/Michael-edel/FitFocus/commit/d774018)
 ожидаемые session/auth-отказы scoped фотоанализа не попадают в диагностику и не
 показываются как alert; access/protocol ошибки остаются заметны. Scoped-401
 регрессия прошла 3/3 на Chromium, Firefox и WebKit.
 
-Локальный P0.6 follow-up исправляет ошибочную обработку отказа durable-записи
-фото прогресса: неуспешный commit теперь не очищает выбранный файл и подпись,
-ошибка показывается пользователю, а попытка отбрасывается при смене account/session
-scope. Полная `profile-durability.spec.ts` прошла 30/30 на desktop Chromium,
-Firefox и WebKit без retries; root typecheck прошёл. Точный CI этого локального
-изменения ожидает push.
+P0.6 follow-up исправляет ошибочную обработку отказа durable-записи фото прогресса:
+неуспешный commit теперь не очищает выбранный файл и подпись, ошибка показывается
+пользователю, а попытка отбрасывается при смене account/session scope. Полная
+`profile-durability.spec.ts` прошла 30/30 на desktop Chromium, Firefox и WebKit
+без retries; три typecheck и проверка локальных ссылок прошли. Это изменение
+локально проверено; точный CI `#1547` ожидает запуска.
 
 P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
 требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;

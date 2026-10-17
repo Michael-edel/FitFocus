@@ -15,10 +15,12 @@ profile operation в IndexedDB отклонялась, `addProgressPhoto` про
 проверяет видимую ошибку, сохранность исходного profile snapshot и выбранного
 файла, отсутствие сетевой мутации. Целевой сценарий прошёл 3/3 на desktop
 Chromium/Firefox/WebKit без retries. Полная `profile-durability.spec.ts` прошла
-30/30 на этих движках без retries; root typecheck и `git diff --check` прошли.
-Это mock-IDB/client acceptance, не staging и не реальное исчерпание диска.
-Точный CI нового SHA запускается после push; общий P0.6 и остальные callbacks
-остаются открытыми.
+30/30 на этих движках без retries; три typecheck и `git diff --check` прошли.
+Это mock-IDB/client acceptance, не staging и не реальное исчерпание диска. Код
+опубликован в [`980aaa1`](https://github.com/Michael-edel/FitFocus/commit/980aaa16f4278b1d1526d6a263ca017297e975ee);
+его точный [CI #1547](https://github.com/Michael-edel/FitFocus/actions/runs/39022819941)
+ожидает запуска. Run #1545 проверяет предыдущий SHA `feaf74c`. Общий P0.6 и
+остальные callbacks остаются открытыми.
 
 ## P0.7 — request-level barrier для state writers, 17.10.2026
 
