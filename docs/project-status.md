@@ -3,10 +3,23 @@
 Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Текущий этап — закрытие и приёмка оставшихся P0,
-включая callback scope, durable outbox и Safari/PWA lifecycle. IndexedDB durable
-outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
-завершены.
+`fix/state-generations`. Текущий этап — стабилизация и приёмка P0; IndexedDB
+durable outbox уже подключён, но общий P0 остаётся открыт, как и Safari/PWA
+lifecycle, интеграция в staging, выпуск и защищённую `main`.
+
+На момент этой сверки локальный HEAD — `10dbcab`; в нём есть мобильные и PWA
+исправления, а также предыдущие локальные commits `77ca05f` и `c5cf035`. Точный
+CI для них ещё не запускался. Предыдущий опубликованный HEAD `5b90b31` завершил
+[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
+с ошибкой: статические проверки, unit, typechecks и build прошли, E2E — 913
+passed, 31 failed, 295 skipped за 41 минуту.
+
+Локально на `10dbcab` прошли unit 1348/1348, все три typecheck и production
+build; целевые E2E: PWA update 7/7, rollback install 7/7, мобильная правка
+дневника 4/4, профильные retry сценарии 12 успешных запусков, weekly menu
+Firefox 1/1. PWA offline прошёл 6/7; сбой iPhone Safari прошёл в одиночном
+повторе, поэтому вся матрица пока не считается устойчивой. Локальные прогоны не
+заменяют точный полный CI.
 
 ## P0.8 — действия урока подтверждаются после durable commit, `77ca05f`, 17.10.2026
 
@@ -18,7 +31,7 @@ outbox подключён, общий P0 открыт; staging и интегра
 Quota/retry E2E сначала воспроизвёл дефект, затем `profile-durability.spec.ts`
 прошёл 45/45 на desktop Chromium/Firefox/WebKit без retries. Unit — 1348/1348;
 root, domain-strict и storage-strict typecheck, production build и
-`git diff --check` прошли. Коммит ещё локальный; exact CI появится после push.
+`git diff --check` прошли. Результат локальный; точный CI ожидает публикации.
 Другие callbacks, общий P0.8/lifecycle, staging, выпуск и интеграция в
 защищённую `main` остаются открыты.
 
@@ -31,9 +44,9 @@ root, domain-strict и storage-strict typecheck, production build и
 сохранение/reload, multi-edit, quota/retry, transaction abort и 401 recovery:
 18/18 на desktop Chromium, Firefox и WebKit без retries. Unit 1347/1347, root,
 domain-strict и storage-strict typecheck, production build и `git diff --check`
-прошли локально. Эти изменения входят в текущий exact PR CI #1557, который
-пока выполняет E2E на опубликованном HEAD `5b90b31`; общий P0.8/lifecycle, staging,
-выпуск и интеграция в защищённый `main` остаются открыты.
+прошли локально. CI #1557 для опубликованного HEAD `5b90b31` завершился с
+ошибками E2E; он не проверяет более поздние локальные commits. Общий
+P0.8/lifecycle, staging, выпуск и интеграция в защищённый `main` остаются открыты.
 
 ## P0.8 — дневник питания подтверждает изменения после durable commit, `2c94596`, 17.10.2026
 

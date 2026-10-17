@@ -1,34 +1,25 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
-подтверждены. Последний локальный code follow-up
-[`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f) заставляет
-отметку прочтения и ответ на тест урока дождаться durable profile commit;
-при quota/transaction ошибке урок остаётся открыт, выбранный ответ сохраняется
-для retry. Новый E2E сначала воспроизвёл раннее закрытие урока. Полная
-`profile-durability.spec.ts` после исправления прошла 45/45 на desktop Chromium,
-Firefox и WebKit без retries; unit 1348/1348, три typecheck-профиля,
-production build и `git diff --check` прошли. Точный CI для этого коммита ещё
-не запущен: опубликованный HEAD `5b90b31` проверяется в
-[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255),
-E2E пока выполняется.
+остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
+защищённую `main` не подтверждены. В плане остаются 33 незакрытых пункта:
+19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
-Предыдущий опубликованный code follow-up
-[`5204b41`](https://github.com/Michael-edel/FitFocus/commit/5204b41) возвращает
-настройки к последнему локально сохранённому варианту после quota/transaction
-ошибки и сохраняет owner-scoped правку во время 401 auth-паузы. Browser
-acceptance прошла 18/18 на desktop Chromium/Firefox/WebKit; unit 1347/1347,
-три typecheck-профиля, production build и `git diff --check` прошли. Точный CI
-для settings входит в текущий run #1557 на родительском HEAD. Предыдущий follow-up
-[`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596) исправляет
-durable writes дневника: add/edit/delete и bulk actions обновляют UI только после
-commit IndexedDB, а ошибка сохраняет форму и выбор для повтора. Регрессии отказа
-и повтора прошли 3 сценария в desktop Chromium/Firefox/WebKit (9/9).
-Предыдущий follow-up
-[`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496) исправил
-такое же ложное сообщение об успехе для избранных рецептов; регрессии формы и
-фоторазбора прошли локально. P0.8/P0.9 и release gates остаются открыты.
+Последние локальные code commits: [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f)
+(durable commit урока) и [`10dbcab`](https://github.com/Michael-edel/FitFocus/commit/10dbcab)
+(мобильные/PWA regressions); документационный commit `c5cf035` также локальный.
+Точный CI для этих ревизий ещё не запускался. Предыдущий опубликованный HEAD
+`5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
+audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли, но E2E
+завершился с 913 passed, 31 failed и 295 skipped за 41 минуту.
+
+На `10dbcab` локально прошли unit **1348/1348**, root/domain/storage typecheck,
+production build и целевые E2E: PWA update **7/7**, rollback install **7/7**,
+мобильная правка дневника **4/4**, профильные мобильные retry сценарии **12/12**
+(набор собран из успешных повторов после исправления iPhone PWA file reset),
+weekly menu Firefox **1/1**. PWA offline прошёл 6/7; единственный iPhone Safari
+сбой затем прошёл в изолированном повторе, поэтому матрица требует точной CI
+перепроверки. Эти локальные результаты не заменяют full CI.
 
 В кодовом коммите [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
 обработан отказ durable profile write в Progress/Settings: ошибки видны,

@@ -6061,8 +6061,28 @@ Firefox и WebKit (`workers=1`, `retries=0`). Новый сценарий про
 durable профиль после успешного повтора. Unit suite — **1348/1348**; root,
 domain-strict и storage-strict typecheck, production build и `git diff --check`
 прошли локально. Кодовый коммит — [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f).
-Его exact CI ещё не запущен, так как предыдущий опубликованный HEAD
-[`5b90b31`](https://github.com/Michael-edel/FitFocus/commit/5b90b31) остаётся в
-[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255),
-шаг E2E. PR #93 остаётся draft; общий P0.8/lifecycle, остальные callbacks,
-staging, выпуск и интеграция в защищённую `main` открыты.
+Его exact CI ещё не запущен. Предыдущий опубликованный HEAD
+[`5b90b31`](https://github.com/Michael-edel/FitFocus/commit/5b90b31) завершил
+[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
+с ошибками E2E, поэтому этот run не подтверждает `77ca05f` и более поздние
+локальные commits. PR #93 остаётся draft; общий P0.8/lifecycle, остальные
+callbacks, staging, выпуск и интеграция в защищённую `main` открыты.
+
+## P0 — локальная стабилизация мобильных/PWA проверок, `10dbcab`, 17.10.2026
+
+Исправлены мобильные предупреждения Recharts в свёрнутых секциях, повторный
+импорт wearable-файла в iPhone PWA и приоритет отображения предупреждения о
+migration pause. E2E теперь ждёт подтверждения outbox-записи перед reload,
+различает ожидаемый HTTP 426 старого протокола от ошибок браузерной консоли и
+открывает меню действий перед правкой дневника на мобильном.
+
+После изменений прошли unit **1348/1348**, root/domain/storage typecheck,
+production build, PWA update **7/7**, rollback install **7/7** и мобильная
+правка дневника **4/4**. Профильные мобильные retry сценарии дали 12 успешных
+запусков в отдельных прогонах; weekly menu Firefox прошёл 1/1. PWA offline
+матрица прошла 6/7, а единственный iPhone Safari сбой — в изолированном повторе.
+Поэтому полная offline матрица требует повторной проверки и пока не считается
+стабильной. Предыдущий CI #1557 на `5b90b31` завершился 913 passed, 31 failed,
+295 skipped; его E2E падения включали эти PWA/mobile классы. Точный CI для
+локального `10dbcab` ещё не запускался. PR #93 остаётся draft; staging, выпуск и
+интеграция в защищённую `main` открыты.
