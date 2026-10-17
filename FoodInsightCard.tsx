@@ -17,7 +17,7 @@ type Props = {
   onClose?: () => void;
   isPro?: boolean;
   onUpdateInsight: PhotoRecipeCommit;
-  onSaveRecipe?: (fav: FavoriteRecipe) => void;
+  onSaveRecipe?: (fav: FavoriteRecipe) => Promise<boolean>;
   onEdit?: () => void;
   nonFood?: boolean;
 };
@@ -56,6 +56,9 @@ export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, i
   const imgRef = useRef<HTMLImageElement | null>(null);
   const calloutRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [calloutFix, setCalloutFix] = useState<Record<number, CalloutFix>>({});
+  const [favoriteSaveBusy, setFavoriteSaveBusy] = useState(false);
+  const [favoriteSaveError, setFavoriteSaveError] = useState<string | null>(null);
+  const [favoriteSaved, setFavoriteSaved] = useState(false);
 
   const plan: 'free' | 'pro' | 'family' = isPro ? 'pro' : 'free';
 
@@ -282,6 +285,31 @@ export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, i
     '--ff-vector-len': Math.min(42, Math.max(18, Math.hypot(activePos.cx - activePos.ax, activePos.cy - activePos.ay))) + '%',
   } : undefined;
 
+  const saveFavoriteRecipe = async () => {
+    if (!insight.recipe || !onSaveRecipe || favoriteSaveBusy || favoriteSaved) return;
+    setFavoriteSaveBusy(true);
+    setFavoriteSaveError(null);
+    try {
+      const saved = await onSaveRecipe({
+        id: `fav_${Date.now()}`,
+        title: insight.recipe.title || name,
+        createdAt: new Date().toISOString(),
+        photo,
+        recipe: insight.recipe,
+        sourceFoodName: name,
+      });
+      if (!saved) {
+        setFavoriteSaveError('Не удалось сохранить рецепт. Проверьте соединение и повторите попытку.');
+        return;
+      }
+      setFavoriteSaved(true);
+    } catch {
+      setFavoriteSaveError('Не удалось сохранить рецепт. Проверьте соединение и повторите попытку.');
+    } finally {
+      setFavoriteSaveBusy(false);
+    }
+  };
+
   return (
     <div className="ff-infocard">
       <div className="ff-infocard__header">
@@ -419,26 +447,23 @@ export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, i
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         {hasRecipe && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!insight.recipe) return;
-              onSaveRecipe?.({
-                id: `fav_${Date.now()}`,
-                title: insight.recipe.title || name,
-                createdAt: new Date().toISOString(),
-                photo,
-                recipe: insight.recipe,
-                sourceFoodName: name,
-              });
-              alert('Рецепт сохранён в избранное!');
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 border border-rose-500/20 transition-all font-bold text-xs"
-            title="Сохранить в рецепты"
-          >
-            <Heart className="w-4 h-4" />
-            Сохранить рецепт
-          </button>
+          <div className="flex flex-col items-start gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void saveFavoriteRecipe();
+              }}
+              disabled={favoriteSaveBusy || favoriteSaved || !onSaveRecipe}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 border border-rose-500/20 transition-all font-bold text-xs disabled:opacity-60"
+              title="Сохранить в рецепты"
+            >
+              <Heart className="w-4 h-4" />
+              {favoriteSaveBusy ? 'Сохраняем…' : favoriteSaved ? 'Сохранено' : 'Сохранить рецепт'}
+            </button>
+            {favoriteSaveError && <div role="alert" className="text-xs font-semibold text-rose-200">{favoriteSaveError}</div>}
+            {favoriteSaved && <div role="status" className="text-xs font-semibold text-emerald-200">Рецепт сохранён в избранное.</div>}
+          </div>
         )}
         {onEdit ? (
           <button

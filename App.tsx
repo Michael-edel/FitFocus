@@ -539,6 +539,8 @@ const App: React.FC = () => {
   } = useFavoriteRecipes({
     userId: uiAccountId,
     repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);

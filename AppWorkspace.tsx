@@ -92,7 +92,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
 
   const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent, onDiaryDayChange } = nutrition;
 
-  const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
+  const { favoriteRecipes, addFavoriteRecipe, updateFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
   const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState, isCurrentSession: isCurrentAccountSession } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
   const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
@@ -383,6 +383,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             isCurrentSession={isCurrentSession}
             recipes={favoriteRecipes}
             onAdd={addFavoriteRecipe}
+            onUpdate={updateFavoriteRecipe}
             onRemove={removeFavoriteRecipe}
             onClear={clearFavoriteRecipes}
           />

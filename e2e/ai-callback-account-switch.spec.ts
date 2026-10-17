@@ -13,6 +13,7 @@ const diaryKey = (accountId: string) => `fitfocus_data_${accountId}_diary`;
 const historyKey = (accountId: string) => `fitfocus_data_${accountId}_history`;
 const councilKey = (accountId: string) => `fitfocus_data_${accountId}_council_history`;
 const weeklyReportsKey = (accountId: string) => `fitfocus_data_${accountId}_weekly_reports`;
+const favoriteRecipesKey = (accountId: string) => `fitfocus_data_${accountId}_favorite_recipes`;
 const recipeUsageKey = (accountId: string) => `fitfocus_usage_counters_v1:${encodeURIComponent(accountId)}`;
 
 type Account = typeof accountA;
@@ -2339,6 +2340,55 @@ test('food photo analysis persists the diary entry, history and usage for its ac
   await page.screenshot({ path: info.outputPath('food-photo-analysis-success.png') });
 });
 
+test('a favorite recipe draft stays open when its durable commit fails and can be retried', async ({ page }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  await installAccountApi(page, state);
+  await openApp(page, '/#recipes');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const recipeUpload = page.locator('input[type="file"][accept="image/*"]').nth(1);
+  await recipeUpload.setInputFiles({
+    name: 'recipe.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pL8AAAAASUVORK5CYII=', 'base64'),
+  });
+  await expect(page.getByText('Новое блюдо', { exact: true })).toBeVisible();
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    (window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if ((window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite
+        && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected favorite recipe quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, favoriteRecipesKey(accountA.id));
+
+  const save = page.getByRole('button', { name: 'Сохранить', exact: true });
+  await save.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить рецепт.' })).toBeVisible();
+  await expect(page.getByText('Новое блюдо', { exact: true })).toBeVisible();
+  const failed = await readDurableSnapshot(page);
+  expect(rawValue(failed, favoriteRecipesKey(accountA.id))).toBeNull();
+  expect(failed.operations.filter(operation => operation.key === favoriteRecipesKey(accountA.id))).toEqual([]);
+
+  await page.evaluate(() => { (window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite = false; });
+  await save.click();
+  await expect(page.getByText('Новое блюдо', { exact: true })).toHaveCount(0);
+  await expect.poll(async () => {
+    const snapshot = await readDurableSnapshot(page);
+    return JSON.parse(rawValue(snapshot, favoriteRecipesKey(accountA.id)) ?? '[]')
+      .map((recipe: { title: string }) => recipe.title);
+  }).toContain('Тестовый рецепт');
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect(page.getByText('Тестовый рецепт', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить рецепт.' })).toHaveCount(0);
+});
+
 test('a held step-by-step recipe response cannot update the diary or usage after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Recipe generation account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
@@ -2500,7 +2550,7 @@ test('a held step-by-step recipe response cannot update after the same account s
   }
 });
 
-test('step-by-step recipe generation uses the active session and commits the diary update', async ({ page }, info) => {
+test('step-by-step recipe generation and favorite saving commit to the active session', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full step-by-step recipe success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
@@ -2520,16 +2570,43 @@ test('step-by-step recipe generation uses the active session and commits the dia
   await page.getByRole('button', { name: /Итого калорий/ }).click();
   await page.getByRole('button', { name: 'Получить пошаговый рецепт', exact: true }).click();
   await expect(page.getByText('Пошаговый тестовый рецепт', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    (window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if ((window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite
+        && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected favorite recipe quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, favoriteRecipesKey(accountA.id));
+
+  await page.getByRole('button', { name: 'Сохранить рецепт', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить рецепт.' })).toBeVisible();
+  const failedFavoriteSave = await readDurableSnapshot(page);
+  expect(rawValue(failedFavoriteSave, favoriteRecipesKey(accountA.id))).toBeNull();
+  expect(failedFavoriteSave.operations.filter(operation => operation.key === favoriteRecipesKey(accountA.id))).toEqual([]);
+
+  await page.evaluate(() => { (window as Window & { failFavoriteRecipeWrite?: boolean }).failFavoriteRecipeWrite = false; });
+  await page.getByRole('button', { name: 'Сохранить рецепт', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Рецепт сохранён в избранное.' })).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
 
   const snapshot = await readDurableSnapshot(page);
   const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ name: string; insight?: { recipe?: { title?: string } } }>;
+  const favoriteRecipes = JSON.parse(rawValue(snapshot, favoriteRecipesKey(accountA.id)) ?? '[]') as Array<{ title: string }>;
   expect(fixture.counts.aiRequests.filter(item => item.feature === 'recipe')).toEqual([
     { feature: 'recipe', account: accountA.id, session: accountA.sid },
   ]);
   expect(diary).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: 'Тестовый омлет', insight: expect.objectContaining({ recipe: expect.objectContaining({ title: 'Пошаговый тестовый рецепт' }) }) }),
   ]));
+  expect(favoriteRecipes).toEqual(expect.arrayContaining([expect.objectContaining({ title: 'Пошаговый тестовый рецепт' })]));
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').recipes, recipeUsageKey(accountA.id))).toBe(1);
   expect(await page.evaluate((key) => localStorage.getItem(key), recipeUsageKey(accountB.id))).toBeNull();
   expect(operationsFor(snapshot, accountA)).toEqual([]);
