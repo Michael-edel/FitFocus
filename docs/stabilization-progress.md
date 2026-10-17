@@ -5792,3 +5792,19 @@ value-only convenience API в state-sync удалены.
 `npm run typecheck` и `git diff --check` прошли. Точный PR CI #1525 ещё проверяет
 предыдущий SHA `a83416c` и пока находится на E2E. Новая правка ждёт отправки,
 чтобы не отменить этот запуск; staging и весь P0.6 остаются открытыми.
+
+## P0.5 — поздний achievement GET после same-account reauth, 17.10.2026
+
+Новый regression удерживает achievement GET, повторно авторизует тот же аккаунт
+в соседнем контексте с новым `serverSessionId`, затем отпускает старый ответ.
+До исправления callback попадал в `catch` по локальному login generation и
+очищал уже загруженный achievement snapshot, хотя transport верно отклонял
+устаревший readGuard. Теперь UI-публикация и очистка после GET дополнительно
+проверяют, что точный attempt guard всё ещё актуален в IndexedDB; старый ответ
+не очищает и не заменяет снимок. POST/check завершение также повторно проверяет
+точный guard перед публикацией unlock.
+
+Regression прошёл после воспроизведённого падения; achievement client и transport
+tests прошли 30/30, `npm run typecheck` и `git diff --check` прошли. PR CI #1527
+для предыдущего SHA `bb8c6c5` выполняет E2E; этот фикс ожидает push и собственного
+точного CI. Другие callbacks и полная P0.5 lifecycle-приёмка остаются открыты.

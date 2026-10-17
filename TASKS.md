@@ -973,6 +973,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   новой сессии; active session остаётся B. Commit `b44d46e`; 7/7 browser/PWA-профилей,
   `workers=3`, `retries=0`; `npm run typecheck` прошёл. Последующий полный CI
   `9bdeb47` завершился success ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)).
+  - [x] Проверить поздний achievement GET после reauth того же account: ответ
+    старого readGuard не должен очистить уже загруженную награду. Регрессия
+    сначала воспроизвела очистку; после проверки актуальности guard целевые
+    achievement unit/transport tests прошли 30/30 и typecheck прошёл. Точный CI
+    новой ревизии ожидается после push.
 - [x] Закрепить invite и member mutations за явным `familyId`: `/api/me`
   объявляет `familySync.target`; старый сервер без capability блокируется до
   запроса. Сервер проверяет точное членство/владельца, UI отбрасывает поздний

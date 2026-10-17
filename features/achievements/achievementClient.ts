@@ -85,6 +85,13 @@ export class AchievementClient {
     // Epoch and fence belong to this attempt; an explicit resume of the same server login can start a new one.
     return { accountId: active.accountId, serverSessionId: login.serverSessionId, sessionEpoch: active.sessionEpoch, authFence: fence };
   }
+  private async attemptIsCurrent(generation: number, guard: OutboxReadGuard | null): Promise<boolean> {
+    if (!guard || !this.current(generation)) return false;
+    try {
+      const current = await this.outbox.isReadSessionCurrent(guard);
+      return current && this.current(generation);
+    } catch { return false; }
+  }
   invalidate(): void {
     this.active = false; this.generation += 1;
     if (this.timer !== undefined) clearTimeout(this.timer);
@@ -94,11 +101,14 @@ export class AchievementClient {
     for (const check of this.outstanding) check.resolve([]);
     this.outstanding.clear();
   }
-  private async request(controller: AbortController, generation: number, context?: AchievementEvaluationContext) {
+  private async request(controller: AbortController, generation: number, context?: AchievementEvaluationContext,
+    onGuard?: (guard: OutboxReadGuard) => void) {
     const guard = await this.captureAttemptGuard(generation);
     if (!guard || !this.current(generation) || controller.signal.aborted) return null;
+    onGuard?.(guard);
     const session = await prepareAchievementSession(guard, controller, () => this.current(generation), { ...this.options, outbox: this.outbox });
     if (!this.current(generation)) return null;
+    onGuard?.(session.guard);
     return requestAchievementJson(session, context);
   }
   async load(): Promise<void> {
@@ -107,10 +117,11 @@ export class AchievementClient {
     const controller = new AbortController(); this.loadController = controller; this.controllers.add(controller);
     const generation = this.generation;
     const current = () => this.current(generation) && !controller.signal.aborted;
+    let attemptGuard: OutboxReadGuard | null = null;
     this.publish({ loading: true });
     try {
-      const result = await this.request(controller, generation);
-      if (!current()) return;
+      const result = await this.request(controller, generation, undefined, guard => { attemptGuard = guard; });
+      if (!current() || !await this.attemptIsCurrent(generation, attemptGuard)) return;
       if (!result?.response.ok) throw new Error('ACHIEVEMENTS_LOAD_FAILED');
       const data = result.body;
       if (data?.enabled === false) { this.publish({ ...emptyAchievements(), enabled: false }); return; }
@@ -121,7 +132,7 @@ export class AchievementClient {
         // A GET begun before a successful check cannot remove the new, monotonic unlock.
         unlocked: [...loaded, ...this.snapshot.unlocked.filter(item => !seen.has(item.key))],
       });
-    } catch { if (current()) this.publish(emptyAchievements()); }
+    } catch { if (await this.attemptIsCurrent(generation, attemptGuard)) this.publish(emptyAchievements()); }
     finally {
       this.controllers.delete(controller);
       if (current()) this.publish({ loading: false });
@@ -184,7 +195,8 @@ export class AchievementClient {
         if (reason === 'wis_share_success') context.wisShareCount = incrementCounter(this.options.accountId, 'wisShareCount');
         if (reason === 'pdf_report_generated') context.pdfReportCount = incrementCounter(this.options.accountId, 'pdfReportCount');
         const result = await requestAchievementJson(session, context);
-        if (!this.current(generation) || controller.signal.aborted || !result.response.ok) continue;
+        if (!this.current(generation) || controller.signal.aborted || !result.response.ok
+          || !await this.attemptIsCurrent(generation, session.guard)) continue;
         const data = result.body;
         if (data?.enabled === false) { this.publish({ ...emptyAchievements(), enabled: false }); continue; }
         const raw = Array.isArray(data?.newlyUnlocked) ? data.newlyUnlocked : [];

@@ -71,6 +71,31 @@ it.each(['load', 'check'])('ignores a held %s response after the original login 
   expect(states).toEqual(before);
   expect(states.at(-1)?.newlyUnlocked).toEqual([]);
 });
+it('preserves the achievement snapshot when a late GET belongs to a replaced same-account session', async () => {
+  let holdLoad = false;
+  let release!: (response: Response) => void;
+  const fetchImpl = vi.fn<typeof fetch>(async url => {
+    if (String(url).startsWith('/api/me')) return me();
+    if (url === '/api/achievements/check') return success();
+    if (holdLoad) return new Promise<Response>(resolve => { release = resolve; });
+    return json({ enabled: true, catalog: [item], unlocked: [item] }, headers());
+  });
+  const value = client(fetchImpl);
+  expect(await value.check('weekly_menu_generated')).toEqual([item]);
+  expect(states.at(-1)?.unlocked).toEqual([expect.objectContaining({ key: 'welcome' })]);
+
+  holdLoad = true;
+  const loading = value.load();
+  await vi.waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url === '/api/achievements')).toBe(true));
+  await outbox.invalidateSessions();
+  const { fence } = await outbox.sessionState();
+  await outbox.acceptReadSession(account, 'b'.repeat(64), fence);
+  release(json({ enabled: true, catalog: [item], unlocked: [] }, headers()));
+  await loading;
+
+  expect(states.at(-1)?.unlocked).toEqual([expect.objectContaining({ key: 'welcome' })]);
+  expect(states.at(-1)?.newlyUnlocked).toEqual([item]);
+});
 it('aborts held proof before POST and settles the caller during cleanup', async () => {
   let release!: (response: Response) => void;
   const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => { release = resolve; }));
