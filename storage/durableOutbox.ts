@@ -59,6 +59,17 @@ export const outboxKeyStateId = (accountId: string, key: string) => `key:${JSON.
 const keyStateId = outboxKeyStateId;
 export const outboxKeyOwnerId = (key: string) => `owner:${JSON.stringify(key)}`;
 const finiteInteger = (value: number) => Number.isSafeInteger(value) && value >= 0;
+export function isOutboxWriteSessionChanged(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current: unknown = error;
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    seen.add(current);
+    const record = current as { message?: unknown; cause?: unknown };
+    if (record.message === 'OUTBOX_WRITE_SESSION_CHANGED') return true;
+    current = record.cause;
+  }
+  return false;
+}
 function requireText(value: string): void { if (typeof value !== 'string' || !value.length) throw new Error('OUTBOX_INVALID_IDENTITY'); }
 
 function notifyActiveSessionChanged(): void {

@@ -18,6 +18,9 @@ describe('frontend error helpers', () => {
     expect(isSoftWeeklyAiError(new Error('SESSION_READ_SESSION'))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('WEEKLY_REPORT_SESSION_CHANGED'))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('WEEKLY_REPORT_ACTION_CHANGED'))).toBe(true);
+    expect(isSoftWeeklyAiError(Object.assign(new Error('STATE_STORAGE_TRANSACTION'), {
+      cause: new Error('OUTBOX_WRITE_SESSION_CHANGED'),
+    }))).toBe(true);
     expect(isSoftWeeklyAiError(new Error('SESSION_READ_PROTOCOL'))).toBe(false);
     expect(isSoftWeeklyAiError(new Error('database stack trace'))).toBe(false);
   });

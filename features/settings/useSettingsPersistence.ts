@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UserStateRepository } from '../../storage/userStateRepository';
-import type { OutboxCommitGuard, OutboxReadGuard } from '../../storage/durableOutbox';
+import type { OutboxLocalCommitGuard, OutboxReadGuard } from '../../storage/durableOutbox';
 import type { AppSettings } from '../../types';
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -23,7 +23,7 @@ export function isAppSettings(value: unknown): value is AppSettings {
 }
 
 type SettingsRepository = Pick<UserStateRepository, 'readJsonAsync' | 'writeJson'>;
-type ScopedSettingsRepository = SettingsRepository & Pick<UserStateRepository, 'accountId' | 'isReadSessionCurrent'>;
+type ScopedSettingsRepository = SettingsRepository & Pick<UserStateRepository, 'accountId' | 'isLocalCommitSessionCurrent' | 'writeLocalJson'>;
 
 export function readStoredSettings(repository: SettingsRepository): Promise<AppSettings | null> {
   return repository.readJsonAsync<AppSettings | null>('settings', null, isAppSettings);
@@ -87,17 +87,22 @@ export function useSettingsPersistence({
       && scopeRef.current.userId === userId && scopeRef.current.repository === repository && isCurrentSession();
     void (async () => {
       try {
-        let guard: OutboxCommitGuard | undefined;
+        let localGuard: OutboxLocalCommitGuard | undefined;
         if (loginGuard) {
           if (loginGuard.accountId !== userId) return;
-          // During an auth pause, keep accepting this account's local intent.
-          // A fresh read guard is used whenever the accepted session remains current.
-          if (await repository.isReadSessionCurrent(loginGuard)) {
-            guard = { readGuard: loginGuard, canCommit: isCurrentSession };
-          }
+          // Settings are user-authored intent. Keep the write valid through an
+          // auth/access pause, while still fencing a logout or account switch.
+          const localCommitGuard = {
+            accountId: loginGuard.accountId,
+            serverSessionId: loginGuard.serverSessionId,
+            sessionEpoch: loginGuard.sessionEpoch,
+          };
+          if (!await repository.isLocalCommitSessionCurrent(localCommitGuard)) return;
+          localGuard = { localCommitGuard, canCommit: isCurrentSession };
         }
         if (!scopeIsCurrent()) return;
-        await repository.writeJson('settings', attemptedSettings, guard);
+        if (localGuard) await repository.writeLocalJson('settings', attemptedSettings, localGuard);
+        else await repository.writeJson('settings', attemptedSettings);
         if (scopeIsCurrent()) loadedSettingsRef.current = attemptedSettings;
       } catch {
         if (!scopeIsCurrent() || settingsRef.current !== attemptedSettings) return;

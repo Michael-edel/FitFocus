@@ -1592,6 +1592,15 @@ all-client Service Worker fence, атомарные migration items и quarantin
     Safari сценарий после изменения прошёл 10/10 без retries. Root typecheck и
     `git diff --check` прошли. Exact CI follow-up SHA ожидает push. Полный
     P0.8/lifecycle остаётся открыт.
+  - [x] Устранить два E2E отказа точного CI #1577 для `87ba8b9`: Android access-pause
+    сохраняет пользовательскую настройку через отдельный `writeLocalJson` с
+    `localCommitGuard`, а устаревшая
+    generated-запись после logout больше не выдаётся за storage failure. В profile
+    fixture фоновые state writes подтверждаются общим mock, чтобы incidental
+    DELETE не уходил на preview origin. Целевые Android Chrome/iPhone Safari E2E
+    прошли 12/12 без retries; затронутые unit — 32/32, полный unit suite —
+    1362/1362; root/domain/storage strict typecheck, build и diff check прошли.
+    Новый SHA ожидает точный CI.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

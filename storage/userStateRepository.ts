@@ -3,7 +3,7 @@ import type { CoachAdviceResult } from '../geminiService';
 import type { AppSettings, FavoriteRecipe, FoodItem, UserHabit, UserProfile } from '../types';
 import type { CouncilChatMsg, FamilyMenuPrefs } from './stateTypes';
 import type { WeeklyStoredReport } from '../weeklyAutoEngine';
-import { DurableOutbox, type OutboxCommitGuard, type OutboxIntent, type OutboxLocalCommitGuard, type OutboxOperation, type OutboxReadGuard, type OutboxWriteGuard } from './durableOutbox';
+import { DurableOutbox, isOutboxWriteSessionChanged, type OutboxCommitGuard, type OutboxIntent, type OutboxLocalCommitGuard, type OutboxOperation, type OutboxReadGuard, type OutboxWriteGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSaveSuccess } from './stateSaveStatus';
 import type { FastLogItem } from './foodDiary';
 import { STORAGE_KEYS } from './keys';
@@ -71,9 +71,14 @@ export class UserStateRepository {
 
   private track<T>(key: string, promise: Promise<T>): Promise<T> {
     // Keep rejection observable to callers, and handled when a UI event ignores the Promise.
-    void promise.catch((error: unknown) => reportStateSaveIssue({
-      accountId: this.accountId, key, kind: 'error', reason: error instanceof Error ? error.name : 'storage',
-    }));
+    void promise.catch((error: unknown) => {
+      // A guarded async result can lose its captured login while IndexedDB is
+      // opening. It was intentionally discarded, not lost to a storage fault.
+      if (isOutboxWriteSessionChanged(error)) return;
+      reportStateSaveIssue({
+        accountId: this.accountId, key, kind: 'error', reason: error instanceof Error ? error.name : 'storage',
+      });
+    });
     return promise;
   }
 
@@ -211,6 +216,12 @@ export class UserStateRepository {
     let raw: string;
     try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
     return this.writeRaw(stateKey, raw, false, guard);
+  }
+
+  writeLocalJson<K extends JsonUserStateKey>(stateKey: K, value: UserStateValue[K], guard: OutboxLocalCommitGuard): Promise<OutboxOperation> {
+    let raw: string;
+    try { raw = JSON.stringify(value); } catch (error) { return this.track(this.key(stateKey), Promise.reject(error)); }
+    return this.writeLocalRaw(stateKey, raw, false, guard);
   }
 
   writeRaw(stateKey: UserStateKey, value: string, retainAsConflict = false, guard?: OutboxCommitGuard): Promise<OutboxOperation> {

@@ -5,13 +5,17 @@
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
 outbox подключён; продолжается P0.8-перенос пользовательских действий. Коммит
-`87ba8b9` стабилизирует fallback AI-plan profile E2E: fixture задаёт явный scoped
-ответ фонового `wis_text` запроса во время reload. Узкий тест прошёл 10/10 на
-iPhone Safari, а полный `profile-durability.spec.ts` — 20/20 на iPhone Safari без
-retries; root typecheck и diff check прошли локально. Точный
-[PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020)
-подтвердил audit, schema/privacy/auth/API checks, unit, три typecheck и build;
-на последней проверке выполнялся полный E2E набор.
+`87ba8b9` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
+build в точном [PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020),
+но E2E завершился с двумя отказами (987 passed, 299 skipped): Android Chrome
+показал storage error вместо access-pause notice, а iPhone Safari получил
+access-control error от incidental state request в profile flow.
+Текущие локальные правки используют отдельный `writeLocalJson` с local session
+guard для настроек, подавляют storage-error для намеренно отменённого stale generated write и
+закрывают incidental state writes в profile fixture. Два сценария прошли 12/12
+на Android Chrome/iPhone Safari без retries; затронутые unit — 32/32, полный
+unit suite — 1362/1362, root/domain/storage strict typecheck, production build
+и diff check прошли. Новый exact CI ещё ожидает публикации.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые

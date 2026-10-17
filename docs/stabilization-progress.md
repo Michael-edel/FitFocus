@@ -6337,3 +6337,26 @@ Chromium показал `title=FitFocus`, без `pageerror`, off-origin зап�
 её браузерах, и её безусловное удаление может ослабить политику. Smoke не
 подтверждает D1 binding, `APP_URL`, OAuth/callback или аутентифицированные
 сценарии; staging и выпуск остаются открытыми.
+
+## P0.8 — follow-up двух E2E отказов CI #1577, 18.10.2026
+
+Точный [PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020)
+для `87ba8b9` завершился ошибкой только в E2E: 987 passed, 299 skipped, два
+failed; audit, schema/privacy/auth/API checks, unit, root/domain/storage
+typecheck и build прошли. Android Chrome access-pause проверка сохранила pending
+settings operation, но показала local storage error вместо сообщения о паузе.
+В коде пользовательский settings write был завязан на read guard, который
+отклоняется при auth/access pause; теперь отдельный `writeLocalJson` использует local commit guard,
+сохраняющий локальное намерение при паузе и по-прежнему проверяющий аккаунт,
+server session и epoch. Guarded generated write, отозванный сменой сессии,
+больше не публикуется как storage failure.
+
+Второй отказ был на iPhone Safari profile fallback E2E. Трасса прежнего run
+показывала incidental `/api/state` от фоновой AI записи, который мог пройти
+через незакрытый `DELETE` fixture route к preview origin. Общая profile fixture
+теперь подтверждает background state writes. После изменений целевые два
+сценария прошли 12/12 на Android Chrome/iPhone Safari без retries; затронутые
+unit — 32/32, полный unit suite — 1362/1362, root/domain/storage strict
+typecheck, production build и `git diff --check` прошли. Новый SHA и точный CI
+ещё не подтверждены; полный
+P0.8/P0.9, staging, выпуск и интеграция в защищённую `main` остаются открыты.

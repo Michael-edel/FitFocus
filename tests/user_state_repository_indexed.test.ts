@@ -182,6 +182,62 @@ describe('runtime repository and durable intent', () => {
     expect((await outbox.list(accountId))[0]).toMatchObject({ key: `fitfocus_data_${accountId}_settings`, type: 'put' });
   });
 
+  it('keeps a user settings edit durable during an access pause in the same session', async () => {
+    const sessionId = 'a'.repeat(64);
+    const login = await outbox.acceptReadSession(accountId, sessionId, (await outbox.sessionState()).fence);
+    expect(login).not.toBeNull();
+    const dark = { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false } as const;
+    const light = { ...dark, theme: 'light' } as const;
+    await repository.writeJson('settings', dark);
+
+    const nowMs = Date.now() + 1;
+    const claim = await outbox.claim({ accountId, sessionEpoch: login!.sessionEpoch, owner: 'test-sender', nowMs, leaseMs: 10_000 });
+    expect(claim).not.toBeNull();
+    expect(await outbox.finish(claim!, {
+      kind: 'retry', reason: 'access', pause: 'access', nextAttemptAtMs: nowMs,
+    }, nowMs)).toBe(true);
+
+    const operation = await repository.writeLocalJson('settings', light, {
+      localCommitGuard: {
+        accountId, serverSessionId: login!.serverSessionId, sessionEpoch: login!.sessionEpoch,
+      },
+      canCommit: () => true,
+    });
+
+    expect(operation).toMatchObject({ status: 'pending', parentOpId: claim!.opId });
+    expect((await outbox.snapshot(accountId, repository.key('settings'))).value).toBe(JSON.stringify(light));
+    expect((await outbox.sessionState()).active).toMatchObject({ accountId, pause: 'access' });
+  });
+
+  it('does not report a guarded write invalidated by logout as a local storage failure', async () => {
+    const guardedAccount = 'repository-stale-generated';
+    const guardedRepository = new UserStateRepository(guardedAccount, { outbox, writerId: 'generated-writer' });
+    const login = await outbox.acceptReadSession(guardedAccount, 'b'.repeat(64), (await outbox.sessionState()).fence);
+    expect(login).not.toBeNull();
+    const originalOpen = connection.open.bind(connection);
+    let releaseOpen!: () => void;
+    let notifyOpenStarted!: () => void;
+    const waiting = new Promise<void>((resolve) => { releaseOpen = resolve; });
+    const openStarted = new Promise<void>((resolve) => { notifyOpenStarted = resolve; });
+    vi.spyOn(connection, 'open').mockImplementationOnce(async () => {
+      notifyOpenStarted();
+      await waiting;
+      return originalOpen();
+    });
+
+    const pendingWrite = guardedRepository.writeJson('weekly_reports', [], {
+      readGuard: login!, canCommit: () => true,
+    });
+    await openStarted;
+    await outbox.invalidateSessions();
+    releaseOpen();
+
+    await expect(pendingWrite).rejects.toMatchObject({ cause: { message: 'OUTBOX_WRITE_SESSION_CHANGED' } });
+    expect(getStateSaveIssues()).not.toContainEqual(expect.objectContaining({
+      accountId: guardedAccount, key: guardedRepository.key('weekly_reports'), kind: 'error',
+    }));
+  });
+
   it('rejects old raw writers and remote hydration while local intent is pending', async () => {
     await repository.writeJson('diary', diary('local'));
     expect(await writeIndexedUserStateRaw(key, 'remote')).toBe(false);

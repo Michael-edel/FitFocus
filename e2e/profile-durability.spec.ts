@@ -52,7 +52,10 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
       expectedHttpErrors.push(message.text());
     } else errors.push(message.text());
   });
-  await mockApp(page, { session: 'app' });
+  // This suite drives profile and AI flows; background state writes are incidental.
+  // Acknowledge them in the shared harness so a future DELETE writer cannot fall
+  // through to the Vite preview server and surface as a browser access-control error.
+  await mockApp(page, { session: 'app', acknowledgeStateWrites: true });
   await page.route('**/api/**', async route => {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200, headers?: Record<string, string>) => {

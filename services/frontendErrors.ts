@@ -1,4 +1,5 @@
 import { SessionReadError } from '../storage/sessionRead';
+import { isOutboxWriteSessionChanged } from '../storage/durableOutbox';
 
 type ErrorLike = {
   name?: unknown;
@@ -33,6 +34,7 @@ export function classifyWisShareFailure(error: unknown): string {
 export function isSoftWeeklyAiError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
+    isOutboxWriteSessionChanged(error) ||
     message === 'login_session_changed' ||
     message === 'session_read_auth' ||
     message === 'session_read_session' ||
