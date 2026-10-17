@@ -1245,5 +1245,11 @@ assertIncludes(
   'family creation must surface unresolved creation races explicitly',
 );
 
+const pushTransport = read('functions/api/_lib/push.ts');
+assertIncludes(pushTransport, "import { fetchWithTimeout } from './external_fetch'", 'Web Push must use the shared bounded transport');
+assertIncludes(pushTransport, 'fetchWithTimeout(subscription.endpoint', 'Web Push must deliver through the bounded transport');
+assertIncludes(pushTransport, 'timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS)', 'Web Push must pass its delivery deadline to the transport');
+assertIncludes(pushTransport, 'timeoutError: "PUSH_REQUEST_TIMEOUT"', 'Web Push must preserve its timeout error code');
+
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');

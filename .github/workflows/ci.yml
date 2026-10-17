@@ -6,10 +6,15 @@ on:
       - main
       - dev
       - feature/**
+      - fix/**
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build-and-typecheck:
