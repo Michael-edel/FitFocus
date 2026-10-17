@@ -1,8 +1,8 @@
 import React from 'react';
 import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
-import type { OutboxReadGuard } from './storage/durableOutbox';
-import type { OutboxCommitGuard } from './storage/durableOutbox';
+import type { OutboxOperation, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import type { ProfilePersistOptions } from './features/profile/useProfilePersistence';
 import { ACTIVE_SESSION_CHANNEL, DurableOutbox } from './storage/durableOutbox';
 import { accountSessionRenderKey } from './features/state/accountScopedUi';
 
@@ -44,7 +44,7 @@ type AppWorkspaceData = {
     googleMe: { sub?: string } | null;
     logout: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
-    persistUser?: (user: UserProfile, guard?: OutboxCommitGuard) => Promise<unknown> | void;
+    persistUser?: (user: UserProfile, guard?: OutboxWriteGuard, options?: ProfilePersistOptions) => Promise<OutboxOperation | null>;
     patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
     onProfileDraftChange?: (dirty: boolean) => void;
     onExportBackup?: () => void;
@@ -504,7 +504,19 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onServerLogout={logout}
             onDeleteAccount={deleteAccount}
             user={currentUser}
-            onChangeUser={async (u: UserProfile, guard?: OutboxCommitGuard) => { await persistUser?.(u, guard); }}
+            onChangeUser={async (u: UserProfile, guard?: OutboxWriteGuard) => {
+              if (!persistUser) return false;
+              const writeGuard: OutboxWriteGuard | undefined = guard ?? (loginGuard ? {
+                localCommitGuard: {
+                  accountId: loginGuard.accountId,
+                  serverSessionId: loginGuard.serverSessionId,
+                  sessionEpoch: loginGuard.sessionEpoch,
+                },
+                canCommit: isCurrentSession,
+              } : undefined);
+              const operation = await persistUser(u, writeGuard, { durable: true });
+              return operation?.status === 'pending';
+            }}
             onPatchUser={(patch: Partial<UserProfile>) => patchProfileInCloud?.(patch)}
             onProfileDraftChange={onProfileDraftChange}
             onExportBackup={onExportBackup}

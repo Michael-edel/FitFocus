@@ -446,7 +446,8 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
       ...(options.supported ? { pushManager } : {}),
       async update() {},
     });
-    const controller = {
+    const controller = Object.assign(new EventTarget(), {
+      state: 'activated' as ServiceWorkerState,
       scriptURL: '/sw.js',
       postMessage(message: unknown, transfer: Transferable[] = []) {
         if (!message || typeof message !== 'object' || !('type' in message)
@@ -458,7 +459,7 @@ async function installPushMocks(page: Page, config: Required<PushMockConfig>): P
           workerBuildId: request.buildId, complete: true,
           clients: [{ id: 'e2e-current-client', buildId: request.buildId }] });
       },
-    };
+    });
 
     Object.defineProperty(navigator, 'serviceWorker', {
       configurable: true,

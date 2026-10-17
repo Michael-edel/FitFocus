@@ -24,6 +24,7 @@ type Props = {
   draftChestCm: string;
   draftHipsCm: string;
   profileDirty: boolean;
+  profileSaving?: boolean;
   profileValidationError: string | null;
   profileSummary?: ProfileSummary | null;
   onProfileSave: () => void | Promise<void>;
@@ -55,6 +56,7 @@ export default function ProfileDetailsSection({
   draftChestCm,
   draftHipsCm,
   profileDirty,
+  profileSaving = false,
   profileValidationError,
   profileSummary,
   onProfileSave,
@@ -252,10 +254,10 @@ export default function ProfileDetailsSection({
           <button
             onClick={onProfileSave}
             className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-indigo-600 hover:bg-indigo-500 text-white font-black transition-all disabled:opacity-50"
-            disabled={!profileDirty}
+            disabled={!profileDirty || profileSaving}
           >
             <Save className="w-4 h-4" />
-            Сохранить профиль
+            {profileSaving ? 'Сохраняем…' : 'Сохранить профиль'}
           </button>
           {profileValidationError && (
             <div className="w-full rounded-[1rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 font-semibold">

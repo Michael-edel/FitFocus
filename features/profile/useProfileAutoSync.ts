@@ -10,15 +10,18 @@ export function getProfileAutoSyncMode({
   cloudUserId,
   suppressNextSync,
   hasPendingChanges,
+  hasUncommittedDraft = false,
 }: {
   currentUser: UserProfile | null;
   cloudUserId: string | undefined;
   suppressNextSync: boolean;
   hasPendingChanges: boolean;
+  hasUncommittedDraft?: boolean;
 }): ProfileAutoSyncMode {
   if (!currentUser) return 'none';
   if (!cloudUserId) return 'offline';
   if (suppressNextSync) return 'skip-once';
+  if (hasUncommittedDraft) return 'none';
   return hasPendingChanges ? 'schedule' : 'none';
 }
 
@@ -26,6 +29,7 @@ export function getProfileAutoSyncMode({
 export function useProfileAutoSync({
   currentUser,
   cloudUserId,
+  hasUncommittedDraft,
   suppressNextFullProfileSyncRef,
   hasPendingProfileChangesRef,
   pushProfileToCloud,
@@ -36,6 +40,7 @@ export function useProfileAutoSync({
 }: {
   currentUser: UserProfile | null;
   cloudUserId: string | undefined;
+  hasUncommittedDraft: boolean;
   suppressNextFullProfileSyncRef: MutableRefObject<boolean>;
   hasPendingProfileChangesRef: MutableRefObject<boolean>;
   pushProfileToCloud: (profile: UserProfile) => Promise<void>;
@@ -52,6 +57,7 @@ export function useProfileAutoSync({
       cloudUserId,
       suppressNextSync: suppressNextFullProfileSyncRef.current,
       hasPendingChanges: hasPendingProfileChangesRef.current,
+      hasUncommittedDraft,
     });
     if (mode === 'none') return;
     if (mode === 'offline') {
@@ -73,5 +79,5 @@ export function useProfileAutoSync({
         saveTimerRef.current = null;
       }
     };
-  }, [cloudUserId, currentUser, debounceMs, hasPendingProfileChangesRef, pushProfileToCloud, setLastProfileSyncAt, setProfileSyncNote, setProfileSyncState, suppressNextFullProfileSyncRef]);
+  }, [cloudUserId, currentUser, debounceMs, hasPendingProfileChangesRef, hasUncommittedDraft, pushProfileToCloud, setLastProfileSyncAt, setProfileSyncNote, setProfileSyncState, suppressNextFullProfileSyncRef]);
 }

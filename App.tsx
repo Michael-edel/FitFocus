@@ -318,7 +318,9 @@ const App: React.FC = () => {
   const hasPendingProfileChangesRef = useRef(false);
   const profileEditRevisionRef = useRef(0);
   const hasProfileDraftRef = useRef(false);
+  const [hasProfileDraft, setHasProfileDraft] = useState(false);
   const onProfileDraftChange = useCallback((dirty: boolean) => {
+    if (hasProfileDraftRef.current !== dirty) setHasProfileDraft(dirty);
     hasProfileDraftRef.current = dirty;
     if (dirty) profileEditRevisionRef.current += 1;
   }, []);
@@ -826,6 +828,7 @@ const App: React.FC = () => {
       setUserProfileRepository(null);
       setLoginReadGuard(null);
       hasProfileDraftRef.current = false;
+      setHasProfileDraft(false);
       void stateSync.invalidate().catch(() => {
         if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
       });
@@ -891,6 +894,7 @@ const App: React.FC = () => {
     setUserProfileRepository(profileRepository);
     setLoginReadGuard(prepared.hydrated.readGuard ?? null);
     hasProfileDraftRef.current = false;
+    setHasProfileDraft(false);
     setCurrentUser(prepared.currentUser);
     if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
     setWeeklyReports(prepared.hydrated.weeklyReports);
@@ -946,6 +950,7 @@ const App: React.FC = () => {
       currentUser,
       repository: userProfileRepository,
       isCurrentSession: isCurrentProfileSession,
+      loginGuard: loginReadGuard,
       profileEditRevisionRef,
       hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
@@ -954,7 +959,7 @@ const App: React.FC = () => {
       persistUser,
       applyRemoteProfile,
     });
-  }, [currentUser, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
+  }, [currentUser, applyRemoteProfile, loginReadGuard, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
     const committed = await patchProfileInCloud(patch);
@@ -1025,6 +1030,7 @@ const App: React.FC = () => {
   useProfileAutoSync({
     currentUser,
     cloudUserId: googleMe?.sub,
+    hasUncommittedDraft: hasProfileDraft,
     suppressNextFullProfileSyncRef,
     hasPendingProfileChangesRef,
     pushProfileToCloud: flushPendingProfileToCloud,

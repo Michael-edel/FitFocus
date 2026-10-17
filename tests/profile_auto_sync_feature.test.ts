@@ -18,4 +18,11 @@ describe('profile auto sync feature', () => {
     expect(getProfileAutoSyncMode({ currentUser: profile, cloudUserId: 'user-1', suppressNextSync: false, hasPendingChanges: false })).toBe('none');
     expect(getProfileAutoSyncMode({ currentUser: profile, cloudUserId: 'user-1', suppressNextSync: true, hasPendingChanges: false })).toBe('skip-once');
   });
+
+  it('defers pending profile writes while a form draft is open, then schedules after save', () => {
+    expect(getProfileAutoSyncMode({ currentUser: profile, cloudUserId: 'user-1', suppressNextSync: false,
+      hasPendingChanges: true, hasUncommittedDraft: true })).toBe('none');
+    expect(getProfileAutoSyncMode({ currentUser: profile, cloudUserId: 'user-1', suppressNextSync: false,
+      hasPendingChanges: true, hasUncommittedDraft: false })).toBe('schedule');
+  });
 });

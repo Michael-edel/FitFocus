@@ -4,6 +4,7 @@ import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 const account = 'google-e2e-sub'; const sid = 'a'.repeat(64);
 const key = `fitfocus_data_${account}_profile`;
 const profile = { ...buildMockProfile(), id: account, version: 2 };
+type ProfileSnapshot = typeof profile & { wearableProvider?: string; wearableEnabled?: boolean };
 const scope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
   'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
   'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
@@ -27,10 +28,11 @@ async function saved(page: Page) {
   }, key);
 }
 async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal', stateGate?: { started: () => void; wait: Promise<void> },
-  profileGates: Array<{ started: () => void; wait: Promise<void> }> = []) {
+  profileGates: Array<{ started: () => void; wait: Promise<void> }> = [], profileSnapshot: ProfileSnapshot = profile) {
   let conflict = mode === 'conflict';
   let expectedProfileBaseVersion = mode === 'refresh' ? 9 : 2;
   let currentSid = sid;
+  let huaweiConnected = profileSnapshot.wearableProvider === 'huawei_health' && profileSnapshot.wearableEnabled !== false;
   let expired = false;
   let rejectedProofs = 0;
   // A new document can start with a restored server login; focus within the old document cannot.
@@ -53,11 +55,26 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
   await mockApp(page, { session: 'app' });
   await page.route('**/api/**', async route => {
     const request = route.request(); const path = new URL(request.url()).pathname;
-    const json = (body: unknown, status = 200, headers = { ...scope, 'X-FitFocus-State-Session': currentSid }) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
+    const json = (body: unknown, status = 200, headers?: Record<string, string>) => {
+      const responseHeaders = { ...scope, 'X-FitFocus-State-Session': currentSid, ...headers };
+      if (path.startsWith('/api/wearable/huawei/')) Object.assign(responseHeaders, {
+        'X-FitFocus-Huawei-Protocol': '1', 'X-FitFocus-Huawei-Guard': '1',
+        'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': currentSid,
+      });
+      return route.fulfill({ status, contentType: 'application/json', headers: responseHeaders, body: JSON.stringify(body) });
+    };
     if (path === '/api/me' && expired) { rejectedProofs += 1; return json({ error: 'UNAUTH' }, 401); }
     if (path === '/api/me') return json({ user: { sub: account, roles: ['user'] }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: currentSid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
-    if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
+      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: currentSid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
+      ...(profileSnapshot.wearableProvider === 'huawei_health' ? { huaweiSync: { protocol: 1, guard: 1 } } : {}) });
+    if (path === '/api/bootstrap') return json({ user: { sub: account }, profile: profileSnapshot, items: [] });
+    if (path === '/api/wearable/huawei/status' && request.method() === 'GET') return json({
+      configured: true, connected: huaweiConnected, status: huaweiConnected ? 'connected' : 'disconnected', scope: 'health.read', expiresAt: null, lastSyncAt: null,
+    });
+    if (path === '/api/wearable/huawei/disconnect' && request.method() === 'POST') {
+      huaweiConnected = false;
+      return json({ disconnected: true, profile: { ...profileSnapshot, wearableProvider: 'manual', wearableEnabled: false, version: (profileSnapshot.version ?? 2) + 1 } });
+    }
     if (path === '/api/profile' && request.method() === 'PUT') {
       const writeIndex = mutations.length;
       const responseScope = { ...scope, 'X-FitFocus-State-Session': currentSid };
@@ -82,7 +99,7 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
       }
       return respond();
     }
-    if (path === '/api/profile') return json({ profile: mode === 'refresh' ? { ...profile, name: 'Cloud refreshed', version: 9 } : profile });
+    if (path === '/api/profile') return json({ profile: mode === 'refresh' ? { ...profileSnapshot, name: 'Cloud refreshed', version: 9 } : profileSnapshot });
     if (path === '/api/state' && request.method() === 'GET') return json({ items: [] });
     if (path === '/api/state' && request.method() === 'PUT') {
       const body = request.postDataJSON() as { items: Array<{ key: string; baseVersion: number }> };
@@ -533,9 +550,11 @@ test('dashboard weight stays available after a failed durable commit and survive
   await page.getByRole('button', { name: 'Сохранить вес' }).click();
   await expect.poll(async () => JSON.parse((await saved(page)).value!).weight).toBe(88.5);
   await expect(weight).toHaveValue('');
+  await expect.poll(() => mutations.length).toBe(1);
+  await expect.poll(async () => (await saved(page)).operations).toEqual([]);
   const committed = await saved(page);
-  expect(committed.operations).toHaveLength(1);
-  expect(committed.operations[0]).toMatchObject({ resource: 'profile', status: 'pending', value: expect.stringContaining('"weight":88.5') });
+  expect(JSON.parse(committed.value!).weight).toBe(88.5);
+  expect(committed.operations).toEqual([]);
   await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить вес.' })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -574,8 +593,9 @@ test('dashboard habit stays unchanged after a failed durable profile commit and 
   const committed = await saved(page);
   const committedProfile = JSON.parse(committed.value!) as { dailyHabits?: Record<string, { water?: boolean }> };
   expect(Object.values(committedProfile.dailyHabits ?? {}).some((day) => day.water === true)).toBe(true);
-  expect(committed.operations).toHaveLength(1);
-  expect(committed.operations[0]).toMatchObject({ resource: 'profile', status: 'pending', value: expect.stringContaining('"water":true') });
+  await expect.poll(() => mutations.length).toBe(1);
+  await expect.poll(async () => (await saved(page)).operations).toEqual([]);
+  expect((await saved(page)).operations).toEqual([]);
   await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить привычку.' })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -602,6 +622,70 @@ test('a failed wearable provider commit is visible and leaves the profile unchan
   expect((await saved(page)).value).toBe(before.value);
   expect((await saved(page)).operations).toEqual([]);
   expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Huawei disconnection is not reported saved until its returned profile is committed', async ({ page }) => {
+  const huaweiProfile = { ...profile, wearableProvider: 'huawei_health' as const, wearableEnabled: true };
+  const { errors } = await setup(page, 'normal', undefined, [], huaweiProfile);
+  await openApp(page, '/#settings');
+  await expect(page.getByText('Подключено', { exact: true })).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected Huawei profile quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  const disconnect = page.getByRole('button', { name: 'Отключить часы', exact: true });
+  await disconnect.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить профиль.' })).toBeVisible();
+  await expect(page.getByText('Huawei Health отключён.', { exact: true })).toHaveCount(0);
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+
+  await page.reload();
+  await expect(page).toHaveURL(/#settings$/);
+  await disconnect.click();
+  await expect(page.getByText('Huawei Health отключён.', { exact: true })).toBeVisible();
+  await expect.poll(async () => JSON.parse((await saved(page)).value!).wearableEnabled).toBe(false);
+  await expect.poll(async () => JSON.parse((await saved(page)).value!).wearableProvider).toBe('manual');
+  expect(errors).toEqual([]);
+});
+
+test('goal intensity remains unchanged after a failed durable profile commit and can be retried after reload', async ({ page }) => {
+  const { errors } = await setup(page, 'normal');
+  await openApp(page, '/#settings');
+  const intensity = page.getByText('Интенсивность цели', { exact: true });
+  await expect(intensity).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected goal intensity quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  await page.getByRole('button', { name: '−650', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить профиль.' })).toBeVisible();
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+
+  await page.reload();
+  await expect(page).toHaveURL(/#settings$/);
+  await page.getByRole('button', { name: '−650', exact: true }).click();
+  await expect.poll(async () => JSON.parse((await saved(page)).value!).lossDeficit).toBe(650);
   expect(errors).toEqual([]);
 });
 

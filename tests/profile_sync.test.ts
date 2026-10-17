@@ -46,6 +46,25 @@ describe('durable profile actions', () => {
     expect(ops).toHaveLength(2); expect(ops[1]).toMatchObject({ resource: 'profile', status: 'pending', parentOpId: ops[0].opId });
     expect(JSON.parse((await outbox.snapshot(profile.id, repository.key('profile'))).value!)).toMatchObject({ name: 'Новое имя', weight: 68 });
   });
+  it('uses a durable session-bound local commit for settings patches', async () => {
+    const loginGuard: OutboxReadGuard = {
+      accountId: profile.id, serverSessionId: 'a'.repeat(64), sessionEpoch: 'active-epoch', authFence: 1,
+    };
+    const d = { ...deps(), loginGuard };
+    d.syncStateImpl.mockResolvedValue(false);
+
+    expect(await patchProfileInCloud({ name: 'Сохранённая форма' }, d)).toBe(true);
+
+    expect(d.persistUser).toHaveBeenCalledWith(expect.any(Function), {
+      localCommitGuard: {
+        accountId: loginGuard.accountId,
+        serverSessionId: loginGuard.serverSessionId,
+        sessionEpoch: loginGuard.sessionEpoch,
+      },
+      canCommit: expect.any(Function),
+    }, { durable: true });
+    expect(await outbox.list(profile.id)).toHaveLength(1);
+  });
   it('does not show success while the sender retains an intent', async () => {
     const d = deps(); d.syncStateImpl.mockResolvedValue(false); await pushProfileToCloud(profile, d);
     expect(d.setProfileSyncState).toHaveBeenLastCalledWith('error'); expect(d.setLastProfileSyncAt).not.toHaveBeenCalled();

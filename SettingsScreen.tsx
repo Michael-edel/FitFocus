@@ -12,7 +12,7 @@ import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 import { requestMobileToken } from './features/settings/mobileTokenApi';
-import type { OutboxCommitGuard, OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
 import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSession } from './services/mobileTokenSession';
 import { prepareHuaweiSession, type HuaweiSession } from './services/huaweiSession';
 import { disconnectHuaweiHealth, requestHuaweiHealthStatus, startHuaweiHealthOAuth, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
@@ -65,7 +65,7 @@ type Props = {
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
-  onChangeUser?: (next: UserProfile, guard?: OutboxCommitGuard) => Promise<void> | void;
+  onChangeUser?: (next: UserProfile, guard?: OutboxWriteGuard) => Promise<boolean>;
   onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
   onProfileDraftChange?: (dirty: boolean) => void;
   onExportBackup?: () => void;
@@ -400,9 +400,35 @@ export default function SettingsScreen({
 
   const [ackLoss, setAckLoss] = useState(false);
   const [ackGain, setAckGain] = useState(false);
+  const [draftLossDeficit, setDraftLossDeficit] = useState('');
+  const [draftGainSurplus, setDraftGainSurplus] = useState('');
   const [cacheClearedTs, setCacheClearedTs] = useState<number | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
   const [profileValidationError, setProfileValidationError] = useState<string | null>(null);
+  const [profileCommitError, setProfileCommitError] = useState<string | null>(null);
+  const [profileCommitBusy, setProfileCommitBusy] = useState(false);
+  const profileCommitBusyRef = useRef(false);
+
+  const commitProfileChange = useCallback(async (
+    next: UserProfile,
+    guard?: OutboxWriteGuard,
+  ): Promise<boolean> => {
+    if (!onChangeUser || profileCommitBusyRef.current) return false;
+    profileCommitBusyRef.current = true;
+    setProfileCommitBusy(true);
+    setProfileCommitError(null);
+    try {
+      const saved = await onChangeUser(next, guard);
+      if (saved !== true) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
+      return true;
+    } catch {
+      setProfileCommitError('Не удалось сохранить профиль. Данные не подтверждены — попробуйте ещё раз.');
+      return false;
+    } finally {
+      profileCommitBusyRef.current = false;
+      setProfileCommitBusy(false);
+    }
+  }, [onChangeUser]);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -468,6 +494,11 @@ export default function SettingsScreen({
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
   const [pushLastDeliveryError, setPushLastDeliveryError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftLossDeficit(String(user?.lossDeficit ?? DEFAULT_DEFICIT));
+    setDraftGainSurplus(String(user?.gainSurplus ?? DEFAULT_SURPLUS));
+  }, [user?.id, user?.lossDeficit, user?.gainSurplus]);
   const [pushNotice, setPushNotice] = useState<string | null>(null);
   type PushAttempt = { id: number; controller: AbortController; scopeKey: string };
   const pushControllerRef = useRef<AbortController | null>(null);
@@ -801,7 +832,7 @@ export default function SettingsScreen({
         if (!isHuaweiAttemptCurrent(attempt)) return;
         if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
         const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
-        await onChangeUser(payload.profile, commitGuard);
+        if (!await commitProfileChange(payload.profile, commitGuard)) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
         if (!isHuaweiAttemptCurrent(attempt)) return;
         setHuaweiNotice('Huawei Health отключён.');
         await refreshHuaweiStatus(attempt, session);
@@ -848,7 +879,7 @@ export default function SettingsScreen({
       if (!isHuaweiAttemptCurrent(attempt)) return;
       if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
       const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
-      await onChangeUser(payload.profile, commitGuard);
+      if (!await commitProfileChange(payload.profile, commitGuard)) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
       if (!isHuaweiAttemptCurrent(attempt)) return;
       const count = Array.isArray(payload.updatedFields) ? payload.updatedFields.length : 0;
       setHuaweiNotice(`Huawei Health синхронизирован: обновлено полей ${count}.`);
@@ -1724,7 +1755,9 @@ export default function SettingsScreen({
     if (serverSession && onPatchUser) {
       if (await onPatchUser(patch) === false) return;
     } else if (onChangeUser) {
-      onChangeUser({ ...user, ...patch });
+      if (!await commitProfileChange({ ...user, ...patch })) return;
+    } else {
+      return;
     }
     setProfileValidationError(null);
     setProfileDirty(false);
@@ -1740,8 +1773,8 @@ export default function SettingsScreen({
       const saved = await onPatchUser(patch);
       return isCurrentAttempt() ? saved !== false : null;
     } else if (onChangeUser) {
-      await onChangeUser({ ...user, ...patch });
-      return isCurrentAttempt();
+      const saved = await commitProfileChange({ ...user, ...patch });
+      return isCurrentAttempt() ? saved : null;
     }
     return false;
   };
@@ -1813,12 +1846,58 @@ export default function SettingsScreen({
     return 'Push-сервер ещё не настроен.';
   })();
 
+  const saveLossDeficitDraft = () => {
+    if (!user) return;
+    const parsed = Number(draftLossDeficit);
+    if (!Number.isFinite(parsed)) {
+      setProfileCommitError('Укажите корректный дефицит калорий.');
+      return;
+    }
+    const value = Math.max(MIN_DEFICIT, Math.min(MAX_DEFICIT, parsed));
+    const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
+    const aggressive = value > limit;
+    if (aggressive && !ackLoss) {
+      setProfileCommitError('Подтвердите риски перед сохранением агрессивного дефицита.');
+      return;
+    }
+    void commitProfileChange({
+      ...user,
+      lossDeficit: value,
+      riskAcknowledgedLoss: aggressive ? true : user.riskAcknowledgedLoss,
+    });
+  };
+
+  const saveGainSurplusDraft = () => {
+    if (!user) return;
+    const parsed = Number(draftGainSurplus);
+    if (!Number.isFinite(parsed)) {
+      setProfileCommitError('Укажите корректный профицит калорий.');
+      return;
+    }
+    const value = Math.max(MIN_SURPLUS, Math.min(MAX_SURPLUS, parsed));
+    const aggressive = value > AGGRESSIVE_SURPLUS;
+    if (aggressive && !ackGain) {
+      setProfileCommitError('Подтвердите риски перед сохранением агрессивного профицита.');
+      return;
+    }
+    void commitProfileChange({
+      ...user,
+      gainSurplus: value,
+      riskAcknowledgedGain: aggressive ? true : user.riskAcknowledgedGain,
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <div className="mb-8 text-left">
         <div className="text-3xl font-black text-slate-100">Настройки</div>
         <div className="text-slate-400 mt-2">Персонализируйте интерфейс. Часть функций будет добавлена позже.</div>
       </div>
+      {profileCommitError && (
+        <div role="alert" className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
+          {profileCommitError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {user && onChangeUser && (
@@ -1930,6 +2009,7 @@ export default function SettingsScreen({
                     draftChestCm={draftChestCm}
                     draftHipsCm={draftHipsCm}
                     profileDirty={profileDirty}
+                    profileSaving={profileCommitBusy}
                     profileValidationError={profileValidationError}
                     profileSummary={profileSummary}
                     onProfileSave={saveProfileDraft}
@@ -2565,11 +2645,13 @@ export default function SettingsScreen({
                     {[250, 400, 500, 650, 750].map(v => (
                       <button
                         key={v}
+                        type="button"
+                        disabled={profileCommitBusy}
                         onClick={() => {
                           const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
                           const isAgg = v > limit;
                           if (isAgg && !ackLoss) return;
-                          onChangeUser({ ...user, lossDeficit: v, riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
+                          void commitProfileChange({ ...user, lossDeficit: v, riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
                         }}
                         className={[
                           "px-4 py-2 rounded-full text-xs font-black border transition-all",
@@ -2592,10 +2674,12 @@ export default function SettingsScreen({
                       <input
                         type="checkbox"
                         checked={ackLoss}
+                        disabled={profileCommitBusy}
                         onChange={(e) => {
                           const next = e.target.checked;
-                          setAckLoss(next);
-                          if (next) onChangeUser({ ...user, riskAcknowledgedLoss: true });
+                          void commitProfileChange({ ...user, riskAcknowledgedLoss: next }).then(saved => {
+                            if (saved) setAckLoss(next);
+                          });
                         }}
                         className="mt-0.5"
                       />
@@ -2608,15 +2692,12 @@ export default function SettingsScreen({
                   <div className="flex items-center gap-3 p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
                     <div className="text-slate-400 text-sm font-semibold">Точное значение</div>
                     <input
-                      value={String(user.lossDeficit ?? 500)}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value || 0);
-                        const n = Math.max(MIN_DEFICIT, Math.min(MAX_DEFICIT, raw));
-                        const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
-                        const isAgg = n > limit;
-                        if (isAgg && !ackLoss) return;
-                        onChangeUser({ ...user, lossDeficit: isFinite(n) ? n : (user.lossDeficit ?? DEFAULT_DEFICIT), riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
-                      }}
+                      aria-label="Точное значение дефицита калорий"
+                      value={draftLossDeficit}
+                      disabled={profileCommitBusy}
+                      onChange={(e) => setDraftLossDeficit(e.target.value)}
+                      onBlur={saveLossDeficitDraft}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       inputMode="numeric"
                       className="ml-auto w-28 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700 text-slate-100 font-black tabular-nums"
                     />
@@ -2631,11 +2712,13 @@ export default function SettingsScreen({
                     {[150, 250, 300, 400, 500].map(v => (
                       <button
                         key={v}
+                        type="button"
+                        disabled={profileCommitBusy}
                         onClick={() => {
                           const limit = AGGRESSIVE_SURPLUS;
                           const isAgg = v > limit;
                           if (isAgg && !ackGain) return;
-                          onChangeUser({ ...user, gainSurplus: v, riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
+                          void commitProfileChange({ ...user, gainSurplus: v, riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
                         }}
                         className={[
                           "px-4 py-2 rounded-full text-xs font-black border transition-all",
@@ -2658,10 +2741,12 @@ export default function SettingsScreen({
                       <input
                         type="checkbox"
                         checked={ackGain}
+                        disabled={profileCommitBusy}
                         onChange={(e) => {
                           const next = e.target.checked;
-                          setAckGain(next);
-                          if (next) onChangeUser({ ...user, riskAcknowledgedGain: true });
+                          void commitProfileChange({ ...user, riskAcknowledgedGain: next }).then(saved => {
+                            if (saved) setAckGain(next);
+                          });
                         }}
                         className="mt-0.5"
                       />
@@ -2674,15 +2759,12 @@ export default function SettingsScreen({
                   <div className="flex items-center gap-3 p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
                     <div className="text-slate-400 text-sm font-semibold">Точное значение</div>
                     <input
-                      value={String(user.gainSurplus ?? 300)}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value || 0);
-                        const n = Math.max(MIN_SURPLUS, Math.min(MAX_SURPLUS, raw));
-                        const limit = AGGRESSIVE_SURPLUS;
-                        const isAgg = n > limit;
-                        if (isAgg && !ackGain) return;
-                        onChangeUser({ ...user, gainSurplus: isFinite(n) ? n : (user.gainSurplus ?? DEFAULT_SURPLUS), riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
-                      }}
+                      aria-label="Точное значение профицита калорий"
+                      value={draftGainSurplus}
+                      disabled={profileCommitBusy}
+                      onChange={(e) => setDraftGainSurplus(e.target.value)}
+                      onBlur={saveGainSurplusDraft}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       inputMode="numeric"
                       className="ml-auto w-28 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700 text-slate-100 font-black tabular-nums"
                     />

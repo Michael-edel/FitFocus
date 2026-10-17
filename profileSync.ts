@@ -3,7 +3,7 @@ import type { UserProfile } from './types';
 import { isUserProfilePayload } from './profileValidation';
 import { stateSync } from './storage/stateSync';
 import type { UserStateRepository } from './storage/userStateRepository';
-import type { OutboxOperation, OutboxReadGuard } from './storage/durableOutbox';
+import type { OutboxOperation, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
 
 type ProfileSyncState = 'idle' | 'saving' | 'saved' | 'error';
 type ProfileSyncDeps = {
@@ -15,7 +15,12 @@ type ProfileSyncDeps = {
   setProfileSyncState: Dispatch<SetStateAction<ProfileSyncState>>;
   setProfileSyncNote?: Dispatch<SetStateAction<string | null>>;
   setLastProfileSyncAt: Dispatch<SetStateAction<number | null>>;
-  persistUser: (action: UserProfile | ((profile: UserProfile) => UserProfile)) => Promise<OutboxOperation | null>;
+  persistUser: (
+    action: UserProfile | ((profile: UserProfile) => UserProfile),
+    guard?: OutboxWriteGuard,
+    options?: { durable?: boolean },
+  ) => Promise<OutboxOperation | null>;
+  loginGuard?: OutboxReadGuard | null;
   applyRemoteProfile: (user: UserProfile) => void;
   syncStateImpl?: (accountId: string) => Promise<boolean>;
 };
@@ -64,9 +69,22 @@ export async function pushProfileToCloud(profile: UserProfile, deps: ProfileSync
 export async function patchProfileInCloud(patch: Partial<UserProfile>, deps: ProfileSyncDeps): Promise<boolean> {
   const current = deps.currentUser;
   if (!current || !owns(current, deps)) return false;
+  if (deps.loginGuard && deps.loginGuard.accountId !== current.id) return false;
   try {
     // Functional editing preserves earlier patches even when React has not rendered between calls.
-    const operation = await deps.persistUser(previous => ({ ...previous, ...patch, id: previous.id, version: previous.version }));
+    const writeGuard: OutboxWriteGuard | undefined = deps.loginGuard ? {
+      localCommitGuard: {
+        accountId: deps.loginGuard.accountId,
+        serverSessionId: deps.loginGuard.serverSessionId,
+        sessionEpoch: deps.loginGuard.sessionEpoch,
+      },
+      canCommit: () => owns(current, deps),
+    } : undefined;
+    const operation = await deps.persistUser(
+      previous => ({ ...previous, ...patch, id: previous.id, version: previous.version }),
+      writeGuard,
+      { durable: true },
+    );
     if (!owns(current, deps) || !operation) return false;
     if (operation.status === 'conflicted') {
       deps.setProfileSyncState('error');
