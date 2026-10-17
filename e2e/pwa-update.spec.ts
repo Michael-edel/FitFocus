@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { previousPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
 import { saved, navigate, healthy } from './support/familyHarness';
-import { mockApp, openApp } from './support/appHarness';
+import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 
 async function openNative(page: Page, url: string, standalone: boolean) {
   const errors: string[] = [];
@@ -214,6 +214,7 @@ test('real service worker waits for an explicit update and preserves durable fam
     expect(server.counts.put).toBe(0);
     await navigate(page, 'Настройки');
     const name = page.getByPlaceholder('Как к вам обращаться');
+    await expect(name).toHaveValue(buildMockProfile().name);
     await name.fill('Черновик перед обновлением');
     await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
     await expect(name).toHaveValue('Черновик перед обновлением');
