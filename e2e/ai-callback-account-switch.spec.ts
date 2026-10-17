@@ -21,6 +21,7 @@ type StateWriteAttempt = { account?: string; session?: string; keys: string[] };
 type FixtureState = {
   current: Account;
   profile: ReturnType<typeof profileFor>;
+  stateValues?: Array<{ accountId: string; key: string; value: string; exists: boolean; version: number }>;
   stateWriteLog?: StateWriteAttempt[];
   holdStateWriteFailures?: { key: string; active: boolean; retryAfterSeconds?: number };
   holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
@@ -129,7 +130,14 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/bootstrap' && method === 'GET') return json({
       user: { sub: state.current.id }, profile: state.profile, items: [],
     });
-    if (path === '/api/state' && method === 'GET') return json({ items: [] }, responseAccount);
+    if (path === '/api/state' && method === 'GET') {
+      const prefix = url.searchParams.get('prefix');
+      const key = url.searchParams.get('key');
+      const items = (state.stateValues ?? []).filter(item => item.accountId === responseAccount.id
+        && (prefix ? item.key.startsWith(prefix) : key ? item.key === key : true))
+        .map(({ key: itemKey, value, exists, version }) => ({ key: itemKey, value, exists, version }));
+      return json({ items }, responseAccount);
+    }
     if (path === '/api/state' && method === 'PUT') {
       const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
       const keys = items.map(item => item.key);
@@ -1640,6 +1648,87 @@ test('an open food insight from account A is hidden after another tab activates 
   await expect(switched.page.getByText('Тестовый омлет', { exact: true })).toHaveCount(0);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab food selection acceptance runs in desktop browser profiles.');
+  const sharedEntryIdA = 'shared-food-entry-a';
+  const sharedEntryIdB = 'shared-food-entry-b';
+  const timestamp = new Date();
+  timestamp.setHours(12, 0, 0, 0);
+  const entry = (id: string, name: string, mealType: 'breakfast' | 'lunch') => ({
+    id, name, calories: 320, protein: 24, fat: 12, carbs: 31,
+    timestamp: timestamp.toISOString(), mealType,
+  });
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateValues: [
+      { accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify([
+        entry(sharedEntryIdA, 'Блюдо A1', 'lunch'),
+        entry(sharedEntryIdB, 'Блюдо A2', 'lunch'),
+      ]), exists: true, version: 1 },
+      { accountId: accountB.id, key: diaryKey(accountB.id), value: JSON.stringify([
+        entry(sharedEntryIdA, 'Блюдо B1', 'lunch'),
+        entry(sharedEntryIdB, 'Блюдо B2', 'lunch'),
+      ]), exists: true, version: 1 },
+    ],
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page.getByText('Блюдо A1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Блюдо A2', { exact: true })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  const keyA = diaryKey(accountA.id);
+  await waitForOutboxKeyIdle(page, accountA, keyA);
+
+  const writesBefore = fixtureA.counts.stateWrites.filter(key => key === keyA).length;
+  const checkboxesA = page.locator('input[type="checkbox"][title="Выбрать"]');
+  await checkboxesA.nth(0).check();
+  await checkboxesA.nth(1).check();
+  await expect(checkboxesA.nth(0)).toBeChecked();
+  await expect(checkboxesA.nth(1)).toBeChecked();
+  await page.getByRole('button', { name: '→ Завтрак', exact: true }).first().click();
+  await expect.poll(async () => {
+    const value = rawValue(await readDurableSnapshot(page), keyA);
+    return value ? JSON.parse(value).map((item: { mealType: string }) => item.mealType) : null;
+  }).toEqual(['breakfast', 'breakfast']);
+  await waitForOutboxKeyIdle(page, accountA, keyA);
+  expect(fixtureA.counts.stateWrites.filter(key => key === keyA).length).toBe(writesBefore + 1);
+
+  const writesBeforeDelete = fixtureA.counts.stateWrites.filter(key => key === keyA).length;
+  await checkboxesA.nth(0).check();
+  await checkboxesA.nth(1).check();
+  await page.getByRole('button', { name: 'Удалить выбранные' }).first().click();
+  await expect(page.getByText('Блюдо A1', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Блюдо A2', { exact: true })).toHaveCount(0);
+  await expect.poll(async () => {
+    const value = rawValue(await readDurableSnapshot(page), keyA);
+    return value ? JSON.parse(value) : null;
+  }).toEqual([]);
+  await waitForOutboxKeyIdle(page, accountA, keyA);
+  expect(fixtureA.counts.stateWrites.filter(key => key === keyA).length).toBe(writesBeforeDelete + 1);
+
+  const switched = await openAccountB(context, state, false, '/#nutrition');
+  await waitForAccountSwitch(page);
+  await expect(switched.page.getByText('Блюдо B1', { exact: true })).toBeVisible();
+  await expect(switched.page.getByText('Блюдо B2', { exact: true })).toBeVisible();
+  const selectedB = switched.page.locator('input[type="checkbox"][title="Выбрать"]').first();
+  await expect(selectedB).not.toBeChecked();
+
+  const final = await readDurableSnapshot(switched.page);
+  expect(JSON.parse(rawValue(final, diaryKey(accountA.id)) ?? 'null')).toEqual([]);
+  expect(JSON.parse(rawValue(final, diaryKey(accountB.id)) ?? '[]')).toEqual([
+    entry(sharedEntryIdA, 'Блюдо B1', 'lunch'),
+    entry(sharedEntryIdB, 'Блюдо B2', 'lunch'),
+  ]);
+  expect(operationsFor(final, accountA)).toEqual([]);
+  expect(operationsFor(final, accountB)).toEqual([]);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {

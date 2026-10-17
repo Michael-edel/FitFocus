@@ -1109,8 +1109,8 @@ const App: React.FC = () => {
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
   } = useFoodSelection(
+    foodDiary,
     setFoodDiary,
-    deleteFoodEntry,
     persistFoodDiary,
     allowCachedUiStateRestore && currentUser?.id
       ? accountSessionRenderKey(loginReadGuard, currentUser.id)

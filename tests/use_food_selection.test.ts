@@ -3,11 +3,39 @@ import {
   clearScopedFoodSelection,
   getScopedFoodSelectionIds,
   isFoodSelectionScopeActive,
+  moveSelectedFoodEntries,
+  removeSelectedFoodEntries,
   toggleScopedFoodSelection,
   type ScopedFoodSelection,
 } from '../useFoodSelection';
 
 describe('account-scoped food selection', () => {
+  it('moves only selected diary entries and reuses the snapshot when nothing changes', () => {
+    const diary = [
+      { id: 'food-a', name: 'Завтрак', calories: 300, protein: 10, fat: 8, carbs: 40, timestamp: '2026-10-17T08:00:00.000Z', mealType: 'breakfast' as const },
+      { id: 'food-b', name: 'Обед', calories: 500, protein: 20, fat: 12, carbs: 60, timestamp: '2026-10-17T12:00:00.000Z', mealType: 'lunch' as const },
+    ];
+
+    const moved = moveSelectedFoodEntries(diary, new Set(['food-b']), 'dinner');
+    expect(moved).toEqual([
+      diary[0],
+      { ...diary[1], mealType: 'dinner' },
+    ]);
+    expect(diary[1].mealType).toBe('lunch');
+    expect(moveSelectedFoodEntries(diary, new Set(['food-a']), 'breakfast')).toBe(diary);
+  });
+
+  it('removes selected diary entries together and reuses the snapshot when none match', () => {
+    const diary = [
+      { id: 'food-a', name: 'Завтрак', calories: 300, protein: 10, fat: 8, carbs: 40, timestamp: '2026-10-17T08:00:00.000Z', mealType: 'breakfast' as const },
+      { id: 'food-b', name: 'Обед', calories: 500, protein: 20, fat: 12, carbs: 60, timestamp: '2026-10-17T12:00:00.000Z', mealType: 'lunch' as const },
+      { id: 'food-c', name: 'Ужин', calories: 600, protein: 30, fat: 15, carbs: 70, timestamp: '2026-10-17T18:00:00.000Z', mealType: 'dinner' as const },
+    ];
+
+    expect(removeSelectedFoodEntries(diary, new Set(['food-a', 'food-c']))).toEqual([diary[1]]);
+    expect(removeSelectedFoodEntries(diary, new Set(['missing']))).toBe(diary);
+  });
+
   it('hides one account selection from another account and starts the new scope empty', () => {
     const accountA: ScopedFoodSelection = {
       scopeKey: 'account-a:session-1',

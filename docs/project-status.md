@@ -3,12 +3,17 @@
 Сверено: 17.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Текущий этап — стабилизационная приёмка P0.8/P0.9;
-IndexedDB durable outbox подключён, общий P0 открыт.
+`fix/state-generations`. Текущий этап — закрытие и приёмка оставшихся P0,
+включая callback scope, durable outbox и Safari/PWA lifecycle. IndexedDB durable
+outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
+завершены.
 
 Последний полный опубликованный CI —
+[run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
+на `11e6583`, все jobs завершились success: dependency audit, schema/privacy,
+auth/API guards, unit, три typecheck, build, E2E и rollback checks. Предыдущий
 [run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586)
-на `b67beee`, завершился success: 1324 unit tests / 212 файлов; E2E — 844 passed /
+на `b67beee` также завершился success: 1324 unit tests / 212 файлов; E2E — 844 passed /
 255 skipped за 37,5 минуты; dependency audit, schema/privacy/auth/API guards,
 три typecheck, build и rollback-check прошли. Rollback-check выполнил 23 HTTP/D1
 запроса на локальном Pages worker/workerd/D1, браузерный trace и tested rollback
@@ -16,9 +21,18 @@ artifact сохранены. Исправление PWA-теста в этом S
 
 В кодовом коммите [`264bc4f`](https://github.com/Michael-edel/FitFocus/commit/264bc4f)
 добавлена native HTTP проверка отмены `/api/profile` при reload. Typecheck и
-targeted Safari/WebKit acceptance прошли; коммит опубликован в PR #93, полный CI
-текущего PR HEAD ожидает завершения. Историческая причина прежнего
-Safari-сообщения остаётся открытой.
+targeted Safari/WebKit acceptance прошли; коммит опубликован в PR #93 и входит в
+позднее проверенный опубликованный HEAD `11e6583` (CI #1499 success). Историческая
+причина прежнего Safari-сообщения остаётся открытой.
+
+Локальный follow-up поверх `11e6583` убирает persistence из React functional
+state updaters дневника, чтобы одна правка не создавала повторные outbox writes
+в `StrictMode`; bulk move/delete для двух продуктов прошли 3/3 desktop engines
+без retries, 4 мобильных профиля skipped. Unit 1326/1326, три typecheck, preview
+build и diff check прошли. Рабочее дерево ещё не закоммичено.
+[CI #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
+завершился success на опубликованном базовом HEAD `11e6583` и не проверяет эти
+локальные изменения; точный CI follow-up будет после commit/push.
 
 Причина предыдущего сбоя [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
 на `0af2c30` — форма настроек принимала ввод до загрузки исходного профиля,

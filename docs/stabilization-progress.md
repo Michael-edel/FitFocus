@@ -1,5 +1,36 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4/P0.8 — побочные эффекты вне React state updaters в дневнике, 17.10.2026
+
+В `useFoodDiary` и `useFoodSelection` persistence вызывался внутри functional
+`setFoodDiary` updater. Корневой app использует `React.StrictMode`; в dev updater
+может вызываться повторно, поэтому одна пользовательская правка могла поставить
+лишнюю durable outbox operation. Add/update/delete и bulk meal move теперь
+вычисляют новый массив по последнему snapshot ref, ставят готовое значение в
+React и записывают его в repository после вычисления, вне state updater.
+
+Новый browser acceptance гидратирует два одинаковых food entry id для аккаунтов
+A и B, выбирает две записи A и проверяет ровно один scoped `PUT /api/state` на
+bulk move и один на bulk-delete. После входа B обе его записи остаются без
+изменений. Повторный прогон прошёл 3/3 на desktop Chromium, Firefox и WebKit,
+четыре мобильных профиля пропущены по условию теста (`workers=1,retries=0`).
+Первый запуск превысил общий 45-секундный timeout в WebKit на завершающих
+действиях; после удаления необязательных ожиданий и screenshot контрольный прогон
+прошёл без изменения лимита. Полный
+unit suite — 1326/1326 в 212 файлах; root,
+domain-strict и storage-strict typecheck прошли; Playwright preview сборка и
+`git diff --check` прошли. Первый запуск E2E разрешил `title="Выбрать"` в label
+загрузки фотографии; селектор уточнён до checkbox элемента. После расширения
+сценария на две записи WebKit превысил общий timeout; повтор после сокращения
+завершающих необязательных проверок прошёл без retries.
+
+Проверенный локальный worktree основан на `11e6583` и содержит незакоммиченные
+изменения; [CI run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
+завершился success только на опубликованном базовом HEAD `11e6583` и не подтверждает
+этот follow-up.
+Точный полный CI запускается после commit/push. Общий аудит P0.4/P0.8, остальные
+callbacks, staging и release acceptance остаются открытыми.
+
 ## P0.8/P0.9 — отмена profile refresh при Safari reload, 17.10.2026
 
 Кодовый коммит [`264bc4f`](https://github.com/Michael-edel/FitFocus/commit/264bc4f)

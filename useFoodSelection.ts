@@ -44,12 +44,36 @@ export function clearScopedFoodSelection(
   return scopeKey === null ? state : { scopeKey, ids: new Set<string>() };
 }
 
+export function moveSelectedFoodEntries(
+  diary: FoodItem[],
+  selectedIds: ReadonlySet<string>,
+  mealType: MealType,
+): FoodItem[] {
+  let changed = false;
+  const next = diary.map(item => {
+    if (!selectedIds.has(item.id) || item.mealType === mealType) return item;
+    changed = true;
+    return { ...item, mealType };
+  });
+  return changed ? next : diary;
+}
+
+export function removeSelectedFoodEntries(
+  diary: FoodItem[],
+  selectedIds: ReadonlySet<string>,
+): FoodItem[] {
+  const next = diary.filter(item => !selectedIds.has(item.id));
+  return next.length === diary.length ? diary : next;
+}
+
 export function useFoodSelection(
+  foodDiary: FoodItem[],
   setFoodDiary: Dispatch<SetStateAction<FoodItem[]>>,
-  deleteFoodEntry: (id: string) => void,
   persistFoodDiary?: (nextDiary: FoodItem[]) => void,
   scopeKey: string | null = null,
 ) {
+  const foodDiaryRef = useRef(foodDiary);
+  foodDiaryRef.current = foodDiary;
   const [selectionState, setSelectionState] = useState<ScopedFoodSelection>(() => ({
     scopeKey,
     ids: new Set<string>(),
@@ -80,12 +104,13 @@ export function useFoodSelection(
     ) return;
 
     const idsToUpdate = new Set(selectedFoodIds);
-    setFoodDiary(prev => {
-      if (!isFoodSelectionScopeActive(scopeKey, currentScopeKeyRef.current)) return prev;
-      const next = prev.map(x => (idsToUpdate.has(x.id) ? { ...x, mealType } : x));
-      persistFoodDiary?.(next);
-      return next;
-    });
+    const previousDiary = foodDiaryRef.current;
+    const nextDiary = moveSelectedFoodEntries(previousDiary, idsToUpdate, mealType);
+    if (nextDiary !== previousDiary) {
+      foodDiaryRef.current = nextDiary;
+      setFoodDiary(nextDiary);
+      persistFoodDiary?.(nextDiary);
+    }
     clearFoodSelection();
   }, [clearFoodSelection, persistFoodDiary, scopeKey, selectedFoodIds, setFoodDiary]);
 
@@ -94,9 +119,15 @@ export function useFoodSelection(
       !isFoodSelectionScopeActive(scopeKey, currentScopeKeyRef.current) ||
       selectedFoodIds.size === 0
     ) return;
-    selectedFoodIds.forEach((id: string) => deleteFoodEntry(id));
+    const previousDiary = foodDiaryRef.current;
+    const nextDiary = removeSelectedFoodEntries(previousDiary, selectedFoodIds);
+    if (nextDiary !== previousDiary) {
+      foodDiaryRef.current = nextDiary;
+      setFoodDiary(nextDiary);
+      persistFoodDiary?.(nextDiary);
+    }
     clearFoodSelection();
-  }, [clearFoodSelection, deleteFoodEntry, scopeKey, selectedFoodIds]);
+  }, [clearFoodSelection, persistFoodDiary, scopeKey, selectedFoodIds, setFoodDiary]);
 
   return {
     selectedFoodIds,

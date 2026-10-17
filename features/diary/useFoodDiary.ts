@@ -67,34 +67,32 @@ export function useFoodDiary({
     repository.writeJson('diary', nextDiary.map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS));
   }, [repository]);
 
+  const commitFoodDiary = useCallback((nextDiary: FoodItem[]) => {
+    foodDiaryRef.current = nextDiary;
+    setFoodDiary(nextDiary);
+    persistFoodDiary(nextDiary);
+  }, [persistFoodDiary, setFoodDiary]);
+
   const addFoodToDiary = useCallback((item: FastLogItem) => {
     if (!userId) return;
     const entryForState = createFoodDiaryEntry(item, Date.now().toString(), inferMealType);
-    const entryForStorage = sanitizeFoodEntryForStorage(entryForState);
+    const nextDiary = [entryForState, ...foodDiaryRef.current].slice(0, MAX_DIARY_ITEMS);
+    commitFoodDiary(nextDiary);
+    const dayKey = toLocalDayKey(entryForState.timestamp);
+    if (dayKey) setSelectedDiaryDayKey(dayKey);
 
-    setFoodDiary((previousDiary) => {
-      const nextState = [entryForState, ...previousDiary].slice(0, MAX_DIARY_ITEMS);
-      const nextStorage = [entryForStorage, ...previousDiary.map(sanitizeFoodEntryForStorage)]
-        .slice(0, MAX_DIARY_ITEMS);
-      repository?.writeJson('diary', nextStorage);
-      const dayKey = toLocalDayKey(entryForState.timestamp);
-      if (dayKey) setSelectedDiaryDayKey(dayKey);
-      return nextState;
-    });
-
-    setFoodHistory((previousHistory) => {
-      const nextHistory = appendFoodHistory(previousHistory, item);
-      repository?.writeJson('history', nextHistory);
-      return nextHistory;
-    });
+    const nextHistory = appendFoodHistory(foodHistoryRef.current, item);
+    foodHistoryRef.current = nextHistory;
+    setFoodHistory(nextHistory);
+    repository?.writeJson('history', nextHistory);
 
     const hasAiPhoto = Boolean(item.photo || item.photoThumb);
     void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
-      foodDiaryCount: foodDiary.length + 1,
+      foodDiaryCount: nextDiary.length,
       hasAiPhoto,
     });
     return entryForState;
-  }, [checkAchievements, foodDiary.length, inferMealType, repository, setFoodHistory, setSelectedDiaryDayKey, userId]);
+  }, [checkAchievements, commitFoodDiary, inferMealType, repository, setFoodHistory, setSelectedDiaryDayKey, userId]);
 
   const addFoodToDiaryGuarded = useCallback(async (
     item: FastLogItem,
@@ -134,14 +132,13 @@ export function useFoodDiary({
 
   const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
     if (!userId) return;
-    setFoodDiary((previousDiary) => {
-      const nextDiary = previousDiary.map((entry) => entry.id === id ? { ...entry, ...patch } : entry);
-      persistFoodDiary(nextDiary);
-      const updated = nextDiary.find((entry) => entry.id === id);
-      if (updated?.timestamp) setSelectedDiaryDayKey(toLocalDayKey(updated.timestamp));
-      return nextDiary;
-    });
-  }, [persistFoodDiary, setSelectedDiaryDayKey, userId]);
+    const previousDiary = foodDiaryRef.current;
+    if (!previousDiary.some(entry => entry.id === id)) return;
+    const nextDiary = previousDiary.map((entry) => entry.id === id ? { ...entry, ...patch } : entry);
+    commitFoodDiary(nextDiary);
+    const updated = nextDiary.find((entry) => entry.id === id);
+    if (updated?.timestamp) setSelectedDiaryDayKey(toLocalDayKey(updated.timestamp));
+  }, [commitFoodDiary, setSelectedDiaryDayKey, userId]);
 
   const updateFoodEntryGuarded = useCallback(async (
     id: string,
@@ -176,12 +173,11 @@ export function useFoodDiary({
 
   const deleteFoodEntry = useCallback((id: string) => {
     if (!userId) return;
-    setFoodDiary((previousDiary) => {
-      const nextDiary = previousDiary.filter((entry) => entry.id !== id);
-      persistFoodDiary(nextDiary);
-      return nextDiary;
-    });
-  }, [persistFoodDiary, userId]);
+    const previousDiary = foodDiaryRef.current;
+    const nextDiary = previousDiary.filter((entry) => entry.id !== id);
+    if (nextDiary.length === previousDiary.length) return;
+    commitFoodDiary(nextDiary);
+  }, [commitFoodDiary, userId]);
 
   return {
     persistFoodDiary,
