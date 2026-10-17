@@ -22,6 +22,21 @@ staging, device/OAuth lifecycle или отдельную установку с�
 production server. Точный PR CI для опубликованного code SHA и old/new bundle
 barrier остаются открытыми; merge/deploy не выполнялись.
 
+## P0.7 — old/new state writer barrier, 17.10.2026
+
+Добавлен browser acceptance для настоящих pinned old/current bundles на одном
+origin и в одном browser context. Старый sender получает `426` от HTTP fixture;
+его settings intent остаётся в IndexedDB как failed `http-426`, а сервер не
+принимает запись. После обновления через ожидающий Service Worker текущая сборка
+повторяет ту же операцию с protocol v2, сервер принимает её, а запись исчезает
+из outbox. Сценарий прошёл 7/7 Playwright-проектов без retries; весь
+`legacy-outbox-migration.spec.ts` прошёл 3/3 на desktop Chromium.
+
+Проверка использует synthetic API и не подтверждает Cloudflare/D1 или staging.
+Полный CI run #1517 проверяет опубликованный родительский SHA `8787465`; новый
+E2E входит только в последующий commit. Staging и защищённый `main` остаются
+открытыми.
+
 ## P0.5 — late enhanced recipe-photo analysis after same-account login, 17.10.2026
 
 Добавлен E2E для `foodphoto_enhanced` в Recipes: пока ответ удержан, аккаунт A

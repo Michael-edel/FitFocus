@@ -1219,8 +1219,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:
   пока первая запись отправляется, независимая правка сохраняется конфликтом;
   [E2E](e2e/storage-durability.spec.ts) прошёл 3/3 desktop-браузера.
-- [ ] Проверить границу old/new writers; завершить гарантии для profile и
-  остальных API callbacks.
+- [x] Проверить границу old/new bundles для `/api/state`: старая сборка получает
+  `426` и сохраняет durable intent; после same-origin Service Worker update
+  текущая сборка повторно отправляет тот же ключ с protocol v2. Новый E2E прошёл
+  7/7 Playwright-проектов (`workers=1,retries=0`), весь файл — 3/3 на desktop
+  Chromium.
+- [ ] Завершить гарантии для profile и остальных API callbacks.
   Добавлен браузерный сценарий двух вкладок без Web Locks: параллельно
   сохраняются отметка плана и настройки в разные ключи. Проверка прошла в CI
   HEAD `a8f3219` (run 38634080772); остальные критерии P0.6 и writers остаются открытыми.
@@ -1235,7 +1239,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   прогон всех трёх account-сценариев прошёл 9/9 в desktop Chromium, Firefox и
   WebKit без retries (`workers=1,retries=0`); полный CI `455cb01` завершился
   success.
-  Это не закрывает общий P0.6: остаются old/new writers и остальные callbacks.
+  Это не закрывает общий P0.6: остаются profile и остальные API callbacks.
 
 Готово, когда нет отправок чужих данных и потери записи из-за перезаписи
 всей очереди одной вкладкой.

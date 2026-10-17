@@ -533,3 +533,93 @@ test('resolves a legacy profile through its guarded profile CAS endpoint', async
     await server.close();
   }
 });
+
+test('holds a state write from the old bundle at protocol 426 and retries it with the current bundle', async ({ context }, info) => {
+  test.setTimeout(120_000);
+  const settingsKey = `fitfocus_data_${account}_settings`;
+  const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
+  const oldPage = await context.newPage();
+  const currentPage = await context.newPage();
+  await Promise.all([
+    captureAppDatabase(oldPage, 'old-state-writer', []),
+    captureAppDatabase(currentPage, 'current-state-writer', []),
+  ]);
+  try {
+    const standalone = info.project.name.includes('-pwa');
+    await mockApp(oldPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await openApp(oldPage, `${server.origin}/#settings`);
+    await expect(oldPage).toHaveTitle(/FitFocus/);
+    await expect.poll(() => oldPage.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? '')).toContain('/sw.js');
+    const oldScript = await oldPage.locator('script[type="module"][src]').getAttribute('src');
+    expect(oldScript).toBeTruthy();
+
+    // Isolate the durable writer from the separate legacy-queue import gate.
+    // The durable records created during startup remain in IndexedDB.
+    await oldPage.evaluate(sourceKey => localStorage.setItem(sourceKey, '[]'), legacySourceKey);
+    await expect.poll(async () => {
+      const state = await migrationState(oldPage, settingsKey);
+      return state.metadata.find(entry => entry.id === 'active-session')?.pause ?? null;
+    }).toBeNull();
+    await oldPage.getByRole('button', { name: /^Светлая/ }).click();
+    await expect(oldPage.getByRole('button', { name: /^Светлая/ })).toHaveClass(/border-indigo-500\/40/);
+    // Startup can enqueue a background legacy mirror after the first cleanup;
+    // clear that test-only source again and wake the durable sender explicitly.
+    await oldPage.evaluate(sourceKey => {
+      localStorage.setItem(sourceKey, '[]');
+      window.dispatchEvent(new Event('focus'));
+    }, legacySourceKey);
+    await expect.poll(() => server.counts.stateProtocolRejected).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const state = await migrationState(oldPage, settingsKey);
+      return state.operations.find(operation => operation.key === settingsKey)?.status;
+    }).toBe('failed');
+
+    const rejectedState = await migrationState(oldPage, settingsKey);
+    const rejectedOperation = rejectedState.operations.find(operation => operation.key === settingsKey);
+    expect(rejectedState.value).toContain('"theme":"light"');
+    expect(rejectedOperation).toMatchObject({ key: settingsKey, status: 'failed', reason: 'http-426' });
+    expect(server.counts.currentStatePutAccepted).toBe(0);
+    expect(server.stateWriteKeys).not.toContain(settingsKey);
+
+    server.release();
+    await mockApp(currentPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await openApp(currentPage, `${server.origin}/?release=next#settings`);
+    await expect(currentPage).toHaveTitle(/FitFocus/);
+    await expect.poll(() => currentPage.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state ?? null)).toBe('installed');
+
+    const update = currentPage.getByRole('button', { name: 'Обновить приложение', exact: true });
+    await expect(update).toBeVisible();
+    const currentNavigation = currentPage.waitForEvent('framenavigated', frame => frame === currentPage.mainFrame());
+    const oldNavigation = oldPage.waitForEvent('framenavigated', frame => frame === oldPage.mainFrame());
+    await update.click({ noWaitAfter: true });
+    await Promise.all([currentNavigation, oldNavigation]);
+    await Promise.all([currentPage.waitForLoadState('load'), oldPage.waitForLoadState('load')]);
+    const currentScript = await currentPage.locator('script[type="module"][src]').getAttribute('src');
+    expect(currentScript).toBeTruthy();
+    expect(currentScript).not.toBe(oldScript);
+    await expect(oldPage.locator('script[type="module"][src]')).toHaveAttribute('src', currentScript!);
+
+    await expect.poll(async () => {
+      const state = await migrationState(currentPage, settingsKey);
+      return state.operations.find(operation => operation.key === settingsKey)?.status;
+    }).toBe('failed');
+    await currentPage.locator('[data-state-notice-region] details summary').click();
+    const recovery = currentPage.getByRole('region', { name: 'Настройки' });
+    const retry = recovery.getByRole('button', { name: 'Повторить отправку', exact: true });
+    await expect(retry).toBeVisible();
+    await retry.click();
+
+    await expect.poll(() => server.stateWriteKeys).toContain(settingsKey);
+    await expect.poll(async () => (await migrationState(currentPage, settingsKey)).operations.filter(operation => operation.key === settingsKey)).toHaveLength(0);
+    expect(server.counts.currentStatePutAccepted).toBeGreaterThan(0);
+    expect((await migrationState(currentPage, settingsKey)).value).toContain('"theme":"light"');
+    await info.attach('old-new-state-protocol-barrier', { body: JSON.stringify({
+      settingsKey, rejectedState: { value: rejectedState.value, operation: rejectedOperation },
+      protocolRejections: server.counts.stateProtocolRejected,
+      acceptedStateKeys: server.stateWriteKeys, counts: server.counts,
+    }), contentType: 'application/json' });
+  } finally {
+    await Promise.allSettled([oldPage.close(), currentPage.close()]);
+    await server.close();
+  }
+});

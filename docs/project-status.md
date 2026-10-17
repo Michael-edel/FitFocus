@@ -13,8 +13,12 @@ P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b1055
 старый writer получает 426 до body parsing и мутации, а текущий sender сохраняет
 операцию на protocol-паузе. На этой ревизии локально прошли 1333 unit-теста,
 typechecks, production build, API/auth-scope guards и native-SW migration E2E
-2/2 на desktop Chromium. Полный CI точной опубликованной ревизии ожидает push;
-staging и проверка отдельной старой сборки остаются открытыми.
+2/2 на desktop Chromium. Follow-up old/new state writer E2E прошёл 7/7
+Playwright-проектов; весь `legacy-outbox-migration.spec.ts` — 3/3 на Chromium.
+Полный CI опубликованного SHA `8787465` — [run #1517](https://github.com/Michael-edel/FitFocus/actions/runs/39011802641) —
+ещё выполняется и не содержит новый локальный E2E; точный CI этого follow-up
+появится после commit/push. Staging и интеграция в защищённый `main` остаются
+открытыми.
 
 Последний полный PR CI на опубликованном кодовом HEAD
 [`7ff579d`](https://github.com/Michael-edel/FitFocus/commit/7ff579d051f7431cd0ba23cb1599863a467b0cc3) —
