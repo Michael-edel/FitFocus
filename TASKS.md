@@ -100,7 +100,9 @@ bundle проверена на семи Playwright-проектах и прош�
     и анонимный `/api/me` — 200, `/api/bootstrap`, `/api/profile`, `/api/state`
     и `/api/push/status` — 401 без redirect/cookie. Только GET, OAuth start не
     вызывался; D1, `APP_URL`, provider callbacks и реальные edge-настройки
-    остаются непроверенными.
+    остаются непроверенными. Дополнительный Chromium browser smoke подтвердил
+    отрисовку landing page без pageerror, app console errors и записывающих запросов;
+    зафиксировано одно предупреждение о `ambient-light-sensor` policy feature.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.

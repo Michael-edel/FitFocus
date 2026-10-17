@@ -122,6 +122,12 @@ account proof и записи:
 - `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401
   `UNAUTH`, без redirect и `Set-Cookie`.
 
+Свежий Chromium browser smoke загрузил эту же страницу с HTTP 200: `title=FitFocus`,
+главная страница отрисована, `pageerror` и ошибки приложения не возникли,
+POST/PUT/PATCH/DELETE не отправлялись. Браузер вывел одно предупреждение о
+неизвестной ему директиве `ambient-light-sensor` в `Permissions-Policy` из
+`public/_headers`; оно не сопровождалось ошибкой страницы или приложения.
+
 Публичный preview обслуживает точный текущий branch bundle, сохраняет origin и
 ожидаемо закрывает перечисленные API без сессии. OAuth start не вызывался.
 Проверка не подтверждает D1 binding/изоляцию, `APP_URL`, OAuth callback,

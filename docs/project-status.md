@@ -22,8 +22,11 @@ identity прошли. В WebKit-only фильтр E2E добавлен толь
 Read-only smoke branch preview подтвердил страницу и точный bundle SHA `0af2c30`
 на `fix-durable-outbox.fitfocus.pages.dev`: `/api/env` и анонимный `/api/me`
 ответили 200, bootstrap/profile/state/push-status — 401 без redirect или cookie.
-OAuth start и любые записывающие методы не вызывались. Это не подтверждает D1,
-`APP_URL`, provider callbacks, конфигурацию Cloudflare edge или изоляцию staging;
+Chromium открыл landing page с `title=FitFocus`; `pageerror`, ошибки приложения
+и записывающие запросы отсутствовали. Браузер сообщил одно предупреждение о
+`ambient-light-sensor` в `Permissions-Policy`. OAuth start и любые записывающие
+методы не вызывались. Это не подтверждает D1, `APP_URL`, provider callbacks,
+конфигурацию Cloudflare edge или изоляцию staging;
 подробности в [контракте preview](staging-origin.md).
 
 E2E follow-up
