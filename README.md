@@ -6,7 +6,7 @@ FitFocus — прогрессивное веб-приложение для пи�
 интеграции с поддерживаемыми сервисами. Полный перечень функций и их статус —
 в [PRODUCT.md](PRODUCT.md).
 
-Обновлено: 15.10.2026. Текущий этап — стабилизация хранения пользовательских
+Обновлено: 18.10.2026. Текущий этап — стабилизация хранения пользовательских
 данных, синхронизации между вкладками и восстановления после ошибок. Проверенный
 статус, точные ревизии и ограничения собраны в [docs/project-status.md](docs/project-status.md).
 
@@ -73,37 +73,14 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний локальный кодовый коммит `6bcbdd2` удерживает fallback AI-план скрытым,
-пока профиль не сохранён в IndexedDB outbox; точный CI этого SHA ещё ожидает push.
-
-Кодовый SHA [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3)
-привязывает logout и удаление аккаунта в текущем клиенте к исходному login
-proof, чтобы старый callback не изменил другую сессию. На этом SHA server-side
-legacy logout ещё оставался открытым. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
-требует proof для `/api/logout`; запросы без полного proof получают 401 до cookie
-lookup/revoke. Guards и три typecheck прошли в изолированном контейнере; точный
-CI текущего HEAD ещё не подтверждён. Предыдущий PR run
-[`38706186324`](https://github.com/Michael-edel/FitFocus/actions/runs/38706186324)
-на `01bfa05` нашёл один ошибочный test fixture; исправление [`478fc58`](https://github.com/Michael-edel/FitFocus/commit/478fc58)
-отправляет в этом тесте запрос без proof. Реальный OAuth, staging, полный P0.5/P0.8
-lifecycle и выпуск в main остаются открытыми. См. [контракт](docs/account-lifecycle-session.md),
-[статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
-
-Предыдущая кодовая ревизия [`562e20d`](https://github.com/Michael-edel/FitFocus/commit/562e20d210695328bcd17309f9836a2e10c68935)
-добавила проверку задержанного ответа личной генерации недельного меню при
-смене аккаунта. Изменённый callback spec прошёл 15/15 на desktop Chromium,
-Firefox и WebKit; новый сценарий — 3/3, typecheck прошёл. Полный [CI run
-38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)
-завершился success, включая E2E и rollback/CAS.
-
-Последний завершённый полный CI до Firefox-finish исправления проверил HEAD
-[a9e3096](https://github.com/Michael-edel/FitFocus/commit/a9e309696be85414a6ca96697beec3d91c19718c),
-[run 38540109329](https://github.com/Michael-edel/FitFocus/actions/runs/38540109329):
-1132 unit, 535 browser passed / 79 skipped, audit, typechecks, build и rollback/CAS
-прошли. Два Firefox weekly-menu теста прошли автоматический retry; причина и
-локальный follow-up записаны в статусе проекта.
-
-Локальный follow-up для двух flaky-сценариев прошёл: целевые повторы — 10/10, полные затронутые specs — 10/10 на Android PWA Chrome и 8/8 на iPhone PWA, `npm run typecheck` — успешно. Полный [CI run `38466153712`](https://github.com/Michael-edel/FitFocus/actions/runs/38466153712) для кодовой ревизии [`a99ab7b`](https://github.com/Michael-edel/FitFocus/commit/a99ab7beea367df76154faa53747aed2aa473d98) отменён после отправки следующего документационного коммита; актуальное состояние проверок текущего HEAD смотрите на [странице checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks). Cloudflare preview успешен, но это не production-релиз. Подробности и оставшиеся критерии — в [статусе проекта](docs/project-status.md), [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).
-
-PR #93 не слит в `main`. OAuth, настоящая миграция на staging, реальные устройства
-и выпуск проверяются отдельно по [чек-листу релиза](RELEASE_CHECKLIST.md).
+Текущий кодовый HEAD — [`4c03b68`](https://github.com/Michael-edel/FitFocus/commit/4c03b68743626744f867db64fd276cdffffa6388),
+отправлен в `fix/durable-outbox`. Он исправляет два E2E отказа предыдущего CI:
+сохранение пользовательской настройки во время access-паузы и incidental
+state-запрос в profile fixture. Локально прошли 1362 unit, все три typecheck,
+production build и 12/12 повторов целевых Android Chrome/iPhone Safari сценариев.
+Точный [CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
+прошёл audit, schema/privacy/auth/API checks, unit, typecheck и build; полная
+E2E-матрица выполняется. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
+задач; staging, выпуск и интеграция PR #93 в защищённую `main` не подтверждены.
+Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
+[журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

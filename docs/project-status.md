@@ -3,19 +3,15 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
-outbox подключён; продолжается P0.8-перенос пользовательских действий. Коммит
-`87ba8b9` прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и
-build в точном [PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020),
-но E2E завершился с двумя отказами (987 passed, 299 skipped): Android Chrome
-показал storage error вместо access-pause notice, а iPhone Safari получил
-access-control error от incidental state request в profile flow.
-Текущие локальные правки используют отдельный `writeLocalJson` с local session
-guard для настроек, подавляют storage-error для намеренно отменённого stale generated write и
-закрывают incidental state writes в profile fixture. Два сценария прошли 12/12
-на Android Chrome/iPhone Safari без retries; затронутые unit — 32/32, полный
-unit suite — 1362/1362, root/domain/storage strict typecheck, production build
-и diff check прошли. Новый exact CI ещё ожидает публикации.
+`fix/state-generations`. Текущий этап — стабилизация P0, в частности P0.8:
+IndexedDB durable outbox подключён, продолжается перенос и lifecycle-приёмка
+пользовательских действий. Последний опубликованный HEAD — `4c03b68`; точный
+[PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
+прошёл audit, schema/privacy/auth/API checks, 1362 unit tests, root/domain/storage
+strict typecheck и production build; полный E2E выполняется. Исправленные два
+сценария Android Chrome/iPhone Safari прошли локально 12/12 без retries;
+затронутые unit — 32/32. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
+задач; staging, выпуск и интеграция в защищённую `main` открыты.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые

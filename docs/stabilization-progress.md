@@ -6357,6 +6357,8 @@ server session и epoch. Guarded generated write, отозванный смен�
 теперь подтверждает background state writes. После изменений целевые два
 сценария прошли 12/12 на Android Chrome/iPhone Safari без retries; затронутые
 unit — 32/32, полный unit suite — 1362/1362, root/domain/storage strict
-typecheck, production build и `git diff --check` прошли. Новый SHA и точный CI
-ещё не подтверждены; полный
-P0.8/P0.9, staging, выпуск и интеграция в защищённую `main` остаются открыты.
+typecheck, production build и `git diff --check` прошли. Коммит `4c03b68`
+опубликован в `fix/durable-outbox`; точный [PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
+прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и build; полный
+E2E ещё выполняется. Полный P0.8/P0.9, staging, выпуск и интеграция в защищённую
+`main` остаются открыты.
