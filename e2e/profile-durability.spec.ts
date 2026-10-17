@@ -501,6 +501,45 @@ test('a failed manual measurement commit reports the error and keeps the entered
   expect(errors).toEqual([]);
 });
 
+test('dashboard weight stays available after a failed durable commit and survives reload for retry', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#dashboard');
+  const weight = page.getByLabel('Вес сегодня');
+  await expect(weight).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string; resource?: string };
+      if (this.name === 'outbox' && operation?.key === key && operation.resource === 'profile') {
+        throw new DOMException('Injected dashboard weight quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  await weight.fill('88.5');
+  await page.getByRole('button', { name: 'Сохранить вес' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить вес.' })).toBeVisible();
+  await expect(weight).toHaveValue('88.5');
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+
+  await page.reload();
+  await expect(page).toHaveURL(/#dashboard$/);
+  await expect(weight).toHaveValue('88.5');
+  await page.getByRole('button', { name: 'Сохранить вес' }).click();
+  await expect.poll(async () => JSON.parse((await saved(page)).value!).weight).toBe(88.5);
+  await expect(weight).toHaveValue('');
+  const committed = await saved(page);
+  expect(committed.operations).toHaveLength(1);
+  expect(committed.operations[0]).toMatchObject({ resource: 'profile', status: 'pending', value: expect.stringContaining('"weight":88.5') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить вес.' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('a failed wearable provider commit is visible and leaves the profile unchanged', async ({ page }) => {
   const { errors, mutations } = await setup(page, 'normal');
   await openApp(page, '/#settings');

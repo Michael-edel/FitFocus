@@ -6176,3 +6176,25 @@ Firefox и WebKit с `workers=1`, `retries=0`; прежняя page error не п
 его точный CI проверяется отдельно после push. Результаты этого раздела пока
 локальные; staging, полный P0.8/P0.9, release acceptance и интеграция в защищённую
 `main` остаются открытыми.
+
+## P0.8 — durable dashboard weight and weekly-report writer, 17.10.2026
+
+Dashboard cleared the entered weight immediately after starting `persistUser`,
+before IndexedDB had confirmed the profile outbox transaction. The callback now
+awaits the durable commit, checks the captured account/session, and clears the
+draft or triggers the achievement only after success. A storage failure leaves
+the value visible, reports the failure, and allows retry after reload.
+
+The browser regression exposed a related weekly-report error after reload:
+each run created a new repository with a random writer ID, so its update was
+correctly rejected as `independent-snapshot` when the same report still had a
+pending outbox operation. Weekly reports now use a stable logical writer and
+continue only that writer's active causal chain; other writers still conflict.
+Concurrent report generation is serialized in the current page, and report
+updates merge from the current durable value instead of rewriting a stale array.
+
+Full unit suite passed **1355/1355**, dashboard weight/reload/retry passed **7/7**
+desktop/mobile/PWA Playwright projects, root/domain/storage typechecks, production
+build, and `git diff --check` passed locally. The exact CI for this change starts
+after push; PR #93 remains draft, and the rest of P0.8/P0.9, staging, release
+acceptance, and integration into protected `main` remain open.

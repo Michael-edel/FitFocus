@@ -1273,17 +1273,27 @@ const App: React.FC = () => {
     try { e.target.value = ''; } catch {}
   }, [processPhotoFiles]);
 
-const logWeight = useCallback(() => {
-    if (!currentUser || !newWeight) return;
+const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> => {
+    if (!currentUser || !newWeight) return 'invalid';
     const result = recordDashboardWeight(currentUser, newWeight);
-    if (result.kind === 'invalid') return;
-    persistUser(result.profile);
-    setNewWeight('');
-    void checkAchievements('log_weight', {
-      weightHistoryCount: result.profile.weightHistory?.length || 0,
-      latestWeight: result.weight,
-    });
-  }, [checkAchievements, currentUser, newWeight, persistUser]);
+    if (result.kind === 'invalid') return 'invalid';
+    if (!loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
+    try {
+      const operation = await persistUser(result.profile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setNewWeight('');
+      void checkAchievements('log_weight', {
+        weightHistoryCount: result.profile.weightHistory?.length || 0,
+        latestWeight: result.weight,
+      });
+      return 'saved';
+    } catch {
+      return 'failed';
+    }
+  }, [checkAchievements, currentUser, isCurrentProfileSession, loginReadGuard, newWeight, persistUser, setNewWeight]);
 
   const {
     coachCard,

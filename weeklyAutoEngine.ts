@@ -81,9 +81,37 @@ function isWeeklyStoredReport(value: unknown): value is WeeklyStoredReport {
     && (value.aiText === undefined || typeof value.aiText === 'string');
 }
 
-async function saveWeeklyReports(repository: UserStateRepository, reports: WeeklyStoredReport[], guard?: OutboxCommitGuard): Promise<void> {
-  const operation = await repository.writeJson('weekly_reports', reports.slice(-4), guard);
-  if (operation.status === 'conflicted') throw new Error('WEEKLY_REPORT_STORAGE_CONFLICT');
+function isWeeklyStoredReports(value: unknown): value is WeeklyStoredReport[] {
+  return Array.isArray(value) && value.every(isWeeklyStoredReport);
+}
+
+const weeklyReportQueues = new Map<string, Promise<void>>();
+
+async function serializeWeeklyReportWork<T>(userId: string, work: () => Promise<T>): Promise<T> {
+  const previous = weeklyReportQueues.get(userId) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.catch(() => undefined).then(() => gate);
+  weeklyReportQueues.set(userId, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await work();
+  } finally {
+    release();
+    if (weeklyReportQueues.get(userId) === tail) weeklyReportQueues.delete(userId);
+  }
+}
+
+async function updateWeeklyReports(
+  repository: UserStateRepository,
+  update: (reports: WeeklyStoredReport[]) => WeeklyStoredReport[],
+  guard?: OutboxCommitGuard,
+): Promise<WeeklyStoredReport[]> {
+  const result = await repository.updateJson('weekly_reports', [], isWeeklyStoredReports, update, guard);
+  if (result.operation?.status === 'conflicted') {
+    throw new Error(`WEEKLY_REPORT_STORAGE_CONFLICT:${result.operation.reason ?? 'unknown'}`);
+  }
+  return result.value;
 }
 
 function commitSessionKey(guard?: OutboxCommitGuard): string | undefined {
@@ -95,14 +123,14 @@ function commitSessionKey(guard?: OutboxCommitGuard): string | undefined {
 /**
  * Гарантирует наличие отчёта для текущей недели с AI-интерпретацией.
  */
-export async function ensureWeeklyReportWithAI(
+async function ensureWeeklyReportWithAIUnlocked(
   userId: string,
   weeklyData: WeeklyIntelligenceResult,
   generateAI: () => Promise<string>,
   commitGuard?: OutboxCommitGuard,
 ): Promise<{ report: WeeklyStoredReport; isNew: boolean }> {
   const currentWeek = getWeekKey();
-  const repository = new UserStateRepository(userId);
+  const repository = new UserStateRepository(userId, { writerId: `fitfocus:weekly-reports:${userId}` });
   const assertCurrent = async () => {
     if (!commitGuard) return;
     if (!commitGuard.canCommit() || !await repository.isReadSessionCurrent(commitGuard.readGuard) || !commitGuard.canCommit()) {
@@ -119,9 +147,16 @@ export async function ensureWeeklyReportWithAI(
     const existing = reports[existingIdx];
     // Обновляем данные WIS если они значительно изменились, но не перегенерируем AI текст без нужды
     if (Math.abs(existing.data.wis - weeklyData.wis) > 5) {
-      existing.data = weeklyData;
       await assertCurrent();
-      await saveWeeklyReports(repository, reports, commitGuard);
+      const updated = await updateWeeklyReports(repository, (current) => {
+        const index = current.findIndex((report) => report.weekKey === currentWeek);
+        if (index === -1 || Math.abs(current[index].data.wis - weeklyData.wis) <= 5) return current;
+        const next = [...current];
+        next[index] = { ...current[index], data: weeklyData };
+        return next;
+      }, commitGuard);
+      await assertCurrent();
+      return { report: updated.find((report) => report.weekKey === currentWeek) ?? existing, isNew: false };
     }
     return { report: existing, isNew: false };
   }
@@ -158,13 +193,17 @@ export async function ensureWeeklyReportWithAI(
       aiText
     };
 
-    const updated = [...reports, newReport];
-    await saveWeeklyReports(repository, updated, commitGuard);
+    const updated = await updateWeeklyReports(repository, (current) => {
+      if (current.some((report) => report.weekKey === currentWeek)) return current;
+      return [...current, newReport].slice(-4);
+    }, commitGuard);
     await assertCurrent();
     localStorage.removeItem(lastAttemptKey(userId));
     clearInFlight(userId, runId);
 
-    return { report: newReport, isNew: true };
+    const savedReport = updated.find((report) => report.weekKey === currentWeek);
+    if (!savedReport) throw new Error('WEEKLY_REPORT_STORAGE_CONFLICT');
+    return { report: savedReport, isNew: savedReport.createdAt === newReport.createdAt };
   } catch (error: unknown) {
     // Не ставим cooldown для "мягких" ситуаций (дубль/нет ключа и т.п.)
     const msg = String(error instanceof Error ? error.message : error || "").toLowerCase();
@@ -175,4 +214,13 @@ export async function ensureWeeklyReportWithAI(
     if (runId) clearInFlight(userId, runId);
     throw error;
   }
+}
+
+export function ensureWeeklyReportWithAI(
+  userId: string,
+  weeklyData: WeeklyIntelligenceResult,
+  generateAI: () => Promise<string>,
+  commitGuard?: OutboxCommitGuard,
+): Promise<{ report: WeeklyStoredReport; isNew: boolean }> {
+  return serializeWeeklyReportWork(userId, () => ensureWeeklyReportWithAIUnlocked(userId, weeklyData, generateAI, commitGuard));
 }

@@ -1521,6 +1521,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
     typecheck-профиля, production build и `git diff --check` прошли. Код
     [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f);
     exact CI ожидает push. Остальной P0.8 и полный lifecycle остаются открыты.
+  - [x] Сохранять вес с dashboard только после durable profile commit; при
+    ошибке оставить введённое значение и дать повторить его после reload.
+    Недельный отчёт продолжает собственную ожидающую запись через новый
+    repository instance по стабильному writer ID; конкурирующий writer по-прежнему
+    остаётся конфликтом. Регрессия dashboard прошла 7/7 desktop/mobile/PWA;
+    unit 1355/1355, root/domain/storage typechecks и production build прошли.
+    Точный CI нового SHA запускается после push; полный P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

@@ -40,12 +40,14 @@ export function userStateStorageKey(userId: string, stateKey: UserStateKey): str
 export class UserStateRepository {
   private readonly outbox: DurableOutbox;
   private readonly writerId: string;
+  private readonly resumeOwnPendingWrites: boolean;
   private readonly observations = new Map<string, { revision: number; confirmedVersion: number; parentOpId?: string }>();
   private readonly pending = new Map<string, Promise<unknown>>();
 
   constructor(readonly accountId: string, options: { outbox?: DurableOutbox; writerId?: string } = {}) {
     this.outbox = options.outbox ?? new DurableOutbox();
     this.writerId = options.writerId ?? crypto.randomUUID();
+    this.resumeOwnPendingWrites = options.writerId !== undefined;
   }
 
   key(stateKey: UserStateKey): string {
@@ -156,10 +158,21 @@ export class UserStateRepository {
     return this.track(key, this.serialize(key, async () => {
       const snapshot = await this.outbox.snapshot(this.accountId, key, stateKey === 'profile');
       const previous = this.observations.get(key);
+      let parentOpId = previous?.revision === snapshot.revision && previous.parentOpId
+        ? previous.parentOpId
+        : undefined;
+      if (!parentOpId && this.resumeOwnPendingWrites) {
+        const sameWriterHead = (await this.outbox.list(this.accountId)).find((operation) =>
+          operation.key === key
+          && operation.revision === snapshot.revision
+          && operation.writerId === this.writerId
+          && (operation.status === 'pending' || operation.status === 'sending'));
+        parentOpId = sameWriterHead?.opId;
+      }
       this.observations.set(key, {
         revision: snapshot.revision,
         confirmedVersion: snapshot.confirmedVersion,
-        ...(previous?.revision === snapshot.revision && previous.parentOpId ? { parentOpId: previous.parentOpId } : {}),
+        ...(parentOpId ? { parentOpId } : {}),
       });
 
       let raw = snapshot.value;

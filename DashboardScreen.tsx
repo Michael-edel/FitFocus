@@ -28,6 +28,8 @@ type RefeedSuggestion =
   | { type: 'adjust'; stepsExtra: number }
   | { type: 'none' };
 
+type DashboardWeightSaveResult = 'saved' | 'invalid' | 'failed';
+
 type AdaptationStatus = {
   label: string;
   color: string;
@@ -64,7 +66,7 @@ type DashboardScreenProps = {
   setPdfIncludeMealLog: React.Dispatch<React.SetStateAction<boolean>>;
   newWeight: string;
   setNewWeight: React.Dispatch<React.SetStateAction<string>>;
-  logWeight: () => void;
+  logWeight: () => Promise<DashboardWeightSaveResult>;
   plateau: boolean;
   adaptationIndex: number;
   adaptationStatus: AdaptationStatus;
@@ -174,6 +176,24 @@ export default function DashboardScreen({
       : refeedSuggestion.type === 'adjust'
         ? `Мягкая адаптация: +${refeedSuggestion.stepsExtra} шагов`
         : 'Динамика в норме';
+  const [weightSaveError, setWeightSaveError] = React.useState<string | null>(null);
+  const [weightSaving, setWeightSaving] = React.useState(false);
+  const weightSavingRef = React.useRef(false);
+  const saveWeight = async () => {
+    if (weightSavingRef.current) return;
+    weightSavingRef.current = true;
+    setWeightSaving(true);
+    setWeightSaveError(null);
+    try {
+      const result = await logWeight();
+      if (result === 'failed') setWeightSaveError('Не удалось сохранить вес. Значение осталось в поле — попробуйте ещё раз.');
+    } catch {
+      setWeightSaveError('Не удалось сохранить вес. Значение осталось в поле — попробуйте ещё раз.');
+    } finally {
+      weightSavingRef.current = false;
+      setWeightSaving(false);
+    }
+  };
   const currentWeightLabel = typeof currentUser?.weight === 'number' ? `${currentUser.weight.toFixed(1)} кг` : '—';
   const measurementsCount = currentUser?.measurementsHistory?.length ?? 0;
   const progressPhotosCount = currentUser?.progressPhotos?.length ?? 0;
@@ -227,11 +247,12 @@ export default function DashboardScreen({
             </div>
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full">
               <div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20">
-                <input type="number" aria-label="Вес сегодня" placeholder="90.0" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} />
+                <input type="number" aria-label="Вес сегодня" placeholder="90.0" disabled={weightSaving} className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0 disabled:opacity-60" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveWeight(); }} />
                 <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">кг</span>
               </div>
-              <button onClick={logWeight} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
+              <button type="button" onClick={() => void saveWeight()} disabled={weightSaving} aria-busy={weightSaving} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-wait shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
             </div>
+            {weightSaveError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-300">{weightSaveError}</p>}
           </div>
         </div>
       </header>

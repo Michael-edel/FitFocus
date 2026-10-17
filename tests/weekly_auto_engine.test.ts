@@ -75,6 +75,46 @@ describe('weekly AI reports', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('serializes concurrent report generation and commits only one current-week report', async () => {
+    let resolveAI!: (text: string) => void;
+    const aiText = new Promise<string>((resolve) => { resolveAI = resolve; });
+    const firstGenerate = vi.fn(() => aiText);
+    const secondGenerate = vi.fn().mockResolvedValue('Дублирующий отчёт');
+
+    const first = ensureWeeklyReportWithAI('user-1', weeklyData, firstGenerate);
+    await vi.waitFor(() => expect(localStorage.getItem('ff_weekly_ai_inflight_user-1')).not.toBeNull());
+    const second = ensureWeeklyReportWithAI('user-1', weeklyData, secondGenerate);
+    resolveAI('Хорошая динамика.');
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult).toMatchObject({ isNew: true, report: { aiText: 'Хорошая динамика.' } });
+    expect(secondResult).toEqual({ isNew: false, report: firstResult.report });
+    expect(firstGenerate).toHaveBeenCalledTimes(1);
+    expect(secondGenerate).not.toHaveBeenCalled();
+    expect(await loadWeeklyReports('user-1')).toEqual([firstResult.report]);
+    expect((await new DurableOutbox().list('user-1'))).toHaveLength(1);
+  });
+
+  it('continues its own pending report write after a new repository instance is created', async () => {
+    await ensureWeeklyReportWithAI('user-1', weeklyData, vi.fn().mockResolvedValue('Хорошая динамика.'));
+    const outbox = new DurableOutbox();
+    const original = (await outbox.list('user-1'))[0];
+    const updatedData = { ...weeklyData, wis: 91 };
+
+    const result = await ensureWeeklyReportWithAI('user-1', updatedData, vi.fn());
+    const operations = await outbox.list('user-1');
+    const update = operations.find((operation) => operation.type === 'put' && operation.value.includes('"wis":91'));
+
+    expect(result.report.data.wis).toBe(91);
+    expect(result.isNew).toBe(false);
+    expect(operations).toHaveLength(2);
+    expect(update).toMatchObject({
+      status: 'pending',
+      writerId: original?.writerId,
+      parentOpId: original?.opId,
+    });
+  });
+
   it('does not commit a report or apply cooldown after its captured login expires', async () => {
     const outbox = new DurableOutbox();
     const readGuard = (await outbox.acceptReadSession('user-1', 'a'.repeat(64), 0))!;
