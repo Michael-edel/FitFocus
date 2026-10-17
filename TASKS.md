@@ -481,7 +481,10 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   versionchange/close и стадии transaction/read в failure attachment. На HEAD
   `404b3da` Firefox `pwa-update.spec.ts` прошёл ещё 5/5 последовательных
   запусков (`workers=1,retries=0`); timeout снова не воспроизведён, поэтому
-  первопричина остаётся открытой.
+  первопричина остаётся открытой. На коде `bb94957` сценарий реального
+  обновления PWA повторно прошёл 1/1 в `desktop-firefox` без retries; это не
+  устанавливает причину исторического timeout. Полный точный CI #1573 ещё
+  выполняется.
 
 - [x] Разобрать исторический native WebKit pageerror по trace CI `5b90249`:
   ошибка привязана к отмене семейного PUT при reload после `controllerchange`,

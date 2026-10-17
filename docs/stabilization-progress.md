@@ -6267,3 +6267,11 @@ iPhone PWA прошли **3/3**, workers=1, retries=0. Это подтвержд
 нынешней отмены GET `/api/profile` при reload, но не устанавливает источник
 старого исторического сообщения; соответствующий диагностический пункт в
 `TASKS.md` остаётся открытым. Этот прогон локальный и не заменяет точный CI.
+
+## Firefox PWA update timeout recheck: 17.10.2026
+
+Сценарий `real service worker waits for an explicit update and preserves durable
+family intent` на коде `bb94957` прошёл **1/1** в `desktop-firefox`,
+`workers=1,retries=0`. Timeout на ожидании сохранённого состояния не возник;
+один успешный повтор не устанавливает причину исторического timeout и не
+закрывает диагностический пункт. Точный полный CI #1573 ещё выполняется.
