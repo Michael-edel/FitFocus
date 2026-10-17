@@ -915,10 +915,9 @@ const App: React.FC = () => {
   const applyRemoteProfile = useCallback((profile: UserProfile) => {
     loginAttemptRef.current += 1;
     const refreshed = resetUsageIfNewPeriod(profile);
-    const displayed = refreshed.aiPlan ? refreshed : { ...refreshed, aiPlan: buildFallbackAiPlan(refreshed) };
     setUserProfileRepository(new UserStateRepository(profile.id));
-    setCurrentUser(displayed);
-    setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? displayed : user)));
+    setCurrentUser(refreshed);
+    setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? refreshed : user)));
     hasPendingProfileChangesRef.current = false;
     setProfileSyncState('idle');
     setProfileSyncNote('Профиль обновлён из облака.');
@@ -1440,8 +1439,17 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.aiPlan) return;
-    persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
-  }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
+    if (hasProfileDraftRef.current) return;
+    if (loginReadGuard && loginReadGuard.accountId !== currentUser.id) return;
+    const writeGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+      readGuard: { ...loginReadGuard },
+      canCommit: isCurrentProfileSession,
+    } : undefined;
+    void persistUser(previous => previous.aiPlan ? previous : {
+      ...previous,
+      aiPlan: buildFallbackAiPlan(previous),
+    }, writeGuard, { durable: true }).catch(() => undefined);
+  }, [currentUser, hasProfileDraft, isCurrentProfileSession, loginReadGuard, persistUser]);
 
   const courseWriteGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
     localCommitGuard: {

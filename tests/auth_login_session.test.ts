@@ -12,11 +12,17 @@ describe('prepareLoginSession', () => {
   });
   it('keeps an existing AI plan and filters the local profile list to the verified owner', async () => {
     const withPlan = { ...user, aiPlan: { title: 'existing' } } as typeof user;
-    const buildFallbackPlan = vi.fn();
     const prepared = await prepareLoginSession(withPlan, { sub: user.id }, { ...basic,
-      hydrateSession: async () => ({ ...hydrated(withPlan), allUsers: [userProfile('other')] }), buildFallbackPlan });
+      hydrateSession: async () => ({ ...hydrated(withPlan), allUsers: [userProfile('other')] }) });
     expect(prepared.currentUser.aiPlan).toEqual({ title: 'existing' });
-    expect(prepared.hydrated.allUsers).toEqual([withPlan]); expect(buildFallbackPlan).not.toHaveBeenCalled();
+    expect(prepared.hydrated.allUsers).toEqual([withPlan]);
+  });
+  it('keeps a missing fallback plan absent until the caller durably commits it', async () => {
+    const withoutPlan = { ...user, aiPlan: undefined };
+    const prepared = await prepareLoginSession(withoutPlan, { sub: user.id }, { ...basic,
+      hydrateSession: async () => hydrated(withoutPlan) });
+    expect(prepared.currentUser.aiPlan).toBeUndefined();
+    expect(prepared.hydrated.allUsers).toEqual([withoutPlan]);
   });
   it('does not activate a session after hydration was cancelled', async () => {
     let current = true;

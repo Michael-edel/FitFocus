@@ -1,4 +1,3 @@
-import { buildFallbackAiPlan } from "../../aiPlanFallback";
 import { hydrateSessionFromCloud, type HydratedSession } from "../../sessionHydration";
 import type { UserHabit, UserProfile } from "../../types";
 import type { OutboxReadGuard } from '../../storage/durableOutbox';
@@ -9,7 +8,6 @@ type LoginSessionDeps = {
   initialHabits: UserHabit[];
   resetUsageIfNewTime: (user: UserProfile) => UserProfile;
   hydrateSession?: typeof hydrateSessionFromCloud;
-  buildFallbackPlan?: typeof buildFallbackAiPlan;
   isCurrentSession?: () => boolean;
   readGuard?: OutboxReadGuard;
 };
@@ -17,7 +15,6 @@ type LoginSessionDeps = {
 export type PreparedLoginSession = {
   currentUser: UserProfile;
   hydrated: HydratedSession;
-  shouldPersistFallbackPlan: boolean;
 };
 
 /** Prepares a cloud-backed session while keeping local data scoped to the verified identity. */
@@ -27,7 +24,6 @@ export async function prepareLoginSession(
   deps: LoginSessionDeps,
 ): Promise<PreparedLoginSession> {
   const hydrateSession = deps.hydrateSession ?? hydrateSessionFromCloud;
-  const buildFallbackPlan = deps.buildFallbackPlan ?? buildFallbackAiPlan;
   const identity = authUser?.sub?.trim();
   const isCurrent = deps.isCurrentSession ?? (() => true);
   if (!isCurrent()) throw new Error('LOGIN_SESSION_CHANGED');
@@ -42,10 +38,8 @@ export async function prepareLoginSession(
   if (hydrated.currentUser.id !== identity) throw new Error('PROFILE_ACCOUNT_MISMATCH');
   const normalizedCurrentUser = hydrated.currentUser;
   hydrated.allUsers = [normalizedCurrentUser];
-  const shouldPersistFallbackPlan = !normalizedCurrentUser.aiPlan;
   return {
-    currentUser: shouldPersistFallbackPlan ? { ...normalizedCurrentUser, aiPlan: buildFallbackPlan(normalizedCurrentUser) } : normalizedCurrentUser,
+    currentUser: normalizedCurrentUser,
     hydrated,
-    shouldPersistFallbackPlan,
   };
 }

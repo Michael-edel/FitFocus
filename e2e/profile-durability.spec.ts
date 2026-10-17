@@ -4,7 +4,7 @@ import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 const account = 'google-e2e-sub'; const sid = 'a'.repeat(64);
 const key = `fitfocus_data_${account}_profile`;
 const profile = { ...buildMockProfile(), id: account, version: 2 };
-type ProfileSnapshot = typeof profile & { wearableProvider?: string; wearableEnabled?: boolean };
+type ProfileSnapshot = Omit<typeof profile, 'aiPlan'> & { aiPlan?: typeof profile.aiPlan; wearableProvider?: string; wearableEnabled?: boolean };
 const scope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
   'X-FitFocus-Bootstrap-Protocol': '1', 'X-FitFocus-Bootstrap-Guard': '1',
   'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
@@ -143,6 +143,48 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
   // Verify it is rendered and restored without imposing a desktop viewport layout.
   await expect(name).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('profile-local-reload.png') });
+});
+
+test('fallback AI plan stays hidden when its durable profile commit fails, then recovers after reload', async ({ page }) => {
+  const failKey = '__fitfocus_e2e_fail_fallback_profile_write';
+  const profileWithoutPlan: ProfileSnapshot = { ...profile, aiPlan: undefined };
+  const { errors, mutations } = await setup(page, 'normal', undefined, [], profileWithoutPlan);
+  await page.addInitScript(({ failureKey, profileKey }) => {
+    if (localStorage.getItem(failureKey) === null) localStorage.setItem(failureKey, '1');
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string; resource?: string };
+      if (localStorage.getItem(failureKey) === '1' && this.name === 'outbox'
+        && operation?.key === profileKey && operation.resource === 'profile') {
+        throw new DOMException('Injected fallback profile quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, { failureKey: failKey, profileKey: key });
+
+  await openApp(page, '/#plan');
+  await expect(page.getByText('План ещё подготавливается', { exact: true })).toBeVisible();
+  const initialSnapshot = await saved(page);
+  const initialProfile = initialSnapshot.value ? JSON.parse(initialSnapshot.value) as { aiPlan?: unknown } : null;
+  expect(initialProfile?.aiPlan).toBeUndefined();
+  expect(initialSnapshot.operations).toEqual([]);
+  await expect.poll(async () => {
+    const snapshot = await saved(page);
+    const value = snapshot.value ? JSON.parse(snapshot.value) as { aiPlan?: unknown } : null;
+    return { aiPlan: value?.aiPlan ?? null, operations: snapshot.operations.length };
+  }).toEqual({ aiPlan: null, operations: 0 });
+  expect(mutations).toEqual([]);
+
+  await page.evaluate(failureKey => localStorage.setItem(failureKey, '0'), failKey);
+  await page.reload();
+  await expect(page.getByText('План ещё подготавливается', { exact: true })).toHaveCount(0);
+  await expect.poll(async () => {
+    const snapshot = await saved(page);
+    const value = snapshot.value ? JSON.parse(snapshot.value) as { aiPlan?: { model?: string } } : null;
+    return value?.aiPlan?.model ?? null;
+  }).toBe('local-fallback');
+  await expect.poll(() => mutations.length).toBe(1);
+  expect(errors).toEqual([]);
 });
 
 test('profile outbox resumes the same operation after BFCache with a newly verified session', async ({ page }) => {
