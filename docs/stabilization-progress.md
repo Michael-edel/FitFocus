@@ -1,5 +1,18 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний retry персонального плана после same-account login, 17.10.2026
+
+В `ai-callback-account-switch.spec.ts` добавлена проверка удержанного AI retry
+персонального плана: аккаунт A входит повторно с новой `serverSessionId`, после
+чего освобождается ответ прежнего входа. Проверяются неизменность профиля,
+managed values и outbox, отсутствие позднего плана в обеих вкладках и отсутствие
+повторных profile/state writes и achievements. Runtime-код не менялся; дефекта
+в этом сценарии не выявлено.
+
+E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+общий `npm run typecheck` и `git diff --check` прошли. Новый сценарий входит в
+точный CI после push. Общий P0.5 и остальные callbacks остаются открытыми.
+
 ## P0.4/P0.8 — побочные эффекты вне React state updaters в дневнике, 17.10.2026
 
 В `useFoodDiary` и `useFoodSelection` persistence вызывался внутри functional

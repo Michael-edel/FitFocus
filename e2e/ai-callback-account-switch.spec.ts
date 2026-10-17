@@ -687,6 +687,91 @@ test('held personal-plan retry cannot update either profile after another tab si
   }
 });
 
+test('held personal-plan retry cannot update the profile after same-account reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'personal_plan');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await waitForAccountOutboxIdle(page, accountA);
+  await page.evaluate(({ key, accountId }) => {
+    localStorage.setItem(key, JSON.stringify({ feature: 'personal_plan', type: 'plan', userId: accountId, actionId: 'seeded-same-session-plan' }));
+  }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  const retry = page.getByRole('button', { name: 'Retry: Plan', exact: true });
+  await expect(retry).toBeVisible({ timeout: 5_000 });
+  await retry.click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  const valuesBefore = valuesFor(beforeReauthentication, accountA);
+  const operationsBefore = operationsFor(beforeReauthentication, accountA);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const newSessionProfile = rawValue(beforeOldResponse, profileKey(accountA.id));
+    const newSessionValues = valuesFor(beforeOldResponse, accountA);
+    const newSessionOperations = operationsFor(beforeOldResponse, accountA);
+    expect(beforeReauthentication.activeSession?.sessionEpoch).not.toBe(beforeOldResponse.activeSession?.sessionEpoch);
+    expect(newSessionProfile).toBe(profileBefore);
+    expect(newSessionValues).toEqual(valuesBefore);
+    expect(newSessionOperations).toEqual(operationsBefore);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, profileKey(accountA.id))).toBe(newSessionProfile);
+    expect(valuesFor(afterOldResponse, accountA)).toEqual(newSessionValues);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(newSessionOperations);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'personal_plan')).toEqual([{
+      feature: 'personal_plan', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Поздний план A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Поздний план A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('held plateau retry cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };

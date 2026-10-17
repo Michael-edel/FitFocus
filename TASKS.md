@@ -1132,6 +1132,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   Chromium/Firefox/WebKit. Полный unit suite 1318/1318, три typecheck и build
   прошли локально. Точный CI опубликованного HEAD ещё нужно проверить; общий
   P0.5 и остальные callbacks остаются открытыми.
+  - [x] Удержать retry персонального плана аккаунта A, повторно войти в тот же
+    аккаунт с новой server session и освободить старый AI-ответ. Профиль, значения,
+    outbox и экран новой сессии не принимают устаревший план; не создаются новые
+    profile/state writes или achievements. E2E прошёл 3/3 на desktop
+    Chromium/Firefox/WebKit (`workers=1,retries=0`); typecheck и diff check прошли.
+    Точный CI этой ревизии ожидает push.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —
