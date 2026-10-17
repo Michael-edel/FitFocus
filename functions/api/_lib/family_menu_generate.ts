@@ -1,5 +1,6 @@
 import { nowMs, uuid } from './db';
-import { requireFamilyOwner } from './family_access';
+import { requireFamilyMember, requireFamilyOwner } from './family_access';
+import { familyMenuStateReady } from './family_menu_state';
 import { isFamilyMenuWeekStart } from './family_menu';
 import { aggregateShoppingRows, normalizeShoppingIngredient } from './ingredients';
 import { isJsonObject, safeJsonParse } from './json';
@@ -53,7 +54,8 @@ type WeeklyMenuRow = { id?: string };
 
 export type FamilyMenuGenerateResult =
   | { kind: 'invalid-week' }
-  | { kind: 'generated'; weekStart: string; menuId: string; familyId: string; menu: unknown; memberCount: number };
+  | { kind: 'state-required' }
+  | { kind: 'generated'; weekStart: string; menuId: string; familyId: string; menu: unknown; memberCount: number; preview?: true };
 
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/ё/g, 'е').trim();
@@ -138,12 +140,17 @@ function formatMealPortion(ingredients: { name: string; grams: number }[], kcal:
 }
 
 /** Generates and atomically persists a shared family menu and each member's portions. */
-export async function generateFamilyMenu({ db, userId, weekStart }: { db: D1Database; userId: string; weekStart: string }): Promise<FamilyMenuGenerateResult> {
+export async function generateFamilyMenu({ db, userId, weekStart, preview, familyId }: {
+  db: D1Database; userId: string; weekStart: string; preview?: boolean; familyId?: string;
+}): Promise<FamilyMenuGenerateResult> {
   if (!isFamilyMenuWeekStart(weekStart)) return { kind: 'invalid-week' };
-  const family = await requireFamilyOwner(db, userId);
+  const canonical = await familyMenuStateReady(db);
+  if (canonical && (!preview || !familyId) || preview && !canonical) return { kind: 'state-required' };
+  const family = preview && familyId ? await requireFamilyMember(db, familyId, userId) : await requireFamilyOwner(db, userId);
+  if (family.owner_user_id !== userId) throw new Error('FORBIDDEN');
   await requireFamilyPlan(db, userId);
   const now = Math.floor(nowMs() / 1000), shared = buildDeterministicSharedMenu();
-  const existing = await db.prepare('SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1').bind(family.id, weekStart).first<WeeklyMenuRow>();
+  const existing = preview ? null : await db.prepare('SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1').bind(family.id, weekStart).first<WeeklyMenuRow>();
   const menuId = existing?.id || uuid();
   const members = await db.prepare(`SELECT user_id, goal, sex, age, height_cm, weight_kg, activity
           , restrictions_json FROM family_members WHERE family_id = ? AND status = 'active' AND is_active = 1`).bind(family.id).all<FamilyMemberRow>();
@@ -190,6 +197,8 @@ export async function generateFamilyMenu({ db, userId, weekStart }: { db: D1Data
     shoppingListItems,
     shoppingList: shoppingListItems.map((item) => `${item.name} — ${item.grams} г`),
   };
+  if (preview) return { kind: 'generated', weekStart, menuId: `${family.id}:${weekStart}`, familyId: family.id,
+    menu: familyWeeklyMenu, memberCount: memberList.length, preview: true };
   const menuJson = JSON.stringify(familyWeeklyMenu);
   const statements: D1PreparedStatement[] = [
     existing ? db.prepare('UPDATE weekly_menus SET menu_json=?, created_by_user_id=?, created_at=? WHERE id=?').bind(menuJson, userId, now, menuId)

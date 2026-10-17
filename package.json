@@ -4,6 +4,9 @@
   "version": "2.0.0-architecture.0",
   "type": "module",
   "scripts": {
+    "release:build": "node scripts/release-artifact.mjs",
+    "release:verify": "node scripts/release-artifact.mjs --verify",
+    "release:check": "node scripts/check-release-rollback.mjs",
     "dev": "vite",
     "predev": "node scripts/generate-build-info.mjs",
     "build": "vite build",
@@ -40,7 +43,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.0",
@@ -50,7 +53,8 @@
     "typescript": "^5.5.4",
     "vite": "^6.4.3",
     "vite-plugin-pwa": "^0.21.2",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "wrangler": "4.149.0"
   },
   "overrides": {
     "dompurify": "3.4.16",

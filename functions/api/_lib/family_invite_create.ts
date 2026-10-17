@@ -1,5 +1,5 @@
 import { nowMs, randomCode } from './db';
-import { requireFamilyOwner } from './family_access';
+import { requireFamilyOwnerForTarget } from './family_access';
 import { isJsonObject } from './json';
 import { requireFamilyPlan } from './plans';
 
@@ -7,7 +7,7 @@ type MutationResult = { meta?: { changes?: number }; changes?: number };
 
 export type FamilyInviteCreateResult =
   | { ok: true; code: string; expiresAt: number }
-  | { ok: false; error: 'INVITE_GENERATION_FAILED' };
+  | { ok: false; error: 'BAD_TARGET' | 'INVITE_GENERATION_FAILED' };
 
 function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
@@ -19,17 +19,20 @@ export function normalizeFamilyInviteTtlHours(value: unknown): number {
   return Math.max(1, Math.min(24 * 14, ttlHours));
 }
 
-/** Issues a time-limited invite for the caller's active family. */
+/** Issues a time-limited invite for the caller-selected family after checking exact membership and ownership. */
 export async function createFamilyInvite({
   db,
   userId,
+  familyId,
   body,
 }: {
   db: D1Database;
   userId: string;
+  familyId: unknown;
   body: unknown;
 }): Promise<FamilyInviteCreateResult> {
-  const family = await requireFamilyOwner(db, userId);
+  if (typeof familyId !== 'string' || !familyId.trim()) return { ok: false, error: 'BAD_TARGET' };
+  const family = await requireFamilyOwnerForTarget(db, familyId.trim(), userId);
   await requireFamilyPlan(db, userId);
 
   const payload = isJsonObject(body) ? body : null;

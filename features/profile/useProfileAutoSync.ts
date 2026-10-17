@@ -9,21 +9,29 @@ export function getProfileAutoSyncMode({
   currentUser,
   cloudUserId,
   suppressNextSync,
+  hasPendingChanges,
+  hasUncommittedDraft = false,
 }: {
   currentUser: UserProfile | null;
   cloudUserId: string | undefined;
   suppressNextSync: boolean;
+  hasPendingChanges: boolean;
+  hasUncommittedDraft?: boolean;
 }): ProfileAutoSyncMode {
   if (!currentUser) return 'none';
   if (!cloudUserId) return 'offline';
-  return suppressNextSync ? 'skip-once' : 'schedule';
+  if (suppressNextSync) return 'skip-once';
+  if (hasUncommittedDraft) return 'none';
+  return hasPendingChanges ? 'schedule' : 'none';
 }
 
 /** Debounces profile writes while preserving the local-only and one-shot suppression paths. */
 export function useProfileAutoSync({
   currentUser,
   cloudUserId,
+  hasUncommittedDraft,
   suppressNextFullProfileSyncRef,
+  hasPendingProfileChangesRef,
   pushProfileToCloud,
   setProfileSyncState,
   setProfileSyncNote,
@@ -32,7 +40,9 @@ export function useProfileAutoSync({
 }: {
   currentUser: UserProfile | null;
   cloudUserId: string | undefined;
+  hasUncommittedDraft: boolean;
   suppressNextFullProfileSyncRef: MutableRefObject<boolean>;
+  hasPendingProfileChangesRef: MutableRefObject<boolean>;
   pushProfileToCloud: (profile: UserProfile) => Promise<void>;
   setProfileSyncState: Dispatch<SetStateAction<ProfileSyncState>>;
   setProfileSyncNote: Dispatch<SetStateAction<string | null>>;
@@ -46,6 +56,8 @@ export function useProfileAutoSync({
       currentUser,
       cloudUserId,
       suppressNextSync: suppressNextFullProfileSyncRef.current,
+      hasPendingChanges: hasPendingProfileChangesRef.current,
+      hasUncommittedDraft,
     });
     if (mode === 'none') return;
     if (mode === 'offline') {
@@ -67,5 +79,5 @@ export function useProfileAutoSync({
         saveTimerRef.current = null;
       }
     };
-  }, [cloudUserId, currentUser, debounceMs, pushProfileToCloud, setLastProfileSyncAt, setProfileSyncNote, setProfileSyncState, suppressNextFullProfileSyncRef]);
+  }, [cloudUserId, currentUser, debounceMs, hasPendingProfileChangesRef, hasUncommittedDraft, pushProfileToCloud, setLastProfileSyncAt, setProfileSyncNote, setProfileSyncState, suppressNextFullProfileSyncRef]);
 }

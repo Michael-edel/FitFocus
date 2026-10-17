@@ -16,6 +16,8 @@ import { isRecord, parseJson } from './safeJson';
 
 type ProgressArchiveScreenProps = {
   currentUser: UserProfile | null;
+  allowCachedUiStateRestore?: boolean;
+  isCurrentSession: () => boolean | Promise<boolean>;
   weightHistory: UserProfile['weightHistory'];
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
@@ -60,6 +62,8 @@ const toDateKey = (iso?: string | null) => toLocalDayKey(iso);
 
 export default function ProgressArchiveScreen({
   currentUser,
+  allowCachedUiStateRestore = true,
+  isCurrentSession,
   weightHistory,
   measurementsHistory,
   progressPhotos,
@@ -80,6 +84,11 @@ export default function ProgressArchiveScreen({
   const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>(defaultOpenSections);
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      archiveSkipSaveRef.current = true;
+      setOpenSections(defaultOpenSections());
+      return;
+    }
     try {
       archiveSkipSaveRef.current = true;
       const raw = window.localStorage.getItem(storageKey);
@@ -99,13 +108,15 @@ export default function ProgressArchiveScreen({
       archiveSkipSaveRef.current = true;
       setOpenSections(defaultOpenSections());
     }
-  }, [storageKey]);
+  }, [allowCachedUiStateRestore, storageKey]);
 
   const toggleSection = (section: ArchiveSectionKey) => {
+    if (!allowCachedUiStateRestore) return;
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
   };
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) return;
     if (archiveSkipSaveRef.current) {
       archiveSkipSaveRef.current = false;
       return;
@@ -115,7 +126,7 @@ export default function ProgressArchiveScreen({
     } catch {
       // Ignore storage failures and keep the archive usable.
     }
-  }, [openSections, storageKey]);
+  }, [allowCachedUiStateRestore, openSections, storageKey]);
 
   const measurementsSorted = useMemo(
     () =>
@@ -188,8 +199,9 @@ export default function ProgressArchiveScreen({
   }, [waistDiff, weightDiff]);
 
   const exportArchivePdf = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !allowCachedUiStateRestore || !await isCurrentSession()) return;
     const { downloadProgressArchivePdf } = await import('./pdf');
+    if (!await isCurrentSession()) return;
     await downloadProgressArchivePdf({
       userName: currentUser.name || 'Пользователь',
       generatedAt: new Date().toLocaleString('ru-RU'),
@@ -216,7 +228,7 @@ export default function ProgressArchiveScreen({
       wearableMetricsUpdatedAt,
       summary: progressSummary,
       timelineItems: archiveTimeline.slice(0, 8),
-    });
+    }, { isCurrentSession });
   };
 
   const providerLabel = (provider: WearableProvider) => {

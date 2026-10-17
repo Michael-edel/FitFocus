@@ -1,13 +1,19 @@
 // Local backup/restore helpers. Volume state can live in IndexedDB, so both
 // browser storage layers are included in the portable JSON snapshot.
 
-import { listIndexedUserStateRaw, writeIndexedUserStateRaw } from './storage/indexedUserState';
+import { restoreIndexedUserStateBackup } from './storage/indexedUserState';
+import {
+  createDurableStateBackup, getBackupIndexedValues, restoreDurableStateBackup,
+  type DurableStateBackup,
+} from './storage/durableStateBackup';
+import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
 
 export type BackupPayload = {
   version: number;
   createdAt: string;
   localStorage: Record<string, string>;
   indexedDb?: Record<string, string>;
+  durableState?: DurableStateBackup;
 };
 
 export type BackupFileHandle = {
@@ -36,7 +42,11 @@ function isBackupPayload(value: unknown): value is BackupPayload {
   return isRecord(value)
     && isStringRecord(value.localStorage)
     && (value.indexedDb === undefined || isStringRecord(value.indexedDb))
-    && typeof value.version === "number"
+    && typeof value.version === 'number'
+    && Number.isSafeInteger(value.version)
+    && value.version >= 1
+    && value.version <= 3
+    && (value.version !== 3 || isRecord(value.durableState))
     && typeof value.createdAt === "string";
 }
 
@@ -50,6 +60,7 @@ function safeJsonParse(text: string): unknown | null {
 
 function isFitFocusBackupKey(key: string): boolean {
   return (
+    key === LEGACY_QUEUE_SOURCE_KEY ||
     key.startsWith('fitfocus_') ||
     key.startsWith('ff_') ||
     key.startsWith('fitfocus_data_') ||
@@ -59,43 +70,53 @@ function isFitFocusBackupKey(key: string): boolean {
 
 export async function createBackupPayload(): Promise<BackupPayload> {
   const data: Record<string, string> = {};
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k) continue;
-      if (!isFitFocusBackupKey(k)) continue;
-      const v = localStorage.getItem(k);
-      if (v == null) continue;
-      data[k] = v;
-    }
-  } catch {
-    // ignore
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !isFitFocusBackupKey(k)) continue;
+    const v = localStorage.getItem(k);
+    if (v != null) data[k] = v;
   }
 
+  const durableState = await createDurableStateBackup();
+
   return {
-    version: 2,
+    version: 3,
     createdAt: new Date().toISOString(),
     localStorage: data,
-    indexedDb: await listIndexedUserStateRaw(),
+    // Keep the old volume-state field so v1/v2 clients can still recover values.
+    indexedDb: getBackupIndexedValues(durableState),
+    durableState,
   };
 }
 
 export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolean; error?: string }> {
+  const localStorageBefore = new Map<string, string | null>();
+  let localStorageWasChanged = false;
   try {
     if (!isBackupPayload(payload)) return { ok: false, error: 'Invalid payload' };
 
-    const ls = payload.localStorage;
-    for (const [k, v] of Object.entries(ls)) {
-      if (typeof k !== 'string') continue;
-      if (typeof v !== 'string') continue;
-      if (!isFitFocusBackupKey(k)) continue;
-      try { localStorage.setItem(k, v); } catch {}
+    const entries = Object.entries(payload.localStorage).filter(([key]) => isFitFocusBackupKey(key));
+    for (const [key] of entries) localStorageBefore.set(key, localStorage.getItem(key));
+    for (const [key, value] of entries) {
+      localStorage.setItem(key, value);
+      localStorageWasChanged = true;
     }
-    for (const [key, value] of Object.entries(payload.indexedDb || {})) {
-      await writeIndexedUserStateRaw(key, value);
+
+    if (payload.version === 3) {
+      await restoreDurableStateBackup(payload.durableState);
+    } else if (!await restoreIndexedUserStateBackup(payload.indexedDb || {})) {
+      throw new Error('Не все данные удалось восстановить: хранилище недоступно или запись защищена очередью изменений.');
     }
     return { ok: true };
   } catch (error: unknown) {
+    if (localStorageWasChanged) {
+      for (const [key, previous] of localStorageBefore) {
+        try {
+          if (previous === null) localStorage.removeItem(key);
+          else localStorage.setItem(key, previous);
+        } catch { /* Report the original failure; the IDB restore itself is transactional. */ }
+      }
+    }
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to apply backup' };
   }
 }

@@ -1,6 +1,6 @@
 # Проверка и выпуск FitFocus
 
-Обновлено: 09.10.2026. Это шаблон следующего выпуска, а не отчёт о пройденных
+Обновлено: 12.10.2026. Это шаблон следующего выпуска, а не отчёт о пройденных
 проверках. Для релиза записать ветку, полный SHA, PR, URL CI и адрес среды.
 Область текущей документации: [карта](docs/README.md).
 
@@ -11,6 +11,75 @@
 - [ ] Для исправления есть проверка воспроизводившегося дефекта.
 - [ ] Обновлены задачи, решения и затронутые API/storage-контракты.
 - [ ] Указаны изменения формата, старые клиенты и порядок миграции.
+- [ ] Перед выпуском клиента с [AI/items guard](docs/ai-session-guard.md)
+  серверные capabilities и обязательный отказ без парного scope, при смене
+  account/session проверены на staging. Старые bundles без proof получают 401;
+  проверить обновление клиента до rollout и фактическую регистрацию/меню.
+- [ ] Для персонального меню проверены атомарный profile/projection commit,
+  quota/409, восстановление той же операции после reload, отсутствие личного
+  items POST, timeout/retry и реальный lifecycle страницы. Mock событий
+  pagehide/pageshow не заменяет BFCache на целевом браузере.
+- [ ] На staging подтверждены личные покупки через profile CAS/SQL-проекцию
+  и семейное меню/покупки через family/week CAS и durable `familyMenu` outbox.
+  Это задаёт порядок этих ресурсов; для остальных writers требуется отдельная
+  проверка их версий, очереди и побочных эффектов.
+- [ ] Для [достижений](docs/achievement-session.md) сервер публикует независимую
+  `achievementSync: { protocol: 1, guard: 1 }` до выпуска нового клиента.
+  Проверены scoped GET/POST, смена cookie, новый вход того же аккаунта и
+  отказ до прикладных эффектов. Старые bundles без proof получают 401; проверить
+  обновление клиента и реальный unlock до rollout.
+- [ ] Для [Checkout и смены тарифа](docs/billing-session.md) оба endpoints
+  требуют парный proof и отклоняют старые unscoped bundles с 401 до side effects.
+  Проверить обновление клиента, смену аккаунта и Stripe return на staging.
+- [ ] Выдача [мобильного bearer-токена](docs/wearable-sync.md) требует proof;
+  старый Settings bundle получает 401. Проверить свежую выдачу и установку на
+  целевом устройстве после обновления клиента.
+- [ ] Для [Huawei Health](docs/huawei-health-session.md) status/start/sync/
+  disconnect требуют парный proof и отклоняют старые запросы с 401 до body и
+  прикладных D1/provider действий. Callback проверяет подписанный OAuth state и nonce.
+  Проверить обновление Settings bundle, реальный OAuth, смену login и возврат
+  из BFCache на staging и целевом устройстве.
+- [ ] Для [поддержки](docs/support-session.md) пользовательские и admin
+  endpoints, включая `GET /api/support/attachment`, требуют парный
+  account/session proof; старые bundles без него
+  получают 401 до разбора тела и прикладных запросов. Проверить обновление
+  клиента, создание/ответ пользователя, чтение/изменение тикетов и открытие
+  вложений из admin панели с проверкой scope на staging.
+- [ ] `POST /api/logout_all` требует полный proof до отзыва всех сессий и
+  истечения cookie; старый AdminScreen bundle получает 401. На staging проверить
+  успешный выход всех устройств и отказ без/с неполным proof без side effects.
+- [ ] `POST /api/logout` требует полный proof; без/с неполным proof сервер
+  отвечает 401 до revoke, а успешный или поздний ответ не очищает cookie нового
+  входа. Проверить обычный и повторный logout после обновления старого bundle.
+- [ ] `GET /api/export` требует полный account/session proof до чтения экспортируемых
+  данных; проверить 401 для отсутствующей/частичной/чужой пары, 403 без beta
+  access, scope markers и `no-store` при успешном экспорте на staging. Обновить
+  любые внешние клиенты: вызовы без proof теперь отклоняются.
+- [ ] Все [`/api/admin/*`](API_CONTRACTS.md) требуют полный account/session
+  proof до D1-проверки admin-роли и admin-session side effects. Старые bundles
+  без proof получают guarded 401; проверить обновление панели и ролевые операции.
+- [ ] Для [`/api/state` и `/api/profile`](API_CONTRACTS.md) все GET/PUT/PATCH/
+  DELETE handlers требуют парный account/session proof и отвечают 401 старым
+  bundles без него. Проверить обновление клиента, pending/outbox writes,
+  profile refresh и CAS/state write на staging.
+- [ ] Очередь достижений сохраняет исходный login proof и завершается при
+  logout/pagehide/истечении lifetime; поздний GET не отменяет подтверждённый unlock.
+  Реальный BFCache проверен отдельно. Временная очередь и best-effort счётчики
+  не объявлены гарантированной доставкой событий после offline/reload.
+- [ ] Для [семейных запросов](docs/family-session.md) серверный scope и
+  `familySync: { protocol: 1, guard: 1 }` выпущены до нового клиента.
+  На staging проверены отказ старых запросов без proof до side effects, чужая
+  cookie, новый login того же аккаунта, поздний ответ, отказ checkbox с
+  восстановлением и повтор после реального BFCache.
+- [ ] Для [Push](docs/push-session.md) все четыре API требуют свежий парный
+  account/session proof до чтения тела, D1 и отправки уведомлений. На staging
+  старые unscoped Settings/Service Worker запросы получают 401, а новый клиент
+  успешно читает статус и восстанавливает подписку после обновления и повторного
+  входа с новым server session proof.
+- [ ] На staging проверены семейный AI-путь `useFamilyMenu`, явная
+  family/week-привязка, CAS-запись через `familyMenu` outbox, reload/конфликт
+  и отказ старых writers после migration barrier. Session guard и отмена fetch
+  не объявлены атомарностью или гарантированной доставкой.
 
 Для изменения исполняемого кода запускать проверки из `package.json`
 и действующего `.github/workflows/ci.yml`:
@@ -36,6 +105,32 @@ schema/privacy. Для изменения только документации 
 ссылок, фактов и отсутствия случайных изменений кода; обязательный CI остаётся
 обязательным. Не переносить старые результаты тестов на новый SHA.
 
+## Дополнение: проекция личных покупок 0020
+
+- [x] Подготовлен отдельный CAS-сервер `dde4c71` с `RETURNING`, сохраняющий
+  прежний контракт покупок; локально прошли 952 unit, обязательные проверки,
+  build и переход 0019 → 0020 → проекция (30 HTTP).
+  [Версии, порядок и ограничения](docs/profile-cas-rollout.md).
+- [x] Подтверждён [CI подготовительного `c39904c`](https://github.com/Michael-edel/FitFocus/actions/runs/38196258543):
+  952 unit, 229 browser passed / 9 skips, success.
+- [ ] Подготовительный сервер выпущен на staging до triggers.
+  Старый `meta.changes === 1` после миграции не применяется.
+- [ ] После подготовительного сервера применена миграция 0020; сохранены legacy
+  строки, проверены оба triggers, откат SQL statement и `DB_MIGRATION_VERSION`.
+- [ ] Затем выпущен сервер проекции; новая capability проверена на staging
+  до нового клиента. Полный сервер проекции не запускается без таблицы 0020.
+- [ ] Проверены profile CAS → покупки/CSV, конкурентные версии, пустой снимок,
+  удаление меню, история недель и отказ устаревшего личного items POST.
+- [ ] Проверены старый/новый клиент и откат; reader только weekly_menu_items
+  не скрывает уже принятые канонические покупки. Таблица/legacy не удаляются.
+- [ ] Export/delete аккаунта охватывают personal_menu_projections;
+  семейный путь принят отдельно, без переноса гарантий личной проекции.
+
+Подробные [контракт и свидетельства](docs/personal-menu-projection.md),
+[ADR-007](docs/adr/ADR-007-personal-menu-projection.md). Эти пункты ещё
+требуют staging, кроме отмеченной локальной подготовки; Worker smoke
+не считается выполненным выпуском.
+
 ## GitHub CI
 
 - [ ] Проверки действительно запустились на SHA кандидата или его merge ref.
@@ -52,12 +147,40 @@ Actions, наличие workflow в нужной ветке и состояни�
 
 ## Staging и данные
 
+- [ ] Для [bootstrap/hydration](docs/bootstrap-hydration.md) сервер объявляет
+  `bootstrapSync: { protocol: 1, guard: 1 }`, требует account/session proof и
+  отдаёт 401 старым unscoped bundles до чтения данных. Новый клиент включается
+  после доступности этого контракта; проверить обновление bundle до rollout.
+  Проверены смена cookie между `/me` и bootstrap/state GET, поздний ответ
+  после logout/смены аккаунта, отказ доступа, неподдерживаемый протокол,
+  ограничение тела/времени, owned local fallback при временной недоступности
+  и повторное чтение одинакового снимка во второй вкладке.
 - [ ] Для P0.7 выполнены [условия выпуска поколений state](docs/state-generations.md#условия-выпуска-и-отката):
   миграция 0019 предшествует серверу; клиент понимает tombstones/409/ack;
   старые writers остановлены, поколения старых pending-операций не угаданы.
+- [ ] Для [profile sender](docs/profile-persistence.md) серверный guard и
+  `profileSync: { protocol: 1, guard: 1 }` в `/me` выпущены согласованно
+  до отправки новым клиентом. Проверены смена cookie между `/me` и GET/PUT,
+  scope ответа, ack-версия, 409, reload и quota; отсутствие capability
+  сохраняет операцию в protocol-паузе. Совместимость старых запросов
+  без заголовков не считается барьером старых writers.
+- [ ] Для [регистрации](docs/registration-persistence.md) invite guard и
+  `inviteSync: { protocol: 1, guard: 1 }` выпущены до нового клиента;
+  проверены смена cookie перед redeem, отказ старого клиента без proof,
+  потерянный ответ и повтор того же кода.
+  Проверены profile create с baseVersion=0, локальный commit до AI,
+  quota/rollback, auth-пауза и reload без OAuth-маркера.
+- [ ] Проверен [lifecycle sender](docs/state-sender.md#жизненный-цикл-страницы):
+  reload/закрытие отменяет запросы старой страницы, BFCache-возврат проверяет
+  сессию заново, обработчик прежнего аккаунта не запускает его после смены входа.
 - [ ] Подтверждены отдельный адрес среды, D1 binding и безопасные тестовые данные.
-- [ ] Preview не перенаправляет тест в production: проверить редирект
-  неканонических `*.pages.dev` в `index.tsx`.
+- [ ] В целевой preview-сборке сохранён её origin; клиент и edge-правила
+  не переводят тест в production. Клиентский redirect удалён и проверяется
+  локально; [контракт origin и настройки APP_URL/D1](docs/staging-origin.md).
+  - [x] Текущий branch preview `bb94957` развернут и проверен read-only GET
+    плюс Chromium: root/env/me — 200, защищённые GET — 401 без redirect/cookie;
+    UI остаётся на preview origin. Это не подтверждает D1/APP_URL/OAuth и не
+    закрывает staging gate.
 - [ ] Создана резервная копия затрагиваемых данных; восстановление проверено.
 - [ ] Миграция проверена на старой схеме и повторном запуске; schema/privacy
   охватывают новые данные, включая tombstones и миграционные записи.
@@ -93,3 +216,36 @@ Actions, наличие workflow в нужной ветке и состояни�
 
 Связанные документы: [TASKS](TASKS.md), [наблюдаемость](docs/observability.md),
 [ADR-005](docs/adr/ADR-005-durable-outbox.md).
+
+## Дополнительный gate семейного меню 0021 — 12.10.2026
+
+[Контракт](docs/family-menu-state.md), [ADR-008](docs/adr/ADR-008-family-menu-generation.md).
+Новая реализация пока не подтверждает выпуск.
+
+- [ ] Проверить legacy JSON на staging и подготовить восстановление corrupt
+  canonical; источник и резервную копию сохранить.
+- [ ] Развернуть совместимый сервер до 0021; до миграции familyMenu capability
+  отсутствует, новый state endpoint не принимает запись.
+- [ ] Применить 0021 и проверить таблицу, четыре SQL-barrier triggers,
+  capability, scoped GET/PUT, own RETURNING version и старые writers=409.
+- [ ] Повторить actual old/new bundle smoke в staging с SW/PWA: v2 sender не
+  получает новый resource, v3 сохраняет pending/conflict/ledger/quarantine/auth-fence.
+  Локально Chromium/mock API/SW blocked прошли 2/2 на `3baac01` и `405238b`.
+  Следующий компонент [явного PWA-обновления](docs/pwa-updates.md) локально
+  прошёл семь real-SW/native HTTP сценариев на семи конфигурациях.
+  Это синтетический API и эмуляция standalone; staging gate остаётся открытым.
+- [ ] Проверить standalone/PWA, реальный lifecycle/OAuth и повтор после сбоя.
+- [ ] Подготовить и принять [rollback artifact](docs/release-artifacts.md)
+  с canonical reader и v3-aware sender. Прежняя база `574de76` собрана,
+  но два полных прогона дали 26/28; она не принята. Новый архив `98d4910`
+  без лишнего SDK собран: локально 28/28 fresh-install/rollback/forward
+  на семи конфигурациях без retries; HTTP/D1 `bd763ec` → архив `98d4910`
+  прошёл 23 запроса. CI `5b90249` тоже прошёл 23 HTTP/D1-запроса и сохранил
+  архив; скачанный ZIP проверен по digest и inventory 82 файлов. Flaky
+  WebKit fresh install и staging должны быть закрыты до приёмки этого пункта.
+  Не удалять и не понижать IDB, не возвращать legacy reader после новых записей.
+  Pending после восстановления API соблюдает сохранённые Retry-After/lease.
+  Сохранить проверенный `.tar`, SHA, контрольные суммы и CI run отдельно
+  до истечения срока хранения CI; повторная сборка не заменяет этот архив.
+- [ ] Подтвердить полную browser matrix и CI точного кандидата, затем protected
+  main и отдельный staging/production smoke.

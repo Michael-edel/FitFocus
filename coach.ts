@@ -5,8 +5,13 @@ import { calculateDailyTargets } from './profileMath';
 import { calculateCompliance, adaptiveTDEE } from './adaptive';
 import { toLocalDayKey } from './dateUtils';
 import { generatePlateauExplanation } from './geminiService';
+import type { AiSession } from './services/aiSession';
 
-export async function generateDailyTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): Promise<string> {
+export function requiresAiPlateauTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): boolean {
+  return detectPlateau(profile) && profile.goal === Goal.LOSS && calculateCompliance(diary, habits, profile) > 0.7;
+}
+
+export async function generateDailyTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[], session?: AiSession): Promise<string> {
   // 1. Проверка на плато
   const plateau = detectPlateau(profile);
   const compliance = calculateCompliance(diary, habits, profile);
@@ -21,11 +26,12 @@ export async function generateDailyTask(profile: UserProfile, diary: FoodItem[],
       const last14 = profile.weightHistory?.slice(-14) || [];
       const delta = last14.length >= 2 ? last14[last14.length - 1].weight - last14[0].weight : 0;
       
+      if (!session) return 'Динамика веса замедлилась при хорошем соблюдении режима. Проверьте точность порций, сон и стабильность активности за последние недели.';
       return await generatePlateauExplanation({
         weightDelta: delta,
         compliance,
         newCalories: newTarget
-      });
+      }, session);
     } else {
       return 'Мы заметили плато, но комплаенс режима пока не стабилен. Перед корректировкой цифр давай сфокусируемся на 7 днях точного трекинга.';
     }
@@ -45,13 +51,13 @@ export async function generateDailyTask(profile: UserProfile, diary: FoodItem[],
   return 'Обрати внимание на размеры порций и попробуй есть осознанно и чуть медленнее сегодня.';
 }
 
-export async function createTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[]): Promise<UserProfile> {
+export async function createTask(profile: UserProfile, diary: FoodItem[], habits: UserHabit[], session?: AiSession): Promise<UserProfile> {
   const today = toLocalDayKey(new Date());
   const tasks = profile.tasks || [];
   
   if (tasks.find(t => t.date === today)) return profile;
 
-  const taskText = await generateDailyTask(profile, diary, habits);
+  const taskText = await generateDailyTask(profile, diary, habits, session);
 
   const nextTasks = [...tasks, {
     date: today,

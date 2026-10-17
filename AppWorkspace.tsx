@@ -1,6 +1,10 @@
 import React from 'react';
 import { Goal } from './types';
 import type { AppSettings, UserProfile } from './types';
+import type { OutboxOperation, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import type { ProfilePersistOptions } from './features/profile/useProfilePersistence';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox } from './storage/durableOutbox';
+import { accountSessionRenderKey } from './features/state/accountScopedUi';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
@@ -40,8 +44,9 @@ type AppWorkspaceData = {
     googleMe: { sub?: string } | null;
     logout: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
-    persistUser?: (user: UserProfile) => Promise<void> | void;
-    patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    persistUser?: (user: UserProfile, guard?: OutboxWriteGuard, options?: ProfilePersistOptions) => Promise<OutboxOperation | null>;
+    patchProfileInCloud?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
+    onProfileDraftChange?: (dirty: boolean) => void;
     onExportBackup?: () => void;
     onImportBackup?: (file: File) => void;
     onConnectAutosave?: () => Promise<boolean>;
@@ -52,20 +57,24 @@ type AppWorkspaceData = {
     syncAllLocalDataNow?: () => Promise<void> | void;
     reloadUserFromCloud?: () => Promise<void> | void;
     resetUiState?: () => void;
+    onAccountUiCacheRestoreAllowedChange?: (allowed: boolean) => void;
     aiBadge: PassThroughProp;
     retryMeta: PassThroughProp;
   };
   dashboard: Record<string, PassThroughProp>;
   plan: Record<string, PassThroughProp> & {
     currentUserGoal?: Goal;
+    loginGuard: OutboxReadGuard | null;
+    isCurrentSession: () => boolean;
   };
   nutrition: Record<string, PassThroughProp>;
   progress: Record<string, PassThroughProp> & {
-    onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
     syncState?: PassThroughProp;
+    isCurrentSession: () => boolean | Promise<boolean>;
   };
   family: Record<string, PassThroughProp>;
-  council: Record<string, PassThroughProp>;
+  council: Record<string, PassThroughProp> & { councilError?: string | null };
   content: Record<string, PassThroughProp> & {
     settings: AppSettings;
     setSettings: (next: AppSettings) => void;
@@ -75,25 +84,111 @@ type AppWorkspaceData = {
 export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { meta, dashboard, plan, nutrition, progress, family, council, content } = workspaceProps;
 
-  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, aiBadge, retryMeta } = meta;
+  const { activeTab, isAdmin, currentUser, paywall, setActiveTab, googleMe, logout, deleteAccount, persistUser, patchProfileInCloud, onProfileDraftChange, onExportBackup, onImportBackup, onConnectAutosave, autosaveEnabled, profileSyncState, profileSyncNote, lastProfileSyncAt, syncAllLocalDataNow, reloadUserFromCloud, resetUiState, onAccountUiCacheRestoreAllowedChange, aiBadge, retryMeta } = meta;
 
-  const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, setAdaptLoading, setLastAiAction, generatePlateauExplanation, adaptNote, setAdaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
+  const { dailyStats, targets, weightHistory, dailyHabits, weightTrend, currentWeight, handleToggleHabit, exportShortPdf, exportDetailedPdf, pdfIncludeMealLog, setPdfIncludeMealLog, newWeight, setNewWeight, logWeight, plateau, adaptationIndex, adaptationStatus, compliancePct, deltaDays, weightDeltaN, refeedSuggestion, refeedDate, scheduleRefeedTomorrow, expectedN, adaptLoading, generatePlateauExplanation, adaptNote, adaptExpanded, setAdaptExpanded, adaptRead, setAdaptRead, weekly, weeklyReports, exportWeeklyPDF, onShareWisCard, shareWisState, shareWisMessage, achievementsEnabled, achievementsCatalog, achievementsUnlocked, achievementsNewlyUnlocked, achievementsLoading, dismissAchievementToast } = dashboard;
 
-  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS, ShoppingListCardComponent } = plan;
+  const { planTaskDone, setPlanTaskDone, setPlanIntroOpen, setPlanRulesExpanded, planRulesExpanded, planWeekExpanded, setPlanWeekExpanded, weeklyMenuLoading, handleGenerateWeeklyMenu, weeklyMenuError, currentUserAiPlan, currentUserTargetWeight, formatGramsPretty, MealParts, cloudFamily, planScope, setPlanScope, familyShoppingLoading, familyShopping, toggleFamilyShoppingItem, loadFamilyShopping, familyMenuError, familyMenu, familyMenuLoading, setFamilyMenuPrefsOpen, handleGenerateFamilyWeeklyMenu, paywallPlan, allUsers, currentUserGoal = Goal.MAINTAIN, DEFAULT_DEFICIT, DEFAULT_SURPLUS, loginGuard, isCurrentSession, ShoppingListCardComponent } = plan;
 
   const { cameraOpen, setCameraOpen, cameraFacing, setCameraFacing, handlePhotoUpload, processPhotoFiles, remainingScans, searchQuery, setSearchQuery, showSearchResults, setShowSearchResults, searchResults, addFoodToDiary, foodDiary, selectedFoodIds, toggleFoodSelected, bulkUpdateMealType, bulkRemoveSelectedFoods, deleteFoodEntry, deleteFoodPhoto, openInsight, openEditFood, formatTime, mealTypeLabel, MacroBarComponent, FoodDiaryGroupedComponent, onDiaryDayChange } = nutrition;
 
-  const { favoriteRecipes, addFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
-  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState } = progress;
+  const { favoriteRecipes, addFavoriteRecipe, updateFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
+  const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState, isCurrentSession: isCurrentAccountSession } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
-  const { councilInput, setCouncilInput, councilLoading, councilStage, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
+  const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
+  // Ephemeral screen drafts belong to the active IndexedDB session. The login guard
+  // captured by this tab can become stale when another tab accepts a new session.
+  const [durableSessionKey, setDurableSessionKey] = React.useState('checking');
+  const [durableSessionAccountId, setDurableSessionAccountId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const outbox = new DurableOutbox();
+    let disposed = false;
+    let checking = false;
+    const refreshSessionKey = () => {
+      if (checking) return;
+      checking = true;
+      void outbox.sessionState()
+        .then(({ active }) => {
+          if (disposed) return;
+          setDurableSessionAccountId(active?.accountId ?? null);
+          // A sender pause advances authFence; it does not change the owner of local UI state.
+          const next = JSON.stringify([
+            active?.accountId ?? null,
+            active?.serverSessionId ?? null,
+            active?.sessionEpoch ?? null,
+          ]);
+          setDurableSessionKey(previous => previous === next ? previous : next);
+        })
+        .catch(() => {
+          if (!disposed) {
+            setDurableSessionAccountId(null);
+            setDurableSessionKey('unavailable');
+          }
+        })
+        .finally(() => { checking = false; });
+    };
+    refreshSessionKey();
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    } catch {
+      // The interval and focus listeners remain as a fallback when channels are unavailable.
+    }
+    channel?.addEventListener('message', refreshSessionKey);
+    const interval = window.setInterval(refreshSessionKey, 2_000);
+    const refreshWhenVisible = () => { if (!document.hidden) refreshSessionKey(); };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      channel?.removeEventListener('message', refreshSessionKey);
+      channel?.close();
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+  // A second tab can change IndexedDB's active session without changing this tab's React props.
+  const screenSessionKey = `${accountSessionRenderKey(loginGuard, currentUser?.id)}:${durableSessionKey}`;
+  const activeSessionIdentityMatchesLoginGuard = loginGuard
+    ? durableSessionKey === JSON.stringify([
+      loginGuard.accountId,
+      loginGuard.serverSessionId,
+      loginGuard.sessionEpoch,
+    ])
+    : durableSessionAccountId === null
+      ? !currentUser?.id
+      : durableSessionAccountId === currentUser?.id;
+  const allowCachedAccountUiStateRestore = durableSessionKey !== 'checking'
+    && durableSessionKey !== 'unavailable'
+    && (!loginGuard || loginGuard.accountId === currentUser?.id)
+    && activeSessionIdentityMatchesLoginGuard;
+  const canRenderActiveTab = allowCachedAccountUiStateRestore
+    || activeTab === 'guide'
+    || activeTab === 'privacy'
+    || activeTab === 'updates';
+  const accountSessionMessage = durableSessionKey === 'checking'
+    ? 'Проверяем активную сессию…'
+    : durableSessionKey === 'unavailable'
+      ? 'Не удалось подтвердить активную сессию. Данные аккаунта скрыты; повторите вход.'
+      : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
+  React.useLayoutEffect(() => {
+    onAccountUiCacheRestoreAllowedChange?.(allowCachedAccountUiStateRestore);
+  }, [allowCachedAccountUiStateRestore, onAccountUiCacheRestoreAllowedChange]);
 
   return (
     <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
+      {!canRenderActiveTab ? (
+        <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
+          {accountSessionMessage}
+        </div>
+      ) : (
+        <>
       {activeTab === 'dashboard' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка dashboard...</div>}>
           <DashboardScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             paywallPlan={paywall.plan}
             canUsePro={paywall.canUsePro}
@@ -124,17 +219,14 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             scheduleRefeedTomorrow={scheduleRefeedTomorrow}
             expectedN={expectedN}
             adaptLoading={adaptLoading}
-            setAdaptLoading={setAdaptLoading}
-            setLastAiAction={setLastAiAction}
             generatePlateauExplanation={generatePlateauExplanation}
             adaptNote={adaptNote}
-            setAdaptNote={setAdaptNote}
             adaptExpanded={adaptExpanded}
             setAdaptExpanded={setAdaptExpanded}
             adaptRead={adaptRead}
             setAdaptRead={setAdaptRead}
             weekly={weekly}
-            weeklyReports={weeklyReports}
+            weeklyReports={allowCachedAccountUiStateRestore ? weeklyReports : []}
             exportWeeklyPDF={exportWeeklyPDF}
             onShareWisCard={onShareWisCard}
             shareWisState={shareWisState}
@@ -152,7 +244,9 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'plan' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка плана...</div>}>
           <PlanScreen
+            key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
             planTaskDone={planTaskDone}
             setPlanTaskDone={setPlanTaskDone}
             setActiveTab={setActiveTab}
@@ -185,6 +279,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             currentUserGoal={currentUserGoal}
             DEFAULT_DEFICIT={DEFAULT_DEFICIT}
             DEFAULT_SURPLUS={DEFAULT_SURPLUS}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
             ShoppingListCardComponent={ShoppingListCardComponent}
           />
         </React.Suspense>
@@ -192,7 +288,10 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'progress' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка прогресса...</div>}>
           <ProgressScreen
+            key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
+            isCurrentSession={isCurrentAccountSession}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
             progressPhotos={progressPhotos}
@@ -219,7 +318,10 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'progress-archive' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка архива прогресса...</div>}>
           <ProgressArchiveScreen
+            key={screenSessionKey}
             currentUser={currentUser}
+            allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
+            isCurrentSession={isCurrentAccountSession}
             weightHistory={weightHistory}
             measurementsHistory={measurementsHistory}
             progressPhotos={progressPhotos}
@@ -237,6 +339,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'nutrition' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
           <NutritionScreen
+            key={screenSessionKey}
             cameraOpen={cameraOpen}
             setCameraOpen={setCameraOpen}
             cameraFacing={cameraFacing}
@@ -273,7 +376,17 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       )}
       {activeTab === 'recipes' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка рецептов...</div>}>
-          <RecipesScreen recipes={favoriteRecipes} onAdd={addFavoriteRecipe} onRemove={removeFavoriteRecipe} onClear={clearFavoriteRecipes} />
+          <RecipesScreen
+            key={screenSessionKey}
+            userId={currentUser?.id}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+            recipes={favoriteRecipes}
+            onAdd={addFavoriteRecipe}
+            onUpdate={updateFavoriteRecipe}
+            onRemove={removeFavoriteRecipe}
+            onClear={clearFavoriteRecipes}
+          />
         </React.Suspense>
       )}
       {activeTab === 'workouts' && (
@@ -284,6 +397,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'family' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка семьи...</div>}>
           <FamilyScreen
+            key={screenSessionKey}
             cloudFamily={cloudFamily}
             cloudFamilyMembers={cloudFamilyMembers}
             cloudFamilyLoading={cloudFamilyLoading}
@@ -311,10 +425,12 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'council' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка AI Совета...</div>}>
           <CouncilScreen
+            key={screenSessionKey}
             councilInput={councilInput}
             setCouncilInput={setCouncilInput}
             councilLoading={councilLoading}
             councilStage={councilStage}
+            councilError={councilError}
             councilMessages={councilMessages}
             expandedCouncilThoughtIds={expandedCouncilThoughtIds}
             setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}
@@ -332,6 +448,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'course' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка курса...</div>}>
           <CourseScreen
+            key={screenSessionKey}
             currentUser={currentUser}
             courseLibrary={courseLibrary}
             lessons={lessons}
@@ -342,12 +459,21 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       )}
       {activeTab === 'admin' && isAdmin && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка админ-панели...</div>}>
-          <AdminScreen />
+          <AdminScreen
+            key={screenSessionKey}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+          />
         </React.Suspense>
       )}
       {activeTab === 'support' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка поддержки...</div>}>
-          <SupportScreen currentUser={currentUser} />
+          <SupportScreen
+            key={screenSessionKey}
+            currentUser={currentUser}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
+          />
         </React.Suspense>
       )}
       {activeTab === 'guide' && (
@@ -368,14 +494,31 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
       {activeTab === 'settings' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка настроек...</div>}>
           <SettingsScreen
+            key={screenSessionKey}
+            allowCachedProfileDraftRestore={allowCachedAccountUiStateRestore}
             settings={settings}
             onChange={setSettings}
             serverSession={!!googleMe?.sub}
+            loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession}
             onServerLogout={logout}
             onDeleteAccount={deleteAccount}
             user={currentUser}
-            onChangeUser={(u: UserProfile) => void persistUser?.(u)}
-            onPatchUser={(patch: Partial<UserProfile>) => void patchProfileInCloud?.(patch)}
+            onChangeUser={async (u: UserProfile, guard?: OutboxWriteGuard) => {
+              if (!persistUser) return false;
+              const writeGuard: OutboxWriteGuard | undefined = guard ?? (loginGuard ? {
+                localCommitGuard: {
+                  accountId: loginGuard.accountId,
+                  serverSessionId: loginGuard.serverSessionId,
+                  sessionEpoch: loginGuard.sessionEpoch,
+                },
+                canCommit: isCurrentSession,
+              } : undefined);
+              const operation = await persistUser(u, writeGuard, { durable: true });
+              return operation?.status === 'pending';
+            }}
+            onPatchUser={(patch: Partial<UserProfile>) => patchProfileInCloud?.(patch)}
+            onProfileDraftChange={onProfileDraftChange}
             onExportBackup={onExportBackup}
             onImportBackup={onImportBackup}
             onConnectAutosave={onConnectAutosave}
@@ -388,6 +531,8 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             onResetUiState={resetUiState}
           />
         </React.Suspense>
+      )}
+        </>
       )}
     </main>
   );

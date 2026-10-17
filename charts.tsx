@@ -35,6 +35,12 @@ type DailyStats = {
 
 type Targets = DailyStats;
 
+function initialChartDimension(height: number) {
+  const viewportWidth = typeof window === 'undefined' ? 320 : window.innerWidth;
+  const horizontalChrome = viewportWidth >= 768 ? 400 : 72;
+  return { width: Math.max(1, viewportWidth - horizontalChrome), height };
+}
+
 type DashboardChartsPanelProps = {
   dailyStats: DailyStats;
   targets: Targets;
@@ -59,6 +65,7 @@ type DashboardChartsPanelProps = {
   } | null;
   currentWeight?: number | null;
   targetWeight?: number | null;
+  savingHabit?: boolean;
   onToggleHabit: (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => void;
 };
 
@@ -96,7 +103,7 @@ export function WeightTrendChart({ weightHistory, targetWeight }: { weightHistor
 
   return (
     <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height={220} initialDimension={initialChartDimension(220)}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorWeightChart" x1="0" y1="0" x2="0" y2="1">
@@ -201,7 +208,7 @@ export function ProgressArchiveChart({
 
   return (
     <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height={220} initialDimension={initialChartDimension(220)}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorProgressPhotos" x1="0" y1="0" x2="0" y2="1">
@@ -339,6 +346,7 @@ export default function DashboardChartsPanel({
   weightTrend,
   currentWeight,
   targetWeight,
+  savingHabit = false,
   onToggleHabit,
 }: DashboardChartsPanelProps) {
   const macroPieData = useMemo(
@@ -443,9 +451,13 @@ export default function DashboardChartsPanel({
             const isDone = dailyHabits?.[getTodayKey()]?.[h.key as 'water' | 'steps' | 'breakfast' | 'sleep'];
             const streak = calculateStreak(dailyHabits || {}, h.key as 'water' | 'steps' | 'breakfast' | 'sleep');
             return (
-              <div
+              <button
+                type="button"
                 key={h.key}
-                className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer"
+                aria-pressed={Boolean(isDone)}
+                disabled={savingHabit}
+                aria-busy={savingHabit}
+                className="w-full flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 disabled:cursor-wait disabled:opacity-60 transition-all text-left"
                 onClick={() => onToggleHabit(h.key as 'water' | 'steps' | 'breakfast' | 'sleep')}
               >
                 <div className="flex items-center gap-4">
@@ -458,7 +470,7 @@ export default function DashboardChartsPanel({
                   </div>
                 </div>
                 <span className={isDone ? 'text-emerald-400' : 'text-slate-600'}>{h.icon}</span>
-              </div>
+              </button>
             );
           })}
         </div>

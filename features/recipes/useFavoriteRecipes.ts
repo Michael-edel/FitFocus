@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UserStateRepository } from '../../storage/userStateRepository';
+import type { OutboxCommitGuard } from '../../storage/durableOutbox';
 import type { FavoriteRecipe } from '../../types';
 
 type UnknownRecord = Record<string, unknown>;
@@ -111,16 +112,41 @@ export function prependFavoriteRecipe(recipes: FavoriteRecipe[], recipe: Favorit
   return [recipe, ...recipes].slice(0, 100);
 }
 
-type FavoriteRecipeRepository = Pick<UserStateRepository, 'readJsonAsync' | 'writeJson'>;
+type FavoriteRecipeRepository = Pick<UserStateRepository, 'readJsonAsync' | 'updateJson' | 'isReadSessionCurrent'>;
+type FavoriteRecipeUpdate = (recipes: FavoriteRecipe[]) => FavoriteRecipe[];
+
+const isFavoriteRecipeList = (value: unknown): value is FavoriteRecipe[] => Array.isArray(value);
+
+async function commitFavoriteRecipeUpdate(
+  repository: FavoriteRecipeRepository,
+  update: FavoriteRecipeUpdate,
+  guard: OutboxCommitGuard,
+): Promise<FavoriteRecipe[] | null> {
+  const result = await repository.updateJson('favorite_recipes', [], isFavoriteRecipeList, (stored) => {
+    const recipes = stored.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
+    return update(recipes);
+  }, guard);
+  if (result.operation?.status !== 'pending' || !guard.canCommit()
+    || !await repository.isReadSessionCurrent(guard.readGuard)) return null;
+  return result.value.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
+}
 
 export function useFavoriteRecipes({
   userId,
   repository,
+  loginGuard,
+  isCurrentSession,
 }: {
   userId: string | null | undefined;
   repository: FavoriteRecipeRepository | null;
+  loginGuard: OutboxCommitGuard['readGuard'] | null;
+  isCurrentSession: () => boolean;
 }) {
   const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>([]);
+  const scopeRef = useRef({ userId, repository, generation: 0 });
+  if (scopeRef.current.userId !== userId || scopeRef.current.repository !== repository) {
+    scopeRef.current = { userId, repository, generation: scopeRef.current.generation + 1 };
+  }
 
   useEffect(() => {
     if (!userId) {
@@ -133,31 +159,49 @@ export function useFavoriteRecipes({
       if (!active) return;
       const normalized = stored.map((item) => normalizeFavoriteRecipe(item)).filter(isPresent);
       setFavoriteRecipes(normalized);
-      repository.writeJson('favorite_recipes', normalized);
-    });
+    }).catch(() => { /* Keep the storage failure visible; never persist an empty fallback. */ });
     return () => { active = false; };
   }, [repository, userId]);
 
-  const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
-    setFavoriteRecipes(next);
-    repository?.writeJson('favorite_recipes', next);
-  }, [repository]);
+  const updateFavorites = useCallback(async (update: FavoriteRecipeUpdate): Promise<boolean> => {
+    const generation = scopeRef.current.generation;
+    const accountId = userId;
+    const activeRepository = repository;
+    const guard = loginGuard ? { readGuard: loginGuard, canCommit: isCurrentSession } : null;
+    if (!accountId || !activeRepository || !guard || guard.readGuard.accountId !== accountId
+      || !isCurrentSession() || !guard.canCommit()) return false;
+    try {
+      const next = await commitFavoriteRecipeUpdate(activeRepository, update, guard);
+      if (!next || scopeRef.current.generation !== generation
+        || scopeRef.current.userId !== accountId || scopeRef.current.repository !== activeRepository
+        || !isCurrentSession() || !guard.canCommit()) return false;
+      setFavoriteRecipes(next);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [isCurrentSession, loginGuard, repository, userId]);
 
-  const addFavoriteRecipe = useCallback((recipe: FavoriteRecipe) => {
-    persistFavorites(prependFavoriteRecipe(favoriteRecipes, recipe));
-  }, [favoriteRecipes, persistFavorites]);
+  const addFavoriteRecipe = useCallback((recipe: FavoriteRecipe) =>
+    updateFavorites((recipes) => prependFavoriteRecipe(recipes, normalizeFavoriteRecipe(recipe) ?? recipe)),
+  [updateFavorites]);
 
-  const removeFavoriteRecipe = useCallback((id: string) => {
-    persistFavorites(favoriteRecipes.filter((recipe) => recipe.id !== id));
-  }, [favoriteRecipes, persistFavorites]);
+  const updateFavoriteRecipe = useCallback((recipe: FavoriteRecipe) =>
+    updateFavorites((recipes) => recipes.map((current) => current.id === recipe.id
+      ? normalizeFavoriteRecipe(recipe) ?? recipe
+      : current)),
+  [updateFavorites]);
 
-  const clearFavoriteRecipes = useCallback(() => {
-    persistFavorites([]);
-  }, [persistFavorites]);
+  const removeFavoriteRecipe = useCallback((id: string) =>
+    updateFavorites((recipes) => recipes.filter((recipe) => recipe.id !== id)),
+  [updateFavorites]);
+
+  const clearFavoriteRecipes = useCallback(() => updateFavorites(() => []), [updateFavorites]);
 
   return {
     favoriteRecipes,
     addFavoriteRecipe,
+    updateFavoriteRecipe,
     removeFavoriteRecipe,
     clearFavoriteRecipes,
   };

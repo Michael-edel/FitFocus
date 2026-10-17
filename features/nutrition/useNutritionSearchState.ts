@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parseJson } from '../../safeJson';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type NutritionSearchState = {
   query: string;
@@ -27,17 +28,22 @@ export function parseNutritionSearchState(raw: string | null): NutritionSearchSt
 }
 
 /** Persists food search input per user without losing legacy plain-text values. */
-export function useNutritionSearchState(userId: string | null | undefined) {
+export function useNutritionSearchState(userId: string | null | undefined, allowCachedUiStateRestore = true) {
   const storageKey = useMemo(
     () => `fitfocus.nutrition.search.v1:${userId ?? 'anon'}`,
     [userId],
   );
-  const skipNextSaveRef = useRef(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
 
   useEffect(() => {
-    skipNextSaveRef.current = true;
+    if (!allowCachedUiStateRestore) {
+      setSearchQuery('');
+      setShowSearchResults(false);
+      setHydratedStorageKey(null);
+      return;
+    }
     try {
       const next = parseNutritionSearchState(localStorage.getItem(storageKey));
       setSearchQuery(next.query);
@@ -46,24 +52,29 @@ export function useNutritionSearchState(userId: string | null | undefined) {
       setSearchQuery('');
       setShowSearchResults(false);
     }
-  }, [storageKey]);
+    setHydratedStorageKey(storageKey);
+  }, [allowCachedUiStateRestore, storageKey]);
 
   useEffect(() => {
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
+    if (!allowCachedUiStateRestore || hydratedStorageKey !== storageKey) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify({ query: searchQuery, open: showSearchResults }));
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [searchQuery, showSearchResults, storageKey]);
+  }, [allowCachedUiStateRestore, hydratedStorageKey, searchQuery, showSearchResults, storageKey]);
+
+  const visibleState = getAccountScopedUiValue(storageKey, hydratedStorageKey, {
+    query: searchQuery,
+    open: showSearchResults,
+  }, EMPTY_SEARCH_STATE, allowCachedUiStateRestore);
+  const setSearchQueryForScope = useAccountScopedUiSetter(storageKey, setSearchQuery, allowCachedUiStateRestore);
+  const setShowResultsForScope = useAccountScopedUiSetter(storageKey, setShowSearchResults, allowCachedUiStateRestore);
 
   return {
-    searchQuery,
-    setSearchQuery,
-    showSearchResults,
-    setShowSearchResults,
+    searchQuery: visibleState.query,
+    setSearchQuery: setSearchQueryForScope,
+    showSearchResults: visibleState.open,
+    setShowSearchResults: setShowResultsForScope,
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { onRequestPost } from '../functions/api/ai';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AiPostContext = Parameters<typeof onRequestPost>[0];
 type AiErrorBody = { error?: { code?: string; message?: string } };
 
@@ -73,10 +74,12 @@ async function postAi(
   options: { body?: Record<string, unknown>; env?: Record<string, unknown> } = {},
 ) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: AiPostContext = {
     request: new Request('https://fitfocus.test/api/ai', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'ai-config-test-01' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'ai-config-test-01',
+        'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof },
       body: JSON.stringify(options.body ?? { feature: 'coach', contents: 'hello' }),
     }),
     env: {

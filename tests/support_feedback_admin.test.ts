@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPatch, onRequestPost } from '../functions/api/support/feedback';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type SupportFeedbackGetContext = Parameters<typeof onRequestGet>[0];
 type SupportFeedbackPatchContext = Parameters<typeof onRequestPatch>[0];
 type SupportFeedbackPostContext = Parameters<typeof onRequestPost>[0];
@@ -31,6 +32,13 @@ async function signJwt(payload: Record<string, unknown>) {
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
   return `${data}.${b64url(sig)}`;
+}
+
+async function validSupportScope(sub: string) {
+  return {
+    'X-FitFocus-State-Account': sub,
+    'X-FitFocus-State-Session': await stateSessionId({ sub, sid: 'sid-admin' }),
+  };
 }
 
 type PreparedStatement = {
@@ -123,11 +131,12 @@ function makeDb(options: { updateChanges?: number; messageInsertChanges?: number
   return db;
 }
 
-async function getTickets(db: ReturnType<typeof makeDb>, query = '') {
+async function getTickets(db: ReturnType<typeof makeDb>, query = '', includeScope = true) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request(`https://fitfocus.test/api/support/feedback${query}`, {
     headers: {
       Cookie: `ff_session=${token}`,
+      ...(includeScope ? await validSupportScope('admin-1') : {}),
       'X-Request-ID': 'support-admin-get-test-01',
     },
   });
@@ -147,12 +156,13 @@ async function patchTicket(db: ReturnType<typeof makeDb>, body: Record<string, u
   return patchTicketRaw(db, JSON.stringify(body));
 }
 
-async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
+async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string, includeScope = true) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
   const request = new Request('https://fitfocus.test/api/support/feedback', {
     method: 'PATCH',
     headers: {
       Cookie: `ff_session=${token}`,
+      ...(includeScope ? await validSupportScope('admin-1') : {}),
       'Content-Type': 'application/json',
       'X-Request-ID': 'support-admin-patch-test-01',
     },
@@ -170,12 +180,18 @@ async function patchTicketRaw(db: ReturnType<typeof makeDb>, body: string) {
   return onRequestPatch(context);
 }
 
-async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, contentType = 'multipart/form-data; boundary=x') {
+async function postTicketRaw(
+  db: ReturnType<typeof makeDb>,
+  body: BodyInit,
+  contentType = 'multipart/form-data; boundary=x',
+  includeScope = true,
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
   const request = new Request('https://fitfocus.test/api/support/feedback', {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
+      ...(includeScope ? await validSupportScope('user-1') : {}),
       'Content-Type': contentType,
       'X-Request-ID': 'support-create-test-01',
     },
@@ -193,10 +209,16 @@ async function postTicketRaw(db: ReturnType<typeof makeDb>, body: BodyInit, cont
   return onRequestPost(context);
 }
 
-async function postTicketForm(db: ReturnType<typeof makeDb>, form: FormData, extraHeaders: Record<string, string> = {}) {
+async function postTicketForm(
+  db: ReturnType<typeof makeDb>,
+  form: FormData,
+  extraHeaders: Record<string, string> = {},
+  includeScope = true,
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-admin', email: 'u@example.com' });
   const headers = new Headers({
     Cookie: `ff_session=${token}`,
+    ...(includeScope ? await validSupportScope('user-1') : {}),
     'X-Request-ID': 'support-create-test-01',
     ...extraHeaders,
   });
@@ -218,6 +240,38 @@ async function postTicketForm(db: ReturnType<typeof makeDb>, form: FormData, ext
 }
 
 describe('admin support ticket updates', () => {
+  it('rejects an unscoped legacy admin list before role and ticket queries', async () => {
+    const db = makeDb();
+
+    const response = await getTickets(db, '', false);
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects an unscoped legacy admin patch before parsing JSON or writing', async () => {
+    const db = makeDb();
+
+    const response = await patchTicketRaw(db, '{', false);
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects an unscoped legacy create before parsing the body or writing', async () => {
+    const db = makeDb();
+
+    const response = await postTicketRaw(db, '{', 'application/json', false);
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('falls back invalid list limits to a bounded default', async () => {
     const db = makeDb();
 
@@ -308,6 +362,39 @@ describe('admin support ticket updates', () => {
     const messageInsert = db.runs.find((run) => run.sql.includes('INSERT INTO support_feedback_messages'));
     expect(messageInsert?.binds[4]).toBe('');
     expect(messageInsert?.binds[5]).toBe(1);
+  });
+
+  it('advertises the verified account/session for a scoped ticket creation', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка'); form.set('section', 'Обзор'); form.set('subject', 'Scoped support request');
+    form.set('message', 'Проверка guarded support POST.');
+    const sid = await stateSessionId({ sub: 'user-1', sid: 'sid-admin' });
+    const response = await postTicketForm(db, form, {
+      'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sid,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-FitFocus-Support-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe(sid);
+    expect(db.batches).toHaveLength(1);
+  });
+
+  it('rejects a ticket creation with a stale account/session proof before any write', async () => {
+    const db = makeDb();
+    const form = new FormData();
+    form.set('category', 'Ошибка'); form.set('section', 'Обзор'); form.set('subject', 'Should not be created');
+    form.set('message', 'Stale state proof.');
+    const response = await postTicketForm(db, form, {
+      'X-FitFocus-State-Account': 'another-user', 'X-FitFocus-State-Session': 'f'.repeat(64),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Guard')).toBeNull();
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some(run => run.sql.includes('INSERT INTO support_feedback'))).toBe(false);
   });
 
   it('adds automatic device and browser diagnostics to user bug reports', async () => {

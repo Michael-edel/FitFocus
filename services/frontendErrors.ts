@@ -1,3 +1,5 @@
+import { SessionReadError } from '../storage/sessionRead';
+
 type ErrorLike = {
   name?: unknown;
   message?: unknown;
@@ -11,6 +13,10 @@ export function getErrorMessage(error: unknown): string {
   const message = errorRecord(error).message;
   if (typeof message === 'string') return message;
   return typeof error === 'string' ? error : '';
+}
+
+export function isExpectedAiSessionFailure(error: unknown): boolean {
+  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth');
 }
 
 export function classifyWisShareFailure(error: unknown): string {
@@ -27,6 +33,11 @@ export function classifyWisShareFailure(error: unknown): string {
 export function isSoftWeeklyAiError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
+    message === 'login_session_changed' ||
+    message === 'session_read_auth' ||
+    message === 'session_read_session' ||
+    message === 'weekly_report_session_changed' ||
+    message === 'weekly_report_action_changed' ||
     message.includes('already in progress') ||
     message.includes('cooldown') ||
     message.includes('api key') ||

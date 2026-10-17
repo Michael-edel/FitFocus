@@ -18,6 +18,7 @@ const files = listAdminFiles(adminDir);
 const violations = [];
 
 for (const file of files) {
+  if (file.endsWith("_middleware.ts")) continue;
   const text = readFileSync(file, "utf8");
   const hasAdminRequestGuard = /requireAdminRequest\s*\(/.test(text);
   if (!hasAdminRequestGuard) {

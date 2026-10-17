@@ -1,4 +1,5 @@
-import { json, requireUser } from "./auth";
+import { json } from "./auth";
+import { requireScopedStateUser } from "./state_session";
 import { requireDB } from "./db";
 import { requireRole } from "./rbac";
 import { requireAdminRequest } from "./admin_guard";
@@ -30,7 +31,7 @@ function toInt(value: unknown, fallback: number) {
 export async function handleSupportPost({ request, env }: SupportFeedbackContext) {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
@@ -64,7 +65,7 @@ export async function handleSupportPost({ request, env }: SupportFeedbackContext
 export async function handleSupportPatch({ request, env }: SupportFeedbackContext) {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
@@ -99,7 +100,7 @@ export async function handleSupportPatch({ request, env }: SupportFeedbackContex
 export async function handleSupportGet({ request, env }: SupportFeedbackContext) {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }

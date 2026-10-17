@@ -15,6 +15,8 @@ import {
   type ShoppingListItem,
   type UserProfile,
 } from './types';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from './features/state/accountScopedUi';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -22,6 +24,9 @@ type ShoppingListCardComponent = React.ComponentType<{
   title?: string;
   fallbackList?: string[];
   userId?: string | null;
+  allowCachedUiStateRestore?: boolean;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
 }>;
 type CloudFamilyRef = { id?: string | null } | null;
 type FamilyShoppingItem = ShoppingListItem & { checked?: boolean };
@@ -29,6 +34,7 @@ type FamilyShoppingState = { week_start: string; items: FamilyShoppingItem[] } |
 
 type PlanScreenProps = {
   currentUser: UserProfile | null;
+  allowCachedUiStateRestore?: boolean;
   planTaskDone: Record<string, boolean>;
   setPlanTaskDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setActiveTab: (tab: string) => void;
@@ -61,11 +67,14 @@ type PlanScreenProps = {
   currentUserGoal: Goal | string;
   DEFAULT_DEFICIT: number;
   DEFAULT_SURPLUS: number;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   ShoppingListCardComponent?: ShoppingListCardComponent;
 };
 
 export default function PlanScreen({
   currentUser,
+  allowCachedUiStateRestore = true,
   planTaskDone,
   setPlanTaskDone,
   setActiveTab,
@@ -98,6 +107,8 @@ export default function PlanScreen({
   currentUserGoal,
   DEFAULT_DEFICIT,
   DEFAULT_SURPLUS,
+  loginGuard,
+  isCurrentSession,
   ShoppingListCardComponent,
 }: PlanScreenProps) {
   const getWeekStartISO = React.useCallback((date: Date) => {
@@ -118,24 +129,44 @@ export default function PlanScreen({
   );
   const activeWeekDaySkipSaveRef = React.useRef(false);
   const [activeWeekDay, setActiveWeekDay] = React.useState<string>('');
+  const [hydratedActiveWeekDayStorageKey, setHydratedActiveWeekDayStorageKey] = React.useState<string | null>(null);
+  const setActiveWeekDayForScope = useAccountScopedUiSetter(
+    activeWeekDayStorageKey,
+    setActiveWeekDay,
+    allowCachedUiStateRestore,
+  );
 
   React.useEffect(() => {
+    activeWeekDaySkipSaveRef.current = true;
+    if (!allowCachedUiStateRestore) {
+      setActiveWeekDay('');
+      setHydratedActiveWeekDayStorageKey(null);
+      return;
+    }
     try {
-      activeWeekDaySkipSaveRef.current = true;
       setActiveWeekDay(localStorage.getItem(activeWeekDayStorageKey) || '');
     } catch {
-      activeWeekDaySkipSaveRef.current = true;
       setActiveWeekDay('');
     }
-  }, [activeWeekDayStorageKey]);
+    setHydratedActiveWeekDayStorageKey(activeWeekDayStorageKey);
+  }, [activeWeekDayStorageKey, allowCachedUiStateRestore]);
+
+  const visibleActiveWeekDay = getAccountScopedUiValue(
+    activeWeekDayStorageKey,
+    hydratedActiveWeekDayStorageKey,
+    activeWeekDay,
+    '',
+    allowCachedUiStateRestore,
+  );
 
   React.useEffect(() => {
     const nextDay = weeklyMenu?.days?.[0]?.day || '';
     if (!nextDay) return;
-    setActiveWeekDay((prev) => (prev && weeklyMenu.days.some((d) => d.day === prev) ? prev : nextDay));
-  }, [weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
+    setActiveWeekDayForScope((prev) => (prev && weeklyMenu.days.some((d) => d.day === prev) ? prev : nextDay));
+  }, [setActiveWeekDayForScope, weeklyMenu?.weekStart, weeklyMenu?.days?.length]);
 
   React.useEffect(() => {
+    if (!allowCachedUiStateRestore || hydratedActiveWeekDayStorageKey !== activeWeekDayStorageKey) return;
     if (activeWeekDaySkipSaveRef.current) {
       activeWeekDaySkipSaveRef.current = false;
       return;
@@ -147,13 +178,13 @@ export default function PlanScreen({
     } catch {
       // no-op
     }
-  }, [activeWeekDay, activeWeekDayStorageKey]);
+  }, [activeWeekDay, activeWeekDayStorageKey, allowCachedUiStateRestore, hydratedActiveWeekDayStorageKey]);
 
   const weeklyMenuDay = React.useMemo(() => {
     const days = weeklyMenu?.days ?? [];
     if (!days.length) return null;
-    return days.find((d) => d.day === activeWeekDay) || days[0];
-  }, [weeklyMenu?.days, activeWeekDay]);
+    return days.find((d) => d.day === visibleActiveWeekDay) || days[0];
+  }, [weeklyMenu?.days, visibleActiveWeekDay]);
 
   const mealTemplateFields = [
     { key: 'breakfast', label: 'Завтрак', value: currentUserAiPlan?.mealTemplate?.breakfast || '' },
@@ -386,7 +417,7 @@ export default function PlanScreen({
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setActiveWeekDay(d.day)}
+                      onClick={() => setActiveWeekDayForScope(d.day)}
                       className={clsx(
                         'shrink-0 min-h-[42px] px-4 py-2 rounded-full border font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap',
                         active
@@ -531,6 +562,9 @@ export default function PlanScreen({
                     : weeklyMenu.shoppingList
                 }
                 userId={currentUser?.id ?? null}
+                allowCachedUiStateRestore={allowCachedUiStateRestore}
+                loginGuard={loginGuard}
+                isCurrentSession={isCurrentSession}
               />
             </div>
           </div>

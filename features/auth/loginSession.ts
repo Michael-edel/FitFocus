@@ -1,11 +1,6 @@
-import { buildFallbackAiPlan } from "../../aiPlanFallback";
 import { hydrateSessionFromCloud, type HydratedSession } from "../../sessionHydration";
-import {
-  persistAllUsersSnapshot,
-  readStoredAllUsersSnapshotForUser,
-  renameLocalStoragePrefix,
-} from "../../storage/hybrid";
 import type { UserHabit, UserProfile } from "../../types";
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
 
 export type AuthIdentity = { sub?: string; email?: string; picture?: string } | null | undefined;
 
@@ -13,16 +8,13 @@ type LoginSessionDeps = {
   initialHabits: UserHabit[];
   resetUsageIfNewTime: (user: UserProfile) => UserProfile;
   hydrateSession?: typeof hydrateSessionFromCloud;
-  buildFallbackPlan?: typeof buildFallbackAiPlan;
-  renameStoragePrefix?: typeof renameLocalStoragePrefix;
-  persistUsersSnapshot?: typeof persistAllUsersSnapshot;
-  readUsersSnapshot?: typeof readStoredAllUsersSnapshotForUser<UserProfile>;
+  isCurrentSession?: () => boolean;
+  readGuard?: OutboxReadGuard;
 };
 
 export type PreparedLoginSession = {
   currentUser: UserProfile;
   hydrated: HydratedSession;
-  shouldPersistFallbackPlan: boolean;
 };
 
 /** Prepares a cloud-backed session while keeping local data scoped to the verified identity. */
@@ -32,36 +24,22 @@ export async function prepareLoginSession(
   deps: LoginSessionDeps,
 ): Promise<PreparedLoginSession> {
   const hydrateSession = deps.hydrateSession ?? hydrateSessionFromCloud;
-  const buildFallbackPlan = deps.buildFallbackPlan ?? buildFallbackAiPlan;
-  const renameStoragePrefix = deps.renameStoragePrefix ?? renameLocalStoragePrefix;
-  const persistUsersSnapshot = deps.persistUsersSnapshot ?? persistAllUsersSnapshot;
-  const readUsersSnapshot = deps.readUsersSnapshot ?? readStoredAllUsersSnapshotForUser<UserProfile>;
   const identity = authUser?.sub?.trim();
-
-  const normalizedUser = identity && user.id !== identity
-    ? { ...user, id: identity, googleSub: identity, email: authUser?.email ?? user.email, picture: authUser?.picture ?? user.picture }
-    : user;
-
-  if (identity && user.id !== identity) {
-    renameStoragePrefix(`fitfocus_data_${user.id}_`, `fitfocus_data_${identity}_`);
-    persistUsersSnapshot(identity, (readUsersSnapshot(user.id) || [user]).map((profile) =>
-      profile.id === user.id
-        ? { ...profile, id: identity, googleSub: identity, email: authUser?.email ?? profile.email, picture: authUser?.picture ?? profile.picture }
-        : profile,
-    ));
-  }
-
-  const hydrated = await hydrateSession(normalizedUser, {
+  const isCurrent = deps.isCurrentSession ?? (() => true);
+  if (!isCurrent()) throw new Error('LOGIN_SESSION_CHANGED');
+  if (!identity || user.id !== identity) throw new Error('PROFILE_ACCOUNT_MISMATCH');
+  const hydrated = await hydrateSession(user, {
     resetUsageIfNewTime: deps.resetUsageIfNewTime,
     initialHabits: deps.initialHabits,
+    isCurrentSession: isCurrent,
+    readGuard: deps.readGuard,
   });
-  const normalizedCurrentUser = identity && hydrated.currentUser.id !== identity
-    ? { ...hydrated.currentUser, id: identity, googleSub: identity, email: authUser?.email ?? hydrated.currentUser.email, picture: authUser?.picture ?? hydrated.currentUser.picture }
-    : hydrated.currentUser;
-  const shouldPersistFallbackPlan = !normalizedCurrentUser.aiPlan;
+  if (!isCurrent()) throw new Error('LOGIN_SESSION_CHANGED');
+  if (hydrated.currentUser.id !== identity) throw new Error('PROFILE_ACCOUNT_MISMATCH');
+  const normalizedCurrentUser = hydrated.currentUser;
+  hydrated.allUsers = [normalizedCurrentUser];
   return {
-    currentUser: shouldPersistFallbackPlan ? { ...normalizedCurrentUser, aiPlan: buildFallbackPlan(normalizedCurrentUser) } : normalizedCurrentUser,
+    currentUser: normalizedCurrentUser,
     hydrated,
-    shouldPersistFallbackPlan,
   };
 }

@@ -1,5 +1,5 @@
 import { nowMs } from './db';
-import { requireActiveFamilyForUser } from './family_access';
+import { requireFamilyMember } from './family_access';
 import { isJsonObject, safeJsonParseObject } from './json';
 
 type MutationResult = { meta?: { changes?: number }; changes?: number };
@@ -16,7 +16,7 @@ type FamilyMemberPatch = {
 
 export type FamilyMemberProfileResult =
   | { ok: true; updatedAt: number }
-  | { ok: false; error: 'BAD_JSON' | 'BAD_GOAL' | 'BAD_SEX' | 'BAD_AGE' | 'BAD_HEIGHT' | 'BAD_WEIGHT' | 'BAD_ACTIVITY' | 'NOT_IN_FAMILY' | 'NOT_FOUND' };
+  | { ok: false; error: 'BAD_JSON' | 'BAD_TARGET' | 'BAD_GOAL' | 'BAD_SEX' | 'BAD_AGE' | 'BAD_HEIGHT' | 'BAD_WEIGHT' | 'BAD_ACTIVITY' | 'NOT_IN_FAMILY' | 'NOT_FOUND' };
 
 function changedRows(result: MutationResult): number {
   return Number(result?.meta?.changes ?? result?.changes ?? 0);
@@ -106,20 +106,28 @@ function isPatch(value: FamilyMemberPatch | FamilyMemberProfileResult): value is
   return !('ok' in value);
 }
 
-/** Applies a validated profile patch only to the caller's active family membership. */
-export async function updateActiveFamilyMemberProfile({
+/** Applies a validated profile patch only to the caller's explicitly selected active family membership. */
+export async function updateFamilyMemberProfile({
   db,
   userId,
+  familyId,
   body,
 }: {
   db: D1Database;
   userId: string;
+  familyId: unknown;
   body: unknown;
 }): Promise<FamilyMemberProfileResult> {
+  if (typeof familyId !== 'string' || !familyId.trim()) return { ok: false, error: 'BAD_TARGET' };
+  const targetFamilyId = familyId.trim();
+
   const patch = parseFamilyMemberPatch(body);
   if (!isPatch(patch)) return patch;
 
-  const family = await requireActiveFamilyForUser(db, userId).catch(() => null);
+  const family = await requireFamilyMember(db, targetFamilyId, userId).catch((error: unknown) => {
+    if (error instanceof Error && error.message === 'FORBIDDEN') return null;
+    throw error;
+  });
   if (!family) return { ok: false, error: 'NOT_IN_FAMILY' };
 
   const updatedAt = Math.floor(nowMs() / 1000);
@@ -134,7 +142,8 @@ export async function updateActiveFamilyMemberProfile({
            activity = COALESCE(?, activity),
            restrictions_json = COALESCE(?, restrictions_json),
            updated_at = ?
-       WHERE family_id = ? AND user_id = ? AND status = 'active' AND is_active = 1`,
+       WHERE family_id = ? AND user_id = ? AND status = 'active' AND is_active = 1
+         AND EXISTS (SELECT 1 FROM families f WHERE f.id = ? AND f.is_active = 1)`,
     )
     .bind(
       patch.goal,
@@ -145,8 +154,9 @@ export async function updateActiveFamilyMemberProfile({
       patch.activity,
       patch.restrictionsJson,
       updatedAt,
-      family.id,
+      targetFamilyId,
       userId,
+      targetFamilyId,
     )
     .run();
 

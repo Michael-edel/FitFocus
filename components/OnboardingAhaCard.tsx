@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import clsx from 'clsx';
 import { Activity, BrainCircuit, Flame, Sparkles, Timer } from 'lucide-react';
 import { calculateBMR, calculateDailyTargets, calculateTDEE } from '../domain/profileMath';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS } from '../domain/constants';
 import { Goal, type ActivityLevel, type Gender } from '../domain/types';
-import { trackOnboardingEvent } from '../analytics/onboarding';
 
 type Props = {
   gender: Gender;
@@ -60,14 +59,6 @@ export default function OnboardingAhaCard({
       note: `Изменение: ${(weeklyDeltaKg > 0 ? '+' : '') + weeklyDeltaKg.toFixed(2)} кг/нед`,
     };
   }, [goal, gainSurplus, lossDeficit, targets.calories, tdee, weight]);
-
-  useEffect(() => {
-    trackOnboardingEvent('aha_card_viewed', {
-      goal,
-      weight,
-      activityLevel,
-    });
-  }, [activityLevel, goal, weight]);
 
   const goalLabel = goal === Goal.LOSS ? 'Снижение веса' : goal === Goal.GAIN ? 'Набор массы' : 'Поддержание';
 

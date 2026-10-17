@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { 
   Activity, 
@@ -47,7 +47,7 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, generatePersonalPlan, generatePlateauExplanation, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
+import { analyzeFoodPhoto, generatePersonalPlan, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { fetchWithResilience } from './services/httpClient';
 import { type FastLogItem } from './storage/foodDiary';
@@ -61,7 +61,6 @@ import { calculateStreak, getTodayKey } from './habits';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { type WeeklyStoredReport } from './weeklyAutoEngine';
-import { trackWisShareEvent } from './analytics/wisShare';
 import { calculateFoodStreak } from './analytics/foodStreak';
 import { useAchievements } from './useAchievements';
 import { usePaywall } from './usePaywall';
@@ -69,15 +68,10 @@ import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { buildCorrectedFoodPatch, buildFoodCorrectionDraft, type FoodCorrectionDraft } from './foodCorrection';
 import {
-  collectLocalStateItems,
   clearLocalUserData,
-  persistAllUsersSnapshot,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
   renameLocalStoragePrefix,
-  resumeRemoteKVSync,
-  safeRemoveItem,
-  safeSetItem,
 } from './storage/hybrid';
 import {
   bootstrapAuthSession,
@@ -109,6 +103,8 @@ import { clearAppUiStorage } from './features/profile/clearUiState';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
+import { usePlateauExplanation } from './features/ai/usePlateauExplanation';
+import { AiActionScope } from './features/ai/actionScope';
 import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
@@ -132,6 +128,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { accountSessionRenderKey, getAccountScopedUiValue } from './features/state/accountScopedUi';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
@@ -142,9 +139,15 @@ import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
+import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
+import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
 import { UserStateRepository } from './storage/userStateRepository';
+import { stateSync } from './storage/stateSync';
+import { StateStorageNotice } from './ui/StateStorageNotice';
+import { getStateQueueSummaries, getStateSaveIssues, reportStateSaveIssue, subscribeStateSaveIssues } from './storage/stateSaveStatus';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
@@ -258,26 +261,85 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
+  const authStateRef = useRef(authState);
+  authStateRef.current = authState;
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const { inviteCode, setInviteCode } = useInviteCodeState(currentUser?.id);
+  const [allowCachedUiStateRestore, setAllowCachedUiStateRestore] = useState(false);
+  const uiAccountId = allowCachedUiStateRestore ? currentUser?.id ?? null : null;
+  const { inviteCode, setInviteCode } = useInviteCodeState(uiAccountId);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
-  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
-  const userStateRepository = useMemo(
-    () => (currentUser?.id ? new UserStateRepository(currentUser.id) : null),
-    [currentUser?.id],
+  const [planScopeState, setPlanScopeState] = useState<{ ownerId: string | null; value: 'personal' | 'family' }>({
+    ownerId: null,
+    value: 'personal',
+  });
+  const planScope = getAccountScopedUiValue(
+    currentUser?.id ?? null,
+    planScopeState.ownerId,
+    planScopeState.value,
+    'personal',
+    allowCachedUiStateRestore,
   );
+  const setPlanScope = useCallback<React.Dispatch<React.SetStateAction<'personal' | 'family'>>>((update) => {
+    if (!allowCachedUiStateRestore) return;
+    const ownerId = currentUser?.id ?? null;
+    setPlanScopeState((previous) => {
+      const currentValue = previous.ownerId === ownerId ? previous.value : 'personal';
+      return { ownerId, value: typeof update === 'function' ? update(currentValue) : update };
+    });
+  }, [allowCachedUiStateRestore, currentUser?.id]);
+  const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
+  const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
+  const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);
+  const loginAttemptRef = useRef(0);
+  const authBootstrapAttemptRef = useRef(0);
+  const registrationAttemptRef = useRef(0);
+  const registrationControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { registrationControllerRef.current?.abort(); }, []);
+  const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
+  const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
+  const authIdentityRef = useRef(googleMe?.sub);
+  authIdentityRef.current = googleMe?.sub;
+  const isCurrentProfileSession = useMemo(() => {
+    const attempt = loginAttemptRef.current;
+    return () => attempt === loginAttemptRef.current;
+  }, [userProfileRepository]);
+  const suppressNextFullProfileSyncRef = useRef(false);
+  const hasPendingProfileChangesRef = useRef(false);
+  const profileEditRevisionRef = useRef(0);
+  const hasProfileDraftRef = useRef(false);
+  const [hasProfileDraft, setHasProfileDraft] = useState(false);
+  const onProfileDraftChange = useCallback((dirty: boolean) => {
+    if (hasProfileDraftRef.current !== dirty) setHasProfileDraft(dirty);
+    hasProfileDraftRef.current = dirty;
+    if (dirty) profileEditRevisionRef.current += 1;
+  }, []);
+  const persistUser = useProfilePersistence({
+    repository: userProfileRepository,
+    currentUser,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    hasPendingProfileChangesRef,
+    setCurrentUser,
+    setAllUsers,
+    setProfileSyncState,
+  });
+
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  useEffect(() => {
+    if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
+    stateSync.stop();
+  }, [currentUser?.id, googleMe?.sub]);
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
   const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
@@ -307,8 +369,11 @@ const App: React.FC = () => {
     setFamilyShoppingLoading,
     setCloudFamilyMenu,
     setCloudFamilyMembers,
+    familyMenuRepository,
   } = useFamilyCloud({
     currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     planScope,
     setPlanScope,
     weekStartISO,
@@ -320,30 +385,19 @@ const App: React.FC = () => {
     familyMenuLoading,
     familyMenuPrefs,
     familyMenuPrefsOpen,
+    familyMenuProfiles,
     handleGenerateFamilyWeeklyMenu,
     setFamilyMenuError,
     setFamilyMenuPrefs,
     setFamilyMenuPrefsOpen,
   } = useFamilyMenu({
-    allUsers,
-    cloudFamily,
-    cloudFamilyMenu,
-    currentUser,
-    generateFamilyWeeklyMenu,
-    loadCloudFamily,
-    loadFamilyShopping,
-    setAllUsers,
-    setCloudFamilyMenu,
-    setCurrentUser,
-    weekStartISO,
+    cloudFamily, cloudFamilyMembers, cloudFamilyMenu, currentUser, generateFamilyWeeklyMenu,
+    familyMenuRepository, loginGuard: loginReadGuard, isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef, persistUser, setCloudFamilyMenu, setFamilyShopping, weekStartISO,
   });
 
   useEffect(() => {
     setAiStorageScope(currentUser?.id ?? null);
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentUser?.id) resumeRemoteKVSync();
   }, [currentUser?.id]);
 
   // --- Local JSON backup (hybrid approach):
@@ -369,7 +423,7 @@ const App: React.FC = () => {
     setSelectedDiaryDayKey,
     resolvedDiaryDayKey,
     selectedDiaryStats,
-  } = useDiaryDaySelection(currentUser?.id, foodDiary);
+  } = useDiaryDaySelection(currentUser?.id, foodDiary, allowCachedUiStateRestore);
   const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
   const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
@@ -400,13 +454,13 @@ const App: React.FC = () => {
 
   const [isScanning, setIsScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id);
+  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id, allowCachedUiStateRestore);
   const {
     newWeight,
     setNewWeight,
     pdfIncludeMealLog,
     setPdfIncludeMealLog,
-  } = useDashboardPreferences(currentUser?.id);
+  } = useDashboardPreferences(currentUser?.id, allowCachedUiStateRestore);
   
   const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
   const {
@@ -421,19 +475,20 @@ const App: React.FC = () => {
   } = useCourseUiState({
     currentUser,
     courseLibrary,
+    allowCachedUiStateRestore,
   });
 
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
   const [adaptNote, setAdaptNote] = useState<string>('');
-  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(currentUser?.id);
+  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
   const {
     adaptExpanded,
     setAdaptExpanded,
     adaptRead,
     setAdaptRead,
-  } = useAdaptationUiState(currentUser?.id);
+  } = useAdaptationUiState(uiAccountId);
 
   const resetUiState = useCallback(() => {
     clearAppUiStorage(currentUser?.id);
@@ -466,12 +521,16 @@ const App: React.FC = () => {
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
   const { settings, setSettings } = useSettingsPersistence({
-    userId: currentUser?.id,
-    repository: userStateRepository,
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
-  const { aiStatus, lastAiAction } = useAiActivityStatus();
+  const { aiStatus, lastAiAction } = useAiActivityStatus(
+    allowCachedUiStateRestore ? currentUser?.id ?? null : null,
+  );
 
   useDocumentTheme(settings.theme);
 
@@ -481,8 +540,10 @@ const App: React.FC = () => {
     removeFavoriteRecipe,
     clearFavoriteRecipes,
   } = useFavoriteRecipes({
-    userId: currentUser?.id,
-    repository: userStateRepository,
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
@@ -505,13 +566,19 @@ const App: React.FC = () => {
     setCouncilInput,
     councilLoading,
     councilStage,
+    councilError,
     councilMessages,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,
     councilScrollRef,
     handleCouncilSubmit,
     clearCouncilHistory,
-  } = useCouncilChat({ currentUser, foodDiary, habits });
+  } = useCouncilChat({
+    currentUser, foodDiary, habits,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    allowCachedUiStateRestore,
+  });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
   const {
@@ -519,9 +586,10 @@ const App: React.FC = () => {
     setSearchQuery,
     showSearchResults,
     setShowSearchResults,
-  } = useNutritionSearchState(currentUser?.id);
+  } = useNutritionSearchState(currentUser?.id, allowCachedUiStateRestore);
 
   const openEditFood = (item: FoodEntry) => {
+    if (!allowCachedUiStateRestore) return;
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
   const [regData, setRegData] = useState<RegistrationData>({
@@ -559,7 +627,7 @@ const App: React.FC = () => {
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
 
-  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(currentUser?.id);
+  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(uiAccountId);
   const {
     planIntroOpen,
     setPlanIntroOpen,
@@ -569,6 +637,7 @@ const App: React.FC = () => {
     setPlanWeekExpanded,
   } = usePlanUiState({
     userId: currentUser?.id,
+    allowCachedUiStateRestore,
     weekDayKeys: currentUser?.aiPlan?.weeklyMenu?.days.map((day) => day.day) ?? [],
     planScope,
     setPlanScope,
@@ -594,20 +663,6 @@ const App: React.FC = () => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
 
-  const suppressNextFullProfileSyncRef = useRef(false);
-  const suppressProfileSyncStateRef = useRef(false);
-  const hasPendingProfileChangesRef = useRef(false);
-
-  const persistUser = useProfilePersistence({
-    googleSubject: googleMe?.sub,
-    suppressNextFullProfileSyncRef,
-    suppressProfileSyncStateRef,
-    hasPendingProfileChangesRef,
-    setCurrentUser,
-    setAllUsers,
-    setProfileSyncState,
-  });
-
   const getAchievementContext = useCallback(() => buildAchievementContext({
     currentUser,
     foodDiary,
@@ -617,18 +672,24 @@ const App: React.FC = () => {
     todayKey: getTodayKey(),
   }), [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
 
-  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext });
+  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext,
+    isCurrentSession: isCurrentProfileSession, loginGuard: loginReadGuard });
   const checkAchievements = achievements.checkAchievements;
   const {
     persistFoodDiary,
     addFoodToDiary,
+    addFoodToDiaryGuarded,
     updateFoodEntry,
+    updateFoodEntryGuarded,
     deleteFoodPhoto,
     deleteFoodEntry,
   } = useFoodDiary({
     userId: currentUser?.id,
     repository: userStateRepository,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     foodDiary,
+    foodHistory,
     setFoodDiary,
     inferMealType,
     setFoodHistory,
@@ -664,8 +725,11 @@ const App: React.FC = () => {
     handleGenerateWeeklyMenu,
   } = useWeeklyMenuGeneration({
     currentUser,
+    loginGuard: loginReadGuard,
     persistUser,
     checkAchievements,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
   });
 
   const targets = useMemo(() => {
@@ -683,43 +747,69 @@ const App: React.FC = () => {
     gainSurplus: DEFAULT_SURPLUS,
   }), [weekly, currentUser]);
 
-  const exportWeeklyPDF = exportWeeklyReportPdf;
-
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
-  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice();
+  const wisShareScope = accountSessionRenderKey(loginReadGuard, currentUser?.id);
+  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice(
+    wisShareScope,
+    allowCachedUiStateRestore,
+  );
+
+  const isCurrentAccountSession = useCallback(async () => {
+    if (!allowCachedUiStateRestore || !isCurrentProfileSession()) return false;
+    if (loginReadGuard) {
+      try {
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      } catch {
+        return false;
+      }
+    }
+    return allowCachedUiStateRestore && isCurrentProfileSession();
+  }, [allowCachedUiStateRestore, isCurrentProfileSession, loginReadGuard]);
+
+  const exportWeeklyPDF = useCallback(async (report: WeeklyStoredReport) => {
+    if (!await isCurrentAccountSession()) return;
+    const saved = await exportWeeklyReportPdf(report, { isCurrentSession: isCurrentAccountSession });
+    if (!saved || !await isCurrentAccountSession()) return;
+  }, [isCurrentAccountSession]);
 
   const handleShareWisCard = useCallback(async () => {
-    if (!currentUser || !weekly) return;
+    if (!currentUser || !weekly || !allowCachedUiStateRestore || !isCurrentProfileSession()) return;
     const card = wisShareCardRef.current;
     if (!card) {
       setWisShareNotice('error', 'Не удалось подготовить карточку WIS. Попробуйте ещё раз.');
-      trackWisShareEvent('wis_share_failed', { reason: 'share_card_missing', wis: weekly.wis });
       return;
     }
 
     setWisShareNotice('busy', 'Готовим PNG-карточку WIS...');
-    trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
 
     try {
-      const method = await shareWisCard({ card, wis: weekly.wis, waitForFonts: waitForDocumentFonts });
+      const method = await shareWisCard({
+        card,
+        wis: weekly.wis,
+        waitForFonts: waitForDocumentFonts,
+        isCurrentSession: isCurrentAccountSession,
+      });
+      if (!await isCurrentAccountSession()) return;
       setWisShareNotice('success', method === 'share_sheet'
         ? 'Карточка готова и передана в системное меню отправки.'
         : 'Системная отправка недоступна — PNG скачан на устройство.');
-      trackWisShareEvent('wis_share_success', { method, wis: weekly.wis });
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
       return;
     } catch (error: unknown) {
+      if (!await isCurrentAccountSession()) return;
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
-      trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
-  }, [checkAchievements, currentUser, weekly, weeklyReports.length, setWisShareNotice]);
+  }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isCurrentAccountSession,
+    weekly, weeklyReports.length, setWisShareNotice]);
 
   const aiReportGenerationRef = useWeeklyAiReport({
     currentUser,
     weekly,
     targets,
     setWeeklyReports,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   const dailyStats = useMemo(() => calculateDailyNutrition(foodDiary), [foodDiary]);
@@ -730,34 +820,81 @@ const App: React.FC = () => {
   const searchResults = useMemo(() => findFoodSearchResults(searchQuery, foodHistory, foodFavorites), [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useMemo(() => createLogoutSession({
+    onClearLocalSession: () => {
+      authBootstrapAttemptRef.current += 1;
+      registrationAttemptRef.current += 1;
+      registrationControllerRef.current?.abort();
+      loginAttemptRef.current += 1; setUserStateRepository(null);
+      setUserProfileRepository(null);
+      setLoginReadGuard(null);
+      hasProfileDraftRef.current = false;
+      setHasProfileDraft(false);
+      void stateSync.invalidate().catch(() => {
+        if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
+      });
+    },
     googleSub: googleMe?.sub,
+    loginGuard: loginReadGuard,
+    assertCurrentSession: async () => {
+      if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+      await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+    },
     setGoogleMe,
     setCurrentUser,
     setProfileSyncState,
     setLastProfileSyncAt,
     setAuthState,
-  }), [googleMe?.sub]);
+  }), [googleMe?.sub, isCurrentProfileSession, loginReadGuard]);
 
   const deleteAccount = useCallback(async () => {
     const deletedUserId = googleMe?.sub ?? currentUser?.id ?? null;
     await deleteAccountSession({
       googleSub: googleMe?.sub,
-      clearLocalData: deletedUserId ? () => {
-        clearLocalUserData(deletedUserId);
+      loginGuard: loginReadGuard,
+      assertCurrentSession: async () => {
+        if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      },
+      clearLocalData: deletedUserId ? async () => {
+        const cleanup = await clearLocalUserData(deletedUserId);
         setAllUsers(prev => prev.filter(user => user.id !== deletedUserId));
+        if (!cleanup.complete) {
+          const reasons = [
+            !cleanup.localStorageCleared ? 'часть данных localStorage недоступна для удаления' : '',
+            !cleanup.indexedDbCleared ? 'не удалось полностью очистить IndexedDB' : '',
+            cleanup.legacyEvidenceRetained ? 'legacy-очередь содержит записи аккаунта или неразбираемые данные; она сохранена для безопасной миграции' : '',
+          ].filter(Boolean);
+          alert(`Аккаунт удалён на сервере, но локальная очистка завершена не полностью: ${reasons.join('; ')}.`);
+        }
       } : undefined,
       onLogout: logout,
     });
-  }, [currentUser?.id, googleMe?.sub, logout, setAllUsers]);
+  }, [currentUser?.id, googleMe?.sub, isCurrentProfileSession, loginReadGuard, logout, setAllUsers]);
 
   const loginAsUser = useCallback(async (
     user: UserProfile,
     authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
+    isCurrent: () => boolean = () => true,
+    readGuard?: OutboxReadGuard,
   ) => {
+    if (!isCurrent()) return;
+    const loginAttempt = ++loginAttemptRef.current;
     const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
       resetUsageIfNewTime: resetUsageIfNewPeriod,
+      isCurrentSession: () => loginAttempt === loginAttemptRef.current && isCurrent(),
+      readGuard,
     });
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    const profileRepository = prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id);
+    const pendingProfile = await profileRepository.hasPending('profile');
+    if (prepared.hydrated.readGuard) await assertReadSession(prepared.hydrated.readGuard, { isCurrentSession: isCurrent });
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    setUserStateRepository(profileRepository);
+    setUserProfileRepository(profileRepository);
+    setLoginReadGuard(prepared.hydrated.readGuard ?? null);
+    hasProfileDraftRef.current = false;
+    setHasProfileDraft(false);
     setCurrentUser(prepared.currentUser);
     if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
     setWeeklyReports(prepared.hydrated.weeklyReports);
@@ -769,13 +906,24 @@ const App: React.FC = () => {
     setCurrentLesson(null);
     clearOAuthContinuationState();
     setAuthState('app');
-    setProfileSyncState('saved');
-    setLastProfileSyncAt(Date.now());
-    if (prepared.shouldPersistFallbackPlan) persistUser(prepared.currentUser);
+    hasPendingProfileChangesRef.current = pendingProfile;
+    setProfileSyncState(pendingProfile ? 'saving' : 'idle');
+    setLastProfileSyncAt(null);
   }, [googleMe?.sub, googleMe?.email, googleMe?.picture]);
 
 
-  const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
+  const applyRemoteProfile = useCallback((profile: UserProfile) => {
+    loginAttemptRef.current += 1;
+    const refreshed = resetUsageIfNewPeriod(profile);
+    setUserProfileRepository(new UserStateRepository(profile.id));
+    setCurrentUser(refreshed);
+    setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? refreshed : user)));
+    hasPendingProfileChangesRef.current = false;
+    setProfileSyncState('idle');
+    setProfileSyncNote('Профиль обновлён из облака.');
+  }, []);
+
+  const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
       setProfileSyncNote(null);
@@ -783,39 +931,38 @@ const App: React.FC = () => {
     }
     await pushProfileToCloudService(profile, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      syncStateImpl: id => stateSync.flushPending(id),
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloudService(patch, {
+    return patchProfileInCloudService(patch, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      loginGuard: loginReadGuard,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, applyRemoteProfile, loginReadGuard, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloud(patch);
+    const committed = await patchProfileInCloud(patch);
+    if (!committed || !isCurrentProfileSession()) return false;
     if (patch.profileDetailsCompleted) {
       void checkAchievements('profile_details_completed', { profileDetailsCompleted: true });
     }
@@ -825,7 +972,8 @@ const App: React.FC = () => {
     if (typeof patch.wearableSleepHoursLastNight === 'number' && patch.wearableSleepHoursLastNight >= 8) {
       void checkAchievements('sleep_8h_recorded', { sleepHours: patch.wearableSleepHoursLastNight });
     }
-  }, [checkAchievements, patchProfileInCloud]);
+    return true;
+  }, [checkAchievements, patchProfileInCloud, isCurrentProfileSession]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!googleMe?.sub) {
@@ -836,19 +984,17 @@ const App: React.FC = () => {
     }
     await syncAllLocalDataNowService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   useEffect(() => {
     if (profileSyncState === 'saved') {
@@ -864,26 +1010,29 @@ const App: React.FC = () => {
     }
     await reloadUserFromCloudService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      refreshProfileWithGuardImpl: id => stateSync.refreshProfileWithGuard(id),
+      assertReadGuardImpl: guard => assertReadSession(guard, { isCurrentSession: isCurrentProfileSession }),
+      setLoginReadGuard,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setLoginReadGuard]);
 
-  // Server-driven: persist profile changes to D1 (debounced)
+  // Edits are already durable. A debounce wakes the current sender without obtaining fresh proof.
   useProfileAutoSync({
     currentUser,
     cloudUserId: googleMe?.sub,
+    hasUncommittedDraft: hasProfileDraft,
     suppressNextFullProfileSyncRef,
-    pushProfileToCloud,
+    hasPendingProfileChangesRef,
+    pushProfileToCloud: flushPendingProfileToCloud,
     setProfileSyncState,
     setProfileSyncNote,
     setLastProfileSyncAt,
@@ -937,15 +1086,25 @@ const App: React.FC = () => {
     return getRemainingFoodPhotoScans(allowance, currentUser.usage?.aiFoodPhotoCount);
   }, [currentUser, paywall.plan]);
 
+  const incrementPhotoUsage = useCallback((guard: OutboxCommitGuard) => {
+    if (!currentUser) return Promise.resolve(null);
+    return persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiFoodPhotoCount'),
+    }), guard);
+  }, [currentUser, persistUser]);
+
   const processPhotoFiles = useFoodPhotoAnalysis({
     userId: currentUser?.id,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     remainingScans: remainingPhotoScans,
     openPaywall: paywall.openPaywall,
     setScanning: setIsScanning,
     compressPhoto: compressFoodPhoto,
     analyzePhoto: analyzeFoodPhoto,
-    addFoodToDiary,
-    incrementUsage: () => incrementUsage('aiFoodPhotoCount'),
+    addFoodToDiary: addFoodToDiaryGuarded,
+    incrementUsage: incrementPhotoUsage,
     showInsight: setInsightModal,
   });
 
@@ -955,22 +1114,38 @@ const App: React.FC = () => {
     clearFoodSelection,
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
-  } = useFoodSelection(setFoodDiary, deleteFoodEntry, persistFoodDiary);
+  } = useFoodSelection(
+    foodDiary,
+    setFoodDiary,
+    persistFoodDiary,
+    allowCachedUiStateRestore && currentUser?.id
+      ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+      : null,
+  );
 
   const handleDiaryDayChange = useCallback((dayKey: string) => {
     clearFoodSelection();
     setSelectedDiaryDayKey(dayKey);
   }, [clearFoodSelection]);
 
-  const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
-    if (!currentUser) return;
+  const handleToggleHabit = useCallback(async (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep'): Promise<'saved' | 'failed'> => {
+    if (!currentUser || !loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
     const result = applyHabitToggle(currentUser, habits, habitKey);
-    persistUser(result.updatedProfile);
-    setHabits(result.habits);
-    if (result.waterGoalReached) {
-      void checkAchievements('habit_water_done', { waterToday: true });
+    try {
+      const operation = await persistUser(result.updatedProfile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setHabits(result.habits);
+      if (result.waterGoalReached) {
+        void checkAchievements('habit_water_done', { waterToday: true });
+      }
+      return 'saved';
+    } catch {
+      return 'failed';
     }
-  }, [checkAchievements, currentUser, habits, persistUser]);
+  }, [checkAchievements, currentUser, habits, isCurrentProfileSession, loginReadGuard, persistUser]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
     if (!currentUser) return;
@@ -979,25 +1154,37 @@ const App: React.FC = () => {
   }, [currentUser, persistUser]);
 
   const exportShortPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadShortHealthReportPdf } = await import('./pdf');
-    await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadShortHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, isCurrentAccountSession]);
 
   const exportDetailedPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadDetailedHealthReportPdf } = await import('./pdf');
-    await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadDetailedHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog,
+      isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog, isCurrentAccountSession]);
 
   const bootstrapAuth = useCallback(async () => {
+    const attempt = ++authBootstrapAttemptRef.current;
+    const isCurrent = () => attempt === authBootstrapAttemptRef.current;
     const continueAfterOAuth = consumeOAuthContinuationState();
 
     await bootstrapAuthSession({
       requireInvite,
-      loginAsUser,
+      loginAsUser: (user, authUser, readGuard) => loginAsUser(user, authUser, isCurrent, readGuard),
+      isCurrentSession: isCurrent,
       setGoogleMe,
       setInviteError,
       setAuthState,
@@ -1009,6 +1196,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     void bootstrapAuth();
+    return () => { authBootstrapAttemptRef.current += 1; };
+  }, [bootstrapAuth]);
+
+  // A PWA reopened while offline cannot confirm its cloud session. Keep this
+  // listener active during the initial bootstrap too: connectivity can return
+  // before a failed request moves authState to auth_choice.
+  useEffect(() => {
+    const retryBootstrapWhenOnline = () => {
+      const state = authStateRef.current;
+      if (navigator.onLine && !authIdentityRef.current && (state === 'loading' || state === 'auth_choice')) {
+        void bootstrapAuth();
+      }
+    };
+    window.addEventListener('online', retryBootstrapWhenOnline);
+    return () => window.removeEventListener('online', retryBootstrapWhenOnline);
   }, [bootstrapAuth]);
 
   useEffect(() => {
@@ -1047,6 +1249,9 @@ const App: React.FC = () => {
   useCloudSyncRecovery({
     cloudUserId: googleMe?.sub,
     currentUserId: currentUser?.id,
+    sessionKey: loginReadGuard
+      ? JSON.stringify([loginReadGuard.accountId, loginReadGuard.serverSessionId, loginReadGuard.sessionEpoch])
+      : null,
     profileSyncState,
     hasPendingProfileChangesRef,
     syncAllLocalDataNow,
@@ -1081,17 +1286,27 @@ const App: React.FC = () => {
     try { e.target.value = ''; } catch {}
   }, [processPhotoFiles]);
 
-const logWeight = useCallback(() => {
-    if (!currentUser || !newWeight) return;
+const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> => {
+    if (!currentUser || !newWeight) return 'invalid';
     const result = recordDashboardWeight(currentUser, newWeight);
-    if (result.kind === 'invalid') return;
-    persistUser(result.profile);
-    setNewWeight('');
-    void checkAchievements('log_weight', {
-      weightHistoryCount: result.profile.weightHistory?.length || 0,
-      latestWeight: result.weight,
-    });
-  }, [checkAchievements, currentUser, newWeight, persistUser]);
+    if (result.kind === 'invalid') return 'invalid';
+    if (!loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
+    try {
+      const operation = await persistUser(result.profile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setNewWeight('');
+      void checkAchievements('log_weight', {
+        weightHistoryCount: result.profile.weightHistory?.length || 0,
+        latestWeight: result.weight,
+      });
+      return 'saved';
+    } catch {
+      return 'failed';
+    }
+  }, [checkAchievements, currentUser, isCurrentProfileSession, loginReadGuard, newWeight, persistUser, setNewWeight]);
 
   const {
     coachCard,
@@ -1100,36 +1315,80 @@ const logWeight = useCallback(() => {
     handleGetCoachAdvice,
   } = useCoachAdvice({
     currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
     targets,
     dailyStats,
     canUseCoachAdvice: () => checkLimit('aiCoachAdvicePerDay'),
     openPaywall: paywall.openPaywall,
-    incrementUsage: () => incrementUsage('aiCoachCount'),
+    incrementUsage: guard => persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiCoachCount'),
+    }), guard),
     repository: userStateRepository,
     checkAchievements: () => checkAchievements('ai_coach_success'),
   });
 
-  const handleAiRetry = useCallback((opts?: { force?: boolean }) => retryLastAiAction({
-    currentUser,
-    weekly,
-    targets,
-    compliancePct,
-    weightDeltaN,
-    expectedN,
+  const handlePlateauExplanation = usePlateauExplanation({
+    currentUserId: currentUser?.id ?? null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    setLoading: setAdaptLoading,
+    setNote: setAdaptNote,
+  });
+
+  const aiRetryScope = useMemo(() => new AiActionScope(isCurrentProfileSession), [currentUser?.id, isCurrentProfileSession]);
+  useLayoutEffect(() => {
+    aiRetryScope.activate();
+    const hide = () => { aiRetryScope.invalidate(); setAdaptLoading(false); };
+    const show = (event: PageTransitionEvent) => { if (event.persisted) aiRetryScope.activate(); };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', hide);
+      window.addEventListener('pageshow', show);
+    }
+    return () => {
+      aiRetryScope.invalidate();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', hide);
+        window.removeEventListener('pageshow', show);
+      }
+    };
+  }, [aiRetryScope, setAdaptLoading]);
+
+  const handleAiRetry = useCallback((opts?: { force?: boolean }) => {
+    const attempt = aiRetryScope.begin();
+    if (!attempt) return Promise.resolve();
+    return retryLastAiAction({
+      currentUser,
+      weekly,
+      targets,
+      compliancePct,
+      weightDeltaN,
+      expectedN,
+      adaptationIndex,
+      refeedSuggestion,
+      persistUser,
+      retryCoachAdvice: (action, retryOptions) => handleGetCoachAdvice(action, retryOptions),
+      retryPlateauExplanation: (input, action, retryOptions) => handlePlateauExplanation(input, action, retryOptions),
+      weeklyReportGenerationRef: aiReportGenerationRef,
+      controller: attempt.controller,
+      profileEditRevisionRef,
+      loginGuard: loginReadGuard,
+      isCurrentSession: attempt.isCurrent,
+      setWeeklyReports,
+    }, opts).finally(attempt.finish);
+  }, [
     adaptationIndex,
-    refeedSuggestion,
-    persistUser,
-    retryCoachAdvice: handleGetCoachAdvice,
-    setAdaptLoading,
-    setAdaptNote,
-    weeklyReportGenerationRef: aiReportGenerationRef,
-    setWeeklyReports,
-  }, opts), [
-    adaptationIndex,
+    aiRetryScope,
     compliancePct,
     currentUser,
     expectedN,
     handleGetCoachAdvice,
+    handlePlateauExplanation,
+    loginReadGuard,
+    profileEditRevisionRef,
     persistUser,
     refeedSuggestion,
     targets,
@@ -1138,27 +1397,38 @@ const logWeight = useCallback(() => {
   ]);
 
   const handleRegister = useCallback(async () => {
-    await runRegistrationFlow({
-      regData,
-      regNameValid,
-      allUsersCount: normalizedAllUsers.length,
-      requireInvite,
-      inviteCode,
-      googleMe,
-      setPlanError,
-      setLastAiAction,
-      setDevPlanOverride,
-      generatePersonalPlan,
-      loginAsUser,
-      persistUser,
-      setAllUsers,
-      setCurrentUser,
-      setAuthState,
-      setActiveTab,
-      setPlanIntroOpen,
-      fetchImpl: fetch,
-    });
-  }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
+    const attempt = ++registrationAttemptRef.current;
+    registrationControllerRef.current?.abort();
+    const controller = new AbortController();
+    registrationControllerRef.current = controller;
+    const bootstrap = authBootstrapAttemptRef.current;
+    const accountId = googleMe?.sub;
+    const isCurrent = () => attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
+      && accountId === authIdentityRef.current;
+    try {
+      await runRegistrationFlow({
+        regData,
+        regNameValid,
+        allUsersCount: normalizedAllUsers.length,
+        requireInvite,
+        inviteCode,
+        googleMe,
+        setPlanError,
+        setLastAiAction,
+        setDevPlanOverride,
+        generatePersonalPlan,
+        loginAsUser: (user, readGuard) => loginAsUser(user, googleMe, isCurrent, readGuard),
+        controller,
+        isCurrentSession: isCurrent,
+        setActiveTab,
+        setPlanIntroOpen,
+        fetchImpl: fetch,
+      });
+    } finally {
+      if (registrationControllerRef.current === controller) registrationControllerRef.current = null;
+    }
+  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe,
+    setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
 
   const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
     totalMs: ACTIVATION_TOTAL_MS,
@@ -1169,14 +1439,33 @@ const logWeight = useCallback(() => {
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.aiPlan) return;
-    persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
-  }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
+    if (hasProfileDraftRef.current) return;
+    if (loginReadGuard && loginReadGuard.accountId !== currentUser.id) return;
+    const writeGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+      readGuard: { ...loginReadGuard },
+      canCommit: isCurrentProfileSession,
+    } : undefined;
+    void persistUser(previous => previous.aiPlan ? previous : {
+      ...previous,
+      aiPlan: buildFallbackAiPlan(previous),
+    }, writeGuard, { durable: true }).catch(() => undefined);
+  }, [currentUser, hasProfileDraft, isCurrentProfileSession, loginReadGuard, persistUser]);
 
-  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit } = useCourseActions({
+  const courseWriteGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+    localCommitGuard: {
+      accountId: loginReadGuard.accountId,
+      serverSessionId: loginReadGuard.serverSessionId,
+      sessionEpoch: loginReadGuard.sessionEpoch,
+    },
+    canCommit: isCurrentProfileSession,
+  } : undefined;
+  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit, isSavingLesson, lessonSaveError } = useCourseActions({
     currentUser,
     currentLesson,
     selectedQuizOption,
     persistUser,
+    writeGuard: courseWriteGuard,
+    isCurrentSession: isCurrentProfileSession,
     setIsLessonViewOpen,
     setIsQuizActive,
     setSelectedQuizOption,
@@ -1199,7 +1488,9 @@ const logWeight = useCallback(() => {
     state: profileSyncState,
     note: profileSyncNote,
     lastSyncAt: lastProfileSyncAt,
-  }), [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
+    stateQueue: stateQueues.find((queue) => queue.accountId === currentUser?.id),
+    localSaveError: stateSaveIssues.some((issue) => issue.accountId === currentUser?.id && issue.kind === 'error'),
+  }), [googleMe?.sub, currentUser?.id, lastProfileSyncAt, profileSyncNote, profileSyncState, stateQueues, stateSaveIssues]);
 
   const createFamilyCloudWithAchievements = useCallback(async () => {
     await createFamilyCloud();
@@ -1212,13 +1503,13 @@ const logWeight = useCallback(() => {
   }, [checkAchievements, joinFamilyCloud]);
 
   const generateFamilyMenuNowWithAchievements = useCallback(async () => {
-    await generateFamilyMenuNow();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await generateFamilyMenuNow();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, generateFamilyMenuNow]);
 
   const handleGenerateFamilyWeeklyMenuWithAchievements = useCallback(async () => {
-    await handleGenerateFamilyWeeklyMenu();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await handleGenerateFamilyWeeklyMenu();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, handleGenerateFamilyWeeklyMenu]);
 
   const toggleFamilyShoppingItemWithAchievements = useCallback(async (name: string, checked: boolean) => {
@@ -1241,6 +1532,7 @@ const logWeight = useCallback(() => {
       deleteAccount,
       persistUser,
       patchProfileInCloud: patchProfileInCloudWithAchievements,
+      onProfileDraftChange,
       onExportBackup,
       onImportBackup,
       onConnectAutosave,
@@ -1251,6 +1543,7 @@ const logWeight = useCallback(() => {
       syncAllLocalDataNow,
       reloadUserFromCloud,
       resetUiState,
+      onAccountUiCacheRestoreAllowedChange: setAllowCachedUiStateRestore,
       aiBadge,
       retryMeta,
     },
@@ -1281,9 +1574,7 @@ const logWeight = useCallback(() => {
       scheduleRefeedTomorrow,
       expectedN,
       adaptLoading,
-      setAdaptLoading,
-      setLastAiAction,
-      generatePlateauExplanation,
+      generatePlateauExplanation: handlePlateauExplanation,
       adaptNote,
       setAdaptNote,
       adaptExpanded,
@@ -1304,6 +1595,7 @@ const logWeight = useCallback(() => {
       dismissAchievementToast: achievements.dismissAchievementToast,
     },
     progress: {
+      isCurrentSession: isCurrentAccountSession,
       weightHistory: currentUser?.weightHistory || [],
       measurementsHistory: currentUser?.measurementsHistory || [],
       progressPhotos: currentUser?.progressPhotos || [],
@@ -1356,6 +1648,8 @@ const logWeight = useCallback(() => {
       currentUserGoal: currentUser?.goal || Goal.MAINTAIN,
       DEFAULT_DEFICIT,
       DEFAULT_SURPLUS,
+      loginGuard: loginReadGuard,
+      isCurrentSession: isCurrentProfileSession,
       ShoppingListCardComponent: ShoppingListCard,
     },
     nutrition: {
@@ -1379,7 +1673,10 @@ const logWeight = useCallback(() => {
       bulkRemoveSelectedFoods,
       deleteFoodEntry,
       deleteFoodPhoto,
-      openInsight: (item: FoodItem) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
+      openInsight: (item: FoodItem) => {
+        if (!allowCachedUiStateRestore) return;
+        setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true });
+      },
       openEditFood,
       formatTime,
       mealTypeLabel,
@@ -1412,6 +1709,7 @@ const logWeight = useCallback(() => {
       setCouncilInput,
       councilLoading,
       councilStage,
+      councilError,
       councilMessages,
       expandedCouncilThoughtIds,
       setExpandedCouncilThoughtIds,
@@ -1472,32 +1770,36 @@ const logWeight = useCallback(() => {
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
+      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
-      {isScanning && (
+      {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
           <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
         </div>
       )}
-      {paywall.isPaywallOpen && (
+      {allowCachedUiStateRestore && paywall.isPaywallOpen && (
         <PaywallDialog
           currentPlan={paywall.plan}
           currentUser={currentUser}
           isAdmin={isAdmin}
+          loginGuard={loginReadGuard}
+          isCurrentSession={isCurrentProfileSession}
           onPersistUser={persistUser}
           onClose={paywall.closePaywall}
         />
       )}
       
-      {editFoodModal && (
+      {allowCachedUiStateRestore && editFoodModal && (
         <FoodEditModal
           draft={editFoodModal}
           onChange={setEditFoodModal}
           onClose={() => setEditFoodModal(null)}
-          onSave={() => {
+          onSave={async () => {
             const currentEntry = foodDiary.find((item) => item.id === editFoodModal.id);
             const patch = buildCorrectedFoodPatch(editFoodModal, currentEntry?.insight);
-            updateFoodEntry(editFoodModal.id, patch);
+            const saved = await updateFoodEntry(editFoodModal.id, patch);
+            if (!saved) return false;
             if (insightModal?.id === editFoodModal.id && patch.insight) {
               setInsightModal({
                 ...insightModal,
@@ -1507,22 +1809,35 @@ const logWeight = useCallback(() => {
               });
             }
             setEditFoodModal(null);
+            return true;
           }}
         />
       )}
 
-{insightModal && (
+{allowCachedUiStateRestore && insightModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
             <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
               <FoodInsightCard
+                sourceId={insightModal.id}
+                currentUserId={currentUser?.id}
+                loginGuard={loginReadGuard}
+                isCurrentSession={isCurrentProfileSession}
                 photo={insightModal.photo}
                 name={insightModal.name}
                 insight={insightModal.insight}
                 nonFood={Boolean(insightEntry?.nonFood ?? insightModal.nonFood)}
                 isPro={paywall.canUsePro}
                 onEdit={insightEntry ? () => openEditFood(insightEntry) : undefined}
-                onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); persistFoodDiary(newDiary); setInsightModal({ ...insightModal, insight: next }); }}
+                onUpdateInsight={async (next, guard, isCurrent) => {
+                  const sourceId = insightModal.id;
+                  const saved = await updateFoodEntryGuarded(sourceId, { insight: next }, guard, isCurrent);
+                  if (!saved || !isCurrent()) return false;
+                  setInsightModal(previous => previous?.id === sourceId && isCurrent()
+                    ? { ...previous, insight: next }
+                    : previous);
+                  return true;
+                }}
                 onSaveRecipe={addFavoriteRecipe}
                 onClose={() => setInsightModal(null)}
               />
@@ -1550,7 +1865,7 @@ const logWeight = useCallback(() => {
       <AppWorkspace
         workspaceProps={workspaceProps}
       />
-      {activeTab === 'dashboard' && currentUser && weekly && (
+      {allowCachedUiStateRestore && activeTab === 'dashboard' && currentUser && weekly && (
         <ShareWisCard
           ref={wisShareCardRef}
           weekly={weekly}
@@ -1564,10 +1879,10 @@ const logWeight = useCallback(() => {
         />
       )}
       {/* Family menu pre-questions */}
-      {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
+      {allowCachedUiStateRestore && familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
           <FamilyMenuPrefsModal
-            allUsers={allUsers}
+            allUsers={familyMenuProfiles}
             familyMenuPrefs={familyMenuPrefs}
             setFamilyMenuPrefs={setFamilyMenuPrefs}
             onClose={() => setFamilyMenuPrefsOpen(false)}
@@ -1576,22 +1891,26 @@ const logWeight = useCallback(() => {
         </React.Suspense>
       )}
 
+      {allowCachedUiStateRestore && (
+        <React.Suspense fallback={null}>
+          <PlanIntroModal
+            currentUser={currentUser}
+            planError={planError}
+            open={planIntroOpen}
+            onClose={() => setPlanIntroOpen(false)}
+            onOpenPlan={() => setActiveTab('plan')}
+            onOpenNutrition={() => setActiveTab('nutrition')}
+          />
+        </React.Suspense>
+      )}
       <React.Suspense fallback={null}>
-        <PlanIntroModal
-          currentUser={currentUser}
-          planError={planError}
-          open={planIntroOpen}
-          onClose={() => setPlanIntroOpen(false)}
-          onOpenPlan={() => setActiveTab('plan')}
-          onOpenNutrition={() => setActiveTab('nutrition')}
-        />
-      </React.Suspense>
-      <React.Suspense fallback={null}>
-        {isLessonViewOpen && currentLesson && (
+        {allowCachedUiStateRestore && isLessonViewOpen && currentLesson && (
           <LessonViewModal
             currentLesson={currentLesson}
             isQuizActive={isQuizActive}
             selectedQuizOption={selectedQuizOption}
+            isSaving={isSavingLesson}
+            saveError={lessonSaveError}
             onClose={closeLessonView}
             setSelectedQuizOption={setSelectedQuizOption}
             handleMarkLessonRead={handleMarkLessonRead}

@@ -1,8 +1,9 @@
 // Cloudflare Pages Function: /api/bootstrap
 // Single request to hydrate app state after login (server-driven).
-// Returns: { user, profile, kv }
+// Returns public user, profile, items and schema/feature metadata.
 
-import { requireUser, json } from "./_lib/auth";
+import { json } from "./_lib/auth";
+import { requireScopedStateUser } from './_lib/state_session';
 import { requireBetaAccess } from "./_lib/access";
 import { loadFeatures } from "./_lib/features";
 import { requireDB } from "./_lib/db";
@@ -13,24 +14,31 @@ import { APP_VERSION_LABEL, API_SCHEMA_VERSION, DATA_SCHEMA_VERSION, DB_MIGRATIO
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 
-function respond(requestId: string, body: unknown, status: number): Response {
+function respond(request: Request, requestId: string, body: unknown, status: number): Response {
   logApiEvent('bootstrap.response', { requestId, status });
-  return withRequestId(json(body, status), requestId);
+  const response = withRequestId(json(body, status), requestId);
+  response.headers.set('X-FitFocus-Bootstrap-Protocol', '1');
+  response.headers.set('X-FitFocus-Bootstrap-Guard', '1');
+  for (const header of ['X-FitFocus-State-Account', 'X-FitFocus-State-Session']) {
+    const value = request.headers.get(header);
+    if (value !== null) response.headers.set(header, value);
+  }
+  return response;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
-    return respond(requestId, { error: "UNAUTH" }, 401);
+    return respond(request, requestId, { error: "UNAUTH" }, 401);
   }
 
   try {
     await requireBetaAccess(env, user);
   } catch {
-    return respond(requestId, { error: "ACCESS_REQUIRED" }, 403);
+    return respond(request, requestId, { error: "ACCESS_REQUIRED" }, 403);
   }
 
   const db = requireDB(env);
@@ -43,12 +51,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const features = await loadFeatures(env, String(user.sub));
 
-  return respond(requestId, {
+  return respond(request, requestId, {
     schema_version: API_SCHEMA_VERSION,
     app_version: APP_VERSION_LABEL,
     data_schema_version: DATA_SCHEMA_VERSION,
     db_migration_version: DB_MIGRATION_VERSION,
-    user,
+    user: { sub: user.sub, email: user.email, name: user.name, picture: user.picture, roles: user.roles },
     profile,
     roles: user.roles,
     features,

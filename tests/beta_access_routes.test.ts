@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onRequestGet as getBootstrap } from '../functions/api/bootstrap';
 import { onRequestGet as getExport } from '../functions/api/export';
 import { onRequestPost as postMobileToken } from '../functions/api/mobile/token';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 
 type BootstrapContext = Parameters<typeof getBootstrap>[0];
 type ExportContext = Parameters<typeof getExport>[0];
@@ -78,21 +79,35 @@ function baseContext(request: Request) {
 describe('beta access route boundaries', () => {
   it('blocks bootstrap, export, and mobile token issuance without an invite', async () => {
     const token = await signJwt();
+    const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
     const db = makeDb();
     const env = { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' };
 
     const bootstrapResponse = await getBootstrap({
-      ...baseContext(new Request('https://fitfocus.test/api/bootstrap', { headers: { Cookie: `ff_session=${token}` } })),
+      ...baseContext(new Request('https://fitfocus.test/api/bootstrap', { headers: {
+        Cookie: `ff_session=${token}`,
+        'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof,
+      } })),
       env,
     } as unknown as BootstrapContext);
     const exportResponse = await getExport({
       ...baseContext(new Request('https://fitfocus.test/api/export', {
-        headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'export-beta-test-01' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'X-FitFocus-State-Account': 'user-1',
+          'X-FitFocus-State-Session': sessionProof,
+          'X-Request-ID': 'export-beta-test-01',
+        },
       })),
       env,
     } as unknown as ExportContext);
     const mobileResponse = await postMobileToken({
-      ...baseContext(new Request('https://fitfocus.test/api/mobile/token', { method: 'POST', headers: { Cookie: `ff_session=${token}` } })),
+      ...baseContext(new Request('https://fitfocus.test/api/mobile/token', { method: 'POST', headers: {
+        Cookie: `ff_session=${token}`,
+        'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof,
+      } })),
       env,
     } as unknown as MobileTokenContext);
 
@@ -102,7 +117,32 @@ describe('beta access route boundaries', () => {
     }
     expect(bootstrapResponse.headers.get('X-Request-ID')).toBeTruthy();
     expect(exportResponse.headers.get('X-Request-ID')).toBe('export-beta-test-01');
+    expect(exportResponse.headers.get('X-FitFocus-Export-Protocol')).toBe('1');
+    expect(exportResponse.headers.get('X-FitFocus-Export-Guard')).toBe('1');
+    expect(exportResponse.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(exportResponse.headers.get('X-FitFocus-State-Session')).toBe(sessionProof);
 
     expect(db.queries.filter((sql) => sql.includes('SELECT profile_json') || sql.includes('SELECT k, v') || sql.includes('SELECT id, email'))).toHaveLength(0);
+  });
+
+  it.each([
+    {},
+    { 'X-FitFocus-State-Account': 'user-1' },
+  ])('rejects missing or partial export proof before reading private data', async (scopeHeaders) => {
+    const token = await signJwt();
+    const db = makeDb();
+    const response = await getExport({
+      ...baseContext(new Request('https://fitfocus.test/api/export', {
+        headers: { Cookie: `ff_session=${token}`, ...scopeHeaders },
+      })),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db, REQUIRE_INVITE: '1' },
+    } as unknown as ExportContext);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Export-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Export-Guard')).toBe('1');
+    expect(response.headers.has('Set-Cookie')).toBe(false);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+    expect(db.queries).toHaveLength(0);
   });
 });

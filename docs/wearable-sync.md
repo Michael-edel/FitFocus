@@ -1,8 +1,33 @@
 # FitFocus wearable sync contract
 
+## Актуальное уточнение — обязательный proof для выдачи токена, `a1e79ac`, 15.10.2026
+
+Follow-up [`a1e79ac`](https://github.com/Michael-edel/FitFocus/commit/a1e79ac85d1f77c2112d121fd21deb3da03a5fdc)
+переводит `POST /api/mobile/token` на `requireScopedStateUser`: legacy-запрос без
+proof получает 401 до чтения source-session и mint bearer-токена. Локально прошли
+9 профильных mobile/beta tests, полный unit suite (1244/1244), три typecheck,
+API/auth/admin/schema/privacy guards и production build. Точный CI follow-up
+ожидает push; update старого Settings bundle и реальное устройство остаются
+открытыми.
+
 Endpoint: `POST /api/wearable/sync`
 
 Purpose: accept a snapshot from an iPhone bridge, typically a small native app or helper that reads Apple HealthKit and forwards the data to FitFocus.
+
+## Issuing a mobile bearer token
+
+The user creates the bridge token from Settings with `POST /api/mobile/token`.
+The current web client first refreshes the captured login proof through `/api/me`,
+then sends `X-FitFocus-State-Account` and `X-FitFocus-State-Session` with the
+POST. The server compares the pair to the cookie session before issuing a token.
+Scoped responses include `X-FitFocus-Mobile-Token-Protocol: 1`,
+`X-FitFocus-Mobile-Token-Guard: 1` and the echoed public scope; the response is
+marked `Cache-Control: no-store`. The token-issuing POST is not retried.
+
+Settings keeps the token only for the captured account/session guard, checks the
+guard again before showing or copying it, and hides the token and setup link when
+the login changes. Both scope headers are required; unscoped requests receive 401
+before token minting. Older open web bundles must update before rollout.
 
 ## Required transport
 
@@ -61,11 +86,15 @@ If the profile version changed on the server, the endpoint returns `409` with `P
 ## Huawei Health OAuth sync
 
 Huawei Health uses server-side OAuth and does not expose tokens to the PWA.
+The Settings flow is bound to its captured account/session proof. Current client,
+server guard, OAuth-state binding, and account-switch acceptance are documented
+in [Huawei session contract](huawei-health-session.md).
 
 Routes:
 
 - `GET /api/wearable/huawei/status` - returns whether Huawei Health is configured and connected.
-- `GET /api/wearable/huawei/start` - redirects the current logged-in user to Huawei OAuth.
+- `POST /api/wearable/huawei/start` - checks the account/session scope and returns an authorization URL for the current Settings attempt.
+- `GET /api/wearable/huawei/start` - preserves the legacy redirect flow; OAuth state is also bound to the initiating session.
 - `GET /api/wearable/huawei/callback` - exchanges Huawei OAuth `code` for tokens and stores encrypted tokens in D1.
 - `POST /api/wearable/huawei/sync` - refreshes the token if needed, reads today's Huawei Health snapshot, and writes supported metrics into the user profile.
 - `POST /api/wearable/huawei/disconnect` - removes the Huawei connection and disables Huawei as current wearable source.

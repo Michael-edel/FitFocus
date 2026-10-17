@@ -1,12 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parseJson } from '../../safeJson';
 import type { CourseLesson, LessonQuizOption, UserProfile } from '../../types';
+import { getAccountScopedUiValue, useAccountScopedUiSetter } from '../state/accountScopedUi';
 
 export type CourseUiSnapshot = {
   lessonId: string | null;
   isLessonViewOpen: boolean;
   isQuizActive: boolean;
   selectedQuizOptionId: string | null;
+};
+
+export type CourseUiVisibleState = {
+  currentLesson: CourseLesson | null;
+  isLessonViewOpen: boolean;
+  isQuizActive: boolean;
+  selectedQuizOption: LessonQuizOption | null;
+};
+
+const EMPTY_COURSE_UI_STATE: CourseUiVisibleState = {
+  currentLesson: null,
+  isLessonViewOpen: false,
+  isQuizActive: false,
+  selectedQuizOption: null,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -43,21 +58,31 @@ export function pickLessonForToday(user: UserProfile, lessons: CourseLesson[]): 
 export function useCourseUiState({
   currentUser,
   courseLibrary,
+  allowCachedUiStateRestore = true,
 }: {
   currentUser: UserProfile | null;
   courseLibrary: CourseLesson[] | null;
+  allowCachedUiStateRestore?: boolean;
 }) {
   const courseUiStorageKey = currentUser?.id ? `fitfocus.course.ui.v1:${currentUser.id}` : null;
-  const courseUiHydratedKeyRef = useRef<string | null>(null);
+  const [courseUiHydratedKey, setCourseUiHydratedKey] = useState<string | null>(null);
   const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
   const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(false);
   const [selectedQuizOption, setSelectedQuizOption] = useState<LessonQuizOption | null>(null);
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      setCurrentLesson(null);
+      setIsLessonViewOpen(false);
+      setIsQuizActive(false);
+      setSelectedQuizOption(null);
+      setCourseUiHydratedKey(null);
+      return;
+    }
     if (!currentUser || !courseLibrary || !courseUiStorageKey) return;
 
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) {
+    if (courseUiHydratedKey !== courseUiStorageKey) {
       let savedCourseUi: CourseUiSnapshot | null = null;
       try {
         savedCourseUi = parseCourseUiSnapshot(localStorage.getItem(courseUiStorageKey));
@@ -77,17 +102,17 @@ export function useCourseUiState({
       } else {
         setSelectedQuizOption(null);
       }
-      courseUiHydratedKeyRef.current = courseUiStorageKey;
+      setCourseUiHydratedKey(courseUiStorageKey);
       return;
     }
 
     if (currentLesson) return;
     const nextLesson = pickLessonForToday(currentUser, courseLibrary);
     if (nextLesson) setCurrentLesson(nextLesson);
-  }, [courseLibrary, courseUiStorageKey, currentLesson, currentUser]);
+  }, [allowCachedUiStateRestore, courseLibrary, courseUiHydratedKey, courseUiStorageKey, currentLesson, currentUser]);
 
   useEffect(() => {
-    if (!courseUiStorageKey || courseUiHydratedKeyRef.current !== courseUiStorageKey) return;
+    if (!allowCachedUiStateRestore || !courseUiStorageKey || courseUiHydratedKey !== courseUiStorageKey) return;
     const payload: CourseUiSnapshot = {
       lessonId: currentLesson?.id || null,
       isLessonViewOpen,
@@ -99,16 +124,27 @@ export function useCourseUiState({
     } catch {
       // Ignore storage quota or privacy errors.
     }
-  }, [courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
+  }, [allowCachedUiStateRestore, courseUiHydratedKey, courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
+
+  const visibleState = getAccountScopedUiValue(courseUiStorageKey, courseUiHydratedKey, {
+    currentLesson,
+    isLessonViewOpen,
+    isQuizActive,
+    selectedQuizOption,
+  }, EMPTY_COURSE_UI_STATE, allowCachedUiStateRestore);
+  const setCurrentLessonForScope = useAccountScopedUiSetter(courseUiStorageKey, setCurrentLesson, allowCachedUiStateRestore);
+  const setLessonViewOpenForScope = useAccountScopedUiSetter(courseUiStorageKey, setIsLessonViewOpen, allowCachedUiStateRestore);
+  const setQuizActiveForScope = useAccountScopedUiSetter(courseUiStorageKey, setIsQuizActive, allowCachedUiStateRestore);
+  const setSelectedQuizOptionForScope = useAccountScopedUiSetter(courseUiStorageKey, setSelectedQuizOption, allowCachedUiStateRestore);
 
   return {
-    currentLesson,
-    setCurrentLesson,
-    isLessonViewOpen,
-    setIsLessonViewOpen,
-    isQuizActive,
-    setIsQuizActive,
-    selectedQuizOption,
-    setSelectedQuizOption,
+    currentLesson: visibleState.currentLesson,
+    setCurrentLesson: setCurrentLessonForScope,
+    isLessonViewOpen: visibleState.isLessonViewOpen,
+    setIsLessonViewOpen: setLessonViewOpenForScope,
+    isQuizActive: visibleState.isQuizActive,
+    setIsQuizActive: setQuizActiveForScope,
+    selectedQuizOption: visibleState.selectedQuizOption,
+    setSelectedQuizOption: setSelectedQuizOptionForScope,
   };
 }

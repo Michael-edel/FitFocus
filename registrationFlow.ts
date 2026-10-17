@@ -3,9 +3,13 @@ import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLU
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
-import { persistAllUsersSnapshot } from './storage/hybrid';
+import { UserStateRepository } from './storage/userStateRepository';
+import { createProfileIntent } from './storage/profileState';
 import { Goal, type UserProfile } from './types';
 import { isRecord } from './safeJson';
+import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
 
 type RegDataLike = {
   name: string;
@@ -47,20 +51,21 @@ type RegisterFlowDeps = {
   inviteCode: string;
   googleMe: { email?: string; name?: string; sub?: string; picture?: string } | null;
   setPlanError: (message: string | null) => void;
-  setLastAiAction: (value: { feature: string; type: 'plan'; userId: string }) => void;
+  setLastAiAction: (value: { feature: string; type: 'plan'; userId: string; actionId?: string }) => void;
   setDevPlanOverride: (plan: UserProfile['plan'] | '', userId?: string | null) => void;
-  generatePersonalPlan: (user: UserProfile) => Promise<UserProfile['aiPlan']>;
-  loginAsUser: (user: UserProfile) => Promise<void>;
-  persistUser?: (user: UserProfile) => void;
-  setAllUsers: (value: UserProfile[] | ((prev: UserProfile[]) => UserProfile[])) => void;
-  setCurrentUser: (value: UserProfile | null) => void;
-  setAuthState: (value: 'auth_choice' | 'register' | 'app') => void;
+  generatePersonalPlan: (user: UserProfile, session: AiSession) => Promise<UserProfile['aiPlan']>;
+  prepareSession?: typeof prepareAiSession;
+  controller?: AbortController;
+  loginAsUser: (user: UserProfile, readGuard?: OutboxReadGuard) => Promise<void>;
+  isCurrentSession: () => boolean;
   setActiveTab: (value: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => void;
   setPlanIntroOpen: (value: boolean) => void;
   fetchImpl?: typeof fetch;
 };
 
 export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void> {
+  const isCurrent = deps.isCurrentSession;
+  if (!isCurrent()) return;
   if (!deps.googleMe?.sub) {
     deps.setPlanError('Для создания cloud-профиля нужен вход через Google.');
     return;
@@ -93,7 +98,8 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     || deps.googleMe?.email?.split('@')[0]?.trim()
     || 'Пользователь';
   let newUser: UserProfile = {
-    id: `user-${Date.now()}`,
+    id: deps.googleMe.sub,
+    version: 0,
     name: safeName,
     email: deps.googleMe?.email,
     googleSub: deps.googleMe?.sub,
@@ -145,16 +151,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     profileDetailsCompleted: false,
   } as UserProfile;
 
-  deps.setDevPlanOverride(deps.regData.plan, newUser.id);
-
-  try {
-    deps.setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id });
-    const aiPlan = await deps.generatePersonalPlan(newUser);
-    newUser = { ...newUser, aiPlan };
-  } catch {
-    deps.setPlanError('Не удалось создать AI-план. Используем базовый план.');
-    newUser = { ...newUser, aiPlan: buildFallbackAiPlan(newUser) };
-  }
+  newUser = { ...newUser, aiPlan: buildFallbackAiPlan(newUser) };
 
   if (deps.requireInvite && deps.googleMe?.sub) {
     const code = String(deps.inviteCode || '').trim();
@@ -164,63 +161,106 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     }
     try {
       const fetchFn = deps.fetchImpl ?? fetch;
+      const meResponse = await fetchFn('/api/me', { credentials: 'include', cache: 'no-store' });
+      const me: unknown = await meResponse.json();
+      if (!isCurrent()) return;
+      const proof = isRecord(me) ? me.stateSync : null;
+      const capability = isRecord(me) ? me.inviteSync : null;
+      if (!meResponse.ok || !isRecord(me) || !isRecord(me.user) || me.user.sub !== newUser.id
+        || !isRecord(proof) || proof.accountId !== newUser.id || proof.protocol !== 2 || proof.guard !== 1
+        || typeof proof.sessionId !== 'string' || !/^[a-f0-9]{64}$/.test(proof.sessionId)
+        || !isRecord(capability) || capability.protocol !== 1 || capability.guard !== 1) {
+        deps.setPlanError('Сессия или безопасная активация приглашений недоступна. Повторите вход.');
+        return;
+      }
       const rr = await fetchFn('/api/invite/redeem', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': newUser.id, 'X-FitFocus-State-Session': proof.sessionId },
         body: JSON.stringify({ code }),
       });
       const rawRedeemResponse: unknown = await rr.json().catch(() => null);
+      if (!isCurrent()) return;
       const redeemResponse = isRecord(rawRedeemResponse) ? rawRedeemResponse : {};
-      if (!rr.ok || redeemResponse.ok !== true) {
+      if (!rr.ok || redeemResponse.ok !== true || rr.headers.get('X-FitFocus-Invite-Guard') !== '1'
+        || rr.headers.get('X-FitFocus-State-Account') !== newUser.id || rr.headers.get('X-FitFocus-State-Session') !== proof.sessionId) {
         deps.setPlanError(redeemResponse.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
         return;
       }
     } catch {
-      deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
+      if (isCurrent()) deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
       return;
     }
   }
 
+  if (!isCurrent()) return;
+  const repository = new UserStateRepository(newUser.id);
   try {
-    const fetchFn = deps.fetchImpl ?? fetch;
-    const r = await fetchFn('/api/profile', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser),
-    });
-    const rawProfileResponse: unknown = await r.json().catch(() => null);
-    const profileResponse = isRecord(rawProfileResponse) ? rawProfileResponse : {};
-    if (!r.ok) {
-      deps.setPlanError(
-        profileResponse.error === 'ACCESS_REQUIRED'
-          ? 'Сервер не разрешил облачное сохранение. Проверьте beta-доступ и повторите вход через Google.'
-          : 'Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.',
-      );
-      return;
-    }
-    if (isRecord(profileResponse.profile) && typeof profileResponse.profile.version === 'number') {
-      newUser = { ...newUser, version: profileResponse.profile.version };
-    }
-  } catch {
-    deps.setPlanError('Не удалось сохранить профиль в облако. Проверьте соединение и попробуйте ещё раз.');
+    await createProfileIntent(newUser, repository);
+  } catch (error) {
+    if (isCurrent()) deps.setPlanError(error instanceof Error && error.message.startsWith('PROFILE_')
+      ? 'На устройстве уже есть профиль или конфликт создания. Повторите вход, чтобы восстановить его.'
+      : 'Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.');
     return;
   }
-
-  deps.setCurrentUser(newUser);
-  deps.setAllUsers([newUser]);
-  deps.persistUser?.(newUser);
-  persistAllUsersSnapshot(newUser.id, [newUser]);
+  if (!isCurrent()) return;
+  deps.setDevPlanOverride(deps.regData.plan, newUser.id);
+  const controller = deps.controller ?? new AbortController();
+  const aiIsCurrent = () => isCurrent() && !controller.signal.aborted;
+  const hide = () => controller.abort();
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('pagehide', hide, { once: true });
+  let aiSession: AiSession | undefined;
+  let aiPlan: UserProfile['aiPlan'];
+  try {
+    try {
+      aiSession = await (deps.prepareSession ?? prepareAiSession)(newUser.id, controller, aiIsCurrent, { allowInitialSession: true });
+      if (!aiIsCurrent()) return;
+      deps.setLastAiAction({ feature: 'personal_plan', type: 'plan', userId: newUser.id, actionId: crypto.randomUUID() });
+      aiPlan = await deps.generatePersonalPlan(newUser, aiSession);
+    } catch (error) {
+      if (!aiIsCurrent()) return;
+      if (aiSession) {
+        try {
+          await assertAiSession(aiSession);
+        } catch {
+          if (aiIsCurrent()) deps.setPlanError('Сессия изменилась или больше не подтверждена. Повторите вход перед генерацией плана.');
+          return;
+        }
+        if (!aiIsCurrent()) return;
+      } else if (error instanceof SessionReadError) {
+        deps.setPlanError('Не удалось подтвердить AI-сессию. Повторите вход перед генерацией плана.');
+        return;
+      }
+      deps.setPlanError('Не удалось создать AI-план. Используется ранее сохранённый базовый план.');
+    }
+    if (!aiIsCurrent()) return;
+    if (aiPlan && aiSession) {
+      try {
+        const generated = { ...newUser, aiPlan };
+        const operation = await repository.writeJson('profile', generated, {
+          readGuard: { ...aiSession.guard }, canCommit: aiIsCurrent,
+        });
+        if (!aiIsCurrent()) return;
+        if (operation.status !== 'pending') deps.setPlanError('AI-план не сохранён. Базовый профиль остался на устройстве.');
+        else newUser = generated;
+      } catch {
+        if (!aiIsCurrent()) return;
+        deps.setPlanError('AI-план не удалось сохранить. Базовый профиль сохранён на устройстве.');
+      }
+    }
+  } finally {
+    target?.removeEventListener('pagehide', hide);
+  }
+  if (!isCurrent()) return;
+  try {
+    await deps.loginAsUser(newUser, aiSession?.guard);
+  } catch {
+    if (isCurrent()) deps.setPlanError('Профиль сохранён на устройстве. Повторите вход для его восстановления.');
+    return;
+  }
+  if (!isCurrent()) return;
   clearOAuthContinuationState();
-  deps.setAuthState('app');
   deps.setActiveTab('plan');
   deps.setPlanIntroOpen(true);
-
-  try {
-    await deps.loginAsUser(newUser);
-  } catch {
-    // Keep the freshly created local session if background hydration fails.
-    deps.setPlanError('План создан. Вход выполнен локально, облачная синхронизация догрузится автоматически.');
-  }
 }

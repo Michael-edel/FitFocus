@@ -1,4 +1,5 @@
-import { requireUser, json as jsonV } from "./auth";
+import { json as jsonV } from "./auth";
+import { requireScopedStateUser } from './state_session';
 import { requireBetaAccess } from "./access";
 import { loadFeatures, isEnabled, loadSettings, getSetting, getSettingNumber } from "./features";
 import { requireDB } from "./db";
@@ -96,7 +97,7 @@ export async function handleAiPost({ request, env }: { request: Request; env: En
 
   // Enterprise Layer: require authenticated user (server-driven)
   let user;
-  try { user = await requireUser(request, env); } catch { return jsonV({ error: "UNAUTH" }, 401); }
+  try { user = await requireScopedStateUser(request, env); } catch { return jsonV({ error: "UNAUTH" }, 401); }
   try { await requireBetaAccess(env, user); } catch { return jsonV({ error: "ACCESS_REQUIRED", message: "Доступ к beta AI открыт только тестерам с активированным кодом приглашения." }, 403); }
   let bodyText = "";
   let body: JsonObject = {};

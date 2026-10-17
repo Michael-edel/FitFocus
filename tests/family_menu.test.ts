@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost } from '../functions/api/family/menu';
 import { onRequestPost as onRequestGeneratePost } from '../functions/api/family/menu/generate';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyMenuPostContext = Parameters<typeof onRequestPost>[0];
 type FamilyMenuGetContext = Parameters<typeof onRequestGet>[0];
 type FamilyMenuGenerateContext = Parameters<typeof onRequestGeneratePost>[0];
@@ -72,10 +73,12 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
 
 async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuPostContext = {
     request: new Request('https://fitfocus.test/api/family/menu', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -89,10 +92,12 @@ async function postMenu(db: ReturnType<typeof makeDb>, body: Record<string, unkn
 
 async function getMenu(url: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGetContext = {
     request: new Request(url, {
       method: 'GET',
-      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof,
+        ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},
@@ -105,10 +110,12 @@ async function getMenu(url: string, requestId?: string) {
 
 async function generateMenu(url: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof,
+        ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},

@@ -9,6 +9,26 @@ const LEGACY_HABIT_IDS: Record<HabitKey, string> = {
   breakfast: 'h_veg',
   sleep: 'h_sleep',
 };
+const HABIT_KEYS_BY_LEGACY_ID: Record<string, HabitKey> = {
+  h_water: 'water',
+  h_steps: 'steps',
+  h_veg: 'breakfast',
+  h_sleep: 'sleep',
+};
+
+/** Rebuilds the legacy current counters from the profile's authoritative daily record. */
+export function reconcileLegacyHabitProgress(
+  habits: UserHabit[],
+  profile: UserProfile,
+  dayKey: string,
+): UserHabit[] {
+  return habits.map((habit) => {
+    const key = HABIT_KEYS_BY_LEGACY_ID[habit.id];
+    if (!key) return habit;
+    const done = Boolean(profile.dailyHabits?.[dayKey]?.[key]);
+    return { ...habit, current: done ? habit.goal : 0 };
+  });
+}
 
 /** Keeps the legacy dashboard habit indicators aligned with a persisted daily habit update. */
 export function syncLegacyHabitProgress(

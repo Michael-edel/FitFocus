@@ -1,3 +1,4 @@
+import { familyMenuStateReady } from './family_menu_state';
 import type { SessionUser } from './auth';
 import { safeJsonParse } from './json';
 import { parseAttachmentsJson, type SupportAttachmentRecord } from './support_attachments';
@@ -34,10 +35,12 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
   const familyMemberships = await allRows(db, 'SELECT id, family_id, role, status, display_name, restrictions_json, is_active, updated_at, sex, age, height_cm, weight_kg, activity, goal, created_at FROM family_members WHERE user_id = ? ORDER BY created_at DESC', userId);
   const ownedFamilies = await allRows(db, 'SELECT id, name, is_active, created_at FROM families WHERE owner_user_id = ? ORDER BY created_at DESC', userId);
   const familyMenus = await allRows(db, "SELECT id, family_id, menu_json, created_at FROM family_menus WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT fm.family_id FROM family_members fm JOIN families f ON f.id = fm.family_id WHERE fm.user_id = ? AND fm.status = 'active' AND fm.is_active = 1 AND f.is_active = 1)", userId, userId);
+  const familyMenuGenerations = await familyMenuStateReady(db) ? await allRows(db, "SELECT family_id, week_start, version, menu_json, updated_at FROM family_menu_generations WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT fm.family_id FROM family_members fm JOIN families f ON f.id = fm.family_id WHERE fm.user_id = ? AND fm.status = 'active' AND fm.is_active = 1 AND f.is_active = 1)", userId, userId) : [];
   const familyInvitesCreated = await allRows(db, 'SELECT code, family_id, expires_at, created_by_user_id, created_at, used_by_user_id, used_at FROM family_invites WHERE created_by_user_id = ? ORDER BY created_at DESC', userId);
   const familyInvitesUsed = await allRows(db, 'SELECT code, family_id, expires_at, created_by_user_id, created_at, used_by_user_id, used_at FROM family_invites WHERE used_by_user_id = ? ORDER BY used_at DESC', userId);
   const recipes = await allRows(db, 'SELECT id, title, source_food_name, calories, protein, fat, carbs, ingredients_json, steps_json, allergens_json, created_at FROM recipes WHERE user_id = ? ORDER BY created_at DESC', userId);
   const weeklyMenuItems = await allRows(db, 'SELECT id, family_id, week_start, ingredient_name, grams, category, created_at FROM weekly_menu_items WHERE user_id = ? ORDER BY week_start DESC, ingredient_name', userId);
+  const personalMenuProjections = await allRows(db, 'SELECT week_start, items_json, profile_version, updated_at FROM personal_menu_projections WHERE user_id = ? ORDER BY week_start DESC', userId);
   const weeklyMenusCreated = await allRows(db, 'SELECT id, family_id, week_start, menu_json, created_at FROM weekly_menus WHERE created_by_user_id = ? ORDER BY created_at DESC', userId);
   const weeklyMenuPortions = await allRows(db, 'SELECT weekly_menu_id, portions_json, totals_json, updated_at FROM weekly_menu_portions WHERE user_id = ? ORDER BY updated_at DESC', userId);
   const shoppingChecked = await allRows(db, 'SELECT scope_id, week_start, family_id, ingredient_name, checked, updated_at FROM shopping_checked WHERE scope_id = ? OR scope_id = ? ORDER BY updated_at DESC', `personal:${userId}`, userId);
@@ -69,10 +72,12 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
     family_memberships: familyMemberships,
     owned_families: ownedFamilies,
     family_menus: familyMenus,
+    family_menu_generations: familyMenuGenerations,
     family_invites_created: familyInvitesCreated,
     family_invites_used: familyInvitesUsed,
     recipes,
     weekly_menu_items: weeklyMenuItems,
+    personal_menu_projections: personalMenuProjections,
     weekly_menus_created: weeklyMenusCreated,
     weekly_menu_portions: weeklyMenuPortions,
     shopping_checked: shoppingChecked,

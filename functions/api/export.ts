@@ -1,18 +1,19 @@
 // Cloudflare Pages Function: /api/export
 // GDPR-style export of user data stored in D1.
 
-import { json, requireUser } from './_lib/auth';
+import { json } from './_lib/auth';
 import { requireBetaAccess } from './_lib/access';
 import { requireDB } from './_lib/db';
 import { buildUserDataExport } from './_lib/user_data_export';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
+import { requireScopedStateUser, withSessionGuard } from './_lib/state_session';
 
 type Env = { AUTH_JWT_SECRET: string; DB: D1Database; REQUIRE_INVITE?: string };
 
 const handleExportGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: 'UNAUTH' }, 401);
   }
@@ -42,5 +43,5 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const response = await handleExportGet(context);
   const requestId = requestIdFor(context.request);
   logApiEvent('export.response', { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withRequestId(withSessionGuard(response, context.request, 'Export'), requestId);
 };

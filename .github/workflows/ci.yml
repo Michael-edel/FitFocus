@@ -20,7 +20,6 @@ concurrency:
 jobs:
   build-and-typecheck:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -73,4 +72,30 @@ jobs:
         run: npm run build
 
       - name: E2E tests
+        env:
+          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-98d4910
         run: npm run test:e2e
+
+      - name: Retain browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: fitfocus-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Canonical readers and CAS after server rollback
+        env:
+          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-98d4910
+        run: npm run release:check -- "$FITFOCUS_ROLLBACK_ARTIFACT"
+
+      - name: Retain tested rollback artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: fitfocus-rollback-98d4910-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fitfocus-rollback-98d4910.tar
+          if-no-files-found: error
+          retention-days: 90
