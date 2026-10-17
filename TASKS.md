@@ -1194,6 +1194,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     без retries. Полный unit suite — 1343/1343, три typecheck-профиля и
     production build прошли. Остальные AI/family callbacks и общий lifecycle
     P0.5 остаются открытыми.
+  - [x] Не показывать `SESSION_READ_AUTH`, `LOGIN_SESSION_CHANGED` и session-read
+    отказ семейной AI-генерации как обычную ошибку меню. До исправления новый
+    browser regression показывал `SESSION_READ_AUTH` после scoped 401; после
+    исправления session/auth ошибки подавляются, а остальные ошибки остаются
+    видимыми. Тест прошёл 6/6 на desktop Chromium/Firefox/WebKit без retries;
+    полный unit suite — 1343/1343, три typecheck-профиля и production build
+    прошли. Общий P0.5, остальные callbacks и staging остаются открытыми.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

@@ -11,6 +11,7 @@ import { generateOwnedFamilyMenu } from './features/family/familyMenuGeneration'
 import { familyShoppingProjection } from './features/family/shoppingProjection';
 import type { FamilyMenuRepository } from './storage/familyMenuRepository';
 import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
 import type { useProfilePersistence } from './features/profile/useProfilePersistence';
 import type { AiSession } from './services/aiSession';
 
@@ -53,6 +54,11 @@ export function readFamilyMenuPrefs(raw: string | null, defaultIncludeIds: strin
 const familyPrefsCodec: StateCodec<FamilyMenuPrefs> = {
   decode: (raw, fallback) => readFamilyMenuPrefs(raw, fallback.includeIds), encode: JSON.stringify,
 };
+
+function isStaleFamilyMenuSessionError(error: unknown): boolean {
+  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth')
+    || error instanceof Error && error.message === 'LOGIN_SESSION_CHANGED';
+}
 
 type UseFamilyMenuParams = {
   cloudFamily: CloudFamily | null; cloudFamilyMembers: CloudFamilyMember[];
@@ -121,7 +127,9 @@ export function useFamilyMenu({ cloudFamily, cloudFamilyMembers, cloudFamilyMenu
       }
       return menu;
     } catch (error) {
-      if (attempt.isCurrent()) setFamilyMenuError(errorMessage(error, 'Не удалось сгенерировать семейное меню на неделю.'));
+      if (attempt.isCurrent() && !isStaleFamilyMenuSessionError(error)) {
+        setFamilyMenuError(errorMessage(error, 'Не удалось сгенерировать семейное меню на неделю.'));
+      }
       return null;
     } finally { if (attempt.isCurrent()) setFamilyMenuLoading(false); attempt.finish(); }
   }, [cloudFamily, currentUser, loginGuard, scope, profileEditRevisionRef, weekStartISO, familyMenuRepository,

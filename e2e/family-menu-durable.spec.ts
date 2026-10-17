@@ -185,6 +185,16 @@ test('AI family generation commits once through the family queue', async ({ page
   await expect(update).toBeEnabled(); expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
   await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-menu-ai.png') });
 });
+test('family menu generation hides stale-session rejection instead of showing a generation failure', async ({ page }) => {
+  const { counts, errors } = await setup(page, 'session-expired-ai'); await navigate(page, 'План');
+  const update = page.getByRole('button', { name: 'Обновить', exact: true }); await update.scrollIntoViewIfNeeded(); await update.click();
+  await expect.poll(() => counts.ai).toBe(1);
+  await expect(page.getByText('SESSION_READ_AUTH', { exact: true })).toHaveCount(0);
+  await expect(update).toBeEnabled();
+  const injectedUnauthorized = 'Failed to load resource: the server responded with a status of 401 (Unauthorized)';
+  expect(errors.filter(error => error === injectedUnauthorized).length).toBeLessThanOrEqual(1);
+  await healthy(page, errors.filter(error => error !== injectedUnauthorized));
+});
 test('AI family response after logout cannot create a menu or achievements', async ({ page }) => {
   const { counts, errors, release } = await setup(page, 'held-ai');
   try {
@@ -267,6 +277,7 @@ test('a delayed family AI response after same-account reauthentication cannot cr
     expect(counts.accepted).toBe(0);
     expect(counts.oldWriter).toBe(0);
     expect(counts.achievements).toBe(0);
+    await expect(page.getByText('LOGIN_SESSION_CHANGED', { exact: true })).toHaveCount(0);
     await healthy(page, errors);
     await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
     expect(errorsReauthenticated).toEqual([]);

@@ -52,7 +52,7 @@ export async function saved(page: Page) {
   }, account);
 }
 
-export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
+export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'session-expired-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
   let cloud = familyTestMenu(account), profile = buildMockProfile();
@@ -119,6 +119,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     }
     if (path === '/api/ai' && String(request.postDataJSON()?.feature).startsWith('family_menu')) {
       counts.ai += 1; expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
+      if (mode === 'session-expired-ai') return json({ error: { message: 'Session expired' } }, 401);
       if (mode === 'held-ai') await held;
       await json({ text: JSON.stringify(familyTestMenu(account, 700, week)) }); counts.fulfilled += 1; return;
     }

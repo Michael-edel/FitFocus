@@ -5872,3 +5872,17 @@ same-account reauthentication сценарии `ai-callback-account-switch.spec.
 1343/1343; общий typecheck, domain-strict, storage-strict, production build и
 `git diff --check` прошли. Общий P0.5, остальные callbacks и staging остаются
 открыты.
+
+## P0.5 — подавлять session/auth отказ семейной AI-генерации, 17.10.2026
+
+В `useFamilyMenu` отказ `AiSession` из-за `SESSION_READ_AUTH`,
+`LOGIN_SESSION_CHANGED` или изменившейся сессии ранее попадал в общий `catch` и
+показывался как ошибка генерации. Новый E2E сначала воспроизвёл `SESSION_READ_AUTH`
+на экране после специально возвращённого scoped 401. Теперь ожидаемые session/auth
+отказы не отображаются как ошибка меню; остальные ошибки генерации и сохранения
+по-прежнему видны, а `finally` снимает loading для ещё текущей попытки.
+
+Регрессия и same-account reauthentication сценарий прошли 6/6 на desktop
+Chromium/Firefox/WebKit без retries. Полный unit suite — 1343/1343; общий,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли. P0.5, другие callbacks, staging и общий lifecycle остаются открытыми.
