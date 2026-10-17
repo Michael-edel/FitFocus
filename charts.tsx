@@ -35,6 +35,12 @@ type DailyStats = {
 
 type Targets = DailyStats;
 
+function initialChartDimension(height: number) {
+  const viewportWidth = typeof window === 'undefined' ? 320 : window.innerWidth;
+  const horizontalChrome = viewportWidth >= 768 ? 400 : 72;
+  return { width: Math.max(1, viewportWidth - horizontalChrome), height };
+}
+
 type DashboardChartsPanelProps = {
   dailyStats: DailyStats;
   targets: Targets;
@@ -96,7 +102,7 @@ export function WeightTrendChart({ weightHistory, targetWeight }: { weightHistor
 
   return (
     <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={220} initialDimension={initialChartDimension(220)}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorWeightChart" x1="0" y1="0" x2="0" y2="1">
@@ -201,7 +207,7 @@ export function ProgressArchiveChart({
 
   return (
     <div className="h-[220px] w-full">
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={220} initialDimension={initialChartDimension(220)}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorProgressPhotos" x1="0" y1="0" x2="0" y2="1">

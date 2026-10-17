@@ -4,14 +4,20 @@ import { resolve } from 'node:path';
 import { rollbackPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
 import { mockApp, openApp } from './support/appHarness';
-import { saved, healthy } from './support/familyHarness';
+import { saved, healthy, isExpectedStateProtocolRejection } from './support/familyHarness';
 
 test('fresh rollback installation can explicitly update to the candidate and preserve its family intent', async ({ context }, info) => {
   test.setTimeout(90_000);
   const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { retryFamilyPutDelayMs: 5_000 });
   const page = await context.newPage(), errors: string[] = [], googleRequests: string[] = [];
+  let stateProtocolRejectionResponses = 0;
   let navigations = 0;
   page.on('pageerror', error => errors.push(error.message));
+  page.on('response', response => {
+    if (new URL(response.url()).pathname === '/api/state' && response.status() === 426) {
+      stateProtocolRejectionResponses += 1;
+    }
+  });
   await page.addInitScript(() => {
     const key = '__fitfocusPwaRollbackLifecycle';
     const record = (type: string, detail: Record<string, unknown> = {}) => {
@@ -72,7 +78,10 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     const lifecycle = await page.evaluate(() => JSON.parse(sessionStorage.getItem('__fitfocusPwaRollbackLifecycle') ?? '[]') as Array<{ type?: string }>);
     expect(lifecycle.filter(event => event.type === 'unhandledrejection')).toEqual([]);
     expect(lifecycle.filter(event => event.type === 'error')).toEqual([]);
-    await healthy(page, errors); expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
+    expect(server.counts.stateProtocolRejected).toBeGreaterThan(0);
+    expect(stateProtocolRejectionResponses).toBe(server.counts.stateProtocolRejected);
+    await healthy(page, errors.filter(error => !isExpectedStateProtocolRejection(error)));
+    expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
     await page.screenshot({ path: info.outputPath('fresh-rollback-updated.png') });
     await info.attach('fresh-rollback-proof', { body: JSON.stringify({ installedScript, candidateScript, navigations, operation,
       counts: server.counts, googleRequests, lifecycle }), contentType: 'application/json' });

@@ -74,6 +74,13 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     await expect(page).toHaveTitle(/FitFocus/);
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
     await expect(page.getByRole('button', { name: /^Светлая/ })).toBeVisible();
+  // Do not reload across the startup report's active send. The server may
+  // accept the request while navigation destroys the page before it commits
+  // the IndexedDB acknowledgement, leaving a live lease in the fresh page.
+  await expect.poll(() => server.stateWriteKeys)
+    .toContain('fitfocus_data_google-e2e-sub_weekly_reports');
+  await expect.poll(async () => (await storedSettings(page)).allOperations).toEqual([]);
+  expect(inFlightStateWrites.size).toBe(0);
     // The installation page can load before the worker takes control. Warm one
     // controlled navigation online so the test models a previously used PWA.
     await page.reload();

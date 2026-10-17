@@ -87,11 +87,11 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
   const message = status === 'blocked' ? messages.blocked
     : ownIssues.some((issue) => issue.kind === 'error') ? messages.error
       : conflict ? messages.conflict
-        : ownQueue?.failed ? messages.failed
-          : pause === 'auth' ? messages.auth
-            : pause === 'access' ? messages.access
-              : pause === 'protocol' ? messages.protocol
-                : pause === 'legacy' ? messages.legacy : messages.pending;
+        : pause === 'auth' ? messages.auth
+          : pause === 'access' ? messages.access
+            : pause === 'protocol' ? messages.protocol
+              : pause === 'legacy' ? messages.legacy
+                : ownQueue?.failed ? messages.failed : messages.pending;
 
   async function resolve(group: RecoveryGroup, choice: RecoveryChoice): Promise<void> {
     if (!accountId) return;

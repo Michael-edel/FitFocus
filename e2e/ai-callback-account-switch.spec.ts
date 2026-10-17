@@ -2404,7 +2404,9 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
   await openApp(page, '/#nutrition');
   await expect(page.getByText('Исходное блюдо', { exact: true })).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
-  await page.getByRole('button', { name: 'Правка', exact: true }).click();
+  const edit = page.getByRole('button', { name: 'Правка', exact: true });
+  if (!await edit.isVisible()) await page.getByRole('button', { name: 'Действия', exact: true }).click();
+  await edit.click();
   const name = page.getByPlaceholder('Например: манты свинина/говядина с манго-чили соусом');
   await name.fill('Исправленное блюдо');
 

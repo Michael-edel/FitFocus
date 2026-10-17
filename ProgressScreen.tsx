@@ -239,7 +239,17 @@ export default function ProgressScreen({
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('weight');
   const [activeSection, setActiveSection] = useState<ProgressSectionId>('summary');
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== 'undefined'
+    && window.matchMedia('(min-width: 768px)').matches);
   const [timelineFilter, setTimelineFilter] = useState<'all' | 'measurement' | 'photo' | 'wearable'>('all');
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktopViewport(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
   const [draftWeight, setDraftWeight] = useState('');
   const [draftWaist, setDraftWaist] = useState('');
@@ -256,6 +266,7 @@ export default function ProgressScreen({
   const [profileActionError, setProfileActionError] = useState<string | null>(null);
   const [wearablePasteDraft, setWearablePasteDraft] = useState('');
   const [pendingWearableFile, setPendingWearableFile] = useState<File | null>(null);
+  const [wearableFileInputGeneration, setWearableFileInputGeneration] = useState(0);
   const wearableImportInputRef = React.useRef<HTMLInputElement | null>(null);
   const profileScopeAccountRef = React.useRef<string | null>(currentUser?.id ?? null);
   const profileScopeGenerationRef = React.useRef(0);
@@ -283,6 +294,7 @@ export default function ProgressScreen({
     setWearableBusy(null);
     setDraftSaving(false);
     setImportBusy(false);
+    setWearableFileInputGeneration((generation) => generation + 1);
     if (wearableImportInputRef.current) wearableImportInputRef.current.value = '';
   }, [currentUser?.id]);
 
@@ -853,6 +865,7 @@ export default function ProgressScreen({
       const saved = await applyWearableImport(text, scope);
       if (saved && isProfileScopeIdentityCurrent(scope)) {
         setPendingWearableFile(null);
+        setWearableFileInputGeneration((generation) => generation + 1);
         if (wearableImportInputRef.current) wearableImportInputRef.current.value = '';
       }
       return saved;
@@ -1316,6 +1329,7 @@ export default function ProgressScreen({
           </div>
 
           <input
+            key={wearableFileInputGeneration}
             ref={wearableImportInputRef}
             type="file"
             accept=".json,.csv,application/json,text/csv"
@@ -1631,6 +1645,7 @@ export default function ProgressScreen({
             </div>
           </div>
 
+          {(isDesktopViewport || mobileDetailsOpen) && (
           <div className="mt-5 h-[300px]">
             {progressDynamicsSeries.length ? (
               <ResponsiveContainer width="100%" height="100%" initialDimension={initialProgressChartDimension(300)}>
@@ -1663,6 +1678,7 @@ export default function ProgressScreen({
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6">
@@ -1756,6 +1772,7 @@ export default function ProgressScreen({
             </div>
           </div>
 
+          {(isDesktopViewport || mobileDetailsOpen) && (
           <div className="mt-5 h-[280px]">
             {chartData.length ? (
               <ResponsiveContainer width="100%" height="100%" initialDimension={initialProgressChartDimension(280)}>
@@ -1797,6 +1814,7 @@ export default function ProgressScreen({
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div id="progress-photos" className={clsx('rounded-[2rem] border border-slate-800 bg-slate-900/40 p-5 md:p-6 scroll-mt-28', !mobileDetailsOpen && 'hidden md:block')}>

@@ -148,4 +148,7 @@ export async function navigate(page: Page, name: string) {
   if (!await button.isVisible()) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
   await button.scrollIntoViewIfNeeded(); await button.click();
 }
+export function isExpectedStateProtocolRejection(error: string): boolean {
+  return /Failed to load resource:.*\b426 \(Upgrade Required\)/.test(error);
+}
 export async function healthy(page: Page, errors: string[]) { await expect(page.locator('vite-error-overlay')).toHaveCount(0); expect(errors).toEqual([]); }

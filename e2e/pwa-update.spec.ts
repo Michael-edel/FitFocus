@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { previousPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
-import { saved, navigate, healthy } from './support/familyHarness';
+import { saved, navigate, healthy, isExpectedStateProtocolRejection } from './support/familyHarness';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 
 async function openNative(page: Page, url: string, standalone: boolean) {
@@ -155,6 +155,7 @@ test('real service worker waits for an explicit update and preserves durable fam
   const apiRequests: string[] = [];
   const failedApiRequests: Array<{ tab: string; path: string; errorText: string | null }> = [];
   const meResponses: Array<{ tab: string; status: number }> = [];
+  const stateProtocolRejectionResponses: Array<{ tab: string; status: number }> = [];
   // The retained v2 HTML has an unused GIS loader. Its first, uncontrolled page
   // uses a synthetic login; isolate that external SDK, preserving all v2 app/SW bytes.
   await oldPage.route('https://accounts.google.com/gsi/client', route => {
@@ -180,6 +181,9 @@ test('real service worker waits for an explicit update and preserves durable fam
         || ['warning', 'error'].includes(message.type())) diagnostics.push(message.text());
     });
     tab.on('response', response => {
+      if (new URL(response.url()).pathname === '/api/state' && response.status() === 426) {
+        stateProtocolRejectionResponses.push({ tab: tab === oldPage ? 'old' : 'new', status: response.status() });
+      }
       if (new URL(response.url()).pathname === '/api/me') {
         meResponses.push({ tab: tab === oldPage ? 'old' : 'new', status: response.status() });
       }
@@ -347,15 +351,18 @@ test('real service worker waits for an explicit update and preserves durable fam
     expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(isWebKit ? 2 : 0);
     const currentPageIdbNavigationWarnings = errors.filter(isExpectedFirefoxIdbNavigationWarning);
     expect(currentPageIdbNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
-    await healthy(page, errors.filter(error => !expectedWebKitApiMeWarnings.includes(error)
+    expect(server.counts.stateProtocolRejected).toBeGreaterThan(0);
+    expect(stateProtocolRejectionResponses).toHaveLength(server.counts.stateProtocolRejected);
+    await healthy(page, errors.filter(error => !isExpectedStateProtocolRejection(error)
+      && !expectedWebKitApiMeWarnings.includes(error)
       && !isExpectedFirefoxIdbNavigationWarning(error)));
     // The pinned previous release resolves IndexedDB reads on request success, then
     // clientsClaim reloads it before Firefox dispatches transaction.complete.
     // Its read is aborted by that expected navigation; durable writes are checked above.
     const previousBuildNavigationWarnings = oldErrors.filter(isExpectedFirefoxIdbNavigationWarning);
     expect(previousBuildNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
-    await healthy(oldPage, oldErrors.filter(error => !(info.project.name === 'desktop-firefox'
-      && isExpectedFirefoxIdbNavigationWarning(error))));
+    await healthy(oldPage, oldErrors.filter(error => !isExpectedStateProtocolRejection(error)
+      && !(info.project.name === 'desktop-firefox' && isExpectedFirefoxIdbNavigationWarning(error))));
     await page.getByPlaceholder('Как к вам обращаться').evaluate(element => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: info.outputPath('pwa-updated-preserved-profile.png') });
     await info.attach('pwa-runtime-diagnostics', { body: JSON.stringify({ diagnostics, unexpectedApi: server.unexpectedApi,
