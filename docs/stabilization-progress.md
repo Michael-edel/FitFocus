@@ -6215,7 +6215,29 @@ legacy-счётчики привычек сверяются с сегодняш�
 Полный unit suite прошёл **1357/1357**, тест hydration/profile reconciliation
 входит в набор; пара сценариев веса и привычек прошла **14/14** по семи
 desktop/mobile/PWA Playwright-проектам. Root/domain/storage typechecks,
-production build и `git diff --check` прошли. Точный родительский CI для
-`dbca5e3` — [run #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632) —
-ещё выполняется на E2E. Локальную habit-правку пока не отправляю, чтобы не
-заменить проверку SHA `dbca5e3` новым workflow; P0.8/P0.9, staging и выпуск открыты.
+production build и `git diff --check` прошли. На момент записи точный родительский
+CI для `dbca5e3` — [run #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632) —
+ещё выполнялся на E2E; он позже завершился ошибкой и разобран в следующем разделе.
+P0.8/P0.9, staging и выпуск остаются открыты.
+
+## P0.8 — durable Settings profile callbacks, `a0721b0`, 17.10.2026
+
+Профильная форма и отдельные действия Settings подтверждали изменения до
+IndexedDB commit. Теперь сохранение профиля, goal intensity и risk acknowledgment,
+progress photos, а также профильные ответы Huawei ждут durable write. При отказе
+показывается ошибка, введённое значение остаётся доступно для повтора. Записи
+используют account/session-scoped local commit guard; он сохраняет локальное
+намерение во время sender auth-паузы. Автосинхронизация профиля откладывается,
+пока открыт несохранённый draft.
+
+Исправлен также общий E2E Service Worker mock: он теперь EventTarget с состоянием
+`activated`, поэтому writer-fence handshake проходит как в настоящем браузере.
+Родительский CI [#1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632)
+для `dbca5e3` завершился E2E failure (summary: 341 failed; доступны десять
+подробных account-switch annotations). Эти десять сценариев прошли локально
+10/10 на desktop Chromium после исправления mock. Полный `profile-durability.spec.ts`
+прошёл 19/19 Chromium; Huawei и goal-intensity regressions — 14/14 на семи
+desktop/mobile/PWA проектах. Unit — **1359/1359**, root/domain/storage typecheck,
+production build и `git diff --check` прошли. Точный CI нового SHA ожидает push;
+P0.8/lifecycle, staging, release acceptance и интеграция в защищённую `main`
+остаётся открытыми.

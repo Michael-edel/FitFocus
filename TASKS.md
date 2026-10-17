@@ -2,15 +2,20 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Последняя локальная правка P0.8 сохраняет
-dashboard-привычку через durable profile commit; её browser/PWA-матрица прошла
-7/7 без retries. В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7
-следующих задач; ни один P0 полностью не закрыт.
+защищённую `main` не подтверждены. Кодовый commit `a0721b0` переводит действия
+настроек профиля на durable commit: UI подтверждает правку только после записи
+в IndexedDB, а account/session guard действует и во время auth-паузы. Полная
+профильная Chromium-проверка прошла 19/19; две регрессии Huawei/интенсивности —
+14/14 по семи desktop/mobile/PWA проектам. В плане остаются 33 незакрытых
+пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
-проверяется точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632);
-workflow пока выполняется. Локальная правка привычек готова к публикации после
-завершения этого прогона.
+проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
+который завершился ошибкой в E2E: summary сообщил `341 failed`, а доступные
+GitHub annotations показывают отказы account-switch сценариев при ожидании
+пустого outbox. В тестовой фикстуре не было активного состояния Service Worker;
+она исправлена в `a0721b0`, десять аннотированных сценариев прошли локально
+10/10 на Chromium. Полный точный CI нового кода ещё не запускался.
 
 Исправление обнаруженной паузы sender: когда первый fence handshake не давал
 подтверждение, `StateSync` сохранял безопасный запрет отправки, но секундный
@@ -1536,6 +1541,19 @@ all-client Service Worker fence, атомарные migration items и quarantin
     Проверки веса и привычек прошли 14/14 desktop/mobile/PWA; unit 1357/1357,
     root/domain/storage typechecks, production build и diff check прошли.
     Exact CI ожидает завершения прогона родительского SHA; полный lifecycle остаётся открыт.
+  - [x] Перевести изменения профиля в Settings на durable outbox commit до
+    подтверждения UI: данные профиля, прогресс-фото, настройки дефицита/профицита,
+    risk acknowledgment и ответы Huawei. Запись использует актуальный
+    account/session guard, сохраняется локально во время auth-паузы и не запускает
+    облачную отправку, пока открыт несохранённый черновик формы. При отказе commit
+    интерфейс показывает ошибку и сохраняет введённое значение для повтора.
+    Полный `profile-durability.spec.ts` прошёл 19/19 desktop Chromium; Huawei и
+    goal-intensity quota/retry прошли 14/14 по семи desktop/mobile/PWA проектам.
+    Десять account-switch сценариев, указанных в annotations родительского CI,
+    прошли 10/10 Chromium после обновления Service Worker mock. Unit 1359/1359,
+    root/domain/storage typecheck, production build и `git diff --check` прошли.
+    Код [`a0721b0`](https://github.com/Michael-edel/FitFocus/commit/a0721b0);
+    точный CI нового SHA ожидает push. Полный P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

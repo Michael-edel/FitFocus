@@ -4,19 +4,21 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
-outbox подключён; сейчас закрывается P0.8 для действий профиля. В последнем
-опубликованном `dbca5e3` сохранение веса dashboard ждёт durable commit. На ветке
-локально проверяется следующий callback: отметка привычки сохраняется вместе с
-профилем до обновления интерфейса, а legacy-счётчики сверяются при hydration.
-В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
-P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main` остаются
-открытыми.
+outbox подключён; продолжается P0.8-перенос пользовательских действий. Кодовый
+commit `a0721b0` переводит профильные callbacks Settings на durable commit до
+подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
+guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые
+регрессии — 14/14 по семи desktop/mobile/PWA проектам; unit suite — 1359/1359,
+три typecheck, build и diff check прошли локально.
 
-Опубликованный SHA [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
-проверяется [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632);
-workflow пока выполняется. Для локальной правки привычек прошли unit suite
-1357/1357, typecheck, production build, diff check и отдельная browser/PWA-матрица
-7/7 без retries. Следующий push отложен до завершения проверки родительского SHA.
+Точный родительский [CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632)
+для `dbca5e3` завершился ошибкой E2E (summary: 341 failed). В доступных
+annotations ошибки ожидали пустую очередь после account switch, потому что mock
+Service Worker не имитировал `activated` и EventTarget. Фикстура исправлена в
+`a0721b0`; десять аннотированных account-switch сценариев прошли 10/10 на
+Chromium. Полный CI нового SHA ещё не запускался. В плане остаются 33 незакрытых
+пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
+Staging, выпуск и интеграция в защищённую `main` остаются открытыми.
 
 Если fence handshake не отвечал с первого раза, sender оставлял outbox на
 безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт
