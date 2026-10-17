@@ -1575,7 +1575,8 @@ all-client Service Worker fence, атомарные migration items и quarantin
     build и `git diff --check` прошли. Chromium и Firefox прошли profile E2E
     20/20; первый WebKit-прогон дал 18/20, оба сценария прошли точечный повтор
     2/2 и полный WebKit повтор 20/20 без retries. Код `6bcbdd2`; exact CI этого
-    SHA ожидает push.
+    SHA ожидает push. Предыдущий CI #1573 на родительском SHA завершился двумя
+    E2E сбоями; локальные повторные проверки обоих сценариев прошли по 5/5.
     Полный P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
