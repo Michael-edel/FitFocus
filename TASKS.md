@@ -1150,6 +1150,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     не появляется в старой или новой вкладке. E2E прошёл 3/3 на desktop Chromium,
     Firefox и WebKit (`workers=1,retries=0`); typecheck и diff check прошли.
     Точный CI этой ревизии будет проверен на опубликованном SHA.
+  - [x] Удержать повтор Coach retry и Plateau retry после повторного входа того же
+    аккаунта с новой server session. Старые ответы не меняют coach state, профиль,
+    outbox, achievements или action/status metadata; результат не появляется в
+    новой вкладке. Оба E2E прошли 3/3 на desktop Chromium, Firefox и WebKit
+    (`workers=1,retries=0`); typecheck и diff check прошли. Точный CI проверяется
+    на опубликованном SHA.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

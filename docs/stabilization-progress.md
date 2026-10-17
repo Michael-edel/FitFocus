@@ -1,5 +1,17 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — late Coach и Plateau retry после same-account login, 17.10.2026
+
+Добавлены проверки удержанных AI retry `coach_advice` и `plateau`: аккаунт A
+входит с новой `serverSessionId`, затем освобождается ответ старой сессии. Оба
+ответа не меняют coach state, профиль, очередь, achievements или account-scoped
+action/status metadata и не появляются в новой вкладке. Production-код не менялся;
+дефектов в сценариях не выявлено.
+
+Оба E2E прошли 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+`npm run typecheck` и `git diff --check` прошли. Точный CI будет проверен на
+опубликованном SHA. Остальные callbacks и общий P0.5 lifecycle открыты.
+
 ## P0.5 — поздний ответ пошагового рецепта после same-account login, 17.10.2026
 
 Добавлено E2E-покрытие генерации рецепта из дневникового фото: во время
