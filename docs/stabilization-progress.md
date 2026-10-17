@@ -5975,3 +5975,26 @@ storage-strict typecheck, production build и `git diff --check` прошли. �
 выполняется на parent SHA `81823dc`, поэтому не подтверждает этот follow-up;
 его exact CI запускается после push. BFCache на устройстве, остальные callbacks,
 staging и общий P0.6 остаются открыты.
+
+## P0.8 — durable commit избранного рецепта, `0aad496`, 17.10.2026
+
+В `useFavoriteRecipes` UI раньше обновлялся синхронно, а `writeJson` выполнялся
+в фоне и не ожидался. Поэтому quota/IndexedDB отказ мог показать добавление как
+успешное. Обновление переведено на сериализованный `UserStateRepository.updateJson`
+с account/session commit guard; React-state меняется только после pending outbox
+commit и проверки, что исходный read session всё ещё текущий. Добавление,
+редактирование, удаление и очистка возвращают `Promise<boolean>`. Редактирование
+теперь одна атомарная операция вместо пары remove+add. AI-карточка сообщает об
+ошибке при отказе и о сохранении только после подтверждения commit. Draft форма
+сохраняется открытой при ошибке; её содержимое прокручивается в обычном viewport.
+
+Новый E2E формы сначала воспроизвёл молчаливый отказ; после изменения quota
+failure → retry проходит 3/3 на desktop Chromium, Firefox и WebKit. Прямое
+сохранение из фоторазбора с отказом и повтором прошло 1/1 desktop Chromium.
+Полный unit suite — 1347/1347, root typecheck, storage-strict и production build
+прошли. `git diff --check` без ошибок. Exact CI предыдущего SHA `74309e1`
+([run #1551](https://github.com/Michael-edel/FitFocus/actions/runs/39024480257))
+ещё выполнялся и не покрывает `0aad496`; CI нового коммита будет после push.
+Это закрывает найденную ошибку сохранения избранных рецептов, но не завершает
+P0.8: lifecycle, остальные writers, staging и интеграция в `main` остаются
+открыты.

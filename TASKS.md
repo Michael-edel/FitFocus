@@ -2,8 +2,14 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
-подтверждены. Текущая локальная работа закрывает P0.6 profile-write отказ для
-замеров и wearable; полная приёмка P0.8/P0.9 и release gates остаются открыты.
+подтверждены. Текущий кодовый follow-up [`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496)
+закрывает ложное сообщение об успехе в сохранении избранного рецепта до commit
+в IndexedDB: add/edit/remove/clear ждут результат записи, изменение существующего
+рецепта атомарно, отказ оставляет форму открытой и доступной для повтора. Локально
+прошли регрессии формы в desktop Chromium/Firefox/WebKit (3/3), фото-разбора в
+Chromium (1/1), полный unit suite (1347/1347), root и storage-strict typecheck,
+production build и `git diff --check`. Exact CI этого SHA ожидает публикации;
+P0.8/P0.9 и release gates остаются открыты.
 
 В кодовом коммите [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
 обработан отказ durable profile write в Progress/Settings: ошибки видны,
@@ -1471,6 +1477,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
   конфликт отменяет единую транзакцию всех пяти stores. Браузерный импорт и
   rollback прошли 4/4 на Firefox и Android Chrome в `38d169c`.
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
+  - [x] Сделать избранные рецепты durable: не показывать успех до outbox commit,
+    выполнять edit одной транзакцией вместо remove+add, оставлять draft/editor
+    открытыми при отказе и проверять account/session guard до и после записи.
+    Регрессия отказа/retry формы прошла 3/3 desktop browsers; сохранение из
+    фото-разбора с quota отказом и retry — 1/1 Chromium. Код [`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496);
+    unit 1347/1347, root/storage-strict typecheck и production build прошли.
+    Exact CI follow-up запускается после push; весь P0.8/lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
