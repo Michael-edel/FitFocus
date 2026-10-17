@@ -4,18 +4,19 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
-outbox подключён, повтор writer-fence исправлен и опубликован. Локально проверяется
-следующее изменение: упорядочивание быстрых отметок покупок и безопасная очистка
-listener в PWA fence.
+outbox подключён; сейчас закрывается P0.8 для действий профиля. В последнем
+опубликованном `dbca5e3` сохранение веса dashboard ждёт durable commit. На ветке
+локально проверяется следующий callback: отметка привычки сохраняется вместе с
+профилем до обновления интерфейса, а legacy-счётчики сверяются при hydration.
 В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
 P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main` остаются
 открытыми.
 
-Предыдущий опубликованный SHA [`243c102`](https://github.com/Michael-edel/FitFocus/commit/243c1025d84147b78d6875bb839e17f7cf505a0e)
-проверяется [PR CI #1567](https://github.com/Michael-edel/FitFocus/actions/runs/39040645536):
-audit, schema/privacy/auth/API guards, 1352 unit tests, три typecheck и build прошли;
-E2E выполняется, rollback jobs ещё ожидают. Этот прогон не включает follow-up
-коммит `b6591e6`; его точный CI нужно проверить отдельно.
+Опубликованный SHA [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
+проверяется [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632);
+workflow пока выполняется. Для локальной правки привычек прошли unit suite
+1357/1357, typecheck, production build, diff check и отдельная browser/PWA-матрица
+7/7 без retries. Следующий push отложен до завершения проверки родительского SHA.
 
 Если fence handshake не отвечал с первого раза, sender оставлял outbox на
 безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт

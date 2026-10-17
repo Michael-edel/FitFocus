@@ -6198,3 +6198,24 @@ desktop/mobile/PWA Playwright projects, root/domain/storage typechecks, producti
 build, and `git diff --check` passed locally. The exact CI for this change starts
 after push; PR #93 remains draft, and the rest of P0.8/P0.9, staging, release
 acceptance, and integration into protected `main` remain open.
+
+## P0.8 — durable dashboard habit updates, 17.10.2026
+
+Отметка привычки раньше меняла интерфейс сразу, запускала profile-save без
+ожидания и отдельно писала производный список `habits`. Теперь daily habit
+сохраняется через guarded durable profile commit; при ошибке состояние не
+переключается, кнопка блокируется на время записи, а сообщение предлагает
+повторить действие. Кнопка стала семантической и сообщает `aria-pressed`.
+
+Профиль `dailyHabits` используется как источник истины. При hydration сохранённые
+legacy-счётчики привычек сверяются с сегодняшней записью профиля, поэтому
+отдельная запись второго ключа больше не создаёт частичное состояние. Обновление
+`toggleHabit` теперь иммутабельно и не меняет профиль до durable commit.
+
+Полный unit suite прошёл **1357/1357**, тест hydration/profile reconciliation
+входит в набор; пара сценариев веса и привычек прошла **14/14** по семи
+desktop/mobile/PWA Playwright-проектам. Root/domain/storage typechecks,
+production build и `git diff --check` прошли. Точный родительский CI для
+`dbca5e3` — [run #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632) —
+ещё выполняется на E2E. Локальную habit-правку пока не отправляю, чтобы не
+заменить проверку SHA `dbca5e3` новым workflow; P0.8/P0.9, staging и выпуск открыты.

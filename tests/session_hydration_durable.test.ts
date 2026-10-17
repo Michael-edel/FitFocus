@@ -8,6 +8,8 @@ import type { UserProfile } from '../types';
 import { userProfile } from './_helpers/userProfile';
 import { sessionMe, sessionHeaders, testSessionId } from './_helpers/sessionRead';
 import { restoreProfile } from '../storage/profileState';
+import { getTodayKey } from '../habits';
+import type { UserHabit } from '../types';
 
 vi.mock('../coach', () => ({ createTask: async (user: unknown) => user, requiresAiPlateauTask: () => false }));
 const user = userProfile('hydration-account');
@@ -121,6 +123,31 @@ describe('cloud hydration with the runtime durable repository', () => {
     expect(hydrated.foodDiary).toEqual(meal('cloud'));
     expect(fetchImpl.mock.calls[0][0]).toContain('includeDeleted=1');
     expect(await hydrated.repository!.writeJson('diary', meal('local'))).toMatchObject({ status: 'pending', baseVersion: 4 });
+  });
+
+  it('reconciles legacy habit counters from the durable profile during reload hydration', async () => {
+    const today = getTodayKey();
+    const repository = new UserStateRepository(user.id);
+    await repository.observe('profile');
+    expect(await repository.writeJson('profile', {
+      ...user,
+      dailyHabits: { [today]: { water: true, steps: false, breakfast: true, sleep: false } },
+    })).toMatchObject({ status: 'pending' });
+    const habits: UserHabit[] = [
+      { id: 'h_water', title: 'Water', current: 0, goal: 8, unit: 'cups', streak: 0, lastCompletedDate: null },
+      { id: 'h_steps', title: 'Steps', current: 10, goal: 10, unit: 'k', streak: 0, lastCompletedDate: null },
+      { id: 'h_veg', title: 'Breakfast', current: 0, goal: 1, unit: 'meal', streak: 0, lastCompletedDate: null },
+    ];
+    await repository.observe('habits');
+    expect(await repository.writeJson('habits', habits)).toMatchObject({ status: 'pending' });
+    expect(await repository.readJsonAsync('habits', [], Array.isArray)).toEqual(habits);
+
+    const hydrated = await hydrate(async () => response([]));
+
+    expect(hydrated.currentUser.dailyHabits?.[today]?.water).toBe(true);
+    expect(hydrated.habits.map((habit) => habit.current)).toEqual([8, 0, 1]);
+    expect((await new DurableOutbox().list(user.id)).map((operation) => operation.key).sort())
+      .toEqual([`fitfocus_data_${user.id}_habits`, `fitfocus_data_${user.id}_profile`].sort());
   });
 
   it('does not overwrite a pending local snapshot with a bootstrap/cloud value', async () => {

@@ -65,6 +65,7 @@ type DashboardChartsPanelProps = {
   } | null;
   currentWeight?: number | null;
   targetWeight?: number | null;
+  savingHabit?: boolean;
   onToggleHabit: (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => void;
 };
 
@@ -345,6 +346,7 @@ export default function DashboardChartsPanel({
   weightTrend,
   currentWeight,
   targetWeight,
+  savingHabit = false,
   onToggleHabit,
 }: DashboardChartsPanelProps) {
   const macroPieData = useMemo(
@@ -449,9 +451,13 @@ export default function DashboardChartsPanel({
             const isDone = dailyHabits?.[getTodayKey()]?.[h.key as 'water' | 'steps' | 'breakfast' | 'sleep'];
             const streak = calculateStreak(dailyHabits || {}, h.key as 'water' | 'steps' | 'breakfast' | 'sleep');
             return (
-              <div
+              <button
+                type="button"
                 key={h.key}
-                className="flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 transition-all cursor-pointer"
+                aria-pressed={Boolean(isDone)}
+                disabled={savingHabit}
+                aria-busy={savingHabit}
+                className="w-full flex items-center justify-between p-4 bg-slate-950/50 rounded-[1.5rem] border border-slate-800 group hover:border-indigo-500/30 disabled:cursor-wait disabled:opacity-60 transition-all text-left"
                 onClick={() => onToggleHabit(h.key as 'water' | 'steps' | 'breakfast' | 'sleep')}
               >
                 <div className="flex items-center gap-4">
@@ -464,7 +470,7 @@ export default function DashboardChartsPanel({
                   </div>
                 </div>
                 <span className={isDone ? 'text-emerald-400' : 'text-slate-600'}>{h.icon}</span>
-              </div>
+              </button>
             );
           })}
         </div>

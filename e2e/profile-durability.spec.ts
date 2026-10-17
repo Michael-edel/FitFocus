@@ -540,6 +540,46 @@ test('dashboard weight stays available after a failed durable commit and survive
   expect(errors).toEqual([]);
 });
 
+test('dashboard habit stays unchanged after a failed durable profile commit and can be retried after reload', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#dashboard');
+  const water = page.getByRole('button', { name: 'Пить воду' });
+  await expect(water).toBeVisible();
+  await expect(water).toHaveAttribute('aria-pressed', 'false');
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string; resource?: string };
+      if (this.name === 'outbox' && operation?.key === key && operation.resource === 'profile') {
+        throw new DOMException('Injected dashboard habit quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  await water.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить привычку.' })).toBeVisible();
+  await expect(water).toHaveAttribute('aria-pressed', 'false');
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+
+  await page.reload();
+  await expect(page).toHaveURL(/#dashboard$/);
+  await expect(water).toHaveAttribute('aria-pressed', 'false');
+  await water.click();
+  await expect(water).toHaveAttribute('aria-pressed', 'true');
+  const committed = await saved(page);
+  const committedProfile = JSON.parse(committed.value!) as { dailyHabits?: Record<string, { water?: boolean }> };
+  expect(Object.values(committedProfile.dailyHabits ?? {}).some((day) => day.water === true)).toBe(true);
+  expect(committed.operations).toHaveLength(1);
+  expect(committed.operations[0]).toMatchObject({ resource: 'profile', status: 'pending', value: expect.stringContaining('"water":true') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить привычку.' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('a failed wearable provider commit is visible and leaves the profile unchanged', async ({ page }) => {
   const { errors, mutations } = await setup(page, 'normal');
   await openApp(page, '/#settings');

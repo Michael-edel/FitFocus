@@ -1123,16 +1123,24 @@ const App: React.FC = () => {
     setSelectedDiaryDayKey(dayKey);
   }, [clearFoodSelection]);
 
-  const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
-    if (!currentUser) return;
+  const handleToggleHabit = useCallback(async (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep'): Promise<'saved' | 'failed'> => {
+    if (!currentUser || !loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
     const result = applyHabitToggle(currentUser, habits, habitKey);
-    persistUser(result.updatedProfile);
-    setHabits(result.habits);
-    void userStateRepository?.writeJson('habits', result.habits);
-    if (result.waterGoalReached) {
-      void checkAchievements('habit_water_done', { waterToday: true });
+    try {
+      const operation = await persistUser(result.updatedProfile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setHabits(result.habits);
+      if (result.waterGoalReached) {
+        void checkAchievements('habit_water_done', { waterToday: true });
+      }
+      return 'saved';
+    } catch {
+      return 'failed';
     }
-  }, [checkAchievements, currentUser, habits, persistUser, userStateRepository]);
+  }, [checkAchievements, currentUser, habits, isCurrentProfileSession, loginReadGuard, persistUser]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
     if (!currentUser) return;

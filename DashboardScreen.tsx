@@ -29,6 +29,7 @@ type RefeedSuggestion =
   | { type: 'none' };
 
 type DashboardWeightSaveResult = 'saved' | 'invalid' | 'failed';
+type DashboardHabitSaveResult = 'saved' | 'failed';
 
 type AdaptationStatus = {
   label: string;
@@ -59,7 +60,7 @@ type DashboardScreenProps = {
   foodDiary: FoodItem[];
   weightTrend: number;
   currentWeight?: number;
-  handleToggleHabit: (habitKey: string) => void;
+  handleToggleHabit: (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => Promise<DashboardHabitSaveResult>;
   exportShortPdf: () => void;
   exportDetailedPdf: () => void;
   pdfIncludeMealLog: boolean;
@@ -179,6 +180,24 @@ export default function DashboardScreen({
   const [weightSaveError, setWeightSaveError] = React.useState<string | null>(null);
   const [weightSaving, setWeightSaving] = React.useState(false);
   const weightSavingRef = React.useRef(false);
+  const [habitSaveError, setHabitSaveError] = React.useState<string | null>(null);
+  const [habitSaving, setHabitSaving] = React.useState(false);
+  const habitSavingRef = React.useRef(false);
+  const saveHabit = async (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
+    if (habitSavingRef.current) return;
+    habitSavingRef.current = true;
+    setHabitSaving(true);
+    setHabitSaveError(null);
+    try {
+      const result = await handleToggleHabit(habitKey);
+      if (result !== 'saved') setHabitSaveError('Не удалось сохранить привычку. Состояние не изменено — попробуйте ещё раз.');
+    } catch {
+      setHabitSaveError('Не удалось сохранить привычку. Состояние не изменено — попробуйте ещё раз.');
+    } finally {
+      habitSavingRef.current = false;
+      setHabitSaving(false);
+    }
+  };
   const saveWeight = async () => {
     if (weightSavingRef.current) return;
     weightSavingRef.current = true;
@@ -371,9 +390,11 @@ export default function DashboardScreen({
           weightTrend={weightTrend}
           currentWeight={currentWeight}
           targetWeight={currentUser?.targetWeight ?? null}
-          onToggleHabit={(habitKey) => handleToggleHabit(habitKey)}
+          savingHabit={habitSaving}
+          onToggleHabit={(habitKey) => { void saveHabit(habitKey); }}
         />
       </React.Suspense>
+      {habitSaveError && <p role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{habitSaveError}</p>}
 
       {achievementsEnabled && (
         <AchievementsPanel

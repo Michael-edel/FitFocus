@@ -11,6 +11,8 @@ import type { OutboxReadGuard } from './storage/durableOutbox';
 import { verifyReadSession, readScopedJson, assertReadSession, SessionReadError } from './storage/sessionRead';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
 import { isRecoverableAiGenerationError } from './geminiService';
+import { getTodayKey } from './habits';
+import { reconcileLegacyHabitProgress } from './features/habits/legacyProgress';
 
 export type HydratedSession = {
   repository?: UserStateRepository;
@@ -192,7 +194,8 @@ export async function hydrateSessionFromCloud(user: UserProfile, deps: Hydration
   };
 
   const storedDiary = stripLargePhotoPayloads(await readKV<FoodItem[]>('diary', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem)));
-  const storedHabits = await readKV<UserHabit[]>('habits', deps.initialHabits, (value): value is UserHabit[] => Array.isArray(value) && value.every(isHabit));
+  const storedHabitsSnapshot = await readKV<UserHabit[]>('habits', deps.initialHabits, (value): value is UserHabit[] => Array.isArray(value) && value.every(isHabit));
+  const storedHabits = reconcileLegacyHabitProgress(storedHabitsSnapshot, userWithResetUsage, getTodayKey());
   const storedAllUsers = await readKV<UserProfile[]>('all_users', [], (value): value is UserProfile[] => Array.isArray(value) && value.every(isUserProfilePayload));
   const storedWeeklyReports = await readKV<WeeklyStoredReport[]>('weekly_reports', [], (value): value is WeeklyStoredReport[] => Array.isArray(value) && value.every(isWeeklyReport));
   const foodHistory = await readKV<FoodItem[]>('history', [], (value): value is FoodItem[] => Array.isArray(value) && value.every(isFoodItem));

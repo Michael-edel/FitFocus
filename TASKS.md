@@ -2,14 +2,15 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. В плане остаются 33 незакрытых пункта:
-19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
+защищённую `main` не подтверждены. Последняя локальная правка P0.8 сохраняет
+dashboard-привычку через durable profile commit; её browser/PWA-матрица прошла
+7/7 без retries. В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7
+следующих задач; ни один P0 полностью не закрыт.
 
-Опубликованный HEAD [`cf62df0`](https://github.com/Michael-edel/FitFocus/commit/cf62df0)
-прошёл точный [PR CI #1565](https://github.com/Michael-edel/FitFocus/actions/runs/39037015105)
-со всеми статическими проверками, unit, build, E2E и rollback jobs. После него
-локально исправлена повторная проверка PWA legacy-writer fence. Точная CI
-проверка этого исправления выполняется отдельно на опубликованном SHA.
+Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
+проверяется точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632);
+workflow пока выполняется. Локальная правка привычек готова к публикации после
+завершения этого прогона.
 
 Исправление обнаруженной паузы sender: когда первый fence handshake не давал
 подтверждение, `StateSync` сохранял безопасный запрет отправки, но секундный
@@ -1528,6 +1529,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
     остаётся конфликтом. Регрессия dashboard прошла 7/7 desktop/mobile/PWA;
     unit 1355/1355, root/domain/storage typechecks и production build прошли.
     Точный CI нового SHA запускается после push; полный P0.8/lifecycle остаётся открыт.
+  - [x] Сохранять daily habit только после durable profile commit; при ошибке
+    отметка остаётся прежней, её можно повторить. Profile `dailyHabits` стал
+    источником истины для legacy-счётчиков привычек: они reconciled при hydration,
+    поэтому больше не нужна отдельная несогласованная запись второго ключа.
+    Проверки веса и привычек прошли 14/14 desktop/mobile/PWA; unit 1357/1357,
+    root/domain/storage typechecks, production build и diff check прошли.
+    Exact CI ожидает завершения прогона родительского SHA; полный lifecycle остаётся открыт.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
