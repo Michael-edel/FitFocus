@@ -205,6 +205,7 @@ test('profile recovery rebases the local profile onto the verified server versio
   const { errors, mutations, profileBases, resolveConflict } = await setup(page, 'conflict');
   await openApp(page, '/#settings');
   const name = page.getByPlaceholder('Как к вам обращаться');
+  await expect(name).toHaveValue(profile.name);
   await name.fill('Профиль после разрешения конфликта');
   await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
   await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
