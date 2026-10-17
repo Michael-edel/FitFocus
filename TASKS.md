@@ -4,14 +4,21 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний завершённый [CI run #1493](https://github.com/Michael-edel/FitFocus/actions/runs/38999390586)
-для `b67beee` прошёл полностью: 1324 unit tests / 212 файлов, E2E — 844 passed /
-255 skipped за 37,5 минуты, dependency audit, guards, все typecheck и build
-успешны. Rollback-проверка прошла 23 HTTP/D1-запроса, артефакты браузера и
-rollback сохранены. CI #1491 обнаружил гонку гидратации профиля в PWA update
-acceptance; тест теперь ждёт исходное имя из общей фикстуры перед вводом.
-Исправленный сценарий также прошёл 5/5 на desktop WebKit (`workers=1`,
-`retries=0`), `npm run typecheck` успешен.
+Последний завершённый полный CI — [run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
+на `11e6583`; все jobs завершились success. Текущий кодовый HEAD `7ff579d`
+добавляет запись bulk diary move/delete одним snapshot и уже опубликован в PR #93.
+Локально прошли 1326 unit tests / 212 файлов, три typecheck, preview build,
+`git diff --check` и targeted E2E 3/3 на desktop Chromium/Firefox/WebKit
+(`workers=1,retries=0`; четыре мобильных профиля штатно пропущены).
+Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
+на `7ff579d` прошёл audit, guards, все typecheck и build; E2E ещё выполняется.
+Дублирующий push-run #1500 отменён concurrency после старта PR-run. PR остаётся
+draft, P0 не закрыт; staging и интеграция в `main` открыты.
+
+CI #1491 обнаружил гонку гидратации профиля в PWA update acceptance; тест теперь
+ждёт исходное имя из общей фикстуры перед вводом. Исправленный сценарий прошёл
+5/5 на desktop WebKit (`workers=1`, `retries=0`), затем CI #1493 на `b67beee`
+успешно проверил его вместе с полным набором.
 История и ограничения — в [журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,

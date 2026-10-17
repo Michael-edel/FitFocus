@@ -24,12 +24,11 @@ domain-strict и storage-strict typecheck прошли; Playwright preview сб�
 сценария на две записи WebKit превысил общий timeout; повтор после сокращения
 завершающих необязательных проверок прошёл без retries.
 
-Проверенный локальный worktree основан на `11e6583` и содержит незакоммиченные
-изменения; [CI run #1499](https://github.com/Michael-edel/FitFocus/actions/runs/39003424845)
-завершился success только на опубликованном базовом HEAD `11e6583` и не подтверждает
-этот follow-up.
-Точный полный CI запускается после commit/push. Общий аудит P0.4/P0.8, остальные
-callbacks, staging и release acceptance остаются открытыми.
+Изменение закоммичено и опубликовано как [`7ff579d`](https://github.com/Michael-edel/FitFocus/commit/7ff579d051f7431cd0ba23cb1599863a467b0cc3)
+в PR #93. Точный [CI run #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
+на этом SHA прошёл dependency audit, guards, unit, typechecks и build; E2E ещё
+выполняется. Предыдущий CI #1499 проверял только базовый `11e6583`. Общий аудит
+P0.4/P0.8, остальные callbacks, staging и release acceptance остаются открытыми.
 
 ## P0.8/P0.9 — отмена profile refresh при Safari reload, 17.10.2026
 
