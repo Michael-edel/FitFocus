@@ -6241,3 +6241,20 @@ desktop/mobile/PWA проектах. Unit — **1359/1359**, root/domain/storage
 production build и `git diff --check` прошли. Точный CI нового SHA ожидает push;
 P0.8/lifecycle, staging, release acceptance и интеграция в защищённую `main`
 остаётся открытыми.
+
+## Deployed branch preview smoke: `bb94957`, 17.10.2026
+
+GitHub Cloudflare Pages check сообщает успешное развертывание commit preview
+`https://71594efe.fitfocus.pages.dev/` и branch alias
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Read-only `HttpClient` GET
+проверены без cookie и auto-redirect: на обоих origin root, `/api/env` и
+анонимный `/api/me` ответили 200; `/api/bootstrap`, `/api/profile`, `/api/state`
+и `/api/push/status` — 401 без `Location` и `Set-Cookie`. `/api/env` сообщает
+пустые Google Client IDs и `requireInvite=false`.
+
+Свежий Chromium открыл branch preview с HTTP 200, `title=FitFocus`, без
+pageerror/console errors, off-origin requests или non-GET запросов. Это
+подтверждает только публичную страницу и указанные unauthenticated маршруты.
+D1 binding/изоляция, серверный `APP_URL`, OAuth callback, миграции и
+аутентифицированные сценарии не проверены; staging и выпуск остаются открыты.
+Точный PR CI #1573 для `bb94957` ещё выполняет полный E2E и rollback/CAS.

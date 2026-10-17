@@ -6,8 +6,10 @@
 настроек профиля на durable commit: UI подтверждает правку только после записи
 в IndexedDB, а account/session guard действует и во время auth-паузы. Полная
 профильная Chromium-проверка прошла 19/19; две регрессии Huawei/интенсивности —
-14/14 по семи desktop/mobile/PWA проектам. В плане остаются 33 незакрытых
-пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
+14/14 по семи desktop/mobile/PWA проектам. PR CI #1573 проверяет head `bb94957`:
+audit, guards, unit, typechecks и build прошли, E2E ещё выполняется. Branch preview
+для `bb94957` развернут; ограниченный GET/Chromium smoke прошёл. В плане остаются
+33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -15,7 +17,9 @@
 GitHub annotations показывают отказы account-switch сценариев при ожидании
 пустого outbox. В тестовой фикстуре не было активного состояния Service Worker;
 она исправлена в `a0721b0`, десять аннотированных сценариев прошли локально
-10/10 на Chromium. Полный точный CI нового кода ещё не запускался.
+10/10 на Chromium. CI нового PR head `bb94957` — [run #1573](https://github.com/Michael-edel/FitFocus/actions/runs/39056823576) —
+выполняет полный E2E и rollback/CAS после успешных audit, guards, unit,
+typechecks и production build.
 
 Исправление обнаруженной паузы sender: когда первый fence handshake не давал
 подтверждение, `StateSync` сохранял безопасный запрет отправки, но секундный
@@ -126,6 +130,12 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
+  - [x] Для current branch preview commit `bb94957` сверить успешный Cloudflare
+    deploy, страницу и анонимные GET: root/env/me — 200, защищённые
+    bootstrap/profile/state/push — 401 без redirect/cookie. Свежий Chromium
+    остался на preview origin без page/console errors и записывающих запросов.
+    Google Client IDs пусты; OAuth start не запускался. D1, `APP_URL`, callback,
+    отдельная staging-база и непроверенные edge routes остаются открытыми.
   - [x] Повторно проверить текущий branch preview: точный bundle SHA `8dfab60`
     обслуживается на `fix-durable-outbox.fitfocus.pages.dev`; страница, `/api/env`
     и анонимный `/api/me` отвечают на том же origin; оба Google Client ID пусты,

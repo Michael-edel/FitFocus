@@ -188,8 +188,33 @@ Cloudflare аккаунта нельзя утверждать, применён 
 серверный `APP_URL`, callback и edge rules остаются незавершёнными; preview
 сейчас не позволяет пройти OAuth start.
 
+### Deployed branch preview smoke: `bb94957`, 17.10.2026
+
+Cloudflare Pages check подтверждает успешный deploy commit `bb94957`:
+commit preview `https://71594efe.fitfocus.pages.dev/` и branch alias
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Read-only HTTP проверки
+выполнены `HttpClient` без cookie и auto-redirect:
+
+- На обоих origin `/` — 200, `/api/env` — 200, `/api/me` — 200;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401;
+- redirect и `Set-Cookie` отсутствуют; `/api/env` сообщает пустые Google Client
+  IDs и `requireInvite=false`.
+
+Свежий Chromium подтвердил branch-preview страницу с HTTP 200 и `title=FitFocus`;
+page/console errors, off-origin requests и non-GET запросов не было. Все
+проверенные запросы остались на preview origin.
+
+Это ограниченный публичный smoke для текущего deployed bundle. Он не проверяет
+D1 binding/изоляцию, `APP_URL`, OAuth start/callback, реальные edge routes вне
+перечисленных GET, аутентифицированные изменения или миграции. OAuth start
+намеренно не вызывался; staging и выпуск остаются открытыми.
+
 - [ ] Подтвердить адрес и точный build SHA preview; браузер и edge-правила
   не переводят его на production, API-запросы остаются на выбранном origin.
+  - [x] Cloudflare deployment check и GET/Chromium smoke подтвердили commit
+    `bb94957`, commit preview и branch alias, один origin для UI/проверенных API,
+    ожидаемый 401 анонимному доступу и отсутствие записывающих запросов. Остальные
+    edge routes и аутентифицированные сценарии остаются в общей приёмке.
 - [ ] Проверить D1 binding конкретного deployment и безопасные тестовые
   аккаунты. Другой hostname сам по себе не создаёт другую серверную базу.
 - [ ] Проверить серверный `APP_URL`, если он задан: он должен выбирать нужный

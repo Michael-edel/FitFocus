@@ -9,16 +9,27 @@ commit `a0721b0` переводит профильные callbacks Settings на
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые
 регрессии — 14/14 по семи desktop/mobile/PWA проектам; unit suite — 1359/1359,
-три typecheck, build и diff check прошли локально.
+три typecheck, build и diff check прошли локально. Cloudflare Pages развернул
+branch preview `bb94957`; read-only GET и Chromium smoke подтвердили тот же
+preview origin.
 
 Точный родительский [CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632)
 для `dbca5e3` завершился ошибкой E2E (summary: 341 failed). В доступных
 annotations ошибки ожидали пустую очередь после account switch, потому что mock
 Service Worker не имитировал `activated` и EventTarget. Фикстура исправлена в
 `a0721b0`; десять аннотированных account-switch сценариев прошли 10/10 на
-Chromium. Полный CI нового SHA ещё не запускался. В плане остаются 33 незакрытых
+Chromium. Полный [PR CI #1573](https://github.com/Michael-edel/FitFocus/actions/runs/39056823576)
+для `bb94957` выполняет E2E; audit, guards, unit, три typecheck и build прошли,
+rollback/CAS ещё ожидается. В плане остаются 33 незакрытых
 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 Staging, выпуск и интеграция в защищённую `main` остаются открытыми.
+
+Read-only smoke deployed preview: landing и `/api/env`/`/api/me` ответили 200;
+анонимные `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status`
+ответили 401 без redirect и `Set-Cookie`. В свежем Chromium `title=FitFocus`,
+page/console errors отсутствовали, запросы оставались на branch-preview origin
+и были только GET. `/api/env` показывает пустые Google Client IDs и
+`requireInvite=false`; D1, `APP_URL` и OAuth callback этим не подтверждены.
 
 Если fence handshake не отвечал с первого раза, sender оставлял outbox на
 безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт

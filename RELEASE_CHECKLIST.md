@@ -177,6 +177,10 @@ Actions, наличие workflow в нужной ветке и состояни�
 - [ ] В целевой preview-сборке сохранён её origin; клиент и edge-правила
   не переводят тест в production. Клиентский redirect удалён и проверяется
   локально; [контракт origin и настройки APP_URL/D1](docs/staging-origin.md).
+  - [x] Текущий branch preview `bb94957` развернут и проверен read-only GET
+    плюс Chromium: root/env/me — 200, защищённые GET — 401 без redirect/cookie;
+    UI остаётся на preview origin. Это не подтверждает D1/APP_URL/OAuth и не
+    закрывает staging gate.
 - [ ] Создана резервная копия затрагиваемых данных; восстановление проверено.
 - [ ] Миграция проверена на старой схеме и повторном запуске; schema/privacy
   охватывают новые данные, включая tombstones и миграционные записи.

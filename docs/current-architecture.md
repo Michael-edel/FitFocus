@@ -63,6 +63,8 @@ runtime legacy-импорт, барьер старых сборок и обща�
 Cloudflare Pages Functions в `functions/api/`, D1 с binding `DB`.
 `wrangler.toml` описывает существующий binding и `migrations/`;
 отдельную staging-БД этот файл сам по себе не подтверждает.
+Текущий branch-preview smoke и его ограничения описаны в
+[приёмке origin/staging](staging-origin.md); он не доказывает отдельную D1.
 
 Routes вызывают уже выделенные модули `functions/api/_lib/`: profile/state,
 семья и покупки, поддержка, push, billing, OAuth и wearable-сценарии.
