@@ -296,11 +296,6 @@ export class StateSync {
       && !this.legacyPending() && drained;
   }
 
-  /** A refresh cannot replace an intent, a newer local read, or another session. */
-  async refreshProfile(accountId: string): Promise<string | null> {
-    return (await this.refreshProfileWithGuard(accountId))?.value ?? null;
-  }
-
   /** Return the exact read guard whose proof and transaction accepted the profile snapshot. */
   async refreshProfileWithGuard(accountId: string): Promise<{ value: string; readGuard: OutboxReadGuard } | null> {
     if (this.accountId !== accountId) return null;

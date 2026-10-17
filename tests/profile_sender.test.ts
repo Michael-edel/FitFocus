@@ -62,12 +62,12 @@ it.each([401, 403, 422, 429, 503])('retains the local intent after HTTP %s', asy
 });
 it('does not hydrate over a pending edit or after a cross-tab logout', async () => {
   client(async () => { await repo.writeJson('profile', { ...profile, name: 'Новая правка' }); return json({ profile: { ...profile, version: 9 } }); });
-  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  await sync.connect(account); expect(await sync.refreshProfileWithGuard(account)).toBeNull();
   expect(JSON.parse((await outbox.snapshot(account, repo.key('profile'))).value!).name).toBe('Новая правка');
 });
 it('checks the session inside the hydration transaction', async () => {
   client(async () => { await outbox.invalidateSessions(); return json({ profile: { ...profile, version: 9 } }); });
-  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  await sync.connect(account); expect(await sync.refreshProfileWithGuard(account)).toBeNull();
   expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(2);
 });
 it('does not adopt a newer auth fence while refreshing a profile in the same epoch', async () => {
@@ -78,12 +78,12 @@ it('does not adopt a newer auth fence while refreshing a profile in the same epo
     });
     return json({ profile: { ...profile, version: 9 } });
   });
-  await sync.connect(account); expect(await sync.refreshProfile(account)).toBeNull();
+  await sync.connect(account); expect(await sync.refreshProfileWithGuard(account)).toBeNull();
   expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(2);
 });
 it('applies a clean refresh without creating an outgoing operation', async () => {
   client(async () => json({ profile: { ...profile, name: 'Обновлённый профиль', version: 9 } }));
-  await sync.connect(account); expect(JSON.parse((await sync.refreshProfile(account))!).name).toBe('Обновлённый профиль');
+  await sync.connect(account); expect(JSON.parse((await sync.refreshProfileWithGuard(account))!.value).name).toBe('Обновлённый профиль');
   expect(await outbox.list(account)).toEqual([]);
 });
 it('returns the read guard whose transaction accepted a clean profile refresh', async () => {
@@ -135,9 +135,9 @@ it('keeps a pending profile without sending it when the projection capability is
 it('still accepts a guarded clean profile refresh without the projection write capability', async () => {
   const fetchFn = client(async () => json({ profile: { ...profile, name: 'Прочитано из облака', version: 9 } }), true, {}, false);
   await sync.connect(account);
-  const refreshed = await sync.refreshProfile(account);
+  const refreshed = await sync.refreshProfileWithGuard(account);
   expect(refreshed).not.toBeNull();
-  expect(JSON.parse(refreshed!).name).toBe('Прочитано из облака');
+  expect(JSON.parse(refreshed!.value).name).toBe('Прочитано из облака');
   expect((await outbox.snapshot(account, repo.key('profile'))).confirmedVersion).toBe(9);
   expect(await outbox.list(account)).toEqual([]);
   expect(fetchFn.mock.calls.find(([url]) => String(url) === '/api/profile')?.[1]?.method ?? 'GET').toBe('GET');

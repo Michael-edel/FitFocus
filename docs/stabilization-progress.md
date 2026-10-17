@@ -5776,3 +5776,19 @@ typechecks и build, но упал в одном desktop WebKit сценарии
 Дополнительный запуск `--repeat-each=5` прошёл первый тест, но следующие четыре
 не подключились к preview-серверу; результат повторения проверен отдельными
 запусками.
+
+## P0.6 — fail-closed profile refresh guard, 17.10.2026
+
+Проверка профиля нашла fallback в `reloadUserFromCloud`, который вызывал
+`stateSync.refreshProfile()` и терял возвращаемый state-sync `readGuard`. Из-за
+этого потребитель мог применить облачный снимок, не повторно проверив proof
+сессии и не приняв guard чтения. Теперь reload требует guarded refresh, отклоняет
+guard другого аккаунта, повторно подтверждает текущую сессию и сохраняет именно
+этот guard до синхронного применения профиля. Value-only fallback и
+value-only convenience API в state-sync удалены.
+
+Целевые `profile_sync` и `profile_sender` тесты прошли 35/35, включая
+устаревший и чужой guard;
+`npm run typecheck` и `git diff --check` прошли. Точный PR CI #1525 ещё проверяет
+предыдущий SHA `a83416c` и пока находится на E2E. Новая правка ждёт отправки,
+чтобы не отменить этот запуск; staging и весь P0.6 остаются открытыми.

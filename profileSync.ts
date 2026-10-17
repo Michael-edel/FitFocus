@@ -18,10 +18,12 @@ type ProfileSyncDeps = {
   persistUser: (action: UserProfile | ((profile: UserProfile) => UserProfile)) => Promise<OutboxOperation | null>;
   applyRemoteProfile: (user: UserProfile) => void;
   syncStateImpl?: (accountId: string) => Promise<boolean>;
-  refreshProfileImpl?: (accountId: string) => Promise<string | null>;
-  refreshProfileWithGuardImpl?: (accountId: string) => Promise<{ value: string; readGuard: OutboxReadGuard } | null>;
-  assertReadGuardImpl?: (guard: OutboxReadGuard) => Promise<void>;
-  setLoginReadGuard?: (guard: OutboxReadGuard) => void;
+};
+
+type ProfileReloadDeps = ProfileSyncDeps & {
+  refreshProfileWithGuardImpl: (accountId: string) => Promise<{ value: string; readGuard: OutboxReadGuard } | null>;
+  assertReadGuardImpl: (guard: OutboxReadGuard) => Promise<void>;
+  setLoginReadGuard: (guard: OutboxReadGuard) => void;
 };
 
 function owns(profile: UserProfile, deps: ProfileSyncDeps): boolean {
@@ -85,7 +87,7 @@ export async function syncAllLocalDataNow(deps: ProfileSyncDeps): Promise<void> 
   if (deps.currentUser) await pushProfileToCloud(deps.currentUser, deps);
 }
 
-export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> {
+export async function reloadUserFromCloud(deps: ProfileReloadDeps): Promise<void> {
   const current = deps.currentUser;
   if (!current || !owns(current, deps)) return;
   if (deps.hasUncommittedDraft?.()) {
@@ -94,22 +96,18 @@ export async function reloadUserFromCloud(deps: ProfileSyncDeps): Promise<void> 
   }
   const revision = deps.profileEditRevisionRef.current;
   try {
-    const refreshed = deps.refreshProfileWithGuardImpl
-      ? await deps.refreshProfileWithGuardImpl(current.id)
-      : { value: await (deps.refreshProfileImpl ?? (id => stateSync.refreshProfile(id)))(current.id), readGuard: null };
+    const refreshed = await deps.refreshProfileWithGuardImpl(current.id);
     if (!owns(current, deps) || revision !== deps.profileEditRevisionRef.current) return;
-    if (refreshed === null || refreshed.value === null) {
+    if (refreshed === null) {
       deps.setProfileSyncNote?.('Обновление профиля не применено: проверьте сессию и ожидающие локальные изменения.');
       return;
     }
     const profile: unknown = JSON.parse(refreshed.value);
     if (!isUserProfilePayload(profile) || profile.id !== current.id) throw new Error('PROFILE_INVALID_RESPONSE');
-    if (refreshed.readGuard) {
-      if (refreshed.readGuard.accountId !== current.id || !deps.assertReadGuardImpl || !deps.setLoginReadGuard) return;
-      await deps.assertReadGuardImpl(refreshed.readGuard);
-      if (!owns(current, deps) || revision !== deps.profileEditRevisionRef.current) return;
-      deps.setLoginReadGuard(refreshed.readGuard);
-    }
+    if (refreshed.readGuard.accountId !== current.id) return;
+    await deps.assertReadGuardImpl(refreshed.readGuard);
+    if (!owns(current, deps) || revision !== deps.profileEditRevisionRef.current) return;
+    deps.setLoginReadGuard(refreshed.readGuard);
     // Replace only the profile editor, synchronously; no disabled edit window during state rehydration.
     deps.applyRemoteProfile(profile);
   } catch (error) {

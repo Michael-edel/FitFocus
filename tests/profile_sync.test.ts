@@ -23,7 +23,9 @@ function deps() {
   const profileEditRevisionRef = { current: 0 };
   return { currentUser: profile, repository, profileEditRevisionRef, isCurrentSession: vi.fn(() => true),
     setProfileSyncState: vi.fn(), setProfileSyncNote: vi.fn(), setLastProfileSyncAt: vi.fn(),
-    applyRemoteProfile: vi.fn(), syncStateImpl: vi.fn(async () => true), refreshProfileImpl: vi.fn(async () => null as string | null),
+    applyRemoteProfile: vi.fn(), syncStateImpl: vi.fn(async () => true),
+    refreshProfileWithGuardImpl: vi.fn(async () => null as { value: string; readGuard: OutboxReadGuard } | null),
+    assertReadGuardImpl: vi.fn(async () => {}), setLoginReadGuard: vi.fn(),
     persistUser: vi.fn((action: UserProfile | ((previous: UserProfile) => UserProfile)) => {
       draft = typeof action === 'function' ? action(draft) : action;
       profileEditRevisionRef.current += 1;
@@ -64,13 +66,18 @@ describe('durable profile actions', () => {
     expect(await outbox.list('account-b')).toEqual([]);
   });
   it('does not replace a newer profile edit after a refresh', async () => {
-    const d = deps(); d.refreshProfileImpl.mockImplementation(async () => {
-      d.profileEditRevisionRef.current += 1; return JSON.stringify(profile);
+    const d = deps(); d.refreshProfileWithGuardImpl.mockImplementation(async () => {
+      d.profileEditRevisionRef.current += 1;
+      return { value: JSON.stringify(profile), readGuard: { accountId: profile.id, serverSessionId: 'a'.repeat(64), sessionEpoch: 'refresh-epoch', authFence: 2 } };
     });
     await reloadUserFromCloud(d); expect(d.applyRemoteProfile).not.toHaveBeenCalled();
   });
   it('applies a clean refresh synchronously without another login or a later old-editor callback', async () => {
-    const d = deps(); d.refreshProfileImpl.mockResolvedValue(JSON.stringify({ ...profile, version: 3 }));
+    const d = deps();
+    d.refreshProfileWithGuardImpl.mockResolvedValue({
+      value: JSON.stringify({ ...profile, version: 3 }),
+      readGuard: { accountId: profile.id, serverSessionId: 'a'.repeat(64), sessionEpoch: 'refresh-epoch', authFence: 2 },
+    });
     d.applyRemoteProfile.mockImplementation(() => { d.isCurrentSession.mockReturnValue(false); });
     await reloadUserFromCloud(d);
     expect(d.applyRemoteProfile).toHaveBeenCalledWith({ ...profile, version: 3 });
@@ -102,10 +109,21 @@ describe('durable profile actions', () => {
     expect(d.setLoginReadGuard).not.toHaveBeenCalled();
     expect(d.applyRemoteProfile).not.toHaveBeenCalled();
   });
+  it('rejects a refreshed profile whose guard belongs to another account', async () => {
+    const d = deps();
+    d.refreshProfileWithGuardImpl.mockResolvedValue({
+      value: JSON.stringify({ ...profile, version: 3 }),
+      readGuard: { accountId: 'account-b', serverSessionId: 'b'.repeat(64), sessionEpoch: 'other', authFence: 2 },
+    });
+    await reloadUserFromCloud(d);
+    expect(d.assertReadGuardImpl).not.toHaveBeenCalled();
+    expect(d.setLoginReadGuard).not.toHaveBeenCalled();
+    expect(d.applyRemoteProfile).not.toHaveBeenCalled();
+  });
   it('does not refresh over an uncommitted form draft', async () => {
     const d = { ...deps(), hasUncommittedDraft: () => true };
     await reloadUserFromCloud(d);
-    expect(d.refreshProfileImpl).not.toHaveBeenCalled(); expect(d.applyRemoteProfile).not.toHaveBeenCalled();
+    expect(d.refreshProfileWithGuardImpl).not.toHaveBeenCalled(); expect(d.applyRemoteProfile).not.toHaveBeenCalled();
     await pushProfileToCloud(profile, d);
     expect(d.syncStateImpl).not.toHaveBeenCalled(); expect(d.setLastProfileSyncAt).not.toHaveBeenCalled();
   });
