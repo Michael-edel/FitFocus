@@ -7,12 +7,20 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 durable outbox уже подключён, но общий P0 остаётся открыт, как и Safari/PWA
 lifecycle, интеграция в staging, выпуск и защищённую `main`.
 
-На момент этой сверки локальный HEAD — `10dbcab`; в нём есть мобильные и PWA
-исправления, а также предыдущие локальные commits `77ca05f` и `c5cf035`. Точный
-CI для них ещё не запускался. Предыдущий опубликованный HEAD `5b90b31` завершил
-[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
-с ошибкой: статические проверки, unit, typechecks и build прошли, E2E — 913
-passed, 31 failed, 295 skipped за 41 минуту.
+Локальный HEAD — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c).
+Удалены неиспользуемые onboarding/WIS/food-streak event
+logs, которые сохраняли чувствительные показатели в общих localStorage-ключах;
+новая сборка очищает оставшиеся старые ключи и маркеры, сохраняя профиль и
+настройки аккаунтов. Локально privacy suite прошёл 4/4, все три typecheck,
+production build и `git diff --check` прошли.
+
+Предыдущий опубликованный HEAD `f317d53` проверяется в точном [PR CI #1559](https://github.com/Michael-edel/FitFocus/actions/runs/39034972927):
+audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли; полный
+E2E на момент последней проверки выполнялся. Этот run предшествует `43c3b8c` и не
+подтверждает новое изменение; точный CI текущей ревизии ещё не завершён.
+Предыдущий опубликованный HEAD `5b90b31` завершил [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255)
+с ошибкой E2E: 913 passed, 31 failed, 295 skipped за 41 минуту; статические
+проверки прошли.
 
 Локально на `10dbcab` прошли unit 1348/1348, все три typecheck и production
 build; целевые E2E: PWA update 7/7, rollback install 7/7, мобильная правка

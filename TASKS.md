@@ -5,13 +5,17 @@
 защищённую `main` не подтверждены. В плане остаются 33 незакрытых пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
 
-Последние локальные code commits: [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f)
-(durable commit урока) и [`10dbcab`](https://github.com/Michael-edel/FitFocus/commit/10dbcab)
-(мобильные/PWA regressions); документационный commit `c5cf035` также локальный.
-Точный CI для этих ревизий ещё не запускался. Предыдущий опубликованный HEAD
-`5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
-audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли, но E2E
-завершился с 913 passed, 31 failed и 295 skipped за 41 минуту.
+Последний локальный code commit — [`43c3b8c`](https://github.com/Michael-edel/FitFocus/commit/43c3b8c),
+он удаляет неиспользуемую локальную аналитику с чувствительными показателями и
+очищает её старые ключи при запуске. Его локальные проверки: privacy suite 4/4,
+три typecheck, production build и `git diff --check`. Точный CI для этой
+ревизии ещё не завершён. Предыдущий опубликованный HEAD `f317d53` проверяется в
+[PR CI #1559](https://github.com/Michael-edel/FitFocus/actions/runs/39034972927):
+audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли, а E2E
+на момент последней проверки выполнялся. Этот run не включает `43c3b8c`. Более
+ранний опубликованный HEAD `5b90b31` проверен [PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255):
+статические проверки прошли, E2E завершился с 913 passed, 31 failed и 295 skipped
+за 41 минуту.
 
 На `10dbcab` локально прошли unit **1348/1348**, root/domain/storage typecheck,
 production build и целевые E2E: PWA update **7/7**, rollback install **7/7**,
