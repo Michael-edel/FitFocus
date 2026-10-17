@@ -12,6 +12,11 @@ strict typecheck и production build; полный E2E выполняется. �
 сценария Android Chrome/iPhone Safari прошли локально 12/12 без retries;
 затронутые unit — 32/32. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
 задач; staging, выпуск и интеграция в защищённую `main` открыты.
+Branch preview после публикации `4c03b68` отдаёт точный bundle SHA: `/`,
+`/api/env` и анонимный `/api/me` вернули 200; `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`.
+Проверялись только GET; авторизованные действия, D1, OAuth, edge-конфигурация и
+staging этим smoke не подтверждены.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые

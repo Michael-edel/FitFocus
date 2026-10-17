@@ -6362,3 +6362,10 @@ typecheck, production build и `git diff --check` прошли. Коммит `4c
 прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и build; полный
 E2E ещё выполняется. Полный P0.8/P0.9, staging, выпуск и интеграция в защищённую
 `main` остаются открыты.
+
+После публикации проверен branch preview: bundle содержит точный SHA
+`4c03b68743626744f867db64fd276cdffffa6388`. Read-only GET `/`, `/api/env` и
+анонимный `/api/me` вернули 200; `/api/bootstrap`, `/api/profile`, `/api/state`
+и `/api/push/status` вернули 401 без redirect и `Set-Cookie`. Это проверка
+неавторизованного preview origin, а не D1/OAuth, авторизованных действий или
+staging acceptance.
