@@ -19,12 +19,13 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   let firstFamilyConflictInjected = false, stateAvailable = options.stateUnavailable !== true;
   let currentStateAvailable = options.currentStateUnavailable !== true;
   const stateWriteKeys: string[] = [];
+  const stateWriteItems: Array<{ key: string; value: string; baseVersion: number }> = [];
   const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, profileGet: 0, accepted: 0, acceptedAtMs: null as number | null,
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
     legacyStateProtocolRejected: 0, stateProtocolRejected: 0,
     currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
-  return { unexpectedApi, counts, stateWriteKeys, pushRequests,
+  return { unexpectedApi, counts, stateWriteKeys, stateWriteItems, pushRequests,
     setStateWriteDisconnected: (disconnected: boolean) => { disconnectStateWrites = disconnected; },
     setActiveSessionId: (nextSessionId: string) => { sessionId = nextSessionId; },
     recoverState: () => { stateAvailable = true; },
@@ -88,7 +89,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       if (method !== 'PUT' || legacySingleStateWrite || !Array.isArray(body.items)) {
         unexpectedApi.push(`INVALID_STATE_WRITE:${method}`); return json({ error: 'INVALID_STATE_WRITE' }, 400);
       }
-      const items = body.items as Array<{ key: string; baseVersion: number }>;
+      const items = body.items as Array<{ key: string; value: string; baseVersion: number }>;
       counts.currentStatePutAttempts += 1;
       if (disconnectStateWrites) {
         counts.currentStatePutTransportAborted += 1;
@@ -101,6 +102,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       }
       counts.currentStatePutAccepted += 1;
       stateWriteKeys.push(...items.map(item => item.key));
+      stateWriteItems.push(...items.map(({ key, value, baseVersion }) => ({ key, value, baseVersion })));
       return json({ ok: true, items: items.map(item => ({ key: item.key, version: item.baseVersion + 1, exists: true })) });
     }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },

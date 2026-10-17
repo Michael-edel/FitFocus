@@ -34,7 +34,8 @@ export async function startPwaReleaseServer(previous: string, current: string, o
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No PWA fixture address');
-  return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts, stateWriteKeys: api.stateWriteKeys,
+  return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts,
+    stateWriteKeys: api.stateWriteKeys, stateWriteItems: api.stateWriteItems,
     pushRequests: api.pushRequests, setActiveSessionId: api.setActiveSessionId,
     setStateWriteDisconnected: api.setStateWriteDisconnected,
     release: () => { directory = resolve(current); },

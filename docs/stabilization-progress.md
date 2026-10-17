@@ -28,8 +28,9 @@ barrier остаются открытыми; merge/deploy не выполнял�
 origin и в одном browser context. Старый sender получает `426` от HTTP fixture;
 его settings intent остаётся в IndexedDB как failed `http-426`, а сервер не
 принимает запись. После обновления через ожидающий Service Worker текущая сборка
-повторяет ту же операцию с protocol v2, сервер принимает её, а запись исчезает
-из outbox. Сценарий прошёл 7/7 Playwright-проектов без retries; весь
+сохраняет тот же `opId`, payload и baseVersion, повторяет запись с protocol v2,
+сервер принимает исходный payload, а операция исчезает из outbox. Сценарий прошёл
+7/7 Playwright-проектов без retries; весь
 `legacy-outbox-migration.spec.ts` прошёл 3/3 на desktop Chromium.
 
 Проверка использует synthetic API и не подтверждает Cloudflare/D1 или staging.

@@ -603,6 +603,12 @@ test('holds a state write from the old bundle at protocol 426 and retries it wit
       const state = await migrationState(currentPage, settingsKey);
       return state.operations.find(operation => operation.key === settingsKey)?.status;
     }).toBe('failed');
+    const retainedAfterUpdate = (await migrationState(currentPage, settingsKey)).operations
+      .find(operation => operation.key === settingsKey);
+    expect(retainedAfterUpdate).toMatchObject({
+      opId: rejectedOperation?.opId, key: settingsKey,
+      value: rejectedOperation?.value, baseVersion: rejectedOperation?.baseVersion,
+    });
     await currentPage.locator('[data-state-notice-region] details summary').click();
     const recovery = currentPage.getByRole('region', { name: 'Настройки' });
     const retry = recovery.getByRole('button', { name: 'Повторить отправку', exact: true });
@@ -612,10 +618,14 @@ test('holds a state write from the old bundle at protocol 426 and retries it wit
     await expect.poll(() => server.stateWriteKeys).toContain(settingsKey);
     await expect.poll(async () => (await migrationState(currentPage, settingsKey)).operations.filter(operation => operation.key === settingsKey)).toHaveLength(0);
     expect(server.counts.currentStatePutAccepted).toBeGreaterThan(0);
+    expect(server.stateWriteItems.filter(item => item.key === settingsKey)).toEqual([{
+      key: settingsKey, value: rejectedOperation?.value, baseVersion: rejectedOperation?.baseVersion,
+    }]);
     expect((await migrationState(currentPage, settingsKey)).value).toContain('"theme":"light"');
     await info.attach('old-new-state-protocol-barrier', { body: JSON.stringify({
       settingsKey, rejectedState: { value: rejectedState.value, operation: rejectedOperation },
-      protocolRejections: server.counts.stateProtocolRejected,
+      retainedAfterUpdate, protocolRejections: server.counts.stateProtocolRejected,
+      acceptedStateItems: server.stateWriteItems,
       acceptedStateKeys: server.stateWriteKeys, counts: server.counts,
     }), contentType: 'application/json' });
   } finally {

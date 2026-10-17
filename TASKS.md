@@ -1221,7 +1221,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   [E2E](e2e/storage-durability.spec.ts) прошёл 3/3 desktop-браузера.
 - [x] Проверить границу old/new bundles для `/api/state`: старая сборка получает
   `426` и сохраняет durable intent; после same-origin Service Worker update
-  текущая сборка повторно отправляет тот же ключ с protocol v2. Новый E2E прошёл
+  текущая сборка повторно отправляет тот же `opId`, payload и baseVersion с
+  protocol v2. Новый E2E прошёл
   7/7 Playwright-проектов (`workers=1,retries=0`), весь файл — 3/3 на desktop
   Chromium.
 - [ ] Завершить гарантии для profile и остальных API callbacks.
@@ -1261,7 +1262,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     и локальные проверки описаны в [журнале стабилизации](docs/stabilization-progress.md).
   - [x] Проверить настоящую пару старого/нового bundle через HTTP barrier на одном
     origin: старая сборка получает 426, сохраняет durable intent в IndexedDB,
-    а текущая после Service Worker update повторяет ту же операцию с protocol v2.
+    а текущая после Service Worker update повторяет ту же операцию с тем же opId,
+    payload и baseVersion с protocol v2.
     Native HTTP E2E прошёл 7/7 Playwright-проектов без retries; synthetic API
     не заменяет staging-проверку ниже.
 - [x] Не повышать legacy `baseVersion` до доказанного серверного поколения:
