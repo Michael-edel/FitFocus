@@ -22,7 +22,7 @@ type NutritionScreenProps = {
   showSearchResults: boolean;
   setShowSearchResults: (value: boolean) => void;
   searchResults: SearchResult[];
-  addFoodToDiary: (item: FastLogItem) => void;
+  addFoodToDiary: (item: FastLogItem) => Promise<FoodItem | undefined>;
   foodDiary: FoodItem[];
   selectedFoodIds: ReadonlySet<string>;
   toggleFoodSelected: (id: string) => void;
@@ -76,8 +76,29 @@ export default function NutritionScreen({
   MacroBarComponent,
   FoodDiaryGroupedComponent,
 }: NutritionScreenProps) {
+  const [foodCommitBusy, setFoodCommitBusy] = React.useState(false);
+  const [foodCommitError, setFoodCommitError] = React.useState<string | null>(null);
   const useNativeCameraCapture =
     typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const addSearchResult = async (result: SearchResult) => {
+    if (foodCommitBusy) return;
+    setFoodCommitBusy(true);
+    setFoodCommitError(null);
+    try {
+      const saved = await addFoodToDiary(result);
+      if (!saved) {
+        setFoodCommitError('Не удалось сохранить запись в дневнике. Повторите попытку.');
+        return;
+      }
+      setSearchQuery('');
+      setShowSearchResults(false);
+    } catch {
+      setFoodCommitError('Не удалось сохранить запись в дневнике. Повторите попытку.');
+    } finally {
+      setFoodCommitBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700">
@@ -131,12 +152,9 @@ export default function NutritionScreen({
                 {searchResults.map((res, i) => (
                   <div
                     key={i}
-                    onClick={() => {
-                      addFoodToDiary(res);
-                      setSearchQuery('');
-                      setShowSearchResults(false);
-                    }}
-                    className="w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group"
+                    onClick={() => void addSearchResult(res)}
+                    aria-disabled={foodCommitBusy}
+                    className={`w-full px-8 py-5 flex items-center justify-between hover:bg-slate-800 text-left border-b border-slate-800 last:border-0 group ${foodCommitBusy ? 'opacity-60 pointer-events-none' : ''}`}
                   >
                     <span className="font-bold text-slate-200 group-hover:text-indigo-400 transition-colors">{res.name}</span>
                     <span className="text-sm font-black text-slate-600 tabular-nums">{res.calories} ккал</span>
@@ -145,6 +163,7 @@ export default function NutritionScreen({
               </div>
             )}
           </div>
+          {foodCommitError && <div role="alert" className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{foodCommitError}</div>}
 
           <div className="space-y-4">
             {foodDiary.length === 0 ? (

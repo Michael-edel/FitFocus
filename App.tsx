@@ -683,6 +683,8 @@ const App: React.FC = () => {
   } = useFoodDiary({
     userId: currentUser?.id,
     repository: userStateRepository,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     foodDiary,
     foodHistory,
     setFoodDiary,
@@ -1754,10 +1756,11 @@ const logWeight = useCallback(() => {
           draft={editFoodModal}
           onChange={setEditFoodModal}
           onClose={() => setEditFoodModal(null)}
-          onSave={() => {
+          onSave={async () => {
             const currentEntry = foodDiary.find((item) => item.id === editFoodModal.id);
             const patch = buildCorrectedFoodPatch(editFoodModal, currentEntry?.insight);
-            updateFoodEntry(editFoodModal.id, patch);
+            const saved = await updateFoodEntry(editFoodModal.id, patch);
+            if (!saved) return false;
             if (insightModal?.id === editFoodModal.id && patch.insight) {
               setInsightModal({
                 ...insightModal,
@@ -1767,6 +1770,7 @@ const logWeight = useCallback(() => {
               });
             }
             setEditFoodModal(null);
+            return true;
           }}
         />
       )}

@@ -2265,11 +2265,37 @@ test('bulk move and delete write once and cannot cross account diary keys', asyn
   await checkboxesA.nth(1).check();
   await expect(checkboxesA.nth(0)).toBeChecked();
   await expect(checkboxesA.nth(1)).toBeChecked();
-  await page.getByRole('button', { name: '→ Завтрак', exact: true }).first().click();
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if ((window as Window & { failDiaryWrite?: boolean }).failDiaryWrite
+        && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected diary quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, keyA);
+  const moveToBreakfast = page.getByRole('button', { name: '→ Завтрак', exact: true }).first();
+  await moveToBreakfast.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось перенести записи.' })).toBeVisible();
+  await expect(checkboxesA.nth(0)).toBeChecked();
+  await expect(checkboxesA.nth(1)).toBeChecked();
+  const failedMove = await readDurableSnapshot(page);
+  expect(JSON.parse(rawValue(failedMove, keyA) ?? '[]').map((item: { mealType: string }) => item.mealType))
+    .toEqual(['lunch', 'lunch']);
+  expect(failedMove.operations.filter(operation => operation.key === keyA)).toEqual([]);
+  expect(fixtureA.counts.stateWrites.filter(key => key === keyA).length).toBe(writesBefore);
+
+  await page.evaluate(() => { (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = false; });
+  await moveToBreakfast.click();
   await expect.poll(async () => {
     const value = rawValue(await readDurableSnapshot(page), keyA);
     return value ? JSON.parse(value).map((item: { mealType: string }) => item.mealType) : null;
   }).toEqual(['breakfast', 'breakfast']);
+  await expect(checkboxesA.nth(0)).not.toBeChecked();
+  await expect(checkboxesA.nth(1)).not.toBeChecked();
   await waitForOutboxKeyIdle(page, accountA, keyA);
   expect(fixtureA.counts.stateWrites.filter(key => key === keyA).length).toBe(writesBefore + 1);
 
@@ -2303,6 +2329,115 @@ test('bulk move and delete write once and cannot cross account diary keys', asyn
   expect(operationsFor(final, accountB)).toEqual([]);
   expect(errorsA).toEqual([]);
   expect(switched.errors).toEqual([]);
+});
+
+test('manual diary add waits for durable commit and keeps the search result available on failure', async ({ page }) => {
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateValues: [{
+      accountId: accountA.id,
+      key: historyKey(accountA.id),
+      value: JSON.stringify([{
+        id: 'history-only-item', name: 'Тестовый перекус', calories: 240, protein: 12, fat: 8, carbs: 28,
+        timestamp: '2026-10-17T12:00:00.000Z', mealType: 'lunch',
+      }]),
+      exists: true,
+      version: 1,
+    }],
+  };
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const search = page.getByPlaceholder('Поиск блюда в истории...');
+  await search.fill('Тестовый перекус');
+  const result = page.getByText('Тестовый перекус', { exact: true });
+  await expect(result).toBeVisible();
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if ((window as Window & { failDiaryWrite?: boolean }).failDiaryWrite
+        && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected diary quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, diaryKey(accountA.id));
+
+  await result.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить запись в дневнике.' })).toBeVisible();
+  await expect(search).toHaveValue('Тестовый перекус');
+  await expect(result).toBeVisible();
+  const failed = await readDurableSnapshot(page);
+  expect(rawValue(failed, diaryKey(accountA.id))).toBeNull();
+  expect(failed.operations.filter(operation => operation.key === diaryKey(accountA.id))).toEqual([]);
+
+  await page.evaluate(() => { (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = false; });
+  await result.click();
+  await expect(search).toHaveValue('');
+  await expect(page.getByText('Тестовый перекус', { exact: true }).last()).toBeVisible();
+  await expect.poll(async () => {
+    const snapshot = await readDurableSnapshot(page);
+    return JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]')
+      .map((item: { name: string }) => item.name);
+  }).toContain('Тестовый перекус');
+  await waitForOutboxKeyIdle(page, accountA, diaryKey(accountA.id));
+});
+
+test('food diary edit keeps its draft when the durable commit fails and can be retried', async ({ page }) => {
+  const original = {
+    id: 'editable-food-entry', name: 'Исходное блюдо', calories: 300, protein: 20, fat: 10, carbs: 32,
+    timestamp: '2026-10-17T12:00:00.000Z', mealType: 'lunch',
+  };
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify([original]), exists: true, version: 1,
+    }],
+  };
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page.getByText('Исходное блюдо', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  await page.getByRole('button', { name: 'Правка', exact: true }).click();
+  const name = page.getByPlaceholder('Например: манты свинина/говядина с манго-чили соусом');
+  await name.fill('Исправленное блюдо');
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if ((window as Window & { failDiaryWrite?: boolean }).failDiaryWrite
+        && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected diary quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, diaryKey(accountA.id));
+
+  const save = page.getByRole('button', { name: 'Сохранить', exact: true });
+  await save.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить изменения.' })).toBeVisible();
+  await expect(name).toHaveValue('Исправленное блюдо');
+  const failed = await readDurableSnapshot(page);
+  expect(JSON.parse(rawValue(failed, diaryKey(accountA.id)) ?? '[]')).toEqual([original]);
+  expect(failed.operations.filter(operation => operation.key === diaryKey(accountA.id))).toEqual([]);
+
+  await page.evaluate(() => { (window as Window & { failDiaryWrite?: boolean }).failDiaryWrite = false; });
+  await save.click();
+  await expect(name).toHaveCount(0);
+  await expect(page.getByText('Исправленное блюдо', { exact: true })).toBeVisible();
+  await expect.poll(async () => {
+    const snapshot = await readDurableSnapshot(page);
+    return JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]')
+      .map((item: { name: string }) => item.name);
+  }).toEqual(['Исправленное блюдо']);
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
