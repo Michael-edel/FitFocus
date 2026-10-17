@@ -1156,6 +1156,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     новой вкладке. Оба E2E прошли 3/3 на desktop Chromium, Firefox и WebKit
     (`workers=1,retries=0`); typecheck и diff check прошли. Точный CI проверяется
     на опубликованном SHA.
+  - [x] Удержать отдельный Plateau `Объяснить` callback и повторно войти в тот же
+    аккаунт с новой server session. Старый текст не появляется ни в одной вкладке;
+    профиль, coach state, outbox, achievements и action/status metadata не меняются.
+    E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+    typecheck и diff check прошли. Точный CI проверяется на опубликованном SHA.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

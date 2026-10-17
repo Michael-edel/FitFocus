@@ -1085,6 +1085,92 @@ test('held plateau explanation cannot appear after another tab signs in as accou
   }
 });
 
+test('held plateau explanation cannot appear after the same account starts a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await waitForAccountOutboxIdle(page, accountA);
+  const explanation = page.getByRole('button', { name: 'Объяснить', exact: true });
+  await expect(explanation).toBeVisible();
+  await explanation.click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  const coachBefore = rawValue(beforeReauthentication, coachKey(accountA.id));
+  const valuesBefore = valuesFor(beforeReauthentication, accountA);
+  const operationsBefore = operationsFor(beforeReauthentication, accountA);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const newSessionProfile = rawValue(beforeOldResponse, profileKey(accountA.id));
+    const newSessionCoach = rawValue(beforeOldResponse, coachKey(accountA.id));
+    const newSessionValues = valuesFor(beforeOldResponse, accountA);
+    const newSessionOperations = operationsFor(beforeOldResponse, accountA);
+    expect(beforeReauthentication.activeSession?.sessionEpoch).not.toBe(beforeOldResponse.activeSession?.sessionEpoch);
+    expect(newSessionProfile).toBe(profileBefore);
+    expect(newSessionCoach).toBe(coachBefore);
+    expect(newSessionValues).toEqual(valuesBefore);
+    expect(newSessionOperations).toEqual(operationsBefore);
+    const aiActionKeyA = aiActionKey(accountA.id);
+    const aiStatusKeyA = `fitfocus_data_${accountA.id}_ai_last_status_v1`;
+    const metadataBefore = await reauthenticatedPage.evaluate(keys => keys.map(key => localStorage.getItem(key)), [aiActionKeyA, aiStatusKeyA]);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, profileKey(accountA.id))).toBe(newSessionProfile);
+    expect(rawValue(afterOldResponse, coachKey(accountA.id))).toBe(newSessionCoach);
+    expect(valuesFor(afterOldResponse, accountA)).toEqual(newSessionValues);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(newSessionOperations);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(await reauthenticatedPage.evaluate(keys => keys.map(key => localStorage.getItem(key)), [aiActionKeyA, aiStatusKeyA]))
+      .toEqual(metadataBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+      feature: 'plateau', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('held personal weekly-menu response cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

@@ -1,5 +1,17 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — позднее объяснение Plateau после same-account login, 17.10.2026
+
+Добавлен отдельный acceptance для Plateau `Объяснить`, помимо уже проверенного
+retry: пока AI-ответ удержан, аккаунт A входит с новой `serverSessionId`. Старый
+текст не появляется в обеих вкладках; профиль, coach state, outbox, achievements
+и account-scoped action/status metadata не меняются. Runtime-код не менялся;
+дефекта в сценарии не обнаружено.
+
+E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+`npm run typecheck` и `git diff --check` прошли. Точный CI проверяется на
+опубликованном SHA. Другие P0.5 callbacks остаются открытыми.
+
 ## P0.5 — late Coach и Plateau retry после same-account login, 17.10.2026
 
 Добавлены проверки удержанных AI retry `coach_advice` и `plateau`: аккаунт A
