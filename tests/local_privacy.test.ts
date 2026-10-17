@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { clearLocalUserData } from '../storage/hybrid';
+import { clearLocalUserData, clearRetiredLocalTelemetry } from '../storage/hybrid';
 import { userStateDatabase } from '../storage/stateDatabase';
 
 class MemoryStorage implements Storage {
@@ -103,5 +103,28 @@ describe('clearLocalUserData', () => {
     });
     expect(storage.getItem('fitfocus_data_user-1_diary')).toBeNull();
     expect(storage.getItem('fitfocus.remote-kv-outbox.v1')).toBe(legacySource);
+  });
+});
+
+describe('retired local telemetry cleanup', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('removes old unscoped health telemetry and sent markers without touching app data', () => {
+    const storage = new MemoryStorage();
+    storage.setItem('fitfocus.analytics.onboarding.v1', '[{"weight":72,"age":34}]');
+    storage.setItem('fitfocus.analytics.wis_share.v1', '[{"meta":{"wis":81}}]');
+    storage.setItem('fitfocus.analytics.food_streak.v1', '[{"meta":{"streak":7}}]');
+    storage.setItem('fitfocus.analytics.sent.v1:user-1', '["started"]');
+    storage.setItem('fitfocus_data_user-1_profile', '{"weight":72}');
+    storage.setItem('fitfocus.nutrition.selected-day.v1:user-1', '2026-10-17');
+    vi.stubGlobal('localStorage', storage);
+
+    expect(clearRetiredLocalTelemetry()).toBe(4);
+    expect(storage.getItem('fitfocus.analytics.onboarding.v1')).toBeNull();
+    expect(storage.getItem('fitfocus.analytics.wis_share.v1')).toBeNull();
+    expect(storage.getItem('fitfocus.analytics.food_streak.v1')).toBeNull();
+    expect(storage.getItem('fitfocus.analytics.sent.v1:user-1')).toBeNull();
+    expect(storage.getItem('fitfocus_data_user-1_profile')).toBe('{"weight":72}');
+    expect(storage.getItem('fitfocus.nutrition.selected-day.v1:user-1')).toBe('2026-10-17');
   });
 });

@@ -302,7 +302,7 @@ export default function DashboardScreen({
               </div>
             </div>
           </div>
-          <FoodStreakCard userId={currentUser?.id} foodDiary={foodDiary || []} />
+          <FoodStreakCard foodDiary={foodDiary || []} />
         </div>
       </section>
 

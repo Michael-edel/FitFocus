@@ -61,7 +61,6 @@ import { calculateStreak, getTodayKey } from './habits';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
 import { type WeeklyStoredReport } from './weeklyAutoEngine';
-import { trackWisShareEvent } from './analytics/wisShare';
 import { calculateFoodStreak } from './analytics/foodStreak';
 import { useAchievements } from './useAchievements';
 import { usePaywall } from './usePaywall';
@@ -776,12 +775,10 @@ const App: React.FC = () => {
     const card = wisShareCardRef.current;
     if (!card) {
       setWisShareNotice('error', 'Не удалось подготовить карточку WIS. Попробуйте ещё раз.');
-      trackWisShareEvent('wis_share_failed', { reason: 'share_card_missing', wis: weekly.wis });
       return;
     }
 
     setWisShareNotice('busy', 'Готовим PNG-карточку WIS...');
-    trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
 
     try {
       const method = await shareWisCard({
@@ -794,14 +791,12 @@ const App: React.FC = () => {
       setWisShareNotice('success', method === 'share_sheet'
         ? 'Карточка готова и передана в системное меню отправки.'
         : 'Системная отправка недоступна — PNG скачан на устройство.');
-      trackWisShareEvent('wis_share_success', { method, wis: weekly.wis });
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
       return;
     } catch (error: unknown) {
       if (!await isCurrentAccountSession()) return;
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
-      trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
   }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isCurrentAccountSession,
     weekly, weeklyReports.length, setWisShareNotice]);

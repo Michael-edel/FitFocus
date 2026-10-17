@@ -40,9 +40,33 @@ const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.progress-archive.sections.v1:',
   'fitfocus.settings.ui.v1:',
   'fitfocus.nutrition.search.v1:',
-  'fitfocus.analytics.sent.v1:',
   'fitfocus.achievements.counters.v1:',
 ];
+
+const RETIRED_LOCAL_TELEMETRY_KEYS = new Set([
+  'fitfocus.analytics.onboarding.v1',
+  'fitfocus.analytics.wis_share.v1',
+  'fitfocus.analytics.food_streak.v1',
+]);
+const RETIRED_LOCAL_TELEMETRY_PREFIXES = ['fitfocus.analytics.sent.v1:'];
+
+/** Removes unused, unscoped health-event logs written by older builds. */
+export function clearRetiredLocalTelemetry(): number {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && (RETIRED_LOCAL_TELEMETRY_KEYS.has(key)
+        || RETIRED_LOCAL_TELEMETRY_PREFIXES.some((prefix) => key.startsWith(prefix)))) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) localStorage.removeItem(key);
+    return keys.length;
+  } catch {
+    return 0;
+  }
+}
 
 function isLocalUserKey(key: string, userId: string): boolean {
   const dataPrefix = `${STORAGE_KEYS.dataPrefix}${userId}_`;

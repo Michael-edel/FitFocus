@@ -30,6 +30,11 @@ passed / 9 skipped, audit (0 уязвимостей), guards, typecheck, build �
 метаданные `__ffv` и перечисленные в `storage/hybrid.ts` ключи интерфейса,
 планирования, аналитики и достижений для этого аккаунта.
 
+Сбор локальных onboarding, WIS-share и food-streak event logs удалён: они не
+читались приложением и записывали чувствительные показатели в общие ключи без
+владельца. При старте новая сборка очищает старые global telemetry keys и
+milestone markers; account-scoped профиль и настройки остаются на месте.
+
 В IndexedDB одна readwrite-транзакция проходит по всем пяти долговечным
 stores: `values`, `outbox`, `outbox_migration_items`,
 `outbox_migration_unknown` и `outbox_meta`. Она удаляет строки с подтверждённым
