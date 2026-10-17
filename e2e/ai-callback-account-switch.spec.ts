@@ -2010,6 +2010,101 @@ test('a held step-by-step recipe response cannot update the diary or usage after
   }
 });
 
+test('a held step-by-step recipe response cannot update after the same account starts a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe generation reauthentication acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'recipe');
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto');
+  await waitForAccountOutboxIdle(page, accountA);
+  await page.getByRole('button', { name: /Итого калорий/ }).click();
+  await page.getByRole('button', { name: 'Получить пошаговый рецепт', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const diaryBefore = rawValue(beforeReauthentication, diaryKey(accountA.id));
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  const valuesBefore = valuesFor(beforeReauthentication, accountA);
+  const operationsBefore = operationsFor(beforeReauthentication, accountA);
+  const diaryKeys = [diaryKey(accountA.id), historyKey(accountA.id)];
+  const diaryAndHistoryWritesBefore = fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key));
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const reauthenticated = { id: accountA.id, sid: 'e'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#nutrition');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const newSessionDiary = rawValue(beforeOldResponse, diaryKey(accountA.id));
+    const newSessionProfile = rawValue(beforeOldResponse, profileKey(accountA.id));
+    const newSessionValues = valuesFor(beforeOldResponse, accountA);
+    const newSessionOperations = operationsFor(beforeOldResponse, accountA);
+    expect(beforeReauthentication.activeSession?.sessionEpoch).not.toBe(beforeOldResponse.activeSession?.sessionEpoch);
+    expect(newSessionDiary).toBe(diaryBefore);
+    expect(newSessionProfile).toBe(profileBefore);
+    expect(newSessionValues).toEqual(valuesBefore);
+    expect(newSessionOperations).toEqual(operationsBefore);
+    const recipeUsageBefore = await reauthenticatedPage.evaluate(key => localStorage.getItem(key), recipeUsageKey(accountA.id));
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, diaryKey(accountA.id))).toBe(newSessionDiary);
+    expect(rawValue(afterOldResponse, profileKey(accountA.id))).toBe(newSessionProfile);
+    expect(valuesFor(afterOldResponse, accountA)).toEqual(newSessionValues);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(newSessionOperations);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
+      .toEqual(diaryAndHistoryWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(await reauthenticatedPage.evaluate(key => localStorage.getItem(key), recipeUsageKey(accountA.id)))
+      .toBe(recipeUsageBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'recipe')).toEqual([{
+      feature: 'recipe', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Поздний пошаговый рецепт A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Поздний пошаговый рецепт A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('step-by-step recipe generation uses the active session and commits the diary update', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium', 'The full step-by-step recipe success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
