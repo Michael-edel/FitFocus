@@ -2,15 +2,16 @@
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Последний опубликованный HEAD `a9d2e33` прошёл
-audit, schema/privacy/auth/API checks, unit, три typecheck и build; его точный
-[PR CI #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
-завершился с 988 E2E passed, 299 skipped и одним iPhone Safari failure в profile
-durability сценарии из-за фонового `wis_text` запроса при reload. Тестовая
-фикстура исправлена локально явным scoped ответом; точный сценарий прошёл 10/10
-без retries, root typecheck и diff check прошли. Полный CI follow-up ожидает push.
-Branch preview `bb94957` прошёл ограниченный GET/Chromium smoke. В плане остаются
-33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 полностью не закрыт.
+защищённую `main` не подтверждены. Последний опубликованный HEAD — `87ba8b9`
+(`test: stabilize iPhone profile durability E2E`). Точный
+[PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020)
+прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и production
+build; на последней проверке выполнялся полный E2E набор. Исправленная iPhone
+Safari регрессия локально прошла 10/10, а `profile-durability.spec.ts` на iPhone
+Safari — 20/20 без retries. Branch preview обслуживает точный bundle `87ba8b9`;
+read-only API и Chromium smoke не нашли ошибок приложения, off-origin или
+записывающих запросов. Остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих
+задач; ни один P0 полностью не закрыт.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -163,6 +164,13 @@ bundle проверена на семи Playwright-проектах и прош�
     `/api/env` и `/api/me` дают 200, защищённые GET — 401 без `Location` и
     `Set-Cookie`. Проверялись только GET. Браузерный smoke текущего SHA, D1,
     `APP_URL`, OAuth, edge rules для остальных путей и staging остаются открытыми.
+  - [x] Проверить deployment `87ba8b9`: JS bundle содержит точный SHA; GET
+    `/`, `/api/env`, `/api/me` вернули 200, защищённые bootstrap/profile/state/push
+    маршруты — 401 без redirect/cookie. Свежий Chromium отрисовал FitFocus без
+    `pageerror`, off-origin или не-GET запросов. Осталось одно известное
+    предупреждение о `ambient-light-sensor`; директива сохранена для браузеров,
+    которые её поддерживают. Проверка не подтверждает D1, `APP_URL`, OAuth,
+    авторизованные действия или реальные edge rules.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.

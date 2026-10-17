@@ -4,14 +4,14 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
-outbox подключён; продолжается P0.8-перенос пользовательских действий. Кодовый
-коммит `6bcbdd2` устраняет преждевременный показ локального fallback AI-плана:
-при отсутствии `aiPlan` он показывается только после guarded durable commit.
-Новая регрессия прошла 3/3 desktop браузера; unit suite — 1360/1360, root,
-domain-strict и storage-strict typecheck и production build прошли локально.
-Chromium и Firefox прошли полный profile E2E по 20/20. Первый WebKit проход дал
-18/20; оба сценария прошли точечный повтор 2/2 и полный WebKit повтор 20/20 без
-retries. Это локальная проверка, не GitHub CI.
+outbox подключён; продолжается P0.8-перенос пользовательских действий. Коммит
+`87ba8b9` стабилизирует fallback AI-plan profile E2E: fixture задаёт явный scoped
+ответ фонового `wis_text` запроса во время reload. Узкий тест прошёл 10/10 на
+iPhone Safari, а полный `profile-durability.spec.ts` — 20/20 на iPhone Safari без
+retries; root typecheck и diff check прошли локально. Точный
+[PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020)
+подтвердил audit, schema/privacy/auth/API checks, unit, три typecheck и build;
+на последней проверке выполнялся полный E2E набор.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые
@@ -22,13 +22,7 @@ preview origin.
 
 Точный [PR CI #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
 для `a9d2e33` завершился ошибкой в одном E2E: 988 browser passed, 299 skipped,
-1 failed. Audit, schema/privacy/auth/API checks, unit, три typecheck и build
-успешны. Единственный отказ — fallback AI-plan сценарий на iPhone Safari:
-побочный недельный `wis_text` request зарегистрировал access-control ошибку
-во время reload, после чего появилось сообщение `WEEKLY_AI_REPORT_FAILED`.
-Локальный follow-up задаёт `wis_text` ответ прямо в profile fixture с AI
-scope-заголовками; точный сценарий прошёл 10/10 на iPhone Safari, retries=0.
-Полный новый CI ещё не запущен.
+1 failed. Исправление и точный follow-up CI описаны для `87ba8b9` выше.
 
 Более ранний CI #1573 на `bb94957` завершился двумя E2E сбоями; Firefox
 shopping-list и Android PWA access-pause сценарии прошли локальные повторы 5/5.

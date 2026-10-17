@@ -6317,3 +6317,23 @@ headers; общая проверка консоли не ослаблена. П�
 прошли. Это устраняет нестабильную зависимость этого profile E2E от общего
 fallback mock. Следующий CI должен подтвердить новый SHA целиком; P0.8/P0.9,
 staging, release acceptance и интеграция в `main` остаются открытыми.
+
+## P0.8 — точный CI и branch-preview smoke для `87ba8b9`, 18.10.2026
+
+Коммит `87ba8b917031a6eb739401ecf851ce7fe5e84d42` опубликован в
+`fix/durable-outbox`. В точном [PR CI #1577](https://github.com/Michael-edel/FitFocus/actions/runs/39070119020)
+успешно завершились dependency audit, schema/privacy/auth/API checks, unit,
+root/domain/storage typecheck и production build; E2E выполняется. Полный вывод
+матрицы ещё не получен.
+
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` обслуживает
+bundle `87ba8b917031a6eb739401ecf851ce7fe5e84d42`. Read-only GET дали ожидаемые
+результаты: `/`, `/api/env`, `/api/me` — 200; `/api/bootstrap`, `/api/profile`,
+`/api/state`, `/api/push/status` — 401 без redirect и `Set-Cookie`. Свежий
+Chromium показал `title=FitFocus`, без `pageerror`, off-origin запросов или
+не-GET запросов. Он сообщил одно предупреждение Chromium о неизвестной
+`ambient-light-sensor` директиве Permissions-Policy из `public/_headers`.
+Директива сохранена: она ограничивает экспериментальный API в поддерживающих
+её браузерах, и её безусловное удаление может ослабить политику. Smoke не
+подтверждает D1 binding, `APP_URL`, OAuth/callback или аутентифицированные
+сценарии; staging и выпуск остаются открытыми.
