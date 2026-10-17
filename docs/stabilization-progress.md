@@ -5858,3 +5858,17 @@ acceptance `weekly-ai-report-session.spec.ts` — 6/6 на desktop
 Chromium/Firefox/WebKit без retries. Общий typecheck, domain-strict,
 storage-strict и production build прошли. Точный CI новой ревизии ожидает push;
 общий P0.5/P0.6, staging и полный lifecycle остаются открыты.
+
+## P0.5 — не показывать stale ошибку weekly menu, 17.10.2026
+
+Scoped weekly-menu transport отклоняет AI ответ после смены server session,
+однако catch ранее превращал этот ожидаемый session отказ в обычную ошибку
+генерации. Теперь soft/session ошибки не отображаются как неудачная генерация;
+loading всё равно снимается для текущего локального действия.
+
+Регрессия `weekly_menu_generation_feature.test.ts` прошла 4/4. Account-switch и
+same-account reauthentication сценарии `ai-callback-account-switch.spec.ts`
+прошли 6/6 на desktop Chromium/Firefox/WebKit без retries. Полный unit suite —
+1343/1343; общий typecheck, domain-strict, storage-strict, production build и
+`git diff --check` прошли. Общий P0.5, остальные callbacks и staging остаются
+открыты.

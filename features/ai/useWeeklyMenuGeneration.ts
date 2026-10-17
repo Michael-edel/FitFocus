@@ -3,6 +3,7 @@ import { generateWeeklyMenu } from '../../geminiService';
 import type { UserProfile, WeeklyMenu } from '../../types';
 import type { OutboxReadGuard } from '../../storage/durableOutbox';
 import { prepareAiSession } from '../../services/aiSession';
+import { isSoftWeeklyAiError } from '../../services/frontendErrors';
 import type { useProfilePersistence } from '../profile/useProfilePersistence';
 import { AiActionScope } from './actionScope';
 
@@ -61,8 +62,10 @@ export async function generatePersonalWeeklyMenu({
     void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
     if (!current()) return null;
     return weeklyMenu;
-  } catch {
-    if (current()) setError(!canCommitProfile() ? WEEKLY_MENU_PROFILE_CHANGED : saving ? WEEKLY_MENU_SAVE_ERROR : WEEKLY_MENU_GENERATION_ERROR);
+  } catch (error) {
+    if (current() && !isSoftWeeklyAiError(error)) {
+      setError(!canCommitProfile() ? WEEKLY_MENU_PROFILE_CHANGED : saving ? WEEKLY_MENU_SAVE_ERROR : WEEKLY_MENU_GENERATION_ERROR);
+    }
     return null;
   } finally {
     if (current()) setLoading(false);

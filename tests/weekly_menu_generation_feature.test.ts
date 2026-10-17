@@ -6,6 +6,7 @@ import {
 import type { UserProfile } from '../types';
 import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
 import type { AiSession } from '../services/aiSession';
+import { SessionReadError } from '../storage/sessionRead';
 
 const user = {
   id: 'user-1',
@@ -69,6 +70,21 @@ describe('weekly menu generation feature', () => {
       `error:${WEEKLY_MENU_GENERATION_ERROR}`,
       'loading:false',
     ]);
+  });
+
+  it('does not show a generation error when a stale login session rejects the AI response', async () => {
+    const calls: string[] = [];
+    await expect(generatePersonalWeeklyMenu({
+      ...scope(),
+      currentUser: user,
+      persistUser: async () => { calls.push('persist'); return { status: 'pending' } as OutboxOperation; },
+      checkAchievements: () => calls.push('achievement'),
+      setLoading: (value) => calls.push(`loading:${value}`),
+      setError: (value) => calls.push(`error:${value}`),
+      requestMenu: async () => { throw new SessionReadError('session'); },
+    })).resolves.toBeNull();
+
+    expect(calls).toEqual(['error:null', 'loading:true', 'loading:false']);
   });
 
   it('does nothing until the user has an AI plan', async () => {

@@ -1187,6 +1187,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     weekly report browser spec — 6/6 на desktop Chromium/Firefox/WebKit, весь
     unit suite — 1342/1342; три typecheck-профиля и production build прошли.
     Общий P0.5 и lifecycle остаются открытыми.
+  - [x] Не показывать обычную ошибку генерации недельного меню, если scoped AI
+    request отклонён из-за смены server session. `SessionReadError` теперь
+    завершается без stale UI error; тест прошёл 4/4, а account-switch и
+    same-account reauthentication E2E — 6/6 на desktop Chromium/Firefox/WebKit
+    без retries. Полный unit suite — 1343/1343, три typecheck-профиля и
+    production build прошли. Остальные AI/family callbacks и общий lifecycle
+    P0.5 остаются открытыми.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —
