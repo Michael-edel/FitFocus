@@ -189,7 +189,7 @@ export async function retryLastAiAction({
     });
     if (!isCurrentRetry()) return;
     const reports = await loadReports(currentUser.id);
-    if (!current()) return;
+    if (!isCurrentRetry()) return;
     setWeeklyReports(reports);
   } catch (error) {
     if (marker && weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;

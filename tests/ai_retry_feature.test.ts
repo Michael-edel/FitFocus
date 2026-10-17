@@ -182,4 +182,25 @@ describe('AI retry feature', () => {
     expect(input.loadReports).not.toHaveBeenCalled();
     expect(input.setWeeklyReports).not.toHaveBeenCalled();
   });
+
+  it('does not publish reports when a newer AI action replaces the retry during report loading', async () => {
+    const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
+    const newerAction = { feature: 'coach_advice', type: 'coach', userId: user.id, actionId: 'new-action' } as AiAction;
+    let replaceLastAction: (action: AiAction) => void = () => {};
+    const input = params({ feature: 'wis_text', type: 'wis', userId: user.id }, {
+      ensureWeeklyReport: async (_userId, _weekly, generateAI) => {
+        await generateAI();
+        return { report: reports[0], isNew: true };
+      },
+      loadReports: async () => {
+        replaceLastAction(newerAction);
+        return reports;
+      },
+    });
+    replaceLastAction = input.replaceLastAction;
+
+    await retryLastAiAction(input);
+
+    expect(input.setWeeklyReports).not.toHaveBeenCalled();
+  });
 });

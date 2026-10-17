@@ -1171,6 +1171,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     не меняет профиль, values, outbox или achievements. E2E прошёл 3/3 на desktop
     Chromium, Firefox и WebKit (`workers=1,retries=0`); typecheck и diff check
     прошли. Точный CI проверяется на опубликованном SHA.
+  - [x] Повторно проверить владельца callback после асинхронной загрузки списка
+    weekly AI reports: если за время чтения последнее AI-действие сменилось,
+    старый retry не публикует отчёты. Regression добавлен в
+    `tests/ai_retry_feature.test.ts`; целевой файл прошёл 9/9, unit suite —
+    1338/1338, три typecheck-профиля и production build прошли. Общий P0.5 и
+    остальные callbacks/lifecycle остаются открытыми.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —
