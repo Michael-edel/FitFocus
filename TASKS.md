@@ -1405,8 +1405,14 @@ legacy-ключ не используется для новой очереди �
     после восстановления сети. Локальная матрица на Playwright 1.64.1 прошла
     7/7 профилей без retries и использует `context.setOffline(true)` во всех
     движках; upstream fix — [`Playwright #42894`](https://github.com/microsoft/playwright/pull/42894).
-    Новая версия runner пока не опубликована. Browser/mock acceptance не заменяет
-    физическое устройство, staging или полный P0.9; точный CI follow-up открыт.
+    Повторный offline reopen в run #1485 выявил гонку восстановления auth:
+    браузер вернул сеть, пока стартовый bootstrap ещё загружался, но обработчик
+    `online` устанавливался только после перехода в `auth_choice`. В
+    [`4b041f1`](https://github.com/Michael-edel/FitFocus/commit/4b041f194504068775d661b63a24f047e0e07bb1)
+    обработчик установлен уже во время `loading`; целевой тест прошёл 6/6 на
+    desktop WebKit и iPhone PWA без retries. Точный CI нового HEAD ожидается;
+    browser/mock acceptance не заменяет физическое устройство, staging или
+    полный P0.9.
   - [x] Проверить браузерный IndexedDB transaction abort после добавления
     settings outbox intent: value, operation и metadata целиком откатываются,
     видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий

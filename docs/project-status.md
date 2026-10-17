@@ -4,9 +4,9 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Последний полный опубликованный CI —
-[run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
-на `e370f61`: audit, schema/privacy/auth/API guards, unit, три typecheck и
-production build прошли; E2E завершился 841 passed / 255 skipped / 3 failed.
+[run #1485](https://github.com/Michael-edel/FitFocus/actions/runs/38984560848)
+на `2e6d854`: audit, schema/privacy/auth/API guards, unit, три typecheck и
+production build прошли; E2E завершился 843 passed / 255 skipped / 1 failed.
 
 Текущий этап — стабилизационная приёмка P0.8/P0.9; IndexedDB durable outbox
 подключён, общий P0 открыт. E2E follow-up
@@ -19,10 +19,18 @@ production build прошли; E2E завершился 841 passed / 255 skipped
 update banner, когда тот появляется перед действием, устраняя гонку разовой
 проверки видимости.
 
-Локальная проверка точного кода follow-up: 18/18 целевых запусков на desktop
-WebKit и iPhone Safari (`--repeat-each=3`, `--retries=0`), `npm run typecheck`
-и `git diff --check` прошли. Полный CI для `96c21c3` пока не подтверждён.
-Production-код не менялся; staging, выпуск и интеграция в `main` не выполнены.
+Run #1485 подтвердил, что три прежних сбоя устранены, и нашёл один новый:
+после offline reopen desktop WebKit не восстановил cloud-сессию. Outbox сохранил
+settings intent, но событие `online` пришло во время первичного auth bootstrap,
+пока обработчик повторной проверки ещё не был установлен. Исправление
+[`4b041f1`](https://github.com/Michael-edel/FitFocus/commit/4b041f194504068775d661b63a24f047e0e07bb1)
+держит обработчик активным с начальной загрузки и повторяет обычный guarded
+bootstrap при восстановлении сети, пока подтверждённой сессии нет.
+
+Локальная проверка fix: сценарий PWA offline reopen прошёл 6/6 повторов на
+desktop WebKit и iPhone PWA (`--repeat-each=3`, `--retries=0`); `npm run build`,
+`npm run typecheck` и `git diff --check` прошли. Новый точный CI ожидается после
+push. Staging, выпуск и интеграция в `main` не выполнены.
 
 Предыдущий run #1467 также подтвердил исправление mock-недели для iPhone Safari;
 его отдельный desktop WebKit reload-сбой weekly AI был локально проверен 3/3.

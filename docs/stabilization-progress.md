@@ -1,5 +1,29 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — повтор auth bootstrap при возврате сети после offline reopen, 17.10.2026
+
+Полный [CI run #1485](https://github.com/Michael-edel/FitFocus/actions/runs/38984560848)
+для `2e6d854` прошёл audit, schema/privacy/auth/API guards, unit tests, три
+typecheck и production build; E2E завершился 843 passed / 255 skipped / 1 failed.
+Три падения предыдущего run #1483 больше не возникли. Единственная ошибка была
+в `pwa-offline-durability.spec.ts` на desktop WebKit: после offline reopen
+сохранилась settings операция, но не отобразился экран приложения и outbox не
+синхронизировался.
+
+Trace показал, что восстановление соединения произошло во время первичного
+bootstrap. Обработчик `online` устанавливался лишь после перехода `authState` в
+`auth_choice`, поэтому раннее событие пропускалось, а запущенный до переключения
+сети retry завершался сообщением WebKit `internal error`. Listener теперь
+устанавливается при начальном `loading`, читает актуальные auth-state и
+подтверждённую identity через refs и запускает обычный guarded bootstrap, если
+сессия ещё не подтверждена. Исправление: [`4b041f1`](https://github.com/Michael-edel/FitFocus/commit/4b041f194504068775d661b63a24f047e0e07bb1).
+
+Локально `npm run typecheck`, production build и `git diff --check` прошли.
+Сценарий с настоящим Service Worker прошёл 6/6 повторов на desktop WebKit и
+iPhone PWA (`--repeat-each=3`, `--workers=1`, `--retries=0`). Точный полный CI
+исправленного HEAD запускается после push; физическое устройство, staging,
+выпуск и общий P0.9 остаются открытыми.
+
 ## P0.8/P0.9 — три E2E сбоя WebKit CI #1483, 17.10.2026
 
 Полный [CI run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
