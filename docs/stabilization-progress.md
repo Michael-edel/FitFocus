@@ -1,5 +1,17 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний фотоанализ после same-account login, 17.10.2026
+
+В `ai-callback-account-switch.spec.ts` добавлена проверка удержанного фотоанализа
+еды: тот же аккаунт входит с новой `serverSessionId`, после чего освобождается
+ответ прежней сессии. Проверяются diary/history, profile usage, outbox, achievements
+и UI обеих вкладок. Устаревший анализ не записывает блюдо и не показывает его;
+production-код не менялся, дефекта в сценарии не выявлено.
+
+E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+общий `npm run typecheck` и `git diff --check` прошли. Точный CI этой ревизии
+запускается после push. P0.5 остаётся открытым для остальных callbacks и lifecycle.
+
 ## P0.5 — поздний retry персонального плана после same-account login, 17.10.2026
 
 В `ai-callback-account-switch.spec.ts` добавлена проверка удержанного AI retry

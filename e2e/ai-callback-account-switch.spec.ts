@@ -1285,6 +1285,99 @@ test('held food photo analysis cannot write for account A after another tab sign
   }
 });
 
+test('held food photo analysis cannot commit after the same account starts a new server session', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary reauthentication acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'foodphoto');
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  const upload = page.locator('input[type="file"][multiple]').first();
+  await expect(upload).toHaveCount(1);
+  await upload.setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  const valuesBefore = valuesFor(beforeReauthentication, accountA);
+  const operationsBefore = operationsFor(beforeReauthentication, accountA);
+  const diaryKeys = [diaryKey(accountA.id), historyKey(accountA.id)];
+  const diaryAndHistoryWritesBefore = fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key));
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  expect(JSON.parse(rawValue(beforeReauthentication, diaryKey(accountA.id)) ?? '[]'))
+    .not.toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Поздняя еда A' })]));
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#nutrition');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+
+    const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    const newSessionProfile = rawValue(beforeOldResponse, profileKey(accountA.id));
+    const newSessionValues = valuesFor(beforeOldResponse, accountA);
+    const newSessionOperations = operationsFor(beforeOldResponse, accountA);
+    expect(beforeReauthentication.activeSession?.sessionEpoch).not.toBe(beforeOldResponse.activeSession?.sessionEpoch);
+    expect(newSessionProfile).toBe(profileBefore);
+    expect(newSessionValues).toEqual(valuesBefore);
+    expect(newSessionOperations).toEqual(operationsBefore);
+    expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+
+    const afterOldResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterOldResponse, profileKey(accountA.id))).toBe(newSessionProfile);
+    expect(valuesFor(afterOldResponse, accountA)).toEqual(newSessionValues);
+    expect(operationsFor(afterOldResponse, accountA)).toEqual(newSessionOperations);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
+      .toEqual(diaryAndHistoryWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'foodphoto')).toEqual([{
+      feature: 'foodphoto', account: accountA.id, session: accountA.sid,
+    }]);
+    const diary = JSON.parse(rawValue(afterOldResponse, diaryKey(accountA.id)) ?? '[]');
+    const history = JSON.parse(rawValue(afterOldResponse, historyKey(accountA.id)) ?? '[]');
+    expect(diary).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Поздняя еда A' })]));
+    expect(history).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Поздняя еда A' })]));
+    await expect(page.getByText('Поздняя еда A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Поздняя еда A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.release();
+    fixtureReauthenticated.release();
+  }
+});
+
 test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

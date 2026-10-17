@@ -1138,6 +1138,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     profile/state writes или achievements. E2E прошёл 3/3 на desktop
     Chromium/Firefox/WebKit (`workers=1,retries=0`); typecheck и diff check прошли.
     Точный CI этой ревизии ожидает push.
+  - [x] Удержать фотоанализ еды аккаунта A, повторно войти в тот же аккаунт с
+    новой server session и освободить старый AI-ответ. Diary/history, profile usage,
+    outbox и экран новой сессии не принимают результат; новые записи и achievements
+    не появляются. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit
+    (`workers=1,retries=0`); typecheck и diff check прошли. Точный CI этой ревизии
+    ожидает push.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —
