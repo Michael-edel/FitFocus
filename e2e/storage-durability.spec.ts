@@ -771,6 +771,7 @@ test('multi-edit recovery warns before replacing earlier operations and sends on
   await page.getByRole('button', { name: /^Светлая/ }).click();
   await conflictStarted;
   await page.getByRole('button', { name: /^Violet AI/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).operations.length).toBe(2);
   const queued = await storedSettings(page);
   expect(queued.operations).toHaveLength(2);
   expect(queued.operations.map((operation) => operation.status).sort()).toEqual(['pending', 'sending']);
@@ -976,7 +977,7 @@ test('two tabs without Web Locks retain a same-key edit made while its first wri
   }
 });
 
-test('quota fault rolls back settings and displays a visible storage error', async ({ page }, testInfo) => {
+test('quota fault rolls back selected settings and can be retried after a visible storage error', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -997,11 +998,15 @@ test('quota fault rolls back settings and displays a visible storage error', asy
   const previous = await storedSettings(page);
   await page.evaluate(() => {
     const add = IDBObjectStore.prototype.add;
-    IDBObjectStore.prototype.add = function (value, key) {
-      if (this.name === 'outbox' && typeof value?.key === 'string' && value.key.endsWith('_settings')) {
+    const state = window as Window & { failSettingsWrite?: boolean };
+    state.failSettingsWrite = true;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const record = args[0] as { key?: unknown } | null;
+      if (state.failSettingsWrite && this.name === 'outbox'
+        && typeof record?.key === 'string' && record.key.endsWith('_settings')) {
         throw new DOMException('Injected quota fault', 'QuotaExceededError');
       }
-      return add.call(this, value, key);
+      return add.apply(this, args);
     };
   });
   await page.getByRole('button', { name: /^Violet AI/ }).click();
@@ -1011,6 +1016,15 @@ test('quota fault rolls back settings and displays a visible storage error', asy
   await expect(page.getByText('Cloud: error', { exact: true })).toHaveCount(1);
   await expect(page.getByText('Cloud: saved', { exact: true })).toHaveCount(0);
   expect(await storedSettings(page)).toEqual(previous);
+  await expect(page.getByRole('button', { name: /^Светлая/ })).toHaveClass(/border-indigo-500\/40/);
+  await expect(page.getByRole('button', { name: /^Violet AI/ })).not.toHaveClass(/border-indigo-500\/40/);
+
+  await page.evaluate(() => { (window as Window & { failSettingsWrite?: boolean }).failSettingsWrite = false; });
+  await page.getByRole('button', { name: /^Violet AI/ }).click();
+  await expect.poll(async () => (await storedSettings(page)).confirmedVersion).toBe(2);
+  await expect.poll(async () => (await storedSettings(page)).value).toContain('"theme":"violet"');
+  expect((await storedSettings(page)).operations).toHaveLength(0);
+  await expect(page.getByRole('button', { name: /^Violet AI/ })).toHaveClass(/border-indigo-500\/40/);
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('storage-error.png'), fullPage: false });
 });

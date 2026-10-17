@@ -522,6 +522,8 @@ const App: React.FC = () => {
   const { settings, setSettings } = useSettingsPersistence({
     userId: uiAccountId,
     repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
