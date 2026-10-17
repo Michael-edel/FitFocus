@@ -4,16 +4,18 @@
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0. IndexedDB durable
-outbox подключён, найденная повторная проверка PWA writer fence исправлена локально.
+outbox подключён, повтор writer-fence исправлен и опубликован. Локально проверяется
+следующее изменение: упорядочивание быстрых отметок покупок и безопасная очистка
+listener в PWA fence.
 В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
 P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main` остаются
 открытыми.
 
-Опубликованный HEAD [`cf62df0`](https://github.com/Michael-edel/FitFocus/commit/cf62df0)
-прошёл точный [PR CI #1565](https://github.com/Michael-edel/FitFocus/actions/runs/39037015105)
-успешно, включая E2E и rollback jobs; он относится только к этому parent SHA.
-Отдельная CI-проверка writer-fence исправления выполняется на его SHA после
-публикации.
+Предыдущий опубликованный SHA [`243c102`](https://github.com/Michael-edel/FitFocus/commit/243c1025d84147b78d6875bb839e17f7cf505a0e)
+проверяется [PR CI #1567](https://github.com/Michael-edel/FitFocus/actions/runs/39040645536):
+audit, schema/privacy/auth/API guards, 1352 unit tests, три typecheck и build прошли;
+E2E выполняется, rollback jobs ещё ожидают. Этот прогон не включает follow-up
+коммит `b6591e6`; его точный CI нужно проверить отдельно.
 
 Если fence handshake не отвечал с первого раза, sender оставлял outbox на
 безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт
@@ -21,6 +23,16 @@ P0 полностью не закрыт. Staging, выпуск и интегра
 1352/1352, все три typecheck и production build прошли; offline E2E: Android
 Chrome 20/20 повторов и полная матрица 7/7, везде без retries. Подробности и
 ограничения — в [журнале стабилизации](stabilization-progress.md).
+
+Коммит `b6591e6` сериализует personal и family shopping-check PATCH для одной
+позиции по account/family/week/canonical ingredient, сохраняя порядок пользовательских
+намерений при быстрых кликах. Также cleanup writer-fence не вызывает отсутствующий
+`removeEventListener` у контроллера Service Worker. Новый unit-регресс, полный unit
+suite **1353/1353**, typecheck, production build и `family-callback-account-switch.spec.ts`
+**84/84** на Chromium/Firefox/WebKit прошли без retries; прежняя Firefox/WebKit page
+error в этом наборе не повторилась. Изменения не входят в CI #1567.
+Staging, полный P0.8/P0.9, release acceptance и интеграция в защищённую `main`
+остаются открытыми.
 
 ## P0.8 — действия урока подтверждаются после durable commit, `77ca05f`, 17.10.2026
 

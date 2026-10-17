@@ -26,6 +26,9 @@ type FixtureState = {
   rejectedPersonalShoppingLists: number;
   personalShoppingCheckRequests: number;
   personalShoppingCheckAccounts: string[];
+  personalShoppingCheckValues?: boolean[];
+  personalShoppingCheckCommits?: boolean[];
+  personalShoppingCheckedByAccount?: Record<string, boolean>;
   rejectedPersonalShoppingChecks: number;
   shoppingAchievements: string[];
   memberRequests: number;
@@ -47,6 +50,7 @@ type FixtureState = {
   familyShoppingListAccounts?: string[];
   familyShoppingListSessions?: string[];
   familyShoppingListNamesBySession?: Record<string, string>;
+  familyShoppingChecked?: boolean;
   releasedFamilyShoppingLists?: number;
   familyMenuSessions?: string[];
   familyMenuNamesBySession?: Record<string, string>;
@@ -429,7 +433,8 @@ async function installAccountApi(
         }
         return json({
           week_start: weekStart,
-          items: [{ name: `Список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400, checked: false }],
+          items: [{ name: `Список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`, grams: 400,
+            checked: state.personalShoppingCheckedByAccount?.[scopedAccount.id] ?? false }],
         });
       }
       state.familyShoppingListRequests = (state.familyShoppingListRequests ?? 0) + 1;
@@ -448,20 +453,21 @@ async function installAccountApi(
           name: state.familyShoppingListNamesBySession?.[requestedSession ?? '']
             ?? `Семейный список ${scopedAccount.id === accountA.id ? 'A' : 'B'}`,
           grams: 400,
-          checked: false,
+          checked: state.familyShoppingChecked ?? false,
         }],
       });
     }
     if (path === '/api/shopping/check') {
       state.shoppingCheckRequests += 1;
       state.shoppingCheckAccounts.push(scopedAccount.id);
-      const body = request.postDataJSON() as { family_id?: unknown } | null;
+      const body = request.postDataJSON() as { family_id?: unknown; checked?: unknown } | null;
       state.shoppingCheckSessions?.push(requestedSession ?? '');
       state.shoppingCheckFamilyIds?.push(typeof body?.family_id === 'string' ? body.family_id : '');
       const personal = !body?.family_id;
       if (personal) {
         state.personalShoppingCheckRequests += 1;
         state.personalShoppingCheckAccounts.push(scopedAccount.id);
+        state.personalShoppingCheckValues?.push(body?.checked === true);
       }
       if (state.failShoppingCheckRequest === state.shoppingCheckRequests) {
         state.failedShoppingCheckRequests = (state.failedShoppingCheckRequests ?? 0) + 1;
@@ -474,6 +480,11 @@ async function installAccountApi(
           state.rejectedPersonalShoppingChecks += 1;
           return json({ error: 'STATE_SESSION_CHANGED' }, state.current, 401);
         }
+        if (personal) {
+          const checked = body?.checked === true;
+          (state.personalShoppingCheckedByAccount ??= {})[scopedAccount.id] = checked;
+          state.personalShoppingCheckCommits?.push(checked);
+        } else state.familyShoppingChecked = body?.checked === true;
         await json({ ok: true }, accountA);
         return;
       }
@@ -481,6 +492,11 @@ async function installAccountApi(
         state.rejectedPersonalShoppingChecks += 1;
         return json({ error: 'STATE_SESSION_CHANGED' }, state.current, 401);
       }
+      if (personal) {
+        const checked = body?.checked === true;
+        (state.personalShoppingCheckedByAccount ??= {})[scopedAccount.id] = checked;
+        state.personalShoppingCheckCommits?.push(checked);
+      } else state.familyShoppingChecked = body?.checked === true;
       return json({ ok: true });
     }
     return route.fallback();
@@ -1340,12 +1356,15 @@ test('a failed family shopping retry reconciles the optimistic checkbox with the
     await expect.poll(() => state.shoppingCheckRequests).toBe(1);
     await expect(checkbox).toBeChecked();
 
-    // The first request is still pending and the mock server has not committed it.
-    // The user's newer intent fails; the list read is the authoritative state.
+    // The user's newer intent must wait until the first write is resolved.
     await checkbox.uncheck();
+    await page.waitForTimeout(250);
+    expect(state.shoppingCheckRequests).toBe(1);
+    fixture.releaseShoppingCheck();
     await expect.poll(() => state.failedShoppingCheckRequests).toBe(1);
     await expect.poll(() => state.familyShoppingListRequests).toBeGreaterThan(listReadsBeforeFailure);
-    await expect(checkbox).not.toBeChecked();
+    // The second write failed, so reconciliation restores the first write's server state.
+    await expect(checkbox).toBeChecked();
     expect(errors.filter(message => !/503 \(Service Unavailable\)/.test(message))).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
@@ -1475,6 +1494,54 @@ test('a delayed personal shopping check from account A is rejected after account
     await accountBPage.screenshot({ path: info.outputPath('personal-shopping-check-account-b.png') });
   } finally {
     fixtureA.releaseShoppingCheck();
+  }
+});
+
+test('personal shopping toggles for one item reach the server in user-intent order', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The personal shopping write-order acceptance runs in desktop browser profiles.');
+  const errors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    personalShoppingCheckValues: [], personalShoppingCheckCommits: [], personalShoppingCheckedByAccount: {},
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [],
+    memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const fixture = await installAccountApi(page, state, false, errors, true, false, true);
+  const checkbox = page.getByLabel('Список A');
+
+  try {
+    await openApp(page, '/#plan');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect(page.locator('#shopping-list')).toBeVisible();
+    await expect(checkbox).toBeVisible();
+    await expect(checkbox).not.toBeChecked();
+
+    await checkbox.check();
+    await expect.poll(() => state.personalShoppingCheckRequests).toBe(1);
+    await checkbox.uncheck();
+    await expect(checkbox).not.toBeChecked();
+
+    // The first server write is held. A newer intent must wait instead of racing it.
+    await page.waitForTimeout(250);
+    expect(state.personalShoppingCheckRequests).toBe(1);
+    expect(state.personalShoppingCheckValues).toEqual([true]);
+
+    fixture.releaseShoppingCheck();
+    await expect.poll(() => state.personalShoppingCheckRequests).toBe(2);
+    await expect.poll(() => state.personalShoppingCheckCommits?.length).toBe(2);
+    expect(state.personalShoppingCheckValues).toEqual([true, false]);
+    expect(state.personalShoppingCheckCommits).toEqual([true, false]);
+
+    await page.reload();
+    await expect(page.locator('#shopping-list')).toBeVisible();
+    await expect(checkbox).not.toBeChecked();
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixture.releaseShoppingCheck();
   }
 });
 

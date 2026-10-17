@@ -126,7 +126,7 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
 
   const toggleFamilyShoppingItem = useCallback(async (ingredientName: string, checked: boolean) => {
     const familyId = cloudFamily?.id; if (!familyId) return;
-    const attempt = scope.begin(`check:${ingredientName}`); if (!attempt) throw new SessionReadError('session');
+    const attempt = scope.begin(`check:${ingredientName}:${crypto.randomUUID()}`); if (!attempt) throw new SessionReadError('session');
     const week = weekStartISO();
     const current = () => attempt.isCurrent() && familyIdRef.current === familyId && weekStartISO() === week;
     const previous = familyShopping?.items.find(item => item.name === ingredientName)?.checked ?? false;

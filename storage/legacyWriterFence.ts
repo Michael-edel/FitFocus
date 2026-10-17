@@ -80,7 +80,9 @@ export async function checkLegacyWriterFence(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      controller.removeEventListener('statechange', onStateChange);
+      if (typeof controller.removeEventListener === 'function') {
+        controller.removeEventListener('statechange', onStateChange);
+      }
       channel?.port1.close();
       channel?.port2.close();
       resolve(proof);

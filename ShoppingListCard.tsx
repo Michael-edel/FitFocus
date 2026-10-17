@@ -6,6 +6,7 @@ import { requestFamilyJson } from './services/familySession';
 import { assertReadSession } from './storage/sessionRead';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { buildPersonalShoppingCsv } from './services/shoppingExport';
+import { runShoppingCheckInOrder } from './services/shoppingCheckOrder';
 
 type ShoppingItem = {
   name: string;
@@ -89,6 +90,9 @@ export default function ShoppingListCard({
   const scopeKey = userId && loginGuard?.accountId === userId && isCurrentSession()
     ? JSON.stringify([loginGuard.accountId, loginGuard.serverSessionId, loginGuard.sessionEpoch, loginGuard.authFence, weekStart])
     : null;
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
+  const mountedRef = useRef(true);
   const items = itemsSnapshot?.scopeKey === scopeKey ? itemsSnapshot.items : null;
   const fallbackStorageKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : null;
   const fallbackChecked = allowCachedUiStateRestore && fallbackStorageKey && fallbackCheckedSnapshot?.storageKey === fallbackStorageKey
@@ -107,9 +111,13 @@ export default function ShoppingListCard({
     }
   }, [isCurrentSession, loginGuard, userId]);
 
-  useEffect(() => () => {
-    for (const controller of activeControllersRef.current) controller.abort();
-    activeControllersRef.current.clear();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const controller of activeControllersRef.current) controller.abort();
+      activeControllersRef.current.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -223,15 +231,18 @@ export default function ShoppingListCard({
       updateItem(checked);
       const controller = new AbortController();
       try {
-        const { response } = await requestScoped(controller, "/api/shopping/check", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ week_start: weekStart, ingredient_name: name, checked }),
+        await runShoppingCheckInOrder({ accountId: requestGuard.accountId, familyId: null, weekStart, ingredientName: name }, async () => {
+          if (!mountedRef.current || controller.signal.aborted || scopeKeyRef.current !== requestScopeKey || !currentSession()) return;
+          const { response } = await requestScoped(controller, "/api/shopping/check", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ week_start: weekStart, ingredient_name: name, checked }),
+          });
+          if (!response.ok) throw new Error(`shopping_check_http_${response.status}`);
         });
-        if (!response.ok) throw new Error(`shopping_check_http_${response.status}`);
       } catch {
-        if (controller.signal.aborted || !currentSession()) return;
+        if (!mountedRef.current || controller.signal.aborted || scopeKeyRef.current !== requestScopeKey || !currentSession()) return;
         try {
           await assertReadSession(requestGuard, { isCurrentSession: currentSession, signal: controller.signal });
         } catch {

@@ -42,6 +42,20 @@ it('accepts only a fresh worker proof that lists every current-build client', as
   expect(isCurrentLegacyWriterFenceProof(proof, 7_000)).toBe(false);
 });
 
+it('settles the fence check when the controller cannot remove event listeners', async () => {
+  const container = controller(({ challengeId, buildId }) => ({
+    type: LEGACY_WRITER_FENCE_REPLY,
+    challengeId,
+    workerBuildId: buildId,
+    complete: true,
+    clients: [{ id: 'tab-a', buildId }],
+  }));
+  Object.defineProperty(container.controller!, 'removeEventListener', { value: undefined });
+
+  await expect(checkLegacyWriterFence(container, 'build-123', 500))
+    .resolves.toMatchObject({ buildId: 'build-123', clientIds: ['tab-a'] });
+});
+
 it.each([
   ['an old open tab', ({ challengeId, buildId }: { challengeId: string; buildId: string }) => ({
     type: LEGACY_WRITER_FENCE_REPLY, challengeId, workerBuildId: buildId, complete: false,

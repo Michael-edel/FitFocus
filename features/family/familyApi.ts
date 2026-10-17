@@ -2,6 +2,7 @@ import { isRecord, responseErrorMessage } from '../../safeJson';
 import { isFamilyMenuPayload, isFamilyMenuSnapshot, type FamilyMenuSnapshot } from '../../familyMenuValidation';
 import type { FamilyWeeklyMenu } from '../../types';
 import { familyErrorMessage, requestFamilyJson, type FamilySession } from '../../services/familySession';
+import { runShoppingCheckInOrder } from '../../services/shoppingCheckOrder';
 import { SessionReadError } from '../../storage/sessionRead';
 
 export type CloudFamily = {
@@ -147,13 +148,15 @@ export async function setFamilyShoppingItem(
   checked: boolean,
   session: FamilySession,
 ): Promise<void> {
-  const { response, body: data } = await apiFetch('/api/shopping/check', requestOptions('PATCH', {
-    week_start: week,
-    ingredient_name: ingredientName,
-    checked,
-    family_id: familyId,
-  }), session);
-  if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось обновить список покупок'));
+  await runShoppingCheckInOrder({ accountId: session.guard.accountId, familyId, weekStart: week, ingredientName }, async () => {
+    const { response, body: data } = await apiFetch('/api/shopping/check', requestOptions('PATCH', {
+      week_start: week,
+      ingredient_name: ingredientName,
+      checked,
+      family_id: familyId,
+    }), session);
+    if (!response.ok) throw new Error(responseErrorMessage(data, 'Не удалось обновить список покупок'));
+  });
 }
 
 export async function createFamily(name: string, session: FamilySession): Promise<void> {

@@ -6155,3 +6155,24 @@ typecheck, production build и `git diff --check` прошли. Android Chrome �
 Точная проверка исправления проводится отдельно на опубликованном SHA. PR #93 остаётся draft;
 полный P0.8/P0.9, разделение staging-проверок, выпуск и интеграция в защищённую
 `main` остаются открытыми.
+
+## P0.8/P0.9 — порядок отметок покупок и очистка writer-fence, 17.10.2026
+
+Два быстрых переключения одного и того же пункта покупок могли отправить
+конкурирующие PATCH и сохранить на сервере устаревшее намерение. Добавлена
+локальная очередь по account, family, week и canonical ingredient; personal и
+family writes теперь доходят до сервера в порядке кликов. E2E проверяет порядок
+обоих записей и состояние после reload, а family retry проверяет reconciliation
+после отказа второй записи. Также Firefox/WebKit ранее выдавали page error при
+завершении PWA fence, если контроллер не предоставлял `removeEventListener`;
+очистка стала условной, добавлен unit-регресс на такой объект.
+
+`legacy_writer_fence.test.ts` прошёл **11/11**, полный unit suite — **1353/1353**,
+typecheck, production build и `git diff --check` прошли. Полный
+`family-callback-account-switch.spec.ts` прошёл **84/84** на desktop Chromium,
+Firefox и WebKit с `workers=1`, `retries=0`; прежняя page error не повторилась.
+Точный PR CI [#1567](https://github.com/Michael-edel/FitFocus/actions/runs/39040645536)
+на предшествующем SHA `243c102` выполняет E2E и не включает коммит `b6591e6`;
+его точный CI проверяется отдельно после push. Результаты этого раздела пока
+локальные; staging, полный P0.8/P0.9, release acceptance и интеграция в защищённую
+`main` остаются открытыми.
