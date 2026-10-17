@@ -6038,3 +6038,31 @@ failure → retry проходит 3/3 на desktop Chromium, Firefox и WebKit.
 Это закрывает найденную ошибку сохранения избранных рецептов, но не завершает
 P0.8: lifecycle, остальные writers, staging и интеграция в `main` остаются
 открыты.
+
+## P0.8 — durable commit отметки прочтения и ответа на тест урока, `77ca05f`, 17.10.2026
+
+`useCourseActions` раньше вызывал `persistUser` без ожидания и сразу закрывал
+LessonViewModal. При отказе IndexedDB пользователь терял экран повтора; в тесте
+урока терялся и выбранный вариант. Новая quota-регрессия воспроизвела дефект:
+после клика отсутствовали alert и открытая форма.
+
+Обе операции теперь ждут durable profile commit до закрытия модального окна.
+При ошибке показывается `role=alert`, кнопки исключают повторный параллельный
+commit, урок остаётся открыт, а выбранный ответ сохраняется; после восстановления
+хранилища то же действие можно повторить. Персистентность использует session-bound
+local commit guard: локальные правки разрешены во время auth-паузы отправителя,
+но другой account/session отклоняется. Для проверки ошибки текущего guard добавлена
+проверка локальной сессии без auth-fence, сохраняя различие между локальным
+намерением и правом на облачное чтение.
+
+Полная `profile-durability.spec.ts` прошла **45/45** на desktop Chromium,
+Firefox и WebKit (`workers=1`, `retries=0`). Новый сценарий проверяет отдельно
+отказ/retry отметки прочтения и отправки квиза, сохранение ответа при сбое и
+durable профиль после успешного повтора. Unit suite — **1348/1348**; root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Кодовый коммит — [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f).
+Его exact CI ещё не запущен, так как предыдущий опубликованный HEAD
+[`5b90b31`](https://github.com/Michael-edel/FitFocus/commit/5b90b31) остаётся в
+[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255),
+шаг E2E. PR #93 остаётся draft; общий P0.8/lifecycle, остальные callbacks,
+staging, выпуск и интеграция в защищённую `main` открыты.

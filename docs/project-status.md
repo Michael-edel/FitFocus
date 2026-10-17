@@ -8,6 +8,20 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
+## P0.8 — действия урока подтверждаются после durable commit, `77ca05f`, 17.10.2026
+
+Отметка чтения и отправка ответа на тест раньше закрывали урок до завершения
+записи профиля. Теперь обе операции ждут IndexedDB outbox commit; quota/transaction
+отказ оставляет урок открытым, показывает ошибку, а выбранный ответ сохраняется
+для повтора. Запись использует local session guard, который разрешает локальное
+намерение во время sender auth-паузы и отклоняет переключившуюся сессию.
+Quota/retry E2E сначала воспроизвёл дефект, затем `profile-durability.spec.ts`
+прошёл 45/45 на desktop Chromium/Firefox/WebKit без retries. Unit — 1348/1348;
+root, domain-strict и storage-strict typecheck, production build и
+`git diff --check` прошли. Коммит ещё локальный; exact CI появится после push.
+Другие callbacks, общий P0.8/lifecycle, staging, выпуск и интеграция в
+защищённую `main` остаются открыты.
+
 ## P0.8 — настройки возвращаются к последнему durable значению при отказе, `5204b41`, 17.10.2026
 
 При quota/transaction отказе settings outbox откатывает запись, а hook теперь
@@ -17,7 +31,8 @@ outbox подключён, общий P0 открыт; staging и интегра
 сохранение/reload, multi-edit, quota/retry, transaction abort и 401 recovery:
 18/18 на desktop Chromium, Firefox и WebKit без retries. Unit 1347/1347, root,
 domain-strict и storage-strict typecheck, production build и `git diff --check`
-прошли локально. Точный workflow ожидает push; общий P0.8/lifecycle, staging,
+прошли локально. Эти изменения входят в текущий exact PR CI #1557, который
+пока выполняет E2E на опубликованном HEAD `5b90b31`; общий P0.8/lifecycle, staging,
 выпуск и интеграция в защищённый `main` остаются открыты.
 
 ## P0.8 — дневник питания подтверждает изменения после durable commit, `2c94596`, 17.10.2026

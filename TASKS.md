@@ -2,13 +2,25 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
-подтверждены. Последний кодовый follow-up
+подтверждены. Последний локальный code follow-up
+[`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f) заставляет
+отметку прочтения и ответ на тест урока дождаться durable profile commit;
+при quota/transaction ошибке урок остаётся открыт, выбранный ответ сохраняется
+для retry. Новый E2E сначала воспроизвёл раннее закрытие урока. Полная
+`profile-durability.spec.ts` после исправления прошла 45/45 на desktop Chromium,
+Firefox и WebKit без retries; unit 1348/1348, три typecheck-профиля,
+production build и `git diff --check` прошли. Точный CI для этого коммита ещё
+не запущен: опубликованный HEAD `5b90b31` проверяется в
+[PR CI #1557](https://github.com/Michael-edel/FitFocus/actions/runs/39029225255),
+E2E пока выполняется.
+
+Предыдущий опубликованный code follow-up
 [`5204b41`](https://github.com/Michael-edel/FitFocus/commit/5204b41) возвращает
 настройки к последнему локально сохранённому варианту после quota/transaction
 ошибки и сохраняет owner-scoped правку во время 401 auth-паузы. Browser
 acceptance прошла 18/18 на desktop Chromium/Firefox/WebKit; unit 1347/1347,
 три typecheck-профиля, production build и `git diff --check` прошли. Точный CI
-ожидает публикации. Предыдущий follow-up
+для settings входит в текущий run #1557 на родительском HEAD. Предыдущий follow-up
 [`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596) исправляет
 durable writes дневника: add/edit/delete и bulk actions обновляют UI только после
 commit IndexedDB, а ошибка сохраняет форму и выбор для повтора. Регрессии отказа
@@ -1507,6 +1519,14 @@ all-client Service Worker fence, атомарные migration items и quarantin
     desktop Chromium/Firefox/WebKit; код [`5204b41`](https://github.com/Michael-edel/FitFocus/commit/5204b41),
     unit 1347/1347, три typecheck-профиля и production build прошли. Точный CI
     запускается после push.
+  - [x] Сохранять прогресс чтения и ответ на тест урока только после durable
+    profile outbox commit; при quota/transaction отказе оставить урок открытым,
+    показать ошибку и сохранить выбранный ответ для retry. Новый тест сначала
+    воспроизвёл раннее закрытие. После фикса `profile-durability.spec.ts` прошёл
+    45/45 на desktop Chromium/Firefox/WebKit без retries; unit 1348/1348, три
+    typecheck-профиля, production build и `git diff --check` прошли. Код
+    [`77ca05f`](https://github.com/Michael-edel/FitFocus/commit/77ca05f);
+    exact CI ожидает push. Остальной P0.8 и полный lifecycle остаются открыты.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.
