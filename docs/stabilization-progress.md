@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — отмена profile refresh при Safari reload, 17.10.2026
+
+Кодовый коммит [`264bc4f`](https://github.com/Michael-edel/FitFocus/commit/264bc4f)
+добавил native HTTP gate для GET `/api/profile` в существующую реальную PWA
+фикстуру. Тест инициирует refresh, удерживает ответ, перезагружает страницу и
+проверяет браузерное `requestfailed` с причиной cancel, сохранность локального
+профиля и отсутствие pageerror, console error и неожиданных API-запросов.
+
+Сценарий прошёл 3/3 на desktop WebKit, iPhone Safari и iPhone PWA при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Первая попытка через `page.route` не моделировала native HTTP отмену, поэтому её
+заменили серверной фикстурой. Полный CI точной опубликованной ревизии ещё не
+проверен. Это подтверждает корректную обработку текущего reload-cancel, но не
+устанавливает историческую первопричину Safari-сообщения; общий CORS-фильтр не
+добавлялся.
+
 ## P0.8/P0.9 — гидратация профиля перед вводом в PWA update acceptance, 17.10.2026
 
 Полный [CI run #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)

@@ -232,7 +232,12 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   повторно прошли 24/24 (`workers=1,retries=0`). На точном HEAD `62bd28c`
   конфликт профиля после 409 прошёл ещё 24/24 повторов на desktop WebKit,
   iPhone Safari и iPhone PWA (`workers=1,retries=0`); pageerror не возник.
-  Историческая причина пока не установлена.
+  В `264bc4f` добавлена native HTTP PWA-проверка: удерживаем GET `/api/profile`,
+  выполняем reload и подтверждаем настоящий `requestfailed` с причиной cancel,
+  доступность локального профиля и отсутствие pageerror/console error. Она прошла
+  3/3 на desktop WebKit, iPhone Safari и iPhone PWA без retries. Это подтверждает
+  обработку отмены сейчас, но не устанавливает источник старого исторического
+  сообщения. Полный CI этой ревизии ожидается после push.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.

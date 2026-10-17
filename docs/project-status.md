@@ -14,6 +14,11 @@ IndexedDB durable outbox подключён, общий P0 открыт.
 запроса на локальном Pages worker/workerd/D1, браузерный trace и tested rollback
 artifact сохранены. Исправление PWA-теста в этом SHA подтверждено полным CI.
 
+В кодовом коммите [`264bc4f`](https://github.com/Michael-edel/FitFocus/commit/264bc4f)
+добавлена native HTTP проверка отмены `/api/profile` при reload. Typecheck и
+targeted Safari/WebKit acceptance прошли; exact full CI этого изменения ожидает
+push. Историческая причина прежнего Safari-сообщения остаётся открытой.
+
 Причина предыдущего сбоя [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
 на `0af2c30` — форма настроек принимала ввод до загрузки исходного профиля,
 создавая значение `E2E UserЧерновик перед обновлением`. Тест теперь ждёт имя из
