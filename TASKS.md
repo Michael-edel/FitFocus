@@ -1231,6 +1231,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     guard до применения снимка. Удалены fallback и value-only state-sync API.
     Целевые unit и typecheck прошли; точный CI ожидает push. Остальной P0.6
     и staging остаются открытыми.
+  - [x] Перед показом ошибки profile commit повторно проверять точный readGuard
+    в IndexedDB: локального login-generation недостаточно при смене сессии из
+    другой вкладки. Целевые profile tests прошли 36/36, typecheck прошёл; точный
+    CI новой ревизии будет после push. Остальной P0.6 остаётся открытым.
 - [x] Проверить old/new migration с двумя вкладками на одном origin без Web Locks;
   [smoke](e2e/legacy-outbox-migration.spec.ts) прошёл 7/7 проектов.
 - [x] Проверить конкурентные записи одного ключа из двух вкладок без Web Locks:

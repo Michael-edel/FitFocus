@@ -3,7 +3,7 @@ import type { UserProfile } from '../../types';
 import { normalizeUserProfiles } from '../../storage/hybrid';
 import { StateEditor } from '../../storage/stateEditor';
 import { UserStateRepository } from '../../storage/userStateRepository';
-import type { OutboxCommitGuard } from '../../storage/durableOutbox';
+import type { OutboxCommitGuard, OutboxReadGuard } from '../../storage/durableOutbox';
 
 export type ProfileUpdate = UserProfile | ((profile: UserProfile) => UserProfile);
 
@@ -14,6 +14,14 @@ const codec = {
   // Observe its revision without replacing that prepared working value a second time.
   decode: (_raw: string | null, fallback: UserProfile): UserProfile => fallback,
 };
+
+export async function isProfileCommitErrorCurrent(repository: UserStateRepository, guard: OutboxReadGuard,
+  canCommit: () => boolean): Promise<boolean> {
+  if (!canCommit()) return false;
+  try {
+    return await repository.isReadSessionCurrent(guard) && canCommit();
+  } catch { return false; }
+}
 
 /** One editor per login owns both full edits and functional patches; reads never enqueue defaults. */
 export function useProfilePersistence({ repository, currentUser, isCurrentSession, profileEditRevisionRef, hasPendingProfileChangesRef,
@@ -53,7 +61,9 @@ export function useProfilePersistence({ repository, currentUser, isCurrentSessio
         setProfileSyncState('saving');
         return operation;
       });
-      void committed.catch(() => { if (canCommit()) setProfileSyncState('error'); });
+      void committed.catch(async () => {
+        if (await isProfileCommitErrorCurrent(repository, guard.readGuard, canCommit)) setProfileSyncState('error');
+      });
       return committed;
     }
     const update = typeof action === 'function' ? action(editor.getSnapshot().value) : action;
