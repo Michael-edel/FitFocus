@@ -2,14 +2,16 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
-подтверждены. Текущий кодовый follow-up [`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496)
-закрывает ложное сообщение об успехе в сохранении избранного рецепта до commit
-в IndexedDB: add/edit/remove/clear ждут результат записи, изменение существующего
-рецепта атомарно, отказ оставляет форму открытой и доступной для повтора. Локально
-прошли регрессии формы в desktop Chromium/Firefox/WebKit (3/3), фото-разбора в
-Chromium (1/1), полный unit suite (1347/1347), root и storage-strict typecheck,
-production build и `git diff --check`. Exact CI этого SHA ожидает публикации;
-P0.8/P0.9 и release gates остаются открыты.
+подтверждены. Последний кодовый follow-up
+[`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596) исправляет
+durable writes дневника: add/edit/delete и bulk actions обновляют UI только после
+commit IndexedDB, а ошибка сохраняет форму и выбор для повтора. Регрессии отказа
+и повтора прошли 3 сценария в desktop Chromium/Firefox/WebKit (9/9); unit
+1347/1347, три typecheck-профиля, production build и `git diff --check` прошли.
+Точный CI ожидает публикации. Предыдущий follow-up
+[`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496) исправил
+такое же ложное сообщение об успехе для избранных рецептов; регрессии формы и
+фоторазбора прошли локально. P0.8/P0.9 и release gates остаются открыты.
 
 В кодовом коммите [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
 обработан отказ durable profile write в Progress/Settings: ошибки видны,
@@ -1484,6 +1486,14 @@ all-client Service Worker fence, атомарные migration items и quarantin
     фото-разбора с quota отказом и retry — 1/1 Chromium. Код [`0aad496`](https://github.com/Michael-edel/FitFocus/commit/0aad496);
     unit 1347/1347, root/storage-strict typecheck и production build прошли.
     Exact CI follow-up запускается после push; весь P0.8/lifecycle остаётся открыт.
+  - [x] Дневник питания подтверждает add/edit/delete/bulk move/bulk delete только
+    после durable commit в IndexedDB. При отказе запись не появляется на экране,
+    выбранные строки и форма остаются доступными для повтора; callbacks проверяют
+    account/session guard до и после записи. Quota-failure/retry E2E прошёл 3/3
+    сценария на desktop Chromium/Firefox/WebKit; unit 1347/1347, root,
+    domain-strict и storage-strict typecheck, production build и `git diff --check`
+    прошли. Код [`2c94596`](https://github.com/Michael-edel/FitFocus/commit/2c94596);
+    точный CI ожидает push.
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

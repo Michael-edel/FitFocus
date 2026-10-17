@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — durable writes дневника питания, `2c94596`, 17.10.2026
+
+`useFoodDiary` менял React state до подтверждения записи и запускал persistence
+без ожидания: quota failure мог оставить на экране несохранённое блюдо, а bulk
+action очищал выбор при неудаче. Add/edit/delete, перенос/удаление выбранных
+записей и удаление фото теперь сначала фиксируются через сериализованный
+`UserStateRepository.updateJson`, затем обновляют экран. Guard привязывает запись
+к владельцу repository, account и актуальной login session; после async-записи
+повторно проверяются scope и read session. При отказе поиск и draft редактирования
+остаются открытыми, а bulk selection сохраняется для повтора. История остаётся
+вторичным durable update после commit дневника.
+
+Quota-failure/retry acceptance для ручного добавления, редактирования и bulk
+переноса прошла 3/3 сценария на desktop Chromium, Firefox и WebKit (9/9 без
+retries). Полный unit suite — 1347/1347; root, domain-strict и storage-strict
+typecheck, production build и `git diff --check` прошли. Точный CI для этого SHA
+проверяется после push; остальные callbacks/lifecycle, staging и release gates
+остаются открыты.
+
 ## P0.6 — сохранять фото прогресса после отказа локальной записи, 17.10.2026
 
 `saveProgressPhotos` раньше не возвращал результат `onPatchUser`. Если запись
