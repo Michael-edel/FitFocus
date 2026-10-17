@@ -2,16 +2,19 @@
 
 Обновлено: 17.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
-подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
+подтверждены. Текущая локальная работа закрывает P0.6 profile-write отказ для
+замеров и wearable; полная приёмка P0.8/P0.9 и release gates остаются открыты.
 
-Кодовый коммит [`980aaa1`](https://github.com/Michael-edel/FitFocus/commit/980aaa16f4278b1d1526d6a263ca017297e975ee)
-опубликован в PR #93; его точный CI [#1547](https://github.com/Michael-edel/FitFocus/actions/runs/39022819941)
-ожидает запуска. Исправлена потеря выбранного фото прогресса при отказе durable
-profile write: теперь отказ виден, файл и подпись сохраняются для повтора, а
-устаревший callback не меняет новую сессию. Полная `profile-durability.spec.ts`
-прошла 30/30 на desktop Chromium/Firefox/WebKit без retries; root, domain-strict
-и storage-strict typecheck, `git diff --check` и проверка 238 локальных MD-ссылок
-прошли. Предыдущий CI #1545 проверяет `feaf74c` и не подтверждает этот коммит.
+В кодовом коммите [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
+обработан отказ durable profile write в Progress/Settings: ошибки видны,
+черновики и выбранный файл остаются для повтора, а stale account/session callback
+не меняет экран нового владельца. Полная `profile-durability.spec.ts` прошла
+42/42 на desktop Chromium/Firefox/WebKit без retries; 1347 unit-тестов, root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Exact CI для этой ревизии запускается после push. Предыдущий
+CI [#1549](https://github.com/Michael-edel/FitFocus/actions/runs/39022938858)
+проверяет parent HEAD `81823dc` и на момент записи выполняет E2E; он не включает
+кодовый commit `646b8b4`.
 
 Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
 для опубликованного `7ff579d` завершился success: 1326 unit tests / 212 файлов,
@@ -1256,9 +1259,17 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   - [x] Не терять выбранное фото прогресса, если durable profile write отклонён:
     передавать результат commit в UI, показывать ошибку и сохранять файл/подпись
     для повтора; инвалидировать фото-attempt при смене account/session scope.
-    Регрессия прошла 3/3 desktop browsers, полная `profile-durability.spec.ts` —
-    30/30 без retries; все три typecheck прошли локально. Точный CI — run #1547,
-    ожидает запуска.
+    Регрессия прошла 3/3 desktop browsers; фото-изменение включено в последующую
+    проверку полной `profile-durability.spec.ts`.
+  - [x] Обрабатывать отказ profile commit для ручного замера, wearable text/file
+    import и выбора/отключения источника: показывать ошибку, не считать отказ
+    успешным и оставлять файл/ввод для повтора; отбрасывать callback после смены
+    аккаунта или сессии. Проверки quota отказа сначала воспроизвели молчаливый
+    import failure; после исправления профильный E2E-набор прошёл 42/42 на desktop
+    Chromium/Firefox/WebKit без retries. Unit 1347/1347, три typecheck и build
+    прошли. Код [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4);
+    exact CI после push. Остальные profile callbacks, BFCache на устройстве и
+    staging остаются открыты.
   - [x] Удержать GET `/api/profile` аккаунта A, активировать B в соседней вкладке
     и отпустить ответ A после переключения. Старый экран закрыт session notice;
     профиль B и обе durable-записи не изменились, новых B-операций нет. E2E

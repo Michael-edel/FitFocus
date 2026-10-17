@@ -8,22 +8,27 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
-Кодовый коммит [`980aaa1`](https://github.com/Michael-edel/FitFocus/commit/980aaa16f4278b1d1526d6a263ca017297e975ee)
-опубликован в PR #93; его точный CI [#1547](https://github.com/Michael-edel/FitFocus/actions/runs/39022819941)
-ожидает запуска. Предыдущий CI [#1545](https://github.com/Michael-edel/FitFocus/actions/runs/39021316539)
-относится к `feaf74c`, поэтому не считается проверкой нового коммита. В предыдущих
-исправлениях [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
+Кодовый follow-up [`646b8b4`](https://github.com/Michael-edel/FitFocus/commit/646b8b4)
+исправляет молчаливый отказ durable profile write для замеров и wearable:
+ошибка видна, текст и выбранный файл сохраняются для повтора, повтор файла доступен
+кнопкой; результат действия проверяется с исходным account/session scope.
+`profile-durability.spec.ts` прошёл 42/42 на desktop Chromium/Firefox/WebKit без
+retries; unit 1347/1347, root/domain/storage typecheck и production build прошли
+локально. Полный exact CI этого follow-up должен стартовать после push. Предыдущий
+CI [#1549](https://github.com/Michael-edel/FitFocus/actions/runs/39022938858)
+проверяет parent SHA `81823dc`, остаётся на E2E и не покрывает `646b8b4`.
+В предыдущих исправлениях [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
 и [`d774018`](https://github.com/Michael-edel/FitFocus/commit/d774018)
 ожидаемые session/auth-отказы scoped фотоанализа не попадают в диагностику и не
 показываются как alert; access/protocol ошибки остаются заметны. Scoped-401
 регрессия прошла 3/3 на Chromium, Firefox и WebKit.
 
-P0.6 follow-up исправляет ошибочную обработку отказа durable-записи фото прогресса:
-неуспешный commit теперь не очищает выбранный файл и подпись, ошибка показывается
-пользователю, а попытка отбрасывается при смене account/session scope. Полная
-`profile-durability.spec.ts` прошла 30/30 на desktop Chromium, Firefox и WebKit
-без retries; три typecheck и проверка локальных ссылок прошли. Это изменение
-локально проверено; точный CI `#1547` ожидает запуска.
+P0.6 исправление фото прогресса [`980aaa1`](https://github.com/Michael-edel/FitFocus/commit/980aaa16f4278b1d1526d6a263ca017297e975ee)
+сохраняет выбранный файл и подпись при отказе durable-записи. Следующий follow-up
+`646b8b4` распространяет проверку результата на ручные замеры, wearable import,
+выбор/отключение источника в Progress и Settings; аккаунт/сессионная смена
+инвалидирует попытку. Полная профильная матрица на объединённом коде прошла 42/42
+без retries. Локальные тесты не закрывают остаток P0.6, реальный BFCache или staging.
 
 P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
 требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;
