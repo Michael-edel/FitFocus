@@ -110,6 +110,24 @@ GET-маршруты. OAuth start намеренно не вызывался. D1
 OAuth callback, edge rules для всех путей, миграции и тестовые аккаунты не
 подтверждены; staging и выпуск остаются открытыми.
 
+### Read-only preview smoke: `0af2c30`, 17.10.2026
+
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200;
+статический bundle `/assets/index-BuAwXyl-.js` содержит точный SHA
+`0af2c30401c9893d1b49778111921e10df4ebef4`. Все проверки были GET без cookie,
+account proof и записи:
+
+- `/api/env` — 200, оба публичных Google Client ID пусты, `requireInvite=false`;
+- `/api/me` — 200 с `user: null`, без redirect и `Set-Cookie`;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401
+  `UNAUTH`, без redirect и `Set-Cookie`.
+
+Публичный preview обслуживает точный текущий branch bundle, сохраняет origin и
+ожидаемо закрывает перечисленные API без сессии. OAuth start не вызывался.
+Проверка не подтверждает D1 binding/изоляцию, `APP_URL`, OAuth callback,
+реальные edge rules, миграции или корректность аутентифицированных операций;
+staging acceptance и выпуск остаются открытыми.
+
 Проверка конфигурации репозитория показывает один верхнеуровневый D1 binding
 `DB` (`database_name = "fitfocus"`, ID `061ae786-9341-4bd7-8efe-025dd1bac6d5`);
 `env.preview`/`env.production` overrides в `wrangler.toml` отсутствуют.

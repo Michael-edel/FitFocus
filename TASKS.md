@@ -4,18 +4,14 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Последний опубликованный [CI run #1483](https://github.com/Michael-edel/FitFocus/actions/runs/38979801402)
-для `e370f61` прошёл audit, schema/privacy/auth/API guards, unit, три typecheck
-и production build; E2E завершился 841 passed / 255 skipped / 3 failed. Trace
-связал два WebKit предупреждения с reload и прерываемыми запросами; третий тест
-потерял клик по восстановлению профиля из-за появившегося PWA update banner.
-E2E follow-up [`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
-ограничивает допустимые WebKit сообщения точным окном reload, сохраняет общий
-предел отменённых маршрутов и откладывает баннер при попытке взаимодействия.
-Локально: 18/18 запусков трёх затронутых сценариев на desktop WebKit и iPhone
-Safari (`--repeat-each=3`, retries=0), typecheck и `git diff --check` прошли.
-Точный полный CI follow-up пока не подтверждён; результаты — в
-[журнале стабилизации](docs/stabilization-progress.md).
+Последний завершённый [CI run #1489](https://github.com/Michael-edel/FitFocus/actions/runs/38992296616)
+для `584b257` прошёл проверки до E2E и завершился одной ошибкой desktop WebKit
+в family-menu reauthentication/reload тесте. Трасса отнесла сообщение к GET
+`/api/family/menu` сразу после `page.reload()`; точечная E2E-поправка
+[`4afb66a`](https://github.com/Michael-edel/FitFocus/commit/4afb66a) прошла
+5/5 повторов и полную family-menu WebKit спеку 16/16 (`retries=0`). CI #1491
+для `0af2c30` выполняет E2E; итог ещё не получен.
+История и ограничения — в [журнале стабилизации](docs/stabilization-progress.md).
 
 Предыдущий run #1467 для `c44027f` подтвердил исправление порядка mock-недели,
 но выявил отдельное прерывание weekly AI `wis_text` при reload в desktop WebKit.
@@ -99,6 +95,12 @@ bundle проверена на семи Playwright-проектах и прош�
     полный SHA, публичная страница открывается на preview origin, анонимные API
     отказывают ожидаемо. Реальный OAuth start вернул `AUTH_UNAVAILABLE`;
     конфигурация OAuth в Pages и остальные staging gates остаются открытыми.
+  - [x] Повторно проверить branch preview после `0af2c30`: страница и точный
+    bundle SHA вернули 200 на `fix-durable-outbox.fitfocus.pages.dev`; `/api/env`
+    и анонимный `/api/me` — 200, `/api/bootstrap`, `/api/profile`, `/api/state`
+    и `/api/push/status` — 401 без redirect/cookie. Только GET, OAuth start не
+    вызывался; D1, `APP_URL`, provider callbacks и реальные edge-настройки
+    остаются непроверенными.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.
@@ -1347,11 +1349,16 @@ all-client Service Worker fence, атомарные migration items и quarantin
     122 целевой unit; полный набор — 1291/1291 в 208 файлах. Общий, domain и
     storage typecheck, auth/API guards и production build прошли; legacy migration
     E2E — 14/14 на семи desktop/mobile/PWA проектах, workers=2/retries=0.
-    Точный CI актуальной ревизии ожидается. В run #1487 единственный E2E сбой
-    возник потому, что profile-recovery тест вводил имя до завершения начальной
-    гидратации формы. Добавлено ожидание исходного profile name перед правкой
-    в [`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496); локальный тест прошёл 9/9 на desktop Chromium,
-    Firefox и WebKit, точный CI нового HEAD ожидается.
+    Run #1487 показал преждевременный ввод в profile-recovery до начальной
+    гидратации формы; ожидание profile name в [`6b38bb3`](https://github.com/Michael-edel/FitFocus/commit/6b38bb3c23d58b6b7ac2b4ee373621244e880496)
+    прошло локально 9/9 и в полном CI #1489. Единственная ошибка #1489 затем
+    возникла в family-menu same-account reauthentication на desktop WebKit:
+    trace поместил точный `/api/family/menu` access-control message примерно через
+    45 мс после начала `page.reload()`, при штатном завершении reload и сохранных
+    menu/session assertions. Узкое E2E-исключение добавлено в [`4afb66a`](https://github.com/Michael-edel/FitFocus/commit/4afb66a);
+    сценарий прошёл 5/5, полная desktop WebKit family-menu спека — 16/16 без
+    retries. Полный [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+    для `0af2c30` выполняется; staging и общий lifecycle всё ещё открыты.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

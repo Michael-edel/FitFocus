@@ -16,7 +16,15 @@ same-origin fetch непосредственно после начала `page.r
 identity прошли. В WebKit-only фильтр E2E добавлен только этот точный маршрут
 в существующее bounded-разрешение reload aborts. Локально проблемный сценарий
 прошёл 5/5 повторов, полная `family-menu-durable.spec.ts` на desktop WebKit —
-16/16 без retries. Это тестовое исправление ещё ожидает полного CI.
+16/16 без retries. Точный [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
+для `0af2c30` запущен; предварительные проверки прошли, сейчас выполняется E2E.
+
+Read-only smoke branch preview подтвердил страницу и точный bundle SHA `0af2c30`
+на `fix-durable-outbox.fitfocus.pages.dev`: `/api/env` и анонимный `/api/me`
+ответили 200, bootstrap/profile/state/push-status — 401 без redirect или cookie.
+OAuth start и любые записывающие методы не вызывались. Это не подтверждает D1,
+`APP_URL`, provider callbacks, конфигурацию Cloudflare edge или изоляцию staging;
+подробности в [контракте preview](staging-origin.md).
 
 E2E follow-up
 [`96c21c3`](https://github.com/Michael-edel/FitFocus/commit/96c21c3e199cc8b5abf04ee9bef3d1e39175054b)
