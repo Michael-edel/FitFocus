@@ -188,7 +188,11 @@ export async function retryLastAiAction({
       canCommit: isCurrentRetry,
     });
     if (!isCurrentRetry()) return;
+    await assertAiSession(session);
+    if (!isCurrentRetry()) return;
     const reports = await loadReports(currentUser.id);
+    if (!isCurrentRetry()) return;
+    await assertAiSession(session);
     if (!isCurrentRetry()) return;
     setWeeklyReports(reports);
   } catch (error) {

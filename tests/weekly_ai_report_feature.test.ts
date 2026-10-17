@@ -19,8 +19,9 @@ const loginGuard: OutboxReadGuard = {
 
 function params(overrides: Partial<Parameters<typeof refreshWeeklyAiReport>[0]> = {}) {
   const controller = new AbortController();
-  const session = { guard: loginGuard, controller, isCurrentSession: () => true, outbox: {} } as AiSession;
-  return {
+  const session = { guard: loginGuard, controller, isCurrentSession: () => true,
+    outbox: { isReadSessionCurrent: vi.fn(async () => true) } } as unknown as AiSession;
+  const input = {
     currentUser: user,
     weekly,
     targets: { calories: 1800, protein: 120, fat: 60, carbs: 190 },
@@ -42,6 +43,7 @@ function params(overrides: Partial<Parameters<typeof refreshWeeklyAiReport>[0]> 
     logError: vi.fn(),
     ...overrides,
   };
+  return Object.assign(input, { session });
 }
 
 describe('weekly AI report feature', () => {
@@ -171,6 +173,28 @@ describe('weekly AI report feature', () => {
     expect(input.setWeeklyReports).not.toHaveBeenCalled();
     expect(input.logError).not.toHaveBeenCalled();
     expect(input.weeklyReportGenerationRef.current?.generationKey).toBe('newer-weekly-attempt');
+  });
+
+  it('does not publish a loaded report after same-account reauthentication in another tab', async () => {
+    const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
+    let resolveReports!: (value: typeof reports) => void;
+    const reportList = new Promise<typeof reports>((resolve) => { resolveReports = resolve; });
+    const input = params({
+      loadReports: vi.fn().mockReturnValue(reportList),
+      isSoftError: error => error instanceof Error && error.message === 'LOGIN_SESSION_CHANGED',
+    });
+    vi.mocked(input.session.outbox.isReadSessionCurrent)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+
+    const pending = refreshWeeklyAiReport(input);
+    await vi.waitFor(() => expect(input.loadReports).toHaveBeenCalledOnce());
+    resolveReports(reports);
+    await pending;
+
+    expect(input.setWeeklyReports).not.toHaveBeenCalled();
+    expect(input.logError).not.toHaveBeenCalled();
+    expect(input.weeklyReportGenerationRef.current).toBeNull();
   });
 
   it('does not send or save a report without a matching login proof', async () => {

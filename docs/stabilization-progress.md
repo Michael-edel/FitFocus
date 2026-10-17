@@ -5837,7 +5837,7 @@ unit suite — 1338/1338, три typecheck-профиля и production build п
 Точный CI новой ревизии запускается после push. Общий P0.5 и staging остаются
 открытыми.
 
-## P0.5 — совместное владение попыткой weekly AI report, 17.10.2026
+## P0.5/P0.6 — weekly report attempt и read-session guard, 17.10.2026
 
 Фоновая генерация и ручной retry используют один `WeeklyReportGenerationRef`,
 но фоновый путь раньше присваивал маркер лишь при вызове AI и не сверял его
@@ -5845,11 +5845,16 @@ unit suite — 1338/1338, три typecheck-профиля и production build п
 мог пройти session-only commit guard или опубликовать старый список. Теперь
 попытка захватывает общий маркер до получения proof; `canCommit`, AI response,
 `loadReports` и обновление UI требуют, чтобы и сессия, и точный маркер оставались
-текущими. Catch очищает только собственный маркер.
+текущими. Перед UI publication после чтения дополнительно подтверждается точный
+`readGuard` в IndexedDB, чтобы same-account reauthentication в другой вкладке
+не принималась за прежнюю локальную сессию. Catch очищает только собственный
+маркер и не показывает session-change как ошибку.
 
-Два unit-регресса проверяют замену владельца во время AI generation и чтения
-списка. Два weekly AI report unit-файла прошли 16/16, полный unit suite —
-1340/1340, browser acceptance `weekly-ai-report-session.spec.ts` — 6/6 на
-desktop Chromium/Firefox/WebKit без retries. Общий typecheck, domain-strict,
+Три unit-регресса проверяют замену владельца во время AI generation и чтения
+списка, а также повторную авторизацию в том же аккаунте во время чтения. В
+фоновом пути маркер захватывается до proof; manual retry дополнительно сравнивает
+последний `actionId`. Два weekly AI report unit-файла прошли 18/18, полный unit suite — 1342/1342, browser
+acceptance `weekly-ai-report-session.spec.ts` — 6/6 на desktop
+Chromium/Firefox/WebKit без retries. Общий typecheck, domain-strict,
 storage-strict и production build прошли. Точный CI новой ревизии ожидает push;
-общий P0.5, staging и полный lifecycle остаются открыты.
+общий P0.5/P0.6, staging и полный lifecycle остаются открыты.

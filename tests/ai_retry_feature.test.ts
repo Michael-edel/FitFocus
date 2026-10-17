@@ -203,4 +203,26 @@ describe('AI retry feature', () => {
 
     expect(input.setWeeklyReports).not.toHaveBeenCalled();
   });
+
+  it('does not publish reports after same-account reauthentication during retry loading', async () => {
+    const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
+    let isReadSessionCurrent = true;
+    const input = params({ feature: 'wis_text', type: 'wis', userId: user.id }, {
+      ensureWeeklyReport: async (_userId, _weekly, generateAI) => {
+        await generateAI();
+        return { report: reports[0], isNew: true };
+      },
+      loadReports: async () => {
+        isReadSessionCurrent = false;
+        vi.mocked(input.session.outbox.isReadSessionCurrent).mockResolvedValue(false);
+        return reports;
+      },
+    });
+    vi.mocked(input.session.outbox.isReadSessionCurrent).mockImplementation(async () => isReadSessionCurrent);
+
+    await retryLastAiAction(input);
+
+    expect(input.setWeeklyReports).not.toHaveBeenCalled();
+    expect(input.logError).not.toHaveBeenCalled();
+  });
 });

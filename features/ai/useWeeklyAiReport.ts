@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import { getWeeklyIntelligenceInterpretation, setLastAiAction } from '../../geminiService';
 import { getWeekKey } from '../../dateUtils';
 import { isSoftWeeklyAiError } from '../../services/frontendErrors';
-import { prepareAiSession } from '../../services/aiSession';
+import { assertAiSession, prepareAiSession } from '../../services/aiSession';
 import type { OutboxReadGuard } from '../../storage/durableOutbox';
 import { ensureWeeklyReportWithAI, loadWeeklyReports, type WeeklyStoredReport } from '../../weeklyAutoEngine';
 import type { UserProfile } from '../../types';
@@ -76,7 +76,11 @@ export async function refreshWeeklyAiReport({
       return text;
     }, { readGuard: { ...session.guard }, canCommit: ownsAttempt });
     if (!ownsAttempt()) return;
+    await assertAiSession(session);
+    if (!ownsAttempt()) return;
     const reports = await loadReports(currentUser.id);
+    if (!ownsAttempt()) return;
+    await assertAiSession(session);
     if (!ownsAttempt()) return;
     setWeeklyReports(reports);
   } catch (error) {
