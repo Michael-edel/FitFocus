@@ -262,6 +262,8 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
+  const authStateRef = useRef(authState);
+  authStateRef.current = authState;
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
@@ -1183,17 +1185,19 @@ const App: React.FC = () => {
     return () => { authBootstrapAttemptRef.current += 1; };
   }, [bootstrapAuth]);
 
-  // A PWA reopened while offline cannot confirm its cloud session. Retry the
-  // normal guarded bootstrap when connectivity returns so its durable outbox
-  // can resume without treating the cached account identity as proof.
+  // A PWA reopened while offline cannot confirm its cloud session. Keep this
+  // listener active during the initial bootstrap too: connectivity can return
+  // before a failed request moves authState to auth_choice.
   useEffect(() => {
-    if (authState !== 'auth_choice' || googleMe?.sub) return;
     const retryBootstrapWhenOnline = () => {
-      if (navigator.onLine) void bootstrapAuth();
+      const state = authStateRef.current;
+      if (navigator.onLine && !authIdentityRef.current && (state === 'loading' || state === 'auth_choice')) {
+        void bootstrapAuth();
+      }
     };
     window.addEventListener('online', retryBootstrapWhenOnline);
     return () => window.removeEventListener('online', retryBootstrapWhenOnline);
-  }, [authState, bootstrapAuth, googleMe?.sub]);
+  }, [bootstrapAuth]);
 
   useEffect(() => {
     if (authState !== 'register') return;
