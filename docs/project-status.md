@@ -8,13 +8,16 @@ PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся dr
 outbox подключён, общий P0 открыт; staging и интеграция в защищённый `main` не
 завершены.
 
-Опубликованный HEAD [`dfe9b42`](https://github.com/Michael-edel/FitFocus/commit/dfe9b42c97600e606ad5758672e9cc707f86ac16)
-проверяется точным PR CI #1541: audit, unit, guards, три typecheck и build
-прошли, E2E ещё выполняется. Локальный follow-up [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
-подавляет запись ожидаемых session/auth-отказов scoped фотоанализа в журнал;
-добавлен тест на отказ `access`, чтобы не скрывать реальное ограничение. Полный
-unit (1346/1346), typechecks и production build прошли локально; точный CI
-этого follow-up ожидает push.
+Опубликованный HEAD [`55b3484`](https://github.com/Michael-edel/FitFocus/commit/55b3484e7056ed5078bbab18ea66d567aeac2c00)
+проходит точный PR CI [#1543](https://github.com/Michael-edel/FitFocus/actions/runs/39020797264):
+audit, guards, unit, три typecheck и build прошли; E2E выполняется. В кодовом
+follow-up [`3bc6581`](https://github.com/Michael-edel/FitFocus/commit/3bc6581)
+ожидаемые session/auth-отказы scoped фотоанализа убраны из журнала, при этом
+`access` отказ остаётся диагностируемым. Следующий локальный commit `d774018`
+убирает alert `SESSION_READ_AUTH` в enhanced-анализе рецепта по фото. Новый E2E
+с реальным scoped 401 прошёл 3/3 на Chromium, Firefox и WebKit; полный unit
+(1347/1347), typechecks и сборка прошли локально. Точный CI `d774018` ожидает
+push.
 
 P0.7 follow-up [`b105510`](https://github.com/Michael-edel/FitFocus/commit/b105510a94a6a05cfc630ccd085380b3098ff6ab)
 требует request `X-FitFocus-State-Protocol: 2` для `PUT/DELETE /api/state`;

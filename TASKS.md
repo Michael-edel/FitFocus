@@ -4,10 +4,11 @@
 остаётся draft с base `fix/state-generations`; выпуск и интеграция в `main` не
 подтверждены. Текущий этап — стабилизационная приёмка P0.8/P0.9.
 
-Опубликованный HEAD `dfe9b42` проверяется точным PR CI #1541: audit, unit,
-typechecks и build завершились успешно; E2E ещё выполняется. Следующий локальный
-коммит `3bc6581` исправляет диагностику ожидаемых session/auth-отказов фотоанализа;
-полный CI этого follow-up ожидает push.
+Опубликованный HEAD `55b3484` проходит точный PR CI
+[#1543](https://github.com/Michael-edel/FitFocus/actions/runs/39020797264):
+audit, guards, unit, typechecks и build прошли; E2E выполняется. Локальный
+коммит `d774018` исправляет stale-auth alert при анализе рецепта по фото;
+его E2E прошёл на трёх desktop-браузерах, точный CI ожидает push.
 
 Точный [PR CI #1501](https://github.com/Michael-edel/FitFocus/actions/runs/39006074443)
 для опубликованного `7ff579d` завершился success: 1326 unit tests / 212 файлов,
@@ -1215,7 +1216,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     диагностическом журнале; отказ `access` остаётся видимым. Новый тест
     воспроизвёл логирование `SESSION_READ_AUTH` до исправления. Целевой набор —
     12/12, полный unit — 1346/1346, три typecheck-профиля и production build
-    прошли локально в `3bc6581`; точный CI follow-up ожидает push.
+    прошли локально в `3bc6581`. Коммит опубликован в `55b3484`; точный CI
+    #1543 проходит.
+  - [x] Подавлять только typed `session`/`auth` отказ в общей проверке AI-сессии;
+    `access` и `protocol` остаются заметны. E2E scoped 401 до исправления
+    вызывал alert `SESSION_READ_AUTH`; после исправления тест прошёл 3/3 на
+    Chromium, Firefox и WebKit без retries. Полный unit — 1347/1347, общий,
+    domain-strict и storage-strict typecheck прошли; точный CI `d774018` ожидает
+    push.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

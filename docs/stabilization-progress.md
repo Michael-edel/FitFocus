@@ -5901,6 +5901,29 @@ Scoped AI transport переводит HTTP 401 в `SessionReadError('auth')`. �
 domain-strict и storage-strict typecheck, production build и `git diff --check`
 прошли. Точный CI опубликованного родителя `dfe9b42` (run #1541) на момент
 фиксации ещё выполнялся: статические шаги, unit и build прошли, E2E был в работе.
-Полный CI коммита `3bc6581` ожидает публикации. Фотоанализ проверен unit-тестом;
-реальный OAuth и staging от этого локального результата не подтверждаются.
+Затем `3bc6581` и документация опубликованы под HEAD `55b3484`; точный PR CI
+#1543 проходит, предварительные guards/unit/typechecks/build успешны, E2E ещё
+выполняется. Фотоанализ здесь проверен unit-тестом; реальный OAuth и staging
+этим локальным результатом не подтверждаются.
 P0.5, остальные callbacks, staging и общий lifecycle остаются открытыми.
+
+## P0.5 — не показывать scoped auth-отказ анализа рецепта как alert, `d774018`, 17.10.2026
+
+В enhanced-анализе рецепта `RecipesScreen.handlePick` раньше подавлял только
+`SessionReadError('session')`. При scoped HTTP 401 transport выдавал
+`SessionReadError('auth')`; если IDB-сессия всё ещё была текущей, повторная
+проверка проходила и catch показывал пользователю alert с `SESSION_READ_AUTH`.
+Новый браузерный тест воспроизвёл этот alert до исправления.
+
+Общая `isExpectedAiSessionFailure` распознаёт только типизированные `session`
+и `auth` ошибки. Её используют enhanced-рецепт и пакетный анализ еды; отказы
+`access`/`protocol` остаются видимыми. Scoped-401 E2E после исправления прошёл
+3/3 на desktop Chromium, Firefox и WebKit без retries; проверено отсутствие
+alert, recipe draft и pageerror. Unit suite — 1347/1347, общий,
+domain-strict и storage-strict typecheck прошли; `npm run build` прошёл как шаг
+подготовки Playwright preview. `git diff --check` прошёл.
+
+Точный CI опубликованного HEAD `55b3484` (run #1543) на момент проверки
+выполнялся: guards, unit, typechecks и build прошли, E2E был в работе. Полный CI
+`d774018` запускается после push. Тестовый scoped 401 не подтверждает реальный
+OAuth или staging. P0.5, остальные callbacks, staging и общий lifecycle открыты.
