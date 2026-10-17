@@ -70,6 +70,9 @@ export function clearRetiredLocalTelemetry(): number {
 }
 
 function isLocalUserKey(key: string, userId: string): boolean {
+  // These retired unowned logs can contain health data but have no safe account
+  // mapping. Since the app no longer reads them, purge them during any account deletion.
+  if (RETIRED_LOCAL_TELEMETRY_KEYS.has(key)) return true;
   const dataPrefix = `${STORAGE_KEYS.dataPrefix}${userId}_`;
   if (key.startsWith(dataPrefix)) return true;
   if (key === `ff_last_weekly_ai_attempt_${userId}`) return true;
