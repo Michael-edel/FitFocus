@@ -125,6 +125,54 @@ describe('weekly AI report feature', () => {
     expect(input.weeklyReportGenerationRef.current).toBeNull();
   });
 
+  it('does not publish a report list after another attempt takes ownership during loading', async () => {
+    const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
+    let resolveReports!: (value: typeof reports) => void;
+    const reportList = new Promise<typeof reports>((resolve) => { resolveReports = resolve; });
+    const input = params({ loadReports: vi.fn().mockReturnValue(reportList) });
+
+    const pending = refreshWeeklyAiReport(input);
+    await vi.waitFor(() => expect(input.loadReports).toHaveBeenCalledOnce());
+    input.weeklyReportGenerationRef.current = {
+      generationKey: 'newer-weekly-attempt',
+      signal: new AbortController().signal,
+    };
+    resolveReports(reports);
+    await pending;
+
+    expect(input.setWeeklyReports).not.toHaveBeenCalled();
+    expect(input.weeklyReportGenerationRef.current?.generationKey).toBe('newer-weekly-attempt');
+  });
+
+  it('stops durable commit when a newer attempt replaces ownership during AI generation', async () => {
+    let resolveInterpretation!: (value: string) => void;
+    const interpretation = new Promise<string>((resolve) => { resolveInterpretation = resolve; });
+    let commitAllowedAfterReplacement = true;
+    const input = params({
+      requestInterpretation: vi.fn().mockReturnValue(interpretation),
+      ensureWeeklyReport: async (_userId, _weekly, generateAI, commitGuard) => {
+        const generation = generateAI();
+        await vi.waitFor(() => expect(input.requestInterpretation).toHaveBeenCalledOnce());
+        input.weeklyReportGenerationRef.current = {
+          generationKey: 'newer-weekly-attempt',
+          signal: new AbortController().signal,
+        };
+        commitAllowedAfterReplacement = commitGuard?.canCommit?.() ?? false;
+        resolveInterpretation('Устаревший текст');
+        await expect(generation).rejects.toThrow('WEEKLY_REPORT_SESSION_CHANGED');
+        throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
+      },
+    });
+
+    await refreshWeeklyAiReport(input);
+
+    expect(commitAllowedAfterReplacement).toBe(false);
+    expect(input.loadReports).not.toHaveBeenCalled();
+    expect(input.setWeeklyReports).not.toHaveBeenCalled();
+    expect(input.logError).not.toHaveBeenCalled();
+    expect(input.weeklyReportGenerationRef.current?.generationKey).toBe('newer-weekly-attempt');
+  });
+
   it('does not send or save a report without a matching login proof', async () => {
     const ensureWeeklyReport = vi.fn();
     const input = params({ loginGuard: null, ensureWeeklyReport });

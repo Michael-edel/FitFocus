@@ -1177,6 +1177,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     `tests/ai_retry_feature.test.ts`; целевой файл прошёл 9/9, unit suite —
     1338/1338, три typecheck-профиля и production build прошли. Общий P0.5 и
     остальные callbacks/lifecycle остаются открытыми.
+  - [x] Сохранить владение общей попыткой weekly report от получения proof до
+    guarded commit и публикации. Поздний AI ответ больше не проходит commit guard,
+    если retry уже заменил маркер; поздний `loadReports` также не перезаписывает
+    результат новой попытки. Unit-регрессии прошли 16/16, weekly report browser
+    spec — 6/6 на desktop Chromium/Firefox/WebKit, весь unit suite — 1340/1340;
+    три typecheck-профиля и production build прошли. Общий P0.5 и lifecycle
+    остаются открытыми.
 - [x] Защитить пошаговую генерацию рецепта из дневникового фото: `AiSession`,
   lifecycle/source scope, guarded durable update дневника и usage только после
   успешного commit. Код `71d2ca4`; полный локальный account-switch spec —

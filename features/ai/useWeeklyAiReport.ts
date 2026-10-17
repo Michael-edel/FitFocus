@@ -57,31 +57,32 @@ export async function refreshWeeklyAiReport({
   if (weeklyReportGenerationRef.current?.generationKey === generationKey
     && !weeklyReportGenerationRef.current.signal.aborted) return;
   const isCurrent = () => !controller.signal.aborted && isCurrentSession();
-  let marker: WeeklyReportGenerationMarker | undefined;
+  if (!isCurrent()) return;
+  const marker: WeeklyReportGenerationMarker = { generationKey, signal: controller.signal };
+  weeklyReportGenerationRef.current = marker;
+  const ownsAttempt = () => isCurrent() && weeklyReportGenerationRef.current === marker;
 
   try {
-    if (!isCurrent()) return;
-    const session = await prepareSession(currentUser.id, controller, isCurrent, { previous: loginGuard });
-    if (!isCurrent()) return;
+    const session = await prepareSession(currentUser.id, controller, ownsAttempt, { previous: loginGuard });
+    if (!ownsAttempt()) return;
     await ensureWeeklyReport(currentUser.id, weekly, async () => {
-      if (!isCurrent()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
-      marker = { generationKey, signal: controller.signal };
-      weeklyReportGenerationRef.current = marker;
+      if (!ownsAttempt()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
       recordLastAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
       const text = await requestInterpretation(
         buildWeeklyIntelligenceRequest(currentUser, weekly, targets),
         session,
       );
-      if (!isCurrent()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
+      if (!ownsAttempt()) throw new Error('WEEKLY_REPORT_SESSION_CHANGED');
       return text;
-    }, { readGuard: { ...session.guard }, canCommit: isCurrent });
-    if (!isCurrent()) return;
+    }, { readGuard: { ...session.guard }, canCommit: ownsAttempt });
+    if (!ownsAttempt()) return;
     const reports = await loadReports(currentUser.id);
-    if (!isCurrent()) return;
+    if (!ownsAttempt()) return;
     setWeeklyReports(reports);
   } catch (error) {
-    if (marker && weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;
-    if (isCurrent() && !isSoftError(error)) logError(error);
+    const currentAttempt = ownsAttempt();
+    if (weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;
+    if (currentAttempt && !isSoftError(error)) logError(error);
   }
 }
 

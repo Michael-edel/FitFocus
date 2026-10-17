@@ -5836,3 +5836,20 @@ callback мог опубликовать список поверх текуще�
 unit suite — 1338/1338, три typecheck-профиля и production build прошли.
 Точный CI новой ревизии запускается после push. Общий P0.5 и staging остаются
 открытыми.
+
+## P0.5 — совместное владение попыткой weekly AI report, 17.10.2026
+
+Фоновая генерация и ручной retry используют один `WeeklyReportGenerationRef`,
+но фоновый путь раньше присваивал маркер лишь при вызове AI и не сверял его
+после чтения списка. Если retry заменял маркер, старый фоновый ответ всё ещё
+мог пройти session-only commit guard или опубликовать старый список. Теперь
+попытка захватывает общий маркер до получения proof; `canCommit`, AI response,
+`loadReports` и обновление UI требуют, чтобы и сессия, и точный маркер оставались
+текущими. Catch очищает только собственный маркер.
+
+Два unit-регресса проверяют замену владельца во время AI generation и чтения
+списка. Два weekly AI report unit-файла прошли 16/16, полный unit suite —
+1340/1340, browser acceptance `weekly-ai-report-session.spec.ts` — 6/6 на
+desktop Chromium/Firefox/WebKit без retries. Общий typecheck, domain-strict,
+storage-strict и production build прошли. Точный CI новой ревизии ожидает push;
+общий P0.5, staging и полный lifecycle остаются открыты.
