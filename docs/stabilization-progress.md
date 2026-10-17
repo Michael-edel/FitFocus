@@ -1,5 +1,16 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — late enhanced recipe-photo analysis after same-account login, 17.10.2026
+
+Добавлен E2E для `foodphoto_enhanced` в Recipes: пока ответ удержан, аккаунт A
+входит с новой `serverSessionId`. Ответ прежней сессии не создаёт временный recipe
+draft и не меняет profile, values, outbox или achievements. Production-код не
+менялся; дефекта не обнаружено.
+
+Сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit (`workers=1,retries=0`);
+`npm run typecheck` и `git diff --check` прошли. Точный CI проверяется на
+опубликованном SHA. Общий P0.5 остаётся открытым.
+
 ## P0.5 — позднее объяснение Plateau после same-account login, 17.10.2026
 
 Добавлен отдельный acceptance для Plateau `Объяснить`, помимо уже проверенного
