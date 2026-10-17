@@ -69,7 +69,7 @@ type AppWorkspaceData = {
   };
   nutrition: Record<string, PassThroughProp>;
   progress: Record<string, PassThroughProp> & {
-    onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+    onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
     syncState?: PassThroughProp;
     isCurrentSession: () => boolean | Promise<boolean>;
   };

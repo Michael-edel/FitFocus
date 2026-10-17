@@ -400,3 +400,127 @@ test('a failed progress photo commit keeps the selected image and reports the st
   expect(mutations).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('a failed wearable import commit keeps the pasted source and reports the storage error', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#progress');
+  await expect(page.getByRole('heading', { name: 'Фото, замеры и смарт-часы в одном месте' })).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected wearable import quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  const source = JSON.stringify({ provider: 'manual', stepsToday: 4200, activeMinutesToday: 30 });
+  const importDraft = page.getByPlaceholder('Вставьте JSON/CSV сюда, например:');
+  await importDraft.fill(source);
+  await page.getByRole('button', { name: 'Импорт из текста', exact: true }).click();
+
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить импорт данных.' })).toBeVisible();
+  await expect(importDraft).toHaveValue(source);
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a failed wearable file import can retry the same selected file after storage recovers', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#progress');
+  await expect(page.getByRole('heading', { name: 'Фото, замеры и смарт-часы в одном месте' })).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const scopedWindow = window as Window & { failProfileWrite?: boolean };
+    scopedWindow.failProfileWrite = true;
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (scopedWindow.failProfileWrite && this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected wearable file quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  const fileInput = page.locator('input[type="file"][accept=".json,.csv,application/json,text/csv"]');
+  await fileInput.setInputFiles({
+    name: 'wearable.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ provider: 'manual', stepsToday: 4200 })),
+  });
+  const error = page.getByRole('alert').filter({ hasText: 'Не удалось сохранить импорт данных.' });
+  await expect(error).toBeVisible();
+  await expect(fileInput).toHaveValue(/wearable\.json$/);
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+
+  await page.evaluate(() => { (window as Window & { failProfileWrite?: boolean }).failProfileWrite = false; });
+  await page.getByRole('button', { name: 'Повторить импорт файла', exact: true }).click();
+  await expect.poll(async () => JSON.parse((await saved(page)).value!).wearableStepsToday).toBe(4200);
+  await expect(fileInput).toHaveValue('');
+  await expect(error).toHaveCount(0);
+  expect(mutations).toEqual(['PUT']);
+  expect(errors).toEqual([]);
+});
+
+test('a failed manual measurement commit reports the error and keeps the entered value', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#progress');
+  await expect(page.getByRole('heading', { name: 'Фото, замеры и смарт-часы в одном месте' })).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected measurement quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  const weight = page.getByPlaceholder('90.0');
+  await weight.fill('88.5');
+  await page.getByRole('button', { name: 'Сохранить замер', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить замер.' })).toBeVisible();
+  await expect(weight).toHaveValue('88.5');
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a failed wearable provider commit is visible and leaves the profile unchanged', async ({ page }) => {
+  const { errors, mutations } = await setup(page, 'normal');
+  await openApp(page, '/#settings');
+  await expect(page.getByText('Смарт-часы', { exact: true })).toBeVisible();
+  const before = await saved(page);
+
+  await page.evaluate(key => {
+    const add = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
+      const operation = args[0] as { key?: string };
+      if (this.name === 'outbox' && operation?.key === key) {
+        throw new DOMException('Injected wearable provider quota failure', 'QuotaExceededError');
+      }
+      return add.apply(this, args);
+    };
+  }, key);
+
+  await page.getByRole('button', { name: /Google Fit/ }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить источник данных.' })).toBeVisible();
+  expect((await saved(page)).value).toBe(before.value);
+  expect((await saved(page)).operations).toEqual([]);
+  expect(mutations).toEqual([]);
+  expect(errors).toEqual([]);
+});

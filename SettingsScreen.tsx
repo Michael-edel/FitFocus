@@ -382,6 +382,8 @@ export default function SettingsScreen({
   const mobileTokenScopeKey = loginGuard
     ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
     : null;
+  const wearableScopeKeyRef = useRef(mobileTokenScopeKey);
+  wearableScopeKeyRef.current = mobileTokenScopeKey;
   const pushScopeKey = loginGuard
     ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
     : null;
@@ -430,6 +432,7 @@ export default function SettingsScreen({
     setProfileDirtyState(dirty);
   }, [onProfileDraftChange]);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [wearableError, setWearableError] = useState<string | null>(null);
   const [huaweiStatus, setHuaweiStatus] = useState<HuaweiHealthStatus | null>(null);
   const [huaweiBusy, setHuaweiBusy] = useState<'status' | 'connect' | 'sync' | 'disconnect' | null>(null);
   const [huaweiError, setHuaweiError] = useState<string | null>(null);
@@ -450,6 +453,7 @@ export default function SettingsScreen({
   const mobileTokenAttemptRef = useRef(0);
   const huaweiControllerRef = useRef<AbortController | null>(null);
   const huaweiAttemptRef = useRef(0);
+  const wearableAttemptRef = useRef(0);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -622,6 +626,22 @@ export default function SettingsScreen({
   const huaweiScopeKey = loginGuard
     ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
     : null;
+  const beginWearableProfileAttempt = () => {
+    if (!user || !serverSession || !loginGuard || loginGuard.accountId !== user.id
+      || !mobileTokenScopeKey || !isCurrentSession?.()) return null;
+    const id = ++wearableAttemptRef.current;
+    const scopeKey = mobileTokenScopeKey;
+    return {
+      isCurrent: () => wearableAttemptRef.current === id
+        && wearableScopeKeyRef.current === scopeKey
+        && !!isCurrentSession?.(),
+    };
+  };
+  useEffect(() => {
+    wearableAttemptRef.current += 1;
+    setWearableBusy(null);
+    setWearableError(null);
+  }, [mobileTokenScopeKey]);
   type HuaweiAttempt = { id: number; controller: AbortController; scopeKey: string };
   const beginHuaweiAttempt = useCallback((): HuaweiAttempt | null => {
     if (!serverSession || !loginGuard || !isCurrentSession || !huaweiScopeKey) return null;
@@ -745,17 +765,24 @@ export default function SettingsScreen({
       return;
     }
     if (!user || !onPatchUser) return;
+    const attempt = beginWearableProfileAttempt();
+    if (!attempt) return;
+    setWearableError(null);
     const now = new Date().toISOString();
     setWearableBusy(provider);
     try {
-      await onPatchUser({
+      const saved = await onPatchUser({
         wearableProvider: provider,
         wearableEnabled: true,
         wearableConnectedAt: user.wearableConnectedAt || now,
         wearableLastSyncAt: now,
       });
+      if (!attempt.isCurrent()) return;
+      if (saved === false) setWearableError('Не удалось сохранить источник данных. Повторите попытку.');
+    } catch {
+      if (attempt.isCurrent()) setWearableError('Не удалось сохранить источник данных. Повторите попытку.');
     } finally {
-      setWearableBusy(null);
+      if (attempt.isCurrent()) setWearableBusy(null);
     }
   };
 
@@ -789,13 +816,20 @@ export default function SettingsScreen({
       }
       return;
     }
+    const attempt = beginWearableProfileAttempt();
+    if (!attempt) return;
+    setWearableError(null);
     setWearableBusy('disconnect');
     try {
-      await onPatchUser({
+      const saved = await onPatchUser({
         wearableEnabled: false,
       });
+      if (!attempt.isCurrent()) return;
+      if (saved === false) setWearableError('Не удалось отключить источник данных. Повторите попытку.');
+    } catch {
+      if (attempt.isCurrent()) setWearableError('Не удалось отключить источник данных. Повторите попытку.');
     } finally {
-      setWearableBusy(null);
+      if (attempt.isCurrent()) setWearableBusy(null);
     }
   };
 
@@ -2177,6 +2211,12 @@ export default function SettingsScreen({
                     <Watch className="w-5 h-5" />
                   </div>
                 </div>
+
+                {wearableError ? (
+                  <div role="alert" className="mt-4 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {wearableError}
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-1 gap-3 mt-4">
                   {wearableOptions.map((option) => {

@@ -51,7 +51,7 @@ type ProgressScreenProps = {
   wearableSleepHoursLastNight?: number;
   wearableMetricsDayKey?: string;
   wearableMetricsUpdatedAt?: string;
-  onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+  onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
   syncState?: SyncState;
   lastProfileSyncAt?: number | null;
   onSyncNow?: () => Promise<void> | void;
@@ -71,6 +71,8 @@ type ProgressUiState = {
   compareToKey: string;
   compareMode: 'all' | 'matched';
 };
+
+type ProgressProfileScope = { accountId: string; generation: number };
 
 const PROGRESS_UI_STORAGE_KEY = 'fitfocus.progress.ui.v1';
 
@@ -251,8 +253,59 @@ export default function ProgressScreen({
   const [draftSaving, setDraftSaving] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [profileActionError, setProfileActionError] = useState<string | null>(null);
   const [wearablePasteDraft, setWearablePasteDraft] = useState('');
+  const [pendingWearableFile, setPendingWearableFile] = useState<File | null>(null);
   const wearableImportInputRef = React.useRef<HTMLInputElement | null>(null);
+  const profileScopeAccountRef = React.useRef<string | null>(currentUser?.id ?? null);
+  const profileScopeGenerationRef = React.useRef(0);
+  const renderAccountId = currentUser?.id ?? null;
+  if (profileScopeAccountRef.current !== renderAccountId) {
+    profileScopeAccountRef.current = renderAccountId;
+    profileScopeGenerationRef.current += 1;
+  }
+
+  const captureProfileScope = (): ProgressProfileScope | null => {
+    const accountId = currentUser?.id;
+    return accountId ? { accountId, generation: profileScopeGenerationRef.current } : null;
+  };
+  const isProfileScopeIdentityCurrent = (scope: ProgressProfileScope) =>
+    scope.accountId === profileScopeAccountRef.current
+      && scope.generation === profileScopeGenerationRef.current;
+  const isProfileScopeCurrent = async (scope: ProgressProfileScope) =>
+    isProfileScopeIdentityCurrent(scope) && await isCurrentSession();
+
+  useEffect(() => {
+    setProfileActionError(null);
+    setImportError(null);
+    setPendingWearableFile(null);
+    setWearablePasteDraft('');
+    setWearableBusy(null);
+    setDraftSaving(false);
+    setImportBusy(false);
+    if (wearableImportInputRef.current) wearableImportInputRef.current.value = '';
+  }, [currentUser?.id]);
+
+  const persistProgressProfilePatch = async (
+    patch: Partial<UserProfile>,
+    errorMessage: string,
+    reportError: (message: string) => void = setProfileActionError,
+    scope = captureProfileScope(),
+  ): Promise<boolean> => {
+    if (!onPatchUser || !scope || !(await isProfileScopeCurrent(scope))) return false;
+    try {
+      const saved = await onPatchUser(patch);
+      if (!(await isProfileScopeCurrent(scope))) return false;
+      if (saved === false) {
+        reportError(errorMessage);
+        return false;
+      }
+      return true;
+    } catch {
+      if (await isProfileScopeCurrent(scope)) reportError(errorMessage);
+      return false;
+    }
+  };
 
   const recentMeasurements = useMemo(() => {
     return [...(measurementsHistory || [])]
@@ -639,34 +692,43 @@ export default function ProgressScreen({
 
   const applyWearableProvider = async (provider: WearableProvider) => {
     if (!onPatchUser) return;
+    const scope = captureProfileScope();
+    if (!scope) return;
+    setProfileActionError(null);
     const now = new Date().toISOString();
     setWearableBusy(provider);
     try {
-      await onPatchUser({
+      await persistProgressProfilePatch({
         wearableProvider: provider,
         wearableEnabled: true,
         wearableConnectedAt: wearableConnectedAt || now,
         wearableLastSyncAt: now,
-      });
+      }, 'Не удалось сохранить источник данных. Повторите попытку.', setProfileActionError, scope);
     } finally {
-      setWearableBusy(null);
+      if (isProfileScopeIdentityCurrent(scope)) setWearableBusy(null);
     }
   };
 
   const disableWearable = async () => {
     if (!onPatchUser) return;
+    const scope = captureProfileScope();
+    if (!scope) return;
+    setProfileActionError(null);
     setWearableBusy('disconnect');
     try {
-      await onPatchUser({
+      await persistProgressProfilePatch({
         wearableEnabled: false,
-      });
+      }, 'Не удалось отключить источник данных. Повторите попытку.', setProfileActionError, scope);
     } finally {
-      setWearableBusy(null);
+      if (isProfileScopeIdentityCurrent(scope)) setWearableBusy(null);
     }
   };
 
   const saveManualMeasurement = async () => {
     if (!onPatchUser || !currentUser) return;
+    const scope = captureProfileScope();
+    if (!scope) return;
+    setProfileActionError(null);
     const parse = (value: string) => {
       const normalized = String(value || '').replace(',', '.').trim();
       const next = Number(normalized);
@@ -695,17 +757,17 @@ export default function ProgressScreen({
       restingPulse: nextPulse ?? undefined,
       bloodGlucoseMmolL: nextBloodGlucose ?? undefined,
     };
-      await onPatchUser({
-      weight: nextWeight ?? currentUser.weight,
-      weightHistory: nextWeight ? [{ date: now, weight: nextWeight }, ...(currentUser.weightHistory || [])].slice(0, 120) : currentUser.weightHistory,
-      waistCm: nextWaist ?? currentUser.waistCm,
-      chestCm: nextChest ?? currentUser.chestCm,
-      hipsCm: nextHips ?? currentUser.hipsCm,
-      restingPulse: nextPulse ?? currentUser.restingPulse,
-      bloodGlucoseMmolL: nextBloodGlucose ?? currentUser.bloodGlucoseMmolL,
-      wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
-      wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
-      wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
+      await persistProgressProfilePatch({
+        weight: nextWeight ?? currentUser.weight,
+        weightHistory: nextWeight ? [{ date: now, weight: nextWeight }, ...(currentUser.weightHistory || [])].slice(0, 120) : currentUser.weightHistory,
+        waistCm: nextWaist ?? currentUser.waistCm,
+        chestCm: nextChest ?? currentUser.chestCm,
+        hipsCm: nextHips ?? currentUser.hipsCm,
+        restingPulse: nextPulse ?? currentUser.restingPulse,
+        bloodGlucoseMmolL: nextBloodGlucose ?? currentUser.bloodGlucoseMmolL,
+        wearableStepsToday: nextSteps ?? currentUser.wearableStepsToday,
+        wearableActiveMinutesToday: nextActiveMinutes ?? currentUser.wearableActiveMinutesToday,
+        wearableSleepHoursLastNight: nextSleepHours ?? currentUser.wearableSleepHoursLastNight,
         wearableMetricsDayKey: (nextSteps || nextActiveMinutes || nextSleepHours) ? wearableDayKey : currentUser.wearableMetricsDayKey,
         bloodPressureMeasuredAt: currentUser.bloodPressureMeasuredAt,
         bodyMeasurementsMeasuredAt: (nextWaist || nextChest || nextHips || nextPulse) ? now : currentUser.bodyMeasurementsMeasuredAt,
@@ -716,16 +778,14 @@ export default function ProgressScreen({
           historyEntry,
           ...(currentUser.measurementsHistory || []),
         ].slice(0, 30),
-      });
+      }, 'Не удалось сохранить замер. Черновик оставлен; повторите попытку.', setProfileActionError, scope);
     } finally {
-      setDraftSaving(false);
+      if (isProfileScopeIdentityCurrent(scope)) setDraftSaving(false);
     }
   };
 
-  const importWearableText = async (text: string) => {
-    if (!onPatchUser || !currentUser) return;
-    setImportError(null);
-    setImportBusy(true);
+  const applyWearableImport = async (text: string, scope: ProgressProfileScope): Promise<boolean> => {
+    if (!onPatchUser || !currentUser || !(await isProfileScopeCurrent(scope))) return false;
     try {
       const payload = parseWearableImport(text);
       if (!payload) throw new Error('Не удалось распознать JSON/CSV формат');
@@ -758,18 +818,52 @@ export default function ProgressScreen({
         nextPatch.bloodGlucoseMeasuredAt = importDate;
       }
 
-      await onPatchUser(nextPatch);
+      return await persistProgressProfilePatch(
+        nextPatch,
+        'Не удалось сохранить импорт данных. Повторите попытку.',
+        setImportError,
+        scope,
+      );
     } catch (err) {
-      setImportError(String((err as Error)?.message || err || 'Ошибка импорта'));
-      throw err;
-    } finally {
-      setImportBusy(false);
+      if (await isProfileScopeCurrent(scope)) {
+        setImportError(String((err as Error)?.message || err || 'Ошибка импорта'));
+      }
+      return false;
     }
   };
 
-  const importWearableFile = async (file: File) => {
-    const text = await file.text();
-    await importWearableText(text);
+  const importWearableText = async (text: string): Promise<boolean> => {
+    const scope = captureProfileScope();
+    if (!scope) return false;
+    setImportError(null);
+    setImportBusy(true);
+    try {
+      return await applyWearableImport(text, scope);
+    } finally {
+      if (isProfileScopeIdentityCurrent(scope)) setImportBusy(false);
+    }
+  };
+
+  const importWearableFile = async (file: File, scope: ProgressProfileScope): Promise<boolean> => {
+    setImportError(null);
+    setImportBusy(true);
+    try {
+      const text = await file.text();
+      if (!(await isProfileScopeCurrent(scope))) return false;
+      const saved = await applyWearableImport(text, scope);
+      if (saved && isProfileScopeIdentityCurrent(scope)) {
+        setPendingWearableFile(null);
+        if (wearableImportInputRef.current) wearableImportInputRef.current.value = '';
+      }
+      return saved;
+    } catch (err) {
+      if (await isProfileScopeCurrent(scope)) {
+        setImportError(String((err as Error)?.message || err || 'Не удалось прочитать файл импорта.'));
+      }
+      return false;
+    } finally {
+      if (isProfileScopeIdentityCurrent(scope)) setImportBusy(false);
+    }
   };
 
   const hasMeasurements = recentMeasurements.length > 0;
@@ -847,6 +941,12 @@ export default function ProgressScreen({
           </button>
         </div>
       </header>
+
+      {profileActionError ? (
+        <div role="alert" className="rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
+          {profileActionError}
+        </div>
+      ) : null}
 
       <section className="sticky top-3 z-20 rounded-[1.5rem] border border-slate-800 bg-slate-950/80 p-2 shadow-xl shadow-black/20 backdrop-blur-md">
         <div className="flex flex-wrap gap-2">
@@ -1220,15 +1320,13 @@ export default function ProgressScreen({
             type="file"
             accept=".json,.csv,application/json,text/csv"
             className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.currentTarget.value = '';
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
               if (!file) return;
-              try {
-                await importWearableFile(file);
-              } catch {
-                // error is already shown in state
-              }
+              const scope = captureProfileScope();
+              if (!scope) return;
+              setPendingWearableFile(file);
+              void importWearableFile(file, scope);
             }}
           />
 
@@ -1238,7 +1336,12 @@ export default function ProgressScreen({
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => wearableImportInputRef.current?.click()}
+                onClick={() => {
+                  if (wearableImportInputRef.current) {
+                    wearableImportInputRef.current.value = '';
+                    wearableImportInputRef.current.click();
+                  }
+                }}
                 disabled={!onPatchUser || importBusy}
                 className="inline-flex items-center gap-2 px-4 py-3 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
               >
@@ -1282,7 +1385,20 @@ export default function ProgressScreen({
             </div>
             {importError ? (
               <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
-                {importError}
+                <div role="alert">{importError}</div>
+                {pendingWearableFile ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scope = captureProfileScope();
+                      if (scope) void importWearableFile(pendingWearableFile, scope);
+                    }}
+                    disabled={!onPatchUser || importBusy}
+                    className="mt-3 rounded-lg border border-rose-300/30 px-3 py-2 text-xs font-black hover:bg-rose-300/10 disabled:opacity-50"
+                  >
+                    Повторить импорт файла
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
