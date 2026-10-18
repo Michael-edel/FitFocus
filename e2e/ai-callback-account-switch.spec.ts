@@ -408,6 +408,90 @@ async function openAccountB(context: BrowserContext, state: FixtureState, waitFo
   return { page, errors, fixture };
 }
 
+test('navigation aborts a held Coach retry without durable success effects', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
+  const marker = '__e2e_coach_retry_unload__';
+  await page.addInitScript(({ markerKey, feature }) => {
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${markerKey}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      let requestFeature: unknown;
+      try { requestFeature = typeof init?.body === 'string' ? JSON.parse(init.body).feature : undefined; } catch { /* Ignore unrelated requests. */ }
+      if (url.pathname === '/api/ai' && requestFeature === feature && init?.signal) {
+        mark('request', 'started');
+        init.signal.addEventListener('abort', () => mark('signal', 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => mark('beforeunload', 'fired'));
+    window.addEventListener('pagehide', () => mark('pagehide', 'fired'));
+  }, { markerKey: marker, feature: 'coach_advice' });
+
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixture = await installAccountApi(page, state, 'coach_advice');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixture.counts.completedAiFeatures).toContain('wis_text');
+  await waitForAccountOutboxIdle(page, accountA);
+  const appOrigin = await page.evaluate(() => location.origin);
+  await page.evaluate(markerKey => {
+    for (const suffix of ['request', 'signal', 'beforeunload', 'pagehide']) localStorage.removeItem(`${markerKey}:${suffix}`);
+  }, marker);
+  await page.evaluate(({ key, accountId }) => {
+    localStorage.setItem(key, JSON.stringify({ feature: 'coach_advice', type: 'coach', userId: accountId, actionId: 'unload-coach-retry' }));
+  }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+
+  const retry = page.getByRole('button', { name: 'Retry: Coach', exact: true });
+  await expect(retry).toBeVisible({ timeout: 5_000 });
+  const before = await readDurableSnapshot(page);
+  const profileBefore = rawValue(before, profileKey(accountA.id));
+  const coachBefore = rawValue(before, coachKey(accountA.id));
+  const valuesBefore = valuesFor(before, accountA);
+  const operationsBefore = operationsFor(before, accountA);
+  const profileWritesBefore = [...fixture.counts.profileWrites];
+  const coachStateWritesBefore = fixture.counts.stateWrites.filter(key => key === coachKey(accountA.id));
+  const achievementChecksBefore = fixture.counts.achievementChecks;
+  await retry.click();
+  await expect.poll(() => fixture.counts.heldRequests).toBe(1);
+  await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:request`), marker)).toBe('started');
+
+  await page.goto('about:blank');
+  fixture.release();
+  await expect.poll(() => fixture.counts.releasedResponses).toBe(1);
+  await page.goto(appOrigin);
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const after = await readDurableSnapshot(page);
+  expect(rawValue(after, profileKey(accountA.id))).toBe(profileBefore);
+  expect(rawValue(after, coachKey(accountA.id))).toBe(coachBefore);
+  expect(valuesFor(after, accountA)).toEqual(valuesBefore);
+  expect(operationsFor(after, accountA)).toEqual(operationsBefore);
+  expect(fixture.counts.profileWrites).toEqual(profileWritesBefore);
+  expect(fixture.counts.stateWrites.filter(key => key === coachKey(accountA.id))).toEqual(coachStateWritesBefore);
+  expect(fixture.counts.achievementChecks).toBe(achievementChecksBefore);
+  expect(fixture.counts.aiRequests.filter(request => request.feature === 'coach_advice')).toEqual([{
+    feature: 'coach_advice', account: accountA.id, session: accountA.sid,
+  }]);
+  expect(await page.evaluate(markerKey => ({
+    request: localStorage.getItem(`${markerKey}:request`),
+    signal: localStorage.getItem(`${markerKey}:signal`),
+    beforeunload: localStorage.getItem(`${markerKey}:beforeunload`),
+    pagehide: localStorage.getItem(`${markerKey}:pagehide`),
+  }), marker)).toEqual({ request: 'started', signal: 'aborted', beforeunload: 'fired', pagehide: 'fired' });
+  expect(errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
 test('held coach retry cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const profileA = profileFor(accountA.id);
