@@ -13,6 +13,8 @@
     "pretest:unit": "node scripts/generate-build-info.mjs",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:mock": "playwright test",
+    "test:e2e:staging": "playwright test --config=playwright.staging.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "check:admin-guards": "node scripts/check-admin-guards.mjs",

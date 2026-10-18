@@ -6,6 +6,7 @@ const npmCommand = process.env.npm_execpath
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['staging/**'],
   globalSetup: './e2e/support/preparePwaFixture.ts',
   timeout: 45_000,
   expect: {

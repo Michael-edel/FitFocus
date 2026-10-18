@@ -1831,7 +1831,12 @@ legacy-ключ не используется для новой очереди �
   изолированы, поэтому это не staging/OAuth. Целевой тест — 1/1, полный unit
   suite — 1369/1369, три typecheck, production build, API invariants и
   `git diff --check` прошли локально; точный CI нового HEAD ожидает push.
-- [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
+- [x] Разделить unit, браузерную матрицу с синтетическим API и реальные
+  staging-проверки. Unit и mock browser запускаются отдельными командами;
+  CI использует только локальную mock-матрицу. `test:e2e:staging` требует
+  `FITFOCUS_STAGING_ORIGIN` и ограничен анонимными GET на одном HTTPS origin;
+  запуск на реальном staging и полный release checklist остаются отдельными
+  открытыми gates.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 
 Готово, когда доступны результаты по каждому сценарию и нерешённые

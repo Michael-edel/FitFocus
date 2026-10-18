@@ -71,10 +71,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: E2E tests
+      - name: Browser tests (local mock API)
         env:
           FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-98d4910
-        run: npm run test:e2e
+        run: npm run test:e2e:mock
 
       - name: Retain browser diagnostics
         if: always()

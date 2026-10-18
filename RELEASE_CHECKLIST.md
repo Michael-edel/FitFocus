@@ -4,6 +4,16 @@
 проверках. Для релиза записать ветку, полный SHA, PR, URL CI и адрес среды.
 Область текущей документации: [карта](docs/README.md).
 
+## Разделение тестовых сред
+
+- [ ] Unit: `npm run test:unit`.
+- [ ] Браузерная локальная матрица с синтетическими API:
+  `npm run test:e2e:mock`.
+- [ ] На отдельном изолированном staging origin выполнен read-only smoke:
+  `$env:FITFOCUS_STAGING_ORIGIN = 'https://<staging-host>'`, затем
+  `npm run test:e2e:staging`; записаны полный SHA и результат. Это не заменяет
+  следующие OAuth, авторизованные, миграционные и device/PWA gates.
+
 ## Код готов к проверке
 
 - [ ] Ветка основана на актуальном `origin/main`; зависимости от PR #90 явны.

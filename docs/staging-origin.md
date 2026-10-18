@@ -4,6 +4,31 @@
 `aefc46320de11b83ffdb274e7dae1a911e69612e`. Компонент проверяется локально;
 опубликованный SHA и CI фиксируются в [статусе](project-status.md).
 
+## Разделение проверок
+
+Unit-тесты запускаются отдельно: `npm run test:unit`. Локальная браузерная
+матрица использует production build, локальный preview и синтетические API:
+`npm run test:e2e:mock`. Обычный CI выполняет именно эту матрицу и не обращается
+к staging.
+
+Реальная read-only проверка запускается отдельно и требует явный HTTPS origin
+изолированного staging-окружения:
+
+```powershell
+$env:FITFOCUS_STAGING_ORIGIN = 'https://<staging-host>'
+npm run test:e2e:staging
+```
+
+Playwright config откажется стартовать без переменной, с URL вместо чистого
+origin или с production hostname `fitfocus.pages.dev`. Staging suite выполняет
+только GET: загружает страницу, читает `/api/env` и анонимный `/api/me`, затем
+проверяет, что защищённые bootstrap/profile/state/push-status возвращают 401
+без redirect и `Set-Cookie`. В браузере Service Worker отключён, а любые
+не-GET и запросы за пределы выбранного origin блокируются и завершают тест
+ошибкой. Этот smoke не заменяет OAuth, авторизованные операции, миграцию,
+проверку D1 и release checklist. Его реальный запуск и точный проверенный SHA
+должны быть записаны отдельно; в текущем окружении staging origin не задан.
+
 ## Исправляемое поведение
 
 Прежний [entry point](../index.tsx) безусловно переводил любой неканонический
