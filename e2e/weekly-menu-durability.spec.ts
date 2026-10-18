@@ -70,7 +70,16 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   await mockApp(page, { session: 'app' });
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
-    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
+    const json = (body: unknown, status = 200) => {
+      const origin = request.headers().origin;
+      const headers: Record<string, string> = { ...scope };
+      if (origin && origin === new URL(request.url()).origin) {
+        headers['Access-Control-Allow-Origin'] = origin;
+        headers['Access-Control-Allow-Credentials'] = 'true';
+        headers.Vary = 'Origin';
+      }
+      return route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
+    };
     if (path === '/api/me') return json(active ? { user: { sub: account, roles: ['user'] }, hasAccess: true,
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
       profileSync: { protocol: 1, guard: 1, ...(mode === 'old-profile-server' ? {} : { weeklyMenuProjection: 1 }) },
