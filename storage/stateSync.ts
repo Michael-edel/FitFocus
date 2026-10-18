@@ -1,6 +1,6 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, legacyRecoveryResource, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome,
-  type OutboxReadGuard } from './durableOutbox';
+  type OutboxIntent, type OutboxReadGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
 import { LegacyQueueMigration } from './legacyMigration';
@@ -59,6 +59,20 @@ function managedLegacyStateKey(accountId: string, key: string): UserStateKey | n
   if (!key.startsWith(prefix)) return null;
   const stateKey = key.slice(prefix.length);
   return USER_STATE_KEYS.includes(stateKey as typeof USER_STATE_KEYS[number]) ? stateKey as UserStateKey : null;
+}
+
+function legacySourceHasDelete(source: Pick<Storage, 'getItem'>, key: string): boolean {
+  try {
+    const raw = source.getItem(LEGACY_QUEUE_SOURCE_KEY);
+    if (raw === null) return false;
+    const records: unknown = JSON.parse(raw);
+    return Array.isArray(records) && records.some((record) => {
+      const normalized = normalizeLegacyRecord(record);
+      return normalized.ok && normalized.value.type === 'delete' && normalized.value.key === key;
+    });
+  } catch {
+    return false;
+  }
 }
 
 export class StateSync {
@@ -368,32 +382,62 @@ export class StateSync {
       this.reverify();
       return;
     }
-    if (!this.legacyRuntime || typeof storageEvent.newValue !== 'string') return;
+    if (!this.legacyRuntime) return;
     const accountId = this.accountId;
     const key = storageEvent.key;
     if (!accountId || !managedLegacyStateKey(accountId, key)) return;
-    void this.preserveLegacyLocalWrite(accountId, key, storageEvent.newValue);
+    if (typeof storageEvent.newValue === 'string') {
+      void this.preserveLegacyLocalWrite(accountId, key, storageEvent.newValue);
+      return;
+    }
+    if (storageEvent.newValue === null && typeof storageEvent.oldValue === 'string') {
+      // When the old writer could persist its delete record, let the normal
+      // migration path import that exact intent instead of creating a duplicate.
+      if (legacySourceHasDelete(this.legacySource, key)) {
+        void this.preserveQueuedLegacyDelete(accountId, key);
+        return;
+      }
+      void this.preserveLegacyLocalDelete(accountId, key);
+    }
   };
 
   /** Preserve a legacy tab's local-only edit without making it eligible for sending. */
-  private async preserveLegacyLocalWrite(accountId: string, key: string, value: string): Promise<void> {
+  private preserveLegacyLocalWrite(accountId: string, key: string, value: string): Promise<void> {
+    return this.preserveLegacyLocalIntent(accountId, key, { type: 'put', key, value });
+  }
+
+  /** Preserve a legacy localStorage removal when its auth-paused writer lost the delete record. */
+  private preserveLegacyLocalDelete(accountId: string, key: string): Promise<void> {
+    return this.preserveLegacyLocalIntent(accountId, key, { type: 'delete', key });
+  }
+
+  private async preserveLegacyLocalIntent(accountId: string, key: string, intent: OutboxIntent): Promise<void> {
     const session = this.session;
     const generation = this.generation;
     if (!session || session.accountId !== accountId || !session.serverSessionId) return;
+    const readLegacyValue = (): string | null | undefined => {
+      try { return this.legacySource.getItem(key); } catch { return undefined; }
+    };
+    const deleteStillCurrent = (): boolean => {
+      const currentValue = readLegacyValue();
+      return currentValue === null || currentValue === undefined;
+    };
     try {
+      if (intent.type === 'delete' && !deleteStillCurrent()) return;
       const observed = await this.outbox.snapshot(accountId, key);
       if (generation !== this.generation || accountId !== this.accountId || session.sessionEpoch !== this.session?.sessionEpoch
-        || observed.value === value) return;
+        || (intent.type === 'put' && observed.value === intent.value)) return;
       const operation = await this.outbox.write({
         accountId,
         writerId: 'legacy-local-storage',
-        intent: { type: 'put', key, value },
+        intent,
         expectedRevision: observed.revision,
         baseVersion: observed.confirmedVersion,
         conflictReason: 'legacy-writer-local-only',
         localCommitGuard: { accountId, sessionEpoch: session.sessionEpoch, serverSessionId: session.serverSessionId },
         canCommit: () => generation === this.generation && accountId === this.accountId
-          && session.sessionEpoch === this.session?.sessionEpoch,
+          && session.sessionEpoch === this.session?.sessionEpoch
+          && (intent.type !== 'delete' || deleteStillCurrent()),
       });
       if (generation !== this.generation || accountId !== this.accountId) return;
       reportStateOperation(accountId, operation);
@@ -401,9 +445,27 @@ export class StateSync {
         reportStateSaveIssue({ accountId, key, kind: 'conflicted', reason: operation.reason ?? 'legacy-writer-local-only' });
       }
     } catch {
+      if (intent.type === 'delete' && !deleteStillCurrent()) return;
       if (generation === this.generation && accountId === this.accountId) {
         reportStateSaveIssue({ accountId, key, kind: 'error', reason: 'legacy-writer-local-only' });
       }
+    }
+  }
+
+  private async preserveQueuedLegacyDelete(accountId: string, key: string): Promise<void> {
+    const generation = this.generation;
+    try {
+      if (!await this.verify(generation) || generation !== this.generation || accountId !== this.accountId) return;
+      const latest = (await this.outbox.list(accountId))
+        .filter((operation) => operation.key === key)
+        .sort((left, right) => right.revision - left.revision)[0];
+      if (latest?.type === 'delete' && (latest.migrationSourceKey === LEGACY_QUEUE_SOURCE_KEY
+        || latest.writerId === 'legacy-local-storage')) return;
+      // A pre-existing source delete can be stale if the auth-paused legacy
+      // writer later changed the local value. Preserve the newer removal too.
+      await this.preserveLegacyLocalDelete(accountId, key);
+    } catch {
+      // The legacy source remains durable and can be imported on a later verify.
     }
   }
 

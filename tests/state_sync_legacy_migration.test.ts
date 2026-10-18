@@ -76,6 +76,92 @@ it('retains a value-only write from an open legacy tab as a non-sendable conflic
   expect(await outbox.list('other-account')).toEqual([]);
 });
 
+it('retains a legacy localStorage removal as a non-sendable delete conflict when the old queue is auth-blocked', async () => {
+  const eventTarget = new EventTarget();
+  vi.stubGlobal('window', eventTarget);
+  vi.stubGlobal('navigator', {});
+  const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped: async () => writerFence() });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await migration.progress())?.sendAllowed).toBe(true);
+  await expect.poll(async () => (await outbox.list(accountId)).some((operation) => operation.key === ownKey)).toBe(true);
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: ownKey,
+    oldValue: '{"theme":"dark"}',
+    newValue: null,
+  }));
+
+  await expect.poll(async () => (await outbox.list(accountId)).find((operation) =>
+    operation.key === ownKey && operation.writerId === 'legacy-local-storage' && operation.type === 'delete'))
+    .toMatchObject({ key: ownKey, type: 'delete', status: 'conflicted', reason: 'legacy-writer-local-only' });
+  expect((await outbox.snapshot(accountId, ownKey)).value).toBe('{"theme":"dark"}');
+  expect(await outbox.list('other-account')).toEqual([]);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
+it('does not duplicate a legacy delete already recorded in the migration source', async () => {
+  const eventTarget = new EventTarget();
+  vi.stubGlobal('window', eventTarget);
+  vi.stubGlobal('navigator', {});
+  const sourceValue = JSON.stringify([{ type: 'delete', key: ownKey, baseVersion: 1 }]);
+  source = { getItem: vi.fn((key: string) => key === LEGACY_QUEUE_SOURCE_KEY ? sourceValue : null) };
+  migration = new LegacyQueueMigration(source, db);
+  const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped: async () => writerFence() });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await outbox.list(accountId)).filter((operation) =>
+    operation.key === ownKey && operation.type === 'delete')).toHaveLength(1);
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: ownKey,
+    oldValue: '{"theme":"dark"}',
+    newValue: null,
+  }));
+  await sync.syncNow(accountId);
+
+  const deletes = (await outbox.list(accountId)).filter((operation) => operation.key === ownKey && operation.type === 'delete');
+  expect(deletes).toHaveLength(1);
+  expect(deletes[0].writerId).toMatch(/^legacy:/);
+  expect(deletes[0]).toMatchObject({ status: 'conflicted', reason: 'legacy-server-generation-unproven' });
+});
+
+it('preserves a newer removal when the legacy source still contains an older delete', async () => {
+  const eventTarget = new EventTarget();
+  vi.stubGlobal('window', eventTarget);
+  vi.stubGlobal('navigator', {});
+  const sourceValue = JSON.stringify([{ type: 'delete', key: ownKey, baseVersion: 1 }]);
+  source = { getItem: vi.fn((key: string) => key === LEGACY_QUEUE_SOURCE_KEY ? sourceValue : null) };
+  migration = new LegacyQueueMigration(source, db);
+  const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped: async () => writerFence() });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await outbox.list(accountId)).filter((operation) =>
+    operation.key === ownKey && operation.type === 'delete')).toHaveLength(1);
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: ownKey,
+    oldValue: null,
+    newValue: '{"theme":"light"}',
+  }));
+  await expect.poll(async () => (await outbox.list(accountId)).filter((operation) =>
+    operation.key === ownKey && operation.writerId === 'legacy-local-storage' && operation.type === 'put')).toHaveLength(1);
+
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: ownKey,
+    oldValue: '{"theme":"light"}',
+    newValue: null,
+  }));
+  await expect.poll(async () => {
+    const latest = (await outbox.list(accountId)).filter((operation) => operation.key === ownKey)
+      .sort((left, right) => right.revision - left.revision)[0];
+    return latest;
+  }).toMatchObject({ type: 'delete', writerId: 'legacy-local-storage', status: 'conflicted', reason: 'legacy-writer-local-only' });
+});
+
 it('imports durably but cannot claim or send when the service-worker writer fence is unavailable', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async () => json(proof()));
   sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,

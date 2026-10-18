@@ -27,7 +27,7 @@ const taskText = 'Записать первый завтрак';
 const taskEntry = `0:${taskText}`;
 
 type LegacyRecord = { type: string; key: string; value?: string; baseVersion?: number; retryCount?: number };
-type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; baseVersion: number;
+type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; writerId: string; baseVersion: number;
   status: string; reason?: string; nextAttemptAtMs: number; attempt?: { startedAtMs: number } };
 type MigrationItem = { id: string; canonical: string; state: string; reason?: string; accountId?: string; opId?: string;
   acknowledgedVersion?: number; resolution?: { kind: string; serverVersion: number; atMs: number; replacementOpId?: string } };
@@ -456,6 +456,87 @@ test('preserves legacy intent without sending an operation whose server generati
     };
     await info.attach('legacy-outbox-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
     console.error('LEGACY_OUTBOX_FAILURE', JSON.stringify(diagnostic));
+    throw error;
+  } finally {
+    await Promise.allSettled([oldPage.close(), currentPage.close()]);
+    await server.close();
+  }
+});
+
+test('preserves an old-bundle council-history deletion as a conflicted legacy intent', async ({ context }, info) => {
+  test.setTimeout(120_000);
+  const councilKey = `fitfocus_data_${account}_council_history`;
+  const messageText = 'История, удалённая в старой вкладке';
+  const historyValue = JSON.stringify([{ id: 'legacy-council-message', role: 'user', text: messageText,
+    createdAt: '2026-10-18T00:00:00.000Z' }]);
+  const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
+  const oldPage = await context.newPage();
+  const currentPage = await context.newPage();
+  const storageTrace: string[] = [];
+  await Promise.all([
+    captureAppDatabase(oldPage, 'legacy-council-delete', storageTrace),
+    captureAppDatabase(currentPage, 'current-council-delete', storageTrace),
+  ]);
+  try {
+    const standalone = info.project.name.includes('-pwa');
+    await mockApp(oldPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await oldPage.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: councilKey, value: historyValue });
+    await openApp(oldPage, `${server.origin}/#council`);
+    await expect(oldPage).toHaveTitle(/FitFocus/);
+    await expect(oldPage.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+    await expect(oldPage.getByText(messageText, { exact: true })).toBeVisible();
+    await expect(oldPage.getByRole('button', { name: 'Очистить', exact: true })).toBeVisible();
+    await expectCapturedAppDatabase(oldPage);
+
+    // Open the new bundle on the same origin while the old tab remains active.
+    server.release();
+    await mockApp(currentPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await openApp(currentPage, `${server.origin}/?release=next#plan`);
+    await expect(currentPage).toHaveTitle(/FitFocus/);
+    await expectCapturedAppDatabase(currentPage);
+    await expect.poll(async () => (await migrationState(currentPage, councilKey)).operations
+      .some(operation => operation.key === councilKey && operation.type === 'put' && operation.status === 'conflicted'),
+    { timeout: 30_000 }).toBe(true);
+
+    // After the old writer is auth-blocked, its actual UI clear action removes
+    // localStorage but cannot update the legacy queue. The new tab must retain
+    // that deletion for explicit resolution without applying or sending it.
+    await oldPage.getByRole('button', { name: 'Очистить', exact: true }).click();
+    await expect(oldPage.getByText(messageText, { exact: true })).toHaveCount(0);
+    await expect.poll(() => oldPage.evaluate(key => localStorage.getItem(key), councilKey)).toBeNull();
+    await expect.poll(async () => {
+      const state = await migrationState(currentPage, councilKey);
+      return {
+        legacyDelete: state.operations.find(operation => operation.key === councilKey && operation.type === 'delete'
+          && operation.writerId === 'legacy-local-storage'),
+        durableValue: state.value,
+        sourceDelete: JSON.parse(state.source ?? '[]').find((record: { key?: string; type?: string }) =>
+          record.key === councilKey && record.type === 'delete') ?? null,
+      };
+    }, { timeout: 30_000 }).toMatchObject({
+      legacyDelete: { type: 'delete', key: councilKey, status: 'conflicted', reason: 'legacy-writer-local-only' },
+      durableValue: historyValue,
+      sourceDelete: null,
+    });
+    const final = await migrationState(currentPage, councilKey);
+    const deleteOperation = final.operations.find(operation => operation.key === councilKey && operation.type === 'delete');
+    expect(deleteOperation && 'value' in deleteOperation).toBe(false);
+    expect(server.counts.currentStatePutAttempts).toBe(0);
+    expect(server.stateWriteKeys).not.toContain(councilKey);
+    await info.attach('legacy-council-delete', { body: JSON.stringify({
+      councilKey, deleteOperation, retainedValue: final.value,
+      source: final.source, counts: server.counts, stateWriteKeys: server.stateWriteKeys,
+      storageTrace: storageTrace.slice(-80),
+    }), contentType: 'application/json' });
+  } catch (error) {
+    const diagnostic = {
+      counts: server.counts, stateWriteKeys: server.stateWriteKeys, unexpectedApi: server.unexpectedApi,
+      oldBody: await oldPage.locator('body').innerText().catch(() => ''),
+      currentBody: await currentPage.locator('body').innerText().catch(() => ''),
+      storageTrace: storageTrace.slice(-100),
+    };
+    await info.attach('legacy-council-delete-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
+    console.error('LEGACY_COUNCIL_DELETE_FAILURE', JSON.stringify(diagnostic));
     throw error;
   } finally {
     await Promise.allSettled([oldPage.close(), currentPage.close()]);
