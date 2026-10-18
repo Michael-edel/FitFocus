@@ -44,11 +44,19 @@ for (const mobile of [false, true]) {
         await expect.poll(() => inactive.evaluate(element => getComputedStyle(element).color)).not.toBe(before);
       }
       await page.mouse.move(mobile ? 380 : 1400, 10);
-      await inactive.focus();
-      await page.keyboard.press('Shift+Tab');
+      // Stay inside the document: reverse-tabbing from its first control crosses
+      // the browser chrome boundary differently in Firefox.
+      const tabs = nav.locator('button.ff-navigation-active:visible, button:visible[class*="text-[var(--ff-muted)]"]');
+      const first = tabs.nth(0);
+      const second = tabs.nth(1);
+      await first.focus();
       await page.keyboard.press('Tab');
-      await expect(inactive).toBeFocused();
-      const focus = await inactive.evaluate(element => ({ visible: element.matches(':focus-visible'), style: getComputedStyle(element).outlineStyle, width: getComputedStyle(element).outlineWidth }));
+      await expect(second).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(first).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(second).toBeFocused();
+      const focus = await second.evaluate(element => ({ visible: element.matches(':focus-visible'), style: getComputedStyle(element).outlineStyle, width: getComputedStyle(element).outlineWidth }));
       expect(focus.visible).toBe(true);
       expect(focus.style).not.toBe('none');
       expect(parseFloat(focus.width)).toBeGreaterThan(0);
