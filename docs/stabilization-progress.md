@@ -7085,3 +7085,19 @@ CDP сообщил `BackForwardCacheDisabledForDelegate` даже после у�
 #1663 на опубликованном HEAD `7acfc86` всё ещё выполняет browser tests; новый
 HEAD не отправляется до его завершения. Реальный BFCache, staging/OAuth и общий
 P0.5/P0.9 остаются открытыми.
+
+## P0.6 — очистка счётчика рецептов при удалении аккаунта, `8b7fb2c`, 19.10.2026
+
+Аудит `clearLocalUserData` показал, что общий account cleanup пропускал счётчик
+из `domain/usage.ts`: `fitfocus_usage_counters_v1:<encoded-accountId>`. Из-за
+этого удаление аккаунта могло сообщить о полной локальной очистке, оставив его
+weekly recipe usage. Очистка теперь удаляет точный URL-кодированный ключ и не
+затрагивает соседний аккаунт; обычный и кодированный ID проверяются отдельно.
+
+Регрессия сначала провалилась на обоих вариантах ключа. После фикса privacy и
+usage тесты прошли **9/9**, полный unit suite — **1423/1423** в 216 файлах;
+root/domain-strict/storage-strict typecheck, privacy coverage (29 таблиц),
+production build и `git diff --check` прошли. Code/test commit `8b7fb2c`
+пока локальный. CI #1673 на предыдущем опубликованном HEAD `8ffa9e4` ещё
+выполняет browser tests; публикация follow-up ожидает завершения этого run.
+Этот ключевой cleanup не закрывает остальной account lifecycle P0.6.

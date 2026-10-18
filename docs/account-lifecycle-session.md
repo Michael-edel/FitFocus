@@ -23,6 +23,12 @@
 активная сессия успела смениться, старый callback не выполняет logout нового
 входа; локальная очистка по-прежнему ограничена удалённым account ID.
 
+Локальная очистка также удаляет account-scoped счётчик генерации рецептов
+`fitfocus_usage_counters_v1:<encoded-accountId>`. Сравнивается точный
+URL-кодированный владелец, поэтому счётчики соседних аккаунтов сохраняются.
+Ранее `clearLocalUserData` не включал этот ключ и мог сообщить о полной очистке,
+оставив счётчик в `localStorage`; это исправлено в `8b7fb2c`.
+
 ## Обычный выход
 
 Новый клиент проверяет актуальность IDB read guard перед очисткой состояния,
@@ -44,3 +50,9 @@ domain-strict и storage-strict typecheck, production build, `check:auth-scope`,
 удаления до side effects, отсутствие `Set-Cookie` для scoped logout и отказ
 отзыва чужой сессии. Полный CI этого SHA и реальный OAuth/staging ещё не
 подтверждены.
+
+Дополнительный cleanup regression в `8b7fb2c` сначала воспроизвёл оставшийся
+recipe usage counter для обычного и URL-кодированного account ID. После фикса
+privacy/usage тесты прошли 9/9, полный unit suite — 1423/1423, общий и оба strict
+typecheck, production build, privacy coverage и `git diff --check` прошли.
+Точный CI этого follow-up ожидает публикации; это не закрывает общий P0.6.

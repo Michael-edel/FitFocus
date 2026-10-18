@@ -3,13 +3,13 @@
 Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
 `fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
-HEAD до текущего follow-up — `ed61e8d`; текущий кодовый follow-up —
-[`64f4430`](https://github.com/Michael-edel/FitFocus/commit/64f4430). Коммит
-`3894ada` добавляет negative unit для реальной смены `serverSessionId`; полный
-unit suite прошёл **1422/1422**, root/domain/storage-strict typecheck, guards и
-production build прошли локально. В CI #1665 был один desktop WebKit сбой из-за
-проверки achievement count после перезапуска приложения; тест исправлен в
-`ee2fc50` и прошёл 3/3 локально. Новая browser acceptance покрывает cloud
+HEAD — `8ffa9e4`; локальный code follow-up — `8b7fb2c`. Полный unit suite
+прошёл **1423/1423**, root/domain/storage-strict typecheck, privacy guard и
+production build прошли локально. Точный CI #1673 для опубликованного `8ffa9e4`
+ещё выполняет browser tests; новая ревизия ожидает его завершения. В CI #1665
+был один desktop WebKit сбой: проверка achievement count стояла после
+перезапуска приложения. Тест исправлен в `ee2fc50` и прошёл 3/3 локально.
+Новая browser acceptance покрывает cloud
 hydration с pending edit: серверное `dark` версии 7 не затирает локальное `light`
 после reload; исходные operation/retry данные сохранены. Сценарий прошёл 7/7
 browser/PWA профилей без retries, typecheck прошёл. Точный CI этого follow-up
@@ -1442,6 +1442,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   запрос `/api/env` через 27 мс после restore. Проверка подтверждает только
   публичный конфигурационный callback на локальном mock origin; OAuth,
   авторизованные callbacks, устройства и staging остаются открытыми.
+- [x] При подтверждённом удалении аккаунта очищать его recipe usage counter
+  `fitfocus_usage_counters_v1:<encoded-accountId>`, не затрагивая счётчики других
+  аккаунтов. До исправления очистка сообщала успех, оставляя счётчик. Регрессия
+  воспроизведена и исправлена в `8b7fb2c`; тесты privacy/usage прошли 9/9,
+  полный unit — 1423/1423, typecheck/build/privacy guard прошли. P0.6 остаётся
+  открытым для других callbacks, устройств, staging и полной lifecycle-приёмки.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.

@@ -9,9 +9,13 @@
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
 открыт против `fix/state-generations` и зависит от PR #94 и #90. Ветка PR
 `fix/durable-outbox` содержит P0.8 исправления и тесты; последний runtime-код —
-`856e3f5`, после него опубликованы тестовая и документирующие ревизии. Полный
-unit suite локально прошёл **1422/1422**, root/domain/storage-strict typecheck,
-guards и production build прошли. Ручная чистая Chrome-сессия на локальной
+`856e3f5`. Последний опубликованный HEAD — `8ffa9e4`; локальный code follow-up
+`8b7fb2c` исправляет очистку account-scoped счётчика генерации рецептов при
+удалении аккаунта. Регрессия проверяет обычный и URL-кодированный ID, сохраняя
+счётчики остальных аккаунтов. Полный unit suite локально прошёл **1423/1423**,
+root/domain/storage-strict typecheck, privacy guard и production build прошли.
+Точный CI #1673 опубликованного HEAD ещё выполняет browser tests; новая ревизия
+ожидает его завершения. Ручная чистая Chrome-сессия на локальной
 сборке подтвердила реальный BFCache restore для публичного `/api/env`:
 `pagehide.persisted=true`, `pageshow.persisted=true`, запрос повторён через 27 мс.
 Это подтверждает один desktop Chrome сценарий; остальные callbacks, устройства,
