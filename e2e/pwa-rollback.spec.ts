@@ -118,7 +118,10 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
     await expect.poll(() => server.counts.put).toBeGreaterThan(0);
     await navigate(page, 'Настройки');
-    await page.getByPlaceholder('Как к вам обращаться').fill('Профиль перед откатом');
+    const profileName = page.getByPlaceholder('Как к вам обращаться');
+    await expect(profileName).toHaveValue('E2E User');
+    await profileName.fill('Профиль перед откатом');
+    await expect(profileName).toHaveValue('Профиль перед откатом');
     await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Профиль перед откатом');
     await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe(status);

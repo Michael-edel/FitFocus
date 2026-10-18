@@ -124,7 +124,8 @@ test('council history delete conflict and server snapshot survive reload', async
   const notice = page.getByRole('alert').filter({ hasText: 'Обнаружен конфликт' });
   await notice.scrollIntoViewIfNeeded();
   await expect(notice).toBeVisible();
-  await page.locator('[data-state-notice-region] details summary').click();
+  await page.locator('[data-state-notice-region] details')
+    .filter({ hasText: 'Разрешить конфликт или повторить отправку' }).locator('summary').click();
   const recovery = page.getByRole('region', { name: 'История помощника' });
   await expect(recovery.getByText(/Конфликт: 1 локальных операций; версия сервера 9/)).toBeVisible();
   const acceptServer = recovery.getByRole('button', { name: 'Принять серверную версию' });
