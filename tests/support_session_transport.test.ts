@@ -42,6 +42,17 @@ it('refreshes the captured proof and scopes JSON and multipart support requests'
   expect(requestHeaders.has('Content-Type')).toBe(false);
 });
 
+it('removes transient unload listeners after a support JSON request settles', async () => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const removeListener = vi.spyOn(target, 'removeEventListener');
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : json({ tickets: [] }, headers()));
+  const session = await prepare(fetchImpl);
+  await requestSupportJson(session, '/api/support/feedback/my', { method: 'GET' });
+  expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+});
+
 it('downloads support media with the captured proof and verifies attachment markers', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
     ? json(me()) : new Response('private-image', { headers: attachmentHeaders() }));
@@ -54,6 +65,17 @@ it('downloads support media with the captured proof and verifies attachment mark
   const requestHeaders = new Headers(init?.headers);
   expect(requestHeaders.get('X-FitFocus-State-Account')).toBe(account);
   expect(requestHeaders.get('X-FitFocus-State-Session')).toBe(sid);
+});
+
+it('removes transient unload listeners after a support attachment read settles', async () => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const removeListener = vi.spyOn(target, 'removeEventListener');
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response('private-image', { headers: attachmentHeaders() }));
+  const session = await prepare(fetchImpl);
+  await requestSupportAttachmentBlob(session, '/api/support/attachment?id=ticket-1&index=0');
+  expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
 });
 
 it('rejects support media whose resource markers do not match the session', async () => {
@@ -97,14 +119,30 @@ it('rejects a late response after another tab invalidates the IDB session fence'
   await result;
 });
 
-it('aborts an in-flight support request on pagehide', async () => {
+it.each(['beforeunload', 'pagehide'] as const)('aborts an in-flight support request on %s', async eventName => {
   const target = new EventTarget(); vi.stubGlobal('window', target);
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
     ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));
-  const session = await prepare(fetchImpl);
+  const actionController = new AbortController();
+  const session = await prepare(fetchImpl, actionController);
   const result = expect(requestSupportJson(session, '/api/support/feedback/my', { method: 'GET' }))
     .rejects.toThrow('STATE_REQUEST_ABORTED');
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
-  target.dispatchEvent(new Event('pagehide'));
+  target.dispatchEvent(new Event(eventName));
   await result;
+  expect(actionController.signal.aborted).toBe(true);
+});
+
+it.each(['beforeunload', 'pagehide'] as const)('aborts an in-flight support attachment read on %s', async eventName => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: attachmentHeaders() }));
+  const actionController = new AbortController();
+  const session = await prepare(fetchImpl, actionController);
+  const result = expect(requestSupportAttachmentBlob(session, '/api/support/attachment?id=ticket-1&index=0'))
+    .rejects.toThrow('STATE_REQUEST_ABORTED');
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+  target.dispatchEvent(new Event(eventName));
+  await result;
+  expect(actionController.signal.aborted).toBe(true);
 });

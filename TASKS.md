@@ -905,6 +905,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     `workers=1,retries=0`. Root typecheck и diff check прошли. Это mock API и не
     подтверждает отмену работы внешнего AI-провайдера, BFCache или staging.
     P0.5 остаётся открытым.
+  - [x] Раньше отменять SupportScreen JSON-запросы и чтение вложений: на
+    `beforeunload` теперь abort-ятся request и action controllers; `pagehide`
+    остаётся страховкой. До фикса transport слушал только `pagehide`, оставляя
+    callback активным на более раннем событии. Проверено снятие временных
+    listeners после успешного запроса. Transport-тесты прошли 15/15,
+    support-attachment E2E — 7/7 browser/PWA проектов; root и
+    storage-strict typecheck, `git diff --check` прошли. Точный CI и staging
+    остаются открытыми.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.

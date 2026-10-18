@@ -1,5 +1,19 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — ранняя отмена callbacks поддержки, 19.10.2026
+
+`requestSupportJson` и чтение вложений в `requestSupportAttachmentBlob` раньше
+реагировали только на `pagehide`. Теперь `beforeunload` отменяет и активный
+transport, и controller действия; `pagehide` сохраняется как дополнительная
+защита. Оба временных listener снимаются после завершения запроса, чтобы idle-
+страница не удерживала lifecycle handler. Это не даёт SupportScreen обработать
+поздний результат во время ухода со страницы.
+
+Профильные transport-тесты прошли **15/15**, browser acceptance отображения
+ticket/reply вложений — **7/7** на семи browser/PWA проектах без retries;
+root и storage-strict typecheck, `git diff --check` прошли. Реальные backend,
+staging и BFCache не проверялись. Точный CI после push ожидает проверки.
+
 ## P0.5 — navigation abort во время hydration задачи плато, `aab209f`, 19.10.2026
 
 Новый E2E запускает session hydration с профилем плато и удержанным scoped

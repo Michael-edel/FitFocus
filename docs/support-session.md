@@ -1,6 +1,6 @@
 # Сессия обращений поддержки
 
-Сверено: 15.10.2026. Документ описывает привязку пользовательского экрана
+Сверено: 19.10.2026. Документ описывает привязку пользовательского экрана
 поддержки к login session и границы текущего изменения. Это один компонент
 P0.5; он не закрывает остальные callbacks, staging или выпуск.
 
@@ -40,8 +40,11 @@ key включает account, session epoch, server session и auth fence; пр�
 сессии экран монтируется заново. Каждый запрос проверяет актуальность proof
 до и после HTTP. Список, деталь, создание и ответ имеют отдельные abort
 controllers; смена выбранного тикета отменяет предыдущую загрузку деталей.
-`pagehide`, timeout и закрытие компонента прекращают запрос или не позволяют
-его результату изменить интерфейс.
+`beforeunload` заранее отменяет request и action controllers, а `pagehide`,
+timeout и закрытие компонента также прекращают запрос или не позволяют его
+результату изменить интерфейс. Временные `beforeunload`/`pagehide` listeners
+снимаются после завершения запроса. JSON-запросы и чтение вложений покрыты
+transport-регрессиями для обоих lifecycle events и очистки listeners.
 
 Долгие чтения списка/детали не могут показать тикет прежней учётной записи.
 Позднее создание или ответ не очищает черновик и не отображает успех в другой
@@ -51,7 +54,7 @@ MediaStream и освобождает object URLs вложений при дем
 ## Проверки и границы
 
 - Серверный scope и отказ до записи: [support feedback tests](../tests/support_feedback_my.test.ts), [admin route tests](../tests/support_feedback_admin.test.ts).
-- Клиентский proof, заголовки, response markers, IDB invalidation и pagehide: [transport tests](../tests/support_session_transport.test.ts).
+- Клиентский proof, заголовки, response markers, IDB invalidation, `beforeunload` и `pagehide` для JSON и вложений: [transport tests](../tests/support_session_transport.test.ts).
 - Browser acceptance загружает ticket- и reply-вложения через scoped fetch, проверяет оба account/session proof и отображение Blob в image elements: [support attachment E2E](../e2e/family-callback-account-switch.spec.ts). Точный CI нового HEAD ещё не подтверждён.
 - Поздний список A после входа B в соседней вкладке: [account-switch E2E](../e2e/family-callback-account-switch.spec.ts).
 - Исходники: [SupportScreen](../SupportScreen.tsx), [transport](../services/supportSession.ts), [серверный scope](../functions/api/_lib/state_session.ts).

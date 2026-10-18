@@ -54,10 +54,12 @@ export async function requestSupportJson(session: SupportSession, url: string, i
   await assertSupportSession(session);
   const requestController = new AbortController();
   const abort = () => requestController.abort();
+  const onHide = () => { abort(); session.controller.abort(); };
   session.controller.signal.addEventListener('abort', abort, { once: true });
   if (session.controller.signal.aborted) requestController.abort();
   const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', abort);
+  target?.addEventListener('beforeunload', onHide, { once: true });
+  target?.addEventListener('pagehide', onHide);
   try {
     const headers = new Headers(init.headers);
     headers.set('X-Request-ID', `web-${crypto.randomUUID()}`);
@@ -77,7 +79,8 @@ export async function requestSupportJson(session: SupportSession, url: string, i
     return result;
   } finally {
     session.controller.signal.removeEventListener('abort', abort);
-    target?.removeEventListener('pagehide', abort);
+    target?.removeEventListener('beforeunload', onHide);
+    target?.removeEventListener('pagehide', onHide);
   }
 }
 
@@ -86,10 +89,12 @@ export async function requestSupportAttachmentBlob(session: SupportSession, url:
   await assertSupportSession(session);
   const requestController = new AbortController();
   const abort = () => requestController.abort();
+  const onHide = () => { abort(); session.controller.abort(); };
   session.controller.signal.addEventListener('abort', abort, { once: true });
   if (session.controller.signal.aborted) requestController.abort();
   const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', abort);
+  target?.addEventListener('beforeunload', onHide, { once: true });
+  target?.addEventListener('pagehide', onHide);
   const timeout = setTimeout(abort, session.timeoutMs ?? 12_000);
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let removeAbortListener: (() => void) | undefined;
@@ -153,7 +158,8 @@ export async function requestSupportAttachmentBlob(session: SupportSession, url:
     removeAbortListener?.();
     if (!completed) void reader?.cancel().catch(() => {});
     session.controller.signal.removeEventListener('abort', abort);
-    target?.removeEventListener('pagehide', abort);
+    target?.removeEventListener('beforeunload', onHide);
+    target?.removeEventListener('pagehide', onHide);
   }
 }
 
