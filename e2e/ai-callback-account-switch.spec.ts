@@ -1,6 +1,7 @@
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Request } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
+import { dashboardReadinessSnapshot, observeDashboardReadiness } from './support/dashboardReadiness';
 
 const accountA = { id: 'ai-callback-account-a', sid: 'a'.repeat(64) };
 const accountB = { id: 'ai-callback-account-b', sid: 'b'.repeat(64) };
@@ -2233,8 +2234,18 @@ test('a profile draft cached for account A is not restored after another tab act
   expect(fixtureA.counts.profileWrites).toEqual([]);
 });
 
-test('a dashboard weight draft cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+for (const delayedStateHydration of [false, true]) {
+test(`a dashboard weight draft cached for account A is hidden after another tab activates account B${delayedStateHydration ? ' after delayed state hydration' : ''}`, async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  await observeDashboardReadiness(page);
+  const phases: Array<{ stage: string; atMs: number }> = [];
+  const startedAt = Date.now();
+  const mark = (stage: string) => phases.push({ stage, atMs: Date.now() - startedAt });
+  const errorsA: string[] = [];
+  let hydrationResponseStatus: number | undefined;
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  try {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#dashboard');
@@ -2245,11 +2256,45 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   await weightDraft.fill('98.765');
   const weightDraftKeyA = `fitfocus.dashboard.new-weight.v1:${accountA.id}`;
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+  mark('draft-cached-before-reload');
 
+  let delayedHydrationReads = 0;
+  let heldHydrationRequest: Request | undefined;
+  if (delayedStateHydration) {
+    page.on('response', response => {
+      if (response.request() !== heldHydrationRequest) return;
+      hydrationResponseStatus = response.status();
+      mark('state-hydration-response');
+    });
+    // Delay one read; fallback keeps the existing account/session fixture and response unchanged.
+    await page.route(/\/api\/state(?:\?.*)?$/, async route => {
+      if (route.request().method() === 'GET' && delayedHydrationReads === 0) {
+        delayedHydrationReads += 1;
+        heldHydrationRequest = route.request();
+        mark('state-hydration-held');
+        await new Promise(resolve => setTimeout(resolve, 11_000));
+        mark('state-hydration-released');
+      }
+      await route.fallback();
+    });
+  }
+  mark('reload-start');
   await page.reload();
+  mark('reload-load-event');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  mark('account-a-idb-identity');
+  // IDB identity does not mean AppWorkspace's independent session check or lazy screen is ready.
+  await test.step('Wait for account A Dashboard readiness', async () => {
+    await expect(weightDraft).toBeVisible({ timeout: 20_000 });
+  });
+  mark('dashboard-ready');
   await expect(page.getByLabel('Вес сегодня')).toHaveValue('98.765', { timeout: 30_000 });
+  mark('draft-restored');
+  if (delayedStateHydration) {
+    expect(delayedHydrationReads).toBe(1);
+    expect(hydrationResponseStatus).toBe(200);
+  }
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
@@ -2259,7 +2304,23 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   await expect(switched.page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
   expect(fixtureA.counts.profileWrites).toEqual([]);
   expect(switched.errors).toEqual([]);
+  expect(errorsA).toEqual([]);
+  mark('account-b-isolation-verified');
+  } finally {
+    let documentSnapshot: unknown;
+    try { documentSnapshot = await dashboardReadinessSnapshot(page); }
+    catch (error) { documentSnapshot = { diagnosticError: String(error) }; }
+    try {
+      await info.attach('dashboard-readiness', {
+        body: JSON.stringify({ delayedStateHydration, hydrationResponseStatus, phases, document: documentSnapshot }, null, 2),
+        contentType: 'application/json',
+      });
+    } catch (error) {
+      info.annotations.push({ type: 'dashboard-diagnostics-error', description: String(error) });
+    }
+  }
 });
+}
 
 test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
