@@ -149,6 +149,12 @@ processed marker; после reload та же legacy-запись импорти
 desktop/mobile/PWA проектов без retries. Точный CI нового сценария и staging
 остаются отдельными проверками.
 
+Перестановка source records и изменение `retryCount` также проверены в реальном
+browser migration: две конфликтные operations и их opId остаются прежними,
+обновлённый snapshot обрабатывается полностью, повторный reload не создаёт
+дубликатов. Локальная матрица — 7/7 без retries; этот follow-up пока ожидает
+точного CI.
+
 DELETE-ветка строки `409 update/delete → reload` теперь отдельно проверена для
 `council_history`: после scoped 409 IndexedDB сохраняет tombstone, исходный
 `opId`, `serverSnapshot` и состояние `conflicted`; после reload видна команда

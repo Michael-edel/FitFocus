@@ -6587,6 +6587,15 @@ ledger/quarantine и processed marker отсутствуют; `sendAllowed` ос
 
 Сценарий прошёл 7/7 Playwright-проектов (desktop Chromium/Firefox/WebKit,
 Android Chrome/PWA, iPhone Safari/PWA), `workers=1`, `retries=0`; root typecheck и
-`git diff --check` прошли. Это локальная acceptance: опубликованный HEAD
-`4065275` и текущий CI #1599 тест не содержат. Общая P0.9 матрица, staging и
-release acceptance остаются открыты.
+`git diff --check` прошли. Тест опубликован в `f9bf4e6`. [Точный CI #1601](https://github.com/Michael-edel/FitFocus/actions/runs/39100776970)
+для этого SHA прошёл audit, guards, unit, три typecheck и production build;
+E2E ещё выполняется.
+
+### Следующая строка P0.9 — reorder и retryCount в browser migration
+
+В local-only follow-up добавлена проверка повторного runtime-импорта двух
+конфликтных legacy operations после перестановки массива и изменения `retryCount`.
+Старые opId сохраняются, новый snapshot получает processed marker, второй reload
+не создаёт дубликаты; реальная IndexedDB/Service Worker матрица прошла 7/7 без
+retries. Root typecheck прошёл. Follow-up пока не опубликован и ждёт exact CI;
+staging и общая P0.9 приёмка остаются открыты.

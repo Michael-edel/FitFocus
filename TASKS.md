@@ -1,14 +1,15 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; опубликованный HEAD — `4065275`.
-Локально добавлена browser acceptance миграции legacy outbox при реальном abort
-IndexedDB: value, операция, ledger и processed marker откатываются вместе; после
-повтора сохраняется одна операция с тем же opId. Новый сценарий прошёл 7/7
-desktop/mobile/PWA проектов без retries. Он пока не входит в опубликованный SHA.
-Точный [CI #1599](https://github.com/Michael-edel/FitFocus/actions/runs/39100059502)
-для `4065275` сейчас выполняет E2E; результат ещё не завершён. Основные локальные
-проверки опубликованной реализации: legacy clear/keyed-delete acceptance 7/7,
+остаётся draft с base `fix/state-generations`; опубликованный code/test HEAD —
+`f9bf4e6`. Точный [CI #1601](https://github.com/Michael-edel/FitFocus/actions/runs/39100776970)
+для него выполняет E2E; audit, guards, unit, три typecheck и production build
+завершились успешно. В опубликованный commit добавлен browser acceptance реального
+IndexedDB abort при legacy import: operation, значение и migration marker
+откатываются вместе, после повтора остаётся один opId; тест локально прошёл 7/7
+desktop/mobile/PWA проектов без retries. Дополнительный local-only тест перестановки
+legacy-записей и изменения `retryCount` тоже прошёл 7/7; он ещё не опубликован.
+Основные локальные проверки: legacy clear/keyed-delete acceptance 7/7,
 account-cache sweep 21/21, progress draft/archive 3/3, unit 1368/1368, три
 typecheck, production build и `git diff --check` прошли. В плане остаются 33
 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging,
@@ -1797,6 +1798,11 @@ legacy-ключ не используется для новой очереди �
     повтор создаёт одну операцию и сохраняет тот же opId. Сценарий прошёл 7/7
     desktop/mobile/PWA проектов, workers=1, retries=0. Это локальная browser
     acceptance; точный CI и staging ещё открыты.
+  - [x] Проверить browser migration после перестановки legacy-записей и изменения
+    `retryCount`: две операции остаются конфликтными, сохраняют исходные opId,
+    processed marker нового snapshot завершён, дублей после следующего reload нет.
+    Тест с реальной IndexedDB и Service Worker прошёл 7/7 профилей без retries;
+    точный CI этой локальной добавки ещё не выполнялся.
   - [x] Проверить `401 → новая правка → login`: локальный follow-up
     [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
     сохраняет доступ к локальным настройкам в auth-паузе после обновления

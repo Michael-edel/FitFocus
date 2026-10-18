@@ -665,6 +665,112 @@ test('rolls back legacy import and migration marker together after an IndexedDB 
   }
 });
 
+test('keeps legacy operation identities after source reorder and retryCount changes', async ({ context }, info) => {
+  test.setTimeout(120_000);
+  const putKey = `fitfocus_data_${account}_migration_reorder_put`;
+  const deleteKey = `fitfocus_data_${account}_migration_reorder_delete`;
+  const putValue = JSON.stringify({ source: 'legacy-reorder', retained: true });
+  const initialSource = JSON.stringify([
+    { type: 'put', key: putKey, value: putValue, baseVersion: 0 },
+    { type: 'delete', key: deleteKey, baseVersion: 0 },
+  ]);
+  const replaySource = JSON.stringify([
+    { type: 'delete', key: deleteKey, baseVersion: 0, retryCount: 19 },
+    { type: 'put', key: putKey, value: putValue, baseVersion: 0, retryCount: 9 },
+  ]);
+  const seededKey = '__fitfocusE2eLegacyReorderSeeded';
+  const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
+  server.release();
+  const page = await context.newPage();
+  const storageTrace: string[] = [];
+  await captureAppDatabase(page, 'legacy-reorder-retry-count', storageTrace);
+  const ownedOperations = async () => (await migrationState(page, putKey)).operations
+    .filter((operation) => operation.migrationSourceKey === legacySourceKey
+      && (operation.key === putKey || operation.key === deleteKey));
+  const importedItems = async () => (await migrationState(page, putKey)).migrationItems
+    .filter((item) => itemForKey([item], putKey) || itemForKey([item], deleteKey));
+  try {
+    const standalone = info.project.name.includes('-pwa');
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await page.addInitScript(({ sourceKey, source, seededKey }) => {
+      if (sessionStorage.getItem(seededKey) !== '1') {
+        localStorage.setItem(sourceKey, source);
+        sessionStorage.setItem(seededKey, '1');
+      }
+    }, { sourceKey: legacySourceKey, source: initialSource, seededKey });
+    await openApp(page, `${server.origin}/?legacy-reorder-retry-count=1#plan`);
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expectCapturedAppDatabase(page);
+    await expect.poll(async () => (await ownedOperations()).length, { timeout: 30_000 }).toBe(2);
+    await expect.poll(async () => (await importedItems()).length, { timeout: 30_000 }).toBe(2);
+
+    const initialOperations = await ownedOperations();
+    const initialIds = Object.fromEntries(initialOperations.map((operation) => [operation.key, operation.opId]));
+    expect(initialOperations.map((operation) => operation.status).sort()).toEqual(['conflicted', 'conflicted']);
+    expect(Object.keys(initialIds).sort()).toEqual([deleteKey, putKey].sort());
+    expect((await migrationState(page, putKey)).value).toBe(putValue);
+
+    await page.evaluate(({ sourceKey, source }) => localStorage.setItem(sourceKey, source), {
+      sourceKey: legacySourceKey, source: replaySource,
+    });
+    await page.reload();
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => {
+      const state = await migrationState(page, putKey);
+      const operations = state.operations.filter((operation) => operation.migrationSourceKey === legacySourceKey
+        && (operation.key === putKey || operation.key === deleteKey));
+      const snapshot = state.snapshots.find((entry) => entry.sourceKey === legacySourceKey && entry.rawSource === replaySource);
+      const ledgerCount = state.migrationItems.filter((item) => itemForKey([item], putKey) || itemForKey([item], deleteKey)).length;
+      return {
+        source: state.source,
+        count: operations.length,
+        ids: Object.fromEntries(operations.map((operation) => [operation.key, operation.opId])),
+        statuses: operations.map((operation) => operation.status).sort(),
+        ledgerCount,
+        processed: Array.isArray(snapshot?.processed) ? snapshot.processed.length : -1,
+        value: state.value,
+      };
+    }, { timeout: 30_000 }).toEqual({
+      source: replaySource,
+      count: 2,
+      ids: initialIds,
+      statuses: ['conflicted', 'conflicted'],
+      ledgerCount: 2,
+      processed: 2,
+      value: putValue,
+    });
+
+    await page.reload();
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => {
+      const operations = await ownedOperations();
+      return {
+        count: operations.length,
+        ids: Object.fromEntries(operations.map((operation) => [operation.key, operation.opId])),
+        ledgerCount: (await importedItems()).length,
+      };
+    }, { timeout: 30_000 }).toEqual({ count: 2, ids: initialIds, ledgerCount: 2 });
+    expect(server.stateWriteKeys).not.toContain(putKey);
+    expect(server.stateWriteKeys).not.toContain(deleteKey);
+    expect(server.unexpectedApi).toEqual([]);
+    await info.attach('legacy-reorder-retry-count', { body: JSON.stringify({
+      initialSource, replaySource, initialIds, operations: await ownedOperations(), items: await importedItems(),
+      final: await migrationState(page, putKey), stateWriteKeys: server.stateWriteKeys,
+      unexpectedApi: server.unexpectedApi, storageTrace: storageTrace.slice(-80),
+    }), contentType: 'application/json' });
+  } catch (error) {
+    await info.attach('legacy-reorder-retry-count-failure', { body: JSON.stringify({
+      operations: await ownedOperations().catch(() => []), items: await importedItems().catch(() => []),
+      body: await page.locator('body').innerText().catch(() => ''), stateWriteKeys: server.stateWriteKeys,
+      unexpectedApi: server.unexpectedApi, storageTrace: storageTrace.slice(-100),
+    }), contentType: 'application/json' });
+    throw error;
+  } finally {
+    await page.close().catch(() => undefined);
+    await server.close();
+  }
+});
+
 test('preserves an old-bundle council-history deletion as a conflicted legacy intent', async ({ context }, info) => {
   test.setTimeout(120_000);
   const councilKey = `fitfocus_data_${account}_council_history`;
