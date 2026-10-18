@@ -2,21 +2,19 @@
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Текущий кодовый коммит — [`7fa3649`](https://github.com/Michael-edel/FitFocus/commit/7fa3649765c354a6f2d42965843da8bdabaa7758):
-он публикует принятый read guard в UI после повторной проверки той же серверной
-сессии. Предыдущий опубликованный HEAD `6ed72cd` проверен точным
-[PR CI #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863):
-audit, schema/privacy/auth/API, unit, три typecheck и build прошли; E2E завершился
-988 passed / 299 skipped / 1 failed. Ошибка — необоснованное ожидание, что PWA
-update flow обязательно отправит legacy-запись. В отдельном migration acceptance
-реальный legacy writer продолжает проверяться на ответ 426.
+защищённую `main` не подтверждены. Текущий кодовый коммит — [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00).
+Exact [PR CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
+на родительском `22b010d` прошёл audit, schema/privacy/auth/API, 1363 unit, три
+typecheck и build, но завершился 994 browser passed / 299 skipped / 2 failed.
+В iPhone PWA тест ожидал промежуточный fence после BroadcastChannel, но быстрая
+повторная проверка уже успевала снять паузу; в iPhone Safari офлайнный 503 mock
+порождал access-control console error из-за отсутствующих CORS-заголовков.
 
-На коммите `7fa3649` локально прошли unit 1363/1363, root/domain/storage strict
-typecheck, build и admin guards; новая same-session guard регрессия — 7/7, PWA
-update acceptance — 7/7, retry импорта файла — 5/5. Полный
-`profile-durability.spec.ts` завершился 146/147: один desktop WebKit сценарий
-получил временную CORS/request failure на `/api/state`, после чего этот сценарий
-прошёл 5/5 повторов. Новый exact CI ещё ожидает push. В плане остаются 33 пункта:
+В коммите `5003a28` первый сценарий теперь удерживает read proof до проверки
+fence, затем подтверждает восстановление UI фактическим profile save; mock 503
+возвращает соответствующий `Access-Control-Allow-Origin`. Локально guard прошёл
+7/7 проектов и 5/5 повторов iPhone PWA; settings — 7/7 и 10/10 повторов на iPhone
+Safari/PWA, без retries. Новый exact CI ожидает push. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
@@ -1607,6 +1605,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
     прошли 12/12 без retries; затронутые unit — 32/32, полный unit suite —
     1362/1362; root/domain/storage strict typecheck, build и diff check прошли.
     Новый SHA ожидает точный CI.
+  - [x] Проверить, что временная auth-пауза и быстрый same-server re-verification
+    не дают устаревшему UI guard блокировать профиль. Регрессия удерживает proof,
+    проверяет fence до ответа и успешное durable сохранение после него; 7/7 проектов
+    и 5/5 повторов iPhone PWA без retries в [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00).
   - [x] Удержать GET `/api/family/menu/state` старой server session, повторно
     войти в тот же account и отпустить ответ после принятия нового `sessionEpoch`.
     Значения, family-menu snapshot и outbox остаются равны снимку до ответа.

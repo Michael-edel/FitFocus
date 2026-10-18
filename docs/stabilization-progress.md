@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 follow-up — точный CI #1583 выявил два iPhone E2E отказа, `5003a28`, 18.10.2026
+
+Exact [CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
+на HEAD `22b010d` завершился 994 browser passed / 299 skipped / 2 failed. Audit,
+schema parity, privacy, auth/API guards, 1363 unit tests, три typecheck и build
+прошли. iPhone PWA failure возникал из-за гонки самого теста: периодическая
+same-server re-verification успевала снять auth pause до проверки промежуточного
+fence. Регрессия в `5003a28` удерживает `/api/me` proof до проверки fence, затем
+отпускает ответ и подтверждает обновление UI guard фактическим profile save.
+Сценарий прошёл 7/7 Playwright-проектов и 5/5 iPhone PWA повторов без retries.
+
+Второй отказ iPhone Safari был access-control console error при ожидаемом
+`INJECTED_OFFLINE` 503. Trace показал, что test-specific `route.fulfill` заменял
+ответ общего API mock и не добавлял CORS-заголовки. Route теперь отражает request
+origin в `Access-Control-Allow-Origin` и задаёт `Vary: Origin`, не фильтруя ошибки
+консоли. Settings durability сценарий прошёл 7/7 проектов; iPhone Safari и PWA
+прошли 10/10 повторов без retries. `git diff --check` прошёл. Новый точный CI для
+`5003a28` ожидает push; P0.8/P0.9, staging, выпуск и интеграция в `main` открыты.
+
 ## P0.8 — публиковать свежий guard повторно проверенной сессии в UI, `7fa3649`, 18.10.2026
 
 После auth-паузы `/me` мог подтвердить ту же серверную сессию и атомарно снять

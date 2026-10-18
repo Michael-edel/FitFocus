@@ -5,19 +5,17 @@
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0, в частности P0.8:
 IndexedDB durable outbox подключён, продолжается перенос и lifecycle-приёмка
-пользовательских действий. Текущий кодовый коммит — [`7fa3649`](https://github.com/Michael-edel/FitFocus/commit/7fa3649765c354a6f2d42965843da8bdabaa7758):
-принятый read guard теперь обновляет UI, если повторная проверка подтвердила ту же
-серверную сессию с новым локальным epoch/fence. Предыдущий опубликованный HEAD
-`6ed72cd` проверен [PR CI #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863):
-audit, schema/privacy/auth/API, 1362 unit tests, root/domain/storage strict
-typecheck и build прошли; E2E завершился 988 passed / 299 skipped / 1 failed.
-Единственная ошибка — тест PWA update требовал legacy-отказ, хотя этот сценарий не
-создаёт legacy-запись; реальный 426 барьер остаётся отдельной migration проверкой.
-Локально на новом коде прошли unit 1363/1363, три typecheck, build и admin guards;
-новая same-session guard регрессия прошла 7/7 проектов, PWA update — 7/7, retry
-импорта файла — 5/5. Полный `profile-durability.spec.ts` прошёл 146/147: один
-desktop WebKit сценарий получил временную CORS/request failure на `/api/state`,
-после чего этот сценарий прошёл 5/5 повторов. Новый exact CI ожидает push.
+пользовательских действий. Текущий кодовый коммит — [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00).
+Exact [PR CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
+на родительском `22b010d` прошёл audit, schema/privacy/auth/API, 1363 unit,
+root/domain/storage strict typecheck и production build, но E2E завершился
+994 passed / 299 skipped / 2 failed. iPhone PWA повторная проверка успевала
+снять паузу до ожидания промежуточного UI fence; iPhone Safari возвращал
+access-control console error на намеренно офлайнный 503 mock без CORS-заголовков.
+В `5003a28` proof теперь удерживается в auth-регрессии до явной проверки fence,
+а офлайн mock возвращает ACAO/Vary. Guard прошёл 7/7 проектов и 5/5 iPhone PWA
+повторов; settings — 7/7 проектов и 10/10 повторов iPhone Safari/PWA, без retries.
+Новый exact CI ожидает push.
 В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и
 интеграция в защищённую `main` открыты.
 Branch preview после публикации `4c03b68` отдаёт точный bundle SHA: `/`,
