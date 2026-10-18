@@ -139,6 +139,46 @@ describe('clearLocalUserData', () => {
     expect(storage.getItem('fitfocus_data_user-1_diary')).toBeNull();
     expect(storage.getItem('fitfocus.remote-kv-outbox.v1')).toBe(legacySource);
   });
+
+  it('reports an unowned global legacy record as retained during account deletion', async () => {
+    const storage = new MemoryStorage();
+    const legacySource = JSON.stringify([
+      { type: 'put', key: 'ff_ai_last_status_v1', value: 'possibly account-owned evidence' },
+    ]);
+    storage.setItem('fitfocus_data_user-1_diary', 'local value');
+    storage.setItem('fitfocus.remote-kv-outbox.v1', legacySource);
+    vi.stubGlobal('localStorage', storage);
+
+    const result = await clearLocalUserData('user-1');
+
+    expect(result).toMatchObject({
+      complete: false,
+      localStorageCleared: true,
+      indexedDbCleared: true,
+      legacyEvidenceRetained: true,
+    });
+    expect(storage.getItem('fitfocus_data_user-1_diary')).toBeNull();
+    expect(storage.getItem('fitfocus.remote-kv-outbox.v1')).toBe(legacySource);
+  });
+
+  it('does not classify a clearly other-account legacy key as retained for this deletion', async () => {
+    const storage = new MemoryStorage();
+    const legacySource = JSON.stringify([
+      { type: 'put', key: 'fitfocus_data_user-2_diary', value: 'other account value' },
+    ]);
+    storage.setItem('fitfocus.remote-kv-outbox.v1', legacySource);
+    vi.stubGlobal('localStorage', storage);
+
+    const result = await clearLocalUserData('user-1');
+
+    expect(result).toMatchObject({
+      complete: true,
+      localStorageCleared: true,
+      indexedDbCleared: true,
+      legacyEvidenceRetained: false,
+    });
+    expect(storage.getItem('fitfocus.remote-kv-outbox.v1')).toBe(legacySource);
+  });
 });
 
 describe('retired local telemetry cleanup', () => {

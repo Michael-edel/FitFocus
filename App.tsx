@@ -869,7 +869,7 @@ const App: React.FC = () => {
           const reasons = [
             !cleanup.localStorageCleared ? 'часть данных localStorage недоступна для удаления' : '',
             !cleanup.indexedDbCleared ? 'не удалось полностью очистить IndexedDB' : '',
-            cleanup.legacyEvidenceRetained ? 'legacy-очередь содержит записи аккаунта или неразбираемые данные; она сохранена для безопасной миграции' : '',
+            cleanup.legacyEvidenceRetained ? 'legacy-очередь содержит записи аккаунта или данные без подтверждённого владельца; они сохранены для безопасной миграции' : '',
           ].filter(Boolean);
           alert(`Аккаунт удалён на сервере, но локальная очистка завершена не полностью: ${reasons.join('; ')}.`);
         }

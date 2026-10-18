@@ -123,6 +123,34 @@ describe('account-scoped IndexedDB cleanup', () => {
     ]));
   });
 
+  it('reports global unowned legacy evidence as retained instead of claiming full cleanup', async () => {
+    const database = createDatabase();
+    const db = await database.open();
+    const globalRecord = { type: 'put', key: 'ff_ai_last_status_v1', value: 'possibly account-owned evidence' };
+    const rawSource = JSON.stringify([globalRecord]);
+    await stateTransaction(db, [STATE_STORES.migrationUnknown, STATE_STORES.meta], 'readwrite', (tx) => {
+      tx.objectStore(STATE_STORES.migrationUnknown).put({
+        id: 'global-unknown', sourceKey: LEGACY_QUEUE_SOURCE_KEY,
+        fingerprint: 'global-unknown-fingerprint', rawRecord: globalRecord,
+        rawRecords: [globalRecord], reason: 'unknown-owner',
+      });
+      tx.objectStore(STATE_STORES.meta).put({
+        id: 'legacy-snapshot:v1:global', sourceKey: LEGACY_QUEUE_SOURCE_KEY, rawSource,
+      });
+    });
+
+    const result = await clearIndexedUserStateForUser(deletedAccount, database);
+
+    expect(result).toEqual({ cleared: true, legacyEvidenceRetained: true });
+    const [unknown, snapshot] = await stateTransaction(db, [STATE_STORES.migrationUnknown, STATE_STORES.meta], 'readonly', async (tx) =>
+      Promise.all([
+        indexedRequest(tx.objectStore(STATE_STORES.migrationUnknown).get('global-unknown')),
+        indexedRequest(tx.objectStore(STATE_STORES.meta).get('legacy-snapshot:v1:global')),
+      ]));
+    expect(unknown).toMatchObject({ rawRecords: [globalRecord], reason: 'unknown-owner' });
+    expect(snapshot).toMatchObject({ rawSource });
+  });
+
   it('preserves a value whose explicit owner conflicts with its key prefix', async () => {
     const database = createDatabase();
     const db = await database.open();

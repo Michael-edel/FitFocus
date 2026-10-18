@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
 import { clearIndexedUserStateForUser } from './indexedUserState';
+import { legacyRecordMayBelongToAccount } from './legacyQueue';
 
 type ProfileLike = {
   id: string;
@@ -140,13 +141,11 @@ export type LocalUserDataCleanupResult = {
 
 const INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS = 5_000;
 
-function legacyQueueMayContainAccount(raw: string | null, accountPrefix: string): boolean {
+function legacyQueueMayContainAccount(raw: string | null, accountId: string): boolean {
   if (raw === null) return false;
   const records = parseJson(raw);
   if (!Array.isArray(records)) return true;
-  return records.some((record) => !isRecord(record)
-    || typeof record.key !== 'string'
-    || record.key.startsWith(accountPrefix));
+  return records.some((record) => legacyRecordMayBelongToAccount(record, accountId));
 }
 
 /**
@@ -190,7 +189,7 @@ export async function clearLocalUserData(userId: string | null | undefined): Pro
   }
 
   try {
-    legacyEvidenceRetained = legacyQueueMayContainAccount(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY), accountPrefix);
+    legacyEvidenceRetained = legacyQueueMayContainAccount(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY), normalizedUserId);
   } catch {
     legacyEvidenceRetained = true;
   }

@@ -1,3 +1,5 @@
+import { STORAGE_KEYS } from './keys';
+
 export type LegacyQueueRecord = {
   type: 'put' | 'delete';
   key: string;
@@ -97,4 +99,23 @@ export async function legacyDeletedAccountMetaId(accountId: string): Promise<str
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
   return `${LEGACY_DELETED_ACCOUNT_META_PREFIX}${hash}`;
+}
+
+/**
+ * Unknown legacy records cannot be proven unrelated to an account unless their
+ * key is clearly scoped to a different account. Keep them and report partial
+ * cleanup instead of treating a global or malformed key as account-free.
+ */
+export function legacyRecordMayBelongToAccount(record: unknown, accountId: string): boolean {
+  const normalizedAccountId = accountId.trim();
+  if (!normalizedAccountId || typeof record !== 'object' || record === null || Array.isArray(record)) return true;
+  const key = (record as Record<string, unknown>).key;
+  if (typeof key !== 'string') return true;
+
+  const accountPrefix = `${STORAGE_KEYS.dataPrefix}${normalizedAccountId}_`;
+  if (key.startsWith(accountPrefix)) return true;
+
+  if (!key.startsWith(STORAGE_KEYS.dataPrefix)) return true;
+  const scopedKey = key.slice(STORAGE_KEYS.dataPrefix.length);
+  return scopedKey.indexOf('_') < 1;
 }

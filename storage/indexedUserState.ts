@@ -2,7 +2,7 @@ import { STORAGE_KEYS } from './keys';
 import { STATE_STORES, afterIndexedRequests, stateTransaction, userStateDatabase, type StateDatabase, type StateStore } from './stateDatabase';
 import { outboxKeyOwnerId } from './durableOutbox';
 import { USER_STATE_KEYS } from './userStateRepository';
-import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from './legacyQueue';
+import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId, legacyRecordMayBelongToAccount } from './legacyQueue';
 
 const STORE_NAME = STATE_STORES.values;
 
@@ -149,20 +149,16 @@ export async function listIndexedUserStateRaw(): Promise<Record<string, string>>
   }
 }
 
-function rawRecordsMayBelongToAccount(records: unknown, prefix: string): boolean {
+function rawRecordsMayBelongToAccount(records: unknown, accountId: string): boolean {
   if (!Array.isArray(records)) return true;
-  return records.some((record) => {
-    if (typeof record !== 'object' || record === null || Array.isArray(record)) return true;
-    const key = (record as Record<string, unknown>).key;
-    return typeof key !== 'string' || key.startsWith(prefix);
-  });
+  return records.some((record) => legacyRecordMayBelongToAccount(record, accountId));
 }
 
-function rawSourceMayBelongToAccount(rawSource: unknown, prefix: string): boolean {
+function rawSourceMayBelongToAccount(rawSource: unknown, accountId: string): boolean {
   if (rawSource === null) return false;
   if (typeof rawSource !== 'string') return true;
   try {
-    return rawRecordsMayBelongToAccount(JSON.parse(rawSource), prefix);
+    return rawRecordsMayBelongToAccount(JSON.parse(rawSource), accountId);
   } catch {
     return true;
   }
@@ -253,14 +249,14 @@ export async function clearIndexedUserStateForUser(
             unknownStore.delete(row.id);
             continue;
           }
-          if (rawRecordsMayBelongToAccount(row.rawRecords?.length ? row.rawRecords : [row.rawRecord], prefix)) {
+          if (rawRecordsMayBelongToAccount(row.rawRecords?.length ? row.rawRecords : [row.rawRecord], accountId)) {
             legacyEvidenceRetained = true;
           }
         }
 
         for (const row of items) {
           if (row.accountId === accountId) continue;
-          if (rawRecordsMayBelongToAccount(row.rawRecords ?? [], prefix)) legacyEvidenceRetained = true;
+          if (rawRecordsMayBelongToAccount(row.rawRecords, accountId)) legacyEvidenceRetained = true;
         }
 
         const active = metadata.find((row) => row.id === 'active-session');
@@ -288,7 +284,7 @@ export async function clearIndexedUserStateForUser(
             continue;
           }
           if (row.sourceKey === LEGACY_QUEUE_SOURCE_KEY && row.id.startsWith('legacy-snapshot:v1:')
-            && rawSourceMayBelongToAccount(row.rawSource, prefix)) {
+            && rawSourceMayBelongToAccount(row.rawSource, accountId)) {
             legacyEvidenceRetained = true;
           }
         }
