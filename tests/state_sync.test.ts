@@ -64,7 +64,9 @@ describe('durable HTTP sender', () => {
     releaseClaim();
     await instance.flush();
     expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me']);
-    expect((await outbox.list(account)).map(operation => ({ opId: operation.opId, value: operation.value })))
+    expect((await outbox.list(account)).map(operation => ({
+      opId: operation.opId, value: operation.type === 'put' ? operation.value : null,
+    })))
       .toEqual([{ opId: saved.opId, value: '{"theme":"light"}' }]);
   });
 

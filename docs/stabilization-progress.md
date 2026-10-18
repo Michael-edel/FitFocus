@@ -26,6 +26,11 @@ WebKit и iPhone Safari emulation, с одним worker и без retries. Не�
 физические устройства, staging и исторический legacy full-clear timeout ими
 не подтверждаются.
 
+Первый CI нового runtime-коммита `88a96e6` завершился на typecheck из-за
+неверного обращения к `value` у union-типа в новом unit-тесте; 1373 unit
+прошли, browser этап не запускался. Assertion исправлен с явным сужением
+`type === 'put'`; локальные `npm run typecheck` и адресные 59 unit прошли.
+
 ## 18.10.2026 — ограниченная проверка legacy writer-proof recovery
 
 Зелёная база `8f65edb75db7c988feee4fe30cf2798c49405499` подтверждена
