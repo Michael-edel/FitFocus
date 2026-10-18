@@ -162,10 +162,10 @@ export class StateSync {
       try { currentSource = this.legacySource.getItem(LEGACY_QUEUE_SOURCE_KEY); }
       catch { currentSource = undefined; }
       const ready = progress.sendAllowed && progress.sourceMatches && currentSource === sourceSnapshot;
-      const quarantinedRecords = progress.status === 'partial'
-        ? (await this.legacyMigration.unknown()).filter((record) => !record.resolved).length
-        : 0;
-      reportStateLegacyMigrationNotice(accountId, quarantinedRecords);
+      const quarantinedReasons = progress.status === 'partial'
+        ? (await this.legacyMigration.unknown()).filter((record) => !record.resolved).map((record) => record.reason)
+        : [];
+      reportStateLegacyMigrationNotice(accountId, quarantinedReasons);
       if (generation === this.generation && this.accountId === accountId) {
         this.legacyFenceReady = ready;
         this.legacySourceSnapshot = ready ? sourceSnapshot : undefined;

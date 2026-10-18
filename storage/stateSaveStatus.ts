@@ -1,6 +1,7 @@
 export type StateSaveIssue = { accountId: string; key: string; kind: 'error' | 'conflicted'; reason: string };
 import type { StateSyncPause } from './durableOutbox';
 import type { OutboxOperation } from './durableOutbox';
+import type { MigrationUnknownReason } from './legacyMigration';
 let pauseSnapshot: readonly { accountId: string; reason: StateSyncPause }[] = [];
 export const getStateSyncPauses = () => pauseSnapshot;
 export function reportStateSyncPause(accountId: string, reason: StateSyncPause | null): void {
@@ -8,21 +9,32 @@ export function reportStateSyncPause(accountId: string, reason: StateSyncPause |
   pauseSnapshot = [...pauseSnapshot.filter((entry) => entry.accountId !== accountId), ...(reason ? [{ accountId, reason }] : [])];
   publish();
 }
-export type StateLegacyMigrationNotice = { accountId: string; quarantinedRecords: number };
+export type StateLegacyMigrationNotice = {
+  accountId: string;
+  quarantinedRecords: number;
+  reasons: readonly { reason: MigrationUnknownReason; count: number }[];
+};
 let legacyMigrationSnapshot: readonly StateLegacyMigrationNotice[] = [];
 export const getStateLegacyMigrationNotices = () => legacyMigrationSnapshot;
-export function reportStateLegacyMigrationNotice(accountId: string, quarantinedRecords: number | null): void {
+export function reportStateLegacyMigrationNotice(accountId: string, unresolvedReasons: readonly MigrationUnknownReason[] | null): void {
   const current = legacyMigrationSnapshot.find((entry) => entry.accountId === accountId);
-  if (quarantinedRecords === null || quarantinedRecords <= 0) {
+  if (unresolvedReasons === null || unresolvedReasons.length === 0) {
     if (!current) return;
     legacyMigrationSnapshot = legacyMigrationSnapshot.filter((entry) => entry.accountId !== accountId);
     publish();
     return;
   }
-  if (current?.quarantinedRecords === quarantinedRecords) return;
+  const reasonCounts = new Map<MigrationUnknownReason, number>();
+  for (const reason of unresolvedReasons) reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+  const reasons = [...reasonCounts].sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => ({ reason, count }));
+  const quarantinedRecords = unresolvedReasons.length;
+  if (current?.quarantinedRecords === quarantinedRecords
+    && current.reasons.length === reasons.length
+    && current.reasons.every((entry, index) => entry.reason === reasons[index]?.reason && entry.count === reasons[index]?.count)) return;
   legacyMigrationSnapshot = [
     ...legacyMigrationSnapshot.filter((entry) => entry.accountId !== accountId),
-    { accountId, quarantinedRecords },
+    { accountId, quarantinedRecords, reasons },
   ];
   publish();
 }

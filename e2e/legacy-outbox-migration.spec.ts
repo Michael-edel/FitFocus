@@ -298,6 +298,13 @@ test('preserves legacy intent across a full storage clear without sending an unp
     await expect.poll(() => currentPage.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state ?? null)).toBe('installed');
     await expectCapturedAppDatabase(currentPage);
     await expect(currentPage.getByRole('alert')).toContainText('Обнаружен конфликт данных');
+    const quarantine = currentPage.locator('[data-legacy-quarantine]');
+    await expect(quarantine.locator('summary')).toContainText('Карантин: 8 записей');
+    await quarantine.locator('summary').click();
+    await expect(quarantine.getByText('Не удалось подтвердить владельца записи: 1')).toBeVisible();
+    await expect(quarantine.getByText('Неизвестный тип операции: 1')).toBeVisible();
+    await expect(quarantine).not.toContainText('must-remain-quarantined');
+    await expect(quarantine).not.toContainText(orphanKey);
 
     await expect.poll(async () => {
       const state = await migrationState(currentPage, targetKey, true);
@@ -526,7 +533,7 @@ test('preserves legacy intent across a full storage clear without sending an unp
     // imported records in the same transaction, then sends a new operation.
     const acceptedBeforeResolution = server.counts.currentStatePutAccepted;
     server.recoverCurrentState();
-    await currentPage.locator('[data-state-notice-region] details summary').click();
+    await currentPage.locator('[data-state-notice-region] details:not([data-legacy-quarantine]) summary').click();
     const recovery = currentPage.getByRole('region', { name: 'План питания' });
     const keepLocal = recovery.getByRole('button', { name: 'Оставить последнюю локальную версию' });
     await expect(keepLocal).toBeVisible();

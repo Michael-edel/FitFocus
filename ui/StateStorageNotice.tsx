@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { stateSync } from '../storage/stateSync';
 import { legacyRecoveryResource } from '../storage/durableOutbox';
 import { userStateDatabase } from '../storage/stateDatabase';
+import type { MigrationUnknownReason } from '../storage/legacyMigration';
 import {
   getStateLegacyMigrationNotices, getStateQueueOperations, getStateQueueSummaries, getStateSaveIssues, getStateSyncPauses,
   subscribeStateSaveIssues, type StateQueueOperation,
@@ -21,6 +22,25 @@ const messages = {
   legacyPartial: 'Некоторые записи из прежней очереди не удалось импортировать. Они сохранены для проверки; проверенные изменения продолжают синхронизироваться.',
   pending: 'Изменения сохранены на устройстве и ожидают синхронизации.',
   recovery: 'Разрешить конфликт или повторить отправку',
+};
+const migrationReasonLabels: Record<MigrationUnknownReason, string> = {
+  'not-an-object': 'Запись имеет неверный формат',
+  'invalid-type': 'Неизвестный тип операции',
+  'invalid-key': 'Некорректный ключ записи',
+  'put-without-value': 'У записи отсутствует значение',
+  'delete-with-value': 'У удаления есть лишнее значение',
+  'invalid-baseVersion': 'Некорректная версия записи',
+  'invalid-retryCount': 'Некорректный счётчик повторов',
+  'invalid-json': 'Очередь не удалось прочитать',
+  'invalid-container': 'Неверный формат очереди',
+  'unknown-owner': 'Не удалось подтвердить владельца записи',
+  'ambiguous-owner': 'У записи несколько возможных владельцев',
+  'ownership-conflict': 'Ключ записи не совпадает с владельцем',
+  'forbidden-key': 'Служебный ключ нельзя импортировать',
+  'ambiguous-duplicate': 'Найдены неоднозначные дубликаты',
+  'ambiguous-key': 'Для одного ключа найдены разные записи',
+  'fingerprint-collision': 'Не удалось однозначно различить записи',
+  'missing-imported-operation': 'Импортированная операция не найдена',
 };
 const noticeClass = 'col-start-1 row-start-1 m-4 rounded-xl border p-4 text-sm';
 const labels: Record<string, string> = {
@@ -162,6 +182,21 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
           {!!visible && <p role={status === 'blocked' || ownIssues.length || ownQueue?.failed || conflict || pause === 'auth' || pause === 'access' ? 'alert' : 'status'}>
             {message}
           </p>}
+          {legacyMigrationNotice && (
+            <details data-legacy-quarantine className={visible ? 'mt-3' : ''}>
+              <summary className="cursor-pointer font-bold">
+                Карантин: {legacyMigrationNotice.quarantinedRecords} записей. Показать причины
+              </summary>
+              <ul className="mt-2 list-disc space-y-1 pl-5" aria-label="Причины записей в карантине">
+                {legacyMigrationNotice.reasons.map(({ reason, count }) => (
+                  <li key={reason}>{migrationReasonLabels[reason] ?? 'Другая причина'}: {count}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-slate-300">
+                Ключи и содержимое записей скрыты. Неподтверждённые записи не отправляются автоматически.
+              </p>
+            </details>
+          )}
           {status === 'ready' && recoveryGroups.length > 0 && (
             <details className={visible ? 'mt-3' : ''}>
               <summary className="cursor-pointer font-bold">{messages.recovery}</summary>
