@@ -1223,8 +1223,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     на `beforeunload` до `pagehide`; поздний ответ после навигации не завершает
     hydration и не меняет profile, значения, outbox или achievements. Сценарий
     прошёл 7/7 на семи browser/PWA профилях без retries; root typecheck и
-    `git diff --check` прошли. Это mock API; реальный BFCache, внешний AI provider
-    и staging не подтверждены. Точный CI follow-up ожидает push.
+    `git diff --check` прошли. Код и E2E опубликованы коммитом
+    [`aab209f`](https://github.com/Michael-edel/FitFocus/commit/aab209f) в PR
+    [#93](https://github.com/Michael-edel/FitFocus/pull/93); точный CI запускается
+    после push. Это mock API; реальный BFCache, внешний AI provider и staging
+    не подтверждены.
   Отдельно добавлена account-switch проверка позднего ответа
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует

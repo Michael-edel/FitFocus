@@ -4,9 +4,11 @@
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
 `fix/state-generations`; он зависит от PR #94 и #90. Последний локально
-проверенный code/test SHA — `e22b2bf`; он добавляет навигационную проверку
-семейной AI-генерации. Локальный E2E — 7/7 browser/PWA проектов без retries,
-root typecheck и diff check прошли; точный CI новой ревизии ожидает push.
+проверенный code/test SHA — [`aab209f`](https://github.com/Michael-edel/FitFocus/commit/aab209f).
+Он добавляет navigation acceptance AI-задачи плато во время session hydration:
+targeted E2E прошёл 7/7 browser/PWA проектов без retries, связанные unit —
+44/44, root typecheck и diff check прошли. Точный CI этого SHA запускается после
+push.
 Родительский кодовый SHA `a739c1e` подтверждён успешным [точным CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
 1391 unit в 215 файлах, 1058 browser passed / 307 skipped за 44,7 минуты без
 retries, audit, guards, три typecheck, build и rollback/CAS gate на 23 HTTP/D1-
