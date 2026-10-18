@@ -83,6 +83,7 @@ export async function requestAdminResponse(
   session.controller.signal.addEventListener('abort', abort, { once: true });
   if (session.controller.signal.aborted) controller.abort();
   const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('beforeunload', abort, { once: true });
   target?.addEventListener('pagehide', abort);
   const timeout = setTimeout(abort, session.timeoutMs ?? 12_000);
   try {
@@ -113,6 +114,7 @@ export async function requestAdminResponse(
   } finally {
     clearTimeout(timeout);
     session.controller.signal.removeEventListener('abort', abort);
+    target?.removeEventListener('beforeunload', abort);
     target?.removeEventListener('pagehide', abort);
   }
 }

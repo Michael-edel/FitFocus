@@ -49,6 +49,28 @@ it('scopes admin requests and leaves the returned response readable', async () =
   expect(fetchImpl).toHaveBeenCalledTimes(2);
 });
 
+it.each(['beforeunload', 'pagehide'] as const)('aborts an in-flight admin response on %s without invalidating the session', async eventName => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const removeListener = vi.spyOn(target, 'removeEventListener');
+  let requestCount = 0;
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me())
+    : ++requestCount === 1
+      ? new Response(new ReadableStream({ start() {} }), { headers: scopedHeaders() })
+      : json({ ok: true }, scopedHeaders()));
+  const session = await prepare(fetchImpl);
+  const result = expect(requestAdminResponse(session, '/api/admin/stats')).rejects.toThrow('STATE_REQUEST_ABORTED');
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+  target.dispatchEvent(new Event(eventName));
+  await result;
+
+  expect(session.controller.signal.aborted).toBe(false);
+  const afterReturn = await requestAdminResponse(session, '/api/admin/stats');
+  await expect(afterReturn.json()).resolves.toEqual({ ok: true });
+  expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+});
+
 it.each(['Protocol', 'Guard', 'Account', 'Session'])('rejects an incorrect admin response %s marker', async (field) => {
   const headers: Record<string, string> = scopedHeaders() as Record<string, string>;
   const prefix = field === 'Account' || field === 'Session' ? 'X-FitFocus-State-' : 'X-FitFocus-Admin-';
