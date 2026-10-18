@@ -1,6 +1,6 @@
 # Очистка локальных данных аккаунта
 
-Обновлено: 13.10.2026. Код рабочего пакета: `storage/hybrid.ts`,
+Обновлено: 19.10.2026. Код рабочего пакета: `storage/hybrid.ts`,
 `storage/indexedUserState.ts`, вызовы из `App.tsx` и
 `useDeleteUserProfile.ts`; тесты — `tests/account_state_cleanup.test.ts`,
 `tests/local_privacy.test.ts` и `tests/authSession_logout.test.ts`.
@@ -78,6 +78,11 @@ IndexedDB не открылась за 5 секунд, пользователь 
 их и возвращает `legacyEvidenceRetained`, если обнаруживает ключ удаляемого
 аккаунта, повреждённый формат или запись, для которой нельзя доказать
 безопасное разделение. Ошибки чтения также считаются неполной очисткой.
+Глобальный ключ без account-префикса нельзя считать чужим только потому, что
+его владелец неизвестен: source/snapshot сохраняется, `legacyEvidenceRetained`
+становится `true`, а `complete` — `false`. Такой ключ не получает владельца и
+не импортируется автоматически. Явно account-scoped ключ другого аккаунта не
+блокирует очистку текущего пользователя.
 
 Общий источник и snapshots остаются неизменными. Когда последующая проверка
 владельца связывает точный legacy-ключ с удалённым account ID, мигратор
@@ -105,6 +110,18 @@ HTTP-ack не подтвердит её.
 `tests/legacy_migration.test.ts` проверяет повторный вход без повторного импорта;
 `tests/backup.test.ts` — отказ старой backup-копии восстанавливать account-owned
 строки после удаления.
+
+В локальном коммите `4e8adff`
+общая проверка legacy-записей стала консервативно отмечать глобальные и
+неразбираемые ключи как retained evidence. Это исправляет ложный `complete: true`
+при сохранённом payload и оставляет scoped-записи соседних аккаунтов вне отчёта
+об удаляемом аккаунте. Регрессии проверяют оба случая на localStorage и глобальные
+snapshot/quarantine в IndexedDB.
+
+Полный локальный unit suite — **1426/1426** (216 файлов), общий, `domain-strict`
+и `storage-strict` typecheck, privacy/API-invariant guards, production build и
+`git diff --check` прошли. Точный CI новой ревизии ожидает публикации; run #1673
+проверяет предыдущий опубликованный HEAD.
 
 Локально и в точном CI `b53a55e` прошли 1079 unit-тестов / 197 файлов,
 общий, `domain-strict` и `storage-strict` typecheck, production build; CI также

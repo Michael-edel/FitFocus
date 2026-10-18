@@ -1817,6 +1817,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
     остаётся `partial`, raw evidence сохранена. Migration/cleanup unit suite
     прошла 70/70 в коммите
     [`82d5f27`](https://github.com/Michael-edel/FitFocus/commit/82d5f27dddb47ef374c0c1dd24835e5d2dfd26df).
+  - [x] Не объявлять локальную очистку полной, если сохранена глобальная legacy-
+    запись без доказанного владельца; при этом чётко scoped ключ другого аккаунта
+    не считать evidence удаляемого пользователя. Регрессии в `4e8adff` сначала
+    падали до исправления, затем прошли вместе с полным unit suite 1426/1426,
+    strict typechecks, privacy/API guards и production build. Exact CI #1673
+    проверяет предыдущий опубликованный SHA; новая ревизия ждёт его завершения.
 - [ ] Завершить UI повтора/разрешения конфликтов и общий lifecycle.
   - [x] Показать для подтверждённого аккаунта число legacy-записей в карантине
     и агрегированные причины без отображения ключей/raw payload; неизвестные
