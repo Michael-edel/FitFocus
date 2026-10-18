@@ -3,14 +3,15 @@
 Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
 `fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
-HEAD — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5),
-точный CI [#1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
-ещё выполняет browser tests. Он проверяет исправление гонки legacy profile
-recovery с параллельным session reverify; полный migration E2E прошёл 49/49 на
-семи browser/PWA профилях, Android Chrome сценарий — 10/10, опубликованный unit
-suite — 1421/1421. Локальный commit `3894ada`
-добавляет negative unit на реальную смену `serverSessionId`; с ним unit suite
-прошёл 1422/1422. Этот commit ещё не опубликован и ждёт завершения CI #1665.
+Кодовая ревизия [`ee2fc50`](https://github.com/Michael-edel/FitFocus/commit/ee2fc50ad88edb687ca780205002c5c8496fe342)
+содержит negative unit на реальную смену `serverSessionId`;
+полный unit suite прошёл **1422/1422**, root/domain/storage-strict typecheck,
+guards и production build прошли локально. В CI #1665 обнаружился один desktop
+WebKit сбой: проверка achievement count стояла после повторного открытия приложения
+и могла захватить штатный запрос при старте. Проверка перенесена сразу после
+освобождения позднего ответа; исправленный сценарий прошёл **3/3** на desktop
+WebKit. Точный CI новой ревизии ветки ожидает полного прогона; CI #1667 на
+предыдущем SHA дошёл до браузерной матрицы и не включает это уточнение.
 
 Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
 чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
