@@ -75,9 +75,10 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
 Последний runtime-код — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5).
-Опубликованный HEAD — `8ffa9e4`; локальный code follow-up `8b7fb2c` исправляет
-очистку recipe usage counter при удалении аккаунта, не затрагивая другие
-account-scoped счётчики. Полный unit suite прошёл **1423/1423**, root и оба strict
+Опубликованный HEAD — `8ffa9e4`; локальные code follow-ups `8b7fb2c` и `5d3d5b1`
+исправляют очистку recipe usage counter при удалении аккаунта и используют для
+writer/cleanup общий storage key, не затрагивая другие account-scoped счётчики.
+Полный unit suite прошёл **1423/1423**, root и оба strict
 typecheck, privacy guard и production build прошли. Точный CI #1673 опубликованной
 ревизии ещё выполняет browser tests; новый follow-up ожидает завершения этого run.
 

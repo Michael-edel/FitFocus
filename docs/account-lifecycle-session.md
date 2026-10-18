@@ -27,7 +27,8 @@
 `fitfocus_usage_counters_v1:<encoded-accountId>`. Сравнивается точный
 URL-кодированный владелец, поэтому счётчики соседних аккаунтов сохраняются.
 Ранее `clearLocalUserData` не включал этот ключ и мог сообщить о полной очистке,
-оставив счётчик в `localStorage`; это исправлено в `8b7fb2c`.
+оставив счётчик в `localStorage`; это исправлено в `8b7fb2c`. Writer и cleanup
+используют общий `STORAGE_KEYS.recipeUsagePrefix`, добавленный в `5d3d5b1`.
 
 ## Обычный выход
 
@@ -56,3 +57,5 @@ recipe usage counter для обычного и URL-кодированного a
 privacy/usage тесты прошли 9/9, полный unit suite — 1423/1423, общий и оба strict
 typecheck, production build, privacy coverage и `git diff --check` прошли.
 Точный CI этого follow-up ожидает публикации; это не закрывает общий P0.6.
+Префикс writer/cleanup вынесен в общий каталог ключей на локальном follow-up
+`5d3d5b1`; все указанные unit/typecheck/build проверки прошли на этом HEAD.

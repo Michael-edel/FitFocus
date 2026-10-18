@@ -3,7 +3,8 @@
 Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
 `fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
-HEAD — `8ffa9e4`; локальный code follow-up — `8b7fb2c`. Полный unit suite
+HEAD — `8ffa9e4`; локальный code fix — `8b7fb2c`, с последующим refactor ключа
+`5d3d5b1`. Полный unit suite
 прошёл **1423/1423**, root/domain/storage-strict typecheck, privacy guard и
 production build прошли локально. Точный CI #1673 для опубликованного `8ffa9e4`
 ещё выполняет browser tests; новая ревизия ожидает его завершения. В CI #1665
@@ -1445,7 +1446,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] При подтверждённом удалении аккаунта очищать его recipe usage counter
   `fitfocus_usage_counters_v1:<encoded-accountId>`, не затрагивая счётчики других
   аккаунтов. До исправления очистка сообщала успех, оставляя счётчик. Регрессия
-  воспроизведена и исправлена в `8b7fb2c`; тесты privacy/usage прошли 9/9,
+  воспроизведена и исправлена в `8b7fb2c`; общий ключ writer/cleanup закреплён
+  в `STORAGE_KEYS.recipeUsagePrefix` коммитом `5d3d5b1`. Тесты privacy/usage прошли 9/9,
   полный unit — 1423/1423, typecheck/build/privacy guard прошли. P0.6 остаётся
   открытым для других callbacks, устройств, staging и полной lifecycle-приёмки.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать

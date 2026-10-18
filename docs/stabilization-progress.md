@@ -7101,3 +7101,9 @@ production build и `git diff --check` прошли. Code/test commit `8b7fb2c`
 пока локальный. CI #1673 на предыдущем опубликованном HEAD `8ffa9e4` ещё
 выполняет browser tests; публикация follow-up ожидает завершения этого run.
 Этот ключевой cleanup не закрывает остальной account lifecycle P0.6.
+
+В follow-up `5d3d5b1` префикс счётчика перенесён в общий `STORAGE_KEYS` и
+используется и writer-ом `domain/usage.ts`, и account cleanup. Полный unit
+suite 1423/1423, root/domain/storage-strict typecheck, production build,
+privacy coverage и diff check повторно прошли; CI #1673 всё ещё проверяет
+предыдущий опубликованный SHA.
