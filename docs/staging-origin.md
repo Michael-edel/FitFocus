@@ -101,6 +101,20 @@ HTTP на localhost; это не проверка SW установленног�
 
 ## Обязательная приёмка целевого окружения
 
+### Read-only branch-preview smoke: `5d5dca8`, 18.10.2026
+
+Для текущего опубликованного PR HEAD проверен
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Suite прошёл **7/7** GET-only
+проверок: страница, `/api/env` и анонимный `/api/me` вернули 200; защищённые
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` вернули 401
+без redirect и `Set-Cookie`. Страница осталась на том же origin, pageerror и
+не-GET запросов не было. JS asset
+`/assets/index-6747H75z.js` содержит полный SHA
+`5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`.
+
+Это branch preview, не отдельный изолированный staging. Проверка не подтверждает
+авторизованные запросы, OAuth, D1, миграции или приёмку релиза.
+
 ### Read-only branch-preview smoke: `702b4d1`, 18.10.2026
 
 Для `https://fix-durable-outbox.fitfocus.pages.dev/` запущен staging smoke suite

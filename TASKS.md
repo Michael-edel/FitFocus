@@ -1,21 +1,23 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Последний code/test commit `f4dcce8` (ограничение и
-отмена зависающих запросов invite при регистрации) опубликован в PR. Последний
-PR HEAD после обновления документации — `d2a7503`. Предыдущий опубликованный
-[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
-завершился success: audit, schema/privacy/auth/API guards, unit, три typecheck,
-build, browser matrix и rollback compatibility прошли. Локальный `f4dcce8` прошёл
-registration unit 16/16, полный unit suite 1384/1384 в 215 файлах, root/storage typecheck, auth-scope
-guard, production build и registration durability E2E 2/2 в desktop Chromium.
-После публикации `f4dcce8` запущен новый точный CI; его результат отслеживается
-в PR.
+base `fix/state-generations`. Code commit `f4dcce8` с bounded invite lifecycle
+опубликован. Remote PR HEAD — `5d5dca8`; его точный [CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
+прошёл audit, guards, unit, typechecks и build, сейчас выполняет browser matrix.
+Локальные test follow-ups `32d58d7`, `f4a4140` и `c219f17` покрывают timeout и
+`pagehide` для начального `/api/me`/invite redeem, запрет auto-retry POST и AI
+после durable commit. Тестовый файл прошёл 19/19, полный unit suite — 1387/1387
+в 215 файлах, root typecheck прошёл; эти коммиты пока не опубликованы и не входят
+в CI #1628. На `f4dcce8` прошли registration
+unit 16/16, root/storage typecheck, auth-scope guard, production build и
+registration durability E2E 2/2 в desktop Chromium. Родительский
+[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
-Read-only smoke branch preview подтвердил SHA `702b4d1`: страница, `/api/env` и
-анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/push/status —
-401 без redirect и `Set-Cookie`. Это проверка branch preview, не отдельного staging,
-OAuth или D1.
+Read-only smoke branch preview подтвердил SHA `5d5dca8`: staging smoke прошёл 7/7
+GET-проверок, bundle содержит полный SHA; `/`, `/api/env`, анонимный `/api/me` —
+200, защищённые bootstrap/profile/state/push/status — 401 без redirect и
+`Set-Cookie`. Это проверка branch preview, не отдельного staging, OAuth или D1.
 
 В `b97307a` добавлена безопасная сводка причин legacy quarantine: интерфейс
 показывает их только для подтверждённого аккаунта и скрывает ключи/raw payload.
@@ -188,6 +190,11 @@ bundle проверена на семи Playwright-проектах и прош�
     root, `/api/env`, `/api/me` — 200, защищённые bootstrap/profile/state/push
     GET — 401 без redirect и `Set-Cookie`. Проверка только read-only; D1 binding,
     `APP_URL`, OAuth и отдельная staging-база остаются открыты.
+  - [x] Повторить read-only smoke для remote HEAD `5d5dca8`: staging suite прошёл
+    7/7 GET-проверок, браузер остался на preview origin без pageerror и не-GET;
+    bundle `/assets/index-6747H75z.js` содержит полный SHA
+    `5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`. Это не отдельный staging и не
+    подтверждает OAuth, D1 или авторизованные действия.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.

@@ -71,15 +71,25 @@ body и расходования приглашения. Старые сборк
 обновиться для регистрации с invite.
 
 Follow-up `f4dcce8` ограничивает оба регистрационных invite-запроса общим
-транспортом `requestJson` с таймаутом 12 секунд. Запросы привязаны к контроллеру
-регистрации и отменяются при `pagehide`; после отмены профиль и AI-план не
-создаются. Таймаут показывает повторяемую ошибку, но POST не повторяется
-автоматически. Если ответ на расходование кода потерялся, пользователь может
-повторить действие: `consumeInviteCode` идемпотентен для того же кода и аккаунта.
-Локально прошли registration unit 16/16, полный unit suite 1384/1384 в 215 файлах,
-root/storage typecheck, auth-scope guard, production build и registration
-durability E2E 2/2 в desktop Chromium. Кодовый commit `f4dcce8` опубликован в PR;
-его новый точный CI запущен. Родитель `702b4d1` прошёл
+транспортом `requestJson` с таймаутом 12 секунд. Ожидающий invite-запрос
+отменяется при `pagehide`; тогда redeem/profile/AI шаги не запускаются. Таймаут
+показывает повторяемую ошибку, но POST не повторяется автоматически. Если ответ
+на расходование кода потерялся, пользователь может повторить действие:
+`consumeInviteCode` идемпотентен для того же кода и аккаунта. Если `pagehide`
+прерывает AI уже после durable commit базового профиля, этот профиль остаётся
+восстанавливаемым, но вход в приложение не выполняется.
+
+Локально на `f4dcce8` прошли registration unit 16/16, полный unit suite
+1384/1384 в 215 файлах, root/storage typecheck, auth-scope guard, production build
+и registration durability E2E 2/2 в desktop Chromium. Test follow-ups `32d58d7`,
+`f4a4140` и `c219f17` покрывают отмену `/api/me`/redeem, запрет auto-retry POST и
+abort AI после durable commit; registration spec прошёл 19/19, полный unit suite
+1387/1387, root typecheck. Эти тестовые коммиты пока локальные. Code commit
+`f4dcce8` опубликован в PR;
+текущий точный
+[CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
+проверяет remote HEAD `5d5dca8` и ещё выполняет browser matrix, поэтому новый
+тест пока не вошёл в CI. Родитель `702b4d1` прошёл
 [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427),
 включая browser matrix и rollback compatibility.
 

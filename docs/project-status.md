@@ -3,21 +3,25 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. Code/test commit `f4dcce8` опубликован; последний PR HEAD
-после документационного обновления — `d2a7503`. Точный
-[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
-для родительского `702b4d1` завершился success: audit, schema/privacy/auth/API
-guards, unit, три typecheck, production build, browser matrix и rollback
-compatibility прошли. Новый точный CI после публикации `f4dcce8` запущен и
-отслеживается в PR. Локально на `f4dcce8` прошли
-registration unit 16/16, полный unit suite 1384/1384 в 215 файлах, root/storage
-typecheck, auth-scope guard, production build и registration durability E2E 2/2
-в desktop Chromium.
+`fix/state-generations`. Code commit `f4dcce8` с bounded invite lifecycle
+опубликован. Remote PR HEAD — `5d5dca8`; его точный
+[PR CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
+прошёл audit, guards, unit, typechecks и production build; browser matrix ещё
+выполняется. Локальные test follow-ups `32d58d7`, `f4a4140` и `c219f17` проверяют
+timeout/pagehide initial `/api/me` и invite redeem, отсутствие auto-retry POST и
+прерывание AI после durable commit; registration spec прошёл 19/19, полный unit
+suite — 1387/1387 в 215 файлах, root typecheck прошёл. Эти три коммита ещё не
+опубликованы и не входят в CI. На `f4dcce8` прошли root/storage
+typecheck, auth-scope guard, production build и registration durability E2E 2/2 в
+desktop Chromium. Предыдущий [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
-Read-only branch-preview smoke на точном SHA `702b4d1` прошёл 7/7: страница,
-`/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/
-push/status — 401 без redirect и `Set-Cookie`. Этот smoke не подтверждает отдельный
-staging, OAuth, авторизованные изменения или D1.
+Read-only branch-preview smoke на точном remote HEAD `5d5dca8` прошёл 7/7 GET-
+проверок. Bundle `/assets/index-6747H75z.js` содержит полный SHA
+`5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`; `/`, `/api/env` и анонимный `/api/me`
+вернули 200, защищённые bootstrap/profile/state/push/status — 401 без redirect и
+`Set-Cookie`. Это preview, не отдельный staging, OAuth, авторизованные изменения
+или D1.
 
 В `b97307a` интерфейс показывает агрегированные причины legacy quarantine для
 текущего подтверждённого аккаунта, скрывая ключи и raw payload. Old/new bundle

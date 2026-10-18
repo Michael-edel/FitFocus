@@ -4,21 +4,30 @@
 
 Регистрационные `/api/me` и `/api/invite/redeem` теперь используют общий
 `requestJson` с таймаутом 12 секунд и сигналом контроллера регистрации. `pagehide`
-отменяет ожидающий запрос; после отмены поток не создаёт профиль и не запускает
-AI. Таймаут даёт повторяемое сообщение, а invite POST не повторяется автоматически.
-Повтор пользователем безопасен при потерянном ответе, потому что серверное
-`consumeInviteCode` идемпотентно для того же кода и аккаунта.
+отменяет ожидающий invite-запрос; redeem/profile/AI шаги после такой отмены не
+запускаются. Таймаут даёт повторяемое сообщение, а invite POST не повторяется
+автоматически. Повтор пользователем безопасен при потерянном ответе, потому что
+серверное `consumeInviteCode` идемпотентно для того же кода и аккаунта. Если
+`pagehide` прерывает AI уже после durable commit базового профиля, профиль остаётся
+восстанавливаемым, но вход в приложение не выполняется.
 
 Локальная проверка `f4dcce8`: registration unit **16/16**, полный unit suite
 **1384/1384** в 215 файлах, root и storage typecheck, auth-scope guard,
 production build и registration durability E2E **2/2** в desktop Chromium.
 Кодовый коммит `f4dcce8` опубликован в PR; точный CI этого обновления запущен.
 
-На опубликованном родительском HEAD `702b4d1` выполняется точный
-[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
-завершился success: audit, schema/privacy/auth/API guards, unit, три typecheck,
-production build, browser matrix и rollback compatibility прошли. Это CI
-родительского SHA, не проверка `f4dcce8`.
+Test-only follow-ups `32d58d7`, `f4a4140` и `c219f17` удерживают начальный `/api/me`,
+invite redeem и AI-ответ. Проверяются timeout/pagehide abort, отсутствие auto-retry
+POST, отсутствие локального профиля после отмены invite и отсутствие login после
+сохранения профиля. `registration_flow.test.ts` прошёл **19/19**, полный suite —
+**1387/1387** в 215 файлах; root typecheck прошёл. Эти follow-ups пока локальные.
+
+Точный [PR CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
+для опубликованного HEAD `5d5dca8` прошёл audit, guards, unit, три typecheck и
+production build; browser matrix ещё выполняется. Он содержит код `f4dcce8`, но
+не тестовые follow-ups `32d58d7`, `f4a4140` и `c219f17`. Предыдущий родительский
+[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+для `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
 Read-only smoke branch preview проверил bundle с полным SHA `702b4d1`:
 `/`, `/api/env` и анонимный `/api/me` вернули 200, защищённые bootstrap/profile/
