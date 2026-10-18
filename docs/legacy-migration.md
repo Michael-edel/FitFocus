@@ -59,8 +59,35 @@ IndexedDB как операцию `conflicted` с причиной
 `legacy-outbox-migration.spec.ts` в desktop Chromium (1/1, без retries). Полная
 браузерная матрица прошла 7/7 проектов без retries; точный CI SHA и staging ещё
 не проверены. Этот обработчик
-покрывает строковые записи для известных user-state ключей; profile callbacks и
-удаления localStorage требуют отдельной lifecycle-приёмки.
+покрывал строковые записи для известных user-state ключей; profile callbacks,
+`localStorage.clear()` и удаление аккаунта требуют отдельной lifecycle-приёмки.
+
+### Keyed delete из старой вкладки — `bf29ec8`
+
+Старый экран AI Совета удаляет `council_history` через `safeRemoveItem`. Если
+legacy sender уже остановлен после отказа авторизации, значение удаляется из
+localStorage, но DELETE не попадает в старую Map-очередь. Новый `StateSync`
+теперь обрабатывает keyed `StorageEvent` (`oldValue` — строка, `newValue` —
+`null`) только для управляемого ключа текущего подтверждённого аккаунта и
+сохраняет intent `delete` как `conflicted` с причиной
+`legacy-writer-local-only`. Текущий durable value не изменяется, операция
+автоматически не отправляется; перед записью повторно проверяются актуальная
+session scope и то, что старое значение не было создано заново.
+
+Если валидный DELETE уже записан в legacy source, выполняется повторная
+верификация и штатный импорт без второго operation. При устаревшем DELETE в
+source проверяется последняя операция ключа: более поздняя local-only запись не
+подавляет новое удаление. Эти правила покрыты тремя unit-регрессиями. В
+`legacy-outbox-migration.spec.ts` обе сборки работают на одном origin; реальный
+старый UI очищает историю после 403, и новая сборка сохраняет конфликтный DELETE,
+исходный durable payload и отсутствие state write. Browser acceptance прошёл
+7/7 проектов без retries; целевой unit-файл — 11/11, полный unit suite —
+1367/1367, root/domain/storage strict typecheck, production build и
+`git diff --check` прошли локально. Результаты относятся к локальному commit
+`bf29ec8`; CI #1595 проверяет его родителя `8b7983c` и пока выполняет E2E.
+
+Это не закрывает profile callbacks, `localStorage.clear()`, account deletion,
+полный lifecycle P0.8/P0.9, staging или выпуск.
 
 ## IDB-транзакции импорта — 37dc4b0
 

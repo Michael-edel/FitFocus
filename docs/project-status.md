@@ -2,6 +2,20 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
+Опубликованный draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
+по-прежнему основан на `fix/state-generations`; опубликованный HEAD — `8b7983c`.
+Локальный code/test commit `bf29ec8` закрывает keyed DELETE из старой открытой
+вкладки: после auth-отказа старый sender мог удалить `council_history` из
+localStorage, не записав DELETE в свою очередь. Новый runtime сохраняет intent
+в IndexedDB как конфликт без автоматической отправки и не удаляет durable value;
+если валидный legacy DELETE уже есть, он импортируется без дубликата.
+Настоящий old/new bundle с кнопкой «Очистить» прошёл 7/7 проектов; unit — 11/11,
+полный набор — 1367/1367, root/domain/storage strict typecheck, build и
+`git diff --check` прошли локально. Точный [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856)
+проверяет родителя `8b7983c` и пока выполняет E2E; `bf29ec8` в нём отсутствует.
+Новый CI должен покрыть кодовый commit после push. Остаются 33 пункта: 19 P0,
+7 P1 и 7 следующих задач; staging, выпуск и защищённая `main` открыты.
+
 Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
 неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
 удаливший отдельный localStorage scaffold outbox без runtime-потребителей.

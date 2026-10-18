@@ -1,5 +1,35 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — сохранять keyed DELETE из старой вкладки, локальная проверка `bf29ec8`, 18.10.2026
+
+Настоящий old/new bundle smoke воспроизвёл незакрытый delete lifecycle. Старый UI
+AI Совета удаляет `council_history` из localStorage, но после 403 от scoped
+state endpoint его auth-paused sender не может записать DELETE в legacy Map queue.
+Новая вкладка ранее игнорировала `StorageEvent` с `oldValue` и `newValue: null`;
+значение исчезало из старой сборки без durable delete intent.
+
+В `bf29ec8` `StateSync` теперь сохраняет keyed removal управляемого ключа
+подтверждённого аккаунта как `conflicted` DELETE с причиной
+`legacy-writer-local-only`. Текущая durable value остаётся на месте, DELETE не
+отправляется автоматически. Повторная проверка избегает дубликата, если валидный
+DELETE уже находится в legacy source; устаревшая source-запись не подавляет
+удаление, если после неё была более новая локальная запись. Поздний storage
+event также отбрасывается, если ключ уже восстановлен.
+
+До исправления old-bundle acceptance упал: UI удалил ключ, но ни DELETE operation,
+ни соответствующая source запись не появились; проверка оставалась красной до
+исправления. После него настоящий старый UI и новый клиент на одном origin прошли
+**7/7** Playwright-проектов без retries. `tests/state_sync_legacy_migration.test.ts`
+прошёл **11/11**, весь unit suite — **1367/1367** тестов / 213 файлов. Root,
+domain-strict, storage-strict typecheck, production build и `git diff --check`
+прошли локально.
+
+Опубликованный parent HEAD `8b7983c` проверяет точный [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856):
+audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли; E2E
+ещё выполнялся при этой записи. Этот run не включает `bf29ec8`; CI изменённого
+SHA ожидает push. Открыты profile callbacks, account deletion и полный lifecycle
+P0.8/P0.9, staging, выпуск и интеграция в защищённую `main`.
+
 ## P0.8 follow-up — CORS в weekly-menu recovery mock, `b69935b`, 18.10.2026
 
 Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)

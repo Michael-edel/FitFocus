@@ -1,14 +1,17 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`. В опубликованном follow-up
-`e5a6154` удалён неиспользуемый scaffold outbox; его localStorage payload
-сохраняется как opaque backup data. Backup regression прошёл 10/10, полный unit
-suite — 1364/1364, общий и storage-strict typecheck, production build прошли.
-CI #1591 для `cf9d20e` отменён после продвижения ветки; запуск #1593 создан для
-документационного commit `125ae97` и не включает новый E2E ниже. Browser
-acceptance старого ключа прошёл 7/7 профилей; вся `durable-backup-restore.spec.ts`
-— 21/21. В плане остаются 33 пункта:
+остаётся draft с base `fix/state-generations`. После опубликованного HEAD `8b7983c`
+локальный code/test follow-up `bf29ec8` исправляет потерю DELETE из старой
+вкладки: если auth-paused legacy sender не успел обновить очередь, новый клиент
+сохраняет keyed `localStorage` removal как `conflicted` intent и не отправляет
+его автоматически. Уже записанный валидный legacy DELETE импортируется штатно
+без дубликата; устаревший source DELETE не перекрывает более позднюю правку.
+Настоящий old/new bundle с кнопкой «Очистить» прошёл 7/7 проектов; целевые unit
+— 11/11, полный unit suite — 1367/1367, root/domain/storage strict typecheck,
+production build и `git diff --check` прошли. Exact [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856)
+проверяет опубликованный родитель `8b7983c` и пока выполняет E2E; он не содержит
+`bf29ec8`. Публикация follow-up будет после завершения этого запуска. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
 и интеграция в защищённую `main` не подтверждены.
 
@@ -1535,6 +1538,14 @@ all-client Service Worker fence, атомарные migration items и quarantin
   конфликт отменяет единую транзакцию всех пяти stores. Браузерный импорт и
   rollback прошли 4/4 на Firefox и Android Chrome в `38d169c`.
 - [ ] Завершить остальные callbacks и полный lifecycle P0.2–P0.6.
+  - [x] Проверить удаление `council_history` из открытой старой вкладки:
+    при auth-паузе legacy queue остаётся с прежним PUT, но keyed storage event
+    становится отдельной конфликтной DELETE-операцией `legacy-writer-local-only`.
+    Durable value не удаляется и сетевой state write не выполняется. Нормальный
+    legacy DELETE не дублируется; более старый DELETE не перекрывает последующую
+    правку. Локально: `bf29ec8`, browser 7/7 проектов, unit 11/11; полный P0.8,
+    profile callbacks, account deletion, `localStorage.clear()` и staging остаются
+    открытыми. Точный CI нового SHA ожидает публикации.
   - [x] Сделать избранные рецепты durable: не показывать успех до outbox commit,
     выполнять edit одной транзакцией вместо remove+add, оставлять draft/editor
     открытыми при отказе и проверять account/session guard до и после записи.
