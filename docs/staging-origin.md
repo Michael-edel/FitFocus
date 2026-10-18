@@ -101,6 +101,19 @@ HTTP на localhost; это не проверка SW установленног�
 
 ## Обязательная приёмка целевого окружения
 
+### Read-only branch-preview smoke: `702b4d1`, 18.10.2026
+
+Для `https://fix-durable-outbox.fitfocus.pages.dev/` запущен staging smoke suite
+в режиме только GET. Все **7/7** проверок прошли. `/` и `/api/env` вернули 200,
+анонимный `/api/me` вернул 200 с `user: null`; защищённые `/api/bootstrap`,
+`/api/profile`, `/api/state` и `/api/push/status` вернули 401 без redirect и
+`Set-Cookie`. Загруженный JS bundle содержит полный SHA
+`702b4d15b2cc78b53b20a857078db478111075f0`.
+
+Это проверка опубликованного branch preview, а не отдельного изолированного
+staging. Она не подтверждает авторизованные запросы, OAuth, D1, миграции или
+приёмку релиза; эти gates остаются открытыми.
+
 ### Read-only preview smoke: `45575d2`, 15.10.2026
 
 Публичный preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200.

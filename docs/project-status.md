@@ -2,15 +2,21 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
-Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт; локальная
-ветка `durable-outbox` содержит follow-up `7f76a8e`, основанный на опубликованном
-`b97307a`. Точный [PR CI #1622](https://github.com/Michael-edel/FitFocus/actions/runs/39131570644)
-для `b97307a` завершился с 1026 прошедшими, 303 пропущенными и 8 упавшими
-браузерными тестами. Семь тестов использовали неоднозначный summary selector;
-ещё один столкнулся с гонкой заполнения имени в iPhone PWA rollback. Локальный
-follow-up исправил оба источника: затронутые conflict-сценарии прошли 7/7 browser
-projects, iPhone PWA rollback — 3/3 повтора, typecheck и `git diff --check`
-успешны. Следующий gate — точный CI для follow-up `7f76a8e` после публикации.
+Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
+`fix/state-generations`. Последний опубликованный PR HEAD — `702b4d1`; локальная
+ветка содержит более новый code/test commit `f4dcce8`, который пока не опубликован.
+Точный [PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+для `702b4d1` завершился success: audit, schema/privacy/auth/API guards, unit,
+три typecheck, production build, browser matrix и rollback compatibility прошли.
+Локально на `f4dcce8` прошли
+registration unit 16/16, полный unit suite 1384/1384 в 215 файлах, root/storage
+typecheck, auth-scope guard, production build и registration durability E2E 2/2
+в desktop Chromium. Точный CI для `f4dcce8` ещё не запускался.
+
+Read-only branch-preview smoke на точном SHA `702b4d1` прошёл 7/7: страница,
+`/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/
+push/status — 401 без redirect и `Set-Cookie`. Этот smoke не подтверждает отдельный
+staging, OAuth, авторизованные изменения или D1.
 
 В `b97307a` интерфейс показывает агрегированные причины legacy quarantine для
 текущего подтверждённого аккаунта, скрывая ключи и raw payload. Old/new bundle

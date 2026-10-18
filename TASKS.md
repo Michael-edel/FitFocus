@@ -1,15 +1,20 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Последний локальный code/test HEAD — `7f76a8e`
-(стабилизация conflict recovery и PWA rollback E2E). Предыдущий опубликованный
-HEAD `b97307a` проверен точным [PR CI #1622](https://github.com/Michael-edel/FitFocus/actions/runs/39131570644):
-1026 тестов прошли, 303 пропущены, 8 упали. Семь падений вызваны неоднозначным
-селектором summary после изменения UI; восьмое — гонкой заполнения имени профиля
-в iPhone PWA rollback. Исправления в `7f76a8e` прошли локально: затронутые
-conflict-сценарии 7/7 browser projects, iPhone PWA rollback 3/3 повтора,
-typecheck и `git diff --check`. Следующий gate — точный CI для `7f76a8e` после
-публикации.
+base `fix/state-generations`. Текущий локальный code/test HEAD — `f4dcce8`
+(ограничение и отмена зависающих запросов invite при регистрации); этот коммит
+ещё не опубликован. Последний опубликованный PR HEAD — `702b4d1`. Его точный
+[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+завершился success: audit, schema/privacy/auth/API guards, unit, три typecheck,
+build, browser matrix и rollback compatibility прошли. Локальный `f4dcce8` прошёл registration unit
+16/16, полный unit suite 1384/1384 в 215 файлах, root/storage typecheck, auth-scope
+guard, production build и registration durability E2E 2/2 в desktop Chromium.
+CI точного SHA `f4dcce8` ещё не запускался.
+
+Read-only smoke branch preview подтвердил SHA `702b4d1`: страница, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/push/status —
+401 без redirect и `Set-Cookie`. Это проверка branch preview, не отдельного staging,
+OAuth или D1.
 
 В `b97307a` добавлена безопасная сводка причин legacy quarantine: интерфейс
 показывает их только для подтверждённого аккаунта и скрывает ключи/raw payload.

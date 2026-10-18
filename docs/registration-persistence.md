@@ -70,6 +70,18 @@ POST не повторяется автоматически; повторное 
 body и расходования приглашения. Старые сборки без proof получают 401 и должны
 обновиться для регистрации с invite.
 
+Follow-up `f4dcce8` ограничивает оба регистрационных invite-запроса общим
+транспортом `requestJson` с таймаутом 12 секунд. Запросы привязаны к контроллеру
+регистрации и отменяются при `pagehide`; после отмены профиль и AI-план не
+создаются. Таймаут показывает повторяемую ошибку, но POST не повторяется
+автоматически. Если ответ на расходование кода потерялся, пользователь может
+повторить действие: `consumeInviteCode` идемпотентен для того же кода и аккаунта.
+Локально прошли registration unit 16/16, полный unit suite 1384/1384 в 215 файлах,
+root/storage typecheck, auth-scope guard, production build и registration
+durability E2E 2/2 в desktop Chromium. Точный CI для `f4dcce8` ещё не запускался;
+опубликованный родитель `702b4d1` прошёл [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427),
+включая browser matrix и rollback compatibility.
+
 ## Проверки и оставшаяся работа
 
 [Регистрация](../tests/registration_flow.test.ts), [вход](../tests/auth_login_session.test.ts),

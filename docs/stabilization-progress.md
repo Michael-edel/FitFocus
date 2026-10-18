@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 follow-up — ограничить invite-запросы регистрации, `f4dcce8`, 18.10.2026
+
+Регистрационные `/api/me` и `/api/invite/redeem` теперь используют общий
+`requestJson` с таймаутом 12 секунд и сигналом контроллера регистрации. `pagehide`
+отменяет ожидающий запрос; после отмены поток не создаёт профиль и не запускает
+AI. Таймаут даёт повторяемое сообщение, а invite POST не повторяется автоматически.
+Повтор пользователем безопасен при потерянном ответе, потому что серверное
+`consumeInviteCode` идемпотентно для того же кода и аккаунта.
+
+Локальная проверка `f4dcce8`: registration unit **16/16**, полный unit suite
+**1384/1384** в 215 файлах, root и storage typecheck, auth-scope guard,
+production build и registration durability E2E **2/2** в desktop Chromium.
+Коммит пока локальный; точный CI этого SHA ещё не запускался.
+
+На опубликованном родительском HEAD `702b4d1` выполняется точный
+[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+завершился success: audit, schema/privacy/auth/API guards, unit, три typecheck,
+production build, browser matrix и rollback compatibility прошли. Это CI
+родительского SHA, не проверка `f4dcce8`.
+
+Read-only smoke branch preview проверил bundle с полным SHA `702b4d1`:
+`/`, `/api/env` и анонимный `/api/me` вернули 200, защищённые bootstrap/profile/
+state/push-status — 401 без redirect и `Set-Cookie`. Smoke не проверяет отдельный
+staging, OAuth, авторизованные записи или D1.
+
 ## P0.8 follow-up — показывать неперенесённые legacy-записи, `e91c134`, 18.10.2026
 
 После полной миграции повреждённая запись правильно сохранялась в
