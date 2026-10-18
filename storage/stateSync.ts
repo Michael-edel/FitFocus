@@ -196,6 +196,7 @@ export class StateSync {
     this.timer = undefined;
     this.unsubscribe?.(); this.unsubscribe = undefined;
     if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.beforeUnload);
       window.removeEventListener('online', this.reverify);
       window.removeEventListener('focus', this.reverify);
       window.removeEventListener('storage', this.legacySourceChanged);
@@ -365,6 +366,7 @@ export class StateSync {
     this.unsubscribe = subscribeStateSaveIssues(this.wake);
     // Polling also observes commits from tabs that do not have BroadcastChannel/Web Locks.
     this.timer = setInterval(this.wake, 1_000);
+    window.addEventListener('beforeunload', this.beforeUnload);
     window.addEventListener('online', this.reverify);
     window.addEventListener('focus', this.reverify);
     window.addEventListener('storage', this.legacySourceChanged);
@@ -383,6 +385,9 @@ export class StateSync {
     const accountId = this.accountId;
     if (accountId) void this.verify(generation).then(() => this.wake()).catch(() => { if (generation === this.generation) this.storageError(accountId); });
   };
+
+  // pagehide can follow a late IDB claim; close the sender generation before navigation starts.
+  private readonly beforeUnload = () => { this.stop(); };
 
   private readonly legacySourceChanged = (event: Event) => {
     const storageEvent = event as StorageEvent;

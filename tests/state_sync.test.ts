@@ -23,7 +23,7 @@ beforeEach(() => {
   outbox = new DurableOutbox(db); now = Date.now();
   vi.spyOn(Date, 'now').mockImplementation(() => now);
 });
-afterEach(() => { clients.splice(0).forEach((client) => client.stop()); db.close(); secondDb.close(); vi.restoreAllMocks(); });
+afterEach(() => { clients.splice(0).forEach((client) => client.stop()); db.close(); secondDb.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const write = (type: 'put' | 'delete' = 'put') => outbox.write({ accountId: account, writerId: 'editor', expectedRevision: 0, baseVersion: 0,
   intent: type === 'put' ? { type, key, value: '{"theme":"light"}' } : { type, key } });
 function client(mutation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>, me: () => Response | Promise<Response> = () => json(proof()), options = {}) {
@@ -43,6 +43,31 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('does not start a state write when an outbox claim finishes after beforeunload', async () => {
+    const target = new EventTarget();
+    vi.stubGlobal('window', target);
+    const saved = await write();
+    const claim = outbox.claim.bind(outbox);
+    let releaseClaim!: () => void;
+    let claimStarted!: () => void;
+    const heldClaim = new Promise<void>(resolve => { releaseClaim = resolve; });
+    const started = new Promise<void>(resolve => { claimStarted = resolve; });
+    vi.spyOn(outbox, 'claim').mockImplementation(async (...args) => {
+      claimStarted();
+      await heldClaim;
+      return claim(...args);
+    });
+    const { instance, fetchFn } = client(async () => ack());
+    instance.start(account);
+    await started;
+    target.dispatchEvent(new Event('beforeunload'));
+    releaseClaim();
+    await instance.flush();
+    expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual(['/api/me']);
+    expect((await outbox.list(account)).map(operation => ({ opId: operation.opId, value: operation.value })))
+      .toEqual([{ opId: saved.opId, value: '{"theme":"light"}' }]);
+  });
+
   it('does not let an automatic queue flush activate or switch an account', async () => {
     const { instance, fetchFn } = client(async () => ack());
     expect(await instance.flushPending(account)).toBe(false);

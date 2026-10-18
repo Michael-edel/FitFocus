@@ -1,5 +1,31 @@
 # Стабилизация: проверяемые изменения
 
+## 18.10.2026 — отмена state sender при reload в WebKit
+
+CI39160784838 для `8322d5c` завершился одним отказом desktop WebKit delayed
+dashboard: строгий `errorsA=[]` поймал `/api/state due to access control checks`.
+Оригинальный browser artifact 12149782502 проверен по SHA256
+`6631b4621c58ba92d8282c9d0453fd3d6a4cc7e3d12a0dad1d6bf31964834fb5`.
+Trace размещает pageError через 55 мс после начала `page.reload()`, до запуска
+задержанного GET. Стек указывает на sender `StateSync.drain` → `requestJson`;
+задержанный GET позже получил 200, dashboard восстановился, проверки изоляции
+аккаунта B прошли. Точный внутренний механизм WebKit pageError не виден в trace.
+
+У sender уже был `pagehide` stop через lifecycle, но `beforeunload` не закрывал
+generation перед поздним завершением IDB claim. Контрольный unit на исходном
+runtime показал `PUT /api/state` после `beforeunload`; после добавления раннего
+`stop()` запрос не начинается, opId и payload остаются в outbox. Существующий
+lease может задержать повторную отправку после нового запуска. Assertions
+dashboard, account isolation и send gate не менялись.
+
+Локально: затронутый unit 59/59, полный 1373/1373, root/domain/storage typecheck,
+admin guard и production build прошли. Normal/delayed dashboard на desktop
+WebKit прошли 2/2; writer-proof recovery — 8/8 на desktop Chromium, Firefox,
+WebKit и iPhone Safari emulation, с одним worker и без retries. Независимый review не выявил
+блокирующих замечаний. Эти результаты не заменяют CI нового точного SHA;
+физические устройства, staging и исторический legacy full-clear timeout ими
+не подтверждаются.
+
 ## 18.10.2026 — ограниченная проверка legacy writer-proof recovery
 
 Зелёная база `8f65edb75db7c988feee4fe30cf2798c49405499` подтверждена
