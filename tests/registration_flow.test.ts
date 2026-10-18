@@ -165,6 +165,26 @@ describe('durable registration', () => {
     expect(d.loginAsUser).not.toHaveBeenCalled();
     expect(await new DurableOutbox().list(account)).toEqual([]);
   });
+  it('cancels a held invite-session lookup on pagehide before creating a local profile', async () => {
+    const target = new EventTarget(); vi.stubGlobal('window', target);
+    const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC';
+    let requestSignal: AbortSignal | undefined;
+    d.fetchImpl.mockImplementation((_url, init) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+      });
+    });
+    const flow = runRegistrationFlow(d);
+    await vi.waitFor(() => expect(d.fetchImpl).toHaveBeenCalledOnce());
+    target.dispatchEvent(new Event('pagehide'));
+    await flow;
+    expect(requestSignal?.aborted).toBe(true);
+    expect(d.setPlanError).not.toHaveBeenCalledWith('Не удалось связаться с сервером для проверки приглашения.');
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+  });
   it('cancels a held invite redemption on pagehide before creating a local profile', async () => {
     const target = new EventTarget(); vi.stubGlobal('window', target);
     const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC'; const sid = 'a'.repeat(64);
