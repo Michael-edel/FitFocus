@@ -6927,3 +6927,18 @@ BFCache.
 для него был создан [run #1653](https://github.com/Michael-edel/FitFocus/actions/runs/39162383939).
 После документационного follow-up точная проверка latest PR head отслеживается
 по workflow в PR #93.
+
+## P0.9 — настоящая навигация с активным Admin-запросом, `8f75731`, 19.10.2026
+
+`e2e/admin-session.spec.ts` удерживает scoped `/api/admin/stats`, переходит на
+другую страницу того же origin и проверяет реальное событие `beforeunload`, abort
+сигнала именно активного fetch и запись account/session proof. Acceptance прошёл
+7/7 desktop/mobile/PWA Playwright-профилей, workers=1/retries=0. В fixture
+включено подтверждение incidental state writes, чтобы исходный auth-fence не
+устаревал из-за фоновой очереди до проверки панели.
+
+`tests/admin_session_transport.test.ts` прошёл 13/13; root и storage-strict
+typecheck и `git diff --check` прошли. Unit дополнительно проверяет synthetic
+`pagehide` и отправку следующего запроса той же сессией. Реальная навигация не
+проверяет BFCache, физическое устройство или staging; точный CI новой ревизии
+отслеживается после push в PR #93.

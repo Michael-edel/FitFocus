@@ -8,14 +8,16 @@
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
 открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
-[`931779e`](https://github.com/Michael-edel/FitFocus/commit/931779ef9899366f0a6a812ada054b8c2fff3167)
-добавляет отмену Admin-запроса на `beforeunload`, сохраняя живой `AdminSession`
-для следующего запроса после возврата. Изменение отправлено в PR-ветку; CI для
-этого code commit запущен, а статус последнего workflow отслеживается в PR.
+[`8f75731`](https://github.com/Michael-edel/FitFocus/commit/8f75731a5f590e77036290a06490dc9fe29a4b9e)
+добавляет browser acceptance настоящей навигации с удержанным Admin-запросом;
+предыдущий code fix отменяет request-specific controller на `beforeunload` и
+сохраняет живой `AdminSession` для следующего запроса. Сценарий прошёл в семи
+desktop/mobile/PWA профилях без retries; точный CI обновлённого PR head запускается
+после push.
 
 Локально `admin_session_transport` прошёл 13/13, пара admin/support transport —
-28/28; root и storage-strict typecheck и `git diff --check` прошли. Lifecycle
-события проверены unit-тестом; реальный BFCache, устройство и staging этим не
+28/28; root и storage-strict typecheck и `git diff --check` прошли. Реальная
+navigation проверена в Playwright; BFCache, устройство и staging этим не
 подтверждены. Предыдущий code/test SHA `a739c1e` прошёл точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
 1391 unit, 1058 browser passed / 307 skipped, audit, guards, три typecheck,
 build и rollback/CAS gate на 23 HTTP/D1-запроса.

@@ -1927,8 +1927,11 @@ legacy-ключ не используется для новой очереди �
     и `pagehide`, удалять временные listeners и сохранять сам `AdminSession`
     пригодным для следующего запроса после возврата. `admin_session_transport`
     прошёл 13/13; вместе с Support transport — 28/28. Root и storage-strict
-    typecheck и `git diff --check` прошли на `931779e`. События посланы unit-
-    тестом; реальный BFCache и физическое устройство остаются отдельной проверкой.
+    typecheck и `git diff --check` прошли на `931779e`. Дополнительно реальная
+    browser navigation с удержанным `/api/admin/stats` прошла 7/7 desktop/mobile/
+    PWA проектов без retries на `8f75731`: `beforeunload` отменил scoped fetch,
+    исходный proof записан, same-origin probe прочитал маркеры после перехода.
+    BFCache и физическое устройство остаются отдельной проверкой.
 - [x] Добавить route-level acceptance `delete → recreate → stale update` для
   `/api/state`: проверяются 200/409, tombstone generation и сохранность новой
   версии после старого PUT. `tests/state_generation_route.test.ts` вызывает
