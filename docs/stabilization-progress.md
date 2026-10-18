@@ -1,6 +1,6 @@
 # Стабилизация: проверяемые изменения
 
-## P0.8 follow-up — показывать неперенесённые legacy-записи, локальная проверка, 18.10.2026
+## P0.8 follow-up — показывать неперенесённые legacy-записи, `e91c134`, 18.10.2026
 
 После полной миграции повреждённая запись правильно сохранялась в
 `outbox_migration_unknown`, а прогресс получал статус `partial`. При этом
@@ -16,13 +16,27 @@ legacy-операций.
 
 Новая browser-регрессия на настоящем IndexedDB/Service Worker с синтетическим
 HTTP API прошла **7/7** desktop/mobile/PWA проектов без retries. Связанные
-legacy migration unit-тесты прошли **78/78**, typecheck и production build
-прошли. В одном запуске unit-проверка параллельно со сборкой превысила локальный
-5-секундный timeout; изолированный повтор и полный целевой набор прошли.
-Опубликованный HEAD `05bf14b` и [точный CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
-проверяют предыдущий код: на момент записи E2E ещё выполняются. Новый UI
-follow-up ожидает публикации и exact-head CI. Остальные P0.8/P0.9 lifecycle,
-staging, выпуск и интеграция в защищённую `main` остаются открытыми.
+legacy migration unit-тесты прошли **78/78**, полный suite — **1368/1368**;
+root/domain/storage typecheck и production build прошли. Один параллельный запуск
+unit suite превысил локальный 5-секундный timeout; изолированный повтор, целевой
+suite и полный suite прошли.
+
+Коммит опубликован в `e91c134`. Точный [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
+прошёл audit, guards, unit, три typecheck и build; E2E завершился одним Desktop
+WebKit отказом. Trace показывает, что после reload `/api/me` занял около 5,5
+секунды; весовое поле с черновиком `98.765` появилось уже после истечения
+десятисекундного ожидания. Данные не потеряны: screenshot сохранил dashboard и
+восстановленное значение.
+
+Локальный test-only follow-up увеличивает ожидание восстановления поля до 30
+секунд. Целевой сценарий прошёл **5/5** на WebKit и **3/3** по трём desktop
+браузерам без retries. Новый точный CI ожидает публикации. Предыдущий
+[CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
+для `05bf14b` завершился success. Read-only branch preview отдаёт полный SHA
+`e91c134`; `/`, `/api/env`, анонимный `/api/me` — 200, а защищённые bootstrap,
+profile, state и push — 401. Это не подтверждает D1, OAuth или staging.
+Остальные P0.8/P0.9 lifecycle, staging, выпуск и интеграция в защищённую `main`
+остаются открытыми.
 
 ## P0.8 — не терять edit при source re-verification и полном storage clear, `152b7af`, 18.10.2026
 

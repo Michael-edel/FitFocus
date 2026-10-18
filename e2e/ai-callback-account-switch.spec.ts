@@ -2092,7 +2092,7 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   await page.reload();
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
-  await expect(page.getByLabel('Вес сегодня')).toHaveValue('98.765');
+  await expect(page.getByLabel('Вес сегодня')).toHaveValue('98.765', { timeout: 30_000 });
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);

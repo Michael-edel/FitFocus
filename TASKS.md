@@ -1,18 +1,27 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `05bf14b`.
-Точный [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
-прошёл audit, guards, unit, три typecheck и production build; E2E выполняются.
-Следующий локальный P0.8 follow-up показывает карантин legacy-записей без
-изменения send gate; целевая browser/PWA матрица прошла 7/7, миграционные unit —
-78/78. Коммит и exact-head CI для этих локальных изменений ещё ожидаются.
+Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `e91c134`.
+Точный [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
+прошёл audit, guards, unit, три typecheck и production build; E2E завершился
+одним отказом Desktop WebKit.
+В `e91c134` UI показывает записи legacy-карантина, даже когда проверенные
+изменения продолжают синхронизироваться. Browser/PWA матрица прошла 7/7 без
+retries, целевые migration unit — 78/78, полный unit suite — 1368/1368.
+Предыдущий [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
+для `05bf14b` завершился success.
 Предыдущий [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
 завершился одним Safari E2E отказом: WebKit сообщил об отменённом `/api/ai` во
 время reload. Trace привязал сообщение к началу навигации; опубликованный
 follow-up закрывает раннюю отмену weekly-AI на `beforeunload` и ограниченно
 учитывает browser warning только внутри reload. Unit прошли 32/32, reload browser
-matrix — 9/9 без retries. Branch preview уже отдаёт bundle `05bf14b` и ожидаемые
+matrix — 9/9 без retries. Branch preview уже отдаёт bundle `e91c134` и ожидаемые
 анонимные статусы; это не заменяет staging, OAuth или проверку D1.
+
+Trace #1607 показал, что после reload `/api/me` занял около 5,5 секунды, а поле
+с весовым черновиком `98.765` появилось после десятисекундного ожидания. Сценарий
+не дошёл до переключения аккаунта. Локальное ожидание восстановления увеличено
+до 30 секунд: повтор прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам без
+retries. Новый exact-head CI ожидает публикации.
 
 В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
@@ -174,7 +183,7 @@ bundle проверена на семи Playwright-проектах и прош�
     предупреждение о `ambient-light-sensor`; директива сохранена для браузеров,
     которые её поддерживают. Проверка не подтверждает D1, `APP_URL`, OAuth,
     авторизованные действия или реальные edge rules.
-  - [x] Подтвердить branch preview для `05bf14b`: bundle содержит полный SHA;
+  - [x] Подтвердить branch preview для `e91c134`: bundle содержит полный SHA;
     root, `/api/env`, `/api/me` — 200, защищённые bootstrap/profile/state/push
     GET — 401 без redirect и `Set-Cookie`. Проверка только read-only; D1 binding,
     `APP_URL`, OAuth и отдельная staging-база остаются открыты.

@@ -241,3 +241,12 @@ IDs и `requireInvite=false`.
 Это подтверждает публикацию branch preview и выбранные анонимные GET-маршруты.
 Оно не проверяет D1 binding/изоляцию, `APP_URL`, OAuth start/callback,
 аутентифицированные записи, остальные edge routes или отдельную staging-базу.
+
+### Read-only branch preview smoke: `e91c134`, 18.10.2026
+
+После публикации `e91c134` branch alias
+`https://fix-durable-outbox.fitfocus.pages.dev/` вернул index и JS bundle со
+встроенным полным SHA коммита. Read-only GET без cookies показал: `/`,
+`/api/env`, `/api/me` — 200; `/api/bootstrap`, `/api/profile`, `/api/state` и
+`/api/push/status` — 401. Это подтверждает bundle и анонимные ответы на выбранные
+маршруты, но не D1, OAuth, авторизованные операции или отдельную staging-базу.
