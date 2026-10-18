@@ -155,7 +155,7 @@ export default function SidebarNavigation({
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/92 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-y-auto md:overflow-x-hidden md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
+      <nav className="ff-navigation fixed inset-x-0 bottom-0 bg-[var(--ff-card)] backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-y-auto md:overflow-x-hidden md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
         <div className="hidden md:flex shrink-0 flex-col mb-12 w-full px-4 pt-4 text-left">
           <div className="flex items-center gap-3">
             <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
@@ -233,13 +233,13 @@ export default function SidebarNavigation({
         </div>
 
         {mobilePrimaryTabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => onActiveTabChange(tab.id)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
+          <button key={tab.id} type="button" onClick={() => onActiveTabChange(tab.id)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${activeTab === tab.id ? 'ff-navigation-active text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-[var(--ff-muted)] hover:bg-[var(--ff-card-2)] hover:text-[var(--ff-text)]'}`}>
             <tab.icon size={20} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
             <span className="text-[9px] leading-tight text-center font-bold whitespace-nowrap">{tab.label}</span>
           </button>
         ))}
 
-        <button type="button" onClick={() => onMobileMoreOpenChange(true)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}>
+        <button type="button" onClick={() => onMobileMoreOpenChange(true)} className={`md:hidden flex-1 min-w-0 shrink flex-col items-center justify-center gap-1 px-1 py-2 rounded-[1.2rem] transition-all ${mobileMoreTabs.some(tab => tab.id === activeTab) || mobileMoreOpen ? 'ff-navigation-active text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-[var(--ff-muted)] hover:bg-[var(--ff-card-2)] hover:text-[var(--ff-text)]'}`}>
           <MoreHorizontal size={20} />
           <span className="text-[9px] leading-tight text-center font-bold whitespace-nowrap">Ещё</span>
         </button>
@@ -251,7 +251,7 @@ export default function SidebarNavigation({
               <button
                 key={tab.id}
                 onClick={() => onActiveTabChange(tab.id)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'ff-navigation-active text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-[var(--ff-muted)] hover:bg-[var(--ff-card-2)] hover:text-[var(--ff-text)]'}`}
               >
                 <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
                 <span className="text-base font-bold">{tab.label}</span>
@@ -265,7 +265,7 @@ export default function SidebarNavigation({
               <button
                 key={tab.id}
                 onClick={() => onActiveTabChange(tab.id)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'ff-navigation-active text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-[var(--ff-muted)] hover:bg-[var(--ff-card-2)] hover:text-[var(--ff-text)]'}`}
               >
                 <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
                 <span className="text-base font-bold">{tab.label}</span>
@@ -279,7 +279,7 @@ export default function SidebarNavigation({
               <button
                 key={tab.id}
                 onClick={() => onActiveTabChange(tab.id)}
-                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+                className={`hidden md:flex shrink-0 md:flex-row items-center justify-center gap-4 px-2.5 py-2 md:p-4 rounded-[1.5rem] transition-all md:min-w-0 md:max-w-none md:w-full md:mb-2 ${activeTab === tab.id ? 'ff-navigation-active text-indigo-400 bg-indigo-500/10 shadow-sm font-black' : 'text-[var(--ff-muted)] hover:bg-[var(--ff-card-2)] hover:text-[var(--ff-text)]'}`}
               >
                 <tab.icon size={22} className={tab.id === 'pro' && activeTab !== 'pro' ? 'text-amber-500' : ''} />
                 <span className="text-base font-bold">{tab.label}</span>
