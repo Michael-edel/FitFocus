@@ -205,6 +205,30 @@ describe('durable registration', () => {
     expect(d.loginAsUser).not.toHaveBeenCalled();
     expect(await new DurableOutbox().list(account)).toEqual([]);
   });
+  it('does not automatically retry invite redemption when its response times out', async () => {
+    const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC'; const sid = 'a'.repeat(64);
+    d.fetchImpl.mockImplementation(async (url, init) => {
+      if (url === '/api/me') return new Response(JSON.stringify({ user: { sub: account },
+        stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, inviteSync: { protocol: 1, guard: 1 } }));
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+      });
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const flow = runRegistrationFlow(d);
+      await vi.waitFor(() => expect(d.fetchImpl).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(12_000);
+      await flow;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(d.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(d.setPlanError).toHaveBeenCalledWith('Не удалось связаться с сервером для проверки приглашения.');
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+  });
   it('does not enter the app when pagehide aborts AI after the base profile is durable', async () => {
     const target = new EventTarget(); vi.stubGlobal('window', target);
     const d = deps();
