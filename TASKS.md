@@ -8,13 +8,15 @@ audit, schema/privacy/auth/API guards, три typecheck и build прошли; r
 gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
 
-Текущий опубликованный HEAD `99b6e53`; точный [CI #1638](https://github.com/Michael-edel/FitFocus/actions/runs/39154511524)
-прошёл audit, guards, 1388 unit, три typecheck и production build; сейчас
-выполняется browser job, затем rollback/CAS gate. Локальный follow-up расширяет
-request-scoped `beforeunload` через `AiActionScope` на AI callbacks, сохраняя
-отдельную обработку недельного отчёта без дублирующего listener. Полный unit —
-1390/1390, root/domain/storage typecheck прошли; Coach navigation E2E — 1/1 на
-desktop Chromium. Изменения пока локальные; точный CI для них начнётся после push.
+Текущий опубликованный HEAD `589d49e`; точный [CI #1640](https://github.com/Michael-edel/FitFocus/actions/runs/39155138367)
+прошёл audit, guards, 1390 unit, три typecheck и production build; browser job
+ещё выполняется. Коммит расширяет request-scoped `beforeunload` через
+`AiActionScope` на AI callbacks, сохраняя отдельную обработку недельного отчёта
+без дублирующего listener. Локальный follow-up добавляет такой же ранний abort
+семейным сетевым действиям: полный unit — 1391/1391, root/domain/storage typecheck,
+family unit — 19/19; реальные навигационные сценарии Coach и family invite прошли
+по 1/1 на desktop Chromium. Новые изменения пока локальные; точный CI для них
+начнётся после push.
 План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
 OAuth, release и интеграция в защищённую `main` не подтверждены.
 
@@ -881,6 +883,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     протестированную request-specific обработку. Unit scope/report — 13/13,
     полный unit — 1390/1390, root/domain/storage typecheck прошли; удержанный
     Coach retry отменён при реальной навигации в Chromium (1/1). P0.5 в целом открыт.
+  - [x] Отменять все активные family callbacks перед навигацией через один
+    временный listener на scope; listener снимается после завершения последнего
+    действия или при invalidation, а при idle отсутствует. Family unit — 19/19;
+    реальный переход во время удержанного invite abort-ит его signal и не
+    публикует устаревший код (desktop Chromium 1/1). P0.5 остаётся открытым.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.

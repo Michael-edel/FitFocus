@@ -292,3 +292,42 @@ test('pagehide cancels the old invitation and pageshow permits a new attempt', a
     await expect(page.getByText('CURRENT-CODE', { exact: true })).toBeVisible(); expect(counts.invites).toBe(2); await healthy(page, errors);
   } finally { release(); }
 });
+test('navigation aborts a held family invitation before pagehide', async ({ page }) => {
+  const marker = '__e2e_family_invite_unload__';
+  await page.addInitScript(markerKey => {
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${markerKey}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      if (url.pathname === '/api/family/invite' && init?.signal) {
+        mark('request', 'started');
+        init.signal.addEventListener('abort', () => mark('signal', 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => mark('beforeunload', 'fired'));
+  }, marker);
+  const { errors, counts, release } = await setup(page, 'held-invite');
+  try {
+    const appOrigin = await page.evaluate(() => location.origin);
+    await expect(page.getByText('Семья с проверенной сессией', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Создать приглашение', exact: true }).click();
+    await expect.poll(() => counts.invites).toBe(1);
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(`${key}:request`), marker)).toBe('started');
+
+    await page.goto('about:blank');
+    release();
+    await expect.poll(() => counts.released).toBe(1);
+    await page.goto(appOrigin);
+    await expect(page).toHaveTitle(/FitFocus/);
+    expect(await page.evaluate(key => ({
+      request: localStorage.getItem(`${key}:request`),
+      signal: localStorage.getItem(`${key}:signal`),
+      beforeunload: localStorage.getItem(`${key}:beforeunload`),
+    }), marker)).toEqual({ request: 'started', signal: 'aborted', beforeunload: 'fired' });
+    await expect(page.getByText('OBSOLETE-CODE', { exact: true })).toHaveCount(0);
+    await healthy(page, errors);
+  } finally { release(); }
+});

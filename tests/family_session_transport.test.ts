@@ -85,3 +85,32 @@ it('supports independent reads, supersedes the same action and never revives a h
   read.finish(); expect(next.isCurrent()).toBe(true); scope.invalidate(); scope.activate();
   expect(next.isCurrent()).toBe(false); expect(shopping.isCurrent()).toBe(false); expect(scope.begin('context')!.isCurrent()).toBe(true);
 });
+it('aborts concurrent family requests before unload and keeps no idle listener', () => {
+  const target = new EventTarget();
+  const addListener = vi.spyOn(target, 'addEventListener');
+  const removeListener = vi.spyOn(target, 'removeEventListener');
+  vi.stubGlobal('window', target);
+  try {
+    const scope = new FamilyActionScope(() => true); scope.activate();
+    expect(addListener).not.toHaveBeenCalled();
+
+    const context = scope.begin('context')!, shopping = scope.begin('shopping')!;
+    expect(addListener).toHaveBeenCalledTimes(1);
+    expect(removeListener).not.toHaveBeenCalled();
+    target.dispatchEvent(new Event('beforeunload'));
+    expect(context.controller.signal.aborted).toBe(true);
+    expect(shopping.controller.signal.aborted).toBe(true);
+    expect(context.isCurrent()).toBe(false);
+    expect(shopping.isCurrent()).toBe(false);
+    expect(removeListener).toHaveBeenCalledTimes(1);
+    expect(scope.begin('context')).toBeNull();
+
+    scope.activate();
+    const finished = scope.begin('finished')!;
+    finished.finish();
+    expect(finished.controller.signal.aborted).toBe(false);
+    expect(removeListener).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
