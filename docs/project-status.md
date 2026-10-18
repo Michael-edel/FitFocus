@@ -1,6 +1,6 @@
 # Текущее состояние FitFocus
 
-Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
+Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
 `fix/state-generations`; он зависит от PR #94 и #90. Опубликованный HEAD —
@@ -20,8 +20,9 @@ Read-only branch-preview smoke на HEAD `a739c1e` прошёл 7/7 GET-only п�
 загруженный `/assets/index-BDc4XSZj.js` содержит полный SHA. Это branch preview,
 не отдельный staging; OAuth, D1 и авторизованные действия им не подтверждены.
 
-План содержит 32 открытых пункта (18 P0, 7 P1, 7 следующих задач); ни один P0
-не закрыт целиком. Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
+В `TASKS.md` 32 незакрытых чекбокса: 18 в разделе P0, 7 в P1 и 7 в
+подготовительных/компонентных разделах перед P0. Ни один P0 не закрыт целиком.
+Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
 
 Code/test commit `dc38a51` исправляет отмену регистрации AI при
 навигации: `beforeunload` отменяет активный fetch и registration action до

@@ -1,6 +1,6 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
+Обновлено: 19.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
 base `fix/state-generations`. Перед текущим follow-up опубликованный HEAD был
 `961c895`; его точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
 завершился success: 1388 unit в 215 файлах, 1044 browser passed / 307 skipped,
@@ -19,8 +19,10 @@ desktop Chromium. Дополнительно Firefox `pwa-update.spec.ts` про
 исторический timeout не воспроизвёлся и его причина остаётся неизвестной.
 Read-only branch-preview smoke для `a739c1e` прошёл 7/7 GET-only проверок;
 `/assets/index-BDc4XSZj.js` содержит полный SHA. Это preview, не отдельный staging.
-План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
-OAuth, release и интеграция в защищённую `main` не подтверждены.
+В `TASKS.md` 32 незакрытых чекбокса: 18 находятся в разделе P0, 7 — в P1,
+ещё 7 — в подготовительных и компонентных разделах перед P0. Ни один P0 не
+закрыт целиком. Staging, OAuth, release и интеграция в защищённую `main` не
+подтверждены.
 
 Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
