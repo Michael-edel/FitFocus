@@ -6556,3 +6556,20 @@ DurableOutbox и matching state PUT/DELETE отсутствуют. Точечн�
 7/7 профилей, полная `durable-backup-restore.spec.ts` — 21/21 без retries.
 Точный CI этой регрессии следует проверить на опубликованном SHA. P0.8 lifecycle, staging и
 релизные проверки остаются открыты.
+
+## P0.4 — account-switch cache архива прогресса, `fd026b5`, 18.10.2026
+
+Добавлен двухвкладочный сценарий на мобильной ширине: раскрытая галерея
+сохраняется только в ключе account A, после активации account B старая вкладка
+не показывает архив, профиль и outbox A не меняются, а B видит собственное
+закрытое состояние по умолчанию. Регрессия прошла 3/3 на desktop Chromium,
+Firefox и WebKit без retries. Первый запуск нашёл нулевой размер скрытого
+Recharts контейнера во всех трёх движках. Архивный экран теперь не монтирует
+график, пока мобильный раздел закрыт; открытые графики используют общий
+положительный initial dimension вместе с dashboard и экраном прогресса.
+
+После фикса archive account-switch E2E прошёл 3/3, прежний progress draft
+account-switch E2E — 3/3, полный unit suite — 1368/1368 в 213 файлах, root
+typecheck, production build через Playwright preview и `git diff --check` прошли.
+Сценарий подтверждает один UI cache path; другие callbacks/cache, общий P0.4,
+staging и release acceptance остаются открыты.

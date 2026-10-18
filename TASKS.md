@@ -797,6 +797,16 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     `family-session.spec.ts` прошёл 30/30 на Chromium, Firefox и WebKit без
     retries; root, domain-strict, storage-strict typecheck и diff check прошли.
     Локальный commit `1543cc9`; exact CI запускается после push.
+  - [x] Проверить account-switch UI cache архива прогресса: раскрытая галерея
+    account A остаётся в его ключе, а после входа B второй вкладке показывается
+    default состояние B без изменения профиля/outbox A. E2E прошёл 3/3 на
+    desktop Chromium/Firefox/WebKit без retries. Сценарий выявил, что скрытый на
+    mobile график всё равно монтировал Recharts с нулевым размером; теперь
+    collapsed chart не монтируется, а видимые графики получают положительный
+    initial dimension. Код `fd026b5`; archive и progress account-switch E2E
+    прошли 3/3 каждый, полный unit — 1368/1368, typecheck, production build и
+    diff check прошли. Остальные callbacks/cache, staging и полный P0.4 lifecycle
+    остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
