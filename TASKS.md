@@ -17,6 +17,8 @@ gate выполнил 23 HTTP/D1-запроса. Сохранены [browser dia
 storage typecheck; Coach и family invite navigation E2E прошли 1/1 каждый на
 desktop Chromium. Дополнительно Firefox `pwa-update.spec.ts` прошёл 1/1 без retries;
 исторический timeout не воспроизвёлся и его причина остаётся неизвестной.
+Read-only branch-preview smoke для `a739c1e` прошёл 7/7 GET-only проверок;
+`/assets/index-BDc4XSZj.js` содержит полный SHA. Это preview, не отдельный staging.
 План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
 OAuth, release и интеграция в защищённую `main` не подтверждены.
 

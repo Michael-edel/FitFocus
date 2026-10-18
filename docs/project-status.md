@@ -16,6 +16,10 @@ request-scoped `AiActionScope`; недельный отчёт сохраняет
 family invite E2E — по 1/1 на desktop Chromium. Firefox PWA update test прошёл
 1/1, прежний timeout не воспроизвёлся; причина остаётся неизвестной.
 
+Read-only branch-preview smoke на HEAD `a739c1e` прошёл 7/7 GET-only проверок;
+загруженный `/assets/index-BDc4XSZj.js` содержит полный SHA. Это branch preview,
+не отдельный staging; OAuth, D1 и авторизованные действия им не подтверждены.
+
 План содержит 32 открытых пункта (18 P0, 7 P1, 7 следующих задач); ни один P0
 не закрыт целиком. Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
 

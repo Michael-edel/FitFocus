@@ -4,6 +4,19 @@
 `aefc46320de11b83ffdb274e7dae1a911e69612e`. Компонент проверяется локально;
 опубликованный SHA и CI фиксируются в [статусе](project-status.md).
 
+### Read-only branch-preview smoke: `a739c1e`, 19.10.2026
+
+Для опубликованной ветки выполнен `npm run test:e2e:staging` на
+`https://fix-durable-outbox.fitfocus.pages.dev/`: **7/7 GET-only** проверок.
+`/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
+redirect и `Set-Cookie`. Загруженный asset
+`/assets/index-BDc4XSZj.js` содержит полный SHA
+`a739c1e151d5bf33a99346ba24d95368272ecb10`.
+
+Это branch preview, а не отдельный staging origin; проверка не подтверждает
+авторизованные действия, OAuth, D1, миграции или релиз.
+
 ## Разделение проверок
 
 Unit-тесты запускаются отдельно: `npm run test:unit`. Локальная браузерная

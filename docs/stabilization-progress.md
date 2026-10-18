@@ -6844,3 +6844,13 @@ unit — 1391/1391, три typecheck-профиля и `git diff --check` про
 Повтор `pwa-update.spec.ts` в desktop Firefox прошёл 1/1 без retries; известный
 исторический timeout не воспроизвёлся, и причина остаётся не доказанной. P0.5,
 P0.8/P0.9, staging и protected-main integration остаются открытыми.
+
+## P0.9 — read-only branch-preview smoke для `a739c1e`, 19.10.2026
+
+`npm run test:e2e:staging` выполнен с origin
+`https://fix-durable-outbox.fitfocus.pages.dev/` и прошёл **7/7 GET-only**
+проверок. Страница, `/api/env` и анонимный `/api/me` вернули 200; защищённые
+bootstrap/profile/state/push-status — 401 без redirect и `Set-Cookie`.
+`/assets/index-BDc4XSZj.js` содержит SHA
+`a739c1e151d5bf33a99346ba24d95368272ecb10`. Это branch preview, не выделенное
+staging; реальные OAuth, D1, авторизованные запросы и релиз остаются открыты.
