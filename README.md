@@ -73,14 +73,14 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Текущий кодовый HEAD — [`4c03b68`](https://github.com/Michael-edel/FitFocus/commit/4c03b68743626744f867db64fd276cdffffa6388),
-отправлен в `fix/durable-outbox`. Он исправляет два E2E отказа предыдущего CI:
-сохранение пользовательской настройки во время access-паузы и incidental
-state-запрос в profile fixture. Локально прошли 1362 unit, все три typecheck,
-production build и 12/12 повторов целевых Android Chrome/iPhone Safari сценариев.
-Точный [CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
-прошёл audit, schema/privacy/auth/API checks, unit, typecheck и build; полная
-E2E-матрица выполняется. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
-задач; staging, выпуск и интеграция PR #93 в защищённую `main` не подтверждены.
+Последний опубликованный кодовый HEAD — [`4c03b68`](https://github.com/Michael-edel/FitFocus/commit/4c03b68743626744f867db64fd276cdffffa6388),
+отправленный в `fix/durable-outbox`. Точный [CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
+прошёл audit, schema/privacy/auth/API checks, unit, typecheck и build, но завершился
+одной ошибкой E2E (988 passed / 299 skipped): WebKit начал reload, пока фоновая
+запись AI-отчёта в `weekly_reports` ещё отправлялась. Локальный тест теперь ждёт
+подтверждения этой записи перед reload: сценарий прошёл 7/7 Playwright-проектов и
+10/10 повторов desktop WebKit. Полный профильный набор и новый exact CI ещё не
+подтверждены. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
+staging, выпуск и интеграция PR #93 в защищённую `main` не подтверждены.
 Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
 [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

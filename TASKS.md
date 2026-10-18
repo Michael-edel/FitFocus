@@ -5,10 +5,12 @@
 защищённую `main` не подтверждены. Последний опубликованный HEAD — `4c03b68`
 (`fix: resolve durable outbox e2e regressions`). Точный
 [PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
-прошёл audit, schema/privacy/auth/API checks, unit tests, три typecheck и
-production build; полный E2E ещё выполняется. Локально прошли 1362 unit,
-три typecheck, build и 12/12 целевых Android Chrome/iPhone Safari сценариев
-без retries. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
+прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и build, но
+завершился одной E2E ошибкой: 988 passed / 299 skipped. Trace указывает, что
+WebKit reload прервал фоновую запись AI-отчёта в `weekly_reports`. Тест теперь
+ждёт подтверждения этого state PUT перед reload; локально сценарий прошёл 7/7
+Playwright-проектов и 10/10 повторов desktop WebKit. Новый exact CI ещё не
+подтверждён. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
 ни один P0 не закрыт целиком.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)

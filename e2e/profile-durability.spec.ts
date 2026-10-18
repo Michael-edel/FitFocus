@@ -175,6 +175,20 @@ test('fallback AI plan stays hidden when its durable profile commit fails, then 
     };
   }, { failureKey: failKey, profileKey: key });
 
+  // Opening the plan also produces a weekly report. Capture its separate state
+  // write so the profile retry reload cannot interrupt that background request.
+  const weeklyAiResponse = page.waitForResponse(response => {
+    const request = response.request();
+    return new URL(response.url()).pathname === '/api/ai' && request.method() === 'POST'
+      && request.postDataJSON()?.feature === 'wis_text';
+  });
+  const weeklyReportStateResponse = page.waitForResponse(response => {
+    const request = response.request();
+    if (new URL(response.url()).pathname !== '/api/state' || request.method() !== 'PUT') return false;
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown }> } | null;
+    return body?.items?.some(item => item.key === `fitfocus_data_${account}_weekly_reports`) ?? false;
+  });
+
   await openApp(page, '/#plan');
   await expect(page.getByText('План ещё подготавливается', { exact: true })).toBeVisible();
   const initialSnapshot = await saved(page);
@@ -189,6 +203,12 @@ test('fallback AI plan stays hidden when its durable profile commit fails, then 
   expect(mutations).toEqual([]);
 
   await page.evaluate(failureKey => localStorage.setItem(failureKey, '0'), failKey);
+  await weeklyAiResponse;
+  expect((await weeklyReportStateResponse).status()).toBe(200);
+  // Wait for the background report outbox entry to be acknowledged as well.
+  await expect.poll(async () => (await saved(page)).stateOperationCount, {
+    message: 'the weekly report state operation must settle before the profile recovery reload',
+  }).toBe(0);
   await page.reload();
   await expect(page.getByText('План ещё подготавливается', { exact: true })).toHaveCount(0);
   await expect.poll(async () => {

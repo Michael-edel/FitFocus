@@ -8,10 +8,17 @@ IndexedDB durable outbox подключён, продолжается перен
 пользовательских действий. Последний опубликованный HEAD — `4c03b68`; точный
 [PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
 прошёл audit, schema/privacy/auth/API checks, 1362 unit tests, root/domain/storage
-strict typecheck и production build; полный E2E выполняется. Исправленные два
-сценария Android Chrome/iPhone Safari прошли локально 12/12 без retries;
-затронутые unit — 32/32. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
-задач; staging, выпуск и интеграция в защищённую `main` открыты.
+strict typecheck и production build, но завершился одной ошибкой E2E: 988 passed /
+299 skipped. Trace связывает WebKit page error с reload во время отдельной фоновой
+записи AI-отчёта в `weekly_reports`. Тест теперь ожидает подтверждения этого state
+PUT перед reload; локально проблемный сценарий прошёл 7/7 Playwright-проектов и
+10/10 повторов desktop WebKit. Расширенный `profile-durability.spec.ts` завершился
+138/140: два отказа были в других сценариях восстановления профиля (desktop
+WebKit) и повтора импорта файла (iPhone Safari), где экран показал active-session
+fence. Эти проверки требуют отдельной диагностики; полный набор и новый exact CI
+ещё не подтверждены.
+В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и
+интеграция в защищённую `main` открыты.
 Branch preview после публикации `4c03b68` отдаёт точный bundle SHA: `/`,
 `/api/env` и анонимный `/api/me` вернули 200; `/api/bootstrap`, `/api/profile`,
 `/api/state` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`.
