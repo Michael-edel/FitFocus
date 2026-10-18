@@ -1,5 +1,38 @@
 # Стабилизация: проверяемые изменения
 
+## 18.10.2026 — ограниченная проверка legacy writer-proof recovery
+
+Зелёная база `8f65edb75db7c988feee4fe30cf2798c49405499` подтверждена
+[CI39149756678](https://github.com/Michael-edel/FitFocus/actions/runs/39149756678):
+1372 unit passed, 1044 browser passed / 307 skipped, 23 synthetic rollback
+requests в local workerd/D1. Эта база сохранена; runtime не изменён.
+
+В trace исторического отказа `a84214f` / CI39114947822 после storage clear
+progress уже до update оставался `importing`; оба conflicted intent и их
+opId/value сохранились. Trace не содержит истории controllerchange и ответов
+all-client fence, поэтому причина timeout и его устранение не установлены.
+Повтор исходного old/new full-clear сценария прошёл 1/1 в iPhone Safari
+emulation на Windows. Опубликованный owner `bc0f0e1` не меняет legacy
+fence/importer, SW или PWA относительно этой линии; ветки не объединялись.
+
+Новый [regression spec](../e2e/legacy-writer-proof-recovery.spec.ts) использует
+настоящий SW/native HTTP и две same-build вкладки. Он проверяет закрытый gate
+при подавлении реальных probe replies, затем естественное восстановление
+после возобновления ответов либо ухода вкладки после получения probe.
+Операция, opId, payload и conflicted status сохраняются, целевой PUT не уходит;
+строгие error assertions и production deadlines не изменены. Page-side времена
+доказывают порядок probe → navigation, но не ожидание ответа внутри SW.
+Это не воспроизведение причины старого full-clear timeout.
+
+Локально на рабочем дереве поверх `8f65edb`: 8/8 новых browser cases
+(Chromium, Firefox, WebKit и iPhone Safari emulation), один worker, без retries;
+89/89 адресных и 1372/1372 полных unit, три typecheck, build и admin guards
+прошли. Исходная ошибка нового test init-script на about:blank исправлена
+проверкой URL; ошибки не подавлялись. Независимый review проверил границы
+утверждений. Данные синтетические; физические устройства, staging и причину
+исторического отказа результаты не подтверждают. CI нового коммита проверяется
+отдельно по точному SHA; приведённые CI-числа относятся только к базе.
+
 ## 18.10.2026 — corrective guard boundary поверх `9a23a32`
 
 Опубликованный `9a23a3221817a301445ea61522975c954f1158a3` проверен
