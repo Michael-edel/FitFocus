@@ -78,8 +78,9 @@ Follow-up `f4dcce8` ограничивает оба регистрационны
 повторить действие: `consumeInviteCode` идемпотентен для того же кода и аккаунта.
 Локально прошли registration unit 16/16, полный unit suite 1384/1384 в 215 файлах,
 root/storage typecheck, auth-scope guard, production build и registration
-durability E2E 2/2 в desktop Chromium. Точный CI для `f4dcce8` ещё не запускался;
-опубликованный родитель `702b4d1` прошёл [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427),
+durability E2E 2/2 в desktop Chromium. Кодовый commit `f4dcce8` опубликован в PR;
+его новый точный CI запущен. Родитель `702b4d1` прошёл
+[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427),
 включая browser matrix и rollback compatibility.
 
 ## Проверки и оставшаяся работа

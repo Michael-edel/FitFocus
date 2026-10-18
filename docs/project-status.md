@@ -3,15 +3,16 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. Последний опубликованный PR HEAD — `702b4d1`; локальная
-ветка содержит более новый code/test commit `f4dcce8`, который пока не опубликован.
-Точный [PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
-для `702b4d1` завершился success: audit, schema/privacy/auth/API guards, unit,
-три typecheck, production build, browser matrix и rollback compatibility прошли.
-Локально на `f4dcce8` прошли
+`fix/state-generations`. Code/test commit `f4dcce8` опубликован; последний PR HEAD
+после документационного обновления — `d2a7503`. Точный
+[PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+для родительского `702b4d1` завершился success: audit, schema/privacy/auth/API
+guards, unit, три typecheck, production build, browser matrix и rollback
+compatibility прошли. Новый точный CI после публикации `f4dcce8` запущен и
+отслеживается в PR. Локально на `f4dcce8` прошли
 registration unit 16/16, полный unit suite 1384/1384 в 215 файлах, root/storage
 typecheck, auth-scope guard, production build и registration durability E2E 2/2
-в desktop Chromium. Точный CI для `f4dcce8` ещё не запускался.
+в desktop Chromium.
 
 Read-only branch-preview smoke на точном SHA `702b4d1` прошёл 7/7: страница,
 `/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/

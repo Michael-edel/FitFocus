@@ -12,7 +12,7 @@ AI. Таймаут даёт повторяемое сообщение, а invite
 Локальная проверка `f4dcce8`: registration unit **16/16**, полный unit suite
 **1384/1384** в 215 файлах, root и storage typecheck, auth-scope guard,
 production build и registration durability E2E **2/2** в desktop Chromium.
-Коммит пока локальный; точный CI этого SHA ещё не запускался.
+Кодовый коммит `f4dcce8` опубликован в PR; точный CI этого обновления запущен.
 
 На опубликованном родительском HEAD `702b4d1` выполняется точный
 [PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)

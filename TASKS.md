@@ -1,15 +1,16 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Текущий локальный code/test HEAD — `f4dcce8`
-(ограничение и отмена зависающих запросов invite при регистрации); этот коммит
-ещё не опубликован. Последний опубликованный PR HEAD — `702b4d1`. Его точный
+base `fix/state-generations`. Последний code/test commit `f4dcce8` (ограничение и
+отмена зависающих запросов invite при регистрации) опубликован в PR. Последний
+PR HEAD после обновления документации — `d2a7503`. Предыдущий опубликованный
 [PR CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
 завершился success: audit, schema/privacy/auth/API guards, unit, три typecheck,
-build, browser matrix и rollback compatibility прошли. Локальный `f4dcce8` прошёл registration unit
-16/16, полный unit suite 1384/1384 в 215 файлах, root/storage typecheck, auth-scope
+build, browser matrix и rollback compatibility прошли. Локальный `f4dcce8` прошёл
+registration unit 16/16, полный unit suite 1384/1384 в 215 файлах, root/storage typecheck, auth-scope
 guard, production build и registration durability E2E 2/2 в desktop Chromium.
-CI точного SHA `f4dcce8` ещё не запускался.
+После публикации `f4dcce8` запущен новый точный CI; его результат отслеживается
+в PR.
 
 Read-only smoke branch preview подтвердил SHA `702b4d1`: страница, `/api/env` и
 анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/push/status —
