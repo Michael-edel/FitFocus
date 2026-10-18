@@ -28,6 +28,13 @@ OAuth и staging этим не закрыты. Playwright CI по-прежнем
 CI новой ревизии ожидает полного прогона; CI #1667 на `0faaddc` дошёл до
 браузерной матрицы, но не включает это уточнение.
 
+В P0.9 добавлен browser acceptance cloud hydration с уже сохранённым локальным
+изменением. При загрузке server `dark` version 7, последующем локальном `light`
+и scoped 503 после reload сохраняются локальный снимок, исходные `opId`/payload,
+baseVersion и retry deadline; до срока повторной отправки нет. Сценарий прошёл
+7/7 browser/PWA профилей без retries, `npm run typecheck` прошёл. Это mock API,
+не подтверждение staging или реального offline.
+
 У плана остаются 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных
 или компонентных разделах. Открыты полная lifecycle-матрица, остальные writers
 и callbacks, staging/OAuth/D1-проверки, release rollback и интеграция через

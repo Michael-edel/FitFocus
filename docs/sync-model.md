@@ -140,6 +140,14 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Строка `Cloud hydration при pending` проверена browser acceptance в
+[`storage-durability.spec.ts`](../e2e/storage-durability.spec.ts): после загрузки
+серверной темы `dark` версии 7 локальная правка `light` получает 503 с
+`Retry-After`. Reload не заменяет локальное значение серверным; исходные `opId`,
+payload, baseVersion, retry count и срок повтора сохраняются, пока серверный
+снимок остаётся на версии 7. Сценарий прошёл 7/7 browser/PWA профилей без retries.
+Это mock API, не staging или физический offline.
+
 Строка delete/recreate дополнена route-level acceptance в
 [`state_generation_route.test.ts`](../tests/state_generation_route.test.ts):
 production `/api/state` handlers проходят создание версии 1, DELETE в tombstone

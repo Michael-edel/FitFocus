@@ -3,15 +3,17 @@
 Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
 `fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
-Кодовая ревизия [`ee2fc50`](https://github.com/Michael-edel/FitFocus/commit/ee2fc50ad88edb687ca780205002c5c8496fe342)
-содержит negative unit на реальную смену `serverSessionId`;
-полный unit suite прошёл **1422/1422**, root/domain/storage-strict typecheck,
-guards и production build прошли локально. В CI #1665 обнаружился один desktop
-WebKit сбой: проверка achievement count стояла после повторного открытия приложения
-и могла захватить штатный запрос при старте. Проверка перенесена сразу после
-освобождения позднего ответа; исправленный сценарий прошёл **3/3** на desktop
-WebKit. Точный CI новой ревизии ветки ожидает полного прогона; CI #1667 на
-предыдущем SHA дошёл до браузерной матрицы и не включает это уточнение.
+HEAD до текущего follow-up — `ed61e8d`; текущий кодовый follow-up —
+[`64f4430`](https://github.com/Michael-edel/FitFocus/commit/64f4430). Коммит
+`3894ada` добавляет negative unit для реальной смены `serverSessionId`; полный
+unit suite прошёл **1422/1422**, root/domain/storage-strict typecheck, guards и
+production build прошли локально. В CI #1665 был один desktop WebKit сбой из-за
+проверки achievement count после перезапуска приложения; тест исправлен в
+`ee2fc50` и прошёл 3/3 локально. Новая browser acceptance покрывает cloud
+hydration с pending edit: серверное `dark` версии 7 не затирает локальное `light`
+после reload; исходные operation/retry данные сохранены. Сценарий прошёл 7/7
+browser/PWA профилей без retries, typecheck прошёл. Точный CI этого follow-up
+запускается после push.
 
 Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
 чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
@@ -1877,6 +1879,12 @@ legacy-ключ не используется для новой очереди �
 ### P0.9 — приёмка жизненного цикла
 
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
+  - [x] Browser acceptance cloud hydration при pending: server `dark` версии 7,
+    локальная правка `light`, scoped 503 и reload сохраняют локальное значение,
+    исходные `opId`/payload, baseVersion и retry deadline; до срока повторный PUT
+    не отправляется. Сценарий прошёл 7/7 browser/PWA профилей без retries в
+    [`64f4430`](https://github.com/Michael-edel/FitFocus/commit/64f4430). Это mock
+    API; реальный offline, staging и остальные строки матрицы остаются открыты.
   - [x] Browser-acceptance для server commit с потерянным HTTP-ответом:
     первая запись фиксируется сервером, ответ обрывается, повтор той же операции
     получает 409. Тот же opId/payload остаётся конфликтным, confirmedVersion не

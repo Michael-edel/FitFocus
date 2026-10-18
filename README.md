@@ -74,12 +74,12 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний опубликованный HEAD — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5);
-его [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
-пока выполняет browser tests. Он включает исправление гонки profile recovery;
-локальный commit `3894ada`
-добавляет negative unit для смены server session, доводя локальный suite до
-1422/1422, и ожидает окончания текущего CI перед push.
+Последний runtime-код — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5).
+Кодовая ревизия `64f4430` добавляет browser acceptance облачной гидратации при
+pending локальном изменении: серверное значение `dark` версии 7 не затирает
+локальное `light` после reload, сохраняются прежние `opId`, payload и retry-state.
+Сценарий прошёл **7/7** browser/PWA профилей без retries, `npm run typecheck`
+прошёл. Точный CI этой ревизии запускается после push.
 
 Реальный desktop Chrome BFCache smoke на сборке `856e3f5` подтвердил
 `pageshow.persisted=true` и повтор `/api/env` после восстановления. Это один

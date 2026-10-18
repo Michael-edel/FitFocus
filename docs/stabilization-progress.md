@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — облачная гидратация при локальной pending-правке, 19.10.2026
+
+В [`64f4430`](https://github.com/Michael-edel/FitFocus/commit/64f4430)
+добавлен браузерный сценарий строки `Cloud hydration при pending` из матрицы:
+IndexedDB сначала получает серверную тему `dark` версии 7, локальная правка
+`light` получает scoped 503 с `Retry-After`, затем страница перезагружается при
+ещё несовпадающем серверном снимке. После reload остаются локальное значение,
+исходные `opId`, payload, baseVersion 7, retryCount и deadline; повторный PUT до
+deadline не выполняется, сервер остаётся на версии 7.
+
+Сценарий прошёл **7/7** desktop/mobile/PWA профилей (`workers=1,retries=0`),
+`npm run typecheck` и `git diff --check` прошли. Это browser acceptance с mock
+API; физический offline и staging не проверялись. Точный CI запускается после
+push.
+
 ## P0.5 — изолировать проверку позднего Coach-ответа от старта приложения, 19.10.2026
 
 В CI #1665 единственный desktop WebKit failure был в сценарии отмены Coach retry:
