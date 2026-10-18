@@ -66,6 +66,11 @@ body { font-family: 'Inter', sans-serif; }
   color: var(--ff-muted) !important;
 }
 
+/* Keep active navigation labels readable on the light theme surface. */
+:root[data-ff-theme="light"] .ff-navigation .ff-navigation-active {
+  color: #4f46e5;
+}
+
 /* Inputs & placeholders */
 input, textarea, select {
   color: var(--ff-text);
