@@ -1824,6 +1824,13 @@ legacy-ключ не используется для новой очереди �
     обе операции с исходными opId последовательно после свежего proof.
     7/7 desktop/mobile/PWA E2E, unit 9/9, typecheck и production build прошли;
     это mock API, точный CI и staging остаются открыты.
+- [x] Добавить route-level acceptance `delete → recreate → stale update` для
+  `/api/state`: проверяются 200/409, tombstone generation и сохранность новой
+  версии после старого PUT. `tests/state_generation_route.test.ts` вызывает
+  production handlers на SQLite-backed D1 adapter; auth/capability провайдеры
+  изолированы, поэтому это не staging/OAuth. Целевой тест — 1/1, полный unit
+  suite — 1369/1369, три typecheck, production build, API invariants и
+  `git diff --check` прошли локально; точный CI нового HEAD ожидает push.
 - [ ] Разделить unit, браузерные тесты с mock API и реальные staging-проверки.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 

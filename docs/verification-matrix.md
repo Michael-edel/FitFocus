@@ -270,6 +270,13 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 ставит `confirmedVersion = 9`, удаляет операцию и не вызывает повторный DELETE.
 Проверка входит в коммит `2592492`; это mock API, не staging.
 
+Route-level проверка `delete → recreate → stale update` добавлена в коммите
+`77d2679`: production `/api/state` handlers с SQLite-backed D1 adapter возвращают
+версии 1 → tombstone 2 → recreate 3, отклоняют старые PUT с 409 и сохраняют
+текущий payload. Целевой тест прошёл 1/1, полный unit suite — 1369/1369; три
+typecheck и build прошли локально. Auth/capability провайдеры изолированы, а
+точный CI этого HEAD ожидает push; staging остаётся открытым.
+
 Дополнительная локальная P0.9 browser acceptance прошла 7/7: PWA cold reopen
 сохраняет и отправляет тот же intent после восстановления сети во всех
 desktop/mobile/PWA профилях. На Playwright 1.64.1 WebKit тоже работает с

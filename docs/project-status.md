@@ -28,6 +28,12 @@ Desktop WebKit не нашёл dashboard weight input за 10 секунд. Trac
 [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
 на новом HEAD `cff4b93` завершился success, включая E2E.
 
+Следующая P0.9-проверка в локальном code/test commit `77d2679` проходит
+`delete → recreate → stale update` через production `/api/state` handlers и
+SQLite-backed D1 adapter. Целевой тест прошёл 1/1, полный unit suite — 1369/1369;
+общий/domain/storage typecheck, build и API invariants прошли. Точный CI ожидает
+публикации этой ревизии; приёмка staging и полный P0.9 остаются открыты.
+
 В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
 перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
 новый снимок помечается обработанным, повторная загрузка не создаёт дубликаты.

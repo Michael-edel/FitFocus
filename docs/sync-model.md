@@ -140,6 +140,14 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Строка delete/recreate дополнена route-level acceptance в
+[`state_generation_route.test.ts`](../tests/state_generation_route.test.ts):
+production `/api/state` handlers проходят создание версии 1, DELETE в tombstone
+версии 2, отказ старому PUT с 409, recreate на версии 3 и повторный 409 для
+исходной версии; сохранённый payload остаётся новым. D1 SQL выполняется на
+SQLite-backed adapter. Auth и capability провайдеры изолированы; это локальная
+API acceptance, не staging/OAuth.
+
 Legacy abort проверен отдельной browser acceptance в
 [`legacy-outbox-migration.spec.ts`](../e2e/legacy-outbox-migration.spec.ts): реальная
 IndexedDB транзакция прерывается после записи outbox intent и до фиксации
