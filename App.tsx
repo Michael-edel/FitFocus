@@ -336,6 +336,13 @@ const App: React.FC = () => {
   });
 
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  useEffect(() => stateSync.subscribeReadGuard(guard => {
+    setLoginReadGuard(current => {
+      if (!current || current.accountId !== guard.accountId || current.serverSessionId !== guard.serverSessionId) return current;
+      if (current.sessionEpoch === guard.sessionEpoch && current.authFence === guard.authFence) return current;
+      return guard;
+    });
+  }), []);
   useEffect(() => {
     if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
     stateSync.stop();

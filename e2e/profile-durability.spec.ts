@@ -158,6 +158,45 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
   await page.screenshot({ path: testInfo.outputPath('profile-local-reload.png') });
 });
 
+test('same-server re-verification refreshes the UI guard after a temporary pause', async ({ page }) => {
+  const { errors } = await setup(page, 'normal');
+  await openApp(page, '/#settings');
+  const name = page.getByPlaceholder('Как к вам обращаться');
+  await expect(name).toHaveValue(profile.name);
+  const original = await saved(page);
+  expect(original.activeSession?.sessionEpoch).toBeTruthy();
+
+  const pausedEpoch = 'paused-session-epoch';
+  await page.evaluate(async epoch => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('outbox_meta', 'readwrite');
+      const store = tx.objectStore('outbox_meta');
+      const activeRequest = store.get('active-session');
+      activeRequest.onsuccess = () => store.put({ ...activeRequest.result, sessionEpoch: epoch, pause: 'auth' });
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error ?? new Error('Could not pause active session'));
+    });
+    db.close();
+    const channel = new BroadcastChannel('fitfocus-active-session-v1');
+    channel.postMessage({ type: 'active-session-changed' });
+    channel.close();
+  }, pausedEpoch);
+
+  const sessionFence = page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.', { exact: true });
+  await expect(sessionFence).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(async () => (await saved(page)).activeSession?.sessionEpoch).not.toBe(pausedEpoch);
+  await expect(sessionFence).toHaveCount(0);
+  await expect(name).toHaveValue(profile.name);
+  expect((await saved(page)).pause).toBeUndefined();
+  expect(errors).toEqual([]);
+});
+
 test('fallback AI plan stays hidden when its durable profile commit fails, then recovers after reload', async ({ page }) => {
   const failKey = '__fitfocus_e2e_fail_fallback_profile_write';
   const profileWithoutPlan: ProfileSnapshot = { ...profile, aiPlan: undefined };
@@ -318,7 +357,12 @@ test('profile recovery rebases the local profile onto the verified server versio
 });
 
 test('profile recovery can accept a checked server snapshot after explicit confirmation', async ({ page }) => {
-  const { errors } = await setup(page, 'conflict');
+  const { errors, routeErrors } = await setup(page, 'conflict');
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname === '/api/state') {
+      routeErrors.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? 'request failed'}`);
+    }
+  });
   await openApp(page, '/#settings');
   const name = page.getByPlaceholder('Как к вам обращаться');
   await name.fill('Локальный профиль, который будет отклонён');
@@ -338,6 +382,7 @@ test('profile recovery can accept a checked server snapshot after explicit confi
 
   await expect.poll(async () => (await saved(page)).operations).toHaveLength(0);
   expect((await saved(page)).value).toContain('Cloud name');
+  expect(routeErrors).toEqual([]);
   expect(errors).toEqual([]);
 });
 
@@ -561,7 +606,7 @@ test('a failed wearable file import can retry the same selected file after stora
   await expect.poll(async () => JSON.parse((await saved(page)).value!).wearableStepsToday).toBe(4200);
   await expect(fileInput).toHaveValue('');
   await expect(error).toHaveCount(0);
-  expect(mutations).toEqual(['PUT']);
+  await expect.poll(() => mutations).toEqual(['PUT']);
   expect(errors).toEqual([]);
 });
 

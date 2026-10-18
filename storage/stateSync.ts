@@ -85,6 +85,7 @@ export class StateSync {
   private profileProjectionProtocol = false;
   private familyMenuProtocol = false;
   private readonly requests = new Set<AbortController>();
+  private readonly readGuardListeners = new Set<(guard: OutboxReadGuard) => void>();
   private running?: Promise<void>;
   private verification?: { generation: number; promise: Promise<boolean> };
   private timer?: ReturnType<typeof setInterval>;
@@ -107,6 +108,17 @@ export class StateSync {
       if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
       return checkLegacyWriterFence(navigator.serviceWorker, __FITFOCUS_BUILD_ID__);
     });
+  }
+
+  subscribeReadGuard(listener: (guard: OutboxReadGuard) => void): () => void {
+    this.readGuardListeners.add(listener);
+    return () => this.readGuardListeners.delete(listener);
+  }
+
+  private publishReadGuard(guard: OutboxReadGuard): void {
+    for (const listener of this.readGuardListeners) {
+      try { listener({ ...guard }); } catch {}
+    }
   }
 
   private legacyPending(): boolean {
@@ -457,6 +469,7 @@ export class StateSync {
         if (generation !== this.generation || accountId !== this.accountId) return false;
         this.readGuard = accepted;
         this.session = { id: 'active-session', ...accepted };
+        this.publishReadGuard(accepted);
         this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
         this.profileProjectionProtocol = isRecord(body.profileSync) && body.profileSync.weeklyMenuProjection === 1;
         this.familyMenuProtocol = isRecord(body.familyMenuSync) && body.familyMenuSync.protocol === 1

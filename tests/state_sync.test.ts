@@ -345,6 +345,32 @@ describe('durable HTTP sender', () => {
     expect(await outbox.list(account)).toEqual([]);
   });
 
+  it('publishes the new guard when a paused same-server session is verified again', async () => {
+    const { instance } = client(async () => ack());
+    const guards: Array<{ accountId: string; serverSessionId: string; sessionEpoch: string; authFence: number }> = [];
+    const unsubscribe = instance.subscribeReadGuard(guard => guards.push(guard));
+    await instance.connect(account);
+    const original = guards[0];
+    expect(original).toMatchObject({ accountId: account, serverSessionId: sessionId });
+
+    const connection = await db.open();
+    const tx = connection.transaction(STATE_STORES.meta, 'readwrite');
+    const store = tx.objectStore(STATE_STORES.meta);
+    const activeRequest = store.get('active-session');
+    activeRequest.onsuccess = () => store.put({ ...activeRequest.result, pause: 'auth' });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error ?? new Error('Could not pause active session'));
+    });
+
+    expect(await instance.syncNow(account)).toBe(true);
+    expect(guards).toHaveLength(2);
+    expect(guards[1]).toMatchObject({ accountId: account, serverSessionId: sessionId });
+    expect(guards[1].sessionEpoch).not.toBe(original.sessionEpoch);
+    expect(guards[1].authFence).toBeGreaterThan(original.authFence);
+    unsubscribe();
+  });
+
   it('reads a scoped current server snapshot before rebasing an imported intent', async () => {
     const legacy = await importLegacyConflict();
     const bodies: Array<{ method: string; body?: unknown }> = [];
