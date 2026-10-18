@@ -2,17 +2,19 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Локальный кодовый follow-up [`49a1ff6`](https://github.com/Michael-edel/FitFocus/commit/49a1ff6)
-ещё не опубликован. В P0.6 удалён неиспользуемый путь переименования account-
-префиксов в localStorage и IndexedDB; точный IDB ключ больше нельзя переносить
-между владельцами этим legacy helper. Целевой тест прошёл 3/3, весь unit suite
-1363/1363, общий и storage-strict typecheck, production build и `git diff --check`
-прошли; точный CI этого SHA ожидает push.
+Кодовый follow-up [`49a1ff6`](https://github.com/Michael-edel/FitFocus/commit/49a1ff6)
+уже входит в опубликованный head `faa1e71`; он удалил неиспользуемый перенос
+IDB ключей между account-префиксами. Локальный follow-up `e5a6154` удаляет
+отдельный localStorage scaffold outbox без runtime-потребителей. Его старый key
+payload не очищается: общий backup сохраняет его как opaque data, DurableOutbox
+его не импортирует. Проверки: account isolation 3/3, backup regression 10/10,
+весь unit suite 1364/1364, общий и storage-strict typecheck, production build и
+`git diff --check` прошли; `e5a6154` и связанные документы ожидают push.
 
 Опубликованный [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся
-draft с base `fix/state-generations` и head `5fe169d`. Точный
-[PR CI #1587](https://github.com/Michael-edel/FitFocus/actions/runs/39092410007)
-для `5fe169d` пока выполняет E2E; audit, schema/privacy/auth/API, 1363 unit,
+draft с base `fix/state-generations` и head `faa1e71`. Точный
+[PR CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
+для `faa1e71` находится в процессе; audit, schema/privacy/auth/API, 1363 unit,
 три strict typecheck и build прошли. Непосредственная причина предыдущего
 [CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
 была в weekly-menu test mock без CORS-заголовков; trace подтвердил сохранение
@@ -27,7 +29,7 @@ PR [#90](https://github.com/Michael-edel/FitFocus/pull/90) прошёл точн
 сам PR открыт. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
 staging, выпуск и интеграция feature-цепочки в защищённую `main` открыты.
 
-Последний read-only smoke branch preview подтвердил bundle SHA `5fe169d`:
+Последний read-only smoke branch preview подтвердил bundle SHA `faa1e71`:
 `/`, `/api/env` и анонимный `/api/me` вернули 200;
 `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
 redirect и `Set-Cookie`. Google Client IDs не настроены, поэтому авторизованные

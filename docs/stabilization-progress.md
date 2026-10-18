@@ -6465,7 +6465,25 @@ staging acceptance.
 
 Локальная проверка: `tests/indexed_user_state.test.ts` — 3/3, весь unit suite —
 1363/1363, общий typecheck, `typecheck:storage-strict`, production build и
-`git diff --check` прошли. Коммит `49a1ff6` создан локально; точный CI этого SHA
-ещё не запускался. PR #90 с проверенным CI #971
-пока не влит, потому что защищённая `main` требует approving review от write-
-доступного reviewer. Полный P0.6/P0.8/P0.9, staging и выпуск остаются открыты.
+`git diff --check` прошли. Коммит `49a1ff6` опубликован; точный CI #1589
+проверяет последующий head `faa1e71`. PR #90 с проверенным CI #971 пока не влит,
+потому что защищённая `main` требует approving review от write-доступного
+reviewer. Полный P0.6/P0.8/P0.9, staging и выпуск остаются открыты.
+
+## P0.8 — инвентаризация отдельного scaffold outbox, 18.10.2026
+
+`storage/outbox.ts` реализовывал localStorage ключ `fitfocus_outbox_ops` для
+другого scaffold-формата (`OutboxOp`: device/user/tenant/entity/patch), но не
+имел runtime-потребителей; единственной ссылкой приложения был export из
+`storage/index.ts`. Удалены модуль и export в коммите `e5a6154`, чтобы в текущем
+коде не оставалось второй API-реализации очереди. Существующий ключ не очищается:
+общий backup сохраняет его как непрозрачную localStorage-строку, а новая очередь
+его не импортирует и не отправляет. Источником legacy migration остаётся только
+отдельный `fitfocus.remote-kv-outbox.v1`.
+
+Backup regression проверяет сохранение payload через export/import без записи в
+DurableOutbox; `tests/backup.test.ts` — 10/10, полный unit suite — 1364/1364,
+общий/storage-strict typecheck, production build и `git diff --check` прошли.
+Точный CI для локальных commits ожидает push; PR #93 на опубликованном `faa1e71`
+всё ещё выполняет E2E. P0.8 lifecycle, staging и релизные проверки остаются
+открыты.

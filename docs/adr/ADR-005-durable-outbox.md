@@ -109,8 +109,14 @@ readwrite-транзакция активна. Продолжение после
 ## Источники legacy
 
 `fitfocus.remote-kv-outbox.v1` остаётся источником импорта, а не местом записи
-новой очереди. `fitfocus_outbox_ops` из другого scaffold инвентаризируется
-отдельно; этот ADR не объявляет его тем же форматом и не разрешает удаление.
+новой очереди. Формат `fitfocus_outbox_ops` из другого scaffold был
+инвентаризирован отдельно: это `OutboxOp` с полями `opId`, `deviceId`, `userUid`,
+`tenantId`, `entityType`, `entityId`, `patch` и `updatedAt`, не формат
+`fitfocus.remote-kv-outbox.v1`. Поиск по runtime-коду нашёл только модуль
+`storage/outbox.ts` и его re-export в `storage/index.ts`, без приложения-
+потребителя; оба удалены в follow-up `e5a6154`. Существующий localStorage ключ
+не очищается, остаётся opaque data и попадает в общий backup; автоконвертации
+или отправки для него нет. См. [инвентаризацию модели данных](../data-model.md).
 
 Legacy не имеет надёжного accountId. Владельца устанавливают только по
 проверяемой принадлежности ключа/данных. Активный аккаунт не доказательство;

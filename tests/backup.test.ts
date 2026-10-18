@@ -60,6 +60,23 @@ describe('browser backup', () => {
     expect(await readIndexedUserStateRaw(indexedKey)).toContain('meal-1');
   });
 
+  it('preserves the dormant scaffold outbox key as opaque localStorage data', async () => {
+    const scaffoldPayload = JSON.stringify([{
+      opId: 'scaffold-op-1', deviceId: 'old-device', userUid: 'old-user', tenantId: 'old-tenant',
+      entityType: 'settings', entityId: 'theme', patch: { theme: 'light' }, updatedAt: 1,
+    }]);
+    localStorage.setItem('fitfocus_outbox_ops', scaffoldPayload);
+
+    const backup = await createBackupPayload();
+    expect(backup.localStorage.fitfocus_outbox_ops).toBe(scaffoldPayload);
+    expect(backup.durableState?.stores[STATE_STORES.outbox]).toEqual([]);
+
+    localStorage.clear();
+    await expect(applyBackupPayload(backup)).resolves.toEqual({ ok: true });
+    expect(localStorage.getItem('fitfocus_outbox_ops')).toBe(scaffoldPayload);
+    await expect(new DurableOutbox().list('old-user')).resolves.toEqual([]);
+  });
+
   it('keeps version-one snapshots importable', async () => {
     await expect(applyBackupPayload({
       version: 1,

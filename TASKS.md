@@ -1,18 +1,18 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Текущий кодовый коммит — [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f).
-Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
-на опубликованном родителе `e6612bc` прошёл audit, schema/privacy/auth/API, 1363
-unit, три typecheck и build, но завершился 995 browser passed / 299 skipped /
-1 failed. В iPhone PWA weekly-menu test mock отдавал ожидаемый 503 без
-CORS-заголовков; trace показал, что операция пережила reload с тем же `opId`,
-а повтор получил 200. Коммит `b69935b` добавляет CORS-заголовки только для
-совпадающего same-origin запроса. Локально этот сценарий прошёл 5/5 на iPhone
-PWA, весь weekly-menu spec — 56/56 на семи проектах без retries; typecheck и
-diff check прошли. Новый exact CI для `b69935b` ещё не запущен. В плане остаются 33 пункта:
-19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком.
+остаётся draft с base `fix/state-generations`; опубликованный head — `faa1e71`,
+включающий `49a1ff6`.
+Точный [PR CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
+для этого SHA выполняет E2E после успешных audit, schema/privacy/auth/API,
+1363 unit, трёх typecheck и build. В локальной ветке поверх него создан
+`e5a6154`: удалён
+неиспользуемый scaffold outbox; его localStorage payload сохраняется как opaque
+backup data. Полный unit suite — 1364/1364, backup regression — 10/10, общий и
+storage-strict typecheck, build прошли. Этот follow-up и связанные документы
+ещё не опубликованы, поэтому exact CI для них нет. В плане остаются 33 пункта:
+19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
+и интеграция в защищённую `main` не подтверждены.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -1441,6 +1441,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
 атомарное восстановление. Контракты и результаты проверок: [legacy migration](docs/legacy-migration.md),
 [backup/restore](docs/backup-restore.md), [статус проекта](docs/project-status.md).
 
+- [x] Инвентаризировать отдельную scaffold-очередь `fitfocus_outbox_ops`:
+  у `storage/outbox.ts` не было runtime-вызовов, только re-export из
+  `storage/index.ts`; модуль и re-export удалены в `e5a6154`. Сохранённый
+  localStorage payload остаётся нетронутым и переносится backup как opaque data;
+  автоматического импорта в DurableOutbox нет. Backup regression прошёл 10/10,
+  полный unit suite — 1364/1364, общий и storage-strict typecheck, production
+  build и `git diff --check` прошли. Точный CI нового SHA ожидает push.
 - [x] Обновить существующую IDB до v2, сохранив values; создать outbox,
   migration_items, migration_unknown и outbox_meta.
 - [x] Реализовать и проверить транзакционные примитивы записи value/операции,

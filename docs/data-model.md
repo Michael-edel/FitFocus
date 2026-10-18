@@ -18,7 +18,15 @@ revision; первое подтверждение отсутствия сохр�
 | Объёмные локальные state | IDB `fitfocus-user-state-v1`, версия схемы 1, store `values` | Это значения, ещё не очередь |
 | Остальные локальные значения/метаданные | localStorage, ключи из `storage/keys.ts`, включая версии `__ffv` | Нельзя атомарно связать с отдельной IDB-транзакцией |
 | Очередь hybrid | Map по ключу + localStorage `fitfocus.remote-kv-outbox.v1` | Общая для вкладок без безопасной транзакции и явного accountId |
-| Старый scaffold outbox | `storage/outbox.ts`, ключ `fitfocus_outbox_ops` | Другой формат; найден экспорт, активные вызовы требуют отдельной инвентаризации |
+| Старый scaffold outbox | В исходном снимке `storage/outbox.ts`, ключ `fitfocus_outbox_ops` | Другой формат; последующая инвентаризация описана ниже |
+
+Инвентаризация 18.10.2026: scaffold-формат содержал `opId`, `deviceId`,
+`userUid`, `tenantId`, `entityType`, `entityId`, `patch` и `updatedAt`. Поиск
+runtime call sites нашёл только файл и re-export из `storage/index.ts`, поэтому
+неиспользуемый модуль удалён в `e5a6154`. Существующий localStorage payload не
+удаляется и включается в общий backup как opaque key-value; он не импортируется
+в DurableOutbox и не отправляется автоматически. Это не меняет отдельную
+миграцию `fitfocus.remote-kv-outbox.v1`.
 
 В `values` находятся записи `{ key, value, updatedAt }` для diary, history,
 weekly_reports, favorite_recipes, last_coach_card. Префикс данных пользователя —

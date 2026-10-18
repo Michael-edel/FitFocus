@@ -36,8 +36,11 @@ Runtime legacy-импорт и Service Worker all-client fence подключе�
   неподтверждённых локальных изменений;
 - физическое удаление `user_kv` допускает повторное использование версии.
 
-Профиль имеет отдельную Promise-цепочку; `storage/outbox.ts` содержит другой
-scaffold-формат. Ни один из них нельзя молча считать общей новой очередью.
+Старый scaffold ключ `fitfocus_outbox_ops` содержал другой patch-формат.
+Инвентаризация не нашла runtime-потребителей; его модуль удалён в `e5a6154`.
+Сохранённый localStorage payload остаётся opaque data и переносится backup, но
+не конвертируется в DurableOutbox и не отправляется. Это не legacy migration
+source `fitfocus.remote-kv-outbox.v1`.
 
 ## Требуемое поведение — ещё не реализовано
 
